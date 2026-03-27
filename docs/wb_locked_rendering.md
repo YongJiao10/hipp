@@ -22,8 +22,8 @@ This project's official hippocampal figure workflow is now fixed to a single Wor
 
 For each subject, the official output files are:
 
-- `sub-<id>_wb_structural_biglegend.png`
-- `sub-<id>_wb_wta_biglegend.png`
+- `sub-<id>_structural.png`
+- `sub-<id>_wta.png`
 
 These should be written under a stable output folder such as:
 
