@@ -4,3 +4,8 @@ logs/
 outputs/
 *.pyc
 __pycache__/
+_archive/
+_all_archives/
+**/_archive/
+**/_all_archives/
+**/_archive_retain/
