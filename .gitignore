@@ -9,3 +9,6 @@ _all_archives/
 **/_archive/
 **/_all_archives/
 **/_archive_retain/
+external/
+temp_*/
+refs/

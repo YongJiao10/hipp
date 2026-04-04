@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import re
 import subprocess
+import tempfile
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -25,6 +26,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--left-label-template", default=None, help="Optional absolute path template, e.g. /path/sub-{subject}_...label.gii")
     parser.add_argument("--right-label-template", default=None, help="Optional absolute path template, e.g. /path/sub-{subject}_...label.gii")
     parser.add_argument("--name", default="structural", help="Output stem label, e.g. structural or wta")
+    parser.add_argument(
+        "--no-template-scene",
+        action="store_true",
+        help="Do not persist per-subject *_template.scene files; render from temporary scene files only.",
+    )
     return parser.parse_args()
 
 
@@ -46,8 +52,21 @@ def absolutize_scene_paths(root: ET.Element, scene_path: Path) -> None:
             if not text:
                 continue
             candidate = Path(text)
-            if not candidate.is_absolute():
-                obj.text = str((base / candidate).resolve())
+            if candidate.is_absolute():
+                obj.text = str(candidate)
+                continue
+
+            resolved = (base / candidate).resolve()
+            if resolved.exists():
+                obj.text = str(resolved)
+                continue
+
+            parts = candidate.parts
+            if len(parts) >= 3 and parts[1:3] == ("Documents", "HippoMaps"):
+                obj.text = str((Path.home() / Path(*parts[1:])).resolve())
+                continue
+
+            obj.text = str(resolved)
 
 
 def replace_subject_text(root: ET.Element, template_subject: str, target_subject: str) -> None:
@@ -92,8 +111,8 @@ def validate_scene_paths(root: ET.Element) -> None:
             path = Path(obj.text.strip())
             if not path.exists():
                 # Workbench scene files can retain optional local palette references
-                # that are not needed for batch surface rendering.
-                if path.suffix == ".palette":
+                # or preview artifacts that are not needed for batch surface rendering.
+                if path.suffix in {".palette", ".scene", ".png", ".jpg", ".jpeg"}:
                     continue
                 missing.append(str(path))
     if missing:
@@ -138,8 +157,23 @@ def main() -> int:
         subject_dir.mkdir(parents=True, exist_ok=True)
         scene_out = subject_dir / f"sub-{subject}_template.scene"
         png_out = subject_dir / f"sub-{subject}_wb_{args.name}_native.png"
-        ET.ElementTree(root).write(scene_out, encoding="UTF-8", xml_declaration=True)
-        capture_scene(scene_out, args.scene_index, png_out, args.width, args.height, args.renderer)
+        if args.no_template_scene:
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                suffix=".scene",
+                prefix=f"sub-{subject}_",
+                dir=str(subject_dir),
+                delete=False,
+            ) as tmp:
+                temp_scene = Path(tmp.name)
+            try:
+                ET.ElementTree(root).write(temp_scene, encoding="UTF-8", xml_declaration=True)
+                capture_scene(temp_scene, args.scene_index, png_out, args.width, args.height, args.renderer)
+            finally:
+                temp_scene.unlink(missing_ok=True)
+        else:
+            ET.ElementTree(root).write(scene_out, encoding="UTF-8", xml_declaration=True)
+            capture_scene(scene_out, args.scene_index, png_out, args.width, args.height, args.renderer)
 
     return 0
 

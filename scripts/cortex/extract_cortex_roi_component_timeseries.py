@@ -1,0 +1,214 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import argparse
+import csv
+import json
+import re
+from pathlib import Path
+
+import nibabel as nib
+import numpy as np
+
+
+ROI_NAME_PATTERN = re.compile(r"(?P<network>.+)_(?P<hemi>[LR])_(?P<rank>\d+)$")
+
+
+def load_label_gifti(path: Path) -> tuple[np.ndarray, dict[int, str]]:
+    img = nib.load(str(path))
+    labels = np.asarray(img.darrays[0].data, dtype=np.int32)
+    label_map: dict[int, str] = {}
+    for label in img.labeltable.labels:
+        key = int(label.key)
+        if key == 0:
+            continue
+        label_map[key] = getattr(label, "label", None) or str(key)
+    return labels, label_map
+
+
+def parse_roi_name(name: str) -> tuple[str, str, int]:
+    match = ROI_NAME_PATTERN.fullmatch(name)
+    if not match:
+        raise ValueError(f"Could not parse ROI component name: {name}")
+    return match.group("network"), match.group("hemi"), int(match.group("rank"))
+
+
+def load_roi_summary(path: Path) -> dict[str, int]:
+    data = json.loads(path.read_text(encoding="utf-8"))
+    return {
+        "raw_component_count": int(data["raw_component_count"]),
+        "kept_roi_count": int(data["kept_roi_count"]),
+    }
+
+
+def extract_structure_data(
+    dt_axis: nib.cifti2.cifti2_axes.BrainModelAxis,
+    dt_data_t: np.ndarray,
+    structure_name: str,
+) -> tuple[np.ndarray, np.ndarray]:
+    for name, slc, subaxis in dt_axis.iter_structures():
+        if name == structure_name or name.endswith(structure_name):
+            if getattr(subaxis, "vertex", None) is None:
+                raise RuntimeError(f"Structure {structure_name} does not expose vertices")
+            return np.asarray(subaxis.vertex, dtype=np.int32), dt_data_t[slc, :]
+    raise RuntimeError(f"Could not find structure {structure_name} in dtseries")
+
+
+def align_surface_labels(
+    full_surface_labels: np.ndarray,
+    full_surface_map: dict[int, str],
+    dt_vertices: np.ndarray,
+) -> tuple[np.ndarray, dict[int, str]]:
+    if dt_vertices.max(initial=-1) >= full_surface_labels.shape[0]:
+        raise ValueError(
+            f"Vertex index out of bounds: max dtseries vertex={dt_vertices.max()}, "
+            f"label length={full_surface_labels.shape[0]}"
+        )
+    aligned = full_surface_labels[dt_vertices]
+    used_keys = sorted(int(x) for x in np.unique(aligned) if int(x) > 0)
+    used_map = {key: full_surface_map[key] for key in used_keys}
+    return aligned, used_map
+
+
+def mean_timeseries_by_label(
+    dt_data: np.ndarray,
+    aligned_labels: np.ndarray,
+    label_map: dict[int, str],
+    hemisphere: str,
+) -> tuple[list[np.ndarray], list[dict[str, object]]]:
+    ts_rows: list[np.ndarray] = []
+    meta_rows: list[dict[str, object]] = []
+    for key in sorted(label_map):
+        mask = aligned_labels == key
+        if not np.any(mask):
+            continue
+        roi_name = label_map[key]
+        parent_network, hemi_name, rank = parse_roi_name(roi_name)
+        if hemi_name != hemisphere:
+            raise ValueError(f"ROI name hemisphere mismatch for {roi_name}: expected {hemisphere}")
+        ts = np.nanmean(dt_data[mask, :], axis=0)
+        ts_rows.append(ts.astype(np.float32, copy=False))
+        meta_rows.append(
+            {
+                "parcel_id": int(key),
+                "parcel_name": roi_name,
+                "parent_network": parent_network,
+                "hemisphere": hemisphere,
+                "component_rank": int(rank),
+                "n_grayordinates": int(mask.sum()),
+                "excluded_noise": bool(parent_network == "Noise"),
+            }
+        )
+    return ts_rows, meta_rows
+
+
+def write_tsv(rows: list[dict[str, object]], path: Path, fieldnames: list[str]) -> None:
+    with path.open("w", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames, delimiter="\t")
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="Extract individualized cortex ROI component timeseries from a subject dtseries"
+    )
+    parser.add_argument("--subject", required=True)
+    parser.add_argument("--dtseries", required=True)
+    parser.add_argument("--left-labels", required=True)
+    parser.add_argument("--right-labels", required=True)
+    parser.add_argument("--roi-summary", required=True, help="roi_component_stats.json")
+    parser.add_argument("--outdir", required=True)
+    args = parser.parse_args()
+
+    outdir = Path(args.outdir)
+    outdir.mkdir(parents=True, exist_ok=True)
+
+    roi_summary = load_roi_summary(Path(args.roi_summary))
+    dt_img = nib.load(args.dtseries)
+    dt_data = np.asarray(dt_img.dataobj, dtype=np.float32)
+    if dt_data.ndim != 2:
+        raise ValueError(f"Expected 2D dtseries data, got shape {dt_data.shape}")
+    dt_data_t = dt_data.T
+    dt_axis = dt_img.header.get_axis(1)
+
+    left_all_labels, left_label_map = load_label_gifti(Path(args.left_labels))
+    right_all_labels, right_label_map = load_label_gifti(Path(args.right_labels))
+
+    left_vertices, left_dt = extract_structure_data(dt_axis, dt_data_t, "CORTEX_LEFT")
+    right_vertices, right_dt = extract_structure_data(dt_axis, dt_data_t, "CORTEX_RIGHT")
+
+    left_aligned, left_used_map = align_surface_labels(left_all_labels, left_label_map, left_vertices)
+    right_aligned, right_used_map = align_surface_labels(right_all_labels, right_label_map, right_vertices)
+
+    left_ts, left_rows = mean_timeseries_by_label(left_dt, left_aligned, left_used_map, "L")
+    right_ts, right_rows = mean_timeseries_by_label(right_dt, right_aligned, right_used_map, "R")
+
+    all_rows = left_rows + right_rows
+    if not all_rows:
+        raise RuntimeError("No cortex ROI parcel timeseries could be extracted")
+
+    non_noise_rows = [row for row in all_rows if not row["excluded_noise"]]
+    if not non_noise_rows:
+        raise RuntimeError("All ROI components were excluded as Noise")
+
+    ts_by_name = {
+        row["parcel_name"]: ts
+        for row, ts in zip(all_rows, left_ts + right_ts, strict=True)
+    }
+    ordered_non_noise_rows = sorted(
+        non_noise_rows,
+        key=lambda row: (str(row["hemisphere"]), str(row["parent_network"]), int(row["component_rank"])),
+    )
+    parcel_ts = np.asarray([ts_by_name[row["parcel_name"]] for row in ordered_non_noise_rows], dtype=np.float32)
+    np.save(outdir / "cortex_roi_parcel_timeseries.npy", parcel_ts)
+
+    parent_networks = sorted({str(row["parent_network"]) for row in ordered_non_noise_rows})
+    network_ts = []
+    network_rows = []
+    for network in parent_networks:
+        inds = [idx for idx, row in enumerate(ordered_non_noise_rows) if row["parent_network"] == network]
+        ts = np.nanmean(parcel_ts[inds, :], axis=0)
+        network_ts.append(ts.astype(np.float32, copy=False))
+        network_rows.append(
+            {
+                "parent_network": network,
+                "n_parcels": int(len(inds)),
+            }
+        )
+    network_ts_arr = np.asarray(network_ts, dtype=np.float32)
+    np.save(outdir / "cortex_parent_network_timeseries.npy", network_ts_arr)
+
+    write_tsv(
+        ordered_non_noise_rows,
+        outdir / "cortex_roi_parcels.tsv",
+        [
+            "parcel_id",
+            "parcel_name",
+            "parent_network",
+            "hemisphere",
+            "component_rank",
+            "n_grayordinates",
+            "excluded_noise",
+        ],
+    )
+    write_tsv(network_rows, outdir / "cortex_parent_networks.tsv", ["parent_network", "n_parcels"])
+
+    summary = {
+        "subject": args.subject,
+        "dtseries": str(Path(args.dtseries).resolve()),
+        "left_labels": str(Path(args.left_labels).resolve()),
+        "right_labels": str(Path(args.right_labels).resolve()),
+        "raw_component_count": int(roi_summary["raw_component_count"]),
+        "kept_roi_count": int(roi_summary["kept_roi_count"]),
+        "n_parcels_used_after_noise_exclusion": int(parcel_ts.shape[0]),
+        "n_parent_networks_used": int(network_ts_arr.shape[0]),
+        "n_timepoints": int(parcel_ts.shape[1]),
+    }
+    (outdir / "reference_summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    print(json.dumps(summary, indent=2))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

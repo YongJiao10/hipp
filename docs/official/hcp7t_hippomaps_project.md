@@ -4,9 +4,9 @@
 
 本项目面向单个 HCP 7T 被试，尽量贴近 DeKraker et al. 2025 的 HippoMaps/HippUnfold 思路，完成以下结果：
 
-1. 海马 `WTA 7-network` 功能分区 label
-2. 回投到单被试 `native BOLD space` 的海马 voxel label 图
-3. 每个海马功能分区作为 seed 的全脑 voxel-wise FC 图
+1. 海马 `vertex-to-parcel FC` 与连续功能梯度
+2. 海马 `FC gradients` 连续功能图
+3. 正式 structural / gradient 图
 
 ## 2. 与论文流程的对应关系
 
@@ -14,16 +14,17 @@
   - 先以结构像建立个体海马几何与 unfolded/folded surface
   - 再把 rsfMRI 数据采样到海马 surface
   - 以海马顶点时序与皮层参考网络时序做 FC
-  - 用 `winner-takes-all (WTA)` 生成每个海马 vertex 的离散网络归属
-  - 需要时将 surface label 回投到体积空间
+  - 论文中重点展示的是 FC 模式及其连续组织/梯度
+
+- **当前项目的派生实现**
+  - 旧的 `WTA` 离散网络归属不再作为正式主流程
+  - 正式主流程改成 `FC -> diffusion map gradients`
 
 - **结合 HCP 7T 数据的本地适配**
   - 海马 surface density 固定为 `2mm`
-  - 当前远端实际发现的是 `7T resting-state volume NIfTI`，尚未发现 `7T CIFTI/dtseries`
-  - 因此皮层参考时序存在两条路线：
-    - 论文偏好：`CIFTI/dtseries + Schaefer400 surface atlas`
-    - 当前被试若仅有 volume：需切换为 `volume-based neocortical reference`
-  - 用户已批准切换到 `volume-based neocortical reference`
+  - 当前远端 archive 已确认存在 `7T CIFTI/dtseries`
+  - 因此皮层参考时序默认走：`CIFTI/dtseries + Schaefer400 surface atlas`
+  - 体空间 BOLD 仍保留，用于个体化海马 `volume -> surface` 采样
 
 ## 3. 单被试最小输入清单
 
@@ -35,12 +36,14 @@
 Target   Path Type        Remote Source                                                                                         Notes
 100610   structural T1w   /Volumes/Elements/HCP-YA-2025/Structural Preprocessed Recommended for 3T and 7T/100610_StructuralRecommended.zip::100610/T1w/T1w_acpc_dc_restore.nii.gz   HippUnfold 输入
 100610   structural T2w   /Volumes/Elements/HCP-YA-2025/Structural Preprocessed Recommended for 3T and 7T/100610_StructuralRecommended.zip::100610/T1w/T2w_acpc_dc_restore.nii.gz   HippUnfold 输入
-100610   rsfMRI concat    /Volumes/Elements/HCP-YA-2025/Resting State fMRI 7T Preprocessed Recommended/100610/rfMRI_REST_7T_hp2000_clean_rclean_tclean.nii.gz                       功能时序
-100610   brain mask       /Volumes/Elements/HCP-YA-2025/Resting State fMRI 7T Preprocessed Recommended/100610/rfMRI_REST_7T_brain_mask.nii.gz                                     BOLD 掩膜
+100610   rsfMRI dtseries  /Volumes/Elements/HCP-YA-2025/Resting State fMRI 7T Preprocessed Recommended archive/100610_Rest7TRecommended.zip::100610/MNINonLinear/Results/rfMRI_REST_7T/rfMRI_REST_7T_Atlas_MSMAll_hp2000_clean_rclean_tclean.dtseries.nii  皮层 surface 参考时序
+100610   rsfMRI concat    /Volumes/Elements/HCP-YA-2025/Resting State fMRI 7T Preprocessed Recommended archive/100610_Rest7TRecommended.zip::100610/MNINonLinear/Results/rfMRI_REST_7T/rfMRI_REST_7T_hp2000_clean_rclean_tclean.nii.gz                 海马采样源 volume
+100610   brain mask       /Volumes/Elements/HCP-YA-2025/Resting State fMRI 7T Preprocessed Recommended archive/100610_Rest7TRecommended.zip::100610/MNINonLinear/Results/rfMRI_REST_7T/rfMRI_REST_7T_brain_mask.nii.gz                           BOLD 掩膜
 ```
 
 说明：
 - 结构像不整包复制，而是只从远端 zip 中按成员路径提取 `T1w/T2w`。
+- 功能侧默认从 archive zip 中提取聚合 `dtseries`，并同时提取聚合 volume 与 mask 供海马 surface 采样使用。
 - 当前没有复制多余被试、多余 run、扩展 QC 截图或无关衍生文件。
 
 ## 4. 坐标空间与变换链
@@ -53,9 +56,9 @@ T1w/T2w native
   -> HippUnfold 输出 folded / unfolded hippocampal surfaces
   -> 将海马 surface 映射到 native BOLD / func space
   -> 从 concat rsfMRI 采样海马顶点时序
-  -> 计算 WTA surface labels
-  -> surface labels 回投到 native BOLD volume
-  -> 每个海马功能分区提 seed -> whole-brain voxel-wise FC
+  -> 计算 vertex-to-parcel FC
+  -> diffusion map gradients
+  -> 输出正式 structural / gradient 图
 ```
 
 ## 5. 输入组织约定
@@ -75,13 +78,14 @@ data/hippunfold_input/
       sub-100610_T1w.nii.gz
       sub-100610_T2w.nii.gz
     func/
+      sub-100610_task-rest_run-concat.dtseries.nii
       sub-100610_task-rest_run-concat_bold.nii.gz
       sub-100610_task-rest_run-concat_desc-brain_mask.nii.gz
 ```
 
 ## 6. 依赖与版本锁定
 
-- 分析口径：**当前机器实际可运行的 HippUnfold CLI (`1.5.2-pre.2`) + volume-based HippoMaps 实现**
+- 分析口径：**当前机器实际可运行的 HippUnfold CLI (`1.5.2-pre.2`) + surface-first / CIFTI-first HippoMaps 实现**
 - 海马 surface density：**`2mm`**
 - 本地项目环境名：**`hippo`**
 - 皮层 atlas 来源：**ThomasYeoLab/CBIG 官方 Schaefer400 7-network**
@@ -90,13 +94,13 @@ data/hippunfold_input/
 
 ```text
 Item         Status                Notes
-remote ssh   OK                    已成功连接 192.168.0.113
+remote ssh   OK                    已成功连接 192.168.0.183
 remote data  OK                    已发现 HCP-YA-2025 与被试 100610
 wb_command   OK                    /Applications/wb_view.app/Contents/usr/bin/wb_command，需通过 arch -x86_64 调用
 docker       Missing               本机无 docker
 hippunfold   Installed             hippo 环境中实际可运行 CLI 为 1.5.2-pre.2
 conda pkg    Mismatch observed     conda 包索引显示 2.0.0，但实际安装 CLI 版本为 1.5.2-pre.2
-7T CIFTI     Missing so far        当前仅发现 rsfMRI volume NIfTI
+7T CIFTI     Available             archive zip 内已确认聚合与逐 run dtseries
 ```
 
 平台兼容说明：
@@ -126,11 +130,11 @@ conda pkg    Mismatch observed     conda 包索引显示 2.0.0，但实际安装
 - Schaefer400 官方下载脚本
 - 环境检查脚本
 - pipeline 主控脚本骨架
-- `volume-based` 分支已被用户批准
-- volume-based Schaefer 参考时序提取
+- archive surface/CIFTI 数据已重新确认
+- surface-first Schaefer 参考时序提取
 - 海马 surface 时序采样脚本
-- 左右海马 label 合并并回采样到 BOLD 脚本
+- 梯度计算与正式 gradient 出图脚本
 
 待继续实施：
 - 完成 HippUnfold 模型下载并正式运行
-- 基于 HippUnfold 输出执行海马 surface 采样、WTA、回投与 seed FC
+- 基于 HippUnfold 输出执行海马 surface 采样、surface-based FC 梯度与正式 gradient 出图

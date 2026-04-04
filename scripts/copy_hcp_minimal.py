@@ -13,6 +13,10 @@ import sys
 REMOTE_ROOT_DEFAULT = "/Volumes/Elements/HCP-YA-2025"
 STRUCT_DIR = "Structural Preprocessed Recommended for 3T and 7T"
 RSFMRI_DIR = "Resting State fMRI 7T Preprocessed Recommended"
+RSFMRI_ARCHIVE_DIR = "Resting State fMRI 7T Preprocessed Recommended archive"
+DTSERIES_MEMBER = "MNINonLinear/Results/rfMRI_REST_7T/rfMRI_REST_7T_Atlas_MSMAll_hp2000_clean_rclean_tclean.dtseries.nii"
+BOLD_MEMBER = "MNINonLinear/Results/rfMRI_REST_7T/rfMRI_REST_7T_hp2000_clean_rclean_tclean.nii.gz"
+MASK_MEMBER = "MNINonLinear/Results/rfMRI_REST_7T/rfMRI_REST_7T_brain_mask.nii.gz"
 
 
 def run(cmd: list[str], check: bool = True, capture: bool = True) -> subprocess.CompletedProcess:
@@ -48,21 +52,26 @@ def stream_zip_member(host: str, zip_path: str, member: str, local_path: Path) -
 
 
 def discover_subject(host: str, remote_root: str) -> str:
-    rsfmri_root = f"{remote_root}/{RSFMRI_DIR}"
+    archive_root = f"{remote_root}/{RSFMRI_ARCHIVE_DIR}"
     struct_root = f"{remote_root}/{STRUCT_DIR}"
-    dirs = ssh(host, f"find {shlex.quote(rsfmri_root)} -mindepth 1 -maxdepth 1 -type d -exec basename {{}} \\; | sort")
-    subjects = [x.strip() for x in dirs.splitlines() if x.strip()]
+    zips = ssh(
+        host,
+        f"find {shlex.quote(archive_root)} -mindepth 1 -maxdepth 1 -type f -name '*_Rest7TRecommended.zip' -exec basename {{}} \\; | sort",
+    )
+    subjects = [x.replace("_Rest7TRecommended.zip", "").strip() for x in zips.splitlines() if x.strip()]
     for subject in subjects:
         struct_zip = f"{struct_root}/{subject}_StructuralRecommended.zip"
+        archive_zip = f"{archive_root}/{subject}_Rest7TRecommended.zip"
         check_cmd = (
             f"test -f {shlex.quote(struct_zip)}"
-            f" && test -f {shlex.quote(rsfmri_root + '/' + subject + '/rfMRI_REST_7T_hp2000_clean_rclean_tclean.nii.gz')}"
+            f" && test -f {shlex.quote(archive_zip)}"
+            f" && unzip -l {shlex.quote(archive_zip)} {shlex.quote(f'{subject}/{DTSERIES_MEMBER}')} >/dev/null 2>&1"
             f" && echo {shlex.quote(subject)}"
         )
         found = ssh(host, check_cmd, check=False).strip()
         if found:
             return found
-    raise RuntimeError("No subject with both structural zip and 7T rsfMRI volume found on remote drive")
+    raise RuntimeError("No subject with both structural zip and archive dtseries found on remote drive")
 
 
 def remote_stat(host: str, path: str) -> int:
@@ -87,21 +96,24 @@ def main() -> int:
         subject = discover_subject(args.remote_host, args.remote_root)
 
     struct_zip = f"{args.remote_root}/{STRUCT_DIR}/{subject}_StructuralRecommended.zip"
-    rsfmri_root = f"{args.remote_root}/{RSFMRI_DIR}/{subject}"
-    rsfmri_volume = f"{rsfmri_root}/rfMRI_REST_7T_hp2000_clean_rclean_tclean.nii.gz"
-    rsfmri_mask = f"{rsfmri_root}/rfMRI_REST_7T_brain_mask.nii.gz"
+    archive_zip = f"{args.remote_root}/{RSFMRI_ARCHIVE_DIR}/{subject}_Rest7TRecommended.zip"
     t1_member = f"{subject}/T1w/T1w_acpc_dc_restore.nii.gz"
     t2_member = f"{subject}/T1w/T2w_acpc_dc_restore.nii.gz"
+    dtseries_member = f"{subject}/{DTSERIES_MEMBER}"
+    bold_member = f"{subject}/{BOLD_MEMBER}"
+    mask_member = f"{subject}/{MASK_MEMBER}"
 
     t1_local = outdir / f"sub-{subject}_T1w_acpc_dc_restore.nii.gz"
     t2_local = outdir / f"sub-{subject}_T2w_acpc_dc_restore.nii.gz"
+    dtseries_local = outdir / f"sub-{subject}_rfMRI_REST_7T_Atlas_MSMAll_hp2000_clean_rclean_tclean.dtseries.nii"
     bold_local = outdir / f"sub-{subject}_rfMRI_REST_7T_hp2000_clean_rclean_tclean.nii.gz"
     mask_local = outdir / f"sub-{subject}_rfMRI_REST_7T_brain_mask.nii.gz"
 
     stream_zip_member(args.remote_host, struct_zip, t1_member, t1_local)
     stream_zip_member(args.remote_host, struct_zip, t2_member, t2_local)
-    stream_remote_file(args.remote_host, rsfmri_volume, bold_local)
-    stream_remote_file(args.remote_host, rsfmri_mask, mask_local)
+    stream_zip_member(args.remote_host, archive_zip, dtseries_member, dtseries_local)
+    stream_zip_member(args.remote_host, archive_zip, bold_member, bold_local)
+    stream_zip_member(args.remote_host, archive_zip, mask_member, mask_local)
 
     manifest = {
         "subject": subject,
@@ -121,16 +133,22 @@ def main() -> int:
                 "bytes": t2_local.stat().st_size,
             },
             {
+                "kind": "rsfmri_dtseries",
+                "remote_source": f"{archive_zip}::{dtseries_member}",
+                "local_path": str(dtseries_local),
+                "bytes": dtseries_local.stat().st_size,
+            },
+            {
                 "kind": "rsfmri_volume",
-                "remote_source": rsfmri_volume,
+                "remote_source": f"{archive_zip}::{bold_member}",
                 "local_path": str(bold_local),
-                "bytes": remote_stat(args.remote_host, rsfmri_volume),
+                "bytes": bold_local.stat().st_size,
             },
             {
                 "kind": "brain_mask",
-                "remote_source": rsfmri_mask,
+                "remote_source": f"{archive_zip}::{mask_member}",
                 "local_path": str(mask_local),
-                "bytes": remote_stat(args.remote_host, rsfmri_mask),
+                "bytes": mask_local.stat().st_size,
             },
         ],
     }

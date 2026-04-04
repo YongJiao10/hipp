@@ -1,30 +1,506 @@
 {
   "1": {
-    "name": "Vis",
-    "rgba": [31, 119, 180, 255]
+    "name": "Aud",
+    "rgba": [
+      174,
+      199,
+      232,
+      255
+    ]
   },
   "2": {
-    "name": "SomMot",
-    "rgba": [255, 127, 14, 255]
+    "name": "Auditory",
+    "rgba": [
+      255,
+      187,
+      120,
+      255
+    ]
   },
   "3": {
-    "name": "DorsAttn",
-    "rgba": [44, 160, 44, 255]
+    "name": "CO",
+    "rgba": [
+      152,
+      223,
+      138,
+      255
+    ]
   },
   "4": {
-    "name": "SalVentAttn",
-    "rgba": [214, 39, 40, 255]
+    "name": "CinguloOpercular/Action-mode",
+    "rgba": [
+      255,
+      152,
+      150,
+      255
+    ]
   },
   "5": {
-    "name": "Limbic",
-    "rgba": [140, 86, 75, 255]
+    "name": "Cont",
+    "rgba": [
+      23,
+      190,
+      207,
+      255
+    ]
   },
   "6": {
-    "name": "Cont",
-    "rgba": [23, 190, 207, 255]
+    "name": "DAN",
+    "rgba": [
+      197,
+      176,
+      213,
+      255
+    ]
   },
   "7": {
+    "name": "DMN",
+    "rgba": [
+      196,
+      156,
+      148,
+      255
+    ]
+  },
+  "8": {
     "name": "Default",
-    "rgba": [148, 103, 189, 255]
+    "rgba": [
+      148,
+      103,
+      189,
+      255
+    ]
+  },
+  "9": {
+    "name": "Default_Anterolateral",
+    "rgba": [
+      227,
+      119,
+      194,
+      255
+    ]
+  },
+  "10": {
+    "name": "Default_Dorsolateral",
+    "rgba": [
+      247,
+      182,
+      210,
+      255
+    ]
+  },
+  "11": {
+    "name": "Default_Parietal",
+    "rgba": [
+      127,
+      127,
+      127,
+      255
+    ]
+  },
+  "12": {
+    "name": "Default_Retrosplenial",
+    "rgba": [
+      199,
+      199,
+      199,
+      255
+    ]
+  },
+  "13": {
+    "name": "DorsAttn",
+    "rgba": [
+      44,
+      160,
+      44,
+      255
+    ]
+  },
+  "14": {
+    "name": "DorsalAttention",
+    "rgba": [
+      188,
+      189,
+      34,
+      255
+    ]
+  },
+  "15": {
+    "name": "FP",
+    "rgba": [
+      219,
+      219,
+      141,
+      255
+    ]
+  },
+  "16": {
+    "name": "Frontoparietal",
+    "rgba": [
+      158,
+      218,
+      229,
+      255
+    ]
+  },
+  "17": {
+    "name": "Language",
+    "rgba": [
+      57,
+      59,
+      121,
+      255
+    ]
+  },
+  "18": {
+    "name": "Limbic",
+    "rgba": [
+      140,
+      86,
+      75,
+      255
+    ]
+  },
+  "19": {
+    "name": "MTL",
+    "rgba": [
+      82,
+      84,
+      163,
+      255
+    ]
+  },
+  "20": {
+    "name": "MedialParietal",
+    "rgba": [
+      107,
+      110,
+      207,
+      255
+    ]
+  },
+  "21": {
+    "name": "PMN",
+    "rgba": [
+      156,
+      158,
+      222,
+      255
+    ]
+  },
+  "22": {
+    "name": "PON",
+    "rgba": [
+      99,
+      121,
+      57,
+      255
+    ]
+  },
+  "23": {
+    "name": "Premotor/DorsalAttentionII",
+    "rgba": [
+      140,
+      162,
+      82,
+      255
+    ]
+  },
+  "24": {
+    "name": "SMd",
+    "rgba": [
+      181,
+      207,
+      107,
+      255
+    ]
+  },
+  "25": {
+    "name": "SMl",
+    "rgba": [
+      206,
+      219,
+      156,
+      255
+    ]
+  },
+  "26": {
+    "name": "Sal",
+    "rgba": [
+      140,
+      109,
+      49,
+      255
+    ]
+  },
+  "27": {
+    "name": "SalVentAttn",
+    "rgba": [
+      214,
+      39,
+      40,
+      255
+    ]
+  },
+  "28": {
+    "name": "Salience",
+    "rgba": [
+      189,
+      158,
+      57,
+      255
+    ]
+  },
+  "29": {
+    "name": "SomMot",
+    "rgba": [
+      255,
+      127,
+      14,
+      255
+    ]
+  },
+  "30": {
+    "name": "SomatoCognitiveAction",
+    "rgba": [
+      231,
+      186,
+      82,
+      255
+    ]
+  },
+  "31": {
+    "name": "Somatomotor_Face",
+    "rgba": [
+      231,
+      203,
+      148,
+      255
+    ]
+  },
+  "32": {
+    "name": "Somatomotor_Foot",
+    "rgba": [
+      132,
+      60,
+      57,
+      255
+    ]
+  },
+  "33": {
+    "name": "Somatomotor_Hand",
+    "rgba": [
+      173,
+      73,
+      74,
+      255
+    ]
+  },
+  "34": {
+    "name": "Tpole",
+    "rgba": [
+      214,
+      97,
+      107,
+      255
+    ]
+  },
+  "35": {
+    "name": "VAN",
+    "rgba": [
+      231,
+      150,
+      156,
+      255
+    ]
+  },
+  "36": {
+    "name": "Vis",
+    "rgba": [
+      31,
+      119,
+      180,
+      255
+    ]
+  },
+  "37": {
+    "name": "Visual_Dorsal/VentralStream",
+    "rgba": [
+      123,
+      65,
+      115,
+      255
+    ]
+  },
+  "38": {
+    "name": "Visual_Lateral",
+    "rgba": [
+      165,
+      81,
+      148,
+      255
+    ]
+  },
+  "39": {
+    "name": "Visual_V1",
+    "rgba": [
+      206,
+      109,
+      189,
+      255
+    ]
+  },
+  "40": {
+    "name": "Visual_V5",
+    "rgba": [
+      222,
+      158,
+      214,
+      255
+    ]
+  },
+  "41": {
+    "name": "VentralAttentionB",
+    "rgba": [
+      255,
+      152,
+      213,
+      255
+    ]
+  },
+  "42": {
+    "name": "ControlA",
+    "rgba": [
+      230,
+      148,
+      34,
+      255
+    ]
+  },
+  "43": {
+    "name": "VisualA",
+    "rgba": [
+      120,
+      18,
+      134,
+      255
+    ]
+  },
+  "44": {
+    "name": "TemporalParietal",
+    "rgba": [
+      12,
+      48,
+      255,
+      255
+    ]
+  },
+  "45": {
+    "name": "DorsalAttentionA",
+    "rgba": [
+      74,
+      155,
+      60,
+      255
+    ]
+  },
+  "46": {
+    "name": "ControlC",
+    "rgba": [
+      119,
+      140,
+      176,
+      255
+    ]
+  },
+  "47": {
+    "name": "DefaultA",
+    "rgba": [
+      255,
+      255,
+      0,
+      255
+    ]
+  },
+  "48": {
+    "name": "ControlB",
+    "rgba": [
+      135,
+      50,
+      74,
+      255
+    ]
+  },
+  "49": {
+    "name": "VentralAttentionA",
+    "rgba": [
+      196,
+      58,
+      250,
+      255
+    ]
+  },
+  "50": {
+    "name": "VisualB",
+    "rgba": [
+      255,
+      0,
+      0,
+      255
+    ]
+  },
+  "51": {
+    "name": "SomatomotorA",
+    "rgba": [
+      70,
+      130,
+      180,
+      255
+    ]
+  },
+  "52": {
+    "name": "DefaultB",
+    "rgba": [
+      205,
+      62,
+      78,
+      255
+    ]
+  },
+  "53": {
+    "name": "DefaultC",
+    "rgba": [
+      0,
+      0,
+      130,
+      255
+    ]
+  },
+  "54": {
+    "name": "SomatomotorB",
+    "rgba": [
+      42,
+      204,
+      164,
+      255
+    ]
+  },
+  "55": {
+    "name": "DorsalAttentionB",
+    "rgba": [
+      0,
+      118,
+      14,
+      255
+    ]
+  },
+  "56": {
+    "name": "VisualC",
+    "rgba": [
+      122,
+      135,
+      50,
+      255
+    ]
   }
 }

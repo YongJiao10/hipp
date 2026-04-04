@@ -89,29 +89,26 @@ def find_structural_label(hippunfold_dir: Path, subject: str, hemi: str, space: 
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Run the post-HippUnfold volume-based HippoMaps pipeline")
+    parser = argparse.ArgumentParser(description="Run the post-HippUnfold surface-first HippoMaps pipeline")
     parser.add_argument("--subject", required=True)
     parser.add_argument("--bold", required=True)
     parser.add_argument("--brain-mask", required=True)
+    parser.add_argument("--dtseries", required=True)
     parser.add_argument("--hippunfold-dir", required=True)
-    parser.add_argument("--reference-dir", required=True)
     parser.add_argument("--density", default="2mm")
     parser.add_argument("--space", default="auto")
-    parser.add_argument("--skip-volume-backproject", action="store_true")
     parser.add_argument("--outdir", required=True)
     args = parser.parse_args()
     python_exe = sys.executable or "python"
-    hippo_python = "/opt/miniconda3/envs/hippo/bin/python"
-    surface_to_volume_python = hippo_python if Path(hippo_python).exists() else python_exe
     view_config = json.loads(Path("config/native_surface_3d_view.json").read_text(encoding="utf-8"))
     layout_template_json = Path("config/native_surface_layout_template.json")
+    atlas_dlabel = Path("data/atlas/schaefer400/Schaefer2018_400Parcels_7Networks_order.dlabel.nii")
 
     outdir = Path(args.outdir)
     surf_dir = outdir / "surface"
-    wta_dir = outdir / "wta"
-    vol_dir = outdir / "volume"
-    seed_dir = outdir / "seed_fc"
-    for path in [surf_dir, wta_dir, vol_dir, seed_dir]:
+    ref_dir = outdir / "reference"
+    grad_dir = outdir / "gradients"
+    for path in [surf_dir, ref_dir, grad_dir]:
         path.mkdir(parents=True, exist_ok=True)
 
     timings: list[dict[str, object]] = []
@@ -121,17 +118,34 @@ def main() -> int:
         "subject": args.subject,
         "space": resolved_space,
         "surface_dir": str(surf_dir),
-        "wta_dir": str(wta_dir),
-        "volume_dir": str(vol_dir),
-        "seed_fc_dir": str(seed_dir),
+        "reference_dir": str(ref_dir),
+        "gradient_dir": str(grad_dir),
         "timings": timings,
     }
 
     try:
+        require_existing(Path(args.dtseries), "surface dtseries")
+        require_existing(atlas_dlabel, "Schaefer dlabel atlas")
+
         run(
             [
                 python_exe,
-                "scripts/sample_hipp_surface_timeseries.py",
+                "scripts/extract_schaefer_cifti_reference.py",
+                "--dtseries",
+                args.dtseries,
+                "--atlas-dlabel",
+                str(atlas_dlabel),
+                "--outdir",
+                str(ref_dir),
+            ],
+            "extract_schaefer_cifti_reference",
+            timings,
+        )
+
+        run(
+            [
+                python_exe,
+                "scripts/common/sample_hipp_surface_timeseries.py",
                 "--bold",
                 args.bold,
                 "--hippunfold-dir",
@@ -153,7 +167,7 @@ def main() -> int:
         run(
             [
                 python_exe,
-                "scripts/render_native_surface_label_map_3d.py",
+                "scripts/workbench/render_native_surface_label_map_3d.py",
                 "--subject",
                 args.subject,
                 "--left-surface",
@@ -194,46 +208,47 @@ def main() -> int:
         )
         summary["structural_native_png"] = str(structural_native_png)
 
-        network_ts = str(Path(args.reference_dir) / "schaefer7_network_timeseries.npy")
-        hemi_label_paths: dict[str, str] = {}
+        parcel_ts = str(ref_dir / "schaefer400_parcel_timeseries.npy")
         for hemi in ["L", "R"]:
-            hemi_wta = wta_dir / f"hemi-{hemi}"
-            hemi_wta.mkdir(parents=True, exist_ok=True)
+            hemi_grad = grad_dir / f"hemi-{hemi}"
+            hemi_grad.mkdir(parents=True, exist_ok=True)
             hemi_ts = (
                 surf_dir / f"sub-{args.subject}_hemi-{hemi}_space-{resolved_space}_den-{args.density}_label-hipp_bold.npy"
             )
             run(
                 [
                     python_exe,
-                    "scripts/compute_wta_labels.py",
+                    "scripts/common/compute_fc_gradients.py",
                     "--hipp-ts",
                     str(hemi_ts),
-                    "--network-ts",
-                    network_ts,
+                    "--parcel-ts",
+                    parcel_ts,
+                    "--surface",
+                    str(find_subject_surface(Path(args.hippunfold_dir), args.subject, hemi, resolved_space, args.density)),
                     "--outdir",
-                    str(hemi_wta),
+                    str(hemi_grad),
                 ],
-                f"compute_wta_labels_hemi_{hemi}",
+                f"compute_fc_gradients_hemi_{hemi}",
                 timings,
             )
 
-        wta_native_png = outdir / f"sub-{args.subject}_hipp_wta_native.png"
+        gradient_native_png = outdir / f"sub-{args.subject}_hipp_fc_gradient1_native.png"
         run(
             [
                 python_exe,
-                "scripts/render_native_surface_label_map_3d.py",
+                "scripts/workbench/render_native_surface_scalar_map_3d.py",
                 "--subject",
                 args.subject,
                 "--left-surface",
                 str(find_subject_surface(Path(args.hippunfold_dir), args.subject, "L", resolved_space, args.density)),
                 "--right-surface",
                 str(find_subject_surface(Path(args.hippunfold_dir), args.subject, "R", resolved_space, args.density)),
-                "--left-labels",
-                str(wta_dir / "hemi-L" / "hipp_wta_labels.npy"),
-                "--right-labels",
-                str(wta_dir / "hemi-R" / "hipp_wta_labels.npy"),
-                "--style-json",
-                "config/hipp_network_style.json",
+                "--left-scalars",
+                str(grad_dir / "hemi-L" / "hipp_fc_gradient1.npy"),
+                "--right-scalars",
+                str(grad_dir / "hemi-R" / "hipp_fc_gradient1.npy"),
+                "--colorbar-label",
+                "Gradient 1",
                 "--vertical-axis",
                 str(view_config["vertical_axis"]),
                 "--elev",
@@ -257,81 +272,17 @@ def main() -> int:
                 "--layout-template-json",
                 str(layout_template_json),
                 "--out",
-                str(wta_native_png),
+                str(gradient_native_png),
             ],
-            "render_wta_native_map",
+            "render_gradient_native_map",
             timings,
         )
-        summary["wta_native_png"] = str(wta_native_png)
-
-        if args.skip_volume_backproject:
-            summary["status"] = "success"
-            summary["skipped"] = ["surface_labels_to_volume", "combine_hemi_labels_to_bold", "compute_seed_fc"]
-            print(json.dumps(summary, indent=2))
-            return 0
-
-        for hemi in ["L", "R"]:
-            hemi_wta = wta_dir / f"hemi-{hemi}"
-            hemi_labels_t1w = vol_dir / f"sub-{args.subject}_hemi-{hemi}_space-{resolved_space}_desc-wta_labels.nii.gz"
-            hemi_label_paths[hemi] = str(hemi_labels_t1w)
-            run(
-                [
-                    surface_to_volume_python,
-                    "scripts/surface_labels_to_volume.py",
-                    "--surf-labels",
-                    str(hemi_wta / "hipp_wta_labels.npy"),
-                    "--density",
-                    args.density,
-                    "--hippunfold-dir",
-                    args.hippunfold_dir,
-                    "--subject",
-                    args.subject,
-                    "--hemi",
-                    hemi,
-                    "--space",
-                    resolved_space,
-                    "--out",
-                    str(hemi_labels_t1w),
-                ],
-                f"surface_labels_to_volume_hemi_{hemi}",
-                timings,
-            )
-
-        merged_bold = vol_dir / f"sub-{args.subject}_space-bold_desc-wta_labels.nii.gz"
-        summary["merged_bold_labels"] = str(merged_bold)
-        run(
-            [
-                python_exe,
-                "scripts/combine_hemi_labels_to_bold.py",
-                "--left-labels",
-                hemi_label_paths["L"],
-                "--right-labels",
-                hemi_label_paths["R"],
-                "--bold-ref",
-                args.bold,
-                "--out",
-                str(merged_bold),
-            ],
-            "combine_hemi_labels_to_bold",
-            timings,
-        )
-
-        run(
-            [
-                python_exe,
-                "scripts/compute_seed_fc.py",
-                "--bold",
-                args.bold,
-                "--brain-mask",
-                args.brain_mask,
-                "--seed-labels",
-                str(merged_bold),
-                "--outdir",
-                str(seed_dir),
-            ],
-            "compute_seed_fc",
-            timings,
-        )
+        summary["gradient_native_png"] = str(gradient_native_png)
+        summary["formal_functional_outputs"] = [
+            str(grad_dir / "hemi-L" / "hipp_fc_gradients.npy"),
+            str(grad_dir / "hemi-R" / "hipp_fc_gradients.npy"),
+            str(gradient_native_png),
+        ]
         summary["status"] = "success"
     except Exception as exc:
         summary["status"] = "failed"
