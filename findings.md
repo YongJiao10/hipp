@@ -27,12 +27,23 @@
 - 已确认本地 macOS 上 `nnUNet_predict` 的默认 multiprocessing `spawn` 会触发 `PicklingError`，不适合作为本地测试默认路径。
 - 已实现按系统自动调整的兼容逻辑：Darwin/macOS 下自动切到 `NNUNET_DISABLE_MULTIPROCESSING=1`、单进程低内存路径；Linux/HPC 保留正常并行语义。
 - 本地测试已进一步降到 `fold-0` 单折，以尽快获取功能 label；正式 HPC 版仍应恢复完整折数并使用 GPU。
+- 已按 `MPM619.local -> 192.168.0.183` 重新连回远端 Mac，并确认 archive 目录存在于 `/Volumes/Elements/HCP-YA-2025/Resting State fMRI 7T Preprocessed Recommended archive`。
+- 已确认 `100610_Rest7TRecommended.zip` 与 `102311_Rest7TRecommended.zip` 内都包含聚合 `rfMRI_REST_7T_Atlas_1.6mm_MSMAll_hp2000_clean_rclean_tclean.dtseries.nii`。
+- 同一批 archive zip 内也包含逐 run 的 `rfMRI_REST[1-4]_7T_*_Atlas_1.6mm_MSMAll_hp2000_clean_rclean_tclean.dtseries.nii`。
+- 因此当前 7T 皮层参考数据不再是“缺失 surface 原始数据”，而是此前只检查了未归档目录，遗漏了 archive zip。
+- archive zip 中同时保留 volume NIfTI 与 CIFTI/dtseries；切回 surface-first 后，皮层参考应默认走 CIFTI，海马时序采样仍可继续复用 volume -> hippocampal surface 路径。
+- `100610 / 102311 / 102816` 三位被试的本地 `data/hippunfold_input/sub-*/func/` 现都已补齐聚合 `sub-*_task-rest_run-concat.dtseries.nii`。
+- 当前三位用 `run_hippomaps_pipeline.check_inputs` 检测都返回 `functional_mode = cifti`。
+- 三位被试现有 `outputs/dense_corobl_batch/sub-*/hippunfold/sub-*/surf/` 下的 `multihist7_subfields.label.gii` 已足够作为正式结构结果复用，无需重跑 HippUnfold。
+- 旧 volume 功能结果已归档到 `outputs/dense_corobl_batch/_archived_volume_functional/sub-*/`。
+- 当前正式输出已收敛到 `outputs/dense_corobl_batch/final_structural_only/final/sub-*/sub-*_structural.png`。
 
 ## Constraints
 - 远端数据在远端 Mac 的外接盘，不在本地。
 - 只能最小拷贝单被试所需数据。
 - 任何环境不确定性都必须显式汇报。
 - 未经用户批准，不得从 `CIFTI-first` 路线切换到 `volume-based neocortical reference`。
+- 用户已于 2026-04-01 明确要求：从现在开始全部切换成使用 surface 数据，因此当前默认口径应恢复为 surface-first / CIFTI-first。
 - 当前实际可运行的 HippUnfold 密度口径仍为 `0p5mm / 1mm / 2mm / unfoldiso`，不得再按 `512` 继续实现。
 - `102311` 的 full-fold nnUNet 推理本身完成，失败点在 HippUnfold `postproc_boundary_vertices`，不是 nnUNet 直接崩溃。
 - `102311` 右侧海马 4 个 `*_sdt.nii.gz` 体数据正常，但对应 4 个 `*.shape.gii` 被 `wb_command -volume-to-surface-mapping` 映射成全零。
@@ -43,3 +54,4 @@
 - `surface_labels_to_volume.py` 当前仍有更深一层路径/空间假设：`hippomaps.utils.surface_to_volume` 会强行查找 `sub-*/coords/sub-*_space-T2w_*_laplace_coords.nii.gz`，但当前 HippUnfold 产物实际坐标场位于 `work/sub-*/coords/` 且命名为 `space-corobl`，所以会继续 `IndexError`。
 - 本地 macOS 的兼容补丁只能视为测试机适配，不得把它误当成 HPC 正式运行默认参数。
 - HPC 正式版不需要为 CPU fallback 保留额外兼容逻辑。
+- 即便新默认切到 CIFTI-first，当前个体化海马功能主链仍依赖 `sample_hipp_surface_timeseries.py` 从体空间 BOLD 映射到 HippUnfold 海马 surface；除非用户再单独批准，不应额外发明新的 hippocampal CIFTI fallback 分支。

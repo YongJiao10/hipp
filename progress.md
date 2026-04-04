@@ -61,3 +61,15 @@
 - 新增正式入口 `scripts/render_locked_wb_views.py`，统一执行 `scene capture -> WTA assets -> structural/WTA legend composition`。
 - 生成正式锁定版发布图：三位被试各两张，共六张，最终风格为 `wb_biglegend`。
 - 新增文档 `docs/wb_locked_rendering.md`，明确官方绘图流程、固定视觉规则与 archive policy。
+
+## 2026-04-01
+- 用户明确要求：远端 archive 里已有 surface 原始数据，当前 workflow 从现在开始切回并锁定为 `surface-first / CIFTI-first`。
+- 按仓库约定重新解析 `MPM619.local`，当前可用 IPv4 为 `192.168.0.183`，并改用 `ssh yojiao@192.168.0.183` 直连远端 Mac。
+- 确认 `/Volumes/Elements/HCP-YA-2025/Resting State fMRI 7T Preprocessed Recommended archive` 中以 `*_Rest7TRecommended.zip` 保存 7T 功能 archive。
+- 检查 `100610_Rest7TRecommended.zip` 与 `102311_Rest7TRecommended.zip` 后确认：archive 内确实包含聚合 `rfMRI_REST_7T_Atlas_1.6mm_MSMAll_hp2000_clean_rclean_tclean.dtseries.nii` 与逐 run `dtseries`。
+- 复盘代码现状后确认：`run_hippomaps_pipeline.py` 只做了 `dtseries` 检测，但 `copy_hcp_minimal.py`、`stage_hippunfold_inputs.py`、`run_post_hippunfold_pipeline.py` 仍然是 volume-first，需要补齐 surface/CIFTI 主链。
+- 已为 `100610`、`102311`、`102816` 三位被试补齐本地聚合 `dtseries`，三者在 `check_inputs` 下均被识别为 `functional_mode = cifti`。
+- 新增 `scripts/formalize_structural_only.py`，用于验证本地 `dtseries`、归档旧 volume 功能结果，并只重建正式 structural 图。
+- 新增 `docs/structural_only_formalization.md`，明确当前正式交付只保留结构 label 与 structural PNG。
+- 已将旧 `post_dense_corobl` 与 `final_wb_locked/sub-*` 功能结果整体移到 `outputs/dense_corobl_batch/_archived_volume_functional/sub-*/`。
+- 已重建新的 structural-only 正式输出：`outputs/dense_corobl_batch/final_structural_only/final/sub-100610/sub-100610_structural.png`、`sub-102311_structural.png`、`sub-102816_structural.png`。

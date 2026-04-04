@@ -38,9 +38,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Sequentially rerun multiple subjects and render dense corobl figures")
     parser.add_argument("--subjects", nargs="+", required=True)
     parser.add_argument("--input-dir", default="data/hippunfold_input")
-    parser.add_argument("--reference-dir", default="outputs/100610/reference")
     parser.add_argument("--out-root", default="outputs/dense_corobl_batch")
-    parser.add_argument("--skip-volume-backproject", action="store_true")
     args = parser.parse_args()
 
     python_exe = sys.executable or "python"
@@ -50,7 +48,6 @@ def main() -> int:
     batch_summary: dict[str, object] = {
         "subjects": args.subjects,
         "input_dir": args.input_dir,
-        "reference_dir": args.reference_dir,
         "out_root": str(out_root),
         "results": [],
     }
@@ -87,22 +84,19 @@ def main() -> int:
                 "scripts/run_post_hippunfold_pipeline.py",
                 "--subject",
                 subject,
+                "--dtseries",
+                f"{args.input_dir}/sub-{subject}/func/sub-{subject}_task-rest_run-concat.dtseries.nii",
                 "--bold",
                 f"{args.input_dir}/sub-{subject}/func/sub-{subject}_task-rest_run-concat_bold.nii.gz",
                 "--brain-mask",
                 f"{args.input_dir}/sub-{subject}/func/sub-{subject}_task-rest_run-concat_desc-brain_mask.nii.gz",
                 "--hippunfold-dir",
                 str(hippunfold_dir),
-                "--reference-dir",
-                args.reference_dir,
                 "--space",
                 "corobl",
                 "--outdir",
                 str(post_dir),
             ]
-            if args.skip_volume_backproject:
-                post_cmd.append("--skip-volume-backproject")
-
             run_step(post_cmd, "post_dense_corobl", timings)
             result["status"] = "success"
         except Exception as exc:

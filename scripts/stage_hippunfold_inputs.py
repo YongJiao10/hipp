@@ -48,6 +48,10 @@ def main() -> int:
         func_dir / f"sub-{subject}_task-rest_run-concat_bold.nii.gz",
     )
     copy_file(
+        source_dir / f"sub-{subject}_rfMRI_REST_7T_Atlas_MSMAll_hp2000_clean_rclean_tclean.dtseries.nii",
+        func_dir / f"sub-{subject}_task-rest_run-concat.dtseries.nii",
+    )
+    copy_file(
         source_dir / f"sub-{subject}_rfMRI_REST_7T_brain_mask.nii.gz",
         func_dir / f"sub-{subject}_task-rest_run-concat_desc-brain_mask.nii.gz",
     )

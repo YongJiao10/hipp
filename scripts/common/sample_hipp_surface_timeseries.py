@@ -3,8 +3,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import platform
-import shutil
 import subprocess
 from pathlib import Path
 
@@ -13,16 +11,10 @@ import numpy as np
 
 
 def find_wb_command() -> list[str]:
-    explicit = Path("/Applications/wb_view.app/Contents/usr/bin/wb_command")
-    if explicit.exists():
-        wb_path = str(explicit)
-    else:
-        wb_path = shutil.which("wb_command")
-    if wb_path is None:
-        raise RuntimeError("wb_command not found")
-    if platform.system() == "Darwin" and platform.machine() == "arm64":
-        return ["arch", "-x86_64", wb_path]
-    return [wb_path]
+    wrapper = Path(__file__).resolve().parents[1] / "wb_command"
+    if not wrapper.exists():
+        raise RuntimeError(f"Expected wrapper not found: {wrapper}")
+    return [str(wrapper)]
 
 
 def run_command(cmd: list[str]) -> None:
