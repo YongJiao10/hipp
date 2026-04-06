@@ -241,13 +241,13 @@ def main() -> int:
             raise ValueError(f"Inconsistent colors within legend group '{group_name}'")
         group_colors[group_name] = color
 
-    title_font = load_font(30)
-    item_font = load_font(30)
+    title_font = load_font(34)
+    item_font = load_font(34)
     side_pad = 24
     gap_after_swatch = 16
-    swatch_w = 30
-    swatch_h = 30
-    row_h = 42
+    swatch_w = 34
+    swatch_h = 34
+    row_h = 48
 
     title_text = args.title.strip()
     group_names = sorted(group_props, key=lambda name: (-group_props[name], name))
@@ -272,7 +272,7 @@ def main() -> int:
     if title_lines:
         for line in title_lines:
             draw.text((x0, y), line, fill=(255, 255, 255, 255), font=title_font)
-            y += 40
+            y += 44
         y += 10
 
     for group_name, item_text in zip(group_names, item_texts):

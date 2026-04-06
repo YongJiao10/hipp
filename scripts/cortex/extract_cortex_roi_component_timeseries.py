@@ -12,6 +12,18 @@ import numpy as np
 
 
 ROI_NAME_PATTERN = re.compile(r"(?P<network>.+)_(?P<hemi>[LR])_(?P<rank>\d+)$")
+REPO_ROOT = Path(__file__).resolve().parents[2]
+LEGACY_SOURCE_ROOT = REPO_ROOT.parent / "HippoMaps"
+
+
+def resolve_local_or_legacy_path(relative_path: str) -> Path:
+    local_path = REPO_ROOT / relative_path
+    if local_path.exists():
+        return local_path
+    return LEGACY_SOURCE_ROOT / relative_path
+
+
+CROSS_ATLAS_NETWORK_MERGE_JSON = resolve_local_or_legacy_path("config/cross_atlas_network_merge.json")
 
 
 def load_label_gifti(path: Path) -> tuple[np.ndarray, dict[int, str]]:
@@ -109,6 +121,17 @@ def write_tsv(rows: list[dict[str, object]], path: Path, fieldnames: list[str]) 
         writer.writerows(rows)
 
 
+def load_cross_atlas_network_merge(path: Path) -> tuple[list[str], set[str], dict[str, dict[str, str]]]:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    canonical_order = [str(item) for item in payload["canonical_network_order"]]
+    exclude_labels = {str(item) for item in payload.get("exclude_labels", [])}
+    atlas_mapping = {
+        str(atlas_slug): {str(key): str(value) for key, value in atlas_spec["mapping"].items()}
+        for atlas_slug, atlas_spec in payload["atlases"].items()
+    }
+    return canonical_order, exclude_labels, atlas_mapping
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Extract individualized cortex ROI component timeseries from a subject dtseries"
@@ -118,6 +141,7 @@ def main() -> int:
     parser.add_argument("--left-labels", required=True)
     parser.add_argument("--right-labels", required=True)
     parser.add_argument("--roi-summary", required=True, help="roi_component_stats.json")
+    parser.add_argument("--atlas-slug", required=True)
     parser.add_argument("--outdir", required=True)
     args = parser.parse_args()
 
@@ -164,20 +188,49 @@ def main() -> int:
     np.save(outdir / "cortex_roi_parcel_timeseries.npy", parcel_ts)
 
     parent_networks = sorted({str(row["parent_network"]) for row in ordered_non_noise_rows})
-    network_ts = []
-    network_rows = []
+    parent_network_ts = []
+    parent_network_rows = []
     for network in parent_networks:
         inds = [idx for idx, row in enumerate(ordered_non_noise_rows) if row["parent_network"] == network]
         ts = np.nanmean(parcel_ts[inds, :], axis=0)
-        network_ts.append(ts.astype(np.float32, copy=False))
-        network_rows.append(
+        parent_network_ts.append(ts.astype(np.float32, copy=False))
+        parent_network_rows.append(
             {
                 "parent_network": network,
                 "n_parcels": int(len(inds)),
             }
         )
-    network_ts_arr = np.asarray(network_ts, dtype=np.float32)
-    np.save(outdir / "cortex_parent_network_timeseries.npy", network_ts_arr)
+    parent_network_ts_arr = np.asarray(parent_network_ts, dtype=np.float32)
+    np.save(outdir / "cortex_parent_network_timeseries.npy", parent_network_ts_arr)
+
+    canonical_order, exclude_labels, atlas_mapping = load_cross_atlas_network_merge(CROSS_ATLAS_NETWORK_MERGE_JSON)
+    if args.atlas_slug not in atlas_mapping:
+        raise KeyError(f"Atlas slug not found in cross-atlas network merge config: {args.atlas_slug}")
+    mapping = atlas_mapping[args.atlas_slug]
+
+    missing = sorted(set(parent_networks) - set(mapping))
+    if missing:
+        raise KeyError(f"Missing canonical merge mapping for atlas {args.atlas_slug}: {missing}")
+
+    canonical_network_rows = []
+    canonical_network_ts = []
+    for canonical in canonical_order:
+        matched_rows = [row for row in ordered_non_noise_rows if mapping[str(row["parent_network"])] == canonical]
+        if canonical in exclude_labels or not matched_rows:
+            continue
+        inds = [idx for idx, row in enumerate(ordered_non_noise_rows) if mapping[str(row["parent_network"])] == canonical]
+        ts = np.nanmean(parcel_ts[inds, :], axis=0)
+        original_labels = sorted({str(row["parent_network"]) for row in matched_rows})
+        canonical_network_ts.append(ts.astype(np.float32, copy=False))
+        canonical_network_rows.append(
+            {
+                "canonical_network": canonical,
+                "n_parcels_merged": int(len(inds)),
+                "original_parent_networks": ",".join(original_labels),
+            }
+        )
+    canonical_network_ts_arr = np.asarray(canonical_network_ts, dtype=np.float32)
+    np.save(outdir / "cortex_canonical_network_timeseries.npy", canonical_network_ts_arr)
 
     write_tsv(
         ordered_non_noise_rows,
@@ -192,17 +245,25 @@ def main() -> int:
             "excluded_noise",
         ],
     )
-    write_tsv(network_rows, outdir / "cortex_parent_networks.tsv", ["parent_network", "n_parcels"])
+    write_tsv(parent_network_rows, outdir / "cortex_parent_networks.tsv", ["parent_network", "n_parcels"])
+    write_tsv(
+        canonical_network_rows,
+        outdir / "cortex_canonical_networks.tsv",
+        ["canonical_network", "n_parcels_merged", "original_parent_networks"],
+    )
 
     summary = {
         "subject": args.subject,
+        "atlas_slug": args.atlas_slug,
         "dtseries": str(Path(args.dtseries).resolve()),
         "left_labels": str(Path(args.left_labels).resolve()),
         "right_labels": str(Path(args.right_labels).resolve()),
         "raw_component_count": int(roi_summary["raw_component_count"]),
         "kept_roi_count": int(roi_summary["kept_roi_count"]),
         "n_parcels_used_after_noise_exclusion": int(parcel_ts.shape[0]),
-        "n_parent_networks_used": int(network_ts_arr.shape[0]),
+        "n_parent_networks_used": int(parent_network_ts_arr.shape[0]),
+        "n_canonical_networks_used": int(canonical_network_ts_arr.shape[0]),
+        "canonical_networks_used": [row["canonical_network"] for row in canonical_network_rows],
         "n_timepoints": int(parcel_ts.shape[1]),
     }
     (outdir / "reference_summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
