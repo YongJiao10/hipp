@@ -1,0 +1,162 @@
+{
+  "version": "2026-04-06",
+  "description": "Canonical cross-atlas cortical network merge scheme for Kong2019, Hermosillo2024, and Lynch2024. Same canonical network names should share the same color across atlases. Noise is excluded from functional summaries.",
+  "canonical_network_order": [
+    "Default",
+    "Visual",
+    "Somatomotor",
+    "DorsalAttention",
+    "VentralAttention",
+    "Control",
+    "Auditory",
+    "TemporalParietal",
+    "Language",
+    "Limbic"
+  ],
+  "exclude_labels": [
+    "Noise"
+  ],
+  "shared_colors_rgba": {
+    "Default": [
+      216,
+      92,
+      107,
+      255
+    ],
+    "Visual": [
+      119,
+      52,
+      129,
+      255
+    ],
+    "Somatomotor": [
+      99,
+      150,
+      194,
+      255
+    ],
+    "DorsalAttention": [
+      44,
+      126,
+      17,
+      255
+    ],
+    "VentralAttention": [
+      220,
+      92,
+      255,
+      255
+    ],
+    "Control": [
+      247,
+      172,
+      74,
+      255
+    ],
+    "Auditory": [
+      24,
+      183,
+      201,
+      255
+    ],
+    "TemporalParietal": [
+      31,
+      79,
+      255,
+      255
+    ],
+    "Language": [
+      138,
+      71,
+      24,
+      255
+    ],
+    "Limbic": [
+      182,
+      217,
+      58,
+      255
+    ],
+    "Noise": [
+      128,
+      128,
+      128,
+      255
+    ]
+  },
+  "atlases": {
+    "kong2019": {
+      "display_name": "Kong2019",
+      "original_network_count": 17,
+      "merged_functional_network_count": 8,
+      "mapping": {
+        "VentralAttentionB": "VentralAttention",
+        "ControlA": "Control",
+        "VisualA": "Visual",
+        "TemporalParietal": "TemporalParietal",
+        "DorsalAttentionA": "DorsalAttention",
+        "ControlC": "Control",
+        "DefaultA": "Default",
+        "ControlB": "Control",
+        "VentralAttentionA": "VentralAttention",
+        "VisualB": "Visual",
+        "SomatomotorA": "Somatomotor",
+        "DefaultB": "Default",
+        "DefaultC": "Default",
+        "SomatomotorB": "Somatomotor",
+        "DorsalAttentionB": "DorsalAttention",
+        "Auditory": "Auditory",
+        "VisualC": "Visual"
+      }
+    },
+    "hermosillo2024": {
+      "display_name": "Hermosillo2024",
+      "original_network_count": 14,
+      "merged_functional_network_count": 8,
+      "mapping": {
+        "Aud": "Auditory",
+        "CO": "Control",
+        "DAN": "DorsalAttention",
+        "DMN": "Default",
+        "FP": "Control",
+        "MTL": "Limbic",
+        "PMN": "Default",
+        "PON": "Default",
+        "SMd": "Somatomotor",
+        "SMl": "Somatomotor",
+        "Sal": "VentralAttention",
+        "Tpole": "Limbic",
+        "VAN": "VentralAttention",
+        "Vis": "Visual"
+      }
+    },
+    "lynch2024": {
+      "display_name": "Lynch2024",
+      "original_network_count": 21,
+      "merged_functional_network_count": 8,
+      "mapping": {
+        "Default_Parietal": "Default",
+        "Default_Anterolateral": "Default",
+        "Default_Dorsolateral": "Default",
+        "Default_Retrosplenial": "Default",
+        "Visual_Lateral": "Visual",
+        "Visual_Dorsal/VentralStream": "Visual",
+        "Visual_V5": "Visual",
+        "Visual_V1": "Visual",
+        "Frontoparietal": "Control",
+        "DorsalAttention": "DorsalAttention",
+        "Premotor/DorsalAttentionII": "DorsalAttention",
+        "Language": "Language",
+        "Salience": "VentralAttention",
+        "CinguloOpercular/Action-mode": "Control",
+        "MedialParietal": "Default",
+        "Somatomotor_Hand": "Somatomotor",
+        "Somatomotor_Face": "Somatomotor",
+        "Somatomotor_Foot": "Somatomotor",
+        "Auditory": "Auditory",
+        "SomatoCognitiveAction": "Somatomotor",
+        "Noise": "Noise"
+      }
+    }
+  }
+}
