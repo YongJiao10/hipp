@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import math
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -13,6 +14,7 @@ import nibabel as nib
 import numpy as np
 from nibabel.gifti import GiftiDataArray, GiftiImage, GiftiLabel, GiftiLabelTable
 from scipy import sparse
+from scipy.optimize import linear_sum_assignment
 from scipy.sparse import csgraph
 from sklearn.cluster import AgglomerativeClustering
 from sklearn.metrics import (
@@ -57,9 +59,17 @@ PYTHON_EXE = sys.executable or "/opt/miniconda3/envs/py314/bin/python"
 NETWORK_STYLE_JSON = resolve_local_or_legacy_path("config/hipp_network_style.json")
 CROSS_ATLAS_NETWORK_MERGE_JSON = resolve_local_or_legacy_path("config/cross_atlas_network_merge.json")
 DEFAULT_SCENE = resolve_local_or_legacy_path("config/wb_locked_native_view_lateral_medial.scene")
-EVAL_K = list(range(3, 9))
+EVAL_K = list(range(2, 11))
 SMOOTH_ORDER = ["2mm", "4mm"]
 HEMIS = ["L", "R"]
+RUN_SPECS = [
+    {"run_id": "1", "label": "REST1_PA"},
+    {"run_id": "2", "label": "REST2_AP"},
+    {"run_id": "3", "label": "REST3_PA"},
+    {"run_id": "4", "label": "REST4_AP"},
+]
+DEFAULT_INSTABILITY_RESAMPLES = 6
+DEFAULT_V_MIN_FRACTION = 0.05
 BRANCHES = [
     "network-gradient",
     "network-prob-cluster",
@@ -114,6 +124,27 @@ def run(cmd: list[str]) -> None:
 
 def utc_now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+
+def resolve_v_min_count(
+    *,
+    n_vertices: int,
+    v_min_fraction: float | None,
+    v_min_count: int | None,
+) -> tuple[int, str]:
+    if n_vertices <= 0:
+        raise ValueError(f"n_vertices must be positive, got {n_vertices}")
+    if v_min_count is not None:
+        if v_min_count <= 0:
+            raise ValueError(f"--v-min-count must be positive, got {v_min_count}")
+        if v_min_count > n_vertices:
+            raise ValueError(f"--v-min-count={v_min_count} exceeds n_vertices={n_vertices}")
+        return int(v_min_count), "count"
+    if v_min_fraction is None:
+        raise ValueError("Either --v-min-count or --v-min-fraction must be provided")
+    if not (0.0 < v_min_fraction <= 1.0):
+        raise ValueError(f"--v-min-fraction must be in (0, 1], got {v_min_fraction}")
+    return int(math.ceil(n_vertices * float(v_min_fraction))), "fraction"
 
 
 def file_stamp(path: Path) -> dict[str, object]:
@@ -185,6 +216,143 @@ def write_stage_manifest(
         "outputs": [str(path.resolve()) for path in outputs],
     }
     stage_manifest_path(stage_dir).write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
+def split_run_bounds(n_timepoints: int, n_runs: int) -> list[tuple[int, int]]:
+    if n_runs <= 0:
+        raise ValueError(f"n_runs must be positive, got {n_runs}")
+    if n_timepoints <= 0:
+        raise ValueError(f"n_timepoints must be positive, got {n_timepoints}")
+    if n_timepoints % n_runs != 0:
+        raise ValueError(
+            f"Concat timeseries length {n_timepoints} is not evenly divisible by n_runs={n_runs}"
+        )
+    run_length = n_timepoints // n_runs
+    return [(idx * run_length, (idx + 1) * run_length) for idx in range(n_runs)]
+
+
+def split_dtseries_concat_to_runwise(concat_path: Path, out_paths: list[Path]) -> list[int]:
+    img = nib.load(str(concat_path))
+    series_axis = img.header.get_axis(0)
+    brain_axis = img.header.get_axis(1)
+    shape = img.shape
+    if len(shape) != 2:
+        raise ValueError(f"Expected 2D dtseries data, got shape {shape} for {concat_path}")
+    bounds = split_run_bounds(int(shape[0]), len(out_paths))
+    run_lengths: list[int] = []
+    for (start, stop), out_path in zip(bounds, out_paths, strict=True):
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        block = np.asarray(img.dataobj[start:stop, :], dtype=np.float32)
+        run_axis = series_axis[start:stop]
+        header = nib.cifti2.Cifti2Header.from_axes((run_axis, brain_axis))
+        out_img = nib.Cifti2Image(block, header=header, nifti_header=img.nifti_header.copy())
+        out_img.update_headers()
+        nib.save(out_img, str(out_path))
+        run_lengths.append(int(stop - start))
+    return run_lengths
+
+
+def split_bold_concat_to_runwise(concat_path: Path, out_paths: list[Path]) -> list[int]:
+    img = nib.load(str(concat_path))
+    shape = img.shape
+    if len(shape) != 4:
+        raise ValueError(f"Expected 4D BOLD image, got shape {shape} for {concat_path}")
+    bounds = split_run_bounds(int(shape[3]), len(out_paths))
+    run_lengths: list[int] = []
+    qform, qform_code = img.get_qform(coded=True)
+    sform, sform_code = img.get_sform(coded=True)
+    for (start, stop), out_path in zip(bounds, out_paths, strict=True):
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        block = np.asarray(img.dataobj[..., start:stop], dtype=np.float32)
+        out_img = nib.Nifti1Image(block, affine=img.affine, header=img.header.copy())
+        if qform is not None:
+            out_img.set_qform(qform, int(qform_code))
+        if sform is not None:
+            out_img.set_sform(sform, int(sform_code))
+        nib.save(out_img, str(out_path))
+        run_lengths.append(int(stop - start))
+    return run_lengths
+
+
+def resolve_runwise_dtseries(
+    *,
+    subject: str,
+    concat_dtseries: Path,
+    runwise_dtseries: list[Path],
+    stage_root: Path,
+    resume_mode: str,
+) -> tuple[list[Path], str, list[int]]:
+    if all(path.exists() for path in runwise_dtseries):
+        lengths = [int(nib.load(str(path)).shape[0]) for path in runwise_dtseries]
+        return runwise_dtseries, "provided", lengths
+    if not concat_dtseries.exists():
+        raise FileNotFoundError(f"Missing concat dtseries required to split runs: {concat_dtseries}")
+    stage_dir = stage_root / "dtseries"
+    staged_paths = [stage_dir / path.name for path in runwise_dtseries]
+    params = {"subject": subject, "source": str(concat_dtseries.resolve()), "n_runs": len(staged_paths)}
+    if not stage_is_up_to_date(
+        stage_dir=stage_dir,
+        resume_mode=resume_mode,
+        stage_name="runwise_dtseries_from_concat",
+        params=params,
+        inputs=[concat_dtseries],
+        outputs=staged_paths,
+    ):
+        lengths = split_dtseries_concat_to_runwise(concat_dtseries, staged_paths)
+        write_stage_manifest(
+            stage_dir=stage_dir,
+            stage_name="runwise_dtseries_from_concat",
+            params={**params, "run_lengths": lengths},
+            inputs=[concat_dtseries],
+            outputs=staged_paths,
+        )
+    payload = json.loads(stage_manifest_path(stage_dir).read_text(encoding="utf-8"))
+    lengths = [int(x) for x in payload.get("params", {}).get("run_lengths", [])]
+    if len(lengths) != len(staged_paths):
+        lengths = [int(nib.load(str(path)).shape[0]) for path in staged_paths]
+    return staged_paths, "split_from_concat", lengths
+
+
+def resolve_runwise_bold(
+    *,
+    subject: str,
+    concat_bold: Path,
+    runwise_bold: list[Path],
+    stage_root: Path,
+    resume_mode: str,
+) -> tuple[list[Path], str, list[int]]:
+    if all(path.exists() for path in runwise_bold):
+        lengths = [int(nib.load(str(path)).shape[3]) for path in runwise_bold]
+        return runwise_bold, "provided", lengths
+    if not concat_bold.exists():
+        raise FileNotFoundError(
+            "Missing run-wise volume BOLD inputs and concat BOLD is unavailable for splitting: "
+            f"{concat_bold}"
+        )
+    stage_dir = stage_root / "bold"
+    staged_paths = [stage_dir / path.name for path in runwise_bold]
+    params = {"subject": subject, "source": str(concat_bold.resolve()), "n_runs": len(staged_paths)}
+    if not stage_is_up_to_date(
+        stage_dir=stage_dir,
+        resume_mode=resume_mode,
+        stage_name="runwise_bold_from_concat",
+        params=params,
+        inputs=[concat_bold],
+        outputs=staged_paths,
+    ):
+        lengths = split_bold_concat_to_runwise(concat_bold, staged_paths)
+        write_stage_manifest(
+            stage_dir=stage_dir,
+            stage_name="runwise_bold_from_concat",
+            params={**params, "run_lengths": lengths},
+            inputs=[concat_bold],
+            outputs=staged_paths,
+        )
+    payload = json.loads(stage_manifest_path(stage_dir).read_text(encoding="utf-8"))
+    lengths = [int(x) for x in payload.get("params", {}).get("run_lengths", [])]
+    if len(lengths) != len(staged_paths):
+        lengths = [int(nib.load(str(path)).shape[3]) for path in staged_paths]
+    return staged_paths, "split_from_concat", lengths
 
 
 def write_surface_store_pointer(
@@ -404,6 +572,110 @@ def cluster_embedding(features: np.ndarray, connectivity: sparse.csr_matrix, k: 
     model = AgglomerativeClustering(n_clusters=k, linkage="ward", connectivity=connectivity)
     raw_labels = model.fit_predict(features)
     return reorder_cluster_labels(raw_labels)
+
+
+def write_tsv_rows(path: Path, rows: list[dict[str, object]], fieldnames: list[str]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames, delimiter="\t", extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def match_labels_hungarian(labels_a: np.ndarray, labels_b: np.ndarray) -> np.ndarray:
+    labels_a = labels_a.astype(np.int32, copy=False)
+    labels_b = labels_b.astype(np.int32, copy=False)
+    a_keys = sorted(int(x) for x in np.unique(labels_a))
+    b_keys = sorted(int(x) for x in np.unique(labels_b))
+    contingency = np.zeros((len(a_keys), len(b_keys)), dtype=np.int32)
+    for i, a_key in enumerate(a_keys):
+        mask_a = labels_a == a_key
+        for j, b_key in enumerate(b_keys):
+            contingency[i, j] = int(np.count_nonzero(mask_a & (labels_b == b_key)))
+    row_ind, col_ind = linear_sum_assignment(-contingency)
+    mapping = {b_keys[col]: a_keys[row] for row, col in zip(row_ind.tolist(), col_ind.tolist(), strict=True)}
+    next_key = max(a_keys, default=0) + 1
+    for b_key in b_keys:
+        if b_key not in mapping:
+            mapping[b_key] = next_key
+            next_key += 1
+    return np.asarray([mapping[int(key)] for key in labels_b], dtype=np.int32)
+
+
+def compute_homogeneity(features: np.ndarray, labels: np.ndarray) -> float:
+    tss = float(np.sum((features - np.mean(features, axis=0, keepdims=True)) ** 2))
+    if tss <= 1e-12:
+        return 0.0
+    wcss = compute_wcss(features, labels)
+    return float(max(0.0, 1.0 - (wcss / tss)))
+
+
+def build_run_pair_resamples(n_runs: int, max_resamples: int) -> list[tuple[int, int]]:
+    if n_runs < 2:
+        return []
+    pairs = [(i, j) for i in range(n_runs) for j in range(i + 1, n_runs)]
+    if max_resamples > 0:
+        return pairs[: min(len(pairs), max_resamples)]
+    return pairs
+
+
+def mark_instability_decisions(
+    rows: list[dict[str, object]],
+) -> tuple[list[dict[str, object]], dict[str, object]]:
+    if not rows:
+        raise ValueError("No K rows available for instability selection")
+    ordered = sorted(rows, key=lambda row: int(row["k"]))
+    instabilities = [float(row["instability_mean"]) for row in ordered]
+    best_idx = int(np.argmin(instabilities))
+    best_row = ordered[best_idx]
+    best_instability = float(best_row["instability_mean"])
+    best_se = float(best_row["instability_se"])
+
+    local_minima: list[int] = []
+    for idx, row in enumerate(ordered):
+        current = float(row["instability_mean"])
+        left = float(ordered[idx - 1]["instability_mean"]) if idx > 0 else math.inf
+        right = float(ordered[idx + 1]["instability_mean"]) if idx < len(ordered) - 1 else math.inf
+        is_local = current <= left and current <= right and (current < left or current < right or len(ordered) == 1)
+        row["local_min"] = int(is_local)
+        if is_local:
+            local_minima.append(int(row["k"]))
+
+    one_se_cutoff = best_instability + best_se
+    for row in ordered:
+        row["within_1se_best"] = int(float(row["instability_mean"]) <= one_se_cutoff + 1e-12)
+
+    one_se_candidates = [
+        row
+        for row in ordered
+        if int(row["local_min"]) == 1
+        and int(row["within_1se_best"]) == 1
+    ]
+    if not one_se_candidates:
+        raise RuntimeError("No K survived local-minimum and 1-SE screening")
+    eligible = [
+        row
+        for row in one_se_candidates
+        if int(row["min_parcel_ok"]) == 1
+        and int(row["connectivity_ok"]) == 1
+    ]
+    if not eligible:
+        raise RuntimeError("No K survived local-minimum, 1-SE, and non-triviality constraints")
+    selected = eligible[0]
+    k_star = int(selected["k"])
+    sensitivity = []
+    for candidate in (k_star - 1, k_star + 1):
+        if any(int(row["k"]) == candidate for row in ordered):
+            sensitivity.append(candidate)
+    decision = {
+        "best_by_instability": int(best_row["k"]),
+        "candidate_local_minima": local_minima,
+        "one_se_selected": int(min(int(row["k"]) for row in one_se_candidates)),
+        "post_constraint_selected": k_star,
+        "main_analysis_k": k_star,
+        "sensitivity_k": sensitivity,
+    }
+    return ordered, decision
 
 
 def load_cross_atlas_network_merge(
@@ -765,17 +1037,6 @@ def load_canonical_network_rows(path: Path) -> list[dict[str, object]]:
     return rows
 
 
-def select_final_k(k_metrics: list[dict[str, object]]) -> int:
-    best_row = max(k_metrics, key=lambda row: float(row["ari_odd_even"]))
-    target_ari = float(best_row["ari_odd_even"]) - 0.02
-    eligible = [
-        row
-        for row in sorted(k_metrics, key=lambda row: int(row["k"]))
-        if float(row["ari_odd_even"]) >= target_ari and float(row["min_cluster_size_fraction"]) >= 0.05
-    ]
-    return int(eligible[0]["k"] if eligible else best_row["k"])
-
-
 def build_cluster_annotations(
     *,
     labels: np.ndarray,
@@ -819,30 +1080,57 @@ def build_cluster_annotations(
 def evaluate_k_range(
     *,
     features_full: np.ndarray,
-    features_odd: np.ndarray,
-    features_even: np.ndarray,
+    run_features: list[np.ndarray],
+    run_labels: list[str],
     profile_source: np.ndarray,
     profile_networks: list[str],
     connectivity: sparse.csr_matrix,
     outdir: Path,
     hemi: str,
     profile_mode: str,
+    split_strategy: str,
+    instability_resamples: int,
+    v_min_fraction: float | None,
+    v_min_count: int | None,
 ) -> dict[str, object]:
     k_metrics: list[dict[str, object]] = []
     k_to_annotations: dict[int, list[dict[str, object]]] = {}
     k_to_key_names: dict[int, dict[int, str]] = {}
     k_to_probability_rows: dict[int, np.ndarray] = {}
     tss = float(np.sum((features_full - np.mean(features_full, axis=0, keepdims=True)) ** 2))
+    resample_pairs = build_run_pair_resamples(len(run_features), instability_resamples)
+    if not resample_pairs:
+        raise RuntimeError(f"Need at least two run-wise feature blocks for instability, got {len(run_features)}")
+    resolved_v_min_count, v_min_mode = resolve_v_min_count(
+        n_vertices=int(features_full.shape[0]),
+        v_min_fraction=v_min_fraction,
+        v_min_count=v_min_count,
+    )
 
     previous_wcss: float | None = None
     for k in EVAL_K:
         labels_full = cluster_embedding(features_full, connectivity, k)
-        labels_odd = cluster_embedding(features_odd, connectivity, k)
-        labels_even = cluster_embedding(features_even, connectivity, k)
+        labels_by_run = [cluster_embedding(features_run, connectivity, k) for features_run in run_features]
+        ari_values: list[float] = []
+        resample_rows: list[dict[str, object]] = []
+        for pair_idx, (run_idx_a, run_idx_b) in enumerate(resample_pairs, start=1):
+            labels_a = labels_by_run[run_idx_a]
+            labels_b = match_labels_hungarian(labels_a, labels_by_run[run_idx_b])
+            ari = float(adjusted_rand_score(labels_a, labels_b))
+            ari_values.append(ari)
+            resample_rows.append(
+                {
+                    "resample_id": pair_idx,
+                    "run_a": run_labels[run_idx_a],
+                    "run_b": run_labels[run_idx_b],
+                    "ari": ari,
+                    "instability": float(1.0 - ari),
+                }
+            )
         sizes = [int(np.count_nonzero(labels_full == label)) for label in sorted(np.unique(labels_full))]
-        min_frac = min(size / labels_full.size for size in sizes)
+        min_size_vertices = min(sizes)
+        min_frac = min_size_vertices / labels_full.size
         total_cc, per_cluster_cc = connected_component_count(labels_full, connectivity)
-        ari = adjusted_rand_score(labels_odd, labels_even)
         sil = compute_silhouette(features_full, labels_full)
         ch = float(calinski_harabasz_score(features_full, labels_full))
         db = float(davies_bouldin_score(features_full, labels_full))
@@ -851,6 +1139,13 @@ def evaluate_k_range(
         entropy = compute_balance_entropy(labels_full)
         delta_wcss = None if previous_wcss is None else float(previous_wcss - wcss)
         previous_wcss = wcss
+        instability = 1.0 - np.asarray(ari_values, dtype=np.float32)
+        instability_mean = float(np.mean(instability))
+        instability_se = float(np.std(instability, ddof=1) / np.sqrt(len(instability))) if len(instability) > 1 else 0.0
+        ari_mean = float(np.mean(ari_values))
+        homogeneity = compute_homogeneity(features_full, labels_full)
+        min_parcel_ok = int(min_size_vertices >= resolved_v_min_count)
+        connectivity_ok = int(total_cc == k)
 
         annotations, key_to_name, probability_rows = build_cluster_annotations(
             labels=labels_full,
@@ -866,6 +1161,7 @@ def evaluate_k_range(
         k_dir = outdir / f"k_{k}"
         k_dir.mkdir(parents=True, exist_ok=True)
         np.save(k_dir / "cluster_labels.npy", labels_full.astype(np.int32))
+        save_json(k_dir / "instability_resamples.json", {"hemi": hemi, "k": int(k), "resamples": resample_rows})
         save_json(
             k_dir / "cluster_annotation.json",
             {
@@ -878,28 +1174,101 @@ def evaluate_k_range(
         )
         metric_row = {
             "k": int(k),
-            "ari_odd_even": float(ari),
+            "n_valid_resamples": int(len(resample_rows)),
+            "instability_mean": instability_mean,
+            "instability_se": instability_se,
+            "null_corrected_score": ari_mean,
             "silhouette": float(sil),
             "calinski_harabasz": ch,
             "davies_bouldin": db,
             "wcss": float(wcss),
             "delta_wcss": delta_wcss,
+            "homogeneity": homogeneity,
+            "min_cluster_size_vertices": int(min_size_vertices),
             "min_cluster_size_fraction": float(min_frac),
+            "v_min_vertices": int(resolved_v_min_count),
+            "min_parcel_ok": min_parcel_ok,
             "bss_tss_ratio": bss_ratio,
             "cluster_balance_entropy": entropy,
             "connected_component_count": int(total_cc),
+            "connectivity_ok": connectivity_ok,
             "per_cluster_connected_components": {str(key): int(value) for key, value in per_cluster_cc.items()},
         }
         k_metrics.append(metric_row)
 
-    k_final = select_final_k(k_metrics)
+    k_metrics, decision = mark_instability_decisions(k_metrics)
+    k_final = int(decision["main_analysis_k"])
     labels_final = np.load(outdir / f"k_{k_final}" / "cluster_labels.npy").astype(np.int32)
+    run_metadata = {
+        "project_id": "hipp_functional_parcellation_network",
+        "analysis_date": datetime.now().date().isoformat(),
+        "operator": "codex",
+        "code_commit": None,
+        "feature_definition": profile_mode,
+        "hemisphere": hemi,
+        "subject_set": run_labels,
+        "split_strategy": split_strategy,
+        "clustering_method": "AgglomerativeClustering(linkage=ward)",
+        "distance_metric": "euclidean",
+        "spatial_constraints": str(outdir),
+        "random_seed_policy": "deterministic run-pair ordering",
+        "B_resamples": int(len(resample_pairs)),
+        "K_min": int(min(EVAL_K)),
+        "K_max": int(max(EVAL_K)),
+        "V_min": int(resolved_v_min_count),
+        "V_min_mode": v_min_mode,
+    }
+    save_json(outdir / "run_metadata.json", run_metadata)
+    save_json(
+        outdir / "final_selection_log.json",
+        {
+            "best_by_instability": decision["best_by_instability"],
+            "candidate_local_minima": decision["candidate_local_minima"],
+            "1SE_selected": decision["one_se_selected"],
+            "post_constraint_selected": decision["post_constraint_selected"],
+            "main_analysis_K": decision["main_analysis_k"],
+            "sensitivity_K": decision["sensitivity_k"],
+            "primary_reason": "Selected the smallest local instability minimum within 1-SE that passed parcel-size and connectivity constraints.",
+            "secondary_reason": "Lower-complexity solution retained unless a larger K showed clearly better stability within protocol rules.",
+            "deviations_from_protocol": "local smoke run with limited run-pair resamples",
+        },
+    )
+    write_tsv_rows(
+        outdir / "per_k_summary.tsv",
+        k_metrics,
+        [
+            "k",
+            "n_valid_resamples",
+            "instability_mean",
+            "instability_se",
+            "local_min",
+            "within_1se_best",
+            "homogeneity",
+            "min_parcel_ok",
+            "connectivity_ok",
+            "null_corrected_score",
+            "silhouette",
+            "min_cluster_size_vertices",
+            "min_cluster_size_fraction",
+            "v_min_vertices",
+            "connected_component_count",
+        ],
+    )
     save_json(
         outdir / "selection_summary.json",
         {
             "hemi": hemi,
             "k_metrics": k_metrics,
             "k_final": int(k_final),
+            "run_metadata": run_metadata,
+            "selection_log": {
+                "best_by_instability": decision["best_by_instability"],
+                "candidate_local_minima": decision["candidate_local_minima"],
+                "1SE_selected": decision["one_se_selected"],
+                "post_constraint_selected": decision["post_constraint_selected"],
+                "main_analysis_K": decision["main_analysis_k"],
+                "sensitivity_K": decision["sensitivity_k"],
+            },
             "clusters": k_to_annotations[k_final],
             "probability_rows": k_to_probability_rows[k_final].tolist(),
             "networks": profile_networks,
@@ -908,6 +1277,15 @@ def evaluate_k_range(
     return {
         "k_metrics": k_metrics,
         "k_final": int(k_final),
+        "selection_log": {
+            "best_by_instability": decision["best_by_instability"],
+            "candidate_local_minima": decision["candidate_local_minima"],
+            "1SE_selected": decision["one_se_selected"],
+            "post_constraint_selected": decision["post_constraint_selected"],
+            "main_analysis_K": decision["main_analysis_k"],
+            "sensitivity_K": decision["sensitivity_k"],
+        },
+        "run_metadata": run_metadata,
         "labels_final": labels_final,
         "cluster_annotations": k_to_annotations[k_final],
         "probability_rows": k_to_probability_rows[k_final],
@@ -916,29 +1294,33 @@ def evaluate_k_range(
     }
 
 
+def compute_gradient_state(grouped_fc: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    gradients, eigvals = diffusion_map_embedding(build_sparse_affinity(grouped_fc, 0.1), n_components=5)
+    features = zscore_columns(gradients[:, :3])
+    return features, gradients.astype(np.float32), eigvals.astype(np.float32)
+
+
 def run_gradient_branch(
     *,
     grouped_fc: np.ndarray,
-    grouped_fc_odd: np.ndarray,
-    grouped_fc_even: np.ndarray,
+    run_grouped_fcs: list[np.ndarray],
+    run_labels: list[str],
     networks: list[str],
     connectivity: sparse.csr_matrix,
     feature_dir: Path,
     clustering_dir: Path,
     hemi: str,
+    split_strategy: str,
+    instability_resamples: int,
+    v_min_fraction: float | None,
+    v_min_count: int | None,
 ) -> dict[str, object]:
-    gradients, eigvals = diffusion_map_embedding(build_sparse_affinity(grouped_fc, 0.1), n_components=5)
-    gradients_odd, eigvals_odd = diffusion_map_embedding(build_sparse_affinity(grouped_fc_odd, 0.1), n_components=5)
-    gradients_even, eigvals_even = diffusion_map_embedding(build_sparse_affinity(grouped_fc_even, 0.1), n_components=5)
-    features_full = zscore_columns(gradients[:, :3])
-    features_odd = zscore_columns(gradients_odd[:, :3])
-    features_even = zscore_columns(gradients_even[:, :3])
+    features_full, gradients, eigvals = compute_gradient_state(grouped_fc)
+    run_features = [compute_gradient_state(fc_run)[0] for fc_run in run_grouped_fcs]
 
     feature_dir.mkdir(parents=True, exist_ok=True)
     np.save(feature_dir / "hipp_network_fc_gradients.npy", gradients.astype(np.float32))
     np.save(feature_dir / "hipp_network_fc_gradient_eigenvalues.npy", eigvals.astype(np.float32))
-    np.save(feature_dir / "hipp_network_fc_gradients_odd.npy", gradients_odd.astype(np.float32))
-    np.save(feature_dir / "hipp_network_fc_gradients_even.npy", gradients_even.astype(np.float32))
     save_json(
         feature_dir / "feature_summary.json",
         {
@@ -948,21 +1330,25 @@ def run_gradient_branch(
             "source_shape": [int(grouped_fc.shape[0]), int(grouped_fc.shape[1])],
             "source_networks": networks,
             "eigenvalues": [float(x) for x in eigvals.tolist()],
-            "eigenvalues_odd": [float(x) for x in eigvals_odd.tolist()],
-            "eigenvalues_even": [float(x) for x in eigvals_even.tolist()],
+            "run_labels": run_labels,
+            "split_strategy": split_strategy,
         },
     )
 
     cluster = evaluate_k_range(
         features_full=features_full,
-        features_odd=features_odd,
-        features_even=features_even,
+        run_features=run_features,
+        run_labels=run_labels,
         profile_source=grouped_fc,
         profile_networks=networks,
         connectivity=connectivity,
         outdir=clustering_dir,
         hemi=hemi,
         profile_mode="fc",
+        split_strategy=split_strategy,
+        instability_resamples=instability_resamples,
+        v_min_fraction=v_min_fraction,
+        v_min_count=v_min_count,
     )
     cluster["feature_summary"] = {
         "feature_kind": "network-gradient",
@@ -970,6 +1356,8 @@ def run_gradient_branch(
         "source_shape": [int(grouped_fc.shape[0]), int(grouped_fc.shape[1])],
         "source_networks": networks,
         "eigenvalues": [float(x) for x in eigvals.tolist()],
+        "run_labels": run_labels,
+        "split_strategy": split_strategy,
     }
     return cluster
 
@@ -977,8 +1365,8 @@ def run_gradient_branch(
 def run_probability_branch(
     *,
     grouped_fc: np.ndarray,
-    grouped_fc_odd: np.ndarray,
-    grouped_fc_even: np.ndarray,
+    run_grouped_fcs: list[np.ndarray],
+    run_labels: list[str],
     networks: list[str],
     connectivity: sparse.csr_matrix,
     surface_coords: np.ndarray | None,
@@ -989,10 +1377,13 @@ def run_probability_branch(
     save_soft_extras: bool,
     strict_soft_route: bool,
     zero_negative: bool,
+    split_strategy: str,
+    instability_resamples: int,
+    v_min_fraction: float | None,
+    v_min_count: int | None,
 ) -> dict[str, object]:
     probabilities = grouped_fc_to_probabilities(grouped_fc, zero_negative=zero_negative)
-    probabilities_odd = grouped_fc_to_probabilities(grouped_fc_odd, zero_negative=zero_negative)
-    probabilities_even = grouped_fc_to_probabilities(grouped_fc_even, zero_negative=zero_negative)
+    run_probabilities = [grouped_fc_to_probabilities(fc_run, zero_negative=zero_negative) for fc_run in run_grouped_fcs]
     long_axis_order = compute_long_axis_order(surface_coords) if strict_soft_route else None
     if strict_soft_route:
         regularized_probabilities = regularize_probability_profiles(
@@ -1000,31 +1391,20 @@ def run_probability_branch(
             connectivity,
             long_axis_order=long_axis_order,
         )
-        regularized_probabilities_odd = regularize_probability_profiles(
-            probabilities_odd,
-            connectivity,
-            long_axis_order=long_axis_order,
-        )
-        regularized_probabilities_even = regularize_probability_profiles(
-            probabilities_even,
-            connectivity,
-            long_axis_order=long_axis_order,
-        )
         features_full = zscore_columns(regularized_probabilities)
-        features_odd = zscore_columns(regularized_probabilities_odd)
-        features_even = zscore_columns(regularized_probabilities_even)
+        run_features = [
+            zscore_columns(
+                regularize_probability_profiles(prob_run, connectivity, long_axis_order=long_axis_order)
+            )
+            for prob_run in run_probabilities
+        ]
     else:
         regularized_probabilities = None
-        regularized_probabilities_odd = None
-        regularized_probabilities_even = None
         features_full = zscore_columns(probabilities)
-        features_odd = zscore_columns(probabilities_odd)
-        features_even = zscore_columns(probabilities_even)
+        run_features = [zscore_columns(prob_run) for prob_run in run_probabilities]
 
     feature_dir.mkdir(parents=True, exist_ok=True)
     np.save(feature_dir / "network_probabilities.npy", probabilities.astype(np.float32))
-    np.save(feature_dir / "network_probabilities_odd.npy", probabilities_odd.astype(np.float32))
-    np.save(feature_dir / "network_probabilities_even.npy", probabilities_even.astype(np.float32))
     np.save(feature_dir / "grouped_fc.npy", grouped_fc.astype(np.float32))
     save_json(
         feature_dir / "feature_summary.json",
@@ -1044,6 +1424,8 @@ def run_probability_branch(
                 if strict_soft_route
                 else None
             ),
+            "run_labels": run_labels,
+            "split_strategy": split_strategy,
         },
     )
 
@@ -1101,20 +1483,26 @@ def run_probability_branch(
 
     cluster = evaluate_k_range(
         features_full=features_full,
-        features_odd=features_odd,
-        features_even=features_even,
+        run_features=run_features,
+        run_labels=run_labels,
         profile_source=regularized_probabilities if strict_soft_route else probabilities,
         profile_networks=networks,
         connectivity=connectivity,
         outdir=clustering_dir,
         hemi=hemi,
         profile_mode="probability",
+        split_strategy=split_strategy,
+        instability_resamples=instability_resamples,
+        v_min_fraction=v_min_fraction,
+        v_min_count=v_min_count,
     )
     cluster["feature_summary"] = {
         "feature_kind": "probability-regularized" if strict_soft_route else "probability",
         "feature_shape": [int(features_full.shape[0]), int(features_full.shape[1])],
         "networks": networks,
         "negative_fc_policy": "clip-to-zero" if zero_negative else "row-min-shift",
+        "run_labels": run_labels,
+        "split_strategy": split_strategy,
     }
     if strict_soft_route:
         cluster["feature_summary"]["regularization"] = {
@@ -1220,6 +1608,9 @@ def main() -> int:
     parser.add_argument("--layout", choices=["1x2", "2x2"], default="2x2")
     parser.add_argument("--resume-mode", choices=["resume", "force"], default="resume")
     parser.add_argument("--retain-level", choices=["label", "render", "feature", "all"], default="render")
+    parser.add_argument("--instability-resamples", type=int, default=DEFAULT_INSTABILITY_RESAMPLES)
+    parser.add_argument("--v-min-fraction", type=float, default=DEFAULT_V_MIN_FRACTION)
+    parser.add_argument("--v-min-count", type=int, default=None)
     parser.add_argument(
         "--surface-source-dir",
         default=None,
@@ -1261,10 +1652,40 @@ def main() -> int:
         )
     )
 
-    dtseries = input_root / f"sub-{subject}" / "func" / f"sub-{subject}_task-rest_run-concat.dtseries.nii"
+    func_input_dir = input_root / f"sub-{subject}" / "func"
+    dtseries = func_input_dir / f"sub-{subject}_task-rest_run-concat.dtseries.nii"
+    concat_bold = func_input_dir / f"sub-{subject}_task-rest_run-concat_bold.nii.gz"
+    runwise_dtseries = [
+        func_input_dir / f"sub-{subject}_task-rest_run-{spec['run_id']}.dtseries.nii"
+        for spec in RUN_SPECS
+    ]
+    runwise_bold = [
+        func_input_dir / f"sub-{subject}_task-rest_run-{spec['run_id']}_bold.nii.gz"
+        for spec in RUN_SPECS
+    ]
     surf_dir = hipp_root / "hippunfold" / f"sub-{subject}" / "surf"
     if not dtseries.exists():
         raise FileNotFoundError(f"Missing dtseries: {dtseries}")
+    shared_runwise_input_dir = shared_store_root / f"sub-{subject}" / "runwise_inputs"
+    resolved_runwise_dtseries, dtseries_run_input_mode, dtseries_run_lengths = resolve_runwise_dtseries(
+        subject=subject,
+        concat_dtseries=dtseries,
+        runwise_dtseries=runwise_dtseries,
+        stage_root=shared_runwise_input_dir,
+        resume_mode=resume_mode,
+    )
+    resolved_runwise_bold, bold_run_input_mode, bold_run_lengths = resolve_runwise_bold(
+        subject=subject,
+        concat_bold=concat_bold,
+        runwise_bold=runwise_bold,
+        stage_root=shared_runwise_input_dir,
+        resume_mode=resume_mode,
+    )
+    if dtseries_run_lengths != bold_run_lengths:
+        raise ValueError(
+            "Run-wise dtseries and BOLD lengths do not match after input resolution: "
+            f"dtseries={dtseries_run_lengths}, bold={bold_run_lengths}"
+        )
 
     left_surface = surf_dir / f"sub-{subject}_hemi-L_space-corobl_label-hipp_midthickness.surf.gii"
     right_surface = surf_dir / f"sub-{subject}_hemi-R_space-corobl_label-hipp_midthickness.surf.gii"
@@ -1348,9 +1769,60 @@ def main() -> int:
         canonical_network_timeseries_path=canonical_network_timeseries_path,
     )
 
+    run_reference_outputs: list[Path] = []
+    run_reference_paths: list[Path] = []
+    for spec, run_dtseries in zip(RUN_SPECS, resolved_runwise_dtseries, strict=True):
+        run_reference_dir = shared_reference_store_dir / "runs" / f"run-{spec['run_id']}"
+        run_reference_summary = run_reference_dir / "reference_summary.json"
+        run_canonical_network_timeseries = run_reference_dir / "cortex_canonical_network_timeseries.npy"
+        run_reference_outputs.extend([run_reference_summary, run_canonical_network_timeseries])
+        run_reference_paths.append(run_canonical_network_timeseries)
+        run_reference_params = {
+            "subject": subject,
+            "atlas_slug": atlas_slug,
+            "label_prefix": str(atlas_cfg["label_prefix"]),
+            "run_id": spec["run_id"],
+        }
+        if not stage_is_up_to_date(
+            stage_dir=run_reference_dir,
+            resume_mode=resume_mode,
+            stage_name="reference_run",
+            params=run_reference_params,
+            inputs=[run_dtseries, left_cortex_labels, right_cortex_labels, roi_summary_path],
+            outputs=[run_reference_summary, run_canonical_network_timeseries],
+        ):
+            run(
+                [
+                    PYTHON_EXE,
+                    str(REPO_ROOT / "scripts" / "cortex" / "extract_cortex_roi_component_timeseries.py"),
+                    "--subject",
+                    subject,
+                    "--dtseries",
+                    str(run_dtseries),
+                    "--left-labels",
+                    str(left_cortex_labels),
+                    "--right-labels",
+                    str(right_cortex_labels),
+                    "--roi-summary",
+                    str(roi_summary_path),
+                    "--atlas-slug",
+                    atlas_slug,
+                    "--outdir",
+                    str(run_reference_dir),
+                ]
+            )
+            write_stage_manifest(
+                stage_dir=run_reference_dir,
+                stage_name="reference_run",
+                params=run_reference_params,
+                inputs=[run_dtseries, left_cortex_labels, right_cortex_labels, roi_summary_path],
+                outputs=[run_reference_summary, run_canonical_network_timeseries],
+            )
+
     reference_summary = json.loads(reference_summary_path.read_text(encoding="utf-8"))
     canonical_network_rows = load_canonical_network_rows(canonical_network_table_path)
     network_ts = np.load(canonical_network_timeseries_path).astype(np.float32)
+    run_network_ts = [np.load(path).astype(np.float32) for path in run_reference_paths]
     networks = [str(row["canonical_network"]) for row in canonical_network_rows]
 
     left_raw_metric = surface_source_dir / f"sub-{subject}_hemi-L_space-corobl_den-2mm_label-hipp_bold.func.gii"
@@ -1448,6 +1920,115 @@ def main() -> int:
         fwhm_right_path=fwhm_right_path,
     )
 
+    run_surface_specs: list[dict[str, object]] = []
+    for spec, run_bold in zip(RUN_SPECS, resolved_runwise_bold, strict=True):
+        run_surface_dir = shared_surface_store_dir / "runs" / f"run-{spec['run_id']}"
+        raw_dir = run_surface_dir / "raw"
+        run_raw_left_metric = raw_dir / f"sub-{subject}_hemi-L_space-corobl_den-2mm_label-hipp_bold.func.gii"
+        run_raw_right_metric = raw_dir / f"sub-{subject}_hemi-R_space-corobl_den-2mm_label-hipp_bold.func.gii"
+        run_two_mm_left_func = run_surface_dir / "2mm" / f"sub-{subject}_hemi-L_space-corobl_den-2mm_label-hipp_bold.func.gii"
+        run_two_mm_right_func = run_surface_dir / "2mm" / f"sub-{subject}_hemi-R_space-corobl_den-2mm_label-hipp_bold.func.gii"
+        run_two_mm_left_path = run_surface_dir / "2mm" / f"sub-{subject}_hemi-L_timeseries.npy"
+        run_two_mm_right_path = run_surface_dir / "2mm" / f"sub-{subject}_hemi-R_timeseries.npy"
+        run_four_mm_left_func = run_surface_dir / "4mm" / f"sub-{subject}_hemi-L_space-corobl_den-2mm_label-hipp_bold.func.gii"
+        run_four_mm_right_func = run_surface_dir / "4mm" / f"sub-{subject}_hemi-R_space-corobl_den-2mm_label-hipp_bold.func.gii"
+        run_four_mm_left_path = run_surface_dir / "4mm" / f"sub-{subject}_hemi-L_timeseries.npy"
+        run_four_mm_right_path = run_surface_dir / "4mm" / f"sub-{subject}_hemi-R_timeseries.npy"
+        run_surface_params = {"subject": subject, "run_id": spec["run_id"], "smoothings": SMOOTH_ORDER}
+        run_surface_outputs = [
+            run_raw_left_metric,
+            run_raw_right_metric,
+            run_two_mm_left_func,
+            run_two_mm_right_func,
+            run_two_mm_left_path,
+            run_two_mm_right_path,
+            run_four_mm_left_func,
+            run_four_mm_right_func,
+            run_four_mm_left_path,
+            run_four_mm_right_path,
+        ]
+        if not stage_is_up_to_date(
+            stage_dir=run_surface_dir,
+            resume_mode=resume_mode,
+            stage_name="surface_run",
+            params=run_surface_params,
+            inputs=[run_bold, left_surface, right_surface],
+            outputs=run_surface_outputs,
+        ):
+            run(
+                [
+                    PYTHON_EXE,
+                    str(REPO_ROOT / "scripts" / "common" / "sample_hipp_surface_timeseries.py"),
+                    "--bold",
+                    str(run_bold),
+                    "--hippunfold-dir",
+                    str(hipp_root / "hippunfold"),
+                    "--subject",
+                    subject,
+                    "--density",
+                    "2mm",
+                    "--space",
+                    "corobl",
+                    "--mapping-method",
+                    "trilinear",
+                    "--smooth-iters",
+                    "0",
+                    "--outdir",
+                    str(raw_dir),
+                ]
+            )
+            for hemi, surface_path, metric_path, smooth_mm, out_metric in [
+                ("L", left_surface, run_raw_left_metric, "2", run_two_mm_left_func),
+                ("R", right_surface, run_raw_right_metric, "2", run_two_mm_right_func),
+                ("L", left_surface, run_raw_left_metric, "4", run_four_mm_left_func),
+                ("R", right_surface, run_raw_right_metric, "4", run_four_mm_right_func),
+            ]:
+                out_metric.parent.mkdir(parents=True, exist_ok=True)
+                run(
+                    [
+                        WB_COMMAND,
+                        "-metric-smoothing",
+                        str(surface_path),
+                        str(metric_path),
+                        smooth_mm,
+                        str(out_metric),
+                        "-fwhm",
+                    ]
+                )
+            np.save(
+                run_two_mm_left_path,
+                sanitize_timeseries(load_metric_array(run_two_mm_left_func, expected_n_vertices=int(left_coords.shape[0]))),
+            )
+            np.save(
+                run_two_mm_right_path,
+                sanitize_timeseries(load_metric_array(run_two_mm_right_func, expected_n_vertices=int(right_coords.shape[0]))),
+            )
+            np.save(
+                run_four_mm_left_path,
+                sanitize_timeseries(load_metric_array(run_four_mm_left_func, expected_n_vertices=int(left_coords.shape[0]))),
+            )
+            np.save(
+                run_four_mm_right_path,
+                sanitize_timeseries(load_metric_array(run_four_mm_right_func, expected_n_vertices=int(right_coords.shape[0]))),
+            )
+            write_stage_manifest(
+                stage_dir=run_surface_dir,
+                stage_name="surface_run",
+                params=run_surface_params,
+                inputs=[run_bold, left_surface, right_surface],
+                outputs=run_surface_outputs,
+            )
+        run_surface_specs.append(
+            {
+                "run_id": spec["run_id"],
+                "label": spec["label"],
+                "2mm_left": run_two_mm_left_path,
+                "2mm_right": run_two_mm_right_path,
+                "4mm_left": run_four_mm_left_path,
+                "4mm_right": run_four_mm_right_path,
+            }
+        )
+
     smooth_specs: dict[str, dict[str, np.ndarray | str]] = {
         "2mm": {
             "left": np.load(two_mm_left_path).astype(np.float32),
@@ -1468,28 +2049,46 @@ def main() -> int:
         "atlas_display_name": atlas_cfg["display_name"],
         "smoothings": SMOOTH_ORDER,
         "hemisphere_policy": "per-hemi",
-        "k_policy": "independent_3_to_8_per_hemi",
+        "k_policy": "run-aware-instability_2_to_10_per_hemi",
+        "run_input_sources": {
+            "dtseries": dtseries_run_input_mode,
+            "bold": bold_run_input_mode,
+            "run_lengths": dtseries_run_lengths,
+        },
         "reference_summary": reference_summary,
         "per_smooth": {},
     }
 
     branch_tag = branch_slug.replace("-", "_")
+    split_strategy = "run-pair"
     compute_params = {
         "subject": subject,
         "branch_slug": branch_slug,
         "atlas_slug": atlas_slug,
         "smoothings": SMOOTH_ORDER,
         "eval_k": EVAL_K,
+        "split_strategy": split_strategy,
+        "instability_resamples": int(args.instability_resamples),
+        "dtseries_run_input_mode": dtseries_run_input_mode,
+        "bold_run_input_mode": bold_run_input_mode,
+        "run_lengths": dtseries_run_lengths,
+        "v_min_count": None if args.v_min_count is None else int(args.v_min_count),
+        "v_min_fraction": float(args.v_min_fraction),
         "strict_soft_route": bool(is_soft_branch(branch_slug)),
         "negative_fc_policy": "clip-to-zero" if uses_nonnegative_probabilities(branch_slug) else "row-min-shift",
     }
     compute_inputs = [
         canonical_network_table_path,
         canonical_network_timeseries_path,
+        *run_reference_paths,
         two_mm_left_path,
         two_mm_right_path,
         fwhm_left_path,
         fwhm_right_path,
+        *[Path(spec["2mm_left"]) for spec in run_surface_specs],
+        *[Path(spec["2mm_right"]) for spec in run_surface_specs],
+        *[Path(spec["4mm_left"]) for spec in run_surface_specs],
+        *[Path(spec["4mm_right"]) for spec in run_surface_specs],
         left_surface,
         right_surface,
     ]
@@ -1549,11 +2148,15 @@ def main() -> int:
                         "networks": networks,
                     },
                 )
-
-                odd_idx = np.arange(ts.shape[1]) % 2 == 0
-                even_idx = ~odd_idx
-                fc_odd = corrcoef_rows(ts[:, odd_idx], network_ts[:, odd_idx])
-                fc_even = corrcoef_rows(ts[:, even_idx], network_ts[:, even_idx])
+                run_ts_paths = [
+                    Path(spec[f"{smooth_name}_{'left' if hemi == 'L' else 'right'}"])
+                    for spec in run_surface_specs
+                ]
+                fc_runs = [
+                    corrcoef_rows(np.load(run_ts_path).astype(np.float32), run_network)
+                    for run_ts_path, run_network in zip(run_ts_paths, run_network_ts, strict=True)
+                ]
+                run_labels = [f"run-{spec['run_id']}" for spec in RUN_SPECS]
 
                 feature_dir = feature_root / smooth_name / f"hemi_{hemi}"
                 clustering_dir = clustering_root / smooth_name / f"hemi_{hemi}"
@@ -1562,13 +2165,17 @@ def main() -> int:
                 if is_gradient_branch(branch_slug):
                     cluster = run_gradient_branch(
                         grouped_fc=fc,
-                        grouped_fc_odd=fc_odd,
-                        grouped_fc_even=fc_even,
+                        run_grouped_fcs=fc_runs,
+                        run_labels=run_labels,
                         networks=networks,
                         connectivity=adj,
                         feature_dir=feature_dir,
                         clustering_dir=clustering_dir,
                         hemi=hemi,
+                        split_strategy=split_strategy,
+                        instability_resamples=int(args.instability_resamples),
+                        v_min_fraction=float(args.v_min_fraction),
+                        v_min_count=None if args.v_min_count is None else int(args.v_min_count),
                     )
                 elif is_wta_branch(branch_slug):
                     cluster = run_wta_branch(
@@ -1579,8 +2186,8 @@ def main() -> int:
                 else:
                     cluster = run_probability_branch(
                         grouped_fc=fc,
-                        grouped_fc_odd=fc_odd,
-                        grouped_fc_even=fc_even,
+                        run_grouped_fcs=fc_runs,
+                        run_labels=run_labels,
                         networks=networks,
                         connectivity=adj,
                         surface_coords=left_coords if hemi == "L" else right_coords,
@@ -1591,6 +2198,10 @@ def main() -> int:
                         save_soft_extras=is_soft_branch(branch_slug),
                         strict_soft_route=is_soft_branch(branch_slug),
                         zero_negative=uses_nonnegative_probabilities(branch_slug),
+                        split_strategy=split_strategy,
+                        instability_resamples=int(args.instability_resamples),
+                        v_min_fraction=float(args.v_min_fraction),
+                        v_min_count=None if args.v_min_count is None else int(args.v_min_count),
                     )
                 hemi_results[hemi] = cluster
 
@@ -1615,6 +2226,8 @@ def main() -> int:
                     "feature_summary": node["feature_summary"],
                     "k_metrics": node["k_metrics"],
                     "k_final": node["k_final"],
+                    "selection_log": node.get("selection_log"),
+                    "run_metadata": node.get("run_metadata"),
                     "cluster_annotations": node["cluster_annotations"],
                     "profile_networks": node["profile_networks"],
                     "probability_rows": node["probability_rows"].tolist(),

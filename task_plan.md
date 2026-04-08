@@ -1,7 +1,7 @@
 # HCP 7T HippoMaps Task Plan
 
 ## Goal
-为单个 HCP 7T 被试搭建论文兼容的 HippUnfold + HippoMaps 流程，切换到 archive 中可用的 surface/CIFTI 功能输入，生成海马结构分区、surface-based 皮层参考、海马 FC 梯度与正式出图，并同步产出中文项目文档。
+为单个 HCP 7T 被试打通当前可执行的 hippocampal functional parcellation network workflow，并在现有合法输入模型下实现 run-aware `K` instability smoke，生成协议要求的 `per-K` 记录、最终选 `K` 记录与 overview 图。
 
 ## Phases
 | Phase | Status | Notes |
@@ -9,8 +9,8 @@
 | 1. 初始化项目骨架与文档 | complete | 已创建文档、脚本、目录结构 |
 | 2. 验证远端连通与数据发现 | complete | 已连通远端、锁定 100610、完成最小数据拷贝 |
 | 3. 准备环境与官方资源 | complete | hippo 环境、Workbench 与 Schaefer atlas 已就绪 |
-| 4. 实现分析脚本 | in_progress | 正从 volume-first 切换到 surface-first：补 archive dtseries 发现/拷贝与 CIFTI Schaefer 参考提取 |
-| 5. 运行验证与记录结果 | pending | 先做脚本级验证，再抽样验证真实被试 |
+| 4. 实现分析脚本 | in_progress | 主线回到当前合法输入模型；run-aware instability 已改成优先使用显式 `run-1..4`，缺失时从 `run-concat` 自动拆出 4 个 run staging 后再计算 |
+| 5. 运行验证与记录结果 | in_progress | `100610 + lynch2024` 已完成 `network-gradient` 与 `network-prob-cluster-nonneg` 本地 smoke；下一步收敛正式 `V_min/B`，并决定 `3 vs 5 gradients` 的正式口径 |
 | 6. 修复 102311 HippUnfold surface-volume 对齐失败 | complete | 已在 `scripts/wb_command` 增加零映射检测与负-x 校正 fallback，`102311` 已于 2026-03-26 10:39 完成 145/145 steps |
 
 ## Fixed Decisions
@@ -20,6 +20,7 @@
 - 新皮层参考默认走 archive 中的 CIFTI/dtseries + Schaefer400 surface atlas
 - archive 已确认存在聚合 `rfMRI_REST_7T_Atlas_1.6mm_MSMAll_hp2000_clean_rclean_tclean.dtseries.nii`
 - 海马顶点时序仍通过体空间 BOLD -> hippocampal surface 采样获得，暂不改成直接从 CIFTI 生成
+- 已停止继续尝试“完全不用单独 volume 数据”；当前 K selection 实现基于现有合法海马 surface 输入推进
 - 碰到环境不确定性必须先向用户汇报
 
 ## Errors Encountered
@@ -38,3 +39,4 @@
 | HippUnfold 模型下载受网络沙箱影响 | 1 | 改为单独用已授权网络下载模型到 `/tmp/hippunfold_cache/model` |
 | `102311` 右海马 `postproc_boundary_vertices` 报 `Label 0 has less than minimum number of vertices` | 1 | 已定位为 Workbench 将全零 `sdt.shape.gii` 传给后处理，原因是 corobl surface 与 volume 在 x 轴负向 affine 下发生整体平移错位，准备在本地 `wb_command` 包装器中对零映射结果做自动负-x 校正采样 |
 | 早期远端发现只查了未归档目录，误以为没有 7T CIFTI | 1 | 已在 `Resting State fMRI 7T Preprocessed Recommended archive/*.zip` 中确认聚合与分 run `dtseries` 均存在，主流程改回 surface-first |
+| 严格“完全不用单独 volume 数据”要求与当前 overview workflow 冲突 | 1 | 已确认 `dtseries` 中海马为 volume grayordinates，现有 overview workflow 又要求海马 surface 输入，因此该路线停止 |

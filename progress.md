@@ -73,3 +73,36 @@
 - 新增 `docs/structural_only_formalization.md`，明确当前正式交付只保留结构 label 与 structural PNG。
 - 已将旧 `post_dense_corobl` 与 `final_wb_locked/sub-*` 功能结果整体移到 `outputs/dense_corobl_batch/_archived_volume_functional/sub-*/`。
 - 已重建新的 structural-only 正式输出：`outputs/dense_corobl_batch/final_structural_only/final/sub-100610/sub-100610_structural.png`、`sub-102311_structural.png`、`sub-102816_structural.png`。
+
+## 2026-04-08
+- 复核 `sub-100610_task-rest_run-concat.dtseries.nii` 后确认：CIFTI 中 cortex 为 surface grayordinates，而 hippocampus 为 volume grayordinates，不可直接当作 hippocampal surface fMRI。
+- 将“完全不用单独 volume 数据”调查结论写入 `docs/experiments/hipp_functional_parcellation/2026-04-08_no_separate_volume_findings.md`，并删除失败实验分支/worktree `codex/surface-first-smoke`。
+- 用户决定停止继续追逐 strict no-volume 路线，主线切回当前合法输入模型下的 `k_selection` 测试。
+- 扩展 `scripts/copy_hcp_minimal.py` 与 `scripts/stage_hippunfold_inputs.py`，支持拉取并整理 `REST1..REST4` 的 per-run `dtseries + bold` 输入。
+- 将 `scripts/experiments/hipp_functional_parcellation_network/run_subject.py` 改为 run-aware instability 版：
+  - `K=2..10`
+  - `run-pair` split
+  - 输出 `run_metadata.json / per_k_summary.tsv / final_selection_log.json`
+  - 最终 `K` 规则改为 `local minima -> 1-SE -> V_min/connectivity`
+- `run_subject.py` 新增显式绝对阈值 `--v-min-count`，运行记录新增 `V_min_mode`，并在 `per_k_summary.tsv` 中保留最小 parcel 顶点数与阈值顶点数。
+- `run_subject.py` 进一步改为“优先用显式 `run-1..4` 输入，否则从 `run-concat` 自动等分拆出 4 个 run”：
+  - `dtseries` 缺失时可从 `run-concat.dtseries.nii` staging 出 4 个 `(900, 91282)` 的 run-wise `dtseries`
+  - `bold` 缺失时可从 `run-concat_bold.nii.gz` staging 出 4 个 `(113, 136, 113, 900)` 的 run-wise `bold`
+  - 共享 staging 目录位于 `_shared/sub-<subject>/runwise_inputs/`
+- 更新 `scripts/experiments/hipp_functional_parcellation_network/summarize_outputs.py` 与 flow docs，使 overview 和文档语义同步到新 K 选择逻辑。
+- 从远端 archive 补齐 `100610` 的 4 个 run 到本地 `data/hippunfold_input/sub-100610/func/`，并用其成功跑通 `100610 + lynch2024 + network-gradient` 本地 smoke。
+- smoke 首次在 `V_min = 5%`、随后 `2.5%` 下均因最小 parcel 约束失败；最终以 exploratory `v_min_fraction = 0.01` 跑通完整闭环。
+- 该 smoke 产生并确认过同款 overview：`hipp_functional_parcellation_network_overview.png`，以及 `k_selection_curves.png` 和 `network_probability_heatmaps.png`。
+- smoke 结果摘要：
+  - `2mm/L -> K=7`
+  - `2mm/R -> K=4`
+  - `4mm/L -> K=10`
+  - `4mm/R -> K=6`
+- 已将同一套 smoke 复制到 `100610 + lynch2024 + network-prob-cluster-nonneg`，并确认：
+  - `v_min_count = 63` 会在 `2mm/L` 失败，因为局部极小值的最小 parcel 只有 `36` 顶点
+  - exploratory `v_min_count = 36` 时可以跑通完整闭环并生成同款 overview
+  - 对应结果为 `2mm/L -> K=7`, `2mm/R -> K=2`, `4mm/L -> K=6`, `4mm/R -> K=2`
+- 已确认 `/Volumes/yojiao/HCP_7T_Hippocampus` 中的 `166` 是旧项目 `struct_complete`/`ashs_subjects` 子集，并将其固化为仓库 manifest：
+  - `manifests/hcp_7t_hippocampus_struct_complete_166.txt`
+  - `manifests/hcp_7t_hippocampus_struct_complete_166.json`
+- 已按仓库规则删除 `/tmp/hipp_k_selection_smoke`、`/tmp/hipp_k_selection_smoke_prob_cluster` 以及对应的 Matplotlib 缓存目录，仅保留源码改动和结论记录。
