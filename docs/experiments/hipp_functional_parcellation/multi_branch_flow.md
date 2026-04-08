@@ -27,7 +27,7 @@ smoothing  2mm / 4mm
 
 1. Left and right hippocampi are modeled independently.
 2. Every branch starts from direct `vertex-to-network FC` computed against cortex canonical merged network timeseries.
-3. `network-gradient`, `network-prob-cluster`, `network-prob-cluster-nonneg`, `network-prob-soft`, and `network-prob-soft-nonneg` perform hippocampal clustering with final `K` chosen independently for each hemisphere from `3..8`.
+3. `network-gradient`, `network-prob-cluster`, `network-prob-cluster-nonneg`, `network-prob-soft`, and `network-prob-soft-nonneg` perform hippocampal clustering with final `K` chosen independently for each hemisphere from `2..10` using run-aware instability.
 4. `network-wta` does not perform clustering; it directly outputs one label per predefined cortical network.
 5. Smoothing is compared inside each overview; it is not promoted to a separate top-level comparison dimension.
 6. Every `branch x atlas x subject` produces one overview image copied to `present_network/`.
@@ -39,9 +39,11 @@ All branches share the same upstream preprocessing:
 1. Extract individualized cortical ROI-component timeseries from the chosen cortical atlas output.
 2. Merge atlas-specific parent networks to canonical cross-atlas labels using [cross_atlas_network_merge.json](/Users/jy/Documents/HippoMaps-network-first/config/cross_atlas_network_merge.json).
 3. Exclude `Noise`.
-4. Average ROI-component timeseries within each retained canonical network to create cortex canonical network timeseries.
-5. Sample hippocampal resting-state timeseries on the left and right `corobl` surfaces.
-6. Compute direct `vertex-to-network FC` for each smoothing condition.
+4. Resolve run-wise inputs for run-aware instability:
+   if `run-1..4` `dtseries` and `bold` files are present, use them directly; otherwise split `run-concat` inputs into four equal runs before staging downstream artifacts.
+5. Average ROI-component timeseries within each retained canonical network to create cortex canonical network timeseries.
+6. Sample hippocampal resting-state timeseries on the left and right `corobl` surfaces.
+7. Compute direct `vertex-to-network FC` for each smoothing condition.
 
 In notation:
 
@@ -61,7 +63,7 @@ Count change:
 
 ```text
 Atlas            Raw Atlas Labels  Noise Excluded  Canonical Networks Retained
-Kong2019                      17             no                            8
+Kong2019                      17             no                            7
 Hermosillo2024               14             no                            8
 Lynch2024                    21            yes                            8
 ```
@@ -70,7 +72,7 @@ Canonical merged labels actually used by each atlas:
 
 ```text
 Atlas            Canonical Labels Kept After Merge
-Kong2019         Default / Visual / Somatomotor / DorsalAttention / VentralAttention / Control / Auditory / TemporalParietal
+Kong2019         Default / Visual / Somatomotor / DorsalAttention / VentralAttention / Control / Auditory
 Hermosillo2024   Default / Visual / Somatomotor / DorsalAttention / VentralAttention / Control / Auditory / Limbic
 Lynch2024        Default / Visual / Somatomotor / DorsalAttention / VentralAttention / Control / Auditory / Language
 ```
@@ -84,7 +86,7 @@ Default / Visual / Somatomotor / DorsalAttention / VentralAttention / Control / 
 Atlas-specific eighth network:
 
 ```text
-Kong2019         TemporalParietal
+Kong2019         none (merged into Default)
 Hermosillo2024   Limbic
 Lynch2024        Language
 ```
@@ -100,7 +102,7 @@ Kong2019
   VentralAttentionA + VentralAttentionB               -> VentralAttention
   ControlA + ControlB + ControlC                      -> Control
   Auditory                                            -> Auditory
-  TemporalParietal                                    -> TemporalParietal
+  TemporalParietal                                    -> Default
 
 Hermosillo2024
   DMN + PMN + PON                                     -> Default
@@ -140,7 +142,7 @@ For each hemisphere:
 2. Build a sparse vertex-by-vertex affinity graph from network profiles.
 3. Run diffusion-map embedding.
 4. Use the first `3` gradients as clustering features.
-5. Run spatially constrained Ward clustering for `K=3..8`.
+5. Run spatially constrained Ward clustering for `K=2..10`.
 6. Select the smallest stable `K`.
 7. Annotate final clusters by their dominant canonical network.
 
@@ -159,7 +161,7 @@ For each hemisphere:
 1. Convert direct `vertex-to-network FC` into probability vectors using:
    `Fisher z -> shift positive -> row normalize to sum=1`
 2. Use those network-probability vectors as clustering features.
-3. Run spatially constrained Ward clustering for `K=3..8`.
+3. Run spatially constrained Ward clustering for `K=2..10`.
 4. Select the smallest stable `K`.
 5. Summarize each final cluster by its mean soft network probabilities.
 
@@ -178,7 +180,7 @@ For each hemisphere:
 1. Convert direct `vertex-to-network FC` into probability vectors using:
    `Fisher z -> clip negative values to 0 -> row normalize to sum=1`
 2. Use those network-probability vectors as clustering features.
-3. Run spatially constrained Ward clustering for `K=3..8`.
+3. Run spatially constrained Ward clustering for `K=2..10`.
 4. Select the smallest stable `K`.
 5. Summarize each final cluster by its mean soft network probabilities.
 
@@ -196,7 +198,7 @@ For each hemisphere:
 
 1. Convert direct `vertex-to-network FC` into network probability vectors.
 2. Regularize those probabilities on the hippocampal surface using mesh adjacency plus a long-axis smoothing term.
-3. Cluster vertices by similarity of the regularized probability profiles for `K=3..8`.
+3. Cluster vertices by similarity of the regularized probability profiles for `K=2..10`.
 4. Select the smallest stable `K`.
 5. Save the regularized soft probabilities as the main scientific result.
 6. Derive optional regularized argmax labels only for auxiliary inspection.
@@ -217,7 +219,7 @@ For each hemisphere:
 1. Convert direct `vertex-to-network FC` into network probability vectors using:
    `Fisher z -> clip negative values to 0 -> row normalize to sum=1`
 2. Regularize those probabilities on the hippocampal surface using mesh adjacency plus a long-axis smoothing term.
-3. Cluster vertices by similarity of the regularized probability profiles for `K=3..8`.
+3. Cluster vertices by similarity of the regularized probability profiles for `K=2..10`.
 4. Select the smallest stable `K`.
 5. Save the regularized soft probabilities as the main scientific result.
 6. Derive optional regularized argmax labels only for auxiliary inspection.
@@ -249,11 +251,14 @@ Interpretation:
 
 ## K Evaluation
 
-The final comparison uses `K=3..8` for `network-gradient`, `network-prob-cluster`, `network-prob-cluster-nonneg`, `network-prob-soft`, and `network-prob-soft-nonneg`.
+The final comparison uses `K=2..10` for `network-gradient`, `network-prob-cluster`, `network-prob-cluster-nonneg`, `network-prob-soft`, and `network-prob-soft-nonneg`.
 
 Each candidate `K` records:
 
-- odd/even split-half `ARI`
+- run-pair instability `I_mean = 1 - mean(ARI)`
+- instability standard error
+- run-pair mean `ARI`
+- homogeneity
 - silhouette
 - Calinski-Harabasz
 - Davies-Bouldin
@@ -265,10 +270,11 @@ Each candidate `K` records:
 
 Selection rule:
 
-1. Find the best `ARI`.
-2. Keep all `K` within `0.02` of that best `ARI`.
-3. Among those, choose the smallest `K` with minimum cluster fraction `>= 0.05`.
-4. If none pass that guardrail, fall back to the best-ARI solution.
+1. Compute run-aware instability from independent run pairs, with `ARI` as the chance-corrected agreement score.
+   Run-wise inputs come either from explicit `run-1..4` files or from an equal four-way split of `run-concat` inputs staged by the workflow.
+2. Restrict candidates to local minima of `I_mean(K)`.
+3. Apply the `1-SE` rule relative to the best instability point.
+4. Among surviving candidates, choose the smallest `K` that also passes the pre-registered `V_min` vertex-count threshold and single-component connectivity constraints.
 
 `network-wta` is exempt because it has no clustering stage.
 

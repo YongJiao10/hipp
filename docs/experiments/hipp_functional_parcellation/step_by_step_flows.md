@@ -17,9 +17,11 @@ All six methods share the same upstream steps before branch-specific processing:
 1. Extract individualized cortical ROI-component timeseries from the chosen cortical atlas output.
 2. Merge atlas-specific parent networks to canonical cross-atlas network labels using [cross_atlas_network_merge.json](/Users/jy/Documents/HippoMaps-network-first/config/cross_atlas_network_merge.json).
 3. Exclude `Noise`.
-4. Average ROI-component timeseries within each retained canonical network to obtain cortex `network` timeseries.
-5. Sample left and right hippocampal resting-state timeseries on the `corobl` surfaces.
-6. Compute direct hippocampal `vertex-to-network FC` separately for each hemisphere and smoothing condition.
+4. Resolve run-wise inputs for run-pair instability:
+   if explicit `run-1..4` `dtseries` and `bold` files are available, use them; otherwise split `run-concat` inputs into four equal runs and stage those derived run-wise files.
+5. Average ROI-component timeseries within each retained canonical network to obtain cortex `network` timeseries.
+6. Sample left and right hippocampal resting-state timeseries on the `corobl` surfaces.
+7. Compute direct hippocampal `vertex-to-network FC` separately for each hemisphere and smoothing condition.
 
 Notation:
 
@@ -46,7 +48,7 @@ Per-atlas count change:
 
 ```text
 Atlas            Raw Atlas Labels  Noise Excluded  Canonical Networks Retained
-Kong2019                      17             no                            8
+Kong2019                      17             no                            7
 Hermosillo2024               14             no                            8
 Lynch2024                    21            yes                            8
 ```
@@ -62,7 +64,7 @@ Kong2019
   VentralAttentionA + VentralAttentionB               -> VentralAttention
   ControlA + ControlB + ControlC                      -> Control
   Auditory                                            -> Auditory
-  TemporalParietal                                    -> TemporalParietal
+  TemporalParietal                                    -> Default
 
 Hermosillo2024
   DMN + PMN + PON                                     -> Default
@@ -99,7 +101,7 @@ Default / Visual / Somatomotor / DorsalAttention / VentralAttention / Control / 
 Atlas-specific eighth network:
 
 ```text
-Kong2019         TemporalParietal
+Kong2019         none (merged into Default)
 Hermosillo2024   Limbic
 Lynch2024        Language
 ```
@@ -116,9 +118,9 @@ This is the network-space diffusion-gradient route.
 4. Run diffusion-map embedding on that graph.
 5. Keep the first `3` nontrivial diffusion gradients as clustering features.
 6. Z-score those gradient features across vertices.
-7. Run spatially constrained Ward clustering for each `K` in `3..8`.
-8. Evaluate each `K` with split-half `ARI` and the other selection metrics.
-9. Choose the final `K` using the repository selection rule.
+7. Run spatially constrained Ward clustering for each `K` in `2..10`.
+8. Evaluate each `K` with run-pair instability, `ARI`, homogeneity, parcel-size, and connectivity metrics.
+9. Choose the final `K` with the repository instability rule: local minima -> `1-SE` -> non-triviality constraints.
 10. Save the final hippocampal subregion labels.
 11. Annotate each final cluster by its dominant canonical network.
 
@@ -151,9 +153,9 @@ This is the network-probability clustering route.
    `Fisher z -> shift positive -> row normalize to sum=1`
 3. Use those vertex-wise network probability vectors as clustering features.
 4. Z-score the probability features across vertices.
-5. Run spatially constrained Ward clustering for each `K` in `3..8`.
-6. Evaluate each `K` with split-half `ARI` and the other selection metrics.
-7. Choose the final `K` using the repository selection rule.
+5. Run spatially constrained Ward clustering for each `K` in `2..10`.
+6. Evaluate each `K` with run-pair instability, `ARI`, homogeneity, parcel-size, and connectivity metrics.
+7. Choose the final `K` with the repository instability rule: local minima -> `1-SE` -> `V_min` vertex-count plus connectivity constraints.
 8. Save the final hippocampal subregion labels.
 9. Summarize each final cluster by its mean soft network probabilities.
 
@@ -185,9 +187,9 @@ This is the network-probability clustering route with negative Fisher-z FC value
    `Fisher z -> clip negative values to 0 -> row normalize to sum=1`
 3. Use those vertex-wise network probability vectors as clustering features.
 4. Z-score the probability features across vertices.
-5. Run spatially constrained Ward clustering for each `K` in `3..8`.
-6. Evaluate each `K` with split-half `ARI` and the other selection metrics.
-7. Choose the final `K` using the repository selection rule.
+5. Run spatially constrained Ward clustering for each `K` in `2..10`.
+6. Evaluate each `K` with run-pair instability, `ARI`, homogeneity, parcel-size, and connectivity metrics.
+7. Choose the final `K` with the repository instability rule: local minima -> `1-SE` -> `V_min` vertex-count plus connectivity constraints.
 8. Save the final hippocampal subregion labels.
 9. Summarize each final cluster by its mean soft network probabilities.
 
@@ -224,9 +226,9 @@ This is the strict soft-first network route.
 5. Re-normalize each vertex probability row after each regularization pass so rows still sum to `1`.
 6. Use the regularized probability vectors as clustering features.
 7. Z-score those regularized probability features across vertices.
-8. Run spatially constrained Ward clustering for each `K` in `3..8`.
-9. Evaluate each `K` with split-half `ARI` and the other selection metrics.
-10. Choose the final `K` using the repository selection rule.
+8. Run spatially constrained Ward clustering for each `K` in `2..10`.
+9. Evaluate each `K` with run-pair instability, `ARI`, homogeneity, parcel-size, and connectivity metrics.
+10. Choose the final `K` with the repository instability rule: local minima -> `1-SE` -> `V_min` vertex-count plus connectivity constraints.
 11. Save the final hippocampal subregion labels.
 12. Save the regularized soft probabilities as the main soft output.
 13. Derive optional regularized `argmax` labels only for auxiliary inspection and summary statistics.
@@ -267,9 +269,9 @@ This is the strict soft-first network route with negative Fisher-z FC values cli
 5. Re-normalize each vertex probability row after each regularization pass so rows still sum to `1`.
 6. Use the regularized probability vectors as clustering features.
 7. Z-score those regularized probability features across vertices.
-8. Run spatially constrained Ward clustering for each `K` in `3..8`.
-9. Evaluate each `K` with split-half `ARI` and the other selection metrics.
-10. Choose the final `K` using the repository selection rule.
+8. Run spatially constrained Ward clustering for each `K` in `2..10`.
+9. Evaluate each `K` with run-pair instability, `ARI`, homogeneity, parcel-size, and connectivity metrics.
+10. Choose the final `K` with the repository instability rule: local minima -> `1-SE` -> `V_min` vertex-count plus connectivity constraints.
 11. Save the final hippocampal subregion labels.
 12. Save the regularized soft probabilities as the main soft output.
 13. Derive optional regularized `argmax` labels only for auxiliary inspection and summary statistics.

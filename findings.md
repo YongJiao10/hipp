@@ -37,6 +37,36 @@
 - 三位被试现有 `outputs/dense_corobl_batch/sub-*/hippunfold/sub-*/surf/` 下的 `multihist7_subfields.label.gii` 已足够作为正式结构结果复用，无需重跑 HippUnfold。
 - 旧 volume 功能结果已归档到 `outputs/dense_corobl_batch/_archived_volume_functional/sub-*/`。
 - 当前正式输出已收敛到 `outputs/dense_corobl_batch/final_structural_only/final/sub-*/sub-*_structural.png`。
+- 已直接检查 `sub-100610_task-rest_run-concat.dtseries.nii`：cortex 为 surface grayordinates，hippocampus 为 volume grayordinates（`HippocampusLeft: 764 voxels`, `HippocampusRight: 795 voxels`）。
+- 当前 network workflow 依赖的海马 `.func.gii` 仍来自单独 4D volume BOLD 的 `volume-to-surface-mapping`，因此不符合“完全不用单独 volume 数据”的更严格要求。
+- 仓库已新增 `docs/experiments/hipp_functional_parcellation/2026-04-08_no_separate_volume_findings.md` 记录上述结论，并且已删除失败实验分支 `codex/surface-first-smoke`。
+- 已将 network-first workflow 改为 run-aware instability 版本：
+  - 候选 `K = 2..10`
+  - split strategy = `run-pair`
+  - 主指标 = `instability_mean = 1 - mean(ARI)`
+  - 决策顺序 = `local minima -> 1-SE -> V_min/connectivity`
+- `run_subject.py` 现已支持显式绝对阈值 `--v-min-count`；运行记录会写出 `V_min_mode = count|fraction`，并在 `per_k_summary.tsv` 中保留 `min_cluster_size_vertices` 与 `v_min_vertices`。
+- `run_subject.py` 现已支持在缺少显式 `run-1..4` 输入时，从 `run-concat.dtseries.nii` 与 `run-concat_bold.nii.gz` 自动 staging 出 4 个 run 供 run-aware instability 使用；`100610` 的实测 split 结果为 `run_lengths = [900, 900, 900, 900]`，拆分后 `dtseries` shape 为 `(900, 91282)`，`bold` shape 为 `(113, 136, 113, 900)`。
+- 已为 `100610 + lynch2024 + network-gradient` 跑通本地 smoke，成功生成过 `final_selection_summary.json`、`k_selection_curves.png`、`network_probability_heatmaps.png` 与 `hipp_functional_parcellation_network_overview.png`。
+- 这轮 smoke 若使用 `V_min = 5%` 或 `2.5%` 会在左侧 `2mm` 的局部极小值处被最小 parcel 约束淘汰；本地 exploratory smoke 最终用 `v_min_fraction = 0.01` 才跑通完整闭环。
+- `100610 + lynch2024 + network-gradient` 在 `v_min_fraction = 0.01, B_resamples = 6` 下的 smoke 结果为：
+  - `2mm/L -> K=7`
+  - `2mm/R -> K=4`
+  - `4mm/L -> K=10`
+  - `4mm/R -> K=6`
+- 已将同一套 run-aware smoke 复制到 `network-prob-cluster-nonneg`。
+- `network-prob-cluster-nonneg` 在 exploratory `v_min_count = 63, B_resamples = 6` 下失败，失败点为 `2mm/L`：局部极小值对应的最小 parcel 仅 `36` 顶点，因此没有任何 `K` 同时通过 `local minima -> 1-SE -> V_min/connectivity`。
+- 将 `network-prob-cluster-nonneg` 的 exploratory 绝对阈值降到 `v_min_count = 36` 后，本地 smoke 跑通完整闭环，并成功生成过 `final_selection_summary.json`、`k_selection_curves.png`、`network_probability_heatmaps.png` 与 `hipp_functional_parcellation_network_overview.png`。
+- `100610 + lynch2024 + network-prob-cluster-nonneg` 在 `v_min_count = 36, B_resamples = 6` 下的 smoke 结果为：
+  - `2mm/L -> K=7`
+  - `2mm/R -> K=2`
+  - `4mm/L -> K=6`
+  - `4mm/R -> K=2`
+- `/Volumes/yojiao/HCP_7T_Hippocampus` 里的 `166` 来自旧项目的 `ashs_subjects.txt` / `struct_complete` 子集，不等同于 `175` 个官方 rest7t master，也不等同于当前远端盘上可见的 `168` 个 4-run 完整功能被试。
+- 仓库已新增正式 manifest：
+  - `manifests/hcp_7t_hippocampus_struct_complete_166.txt`
+  - `manifests/hcp_7t_hippocampus_struct_complete_166.json`
+- smoke 产物已按仓库规则从 `/tmp/hipp_k_selection_smoke`、`/tmp/hipp_k_selection_smoke_prob_cluster` 以及对应的 Matplotlib 缓存目录删除；源码修改与关键结论保留。
 
 ## Constraints
 - 远端数据在远端 Mac 的外接盘，不在本地。
@@ -55,3 +85,5 @@
 - 本地 macOS 的兼容补丁只能视为测试机适配，不得把它误当成 HPC 正式运行默认参数。
 - HPC 正式版不需要为 CPU fallback 保留额外兼容逻辑。
 - 即便新默认切到 CIFTI-first，当前个体化海马功能主链仍依赖 `sample_hipp_surface_timeseries.py` 从体空间 BOLD 映射到 HippUnfold 海马 surface；除非用户再单独批准，不应额外发明新的 hippocampal CIFTI fallback 分支。
+- 用户已明确当前应继续测试 `k_selection`，且不再继续尝试“完全不用 volume 数据”。
+- 用户当前可接受先做本地 smoke，再决定服务器正式 cohort 的 `V_min` 与 `B`。
