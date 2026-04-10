@@ -3,7 +3,7 @@ set -euo pipefail
 
 WB_APP="/Applications/wb_view.app/Contents/usr/bin/wb_command"
 FALLBACK_PY="/opt/miniconda3/envs/py314/bin/python"
-FALLBACK_HELPER="/Users/jy/Documents/HippoMaps/scripts/wb_volume_to_surface_fallback.py"
+FALLBACK_HELPER="/Users/jy/Documents/HippoMaps-network-first/scripts/wb_volume_to_surface_fallback.py"
 
 if [[ ! -x "${WB_APP}" ]]; then
   echo "wb_command not found at ${WB_APP}" >&2

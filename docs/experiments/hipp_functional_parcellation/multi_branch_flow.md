@@ -13,6 +13,7 @@ cortex canonical merged network timeseries
 
 For step-by-step per-branch procedures, see [step_by_step_flows.md](/Users/jy/Documents/HippoMaps-network-first/docs/experiments/hipp_functional_parcellation/step_by_step_flows.md).
 For execution notes, see [network_first_runbook.md](/Users/jy/Documents/HippoMaps-network-first/docs/experiments/hipp_functional_parcellation/network_first_runbook.md).
+For the clean 166-subject HPC transfer package, see [network_first_hpc_bundle_handoff.md](/Users/jy/Documents/HippoMaps-network-first/docs/experiments/hipp_functional_parcellation/network_first_hpc_bundle_handoff.md).
 
 The current network-first comparison matrix is:
 
@@ -21,6 +22,14 @@ branches   network-gradient / network-prob-cluster / network-prob-cluster-nonneg
 atlases    lynch2024 / hermosillo2024 / kong2019
 subjects   100610 / 102311 / 102816
 smoothing  2mm / 4mm
+```
+
+The dedicated HPC bundle intentionally narrows this matrix to:
+
+```text
+branches   network-gradient / network-prob-cluster-nonneg
+atlases    lynch2024 / kong2019
+subjects   hcp_7t_hippocampus_struct_complete_166
 ```
 
 ## Core Rules
@@ -297,6 +306,11 @@ final_selection_core.json
 final_selection_summary.json
 summary_manifest.json
 ```
+
+Structural render input rule:
+
+- network-first structural panels now read HippUnfold structural subfields from the subject-level hippocampal CIFTI `dlabel.nii`
+- the workflow then separates that `dlabel.nii` into left/right hippocampal `label.gii` render inputs inside the run output tree before composing the locked overview
 
 Overview heatmap semantics:
 

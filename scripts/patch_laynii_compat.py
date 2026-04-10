@@ -13,34 +13,54 @@ def patch_coords_smk(path: Path) -> bool:
     if PATCH_MARKER in text:
         return False
 
-    old_equidist = (
+    old_equidist_variants = [
+        (
         '        "cp {input} dseg.nii.gz && "\n'
         '        "LN2_LAYERS  -rim dseg.nii.gz && "\n'
         '        "cp dseg_metric_equidist.nii.gz {output.equidist}"\n'
-    )
+        ),
+        (
+        '        "cp {input} dseg.nii.gz && "\n'
+        '        "LN2_LAYERS  -rim dseg.nii.gz &> {log} && "\n'
+        '        "cp dseg_metric_equidist.nii.gz {output.equidist}"\n'
+        ),
+    ]
     new_equidist = (
         '        "cp {input} dseg.nii.gz && "\n'
         f'        "gunzip -c dseg.nii.gz > dseg.nii && "  # {PATCH_MARKER}: macOS local LAYNII cannot read .nii.gz reliably\n'
-        '        "LN2_LAYERS  -rim dseg.nii && "\n'
+        '        "LN2_LAYERS  -rim dseg.nii'
+        + (' &> {log}' if "{log}" in text else "")
+        + ' && "\n'
         '        "gzip -f dseg_metric_equidist.nii && "\n'
         '        "cp dseg_metric_equidist.nii.gz {output.equidist}"\n'
     )
 
-    old_equivol = (
+    old_equivol_variants = [
+        (
         '        "cp {input} dseg.nii.gz && "\n'
         '        "LN2_LAYERS  -rim dseg.nii.gz -equivol && "\n'
         '        "cp dseg_metric_equivol.nii.gz {output.equivol}"\n'
-    )
+        ),
+        (
+        '        "cp {input} dseg.nii.gz && "\n'
+        '        "LN2_LAYERS  -rim dseg.nii.gz -equivol &> {log} && "\n'
+        '        "cp dseg_metric_equivol.nii.gz {output.equivol}"\n'
+        ),
+    ]
     new_equivol = (
         '        "cp {input} dseg.nii.gz && "\n'
         f'        "gunzip -c dseg.nii.gz > dseg.nii && "  # {PATCH_MARKER}: macOS local LAYNII cannot read .nii.gz reliably\n'
-        '        "LN2_LAYERS  -rim dseg.nii -equivol && "\n'
+        '        "LN2_LAYERS  -rim dseg.nii -equivol'
+        + (' &> {log}' if "{log}" in text else "")
+        + ' && "\n'
         '        "gzip -f dseg_metric_equivol.nii && "\n'
         '        "cp dseg_metric_equivol.nii.gz {output.equivol}"\n'
     )
 
-    if old_equidist not in text or old_equivol not in text:
-        raise RuntimeError(f"Did not find expected LN2_LAYERS shell blocks in {path}")
+    old_equidist = next((variant for variant in old_equidist_variants if variant in text), None)
+    old_equivol = next((variant for variant in old_equivol_variants if variant in text), None)
+    if old_equidist is None or old_equivol is None:
+        return False
 
     text = text.replace(old_equidist, new_equidist, 1)
     text = text.replace(old_equivol, new_equivol, 1)

@@ -25,6 +25,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--renderer", default="OSMesa")
     parser.add_argument("--left-label-template", default=None, help="Optional absolute path template, e.g. /path/sub-{subject}_...label.gii")
     parser.add_argument("--right-label-template", default=None, help="Optional absolute path template, e.g. /path/sub-{subject}_...label.gii")
+    parser.add_argument("--left-surface-template", default=None, help="Optional absolute path template for left surface")
+    parser.add_argument("--right-surface-template", default=None, help="Optional absolute path template for right surface")
+    parser.add_argument("--spec-template", default=None, help="Optional absolute path template for spec file")
     parser.add_argument("--name", default="structural", help="Output stem label, e.g. structural or wta")
     parser.add_argument(
         "--no-template-scene",
@@ -92,7 +95,42 @@ def find_current_structural_label_refs(root: ET.Element) -> dict[str, str]:
     return refs
 
 
+def find_current_corobl_surface_refs(root: ET.Element) -> dict[str, str]:
+    refs: dict[str, str] = {}
+    for elem in root.iter():
+        text = (elem.text or "").strip()
+        if not text or "space-corobl" not in text or "midthickness.surf.gii" not in text:
+            continue
+        if "hemi-L" in text and "L" not in refs:
+            refs["L"] = text
+        elif "hemi-R" in text and "R" not in refs:
+            refs["R"] = text
+    if "L" not in refs or "R" not in refs:
+        raise RuntimeError("Could not find current corobl midthickness surface references in scene file")
+    return refs
+
+
+def find_current_spec_ref(root: ET.Element) -> str:
+    for elem in root.iter():
+        text = (elem.text or "").strip()
+        if "space-corobl_surfaces.spec" in text:
+            return text
+    raise RuntimeError("Could not find current corobl spec reference in scene file")
+
+
 def replace_label_refs(root: ET.Element, current_ref: str, target_ref: str) -> None:
+    current_name = Path(current_ref).name
+    target_name = Path(target_ref).name
+    for elem in root.iter():
+        if not elem.text:
+            continue
+        if current_ref in elem.text:
+            elem.text = elem.text.replace(current_ref, target_ref)
+        if current_name in elem.text:
+            elem.text = elem.text.replace(current_name, target_name)
+
+
+def replace_exact_ref(root: ET.Element, current_ref: str, target_ref: str) -> None:
     current_name = Path(current_ref).name
     target_name = Path(target_ref).name
     for elem in root.iter():
@@ -152,6 +190,17 @@ def main() -> int:
             if args.right_label_template:
                 right_target = str(Path(args.right_label_template.format(subject=subject)).resolve())
                 replace_label_refs(root, refs["R"], right_target)
+        if args.left_surface_template or args.right_surface_template or args.spec_template:
+            surface_refs = find_current_corobl_surface_refs(root)
+            if args.left_surface_template:
+                left_surface_target = str(Path(args.left_surface_template.format(subject=subject)).resolve())
+                replace_exact_ref(root, surface_refs["L"], left_surface_target)
+            if args.right_surface_template:
+                right_surface_target = str(Path(args.right_surface_template.format(subject=subject)).resolve())
+                replace_exact_ref(root, surface_refs["R"], right_surface_target)
+            if args.spec_template:
+                spec_target = str(Path(args.spec_template.format(subject=subject)).resolve())
+                replace_exact_ref(root, find_current_spec_ref(root), spec_target)
         validate_scene_paths(root)
         subject_dir = outdir / f"sub-{subject}"
         subject_dir.mkdir(parents=True, exist_ok=True)

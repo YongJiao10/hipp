@@ -20,7 +20,7 @@ BRANCHES = [
     "network-prob-soft-nonneg",
     "network-wta",
 ]
-ATLASES = ["lynch2024", "hermosillo2024", "kong2019"]
+ATLASES = ["lynch2024", "kong2019"]
 SUPPORTED_ATLASES = ["lynch2024", "hermosillo2024", "kong2019"]
 SUBJECTS = ["100610", "102311", "102816"]
 SUMMARY_KEEP = {

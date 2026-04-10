@@ -451,6 +451,24 @@ def load_cluster_name_map(annotation_path: Path) -> dict[int, str]:
     return {int(row["cluster_id"]): str(row["cluster_name"]) for row in rows}
 
 
+def render_cache_is_valid(output_png: Path, input_paths: list[Path]) -> bool:
+    if not output_png.exists():
+        return False
+    try:
+        out_mtime = output_png.stat().st_mtime
+    except OSError:
+        return False
+    for path in input_paths:
+        if not path.exists():
+            return False
+        try:
+            if path.stat().st_mtime > out_mtime:
+                return False
+        except OSError:
+            return False
+    return True
+
+
 def render_shortlist_panels(
     root: Path,
     final_selection: dict[str, object],
@@ -478,15 +496,25 @@ def render_shortlist_panels(
                 / "renders"
                 / f"sub-{subject}_wb_{branch_slug.replace('-', '_')}_{smooth_name}_k{k}_biglegend.png"
             )
-            if not (reuse_existing and render_png.exists()):
-                left_label_path = root / "clustering" / smooth_name / "hemi_L" / f"k_{k}" / "cluster_labels.npy"
-                right_label_path = root / "clustering" / smooth_name / "hemi_R" / f"k_{k}" / "cluster_labels.npy"
+            left_label_path = root / "clustering" / smooth_name / "hemi_L" / f"k_{k}" / "cluster_labels.npy"
+            right_label_path = root / "clustering" / smooth_name / "hemi_R" / f"k_{k}" / "cluster_labels.npy"
+            left_annot_path = root / "clustering" / smooth_name / "hemi_L" / f"k_{k}" / "cluster_annotation.json"
+            right_annot_path = root / "clustering" / smooth_name / "hemi_R" / f"k_{k}" / "cluster_annotation.json"
+            cache_inputs = [
+                left_label_path,
+                right_label_path,
+                left_annot_path,
+                right_annot_path,
+                left_surface,
+                right_surface,
+            ]
+            if not (reuse_existing and render_cache_is_valid(render_png, cache_inputs)):
                 if not left_label_path.exists() or not right_label_path.exists():
                     continue
                 left_labels = np.load(left_label_path).astype(np.int32)
                 right_labels = np.load(right_label_path).astype(np.int32)
-                left_name_map = load_cluster_name_map(root / "clustering" / smooth_name / "hemi_L" / f"k_{k}" / "cluster_annotation.json")
-                right_name_map = load_cluster_name_map(root / "clustering" / smooth_name / "hemi_R" / f"k_{k}" / "cluster_annotation.json")
+                left_name_map = load_cluster_name_map(left_annot_path)
+                right_name_map = load_cluster_name_map(right_annot_path)
                 assets = save_combined_label_assets(
                     subject=subject,
                     left_labels=left_labels,

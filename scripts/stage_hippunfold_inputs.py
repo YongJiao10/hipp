@@ -4,12 +4,21 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+import re
 import shutil
 
 
 def copy_file(src: Path, dst: Path) -> None:
     dst.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(src, dst)
+
+
+RUNWISE_DTSERIES_RE = re.compile(
+    r"sub-(?P<subject>\d+)_rfMRI_REST(?P<run_id>[1-4])_7T_(?P<phase>AP|PA)_Atlas_MSMAll_hp2000_clean_rclean_tclean\.dtseries\.nii$"
+)
+RUNWISE_BOLD_RE = re.compile(
+    r"sub-(?P<subject>\d+)_rfMRI_REST(?P<run_id>[1-4])_7T_(?P<phase>AP|PA)_hp2000_clean_rclean_tclean\.nii\.gz$"
+)
 
 
 def main() -> int:
@@ -55,6 +64,21 @@ def main() -> int:
         source_dir / f"sub-{subject}_rfMRI_REST_7T_brain_mask.nii.gz",
         func_dir / f"sub-{subject}_task-rest_run-concat_desc-brain_mask.nii.gz",
     )
+
+    for path in sorted(source_dir.iterdir()):
+        dt_match = RUNWISE_DTSERIES_RE.fullmatch(path.name)
+        if dt_match and dt_match.group("subject") == subject:
+            copy_file(
+                path,
+                func_dir / f"sub-{subject}_task-rest_run-{dt_match.group('run_id')}.dtseries.nii",
+            )
+            continue
+        bold_match = RUNWISE_BOLD_RE.fullmatch(path.name)
+        if bold_match and bold_match.group("subject") == subject:
+            copy_file(
+                path,
+                func_dir / f"sub-{subject}_task-rest_run-{bold_match.group('run_id')}_bold.nii.gz",
+            )
 
     print(input_dir)
     return 0

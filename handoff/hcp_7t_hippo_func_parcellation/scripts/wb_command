@@ -1,0 +1,22 @@
+#!/bin/zsh
+set -euo pipefail
+
+BUNDLE_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+WB_APP="${WB_COMMAND_BIN:-/Applications/wb_view.app/Contents/usr/bin/wb_command}"
+FALLBACK_PY="${WB_FALLBACK_PY:-python3}"
+FALLBACK_HELPER="${BUNDLE_ROOT}/scripts/wb_volume_to_surface_fallback.py"
+
+if [[ ! -x "${WB_APP}" ]]; then
+  echo "wb_command not found at ${WB_APP}" >&2
+  exit 127
+fi
+
+if [[ "$#" -ge 4 && "$1" == "-volume-to-surface-mapping" && -x "${FALLBACK_PY}" && -f "${FALLBACK_HELPER}" ]]; then
+  exec "${FALLBACK_PY}" "${FALLBACK_HELPER}" --wb-app "${WB_APP}" "$@"
+fi
+
+if [[ "$(uname -s)" == "Darwin" && "$(uname -m)" == "arm64" ]]; then
+  exec arch -x86_64 "${WB_APP}" "$@"
+fi
+
+exec "${WB_APP}" "$@"

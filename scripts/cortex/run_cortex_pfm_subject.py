@@ -245,6 +245,7 @@ def compose_multiview(
     view_pngs: list[tuple[str, Path]],
     out_png: Path,
     subtitle: str | None = None,
+    font_scale: float = 1.0,
 ) -> None:
     def load_font(size: int) -> ImageFont.ImageFont:
         for font_name in ["DejaVuSans.ttf", "Arial.ttf", "Helvetica.ttc"]:
@@ -259,45 +260,47 @@ def compose_multiview(
     tile_h = images[0][1].height
     cols = len(images)
     rows = 1
-    margin = 24
-    title_h = 96 if subtitle else 70
-    label_h = 34
-    legend_w = 240
+    scale = max(float(font_scale), 1.0)
+    margin = int(round(24 * scale))
+    title_h = int(round((96 if subtitle else 70) * scale))
+    label_h = int(round(34 * scale))
+    legend_w = int(round(240 * scale))
     canvas_w = cols * tile_w + legend_w + margin * 4
     canvas_h = title_h + rows * (tile_h + label_h) + margin * 3
     canvas = Image.new("RGB", (canvas_w, canvas_h), (255, 255, 255))
     draw = ImageDraw.Draw(canvas)
-    title_font = load_font(22)
-    label_font = load_font(18)
-    legend_font = load_font(20)
-    legend_title_font = load_font(22)
-    draw.text((margin, 18), f"sub-{subject}  {title}", fill=(0, 0, 0), font=title_font)
+    title_font = load_font(int(round(22 * scale)))
+    label_font = load_font(int(round(18 * scale)))
+    legend_font = load_font(int(round(20 * scale)))
+    legend_title_font = load_font(int(round(22 * scale)))
+    title_prefix = f"sub-{subject}  " if subject and str(subject).lower() != "group" else ""
+    draw.text((margin, int(round(18 * scale))), f"{title_prefix}{title}", fill=(0, 0, 0), font=title_font)
     if subtitle:
-        subtitle_font = load_font(18)
-        draw.text((margin, 50), subtitle, fill=(40, 40, 40), font=subtitle_font)
+        subtitle_font = load_font(int(round(18 * scale)))
+        draw.text((margin, int(round(50 * scale))), subtitle, fill=(40, 40, 40), font=subtitle_font)
     for idx, (label, img) in enumerate(images):
         row = idx // cols
         col = idx % cols
         x = margin + col * tile_w
         y = title_h + margin + row * (tile_h + label_h)
         canvas.paste(img, (x, y))
-        draw.text((x + 12, y + tile_h + 6), label.capitalize(), fill=(0, 0, 0), font=label_font)
+        draw.text((x + int(round(12 * scale)), y + tile_h + int(round(6 * scale))), label.capitalize(), fill=(0, 0, 0), font=label_font)
 
     legend_x = cols * tile_w + margin * 3
     legend_y = title_h + margin
     draw.text((legend_x, legend_y), "Legend", fill=(0, 0, 0), font=legend_title_font)
-    row_gap = 28
-    swatch = 16
-    legend_start_y = legend_y + 28
+    row_gap = int(round(28 * scale))
+    swatch = int(round(16 * scale))
+    legend_start_y = legend_y + int(round(28 * scale))
     for idx, item in enumerate(legend_items):
         col = 0
         row = idx
-        x = legend_x + col * 190
+        x = legend_x + int(round(col * 190 * scale))
         y = legend_start_y + row * row_gap
         rgba = item["rgba"]
         rgb = tuple(rgba[:3])
-        draw.rectangle((x, y + 4, x + swatch, y + 4 + swatch), fill=rgb, outline=(0, 0, 0))
-        draw.text((x + swatch + 10, y), str(item["name"]), fill=(0, 0, 0), font=legend_font)
+        draw.rectangle((x, y + int(round(4 * scale)), x + swatch, y + int(round(4 * scale)) + swatch), fill=rgb, outline=(0, 0, 0))
+        draw.text((x + swatch + int(round(10 * scale)), y), str(item["name"]), fill=(0, 0, 0), font=legend_font)
 
     out_png.parent.mkdir(parents=True, exist_ok=True)
     canvas.save(out_png)

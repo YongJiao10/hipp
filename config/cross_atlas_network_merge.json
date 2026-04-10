@@ -1,5 +1,5 @@
 {
-  "version": "2026-04-06",
+  "version": "2026-04-07",
   "description": "Canonical cross-atlas cortical network merge scheme for Kong2019, Hermosillo2024, and Lynch2024. Same canonical network names should share the same color across atlases. Noise is excluded from functional summaries.",
   "canonical_network_order": [
     "Default",
@@ -9,7 +9,6 @@
     "VentralAttention",
     "Control",
     "Auditory",
-    "TemporalParietal",
     "Language",
     "Limbic"
   ],
@@ -59,12 +58,6 @@
       201,
       255
     ],
-    "TemporalParietal": [
-      31,
-      79,
-      255,
-      255
-    ],
     "Language": [
       138,
       71,
@@ -88,12 +81,12 @@
     "kong2019": {
       "display_name": "Kong2019",
       "original_network_count": 17,
-      "merged_functional_network_count": 8,
+      "merged_functional_network_count": 7,
       "mapping": {
         "VentralAttentionB": "VentralAttention",
         "ControlA": "Control",
         "VisualA": "Visual",
-        "TemporalParietal": "TemporalParietal",
+        "TemporalParietal": "Default",
         "DorsalAttentionA": "DorsalAttention",
         "ControlC": "Control",
         "DefaultA": "Default",
