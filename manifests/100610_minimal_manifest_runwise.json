@@ -1,0 +1,101 @@
+{
+  "subject": "100610",
+  "remote_host": "yojiao@192.168.0.113",
+  "remote_root": "/Volumes/Elements/HCP-YA-2025",
+  "files": [
+    {
+      "kind": "structural_t1w",
+      "remote_source": "/Volumes/Elements/HCP-YA-2025/Structural Preprocessed Recommended for 3T and 7T/100610_StructuralRecommended.zip::100610/T1w/T1w_acpc_dc_restore.nii.gz",
+      "local_path": "/Users/jy/Documents/HippoMaps-network-first/data/raw/100610/sub-100610_T1w_acpc_dc_restore.nii.gz",
+      "bytes": 70379129
+    },
+    {
+      "kind": "structural_t2w",
+      "remote_source": "/Volumes/Elements/HCP-YA-2025/Structural Preprocessed Recommended for 3T and 7T/100610_StructuralRecommended.zip::100610/T1w/T2w_acpc_dc_restore.nii.gz",
+      "local_path": "/Users/jy/Documents/HippoMaps-network-first/data/raw/100610/sub-100610_T2w_acpc_dc_restore.nii.gz",
+      "bytes": 71182802
+    },
+    {
+      "kind": "rsfmri_dtseries",
+      "remote_source": "/Volumes/Elements/HCP-YA-2025/Resting State fMRI 7T Preprocessed Recommended archive/100610_Rest7TRecommended.zip::100610/MNINonLinear/Results/rfMRI_REST_7T/rfMRI_REST_7T_Atlas_MSMAll_hp2000_clean_rclean_tclean.dtseries.nii",
+      "local_path": "/Users/jy/Documents/HippoMaps-network-first/data/raw/100610/sub-100610_rfMRI_REST_7T_Atlas_MSMAll_hp2000_clean_rclean_tclean.dtseries.nii",
+      "bytes": 1315093232
+    },
+    {
+      "kind": "rsfmri_volume",
+      "remote_source": "/Volumes/Elements/HCP-YA-2025/Resting State fMRI 7T Preprocessed Recommended archive/100610_Rest7TRecommended.zip::100610/MNINonLinear/Results/rfMRI_REST_7T/rfMRI_REST_7T_hp2000_clean_rclean_tclean.nii.gz",
+      "local_path": "/Users/jy/Documents/HippoMaps-network-first/data/raw/100610/sub-100610_rfMRI_REST_7T_hp2000_clean_rclean_tclean.nii.gz",
+      "bytes": 6198924127
+    },
+    {
+      "kind": "brain_mask",
+      "remote_source": "/Volumes/Elements/HCP-YA-2025/Resting State fMRI 7T Preprocessed Recommended archive/100610_Rest7TRecommended.zip::100610/MNINonLinear/Results/rfMRI_REST_7T/rfMRI_REST_7T_brain_mask.nii.gz",
+      "local_path": "/Users/jy/Documents/HippoMaps-network-first/data/raw/100610/sub-100610_rfMRI_REST_7T_brain_mask.nii.gz",
+      "bytes": 41477
+    },
+    {
+      "kind": "rsfmri_dtseries_runwise",
+      "run_id": "1",
+      "run_label": "rfMRI_REST1_7T_PA",
+      "remote_source": "/Volumes/Elements/HCP-YA-2025/Resting State fMRI 7T Preprocessed Recommended archive/100610_Rest7TRecommended.zip::100610/MNINonLinear/Results/rfMRI_REST1_7T_PA/rfMRI_REST1_7T_PA_Atlas_MSMAll_hp2000_clean_rclean_tclean.dtseries.nii",
+      "local_path": "/Users/jy/Documents/HippoMaps-network-first/data/raw/100610/sub-100610_rfMRI_REST1_7T_PA_Atlas_MSMAll_hp2000_clean_rclean_tclean.dtseries.nii",
+      "bytes": 329247296
+    },
+    {
+      "kind": "rsfmri_volume_runwise",
+      "run_id": "1",
+      "run_label": "rfMRI_REST1_7T_PA",
+      "remote_source": "/Volumes/Elements/HCP-YA-2025/Resting State fMRI 7T Preprocessed Recommended archive/100610_Rest7TRecommended.zip::100610/MNINonLinear/Results/rfMRI_REST1_7T_PA/rfMRI_REST1_7T_PA_hp2000_clean_rclean_tclean.nii.gz",
+      "local_path": "/Users/jy/Documents/HippoMaps-network-first/data/raw/100610/sub-100610_rfMRI_REST1_7T_PA_hp2000_clean_rclean_tclean.nii.gz",
+      "bytes": 1466968479
+    },
+    {
+      "kind": "rsfmri_dtseries_runwise",
+      "run_id": "2",
+      "run_label": "rfMRI_REST2_7T_AP",
+      "remote_source": "/Volumes/Elements/HCP-YA-2025/Resting State fMRI 7T Preprocessed Recommended archive/100610_Rest7TRecommended.zip::100610/MNINonLinear/Results/rfMRI_REST2_7T_AP/rfMRI_REST2_7T_AP_Atlas_MSMAll_hp2000_clean_rclean_tclean.dtseries.nii",
+      "local_path": "/Users/jy/Documents/HippoMaps-network-first/data/raw/100610/sub-100610_rfMRI_REST2_7T_AP_Atlas_MSMAll_hp2000_clean_rclean_tclean.dtseries.nii",
+      "bytes": 329247296
+    },
+    {
+      "kind": "rsfmri_volume_runwise",
+      "run_id": "2",
+      "run_label": "rfMRI_REST2_7T_AP",
+      "remote_source": "/Volumes/Elements/HCP-YA-2025/Resting State fMRI 7T Preprocessed Recommended archive/100610_Rest7TRecommended.zip::100610/MNINonLinear/Results/rfMRI_REST2_7T_AP/rfMRI_REST2_7T_AP_hp2000_clean_rclean_tclean.nii.gz",
+      "local_path": "/Users/jy/Documents/HippoMaps-network-first/data/raw/100610/sub-100610_rfMRI_REST2_7T_AP_hp2000_clean_rclean_tclean.nii.gz",
+      "bytes": 1466031230
+    },
+    {
+      "kind": "rsfmri_dtseries_runwise",
+      "run_id": "3",
+      "run_label": "rfMRI_REST3_7T_PA",
+      "remote_source": "/Volumes/Elements/HCP-YA-2025/Resting State fMRI 7T Preprocessed Recommended archive/100610_Rest7TRecommended.zip::100610/MNINonLinear/Results/rfMRI_REST3_7T_PA/rfMRI_REST3_7T_PA_Atlas_MSMAll_hp2000_clean_rclean_tclean.dtseries.nii",
+      "local_path": "/Users/jy/Documents/HippoMaps-network-first/data/raw/100610/sub-100610_rfMRI_REST3_7T_PA_Atlas_MSMAll_hp2000_clean_rclean_tclean.dtseries.nii",
+      "bytes": 329247296
+    },
+    {
+      "kind": "rsfmri_volume_runwise",
+      "run_id": "3",
+      "run_label": "rfMRI_REST3_7T_PA",
+      "remote_source": "/Volumes/Elements/HCP-YA-2025/Resting State fMRI 7T Preprocessed Recommended archive/100610_Rest7TRecommended.zip::100610/MNINonLinear/Results/rfMRI_REST3_7T_PA/rfMRI_REST3_7T_PA_hp2000_clean_rclean_tclean.nii.gz",
+      "local_path": "/Users/jy/Documents/HippoMaps-network-first/data/raw/100610/sub-100610_rfMRI_REST3_7T_PA_hp2000_clean_rclean_tclean.nii.gz",
+      "bytes": 1466183158
+    },
+    {
+      "kind": "rsfmri_dtseries_runwise",
+      "run_id": "4",
+      "run_label": "rfMRI_REST4_7T_AP",
+      "remote_source": "/Volumes/Elements/HCP-YA-2025/Resting State fMRI 7T Preprocessed Recommended archive/100610_Rest7TRecommended.zip::100610/MNINonLinear/Results/rfMRI_REST4_7T_AP/rfMRI_REST4_7T_AP_Atlas_MSMAll_hp2000_clean_rclean_tclean.dtseries.nii",
+      "local_path": "/Users/jy/Documents/HippoMaps-network-first/data/raw/100610/sub-100610_rfMRI_REST4_7T_AP_Atlas_MSMAll_hp2000_clean_rclean_tclean.dtseries.nii",
+      "bytes": 329247296
+    },
+    {
+      "kind": "rsfmri_volume_runwise",
+      "run_id": "4",
+      "run_label": "rfMRI_REST4_7T_AP",
+      "remote_source": "/Volumes/Elements/HCP-YA-2025/Resting State fMRI 7T Preprocessed Recommended archive/100610_Rest7TRecommended.zip::100610/MNINonLinear/Results/rfMRI_REST4_7T_AP/rfMRI_REST4_7T_AP_hp2000_clean_rclean_tclean.nii.gz",
+      "local_path": "/Users/jy/Documents/HippoMaps-network-first/data/raw/100610/sub-100610_rfMRI_REST4_7T_AP_hp2000_clean_rclean_tclean.nii.gz",
+      "bytes": 1467627232
+    }
+  ]
+}

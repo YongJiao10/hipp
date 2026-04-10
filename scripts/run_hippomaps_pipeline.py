@@ -79,12 +79,10 @@ def build_hippunfold_command(cfg: dict) -> list[str]:
         cfg["hippunfold_modality"],
         "--output-density",
         cfg["surface_density"],
+        "--output-spaces",
+        "corobl",
         "--participant-label",
         subj,
-        "--path-T1w",
-        str(input_dir / f"sub-{subj}" / "anat" / f"sub-{subj}_T1w.nii.gz"),
-        "--path-T2w",
-        str(input_dir / f"sub-{subj}" / "anat" / f"sub-{subj}_T2w.nii.gz"),
     ]
     if cfg.get("t1_reg_template", False):
         cmd.append("--t1_reg_template")

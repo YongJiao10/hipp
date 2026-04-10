@@ -65,7 +65,7 @@ def main() -> int:
     parser.add_argument("--hippunfold-dir", required=True)
     parser.add_argument("--left-labels", required=True, help="left hemi WTA labels .npy")
     parser.add_argument("--right-labels", required=True, help="right hemi WTA labels .npy")
-    parser.add_argument("--density", default="2mm")
+    parser.add_argument("--density", default="512")
     parser.add_argument("--style-json", default="config/hipp_network_style.json")
     parser.add_argument("--spaces", nargs="+", default=["unfold", "T2w"], help="surface spaces to emit")
     parser.add_argument("--outdir", required=True)

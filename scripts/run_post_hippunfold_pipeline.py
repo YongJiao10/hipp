@@ -95,7 +95,7 @@ def main() -> int:
     parser.add_argument("--brain-mask", required=True)
     parser.add_argument("--dtseries", required=True)
     parser.add_argument("--hippunfold-dir", required=True)
-    parser.add_argument("--density", default="2mm")
+    parser.add_argument("--density", default="512")
     parser.add_argument("--space", default="auto")
     parser.add_argument("--outdir", required=True)
     args = parser.parse_args()

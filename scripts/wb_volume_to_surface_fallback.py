@@ -38,22 +38,33 @@ def run_real_wb_command(wb_app: str, wb_args: list[str]) -> int:
 
 
 def load_surface_points(path: Path) -> np.ndarray:
-    return np.asarray(nib.load(str(path)).agg_data("NIFTI_INTENT_POINTSET"), dtype=np.float64)
+    return np.asarray(
+        nib.load(str(path)).agg_data("NIFTI_INTENT_POINTSET"), dtype=np.float64
+    )
 
 
-def load_volume_proxy(volume_path: Path) -> tuple[nib.Nifti1Image, np.ndarray]:
+def load_volume_proxy(volume_path: Path) -> tuple[nib.Nifti1Image, np.ndarray] | None:
     volume_img = nib.load(str(volume_path))
     data = volume_img.dataobj
-    if len(volume_img.shape) == 3:
+    shape = tuple(int(x) for x in volume_img.shape)
+    if len(shape) == 3:
         proxy = np.asarray(data, dtype=np.float32)
-    elif len(volume_img.shape) == 4:
-        n_frames = min(int(volume_img.shape[3]), 10)
-        proxy = np.zeros(volume_img.shape[:3], dtype=np.float32)
+    elif len(shape) == 4:
+        n_frames = min(int(shape[3]), 10)
+        proxy = np.zeros(shape[:3], dtype=np.float32)
         for idx in range(n_frames):
             proxy += np.abs(np.asarray(data[..., idx], dtype=np.float32))
         proxy /= float(n_frames)
     else:
-        raise RuntimeError(f"Unsupported volume dimensionality for QC: {volume_img.shape}")
+        # Workbench can legitimately map non-scalar volumes here, such as
+        # vector warp fields with shape (X, Y, Z, 1, 3). Our scalar QC
+        # heuristic is not meaningful for those cases, so we should not
+        # block the real command.
+        print(
+            f"[wb_command guard] Skipping scalar QC for unsupported volume dimensionality: {shape}",
+            file=sys.stderr,
+        )
+        return None
     return volume_img, proxy
 
 
@@ -118,8 +129,10 @@ def negative_x_shift(surface_points: np.ndarray, volume_img: nib.Nifti1Image) ->
 
 def shifted_metrics_meaningfully_better(direct: QCMetrics, shifted: QCMetrics) -> bool:
     return (
-        shifted.inside_ratio >= max(MIN_INSIDE_RATIO, direct.inside_ratio + MIN_INSIDE_IMPROVEMENT)
-        and shifted.nonzero_ratio >= max(MIN_NONZERO_RATIO, direct.nonzero_ratio + MIN_NONZERO_IMPROVEMENT)
+        shifted.inside_ratio
+        >= max(MIN_INSIDE_RATIO, direct.inside_ratio + MIN_INSIDE_IMPROVEMENT)
+        and shifted.nonzero_ratio
+        >= max(MIN_NONZERO_RATIO, direct.nonzero_ratio + MIN_NONZERO_IMPROVEMENT)
         and shifted.mean_abs > direct.mean_abs
     )
 
@@ -131,12 +144,20 @@ def write_shifted_surface(surface_path: Path, shifted_points: np.ndarray, out_pa
     nib.save(surface_img, str(out_path))
 
 
-def prepare_surface_for_mapping(volume_path: Path, surface_path: Path, wb_args: list[str]) -> tuple[Path | None, str]:
-    volume_img, proxy_volume = load_volume_proxy(volume_path)
+def prepare_surface_for_mapping(
+    volume_path: Path, surface_path: Path, wb_args: list[str]
+) -> tuple[Path | None, str]:
+    loaded = load_volume_proxy(volume_path)
+    if loaded is None:
+        return None, "direct-unsupported-qc"
+
+    volume_img, proxy_volume = loaded
     surface_points = load_surface_points(surface_path)
     order = mapping_order(wb_args)
 
-    direct_values, _, direct_inside = sample_proxy_at_surface(volume_img, proxy_volume, surface_points, order)
+    direct_values, _, direct_inside = sample_proxy_at_surface(
+        volume_img, proxy_volume, surface_points, order
+    )
     direct_metrics = compute_qc_metrics(direct_values, direct_inside)
     print(f"[wb_command guard] direct QC: {metrics_to_str(direct_metrics)}", file=sys.stderr)
     if qc_passes(direct_metrics):
@@ -144,10 +165,14 @@ def prepare_surface_for_mapping(volume_path: Path, surface_path: Path, wb_args: 
 
     if float(volume_img.affine[0, 0]) < 0.0:
         shifted_points = negative_x_shift(surface_points, volume_img)
-        shifted_values, _, shifted_inside = sample_proxy_at_surface(volume_img, proxy_volume, shifted_points, order)
+        shifted_values, _, shifted_inside = sample_proxy_at_surface(
+            volume_img, proxy_volume, shifted_points, order
+        )
         shifted_metrics = compute_qc_metrics(shifted_values, shifted_inside)
         print(f"[wb_command guard] shifted QC: {metrics_to_str(shifted_metrics)}", file=sys.stderr)
-        if qc_passes(shifted_metrics) and shifted_metrics_meaningfully_better(direct_metrics, shifted_metrics):
+        if qc_passes(shifted_metrics) and shifted_metrics_meaningfully_better(
+            direct_metrics, shifted_metrics
+        ):
             tmpdir = tempfile.mkdtemp(prefix="wb_v2s_guard_")
             shifted_surface = Path(tmpdir) / surface_path.name
             write_shifted_surface(surface_path, shifted_points, shifted_surface)
@@ -178,7 +203,9 @@ def main() -> int:
     surface_path = Path(wb_args[2])
 
     try:
-        prepared_surface, strategy = prepare_surface_for_mapping(volume_path, surface_path, wb_args)
+        prepared_surface, strategy = prepare_surface_for_mapping(
+            volume_path, surface_path, wb_args
+        )
     except Exception as exc:
         print(f"[wb_command guard] {exc}", file=sys.stderr)
         return 2

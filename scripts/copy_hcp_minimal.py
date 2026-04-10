@@ -17,6 +17,32 @@ RSFMRI_ARCHIVE_DIR = "Resting State fMRI 7T Preprocessed Recommended archive"
 DTSERIES_MEMBER = "MNINonLinear/Results/rfMRI_REST_7T/rfMRI_REST_7T_Atlas_MSMAll_hp2000_clean_rclean_tclean.dtseries.nii"
 BOLD_MEMBER = "MNINonLinear/Results/rfMRI_REST_7T/rfMRI_REST_7T_hp2000_clean_rclean_tclean.nii.gz"
 MASK_MEMBER = "MNINonLinear/Results/rfMRI_REST_7T/rfMRI_REST_7T_brain_mask.nii.gz"
+RUN_SPECS = [
+    {
+        "run_id": "1",
+        "hcp_name": "rfMRI_REST1_7T_PA",
+        "dtseries_member": "MNINonLinear/Results/rfMRI_REST1_7T_PA/rfMRI_REST1_7T_PA_Atlas_MSMAll_hp2000_clean_rclean_tclean.dtseries.nii",
+        "bold_member": "MNINonLinear/Results/rfMRI_REST1_7T_PA/rfMRI_REST1_7T_PA_hp2000_clean_rclean_tclean.nii.gz",
+    },
+    {
+        "run_id": "2",
+        "hcp_name": "rfMRI_REST2_7T_AP",
+        "dtseries_member": "MNINonLinear/Results/rfMRI_REST2_7T_AP/rfMRI_REST2_7T_AP_Atlas_MSMAll_hp2000_clean_rclean_tclean.dtseries.nii",
+        "bold_member": "MNINonLinear/Results/rfMRI_REST2_7T_AP/rfMRI_REST2_7T_AP_hp2000_clean_rclean_tclean.nii.gz",
+    },
+    {
+        "run_id": "3",
+        "hcp_name": "rfMRI_REST3_7T_PA",
+        "dtseries_member": "MNINonLinear/Results/rfMRI_REST3_7T_PA/rfMRI_REST3_7T_PA_Atlas_MSMAll_hp2000_clean_rclean_tclean.dtseries.nii",
+        "bold_member": "MNINonLinear/Results/rfMRI_REST3_7T_PA/rfMRI_REST3_7T_PA_hp2000_clean_rclean_tclean.nii.gz",
+    },
+    {
+        "run_id": "4",
+        "hcp_name": "rfMRI_REST4_7T_AP",
+        "dtseries_member": "MNINonLinear/Results/rfMRI_REST4_7T_AP/rfMRI_REST4_7T_AP_Atlas_MSMAll_hp2000_clean_rclean_tclean.dtseries.nii",
+        "bold_member": "MNINonLinear/Results/rfMRI_REST4_7T_AP/rfMRI_REST4_7T_AP_hp2000_clean_rclean_tclean.nii.gz",
+    },
+]
 
 
 def run(cmd: list[str], check: bool = True, capture: bool = True) -> subprocess.CompletedProcess:
@@ -86,6 +112,11 @@ def main() -> int:
     parser.add_argument("--subject", default="auto")
     parser.add_argument("--outdir", required=True)
     parser.add_argument("--manifest", required=True)
+    parser.add_argument(
+        "--include-runwise",
+        action="store_true",
+        help="Also copy the four individual 7T resting-state runs needed for run-aware instability testing.",
+    )
     args = parser.parse_args()
 
     outdir = Path(args.outdir)
@@ -152,6 +183,35 @@ def main() -> int:
             },
         ],
     }
+
+    if args.include_runwise:
+        for spec in RUN_SPECS:
+            dtseries_member = f"{subject}/{spec['dtseries_member']}"
+            bold_member = f"{subject}/{spec['bold_member']}"
+            dtseries_local = outdir / f"sub-{subject}_{spec['hcp_name']}_Atlas_MSMAll_hp2000_clean_rclean_tclean.dtseries.nii"
+            bold_local = outdir / f"sub-{subject}_{spec['hcp_name']}_hp2000_clean_rclean_tclean.nii.gz"
+            stream_zip_member(args.remote_host, archive_zip, dtseries_member, dtseries_local)
+            stream_zip_member(args.remote_host, archive_zip, bold_member, bold_local)
+            manifest["files"].extend(
+                [
+                    {
+                        "kind": "rsfmri_dtseries_runwise",
+                        "run_id": spec["run_id"],
+                        "run_label": spec["hcp_name"],
+                        "remote_source": f"{archive_zip}::{dtseries_member}",
+                        "local_path": str(dtseries_local),
+                        "bytes": dtseries_local.stat().st_size,
+                    },
+                    {
+                        "kind": "rsfmri_volume_runwise",
+                        "run_id": spec["run_id"],
+                        "run_label": spec["hcp_name"],
+                        "remote_source": f"{archive_zip}::{bold_member}",
+                        "local_path": str(bold_local),
+                        "bytes": bold_local.stat().st_size,
+                    },
+                ]
+            )
 
     manifest_path = Path(args.manifest)
     manifest_path.parent.mkdir(parents=True, exist_ok=True)

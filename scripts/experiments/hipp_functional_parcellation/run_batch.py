@@ -13,7 +13,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[3]
 PYTHON_EXE = sys.executable or "/opt/miniconda3/envs/py314/bin/python"
 BRANCHES = ["gradient", "prob-cluster", "prob-soft"]
-ATLASES = ["lynch2024", "hermosillo2024"]
+ATLASES = ["lynch2024", "kong2019"]
 SUPPORTED_ATLASES = ["lynch2024", "hermosillo2024", "kong2019"]
 SUBJECTS = ["100610", "102311", "102816"]
 SUMMARY_KEEP = {

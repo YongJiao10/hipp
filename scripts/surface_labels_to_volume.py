@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib.metadata
 import importlib.util
 from pathlib import Path
 
@@ -9,7 +10,7 @@ import numpy as np
 
 
 def load_surface_to_volume():
-    module_path = Path("/opt/miniconda3/envs/hippo/lib/python3.11/site-packages/hippomaps/utils.py")
+    module_path = Path(importlib.metadata.distribution("hippomaps").locate_file("hippomaps/utils.py")).resolve()
     spec = importlib.util.spec_from_file_location("hippomaps_utils_local", module_path)
     if spec is None or spec.loader is None:
         raise RuntimeError(f"Could not load spec for {module_path}")

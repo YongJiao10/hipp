@@ -10,6 +10,8 @@ The defining rule of this variant is simple:
 
 It is the detailed companion to [multi_branch_flow.md](/Users/jy/Documents/HippoMaps-network-first/docs/experiments/hipp_functional_parcellation/multi_branch_flow.md). The high-level branch definitions there and the step-by-step procedures here should always stay in sync.
 
+For the narrowed HPC handoff profile, also see [network_first_hpc_bundle_handoff.md](/Users/jy/Documents/HippoMaps-network-first/docs/experiments/hipp_functional_parcellation/network_first_hpc_bundle_handoff.md). That bundle keeps only `network-gradient` and `network-prob-cluster-nonneg` with `lynch2024` and `kong2019`, but it uses the same shared upstream logic documented here.
+
 ## Shared Upstream
 
 All six methods share the same upstream steps before branch-specific processing:
@@ -332,6 +334,7 @@ network occupancy summary            N_network
 - Outputs are isolated to `outputs/hipp_functional_parcellation_network/`
 - Final overview copies are isolated to `present_network/`
 - Default retention keeps render-layer artifacts so legend/layout changes can rerender without recomputing feature or clustering stages
+- Structural hippocampal labels for network-first renders are sourced from HippUnfold's subject-level structural `dlabel.nii`, then separated into left/right label files inside the run output tree for rendering
 - In `network_probability_heatmaps.png`, the x-axis always shows all retained merged networks for that atlas in canonical order
 - The left and right hemisphere heatmaps are rendered as separate panels with widened spacing for readability
 

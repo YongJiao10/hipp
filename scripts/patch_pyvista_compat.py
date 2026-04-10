@@ -19,7 +19,7 @@ def patch_get_boundary_vertices(path: Path) -> bool:
         'logger.info(f"Surface loaded: {surface.n_points} vertices, {surface.n_cells} faces.")\n'
     )
     if needle not in text:
-        raise RuntimeError(f"Did not find expected pyvista n_faces usage in {path}")
+        return False
     text = text.replace(needle, replacement, 1)
     path.write_text(text, encoding="utf-8")
     return True
@@ -33,12 +33,19 @@ def main() -> int:
 
     candidates = [
         Path(args.hippunfold_site_root) / "workflow" / "scripts" / "get_boundary_vertices.py",
+        Path(args.hippunfold_site_root) / "workflow" / "scripts" / "postproc_boundary_vertices.py",
         Path(args.runtime_source_cache)
         / "file"
         / Path(args.hippunfold_site_root).relative_to("/")
         / "workflow"
         / "scripts"
         / "get_boundary_vertices.py",
+        Path(args.runtime_source_cache)
+        / "file"
+        / Path(args.hippunfold_site_root).relative_to("/")
+        / "workflow"
+        / "scripts"
+        / "postproc_boundary_vertices.py",
     ]
 
     patched = []

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
@@ -12,7 +13,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 from matplotlib.patches import Rectangle
 
-from run_subject import REPO_ROOT, is_soft_branch, render_locked_grid_png, save_combined_label_assets
+from run_subject import EVAL_K, REPO_ROOT, is_soft_branch, render_locked_grid_png, save_combined_label_assets
 
 
 NETWORK_SHORT = {
@@ -64,7 +65,7 @@ PLOT_SPEC = {
     "metric_font": 15,
     "tick_font": 11,
 }
-RENDER_SHORTLIST = [3, 4, 5, 6]
+RENDER_SHORTLIST = [2, 3, 4, 5, 6]
 SMOOTH_COLORS = {"2mm": "#f58518", "4mm": "#54a24b"}
 SOFT_DIAG_COLORS = {
     ("2mm", "mean_probabilities"): "#4c78a8",
@@ -76,6 +77,22 @@ SOFT_DIAG_COLORS = {
 
 def load_json(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def infer_density(final_selection: dict[str, object]) -> str:
+    explicit = final_selection.get("hipp_density")
+    if explicit:
+        return str(explicit)
+    per_smooth = final_selection.get("per_smooth", {})
+    for smooth_name in SMOOTHS:
+        smooth_node = per_smooth.get(smooth_name, {})
+        assets = smooth_node.get("final_assets", {})
+        for key in ["left_label", "right_label", "left_surface", "right_surface", "dlabel"]:
+            candidate = str(assets.get(key, ""))
+            match = re.search(r"_den-([^_./]+)", candidate)
+            if match:
+                return match.group(1)
+    raise ValueError("Could not infer hippocampal density from final_selection payload")
 
 
 def write_summary_stage_manifest(root: Path, params: dict[str, object], inputs: list[Path], outputs: list[Path]) -> None:
@@ -217,14 +234,14 @@ def draw_centered_titles(
 
 
 METRIC_SPECS = [
-    ("ari_odd_even", "ARI", "higher better"),
+    ("instability_mean", "Instability (1-ARI)", "lower better"),
+    ("instability_se", "Instability SE", "lower better"),
+    ("null_corrected_score", "ARI", "higher better"),
+    ("homogeneity", "Homogeneity", "higher better"),
     ("silhouette", "Silhouette", "higher better"),
-    ("calinski_harabasz", "Calinski-Harabasz", "higher better"),
-    ("davies_bouldin", "Davies-Bouldin", "lower better"),
-    ("wcss", "WCSS", "lower better"),
-    ("delta_wcss", "Delta WCSS", "higher better"),
     ("min_cluster_size_fraction", "Min Cluster Fraction", "higher better"),
-    ("bss_tss_ratio", "BSS/TSS", "higher better"),
+    ("connected_component_count", "Connected Components", "lower better"),
+    ("within_1se_best", "Within 1-SE", "1 is candidate"),
 ]
 
 
@@ -262,7 +279,7 @@ def plot_curves(axs: list[plt.Axes], final_selection: dict[str, object], hemi: s
                 )
         ax.set_title(f"{hemi} {metric_label} ({direction_label})", fontsize=PLOT_SPEC["metric_font"])
         ax.set_xlabel(f"K ({suffix})", fontsize=PLOT_SPEC["tick_font"])
-        ax.set_xticks(list(range(3, 9)))
+        ax.set_xticks(EVAL_K)
         ax.tick_params(axis="both", labelsize=PLOT_SPEC["tick_font"])
         ax.grid(alpha=0.25, linewidth=0.5)
     axs[0].legend(frameon=False, fontsize=PLOT_SPEC["tick_font"], loc="best")
@@ -492,6 +509,24 @@ def load_cluster_name_map(annotation_path: Path) -> dict[int, str]:
     return {int(row["cluster_id"]): str(row["cluster_name"]) for row in rows}
 
 
+def render_cache_is_valid(output_png: Path, input_paths: list[Path]) -> bool:
+    if not output_png.exists():
+        return False
+    try:
+        out_mtime = output_png.stat().st_mtime
+    except OSError:
+        return False
+    for path in input_paths:
+        if not path.exists():
+            return False
+        try:
+            if path.stat().st_mtime > out_mtime:
+                return False
+        except OSError:
+            return False
+    return True
+
+
 def render_shortlist_panels(
     root: Path,
     final_selection: dict[str, object],
@@ -504,6 +539,7 @@ def render_shortlist_panels(
     layout = str(render_cfg["layout"])
     views = [str(token) for token in render_cfg["views"]]
     subject = str(final_selection["subject"])
+    density = infer_density(final_selection)
     shortlist_panels: dict[str, list[tuple[str, Path]]] = {}
     for smooth_name in SMOOTHS:
         smooth_panels: list[tuple[str, Path]] = []
@@ -519,17 +555,28 @@ def render_shortlist_panels(
                 / "renders"
                 / f"sub-{subject}_wb_{branch_slug.replace('-', '_')}_{smooth_name}_k{k}_biglegend.png"
             )
-            if not (reuse_existing and render_png.exists()):
-                left_label_path = root / "clustering" / smooth_name / "hemi_L" / f"k_{k}" / "cluster_labels.npy"
-                right_label_path = root / "clustering" / smooth_name / "hemi_R" / f"k_{k}" / "cluster_labels.npy"
+            left_label_path = root / "clustering" / smooth_name / "hemi_L" / f"k_{k}" / "cluster_labels.npy"
+            right_label_path = root / "clustering" / smooth_name / "hemi_R" / f"k_{k}" / "cluster_labels.npy"
+            left_annot_path = root / "clustering" / smooth_name / "hemi_L" / f"k_{k}" / "cluster_annotation.json"
+            right_annot_path = root / "clustering" / smooth_name / "hemi_R" / f"k_{k}" / "cluster_annotation.json"
+            cache_inputs = [
+                left_label_path,
+                right_label_path,
+                left_annot_path,
+                right_annot_path,
+                left_surface,
+                right_surface,
+            ]
+            if not (reuse_existing and render_cache_is_valid(render_png, cache_inputs)):
                 if not left_label_path.exists() or not right_label_path.exists():
                     continue
                 left_labels = np.load(left_label_path).astype(np.int32)
                 right_labels = np.load(right_label_path).astype(np.int32)
-                left_name_map = load_cluster_name_map(root / "clustering" / smooth_name / "hemi_L" / f"k_{k}" / "cluster_annotation.json")
-                right_name_map = load_cluster_name_map(root / "clustering" / smooth_name / "hemi_R" / f"k_{k}" / "cluster_annotation.json")
+                left_name_map = load_cluster_name_map(left_annot_path)
+                right_name_map = load_cluster_name_map(right_annot_path)
                 assets = save_combined_label_assets(
                     subject=subject,
+                    density=density,
                     left_labels=left_labels,
                     right_labels=right_labels,
                     output_dir=smooth_root / f"k_{k}" / "assets",
@@ -549,6 +596,9 @@ def render_shortlist_panels(
                     title=f"sub-{subject} {branch_slug} {smooth_name} K={k} | Lbest={left_k_final} Rbest={right_k_final}",
                     left_labels=Path(assets["left_label"]),
                     right_labels=Path(assets["right_label"]),
+                    left_surface=Path(assets["left_surface"]),
+                    right_surface=Path(assets["right_surface"]),
+                    spec_path=Path(assets["left_surface"]).parent / f"sub-{subject}_den-{density}_surfaces.spec",
                     legend_group="network",
                 )
                 render_png = Path(render["biglegend_png"])
