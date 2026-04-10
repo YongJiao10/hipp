@@ -11,6 +11,12 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
+COMMON_DIR = REPO_ROOT / "scripts" / "common"
+if str(COMMON_DIR) not in sys.path:
+    sys.path.insert(0, str(COMMON_DIR))
+
+from hipp_density_assets import load_surface_density_from_pipeline_config
+
 PYTHON_EXE = sys.executable or "/opt/miniconda3/envs/py314/bin/python"
 BRANCHES = [
     "network-gradient",
@@ -102,6 +108,7 @@ def run_subject_atlas(
     retain_level: str,
     views: str,
     layout: str,
+    hipp_density: str,
     shared_surface_store_root: str | None,
     summaries_only: bool,
     rebuild_shortlist: bool,
@@ -135,6 +142,8 @@ def run_subject_atlas(
                 views,
                 "--layout",
                 layout,
+                "--hipp-density",
+                hipp_density,
             ]
             + (
                 ["--shared-surface-store-root", shared_surface_store_root]
@@ -173,6 +182,7 @@ def validate(branches: list[str], atlases: list[str], subjects: list[str], out_r
 
 
 def main() -> int:
+    default_density = load_surface_density_from_pipeline_config(REPO_ROOT / "config" / "hippo_pipeline.toml")
     parser = argparse.ArgumentParser(description="Batch run network-first hippocampal functional parcellation with resumable stage-aware outputs")
     parser.add_argument("--branches", nargs="+", default=BRANCHES)
     parser.add_argument("--atlases", nargs="+", default=ATLASES, choices=SUPPORTED_ATLASES)
@@ -187,6 +197,7 @@ def main() -> int:
     parser.add_argument("--views", default="ventral,dorsal")
     parser.add_argument("--layout", choices=["1x2", "2x2"], default="2x2")
     parser.add_argument("--shared-surface-store-root", default=None)
+    parser.add_argument("--hipp-density", default=default_density)
     parser.add_argument("--cleanup-level", choices=["none", "label", "render", "feature"], default="none")
     parser.add_argument(
         "--summaries-only",
@@ -220,6 +231,7 @@ def main() -> int:
                     retain_level=args.retain_level,
                     views=args.views,
                     layout=args.layout,
+                    hipp_density=args.hipp_density,
                     shared_surface_store_root=args.shared_surface_store_root,
                     summaries_only=bool(args.summaries_only),
                     rebuild_shortlist=bool(args.rebuild_shortlist),

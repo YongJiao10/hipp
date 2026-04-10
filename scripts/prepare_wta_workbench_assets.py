@@ -4,11 +4,18 @@ from __future__ import annotations
 import argparse
 import json
 import subprocess
+import sys
 from pathlib import Path
 
 import nibabel as nib
 import numpy as np
 from nibabel.gifti import GiftiDataArray, GiftiImage, GiftiLabel, GiftiLabelTable
+
+COMMON_DIR = Path(__file__).resolve().parent / "common"
+if str(COMMON_DIR) not in sys.path:
+    sys.path.insert(0, str(COMMON_DIR))
+
+from hipp_density_assets import find_surface_asset_strict, load_surface_density_from_pipeline_config, subject_surf_dir
 
 
 def load_style(path: Path) -> dict[int, dict[str, object]]:
@@ -17,16 +24,15 @@ def load_style(path: Path) -> dict[int, dict[str, object]]:
 
 
 def find_surface(hippunfold_dir: Path, subject: str, hemi: str, density: str, space: str) -> Path:
-    candidates = [
-        hippunfold_dir / f"sub-{subject}" / "surf" / f"sub-{subject}_hemi-{hemi}_space-{space}_den-{density}_label-hipp_midthickness.surf.gii",
-        hippunfold_dir / f"sub-{subject}" / "surf" / f"sub-{subject}_hemi-{hemi}_space-{space}_label-hipp_midthickness.surf.gii",
-        hippunfold_dir / "work" / f"sub-{subject}" / "surf" / f"sub-{subject}_hemi-{hemi}_space-{space}_den-{density}_label-hipp_midthickness.surf.gii",
-        hippunfold_dir / "work" / f"sub-{subject}" / "surf" / f"sub-{subject}_hemi-{hemi}_space-{space}_label-hipp_midthickness.surf.gii",
-    ]
-    for path in candidates:
-        if path.exists():
-            return path
-    raise FileNotFoundError(f"Could not find surface for hemi={hemi}, space={space}, density={density}")
+    surf_dir = subject_surf_dir(hippunfold_dir, subject)
+    return find_surface_asset_strict(
+        surf_dir=surf_dir,
+        subject=subject,
+        hemi=hemi,
+        space=space,
+        density=density,
+        suffix="midthickness.surf.gii",
+    )
 
 
 def make_label_gifti(labels: np.ndarray, style: dict[int, dict[str, object]]) -> GiftiImage:
@@ -60,12 +66,13 @@ def run(cmd: list[str]) -> None:
 
 
 def main() -> int:
+    default_density = load_surface_density_from_pipeline_config(Path("config/hippo_pipeline.toml"))
     parser = argparse.ArgumentParser(description="Prepare Workbench label assets from hippocampal WTA numpy labels")
     parser.add_argument("--subject", required=True)
     parser.add_argument("--hippunfold-dir", required=True)
     parser.add_argument("--left-labels", required=True, help="left hemi WTA labels .npy")
     parser.add_argument("--right-labels", required=True, help="right hemi WTA labels .npy")
-    parser.add_argument("--density", default="512")
+    parser.add_argument("--density", default=default_density)
     parser.add_argument("--style-json", default="config/hipp_network_style.json")
     parser.add_argument("--spaces", nargs="+", default=["unfold", "T2w"], help="surface spaces to emit")
     parser.add_argument("--outdir", required=True)

@@ -25,26 +25,6 @@ from sklearn.metrics import (
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-LEGACY_SOURCE_ROOT = REPO_ROOT.parent / "HippoMaps"
-
-
-def default_source_root() -> Path:
-    local_input = REPO_ROOT / "data" / "hippunfold_input"
-    legacy_input = LEGACY_SOURCE_ROOT / "data" / "hippunfold_input"
-    if local_input.exists() or not LEGACY_SOURCE_ROOT.exists() or not legacy_input.exists():
-        return REPO_ROOT
-    return LEGACY_SOURCE_ROOT
-
-
-SOURCE_ROOT = default_source_root()
-
-
-def resolve_local_or_legacy_path(relative_path: str) -> Path:
-    local_path = REPO_ROOT / relative_path
-    if local_path.exists():
-        return local_path
-    legacy_path = LEGACY_SOURCE_ROOT / relative_path
-    return legacy_path
 
 
 COMMON_DIR = REPO_ROOT / "scripts" / "common"
@@ -52,13 +32,19 @@ if str(COMMON_DIR) not in sys.path:
     sys.path.insert(0, str(COMMON_DIR))
 
 from compute_fc_gradients import build_sparse_affinity, corrcoef_rows, diffusion_map_embedding
+from hipp_density_assets import (
+    find_cifti_asset_strict,
+    find_surface_asset_strict,
+    find_surface_sampling_metric_strict,
+    load_surface_density_from_pipeline_config,
+)
 
 
 WB_COMMAND = str((REPO_ROOT / "scripts" / "wb_command").resolve())
 PYTHON_EXE = sys.executable or "/opt/miniconda3/envs/py314/bin/python"
-NETWORK_STYLE_JSON = resolve_local_or_legacy_path("config/hipp_network_style.json")
-CROSS_ATLAS_NETWORK_MERGE_JSON = resolve_local_or_legacy_path("config/cross_atlas_network_merge.json")
-DEFAULT_SCENE = resolve_local_or_legacy_path("config/wb_locked_native_view_lateral_medial.scene")
+NETWORK_STYLE_JSON = REPO_ROOT / "config" / "hipp_network_style.json"
+CROSS_ATLAS_NETWORK_MERGE_JSON = REPO_ROOT / "config" / "cross_atlas_network_merge.json"
+DEFAULT_SCENE = REPO_ROOT / "config" / "wb_locked_native_view_lateral_medial.scene"
 EVAL_K = list(range(2, 11))
 SMOOTH_ORDER = ["2mm", "4mm"]
 HEMIS = ["L", "R"]
@@ -70,7 +56,7 @@ RUN_SPECS = [
 ]
 DEFAULT_INSTABILITY_RESAMPLES = 6
 DEFAULT_V_MIN_FRACTION = 0.05
-DEFAULT_HIPP_DENSITY = "512"
+DEFAULT_HIPP_DENSITY = load_surface_density_from_pipeline_config(REPO_ROOT / "config" / "hippo_pipeline.toml")
 BRANCHES = [
     "network-gradient",
     "network-prob-cluster",
@@ -132,49 +118,28 @@ def find_hippunfold_surface_asset(
     density: str,
     suffix: str,
 ) -> Path:
-    patterns = [
-        f"sub-{subject}_hemi-{hemi}_space-{space}_den-{density}_label-hipp_{suffix}",
-        f"sub-{subject}_hemi-{hemi}_space-{space}_label-hipp_{suffix}",
-        f"sub-{subject}_ses-*_hemi-{hemi}_space-{space}_den-{density}_label-hipp_{suffix}",
-        f"sub-{subject}_ses-*_hemi-{hemi}_space-{space}_label-hipp_{suffix}",
-    ]
-    for pattern in patterns:
-        matches = sorted(surf_dir.glob(pattern))
-        if matches:
-            return matches[0]
-    raise FileNotFoundError(
-        f"Missing hippocampal asset for subject={subject}, hemi={hemi}, space={space}, density={density}, suffix={suffix}"
+    return find_surface_asset_strict(
+        surf_dir=surf_dir,
+        subject=subject,
+        hemi=hemi,
+        space=space,
+        density=density,
+        suffix=suffix,
     )
 
 
 def find_surface_sampling_metric(surface_source_dir: Path, subject: str, hemi: str, density: str) -> Path:
-    patterns = [
-        f"sub-{subject}_hemi-{hemi}_space-corobl_den-{density}_label-hipp_bold.func.gii",
-        f"sub-{subject}_hemi-{hemi}_space-corobl_label-hipp_bold.func.gii",
-    ]
-    for pattern in patterns:
-        matches = sorted(surface_source_dir.glob(pattern))
-        if matches:
-            return matches[0]
-    raise FileNotFoundError(
-        f"Missing archived surface sampling input under {surface_source_dir} for hemi={hemi}, density={density}"
+    return find_surface_sampling_metric_strict(
+        surface_source_dir=surface_source_dir,
+        subject=subject,
+        hemi=hemi,
+        density=density,
+        space="corobl",
     )
 
 
 def find_hippunfold_cifti_asset(*, cifti_dir: Path, subject: str, density: str, suffix: str) -> Path:
-    patterns = [
-        f"sub-{subject}_den-{density}_label-hipp_{suffix}",
-        f"sub-{subject}_label-hipp_{suffix}",
-        f"sub-{subject}_ses-*_den-{density}_label-hipp_{suffix}",
-        f"sub-{subject}_ses-*_label-hipp_{suffix}",
-    ]
-    for pattern in patterns:
-        matches = sorted(cifti_dir.glob(pattern))
-        if matches:
-            return matches[0]
-    raise FileNotFoundError(
-        f"Missing hippocampal CIFTI asset for subject={subject}, density={density}, suffix={suffix}"
-    )
+    return find_cifti_asset_strict(cifti_dir=cifti_dir, subject=subject, density=density, suffix=suffix)
 
 
 def separate_hippunfold_structural_dlabel(
@@ -1691,9 +1656,9 @@ def main() -> int:
     parser.add_argument("--subject", default="100610")
     parser.add_argument("--branch", default="network-gradient", choices=BRANCHES)
     parser.add_argument("--atlas-slug", default="lynch2024", choices=sorted(ATLAS_CONFIG))
-    parser.add_argument("--input-root", default=str(SOURCE_ROOT / "data" / "hippunfold_input"))
-    parser.add_argument("--hippunfold-root", default=str(SOURCE_ROOT / "outputs" / "dense_corobl_batch"))
-    parser.add_argument("--cortex-root", default=str(SOURCE_ROOT / "outputs" / "cortex_pfm"))
+    parser.add_argument("--input-root", default=str(REPO_ROOT / "data" / "hippunfold_input"))
+    parser.add_argument("--hippunfold-root", default=str(REPO_ROOT / "outputs" / "dense_corobl_batch"))
+    parser.add_argument("--cortex-root", default=str(REPO_ROOT / "outputs" / "cortex_pfm"))
     parser.add_argument("--out-root", default=str(REPO_ROOT / "outputs" / "hipp_functional_parcellation_network"))
     parser.add_argument(
         "--shared-surface-store-root",
@@ -1742,13 +1707,7 @@ def main() -> int:
     surface_source_dir = (
         Path(args.surface_source_dir).resolve()
         if args.surface_source_dir
-        else (
-            Path(args.hippunfold_root).resolve()
-            / "_archived_volume_functional"
-            / f"sub-{subject}"
-            / "post_dense_corobl"
-            / "surface"
-        )
+        else (Path(args.hippunfold_root).resolve() / f"sub-{subject}" / "post_dense_corobl" / "surface")
     )
 
     func_input_dir = input_root / f"sub-{subject}" / "func"
@@ -2483,7 +2442,7 @@ def main() -> int:
                 "subject": subject,
                 "branch_slug": branch_slug,
                 "atlas_slug": atlas_slug,
-                "source_root": str(SOURCE_ROOT),
+                "source_root": str(REPO_ROOT),
                 "out_root": str(out_root),
                 "shared_reference_store_dir": str(shared_reference_store_dir),
                 "shared_surface_store_dir": str(shared_surface_store_dir),

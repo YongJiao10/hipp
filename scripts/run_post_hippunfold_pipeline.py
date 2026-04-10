@@ -8,6 +8,17 @@ import sys
 from pathlib import Path
 from time import perf_counter
 
+COMMON_DIR = Path(__file__).resolve().parent / "common"
+if str(COMMON_DIR) not in sys.path:
+    sys.path.insert(0, str(COMMON_DIR))
+
+from hipp_density_assets import (
+    detect_space_strict,
+    find_surface_asset_strict,
+    load_surface_density_from_pipeline_config,
+    subject_surf_dir,
+)
+
 
 def run(cmd: list[str], step_name: str, timings: list[dict[str, object]]) -> None:
     start = perf_counter()
@@ -28,23 +39,6 @@ def run(cmd: list[str], step_name: str, timings: list[dict[str, object]]) -> Non
         )
 
 
-def detect_space(hippunfold_dir: Path, subject: str, density: str, preferred: str | None) -> str:
-    if preferred and preferred != "auto":
-        return preferred
-    surf_dir = hippunfold_dir / f"sub-{subject}" / "surf"
-    for candidate in ["corobl", "T2w", "T1w", "nativepro"]:
-        patterns = [
-            f"sub-{subject}_hemi-L_space-{candidate}_den-{density}_label-hipp_midthickness.surf.gii",
-            f"sub-{subject}_hemi-L_space-{candidate}_label-hipp_midthickness.surf.gii",
-        ]
-        for pattern in patterns:
-            if list(surf_dir.glob(pattern)):
-                return candidate
-    raise FileNotFoundError(
-        f"Could not auto-detect a folded hippocampal surface in {surf_dir} for density={density}"
-    )
-
-
 def require_existing(path: Path, label: str) -> Path:
     if not path.exists():
         raise FileNotFoundError(f"Missing {label}: {path}")
@@ -59,43 +53,38 @@ def find_subject_surface(
     density: str,
     surface_name: str = "midthickness",
 ) -> Path:
-    surf_dir = hippunfold_dir / f"sub-{subject}" / "surf"
-    patterns = [
-        f"sub-{subject}_hemi-{hemi}_space-{space}_den-{density}_label-hipp_{surface_name}.surf.gii",
-        f"sub-{subject}_hemi-{hemi}_space-{space}_label-hipp_{surface_name}.surf.gii",
-    ]
-    for pattern in patterns:
-        matches = sorted(surf_dir.glob(pattern))
-        if matches:
-            return matches[0]
-    raise FileNotFoundError(
-        f"Missing {surface_name} surface for subject={subject}, hemi={hemi}, space={space}, density={density}"
+    surf_dir = subject_surf_dir(hippunfold_dir, subject)
+    return find_surface_asset_strict(
+        surf_dir=surf_dir,
+        subject=subject,
+        hemi=hemi,
+        space=space,
+        density=density,
+        suffix=f"{surface_name}.surf.gii",
     )
 
 
 def find_structural_label(hippunfold_dir: Path, subject: str, hemi: str, space: str, density: str) -> Path:
-    surf_dir = hippunfold_dir / f"sub-{subject}" / "surf"
-    patterns = [
-        f"sub-{subject}_hemi-{hemi}_space-{space}_den-{density}_label-hipp_atlas-multihist7_subfields.label.gii",
-        f"sub-{subject}_hemi-{hemi}_space-{space}_label-hipp_atlas-multihist7_subfields.label.gii",
-    ]
-    for pattern in patterns:
-        matches = sorted(surf_dir.glob(pattern))
-        if matches:
-            return matches[0]
-    raise FileNotFoundError(
-        f"Missing structural label for subject={subject}, hemi={hemi}, space={space}, density={density}"
+    surf_dir = subject_surf_dir(hippunfold_dir, subject)
+    return find_surface_asset_strict(
+        surf_dir=surf_dir,
+        subject=subject,
+        hemi=hemi,
+        space=space,
+        density=density,
+        suffix="atlas-multihist7_subfields.label.gii",
     )
 
 
 def main() -> int:
+    default_density = load_surface_density_from_pipeline_config(Path("config/hippo_pipeline.toml"))
     parser = argparse.ArgumentParser(description="Run the post-HippUnfold surface-first HippoMaps pipeline")
     parser.add_argument("--subject", required=True)
     parser.add_argument("--bold", required=True)
     parser.add_argument("--brain-mask", required=True)
     parser.add_argument("--dtseries", required=True)
     parser.add_argument("--hippunfold-dir", required=True)
-    parser.add_argument("--density", default="512")
+    parser.add_argument("--density", default=default_density)
     parser.add_argument("--space", default="auto")
     parser.add_argument("--outdir", required=True)
     args = parser.parse_args()
@@ -112,7 +101,14 @@ def main() -> int:
         path.mkdir(parents=True, exist_ok=True)
 
     timings: list[dict[str, object]] = []
-    resolved_space = detect_space(Path(args.hippunfold_dir), args.subject, args.density, args.space)
+    surf_source = subject_surf_dir(Path(args.hippunfold_dir), args.subject)
+    resolved_space = detect_space_strict(
+        surf_dir=surf_source,
+        subject=args.subject,
+        density=args.density,
+        preferred=args.space,
+        candidates=["corobl", "T2w", "T1w", "nativepro"],
+    )
 
     summary: dict[str, object] = {
         "subject": args.subject,

@@ -93,7 +93,7 @@
                         <Object Type="class" Class="Brain" Name="m_brains" Version="1">
                             <ObjectArray Type="class" Name="allCaretDataFiles_V2" Length="18">
                                 <Element Index="0">
-                                    <Object Type="class" Class="CaretDataFile" Name="sub-102311_hemi-L_space-corobl_label-hipp_midthickness.surf.gii" Version="1">
+                                    <Object Type="class" Class="CaretDataFile" Name="sub-102311_hemi-L_space-corobl_den-512_label-hipp_midthickness.surf.gii" Version="1">
                                         <Object Type="class" Class="FileIdentificationAttributes" Name="m_fileIdentificationAttributes" Version="2">
                                             <Object Type="enumeratedType" Name="m_displayMode">OVERLAY</Object>
                                             <Object Type="enumeratedType" Name="m_mapSelectionMode">SELECTED</Object>
@@ -137,11 +137,11 @@
                                                 </ObjectMap>
                                             </Object>
                                         </Object>
-                                        <Object Type="pathName" Name="dataFileName_V2">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_label-hipp_midthickness.surf.gii</Object>
+                                        <Object Type="pathName" Name="dataFileName_V2">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_den-512_label-hipp_midthickness.surf.gii</Object>
                                     </Object>
                                 </Element>
                                 <Element Index="1">
-                                    <Object Type="class" Class="CaretDataFile" Name="sub-102311_hemi-L_space-unfoldreg_label-hipp_midthickness.surf.gii" Version="1">
+                                    <Object Type="class" Class="CaretDataFile" Name="sub-102311_hemi-L_space-unfoldreg_den-512_label-hipp_midthickness.surf.gii" Version="1">
                                         <Object Type="class" Class="FileIdentificationAttributes" Name="m_fileIdentificationAttributes" Version="2">
                                             <Object Type="enumeratedType" Name="m_displayMode">OVERLAY</Object>
                                             <Object Type="enumeratedType" Name="m_mapSelectionMode">SELECTED</Object>
@@ -185,11 +185,11 @@
                                                 </ObjectMap>
                                             </Object>
                                         </Object>
-                                        <Object Type="pathName" Name="dataFileName_V2">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-unfoldreg_label-hipp_midthickness.surf.gii</Object>
+                                        <Object Type="pathName" Name="dataFileName_V2">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-unfoldreg_den-512_label-hipp_midthickness.surf.gii</Object>
                                     </Object>
                                 </Element>
                                 <Element Index="2">
-                                    <Object Type="class" Class="CaretDataFile" Name="sub-102311_hemi-L_space-corobl_label-hipp_atlas-multihist7_subfields.label.gii" Version="1">
+                                    <Object Type="class" Class="CaretDataFile" Name="sub-102311_hemi-L_space-corobl_den-512_label-hipp_atlas-multihist7_subfields.label.gii" Version="1">
                                         <Object Type="class" Class="FileIdentificationAttributes" Name="m_fileIdentificationAttributes" Version="2">
                                             <Object Type="enumeratedType" Name="m_displayMode">OVERLAY</Object>
                                             <Object Type="enumeratedType" Name="m_mapSelectionMode">SELECTED</Object>
@@ -238,11 +238,11 @@
                                                 <Object Type="class" Class="CaretMappableDataFileLabelSelectionDelegate" Name="LabelHierarchy_0" Version="1"/>
                                             </Value>
                                         </ObjectMap>
-                                        <Object Type="pathName" Name="dataFileName_V2">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_label-hipp_atlas-multihist7_subfields.label.gii</Object>
+                                        <Object Type="pathName" Name="dataFileName_V2">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_den-512_label-hipp_atlas-multihist7_subfields.label.gii</Object>
                                     </Object>
                                 </Element>
                                 <Element Index="3">
-                                    <Object Type="class" Class="CaretDataFile" Name="sub-102311_hemi-L_space-corobl_label-hipp_gyrification.shape.gii" Version="1">
+                                    <Object Type="class" Class="CaretDataFile" Name="sub-102311_hemi-L_space-corobl_den-512_label-hipp_gyrification.shape.gii" Version="1">
                                         <Object Type="class" Class="FileIdentificationAttributes" Name="m_fileIdentificationAttributes" Version="2">
                                             <Object Type="enumeratedType" Name="m_displayMode">OVERLAY</Object>
                                             <Object Type="enumeratedType" Name="m_mapSelectionMode">SELECTED</Object>
@@ -390,11 +390,11 @@
                                             <Element Index="98">false</Element>
                                             <Element Index="99">false</Element>
                                         </ObjectArray>
-                                        <Object Type="pathName" Name="dataFileName_V2">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_label-hipp_gyrification.shape.gii</Object>
+                                        <Object Type="pathName" Name="dataFileName_V2">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_den-512_label-hipp_gyrification.shape.gii</Object>
                                     </Object>
                                 </Element>
                                 <Element Index="4">
-                                    <Object Type="class" Class="CaretDataFile" Name="sub-102311_hemi-L_space-corobl_label-hipp_curvature.shape.gii" Version="1">
+                                    <Object Type="class" Class="CaretDataFile" Name="sub-102311_hemi-L_space-corobl_den-512_label-hipp_curvature.shape.gii" Version="1">
                                         <Object Type="class" Class="FileIdentificationAttributes" Name="m_fileIdentificationAttributes" Version="2">
                                             <Object Type="enumeratedType" Name="m_displayMode">OVERLAY</Object>
                                             <Object Type="enumeratedType" Name="m_mapSelectionMode">SELECTED</Object>
@@ -542,11 +542,11 @@
                                             <Element Index="98">false</Element>
                                             <Element Index="99">false</Element>
                                         </ObjectArray>
-                                        <Object Type="pathName" Name="dataFileName_V2">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_label-hipp_curvature.shape.gii</Object>
+                                        <Object Type="pathName" Name="dataFileName_V2">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_den-512_label-hipp_curvature.shape.gii</Object>
                                     </Object>
                                 </Element>
                                 <Element Index="5">
-                                    <Object Type="class" Class="CaretDataFile" Name="sub-102311_hemi-L_space-corobl_label-hipp_thickness.shape.gii" Version="1">
+                                    <Object Type="class" Class="CaretDataFile" Name="sub-102311_hemi-L_space-corobl_den-512_label-hipp_thickness.shape.gii" Version="1">
                                         <Object Type="class" Class="FileIdentificationAttributes" Name="m_fileIdentificationAttributes" Version="2">
                                             <Object Type="enumeratedType" Name="m_displayMode">OVERLAY</Object>
                                             <Object Type="enumeratedType" Name="m_mapSelectionMode">SELECTED</Object>
@@ -694,11 +694,11 @@
                                             <Element Index="98">false</Element>
                                             <Element Index="99">false</Element>
                                         </ObjectArray>
-                                        <Object Type="pathName" Name="dataFileName_V2">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_label-hipp_thickness.shape.gii</Object>
+                                        <Object Type="pathName" Name="dataFileName_V2">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_den-512_label-hipp_thickness.shape.gii</Object>
                                     </Object>
                                 </Element>
                                 <Element Index="6">
-                                    <Object Type="class" Class="CaretDataFile" Name="sub-102311_hemi-R_space-corobl_label-hipp_midthickness.surf.gii" Version="1">
+                                    <Object Type="class" Class="CaretDataFile" Name="sub-102311_hemi-R_space-corobl_den-512_label-hipp_midthickness.surf.gii" Version="1">
                                         <Object Type="class" Class="FileIdentificationAttributes" Name="m_fileIdentificationAttributes" Version="2">
                                             <Object Type="enumeratedType" Name="m_displayMode">OVERLAY</Object>
                                             <Object Type="enumeratedType" Name="m_mapSelectionMode">SELECTED</Object>
@@ -742,11 +742,11 @@
                                                 </ObjectMap>
                                             </Object>
                                         </Object>
-                                        <Object Type="pathName" Name="dataFileName_V2">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-R_space-corobl_label-hipp_midthickness.surf.gii</Object>
+                                        <Object Type="pathName" Name="dataFileName_V2">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-R_space-corobl_den-512_label-hipp_midthickness.surf.gii</Object>
                                     </Object>
                                 </Element>
                                 <Element Index="7">
-                                    <Object Type="class" Class="CaretDataFile" Name="sub-102311_hemi-R_space-unfoldreg_label-hipp_midthickness.surf.gii" Version="1">
+                                    <Object Type="class" Class="CaretDataFile" Name="sub-102311_hemi-R_space-unfoldreg_den-512_label-hipp_midthickness.surf.gii" Version="1">
                                         <Object Type="class" Class="FileIdentificationAttributes" Name="m_fileIdentificationAttributes" Version="2">
                                             <Object Type="enumeratedType" Name="m_displayMode">OVERLAY</Object>
                                             <Object Type="enumeratedType" Name="m_mapSelectionMode">SELECTED</Object>
@@ -790,11 +790,11 @@
                                                 </ObjectMap>
                                             </Object>
                                         </Object>
-                                        <Object Type="pathName" Name="dataFileName_V2">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-R_space-unfoldreg_label-hipp_midthickness.surf.gii</Object>
+                                        <Object Type="pathName" Name="dataFileName_V2">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-R_space-unfoldreg_den-512_label-hipp_midthickness.surf.gii</Object>
                                     </Object>
                                 </Element>
                                 <Element Index="8">
-                                    <Object Type="class" Class="CaretDataFile" Name="sub-102311_hemi-R_space-corobl_label-hipp_atlas-multihist7_subfields.label.gii" Version="1">
+                                    <Object Type="class" Class="CaretDataFile" Name="sub-102311_hemi-R_space-corobl_den-512_label-hipp_atlas-multihist7_subfields.label.gii" Version="1">
                                         <Object Type="class" Class="FileIdentificationAttributes" Name="m_fileIdentificationAttributes" Version="2">
                                             <Object Type="enumeratedType" Name="m_displayMode">OVERLAY</Object>
                                             <Object Type="enumeratedType" Name="m_mapSelectionMode">SELECTED</Object>
@@ -838,11 +838,11 @@
                                                 </ObjectMap>
                                             </Object>
                                         </Object>
-                                        <Object Type="pathName" Name="dataFileName_V2">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-R_space-corobl_label-hipp_atlas-multihist7_subfields.label.gii</Object>
+                                        <Object Type="pathName" Name="dataFileName_V2">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-R_space-corobl_den-512_label-hipp_atlas-multihist7_subfields.label.gii</Object>
                                     </Object>
                                 </Element>
                                 <Element Index="9">
-                                    <Object Type="class" Class="CaretDataFile" Name="sub-102311_hemi-R_space-corobl_label-hipp_gyrification.shape.gii" Version="1">
+                                    <Object Type="class" Class="CaretDataFile" Name="sub-102311_hemi-R_space-corobl_den-512_label-hipp_gyrification.shape.gii" Version="1">
                                         <Object Type="class" Class="FileIdentificationAttributes" Name="m_fileIdentificationAttributes" Version="2">
                                             <Object Type="enumeratedType" Name="m_displayMode">OVERLAY</Object>
                                             <Object Type="enumeratedType" Name="m_mapSelectionMode">SELECTED</Object>
@@ -990,11 +990,11 @@
                                             <Element Index="98">false</Element>
                                             <Element Index="99">false</Element>
                                         </ObjectArray>
-                                        <Object Type="pathName" Name="dataFileName_V2">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-R_space-corobl_label-hipp_gyrification.shape.gii</Object>
+                                        <Object Type="pathName" Name="dataFileName_V2">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-R_space-corobl_den-512_label-hipp_gyrification.shape.gii</Object>
                                     </Object>
                                 </Element>
                                 <Element Index="10">
-                                    <Object Type="class" Class="CaretDataFile" Name="sub-102311_hemi-R_space-corobl_label-hipp_curvature.shape.gii" Version="1">
+                                    <Object Type="class" Class="CaretDataFile" Name="sub-102311_hemi-R_space-corobl_den-512_label-hipp_curvature.shape.gii" Version="1">
                                         <Object Type="class" Class="FileIdentificationAttributes" Name="m_fileIdentificationAttributes" Version="2">
                                             <Object Type="enumeratedType" Name="m_displayMode">OVERLAY</Object>
                                             <Object Type="enumeratedType" Name="m_mapSelectionMode">SELECTED</Object>
@@ -1142,11 +1142,11 @@
                                             <Element Index="98">false</Element>
                                             <Element Index="99">false</Element>
                                         </ObjectArray>
-                                        <Object Type="pathName" Name="dataFileName_V2">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-R_space-corobl_label-hipp_curvature.shape.gii</Object>
+                                        <Object Type="pathName" Name="dataFileName_V2">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-R_space-corobl_den-512_label-hipp_curvature.shape.gii</Object>
                                     </Object>
                                 </Element>
                                 <Element Index="11">
-                                    <Object Type="class" Class="CaretDataFile" Name="sub-102311_hemi-R_space-corobl_label-hipp_thickness.shape.gii" Version="1">
+                                    <Object Type="class" Class="CaretDataFile" Name="sub-102311_hemi-R_space-corobl_den-512_label-hipp_thickness.shape.gii" Version="1">
                                         <Object Type="class" Class="FileIdentificationAttributes" Name="m_fileIdentificationAttributes" Version="2">
                                             <Object Type="enumeratedType" Name="m_displayMode">OVERLAY</Object>
                                             <Object Type="enumeratedType" Name="m_mapSelectionMode">SELECTED</Object>
@@ -1294,11 +1294,11 @@
                                             <Element Index="98">false</Element>
                                             <Element Index="99">false</Element>
                                         </ObjectArray>
-                                        <Object Type="pathName" Name="dataFileName_V2">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-R_space-corobl_label-hipp_thickness.shape.gii</Object>
+                                        <Object Type="pathName" Name="dataFileName_V2">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-R_space-corobl_den-512_label-hipp_thickness.shape.gii</Object>
                                     </Object>
                                 </Element>
                                 <Element Index="12">
-                                    <Object Type="class" Class="CaretDataFile" Name="sub-102311_space-corobl_label-hipp_gyrification.dscalar.nii" Version="1">
+                                    <Object Type="class" Class="CaretDataFile" Name="sub-102311_space-corobl_den-512_label-hipp_gyrification.dscalar.nii" Version="1">
                                         <Object Type="class" Class="FileIdentificationAttributes" Name="m_fileIdentificationAttributes" Version="2">
                                             <Object Type="enumeratedType" Name="m_displayMode">OVERLAY</Object>
                                             <Object Type="enumeratedType" Name="m_mapSelectionMode">SELECTED</Object>
@@ -1446,11 +1446,11 @@
                                             <Element Index="98">false</Element>
                                             <Element Index="99">false</Element>
                                         </ObjectArray>
-                                        <Object Type="pathName" Name="dataFileName_V2">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_space-corobl_label-hipp_gyrification.dscalar.nii</Object>
+                                        <Object Type="pathName" Name="dataFileName_V2">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_space-corobl_den-512_label-hipp_gyrification.dscalar.nii</Object>
                                     </Object>
                                 </Element>
                                 <Element Index="13">
-                                    <Object Type="class" Class="CaretDataFile" Name="sub-102311_space-corobl_label-hipp_curvature.dscalar.nii" Version="1">
+                                    <Object Type="class" Class="CaretDataFile" Name="sub-102311_space-corobl_den-512_label-hipp_curvature.dscalar.nii" Version="1">
                                         <Object Type="class" Class="FileIdentificationAttributes" Name="m_fileIdentificationAttributes" Version="2">
                                             <Object Type="enumeratedType" Name="m_displayMode">OVERLAY</Object>
                                             <Object Type="enumeratedType" Name="m_mapSelectionMode">SELECTED</Object>
@@ -1598,11 +1598,11 @@
                                             <Element Index="98">false</Element>
                                             <Element Index="99">false</Element>
                                         </ObjectArray>
-                                        <Object Type="pathName" Name="dataFileName_V2">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_space-corobl_label-hipp_curvature.dscalar.nii</Object>
+                                        <Object Type="pathName" Name="dataFileName_V2">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_space-corobl_den-512_label-hipp_curvature.dscalar.nii</Object>
                                     </Object>
                                 </Element>
                                 <Element Index="14">
-                                    <Object Type="class" Class="CaretDataFile" Name="sub-102311_space-corobl_label-hipp_thickness.dscalar.nii" Version="1">
+                                    <Object Type="class" Class="CaretDataFile" Name="sub-102311_space-corobl_den-512_label-hipp_thickness.dscalar.nii" Version="1">
                                         <Object Type="class" Class="FileIdentificationAttributes" Name="m_fileIdentificationAttributes" Version="2">
                                             <Object Type="enumeratedType" Name="m_displayMode">OVERLAY</Object>
                                             <Object Type="enumeratedType" Name="m_mapSelectionMode">SELECTED</Object>
@@ -1750,11 +1750,11 @@
                                             <Element Index="98">false</Element>
                                             <Element Index="99">false</Element>
                                         </ObjectArray>
-                                        <Object Type="pathName" Name="dataFileName_V2">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_space-corobl_label-hipp_thickness.dscalar.nii</Object>
+                                        <Object Type="pathName" Name="dataFileName_V2">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_space-corobl_den-512_label-hipp_thickness.dscalar.nii</Object>
                                     </Object>
                                 </Element>
                                 <Element Index="15">
-                                    <Object Type="class" Class="CaretDataFile" Name="sub-102311_space-corobl_label-hipp_atlas-multihist7_subfields.dlabel.nii" Version="1">
+                                    <Object Type="class" Class="CaretDataFile" Name="sub-102311_space-corobl_den-512_label-hipp_atlas-multihist7_subfields.dlabel.nii" Version="1">
                                         <Object Type="class" Class="FileIdentificationAttributes" Name="m_fileIdentificationAttributes" Version="2">
                                             <Object Type="enumeratedType" Name="m_displayMode">OVERLAY</Object>
                                             <Object Type="enumeratedType" Name="m_mapSelectionMode">SELECTED</Object>
@@ -1799,7 +1799,7 @@
                                             </Object>
                                         </Object>
                                         <Object Type="class" Class="GroupAndNameHierarchyItem" Name="m_classNameHierarchy" Version="1">
-                                            <Object Type="string" Name="m_name">sub-102311_space-corobl_label-hipp_atlas-multihist7_subfields.dlabel.nii</Object>
+                                            <Object Type="string" Name="m_name">sub-102311_space-corobl_den-512_label-hipp_atlas-multihist7_subfields.dlabel.nii</Object>
                                             <ObjectMap Type="boolean" Name="m_selectedInTab">
                                                 <Value Key="0">true</Value>
                                             </ObjectMap>
@@ -1959,7 +1959,7 @@
                                                 </Object>
                                             </Object>
                                         </Object>
-                                        <Object Type="pathName" Name="dataFileName_V2">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_space-corobl_label-hipp_atlas-multihist7_subfields.dlabel.nii</Object>
+                                        <Object Type="pathName" Name="dataFileName_V2">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_space-corobl_den-512_label-hipp_atlas-multihist7_subfields.dlabel.nii</Object>
                                     </Object>
                                 </Element>
                                 <Element Index="16">
@@ -1990,7 +1990,7 @@
                                         <Object Type="class" Class="SpecFileDataFile" Name="specFileDataFile" Version="1">
                                             <Object Type="enumeratedType" Name="dataFileType">SURFACE</Object>
                                             <Object Type="enumeratedType" Name="structure">HIPPOCAMPUS_LEFT</Object>
-                                            <Object Type="pathName" Name="fileName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_label-hipp_midthickness.surf.gii</Object>
+                                            <Object Type="pathName" Name="fileName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_den-512_label-hipp_midthickness.surf.gii</Object>
                                             <Object Type="boolean" Name="selected">true</Object>
                                         </Object>
                                     </Element>
@@ -1998,7 +1998,7 @@
                                         <Object Type="class" Class="SpecFileDataFile" Name="specFileDataFile" Version="1">
                                             <Object Type="enumeratedType" Name="dataFileType">SURFACE</Object>
                                             <Object Type="enumeratedType" Name="structure">HIPPOCAMPUS_LEFT</Object>
-                                            <Object Type="pathName" Name="fileName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-unfoldreg_label-hipp_midthickness.surf.gii</Object>
+                                            <Object Type="pathName" Name="fileName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-unfoldreg_den-512_label-hipp_midthickness.surf.gii</Object>
                                             <Object Type="boolean" Name="selected">true</Object>
                                         </Object>
                                     </Element>
@@ -2006,7 +2006,7 @@
                                         <Object Type="class" Class="SpecFileDataFile" Name="specFileDataFile" Version="1">
                                             <Object Type="enumeratedType" Name="dataFileType">SURFACE</Object>
                                             <Object Type="enumeratedType" Name="structure">HIPPOCAMPUS_RIGHT</Object>
-                                            <Object Type="pathName" Name="fileName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-R_space-corobl_label-hipp_midthickness.surf.gii</Object>
+                                            <Object Type="pathName" Name="fileName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-R_space-corobl_den-512_label-hipp_midthickness.surf.gii</Object>
                                             <Object Type="boolean" Name="selected">true</Object>
                                         </Object>
                                     </Element>
@@ -2014,7 +2014,7 @@
                                         <Object Type="class" Class="SpecFileDataFile" Name="specFileDataFile" Version="1">
                                             <Object Type="enumeratedType" Name="dataFileType">SURFACE</Object>
                                             <Object Type="enumeratedType" Name="structure">HIPPOCAMPUS_RIGHT</Object>
-                                            <Object Type="pathName" Name="fileName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-R_space-unfoldreg_label-hipp_midthickness.surf.gii</Object>
+                                            <Object Type="pathName" Name="fileName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-R_space-unfoldreg_den-512_label-hipp_midthickness.surf.gii</Object>
                                             <Object Type="boolean" Name="selected">true</Object>
                                         </Object>
                                     </Element>
@@ -2022,7 +2022,7 @@
                                         <Object Type="class" Class="SpecFileDataFile" Name="specFileDataFile" Version="1">
                                             <Object Type="enumeratedType" Name="dataFileType">CONNECTIVITY_DENSE_LABEL</Object>
                                             <Object Type="enumeratedType" Name="structure">ALL</Object>
-                                            <Object Type="pathName" Name="fileName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_space-corobl_label-hipp_atlas-multihist7_subfields.dlabel.nii</Object>
+                                            <Object Type="pathName" Name="fileName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_space-corobl_den-512_label-hipp_atlas-multihist7_subfields.dlabel.nii</Object>
                                             <Object Type="boolean" Name="selected">true</Object>
                                         </Object>
                                     </Element>
@@ -2030,7 +2030,7 @@
                                         <Object Type="class" Class="SpecFileDataFile" Name="specFileDataFile" Version="1">
                                             <Object Type="enumeratedType" Name="dataFileType">CONNECTIVITY_DENSE_SCALAR</Object>
                                             <Object Type="enumeratedType" Name="structure">ALL</Object>
-                                            <Object Type="pathName" Name="fileName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_space-corobl_label-hipp_gyrification.dscalar.nii</Object>
+                                            <Object Type="pathName" Name="fileName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_space-corobl_den-512_label-hipp_gyrification.dscalar.nii</Object>
                                             <Object Type="boolean" Name="selected">true</Object>
                                         </Object>
                                     </Element>
@@ -2038,7 +2038,7 @@
                                         <Object Type="class" Class="SpecFileDataFile" Name="specFileDataFile" Version="1">
                                             <Object Type="enumeratedType" Name="dataFileType">CONNECTIVITY_DENSE_SCALAR</Object>
                                             <Object Type="enumeratedType" Name="structure">ALL</Object>
-                                            <Object Type="pathName" Name="fileName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_space-corobl_label-hipp_curvature.dscalar.nii</Object>
+                                            <Object Type="pathName" Name="fileName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_space-corobl_den-512_label-hipp_curvature.dscalar.nii</Object>
                                             <Object Type="boolean" Name="selected">true</Object>
                                         </Object>
                                     </Element>
@@ -2046,7 +2046,7 @@
                                         <Object Type="class" Class="SpecFileDataFile" Name="specFileDataFile" Version="1">
                                             <Object Type="enumeratedType" Name="dataFileType">CONNECTIVITY_DENSE_SCALAR</Object>
                                             <Object Type="enumeratedType" Name="structure">ALL</Object>
-                                            <Object Type="pathName" Name="fileName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_space-corobl_label-hipp_thickness.dscalar.nii</Object>
+                                            <Object Type="pathName" Name="fileName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_space-corobl_den-512_label-hipp_thickness.dscalar.nii</Object>
                                             <Object Type="boolean" Name="selected">true</Object>
                                         </Object>
                                     </Element>
@@ -2054,7 +2054,7 @@
                                         <Object Type="class" Class="SpecFileDataFile" Name="specFileDataFile" Version="1">
                                             <Object Type="enumeratedType" Name="dataFileType">LABEL</Object>
                                             <Object Type="enumeratedType" Name="structure">HIPPOCAMPUS_LEFT</Object>
-                                            <Object Type="pathName" Name="fileName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_label-hipp_atlas-multihist7_subfields.label.gii</Object>
+                                            <Object Type="pathName" Name="fileName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_den-512_label-hipp_atlas-multihist7_subfields.label.gii</Object>
                                             <Object Type="boolean" Name="selected">true</Object>
                                         </Object>
                                     </Element>
@@ -2062,7 +2062,7 @@
                                         <Object Type="class" Class="SpecFileDataFile" Name="specFileDataFile" Version="1">
                                             <Object Type="enumeratedType" Name="dataFileType">LABEL</Object>
                                             <Object Type="enumeratedType" Name="structure">HIPPOCAMPUS_RIGHT</Object>
-                                            <Object Type="pathName" Name="fileName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-R_space-corobl_label-hipp_atlas-multihist7_subfields.label.gii</Object>
+                                            <Object Type="pathName" Name="fileName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-R_space-corobl_den-512_label-hipp_atlas-multihist7_subfields.label.gii</Object>
                                             <Object Type="boolean" Name="selected">true</Object>
                                         </Object>
                                     </Element>
@@ -2070,7 +2070,7 @@
                                         <Object Type="class" Class="SpecFileDataFile" Name="specFileDataFile" Version="1">
                                             <Object Type="enumeratedType" Name="dataFileType">METRIC</Object>
                                             <Object Type="enumeratedType" Name="structure">HIPPOCAMPUS_LEFT</Object>
-                                            <Object Type="pathName" Name="fileName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_label-hipp_gyrification.shape.gii</Object>
+                                            <Object Type="pathName" Name="fileName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_den-512_label-hipp_gyrification.shape.gii</Object>
                                             <Object Type="boolean" Name="selected">true</Object>
                                         </Object>
                                     </Element>
@@ -2078,7 +2078,7 @@
                                         <Object Type="class" Class="SpecFileDataFile" Name="specFileDataFile" Version="1">
                                             <Object Type="enumeratedType" Name="dataFileType">METRIC</Object>
                                             <Object Type="enumeratedType" Name="structure">HIPPOCAMPUS_LEFT</Object>
-                                            <Object Type="pathName" Name="fileName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_label-hipp_curvature.shape.gii</Object>
+                                            <Object Type="pathName" Name="fileName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_den-512_label-hipp_curvature.shape.gii</Object>
                                             <Object Type="boolean" Name="selected">true</Object>
                                         </Object>
                                     </Element>
@@ -2086,7 +2086,7 @@
                                         <Object Type="class" Class="SpecFileDataFile" Name="specFileDataFile" Version="1">
                                             <Object Type="enumeratedType" Name="dataFileType">METRIC</Object>
                                             <Object Type="enumeratedType" Name="structure">HIPPOCAMPUS_LEFT</Object>
-                                            <Object Type="pathName" Name="fileName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_label-hipp_thickness.shape.gii</Object>
+                                            <Object Type="pathName" Name="fileName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_den-512_label-hipp_thickness.shape.gii</Object>
                                             <Object Type="boolean" Name="selected">true</Object>
                                         </Object>
                                     </Element>
@@ -2094,7 +2094,7 @@
                                         <Object Type="class" Class="SpecFileDataFile" Name="specFileDataFile" Version="1">
                                             <Object Type="enumeratedType" Name="dataFileType">METRIC</Object>
                                             <Object Type="enumeratedType" Name="structure">HIPPOCAMPUS_RIGHT</Object>
-                                            <Object Type="pathName" Name="fileName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-R_space-corobl_label-hipp_gyrification.shape.gii</Object>
+                                            <Object Type="pathName" Name="fileName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-R_space-corobl_den-512_label-hipp_gyrification.shape.gii</Object>
                                             <Object Type="boolean" Name="selected">true</Object>
                                         </Object>
                                     </Element>
@@ -2102,7 +2102,7 @@
                                         <Object Type="class" Class="SpecFileDataFile" Name="specFileDataFile" Version="1">
                                             <Object Type="enumeratedType" Name="dataFileType">METRIC</Object>
                                             <Object Type="enumeratedType" Name="structure">HIPPOCAMPUS_RIGHT</Object>
-                                            <Object Type="pathName" Name="fileName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-R_space-corobl_label-hipp_curvature.shape.gii</Object>
+                                            <Object Type="pathName" Name="fileName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-R_space-corobl_den-512_label-hipp_curvature.shape.gii</Object>
                                             <Object Type="boolean" Name="selected">true</Object>
                                         </Object>
                                     </Element>
@@ -2110,7 +2110,7 @@
                                         <Object Type="class" Class="SpecFileDataFile" Name="specFileDataFile" Version="1">
                                             <Object Type="enumeratedType" Name="dataFileType">METRIC</Object>
                                             <Object Type="enumeratedType" Name="structure">HIPPOCAMPUS_RIGHT</Object>
-                                            <Object Type="pathName" Name="fileName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-R_space-corobl_label-hipp_thickness.shape.gii</Object>
+                                            <Object Type="pathName" Name="fileName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-R_space-corobl_den-512_label-hipp_thickness.shape.gii</Object>
                                             <Object Type="boolean" Name="selected">true</Object>
                                         </Object>
                                     </Element>
@@ -3459,8 +3459,8 @@
                                                                     </Object>
                                                                     <Object Type="enumeratedType" Name="m_volumeToImageMappingMode">NORMAL</Object>
                                                                     <Object Type="float" Name="m_volumeToImageMappingThickness">1</Object>
-                                                                    <Object Type="pathName" Name="selectedMapFileNameWithPath">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-R_space-corobl_label-hipp_atlas-multihist7_subfields.label.gii</Object>
-                                                                    <Object Type="string" Name="selectedMapFile">sub-102311_hemi-R_space-corobl_label-hipp_atlas-multihist7_subfields.label.gii</Object>
+                                                                    <Object Type="pathName" Name="selectedMapFileNameWithPath">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-R_space-corobl_den-512_label-hipp_atlas-multihist7_subfields.label.gii</Object>
+                                                                    <Object Type="string" Name="selectedMapFile">sub-102311_hemi-R_space-corobl_den-512_label-hipp_atlas-multihist7_subfields.label.gii</Object>
                                                                     <Object Type="string" Name="selectedMapName">#1</Object>
                                                                     <Object Type="integer" Name="selectedMapIndex">0</Object>
                                                                 </Object>
@@ -3578,8 +3578,8 @@
                                                                     </Object>
                                                                     <Object Type="enumeratedType" Name="m_volumeToImageMappingMode">NORMAL</Object>
                                                                     <Object Type="float" Name="m_volumeToImageMappingThickness">1</Object>
-                                                                    <Object Type="pathName" Name="selectedMapFileNameWithPath">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_label-hipp_atlas-multihist7_subfields.label.gii</Object>
-                                                                    <Object Type="string" Name="selectedMapFile">sub-102311_hemi-L_space-corobl_label-hipp_atlas-multihist7_subfields.label.gii</Object>
+                                                                    <Object Type="pathName" Name="selectedMapFileNameWithPath">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_den-512_label-hipp_atlas-multihist7_subfields.label.gii</Object>
+                                                                    <Object Type="string" Name="selectedMapFile">sub-102311_hemi-L_space-corobl_den-512_label-hipp_atlas-multihist7_subfields.label.gii</Object>
                                                                     <Object Type="string" Name="selectedMapName">#1</Object>
                                                                     <Object Type="integer" Name="selectedMapIndex">0</Object>
                                                                 </Object>
@@ -3697,8 +3697,8 @@
                                                                     </Object>
                                                                     <Object Type="enumeratedType" Name="m_volumeToImageMappingMode">NORMAL</Object>
                                                                     <Object Type="float" Name="m_volumeToImageMappingThickness">1</Object>
-                                                                    <Object Type="pathName" Name="selectedMapFileNameWithPath">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-R_space-corobl_label-hipp_gyrification.shape.gii</Object>
-                                                                    <Object Type="string" Name="selectedMapFile">sub-102311_hemi-R_space-corobl_label-hipp_gyrification.shape.gii</Object>
+                                                                    <Object Type="pathName" Name="selectedMapFileNameWithPath">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-R_space-corobl_den-512_label-hipp_gyrification.shape.gii</Object>
+                                                                    <Object Type="string" Name="selectedMapFile">sub-102311_hemi-R_space-corobl_den-512_label-hipp_gyrification.shape.gii</Object>
                                                                     <Object Type="string" Name="selectedMapName">vertex areas</Object>
                                                                     <Object Type="integer" Name="selectedMapIndex">0</Object>
                                                                 </Object>
@@ -3816,8 +3816,8 @@
                                                                     </Object>
                                                                     <Object Type="enumeratedType" Name="m_volumeToImageMappingMode">NORMAL</Object>
                                                                     <Object Type="float" Name="m_volumeToImageMappingThickness">1</Object>
-                                                                    <Object Type="pathName" Name="selectedMapFileNameWithPath">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_label-hipp_gyrification.shape.gii</Object>
-                                                                    <Object Type="string" Name="selectedMapFile">sub-102311_hemi-L_space-corobl_label-hipp_gyrification.shape.gii</Object>
+                                                                    <Object Type="pathName" Name="selectedMapFileNameWithPath">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_den-512_label-hipp_gyrification.shape.gii</Object>
+                                                                    <Object Type="string" Name="selectedMapFile">sub-102311_hemi-L_space-corobl_den-512_label-hipp_gyrification.shape.gii</Object>
                                                                     <Object Type="string" Name="selectedMapName">vertex areas</Object>
                                                                     <Object Type="integer" Name="selectedMapIndex">0</Object>
                                                                 </Object>
@@ -4328,8 +4328,8 @@
                                                                     </Object>
                                                                     <Object Type="enumeratedType" Name="m_volumeToImageMappingMode">NORMAL</Object>
                                                                     <Object Type="float" Name="m_volumeToImageMappingThickness">1</Object>
-                                                                    <Object Type="pathName" Name="selectedMapFileNameWithPath">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_space-corobl_label-hipp_atlas-multihist7_subfields.dlabel.nii</Object>
-                                                                    <Object Type="string" Name="selectedMapFile">sub-102311_space-corobl_label-hipp_atlas-multihist7_subfields.dlabel.nii</Object>
+                                                                    <Object Type="pathName" Name="selectedMapFileNameWithPath">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_space-corobl_den-512_label-hipp_atlas-multihist7_subfields.dlabel.nii</Object>
+                                                                    <Object Type="string" Name="selectedMapFile">sub-102311_space-corobl_den-512_label-hipp_atlas-multihist7_subfields.dlabel.nii</Object>
                                                                     <Object Type="string" Name="selectedMapName">#1</Object>
                                                                     <Object Type="integer" Name="selectedMapIndex">0</Object>
                                                                 </Object>
@@ -4447,8 +4447,8 @@
                                                                     </Object>
                                                                     <Object Type="enumeratedType" Name="m_volumeToImageMappingMode">NORMAL</Object>
                                                                     <Object Type="float" Name="m_volumeToImageMappingThickness">1</Object>
-                                                                    <Object Type="pathName" Name="selectedMapFileNameWithPath">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_space-corobl_label-hipp_atlas-multihist7_subfields.dlabel.nii</Object>
-                                                                    <Object Type="string" Name="selectedMapFile">sub-102311_space-corobl_label-hipp_atlas-multihist7_subfields.dlabel.nii</Object>
+                                                                    <Object Type="pathName" Name="selectedMapFileNameWithPath">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_space-corobl_den-512_label-hipp_atlas-multihist7_subfields.dlabel.nii</Object>
+                                                                    <Object Type="string" Name="selectedMapFile">sub-102311_space-corobl_den-512_label-hipp_atlas-multihist7_subfields.dlabel.nii</Object>
                                                                     <Object Type="string" Name="selectedMapName">#1</Object>
                                                                     <Object Type="integer" Name="selectedMapIndex">0</Object>
                                                                 </Object>
@@ -4566,8 +4566,8 @@
                                                                     </Object>
                                                                     <Object Type="enumeratedType" Name="m_volumeToImageMappingMode">NORMAL</Object>
                                                                     <Object Type="float" Name="m_volumeToImageMappingThickness">1</Object>
-                                                                    <Object Type="pathName" Name="selectedMapFileNameWithPath">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_space-corobl_label-hipp_curvature.dscalar.nii</Object>
-                                                                    <Object Type="string" Name="selectedMapFile">sub-102311_space-corobl_label-hipp_curvature.dscalar.nii</Object>
+                                                                    <Object Type="pathName" Name="selectedMapFileNameWithPath">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_space-corobl_den-512_label-hipp_curvature.dscalar.nii</Object>
+                                                                    <Object Type="string" Name="selectedMapFile">sub-102311_space-corobl_den-512_label-hipp_curvature.dscalar.nii</Object>
                                                                     <Object Type="string" Name="selectedMapName">mean curvature</Object>
                                                                     <Object Type="integer" Name="selectedMapIndex">0</Object>
                                                                 </Object>
@@ -4707,8 +4707,8 @@
                                                                     </Object>
                                                                     <Object Type="enumeratedType" Name="m_volumeToImageMappingMode">NORMAL</Object>
                                                                     <Object Type="float" Name="m_volumeToImageMappingThickness">1</Object>
-                                                                    <Object Type="pathName" Name="selectedMapFileNameWithPath">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_space-corobl_label-hipp_atlas-multihist7_subfields.dlabel.nii</Object>
-                                                                    <Object Type="string" Name="selectedMapFile">sub-102311_space-corobl_label-hipp_atlas-multihist7_subfields.dlabel.nii</Object>
+                                                                    <Object Type="pathName" Name="selectedMapFileNameWithPath">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_space-corobl_den-512_label-hipp_atlas-multihist7_subfields.dlabel.nii</Object>
+                                                                    <Object Type="string" Name="selectedMapFile">sub-102311_space-corobl_den-512_label-hipp_atlas-multihist7_subfields.dlabel.nii</Object>
                                                                     <Object Type="string" Name="selectedMapName">#1</Object>
                                                                     <Object Type="integer" Name="selectedMapIndex">0</Object>
                                                                 </Object>
@@ -4826,8 +4826,8 @@
                                                                     </Object>
                                                                     <Object Type="enumeratedType" Name="m_volumeToImageMappingMode">NORMAL</Object>
                                                                     <Object Type="float" Name="m_volumeToImageMappingThickness">1</Object>
-                                                                    <Object Type="pathName" Name="selectedMapFileNameWithPath">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_space-corobl_label-hipp_atlas-multihist7_subfields.dlabel.nii</Object>
-                                                                    <Object Type="string" Name="selectedMapFile">sub-102311_space-corobl_label-hipp_atlas-multihist7_subfields.dlabel.nii</Object>
+                                                                    <Object Type="pathName" Name="selectedMapFileNameWithPath">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_space-corobl_den-512_label-hipp_atlas-multihist7_subfields.dlabel.nii</Object>
+                                                                    <Object Type="string" Name="selectedMapFile">sub-102311_space-corobl_den-512_label-hipp_atlas-multihist7_subfields.dlabel.nii</Object>
                                                                     <Object Type="string" Name="selectedMapName">#1</Object>
                                                                     <Object Type="integer" Name="selectedMapIndex">0</Object>
                                                                 </Object>
@@ -4945,8 +4945,8 @@
                                                                     </Object>
                                                                     <Object Type="enumeratedType" Name="m_volumeToImageMappingMode">NORMAL</Object>
                                                                     <Object Type="float" Name="m_volumeToImageMappingThickness">1</Object>
-                                                                    <Object Type="pathName" Name="selectedMapFileNameWithPath">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_space-corobl_label-hipp_curvature.dscalar.nii</Object>
-                                                                    <Object Type="string" Name="selectedMapFile">sub-102311_space-corobl_label-hipp_curvature.dscalar.nii</Object>
+                                                                    <Object Type="pathName" Name="selectedMapFileNameWithPath">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_space-corobl_den-512_label-hipp_curvature.dscalar.nii</Object>
+                                                                    <Object Type="string" Name="selectedMapFile">sub-102311_space-corobl_den-512_label-hipp_curvature.dscalar.nii</Object>
                                                                     <Object Type="string" Name="selectedMapName">mean curvature</Object>
                                                                     <Object Type="integer" Name="selectedMapIndex">0</Object>
                                                                 </Object>
@@ -5082,8 +5082,8 @@
                                                                     </Object>
                                                                     <Object Type="enumeratedType" Name="m_volumeToImageMappingMode">NORMAL</Object>
                                                                     <Object Type="float" Name="m_volumeToImageMappingThickness">1</Object>
-                                                                    <Object Type="pathName" Name="selectedMapFileNameWithPath">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-R_space-corobl_label-hipp_atlas-multihist7_subfields.label.gii</Object>
-                                                                    <Object Type="string" Name="selectedMapFile">sub-102311_hemi-R_space-corobl_label-hipp_atlas-multihist7_subfields.label.gii</Object>
+                                                                    <Object Type="pathName" Name="selectedMapFileNameWithPath">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-R_space-corobl_den-512_label-hipp_atlas-multihist7_subfields.label.gii</Object>
+                                                                    <Object Type="string" Name="selectedMapFile">sub-102311_hemi-R_space-corobl_den-512_label-hipp_atlas-multihist7_subfields.label.gii</Object>
                                                                     <Object Type="string" Name="selectedMapName">#1</Object>
                                                                     <Object Type="integer" Name="selectedMapIndex">0</Object>
                                                                 </Object>
@@ -5201,8 +5201,8 @@
                                                                     </Object>
                                                                     <Object Type="enumeratedType" Name="m_volumeToImageMappingMode">NORMAL</Object>
                                                                     <Object Type="float" Name="m_volumeToImageMappingThickness">1</Object>
-                                                                    <Object Type="pathName" Name="selectedMapFileNameWithPath">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_label-hipp_atlas-multihist7_subfields.label.gii</Object>
-                                                                    <Object Type="string" Name="selectedMapFile">sub-102311_hemi-L_space-corobl_label-hipp_atlas-multihist7_subfields.label.gii</Object>
+                                                                    <Object Type="pathName" Name="selectedMapFileNameWithPath">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_den-512_label-hipp_atlas-multihist7_subfields.label.gii</Object>
+                                                                    <Object Type="string" Name="selectedMapFile">sub-102311_hemi-L_space-corobl_den-512_label-hipp_atlas-multihist7_subfields.label.gii</Object>
                                                                     <Object Type="string" Name="selectedMapName">#1</Object>
                                                                     <Object Type="integer" Name="selectedMapIndex">0</Object>
                                                                 </Object>
@@ -5320,8 +5320,8 @@
                                                                     </Object>
                                                                     <Object Type="enumeratedType" Name="m_volumeToImageMappingMode">NORMAL</Object>
                                                                     <Object Type="float" Name="m_volumeToImageMappingThickness">1</Object>
-                                                                    <Object Type="pathName" Name="selectedMapFileNameWithPath">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-R_space-corobl_label-hipp_gyrification.shape.gii</Object>
-                                                                    <Object Type="string" Name="selectedMapFile">sub-102311_hemi-R_space-corobl_label-hipp_gyrification.shape.gii</Object>
+                                                                    <Object Type="pathName" Name="selectedMapFileNameWithPath">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-R_space-corobl_den-512_label-hipp_gyrification.shape.gii</Object>
+                                                                    <Object Type="string" Name="selectedMapFile">sub-102311_hemi-R_space-corobl_den-512_label-hipp_gyrification.shape.gii</Object>
                                                                     <Object Type="string" Name="selectedMapName">vertex areas</Object>
                                                                     <Object Type="integer" Name="selectedMapIndex">0</Object>
                                                                 </Object>
@@ -5439,8 +5439,8 @@
                                                                     </Object>
                                                                     <Object Type="enumeratedType" Name="m_volumeToImageMappingMode">NORMAL</Object>
                                                                     <Object Type="float" Name="m_volumeToImageMappingThickness">1</Object>
-                                                                    <Object Type="pathName" Name="selectedMapFileNameWithPath">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_label-hipp_gyrification.shape.gii</Object>
-                                                                    <Object Type="string" Name="selectedMapFile">sub-102311_hemi-L_space-corobl_label-hipp_gyrification.shape.gii</Object>
+                                                                    <Object Type="pathName" Name="selectedMapFileNameWithPath">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_den-512_label-hipp_gyrification.shape.gii</Object>
+                                                                    <Object Type="string" Name="selectedMapFile">sub-102311_hemi-L_space-corobl_den-512_label-hipp_gyrification.shape.gii</Object>
                                                                     <Object Type="string" Name="selectedMapName">vertex areas</Object>
                                                                     <Object Type="integer" Name="selectedMapIndex">0</Object>
                                                                 </Object>
@@ -5448,11 +5448,11 @@
                                                         </ObjectArray>
                                                     </Object>
                                                     <Object Type="class" Class="SurfaceSelectionModel" Name="m_leftFirstSurfaceSelectionModel" Version="1">
-                                                        <Object Type="pathName" Name="m_selectedSurfacePathName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_label-hipp_midthickness.surf.gii</Object>
+                                                        <Object Type="pathName" Name="m_selectedSurfacePathName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_den-512_label-hipp_midthickness.surf.gii</Object>
                                                     </Object>
                                                     <Object Type="class" Class="SurfaceSelectionModel" Name="m_leftSecondSurfaceSelectionModel" Version="1"/>
                                                     <Object Type="class" Class="SurfaceSelectionModel" Name="m_rightFirstSurfaceSelectionModel" Version="1">
-                                                        <Object Type="pathName" Name="m_selectedSurfacePathName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-R_space-corobl_label-hipp_midthickness.surf.gii</Object>
+                                                        <Object Type="pathName" Name="m_selectedSurfacePathName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-R_space-corobl_den-512_label-hipp_midthickness.surf.gii</Object>
                                                     </Object>
                                                     <Object Type="class" Class="SurfaceSelectionModel" Name="m_rightSecondSurfaceSelectionModel" Version="1"/>
                                                     <Object Type="boolean" Name="m_leftEnabled">true</Object>
@@ -5584,8 +5584,8 @@
                                                                     </Object>
                                                                     <Object Type="enumeratedType" Name="m_volumeToImageMappingMode">NORMAL</Object>
                                                                     <Object Type="float" Name="m_volumeToImageMappingThickness">1</Object>
-                                                                    <Object Type="pathName" Name="selectedMapFileNameWithPath">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-R_space-corobl_label-hipp_atlas-multihist7_subfields.label.gii</Object>
-                                                                    <Object Type="string" Name="selectedMapFile">sub-102311_hemi-R_space-corobl_label-hipp_atlas-multihist7_subfields.label.gii</Object>
+                                                                    <Object Type="pathName" Name="selectedMapFileNameWithPath">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-R_space-corobl_den-512_label-hipp_atlas-multihist7_subfields.label.gii</Object>
+                                                                    <Object Type="string" Name="selectedMapFile">sub-102311_hemi-R_space-corobl_den-512_label-hipp_atlas-multihist7_subfields.label.gii</Object>
                                                                     <Object Type="string" Name="selectedMapName">#1</Object>
                                                                     <Object Type="integer" Name="selectedMapIndex">0</Object>
                                                                 </Object>
@@ -5703,8 +5703,8 @@
                                                                     </Object>
                                                                     <Object Type="enumeratedType" Name="m_volumeToImageMappingMode">NORMAL</Object>
                                                                     <Object Type="float" Name="m_volumeToImageMappingThickness">1</Object>
-                                                                    <Object Type="pathName" Name="selectedMapFileNameWithPath">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_label-hipp_atlas-multihist7_subfields.label.gii</Object>
-                                                                    <Object Type="string" Name="selectedMapFile">sub-102311_hemi-L_space-corobl_label-hipp_atlas-multihist7_subfields.label.gii</Object>
+                                                                    <Object Type="pathName" Name="selectedMapFileNameWithPath">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_den-512_label-hipp_atlas-multihist7_subfields.label.gii</Object>
+                                                                    <Object Type="string" Name="selectedMapFile">sub-102311_hemi-L_space-corobl_den-512_label-hipp_atlas-multihist7_subfields.label.gii</Object>
                                                                     <Object Type="string" Name="selectedMapName">#1</Object>
                                                                     <Object Type="integer" Name="selectedMapIndex">0</Object>
                                                                 </Object>
@@ -5822,8 +5822,8 @@
                                                                     </Object>
                                                                     <Object Type="enumeratedType" Name="m_volumeToImageMappingMode">NORMAL</Object>
                                                                     <Object Type="float" Name="m_volumeToImageMappingThickness">1</Object>
-                                                                    <Object Type="pathName" Name="selectedMapFileNameWithPath">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-R_space-corobl_label-hipp_gyrification.shape.gii</Object>
-                                                                    <Object Type="string" Name="selectedMapFile">sub-102311_hemi-R_space-corobl_label-hipp_gyrification.shape.gii</Object>
+                                                                    <Object Type="pathName" Name="selectedMapFileNameWithPath">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-R_space-corobl_den-512_label-hipp_gyrification.shape.gii</Object>
+                                                                    <Object Type="string" Name="selectedMapFile">sub-102311_hemi-R_space-corobl_den-512_label-hipp_gyrification.shape.gii</Object>
                                                                     <Object Type="string" Name="selectedMapName">vertex areas</Object>
                                                                     <Object Type="integer" Name="selectedMapIndex">0</Object>
                                                                 </Object>
@@ -5941,8 +5941,8 @@
                                                                     </Object>
                                                                     <Object Type="enumeratedType" Name="m_volumeToImageMappingMode">NORMAL</Object>
                                                                     <Object Type="float" Name="m_volumeToImageMappingThickness">1</Object>
-                                                                    <Object Type="pathName" Name="selectedMapFileNameWithPath">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_label-hipp_gyrification.shape.gii</Object>
-                                                                    <Object Type="string" Name="selectedMapFile">sub-102311_hemi-L_space-corobl_label-hipp_gyrification.shape.gii</Object>
+                                                                    <Object Type="pathName" Name="selectedMapFileNameWithPath">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_den-512_label-hipp_gyrification.shape.gii</Object>
+                                                                    <Object Type="string" Name="selectedMapFile">sub-102311_hemi-L_space-corobl_den-512_label-hipp_gyrification.shape.gii</Object>
                                                                     <Object Type="string" Name="selectedMapName">vertex areas</Object>
                                                                     <Object Type="integer" Name="selectedMapIndex">0</Object>
                                                                 </Object>
@@ -5950,11 +5950,11 @@
                                                         </ObjectArray>
                                                     </Object>
                                                     <Object Type="class" Class="SurfaceSelectionModel" Name="m_leftFirstSurfaceSelectionModel" Version="1">
-                                                        <Object Type="pathName" Name="m_selectedSurfacePathName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-unfoldreg_label-hipp_midthickness.surf.gii</Object>
+                                                        <Object Type="pathName" Name="m_selectedSurfacePathName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-unfoldreg_den-512_label-hipp_midthickness.surf.gii</Object>
                                                     </Object>
                                                     <Object Type="class" Class="SurfaceSelectionModel" Name="m_leftSecondSurfaceSelectionModel" Version="1"/>
                                                     <Object Type="class" Class="SurfaceSelectionModel" Name="m_rightFirstSurfaceSelectionModel" Version="1">
-                                                        <Object Type="pathName" Name="m_selectedSurfacePathName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-R_space-unfoldreg_label-hipp_midthickness.surf.gii</Object>
+                                                        <Object Type="pathName" Name="m_selectedSurfacePathName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-R_space-unfoldreg_den-512_label-hipp_midthickness.surf.gii</Object>
                                                     </Object>
                                                     <Object Type="class" Class="SurfaceSelectionModel" Name="m_rightSecondSurfaceSelectionModel" Version="1"/>
                                                     <Object Type="boolean" Name="m_leftEnabled">true</Object>
@@ -5973,8 +5973,8 @@
                                         <Object Type="integer" Name="numberOfNodes">5961</Object>
                                         <Object Type="enumeratedType" Name="m_structure">HIPPOCAMPUS_LEFT</Object>
                                         <Object Type="class" Class="BrainStructureNodeAttributes" Name="m_nodeAttributes" Version="1"/>
-                                        <Object Type="class" Class="GroupAndNameHierarchyItem" Name="sub-102311_hemi-L_space-corobl_label-hipp_atlas-multihist7_subfields.label.gii" Version="1">
-                                            <Object Type="string" Name="m_name">sub-102311_hemi-L_space-corobl_label-hipp_atlas-multihist7_subfields.label.gii</Object>
+                                        <Object Type="class" Class="GroupAndNameHierarchyItem" Name="sub-102311_hemi-L_space-corobl_den-512_label-hipp_atlas-multihist7_subfields.label.gii" Version="1">
+                                            <Object Type="string" Name="m_name">sub-102311_hemi-L_space-corobl_den-512_label-hipp_atlas-multihist7_subfields.label.gii</Object>
                                             <ObjectMap Type="boolean" Name="m_selectedInTab">
                                                 <Value Key="0">true</Value>
                                             </ObjectMap>
@@ -6134,7 +6134,7 @@
                                                 </Object>
                                             </Object>
                                         </Object>
-                                        <Object Type="pathName" Name="primaryAnatomicalSurface">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_label-hipp_midthickness.surf.gii</Object>
+                                        <Object Type="pathName" Name="primaryAnatomicalSurface">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_den-512_label-hipp_midthickness.surf.gii</Object>
                                     </Object>
                                 </Element>
                                 <Element Index="1">
@@ -6142,8 +6142,8 @@
                                         <Object Type="integer" Name="numberOfNodes">6006</Object>
                                         <Object Type="enumeratedType" Name="m_structure">HIPPOCAMPUS_RIGHT</Object>
                                         <Object Type="class" Class="BrainStructureNodeAttributes" Name="m_nodeAttributes" Version="1"/>
-                                        <Object Type="class" Class="GroupAndNameHierarchyItem" Name="sub-102311_hemi-R_space-corobl_label-hipp_atlas-multihist7_subfields.label.gii" Version="1">
-                                            <Object Type="string" Name="m_name">sub-102311_hemi-R_space-corobl_label-hipp_atlas-multihist7_subfields.label.gii</Object>
+                                        <Object Type="class" Class="GroupAndNameHierarchyItem" Name="sub-102311_hemi-R_space-corobl_den-512_label-hipp_atlas-multihist7_subfields.label.gii" Version="1">
+                                            <Object Type="string" Name="m_name">sub-102311_hemi-R_space-corobl_den-512_label-hipp_atlas-multihist7_subfields.label.gii</Object>
                                             <ObjectMap Type="boolean" Name="m_selectedInTab">
                                                 <Value Key="0">true</Value>
                                             </ObjectMap>
@@ -6303,7 +6303,7 @@
                                                 </Object>
                                             </Object>
                                         </Object>
-                                        <Object Type="pathName" Name="primaryAnatomicalSurface">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-R_space-corobl_label-hipp_midthickness.surf.gii</Object>
+                                        <Object Type="pathName" Name="primaryAnatomicalSurface">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-R_space-corobl_den-512_label-hipp_midthickness.surf.gii</Object>
                                     </Object>
                                 </Element>
                             </ObjectArray>
@@ -6344,18 +6344,18 @@
 &lt;table&gt; &lt;tbody&gt;
 &lt;tr&gt;&lt;td colspan=&quot;2&quot; align=&quot;left&quot;&gt;Labels&lt;/td&gt;&lt;/tr&gt;
 &lt;tr&gt;    &lt;td align=&quot;left&quot;&gt;CA4 (#1)&lt;/td&gt;
-    &lt;td align=&quot;left&quot;&gt;sub-102311_hemi-L_space-corobl_label-hipp_atlas-multihist7_subfields.label.gii&lt;/td&gt;
+    &lt;td align=&quot;left&quot;&gt;sub-102311_hemi-L_space-corobl_den-512_label-hipp_atlas-multihist7_subfields.label.gii&lt;/td&gt;
 &lt;/tr&gt;&lt;tr&gt;    &lt;td align=&quot;left&quot;&gt;CA2 (#1)&lt;/td&gt;
-    &lt;td align=&quot;left&quot;&gt;sub-102311_hemi-R_space-corobl_label-hipp_atlas-multihist7_subfields.label.gii&lt;/td&gt;
+    &lt;td align=&quot;left&quot;&gt;sub-102311_hemi-R_space-corobl_den-512_label-hipp_atlas-multihist7_subfields.label.gii&lt;/td&gt;
 &lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
 &lt;p&gt;
 &lt;table&gt; &lt;tbody&gt;
 &lt;tr&gt;&lt;td colspan=&quot;3&quot; align=&quot;left&quot;&gt;Scalars&lt;/td&gt;&lt;/tr&gt;
 &lt;tr&gt;    &lt;td align=&quot;left&quot;&gt;6.35995&lt;/td&gt;
-    &lt;td align=&quot;left&quot;&gt;sub-102311_hemi-L_space-corobl_label-hipp_gyrification.shape.gii&lt;/td&gt;
+    &lt;td align=&quot;left&quot;&gt;sub-102311_hemi-L_space-corobl_den-512_label-hipp_gyrification.shape.gii&lt;/td&gt;
     &lt;td align=&quot;left&quot;&gt;&lt;/td&gt;
 &lt;/tr&gt;&lt;tr&gt;    &lt;td align=&quot;left&quot;&gt;5.57396&lt;/td&gt;
-    &lt;td align=&quot;left&quot;&gt;sub-102311_hemi-R_space-corobl_label-hipp_gyrification.shape.gii&lt;/td&gt;
+    &lt;td align=&quot;left&quot;&gt;sub-102311_hemi-R_space-corobl_den-512_label-hipp_gyrification.shape.gii&lt;/td&gt;
     &lt;td align=&quot;left&quot;&gt;&lt;/td&gt;
 &lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
 &lt;p&gt;
@@ -6372,18 +6372,18 @@
 &lt;table&gt; &lt;tbody&gt;
 &lt;tr&gt;&lt;td colspan=&quot;2&quot; align=&quot;left&quot;&gt;Labels&lt;/td&gt;&lt;/tr&gt;
 &lt;tr&gt;    &lt;td align=&quot;left&quot;&gt;CA4 (#1)&lt;/td&gt;
-    &lt;td align=&quot;left&quot;&gt;sub-102311_hemi-L_space-corobl_label-hipp_atlas-multihist7_subfields.label.gii&lt;/td&gt;
+    &lt;td align=&quot;left&quot;&gt;sub-102311_hemi-L_space-corobl_den-512_label-hipp_atlas-multihist7_subfields.label.gii&lt;/td&gt;
 &lt;/tr&gt;&lt;tr&gt;    &lt;td align=&quot;left&quot;&gt;CA4 (#1)&lt;/td&gt;
-    &lt;td align=&quot;left&quot;&gt;sub-102311_hemi-R_space-corobl_label-hipp_atlas-multihist7_subfields.label.gii&lt;/td&gt;
+    &lt;td align=&quot;left&quot;&gt;sub-102311_hemi-R_space-corobl_den-512_label-hipp_atlas-multihist7_subfields.label.gii&lt;/td&gt;
 &lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
 &lt;p&gt;
 &lt;table&gt; &lt;tbody&gt;
 &lt;tr&gt;&lt;td colspan=&quot;3&quot; align=&quot;left&quot;&gt;Scalars&lt;/td&gt;&lt;/tr&gt;
 &lt;tr&gt;    &lt;td align=&quot;left&quot;&gt;6701.24561&lt;/td&gt;
-    &lt;td align=&quot;left&quot;&gt;sub-102311_hemi-L_space-corobl_label-hipp_gyrification.shape.gii&lt;/td&gt;
+    &lt;td align=&quot;left&quot;&gt;sub-102311_hemi-L_space-corobl_den-512_label-hipp_gyrification.shape.gii&lt;/td&gt;
     &lt;td align=&quot;left&quot;&gt;&lt;/td&gt;
 &lt;/tr&gt;&lt;tr&gt;    &lt;td align=&quot;left&quot;&gt;1.28865&lt;/td&gt;
-    &lt;td align=&quot;left&quot;&gt;sub-102311_hemi-R_space-corobl_label-hipp_gyrification.shape.gii&lt;/td&gt;
+    &lt;td align=&quot;left&quot;&gt;sub-102311_hemi-R_space-corobl_den-512_label-hipp_gyrification.shape.gii&lt;/td&gt;
     &lt;td align=&quot;left&quot;&gt;&lt;/td&gt;
 &lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
 &lt;p&gt;
@@ -6472,7 +6472,7 @@
                             <Object Type="enumeratedType" Name="m_selectedModelType">MODEL_TYPE_SURFACE_MONTAGE</Object>
                             <Object Type="class" Class="ModelSurfaceSelector" Name="m_surfaceModelSelector" Version="1">
                                 <Object Type="enumeratedType" Name="m_selectedStructure">ALL</Object>
-                                <Object Type="string" Name="surfaceFileName">sub-102311_hemi-L_space-corobl_label-hipp_midthickness.surf.gii</Object>
+                                <Object Type="string" Name="surfaceFileName">sub-102311_hemi-L_space-corobl_den-512_label-hipp_midthickness.surf.gii</Object>
                             </Object>
                             <Object Type="class" Class="ViewingTransformations" Name="m_cerebellumViewingTransformation" Version="1">
                                 <ObjectArray Type="float" Name="m_translation" Length="3">
@@ -7029,7 +7029,7 @@
                                             <Object Type="boolean" Name="m_displayed">false</Object>
                                             <Object Type="float" Name="m_thickness">2</Object>
                                             <Object Type="class" Class="SurfaceSelectionModel" Name="m_surfaceSelectionModel" Version="1">
-                                                <Object Type="pathName" Name="m_selectedSurfacePathName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_label-hipp_midthickness.surf.gii</Object>
+                                                <Object Type="pathName" Name="m_selectedSurfacePathName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_den-512_label-hipp_midthickness.surf.gii</Object>
                                             </Object>
                                             <Object Type="class" Class="VolumeSurfaceOutlineColorOrTabModel" Name="m_colorOrTabModel" Version="1">
                                                 <Object Type="class" Class="VolumeSurfaceOutlineColorOrTabModel::Item" Name="m_selectedItem" Version="1">
@@ -7049,7 +7049,7 @@
                                             <Object Type="boolean" Name="m_displayed">false</Object>
                                             <Object Type="float" Name="m_thickness">2</Object>
                                             <Object Type="class" Class="SurfaceSelectionModel" Name="m_surfaceSelectionModel" Version="1">
-                                                <Object Type="pathName" Name="m_selectedSurfacePathName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-R_space-corobl_label-hipp_midthickness.surf.gii</Object>
+                                                <Object Type="pathName" Name="m_selectedSurfacePathName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-R_space-corobl_den-512_label-hipp_midthickness.surf.gii</Object>
                                             </Object>
                                             <Object Type="class" Class="VolumeSurfaceOutlineColorOrTabModel" Name="m_colorOrTabModel" Version="1">
                                                 <Object Type="class" Class="VolumeSurfaceOutlineColorOrTabModel::Item" Name="m_selectedItem" Version="1">
@@ -7069,7 +7069,7 @@
                                             <Object Type="boolean" Name="m_displayed">false</Object>
                                             <Object Type="float" Name="m_thickness">2</Object>
                                             <Object Type="class" Class="SurfaceSelectionModel" Name="m_surfaceSelectionModel" Version="1">
-                                                <Object Type="pathName" Name="m_selectedSurfacePathName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_label-hipp_midthickness.surf.gii</Object>
+                                                <Object Type="pathName" Name="m_selectedSurfacePathName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_den-512_label-hipp_midthickness.surf.gii</Object>
                                             </Object>
                                             <Object Type="class" Class="VolumeSurfaceOutlineColorOrTabModel" Name="m_colorOrTabModel" Version="1">
                                                 <Object Type="class" Class="VolumeSurfaceOutlineColorOrTabModel::Item" Name="m_selectedItem" Version="1">
@@ -7089,7 +7089,7 @@
                                             <Object Type="boolean" Name="m_displayed">false</Object>
                                             <Object Type="float" Name="m_thickness">2</Object>
                                             <Object Type="class" Class="SurfaceSelectionModel" Name="m_surfaceSelectionModel" Version="1">
-                                                <Object Type="pathName" Name="m_selectedSurfacePathName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-R_space-corobl_label-hipp_midthickness.surf.gii</Object>
+                                                <Object Type="pathName" Name="m_selectedSurfacePathName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-R_space-corobl_den-512_label-hipp_midthickness.surf.gii</Object>
                                             </Object>
                                             <Object Type="class" Class="VolumeSurfaceOutlineColorOrTabModel" Name="m_colorOrTabModel" Version="1">
                                                 <Object Type="class" Class="VolumeSurfaceOutlineColorOrTabModel::Item" Name="m_selectedItem" Version="1">
@@ -7109,7 +7109,7 @@
                                             <Object Type="boolean" Name="m_displayed">false</Object>
                                             <Object Type="float" Name="m_thickness">2</Object>
                                             <Object Type="class" Class="SurfaceSelectionModel" Name="m_surfaceSelectionModel" Version="1">
-                                                <Object Type="pathName" Name="m_selectedSurfacePathName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_label-hipp_midthickness.surf.gii</Object>
+                                                <Object Type="pathName" Name="m_selectedSurfacePathName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_den-512_label-hipp_midthickness.surf.gii</Object>
                                             </Object>
                                             <Object Type="class" Class="VolumeSurfaceOutlineColorOrTabModel" Name="m_colorOrTabModel" Version="1">
                                                 <Object Type="class" Class="VolumeSurfaceOutlineColorOrTabModel::Item" Name="m_selectedItem" Version="1">
@@ -7129,7 +7129,7 @@
                                             <Object Type="boolean" Name="m_displayed">false</Object>
                                             <Object Type="float" Name="m_thickness">2</Object>
                                             <Object Type="class" Class="SurfaceSelectionModel" Name="m_surfaceSelectionModel" Version="1">
-                                                <Object Type="pathName" Name="m_selectedSurfacePathName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_label-hipp_midthickness.surf.gii</Object>
+                                                <Object Type="pathName" Name="m_selectedSurfacePathName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_den-512_label-hipp_midthickness.surf.gii</Object>
                                             </Object>
                                             <Object Type="class" Class="VolumeSurfaceOutlineColorOrTabModel" Name="m_colorOrTabModel" Version="1">
                                                 <Object Type="class" Class="VolumeSurfaceOutlineColorOrTabModel::Item" Name="m_selectedItem" Version="1">
@@ -7149,7 +7149,7 @@
                                             <Object Type="boolean" Name="m_displayed">false</Object>
                                             <Object Type="float" Name="m_thickness">2</Object>
                                             <Object Type="class" Class="SurfaceSelectionModel" Name="m_surfaceSelectionModel" Version="1">
-                                                <Object Type="pathName" Name="m_selectedSurfacePathName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_label-hipp_midthickness.surf.gii</Object>
+                                                <Object Type="pathName" Name="m_selectedSurfacePathName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_den-512_label-hipp_midthickness.surf.gii</Object>
                                             </Object>
                                             <Object Type="class" Class="VolumeSurfaceOutlineColorOrTabModel" Name="m_colorOrTabModel" Version="1">
                                                 <Object Type="class" Class="VolumeSurfaceOutlineColorOrTabModel::Item" Name="m_selectedItem" Version="1">
@@ -7169,7 +7169,7 @@
                                             <Object Type="boolean" Name="m_displayed">false</Object>
                                             <Object Type="float" Name="m_thickness">2</Object>
                                             <Object Type="class" Class="SurfaceSelectionModel" Name="m_surfaceSelectionModel" Version="1">
-                                                <Object Type="pathName" Name="m_selectedSurfacePathName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_label-hipp_midthickness.surf.gii</Object>
+                                                <Object Type="pathName" Name="m_selectedSurfacePathName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_den-512_label-hipp_midthickness.surf.gii</Object>
                                             </Object>
                                             <Object Type="class" Class="VolumeSurfaceOutlineColorOrTabModel" Name="m_colorOrTabModel" Version="1">
                                                 <Object Type="class" Class="VolumeSurfaceOutlineColorOrTabModel::Item" Name="m_selectedItem" Version="1">
@@ -7189,7 +7189,7 @@
                                             <Object Type="boolean" Name="m_displayed">false</Object>
                                             <Object Type="float" Name="m_thickness">2</Object>
                                             <Object Type="class" Class="SurfaceSelectionModel" Name="m_surfaceSelectionModel" Version="1">
-                                                <Object Type="pathName" Name="m_selectedSurfacePathName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_label-hipp_midthickness.surf.gii</Object>
+                                                <Object Type="pathName" Name="m_selectedSurfacePathName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_den-512_label-hipp_midthickness.surf.gii</Object>
                                             </Object>
                                             <Object Type="class" Class="VolumeSurfaceOutlineColorOrTabModel" Name="m_colorOrTabModel" Version="1">
                                                 <Object Type="class" Class="VolumeSurfaceOutlineColorOrTabModel::Item" Name="m_selectedItem" Version="1">
@@ -7209,7 +7209,7 @@
                                             <Object Type="boolean" Name="m_displayed">false</Object>
                                             <Object Type="float" Name="m_thickness">2</Object>
                                             <Object Type="class" Class="SurfaceSelectionModel" Name="m_surfaceSelectionModel" Version="1">
-                                                <Object Type="pathName" Name="m_selectedSurfacePathName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_label-hipp_midthickness.surf.gii</Object>
+                                                <Object Type="pathName" Name="m_selectedSurfacePathName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_den-512_label-hipp_midthickness.surf.gii</Object>
                                             </Object>
                                             <Object Type="class" Class="VolumeSurfaceOutlineColorOrTabModel" Name="m_colorOrTabModel" Version="1">
                                                 <Object Type="class" Class="VolumeSurfaceOutlineColorOrTabModel::Item" Name="m_selectedItem" Version="1">
@@ -7229,7 +7229,7 @@
                                             <Object Type="boolean" Name="m_displayed">false</Object>
                                             <Object Type="float" Name="m_thickness">2</Object>
                                             <Object Type="class" Class="SurfaceSelectionModel" Name="m_surfaceSelectionModel" Version="1">
-                                                <Object Type="pathName" Name="m_selectedSurfacePathName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_label-hipp_midthickness.surf.gii</Object>
+                                                <Object Type="pathName" Name="m_selectedSurfacePathName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_den-512_label-hipp_midthickness.surf.gii</Object>
                                             </Object>
                                             <Object Type="class" Class="VolumeSurfaceOutlineColorOrTabModel" Name="m_colorOrTabModel" Version="1">
                                                 <Object Type="class" Class="VolumeSurfaceOutlineColorOrTabModel::Item" Name="m_selectedItem" Version="1">
@@ -7249,7 +7249,7 @@
                                             <Object Type="boolean" Name="m_displayed">false</Object>
                                             <Object Type="float" Name="m_thickness">2</Object>
                                             <Object Type="class" Class="SurfaceSelectionModel" Name="m_surfaceSelectionModel" Version="1">
-                                                <Object Type="pathName" Name="m_selectedSurfacePathName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_label-hipp_midthickness.surf.gii</Object>
+                                                <Object Type="pathName" Name="m_selectedSurfacePathName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_den-512_label-hipp_midthickness.surf.gii</Object>
                                             </Object>
                                             <Object Type="class" Class="VolumeSurfaceOutlineColorOrTabModel" Name="m_colorOrTabModel" Version="1">
                                                 <Object Type="class" Class="VolumeSurfaceOutlineColorOrTabModel::Item" Name="m_selectedItem" Version="1">
@@ -7269,7 +7269,7 @@
                                             <Object Type="boolean" Name="m_displayed">false</Object>
                                             <Object Type="float" Name="m_thickness">2</Object>
                                             <Object Type="class" Class="SurfaceSelectionModel" Name="m_surfaceSelectionModel" Version="1">
-                                                <Object Type="pathName" Name="m_selectedSurfacePathName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_label-hipp_midthickness.surf.gii</Object>
+                                                <Object Type="pathName" Name="m_selectedSurfacePathName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_den-512_label-hipp_midthickness.surf.gii</Object>
                                             </Object>
                                             <Object Type="class" Class="VolumeSurfaceOutlineColorOrTabModel" Name="m_colorOrTabModel" Version="1">
                                                 <Object Type="class" Class="VolumeSurfaceOutlineColorOrTabModel::Item" Name="m_selectedItem" Version="1">
@@ -7289,7 +7289,7 @@
                                             <Object Type="boolean" Name="m_displayed">false</Object>
                                             <Object Type="float" Name="m_thickness">2</Object>
                                             <Object Type="class" Class="SurfaceSelectionModel" Name="m_surfaceSelectionModel" Version="1">
-                                                <Object Type="pathName" Name="m_selectedSurfacePathName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_label-hipp_midthickness.surf.gii</Object>
+                                                <Object Type="pathName" Name="m_selectedSurfacePathName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_den-512_label-hipp_midthickness.surf.gii</Object>
                                             </Object>
                                             <Object Type="class" Class="VolumeSurfaceOutlineColorOrTabModel" Name="m_colorOrTabModel" Version="1">
                                                 <Object Type="class" Class="VolumeSurfaceOutlineColorOrTabModel::Item" Name="m_selectedItem" Version="1">
@@ -7309,7 +7309,7 @@
                                             <Object Type="boolean" Name="m_displayed">false</Object>
                                             <Object Type="float" Name="m_thickness">2</Object>
                                             <Object Type="class" Class="SurfaceSelectionModel" Name="m_surfaceSelectionModel" Version="1">
-                                                <Object Type="pathName" Name="m_selectedSurfacePathName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_label-hipp_midthickness.surf.gii</Object>
+                                                <Object Type="pathName" Name="m_selectedSurfacePathName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_den-512_label-hipp_midthickness.surf.gii</Object>
                                             </Object>
                                             <Object Type="class" Class="VolumeSurfaceOutlineColorOrTabModel" Name="m_colorOrTabModel" Version="1">
                                                 <Object Type="class" Class="VolumeSurfaceOutlineColorOrTabModel::Item" Name="m_selectedItem" Version="1">
@@ -7329,7 +7329,7 @@
                                             <Object Type="boolean" Name="m_displayed">false</Object>
                                             <Object Type="float" Name="m_thickness">2</Object>
                                             <Object Type="class" Class="SurfaceSelectionModel" Name="m_surfaceSelectionModel" Version="1">
-                                                <Object Type="pathName" Name="m_selectedSurfacePathName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_label-hipp_midthickness.surf.gii</Object>
+                                                <Object Type="pathName" Name="m_selectedSurfacePathName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_den-512_label-hipp_midthickness.surf.gii</Object>
                                             </Object>
                                             <Object Type="class" Class="VolumeSurfaceOutlineColorOrTabModel" Name="m_colorOrTabModel" Version="1">
                                                 <Object Type="class" Class="VolumeSurfaceOutlineColorOrTabModel::Item" Name="m_selectedItem" Version="1">
@@ -7349,7 +7349,7 @@
                                             <Object Type="boolean" Name="m_displayed">false</Object>
                                             <Object Type="float" Name="m_thickness">2</Object>
                                             <Object Type="class" Class="SurfaceSelectionModel" Name="m_surfaceSelectionModel" Version="1">
-                                                <Object Type="pathName" Name="m_selectedSurfacePathName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_label-hipp_midthickness.surf.gii</Object>
+                                                <Object Type="pathName" Name="m_selectedSurfacePathName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_den-512_label-hipp_midthickness.surf.gii</Object>
                                             </Object>
                                             <Object Type="class" Class="VolumeSurfaceOutlineColorOrTabModel" Name="m_colorOrTabModel" Version="1">
                                                 <Object Type="class" Class="VolumeSurfaceOutlineColorOrTabModel::Item" Name="m_selectedItem" Version="1">
@@ -7369,7 +7369,7 @@
                                             <Object Type="boolean" Name="m_displayed">false</Object>
                                             <Object Type="float" Name="m_thickness">2</Object>
                                             <Object Type="class" Class="SurfaceSelectionModel" Name="m_surfaceSelectionModel" Version="1">
-                                                <Object Type="pathName" Name="m_selectedSurfacePathName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_label-hipp_midthickness.surf.gii</Object>
+                                                <Object Type="pathName" Name="m_selectedSurfacePathName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_den-512_label-hipp_midthickness.surf.gii</Object>
                                             </Object>
                                             <Object Type="class" Class="VolumeSurfaceOutlineColorOrTabModel" Name="m_colorOrTabModel" Version="1">
                                                 <Object Type="class" Class="VolumeSurfaceOutlineColorOrTabModel::Item" Name="m_selectedItem" Version="1">
@@ -7389,7 +7389,7 @@
                                             <Object Type="boolean" Name="m_displayed">false</Object>
                                             <Object Type="float" Name="m_thickness">2</Object>
                                             <Object Type="class" Class="SurfaceSelectionModel" Name="m_surfaceSelectionModel" Version="1">
-                                                <Object Type="pathName" Name="m_selectedSurfacePathName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_label-hipp_midthickness.surf.gii</Object>
+                                                <Object Type="pathName" Name="m_selectedSurfacePathName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_den-512_label-hipp_midthickness.surf.gii</Object>
                                             </Object>
                                             <Object Type="class" Class="VolumeSurfaceOutlineColorOrTabModel" Name="m_colorOrTabModel" Version="1">
                                                 <Object Type="class" Class="VolumeSurfaceOutlineColorOrTabModel::Item" Name="m_selectedItem" Version="1">
@@ -7409,7 +7409,7 @@
                                             <Object Type="boolean" Name="m_displayed">false</Object>
                                             <Object Type="float" Name="m_thickness">2</Object>
                                             <Object Type="class" Class="SurfaceSelectionModel" Name="m_surfaceSelectionModel" Version="1">
-                                                <Object Type="pathName" Name="m_selectedSurfacePathName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_label-hipp_midthickness.surf.gii</Object>
+                                                <Object Type="pathName" Name="m_selectedSurfacePathName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_den-512_label-hipp_midthickness.surf.gii</Object>
                                             </Object>
                                             <Object Type="class" Class="VolumeSurfaceOutlineColorOrTabModel" Name="m_colorOrTabModel" Version="1">
                                                 <Object Type="class" Class="VolumeSurfaceOutlineColorOrTabModel::Item" Name="m_selectedItem" Version="1">
@@ -7429,7 +7429,7 @@
                                             <Object Type="boolean" Name="m_displayed">false</Object>
                                             <Object Type="float" Name="m_thickness">2</Object>
                                             <Object Type="class" Class="SurfaceSelectionModel" Name="m_surfaceSelectionModel" Version="1">
-                                                <Object Type="pathName" Name="m_selectedSurfacePathName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_label-hipp_midthickness.surf.gii</Object>
+                                                <Object Type="pathName" Name="m_selectedSurfacePathName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_den-512_label-hipp_midthickness.surf.gii</Object>
                                             </Object>
                                             <Object Type="class" Class="VolumeSurfaceOutlineColorOrTabModel" Name="m_colorOrTabModel" Version="1">
                                                 <Object Type="class" Class="VolumeSurfaceOutlineColorOrTabModel::Item" Name="m_selectedItem" Version="1">
@@ -7449,7 +7449,7 @@
                                             <Object Type="boolean" Name="m_displayed">false</Object>
                                             <Object Type="float" Name="m_thickness">2</Object>
                                             <Object Type="class" Class="SurfaceSelectionModel" Name="m_surfaceSelectionModel" Version="1">
-                                                <Object Type="pathName" Name="m_selectedSurfacePathName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_label-hipp_midthickness.surf.gii</Object>
+                                                <Object Type="pathName" Name="m_selectedSurfacePathName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_den-512_label-hipp_midthickness.surf.gii</Object>
                                             </Object>
                                             <Object Type="class" Class="VolumeSurfaceOutlineColorOrTabModel" Name="m_colorOrTabModel" Version="1">
                                                 <Object Type="class" Class="VolumeSurfaceOutlineColorOrTabModel::Item" Name="m_selectedItem" Version="1">
@@ -7469,7 +7469,7 @@
                                             <Object Type="boolean" Name="m_displayed">false</Object>
                                             <Object Type="float" Name="m_thickness">2</Object>
                                             <Object Type="class" Class="SurfaceSelectionModel" Name="m_surfaceSelectionModel" Version="1">
-                                                <Object Type="pathName" Name="m_selectedSurfacePathName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_label-hipp_midthickness.surf.gii</Object>
+                                                <Object Type="pathName" Name="m_selectedSurfacePathName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_den-512_label-hipp_midthickness.surf.gii</Object>
                                             </Object>
                                             <Object Type="class" Class="VolumeSurfaceOutlineColorOrTabModel" Name="m_colorOrTabModel" Version="1">
                                                 <Object Type="class" Class="VolumeSurfaceOutlineColorOrTabModel::Item" Name="m_selectedItem" Version="1">
@@ -7489,7 +7489,7 @@
                                             <Object Type="boolean" Name="m_displayed">false</Object>
                                             <Object Type="float" Name="m_thickness">2</Object>
                                             <Object Type="class" Class="SurfaceSelectionModel" Name="m_surfaceSelectionModel" Version="1">
-                                                <Object Type="pathName" Name="m_selectedSurfacePathName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_label-hipp_midthickness.surf.gii</Object>
+                                                <Object Type="pathName" Name="m_selectedSurfacePathName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_den-512_label-hipp_midthickness.surf.gii</Object>
                                             </Object>
                                             <Object Type="class" Class="VolumeSurfaceOutlineColorOrTabModel" Name="m_colorOrTabModel" Version="1">
                                                 <Object Type="class" Class="VolumeSurfaceOutlineColorOrTabModel::Item" Name="m_selectedItem" Version="1">
@@ -7509,7 +7509,7 @@
                                             <Object Type="boolean" Name="m_displayed">false</Object>
                                             <Object Type="float" Name="m_thickness">2</Object>
                                             <Object Type="class" Class="SurfaceSelectionModel" Name="m_surfaceSelectionModel" Version="1">
-                                                <Object Type="pathName" Name="m_selectedSurfacePathName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_label-hipp_midthickness.surf.gii</Object>
+                                                <Object Type="pathName" Name="m_selectedSurfacePathName">../Documents/HippoMaps/outputs/dense_corobl_batch/sub-102311/hippunfold/sub-102311/surf/sub-102311_hemi-L_space-corobl_den-512_label-hipp_midthickness.surf.gii</Object>
                                             </Object>
                                             <Object Type="class" Class="VolumeSurfaceOutlineColorOrTabModel" Name="m_colorOrTabModel" Version="1">
                                                 <Object Type="class" Class="VolumeSurfaceOutlineColorOrTabModel::Item" Name="m_selectedItem" Version="1">

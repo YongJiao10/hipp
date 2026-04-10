@@ -7,6 +7,12 @@ import subprocess
 import sys
 from pathlib import Path
 
+COMMON_DIR = Path(__file__).resolve().parent / "common"
+if str(COMMON_DIR) not in sys.path:
+    sys.path.insert(0, str(COMMON_DIR))
+
+from hipp_density_assets import load_surface_density_from_pipeline_config
+
 
 def run(cmd: list[str]) -> None:
     proc = subprocess.run(cmd, text=True, capture_output=True)
@@ -32,6 +38,7 @@ def archive_dir(src: Path, dst: Path) -> None:
 
 
 def main() -> int:
+    default_density = load_surface_density_from_pipeline_config(Path("config/hippo_pipeline.toml"))
     parser = argparse.ArgumentParser(description="Archive old functional outputs and regenerate formal structural-only renders")
     parser.add_argument("--subjects", nargs="+", required=True)
     parser.add_argument("--input-dir", default="data/hippunfold_input")
@@ -39,6 +46,7 @@ def main() -> int:
     parser.add_argument("--archive-dir", default="outputs/dense_corobl_batch/_archived_volume_functional")
     parser.add_argument("--outdir", default="outputs/dense_corobl_batch/final_structural_only")
     parser.add_argument("--scene", default="config/wb_locked_native_view.scene")
+    parser.add_argument("--density", default=default_density)
     parser.add_argument("--width", type=int, default=1600)
     parser.add_argument("--height", type=int, default=1024)
     args = parser.parse_args()
@@ -62,11 +70,11 @@ def main() -> int:
             raise RuntimeError(f"Empty dtseries for subject {subject}: {dtseries}")
         surf_dir = batch_root / f"sub-{subject}" / "hippunfold" / f"sub-{subject}" / "surf"
         require_file(
-            surf_dir / f"sub-{subject}_hemi-L_space-corobl_label-hipp_atlas-multihist7_subfields.label.gii",
+            surf_dir / f"sub-{subject}_hemi-L_space-corobl_den-{args.density}_label-hipp_atlas-multihist7_subfields.label.gii",
             f"left structural label for subject {subject}",
         )
         require_file(
-            surf_dir / f"sub-{subject}_hemi-R_space-corobl_label-hipp_atlas-multihist7_subfields.label.gii",
+            surf_dir / f"sub-{subject}_hemi-R_space-corobl_den-{args.density}_label-hipp_atlas-multihist7_subfields.label.gii",
             f"right structural label for subject {subject}",
         )
 
@@ -117,7 +125,7 @@ def main() -> int:
                     / "hippunfold"
                     / f"sub-{subject}"
                     / "surf"
-                    / f"sub-{subject}_hemi-L_space-corobl_label-hipp_atlas-multihist7_subfields.label.gii"
+                    / f"sub-{subject}_hemi-L_space-corobl_den-{args.density}_label-hipp_atlas-multihist7_subfields.label.gii"
                 ),
                 "--right-labels",
                 str(
@@ -126,7 +134,7 @@ def main() -> int:
                     / "hippunfold"
                     / f"sub-{subject}"
                     / "surf"
-                    / f"sub-{subject}_hemi-R_space-corobl_label-hipp_atlas-multihist7_subfields.label.gii"
+                    / f"sub-{subject}_hemi-R_space-corobl_den-{args.density}_label-hipp_atlas-multihist7_subfields.label.gii"
                 ),
                 "--title",
                 f"sub-{subject} Structural",

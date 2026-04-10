@@ -16,6 +16,14 @@ It does not include:
 - classic parcel-first parcellation code
 - `prob-soft`, `wta`, or `hermosillo2024`
 - fallback reads from another local HippoMaps checkout
+- legacy no-`den` hippocampal surface assets as runnable inputs
+
+Density contract (strict):
+
+- The pipeline input density is authoritative.
+- Analysis stages consume only `den-<density>` hippocampal assets.
+- Legacy files without `den-` are treated as errors and must be regenerated.
+- Only canonical HippUnfold surface source is allowed: `<hippunfold-root>/sub-<id>/surf`.
 
 Start with [docs/HPC_AGENT_HANDOFF.md](/Users/jy/Documents/HippoMaps-network-first/handoff/network_first_166_bundle/docs/HPC_AGENT_HANDOFF.md) and the local [AGENTS.md](/Users/jy/Documents/HippoMaps-network-first/handoff/network_first_166_bundle/AGENTS.md).
 

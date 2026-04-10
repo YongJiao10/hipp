@@ -13,17 +13,7 @@ import numpy as np
 
 ROI_NAME_PATTERN = re.compile(r"(?P<network>.+)_(?P<hemi>[LR])_(?P<rank>\d+)$")
 REPO_ROOT = Path(__file__).resolve().parents[2]
-LEGACY_SOURCE_ROOT = REPO_ROOT.parent / "HippoMaps"
-
-
-def resolve_local_or_legacy_path(relative_path: str) -> Path:
-    local_path = REPO_ROOT / relative_path
-    if local_path.exists():
-        return local_path
-    return LEGACY_SOURCE_ROOT / relative_path
-
-
-CROSS_ATLAS_NETWORK_MERGE_JSON = resolve_local_or_legacy_path("config/cross_atlas_network_merge.json")
+CROSS_ATLAS_NETWORK_MERGE_JSON = REPO_ROOT / "config" / "cross_atlas_network_merge.json"
 
 
 def load_label_gifti(path: Path) -> tuple[np.ndarray, dict[int, str]]:
