@@ -333,6 +333,9 @@ network occupancy summary            N_network
 - Pipeline runs in resumable stages: `reference`, `surface`, `compute`, `render`, `summary`
 - Outputs are isolated to `outputs/hipp_functional_parcellation_network/`
 - Final overview copies are isolated to `present_network/`
+- Density input is authoritative: if run with `--hipp-density X`, every consumed hippocampal asset must be `den-X`.
+- Files without `den-` are treated as legacy and must fail fast with regeneration guidance.
+- Surface source fallback from `work/sub-*/surf` is disallowed; analysis reads only `<hippunfold-dir>/sub-<id>/surf`.
 - Default retention keeps render-layer artifacts so legend/layout changes can rerender without recomputing feature or clustering stages
 - Structural hippocampal labels for network-first renders are sourced from HippUnfold's subject-level structural `dlabel.nii`, then separated into left/right label files inside the run output tree for rendering
 - In `network_probability_heatmaps.png`, the x-axis always shows all retained merged networks for that atlas in canonical order

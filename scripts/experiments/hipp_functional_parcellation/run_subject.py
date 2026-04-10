@@ -29,6 +29,11 @@ if str(COMMON_DIR) not in sys.path:
 
 from compute_fc_gradients import build_sparse_affinity, corrcoef_rows, diffusion_map_embedding
 from sample_hipp_surface_timeseries import maybe_smooth
+from hipp_density_assets import (
+    find_surface_asset_strict,
+    find_surface_sampling_metric_strict,
+    load_surface_density_from_pipeline_config,
+)
 
 
 WB_COMMAND = str((REPO_ROOT / "scripts" / "wb_command").resolve())
@@ -39,6 +44,7 @@ EVAL_K = list(range(3, 9))
 SMOOTH_ORDER = ["light", "4mm"]
 HEMIS = ["L", "R"]
 BRANCHES = ["gradient", "prob-cluster", "prob-soft", "wta"]
+DEFAULT_HIPP_DENSITY = load_surface_density_from_pipeline_config(REPO_ROOT / "config" / "hippo_pipeline.toml")
 ATLAS_CONFIG = {
     "lynch2024": {
         "label_prefix": "PFM_Lynch2024priors.components",
@@ -552,6 +558,7 @@ def save_combined_label_assets(
     left_key_to_name: dict[int, str],
     right_key_to_name: dict[int, str],
     stem: str,
+    density: str,
 ) -> dict[str, str]:
     output_dir.mkdir(parents=True, exist_ok=True)
     right_offset = max(left_key_to_name.keys(), default=0)
@@ -559,12 +566,12 @@ def save_combined_label_assets(
     right_labels_shifted[right_labels_shifted > 0] += right_offset
     right_key_to_name_shifted = {key + right_offset: value for key, value in right_key_to_name.items()}
 
-    left_path = output_dir / f"sub-{subject}_hemi-L_space-corobl_den-2mm_label-{stem}.label.gii"
-    right_path = output_dir / f"sub-{subject}_hemi-R_space-corobl_den-2mm_label-{stem}.label.gii"
+    left_path = output_dir / f"sub-{subject}_hemi-L_space-corobl_den-{density}_label-{stem}.label.gii"
+    right_path = output_dir / f"sub-{subject}_hemi-R_space-corobl_den-{density}_label-{stem}.label.gii"
     nib.save(make_label_gifti(left_labels, left_key_to_name), str(left_path))
     nib.save(make_label_gifti(right_labels_shifted, right_key_to_name_shifted), str(right_path))
 
-    dlabel_path = output_dir / f"sub-{subject}_space-corobl_den-2mm_label-{stem}.dlabel.nii"
+    dlabel_path = output_dir / f"sub-{subject}_space-corobl_den-{density}_label-{stem}.dlabel.nii"
     run(
         [
             WB_COMMAND,
@@ -1139,6 +1146,7 @@ def main() -> int:
     parser.add_argument("--layout", choices=["1x2", "2x2"], default="2x2")
     parser.add_argument("--resume-mode", choices=["resume", "force"], default="resume")
     parser.add_argument("--retain-level", choices=["label", "render", "feature", "all"], default="render")
+    parser.add_argument("--hipp-density", default=DEFAULT_HIPP_DENSITY)
     parser.add_argument(
         "--surface-source-dir",
         default=None,
@@ -1152,6 +1160,7 @@ def main() -> int:
         raise ValueError(f"Invalid --views: {args.views}")
     subject = args.subject
     branch_slug = args.branch
+    hipp_density = str(args.hipp_density)
     atlas_slug = args.atlas_slug
     resume_mode = args.resume_mode
     atlas_cfg = ATLAS_CONFIG[atlas_slug]
@@ -1171,13 +1180,7 @@ def main() -> int:
     surface_source_dir = (
         Path(args.surface_source_dir).resolve()
         if args.surface_source_dir
-        else (
-            Path(args.hippunfold_root).resolve()
-            / "_archived_volume_functional"
-            / f"sub-{subject}"
-            / "post_dense_corobl"
-            / "surface"
-        )
+        else (Path(args.hippunfold_root).resolve() / f"sub-{subject}" / "post_dense_corobl" / "surface")
     )
 
     dtseries = input_root / f"sub-{subject}" / "func" / f"sub-{subject}_task-rest_run-concat.dtseries.nii"
@@ -1185,10 +1188,38 @@ def main() -> int:
     if not dtseries.exists():
         raise FileNotFoundError(f"Missing dtseries: {dtseries}")
 
-    left_surface = surf_dir / f"sub-{subject}_hemi-L_space-corobl_label-hipp_midthickness.surf.gii"
-    right_surface = surf_dir / f"sub-{subject}_hemi-R_space-corobl_label-hipp_midthickness.surf.gii"
-    left_struct_labels = surf_dir / f"sub-{subject}_hemi-L_space-corobl_label-hipp_atlas-multihist7_subfields.label.gii"
-    right_struct_labels = surf_dir / f"sub-{subject}_hemi-R_space-corobl_label-hipp_atlas-multihist7_subfields.label.gii"
+    left_surface = find_surface_asset_strict(
+        surf_dir=surf_dir,
+        subject=subject,
+        hemi="L",
+        space="corobl",
+        density=hipp_density,
+        suffix="midthickness.surf.gii",
+    )
+    right_surface = find_surface_asset_strict(
+        surf_dir=surf_dir,
+        subject=subject,
+        hemi="R",
+        space="corobl",
+        density=hipp_density,
+        suffix="midthickness.surf.gii",
+    )
+    left_struct_labels = find_surface_asset_strict(
+        surf_dir=surf_dir,
+        subject=subject,
+        hemi="L",
+        space="corobl",
+        density=hipp_density,
+        suffix="atlas-multihist7_subfields.label.gii",
+    )
+    right_struct_labels = find_surface_asset_strict(
+        surf_dir=surf_dir,
+        subject=subject,
+        hemi="R",
+        space="corobl",
+        density=hipp_density,
+        suffix="atlas-multihist7_subfields.label.gii",
+    )
 
     reference_dir = out_root / "reference"
     surface_dir = out_root / "surface"
@@ -1269,13 +1300,20 @@ def main() -> int:
     parcel_rows = load_reference_rows(parcel_table_path)
     parcel_ts = np.load(parcel_timeseries_path).astype(np.float32)
 
-    left_raw_metric = surface_source_dir / f"sub-{subject}_hemi-L_space-corobl_den-2mm_label-hipp_bold.func.gii"
-    right_raw_metric = surface_source_dir / f"sub-{subject}_hemi-R_space-corobl_den-2mm_label-hipp_bold.func.gii"
-    if not left_raw_metric.exists() or not right_raw_metric.exists():
-        raise FileNotFoundError(
-            f"Missing archived surface sampling inputs under {surface_source_dir}: "
-            f"{left_raw_metric.name}, {right_raw_metric.name}"
-        )
+    left_raw_metric = find_surface_sampling_metric_strict(
+        surface_source_dir=surface_source_dir,
+        subject=subject,
+        hemi="L",
+        density=hipp_density,
+        space="corobl",
+    )
+    right_raw_metric = find_surface_sampling_metric_strict(
+        surface_source_dir=surface_source_dir,
+        subject=subject,
+        hemi="R",
+        density=hipp_density,
+        space="corobl",
+    )
 
     left_coords, left_faces = load_surface(left_surface)
     right_coords, right_faces = load_surface(right_surface)
@@ -1284,8 +1322,8 @@ def main() -> int:
 
     light_left_path = shared_surface_store_dir / "light" / f"sub-{subject}_hemi-L_timeseries.npy"
     light_right_path = shared_surface_store_dir / "light" / f"sub-{subject}_hemi-R_timeseries.npy"
-    fwhm_left_func = shared_surface_store_dir / "4mm" / f"sub-{subject}_hemi-L_space-corobl_den-2mm_label-hipp_bold.func.gii"
-    fwhm_right_func = shared_surface_store_dir / "4mm" / f"sub-{subject}_hemi-R_space-corobl_den-2mm_label-hipp_bold.func.gii"
+    fwhm_left_func = shared_surface_store_dir / "4mm" / f"sub-{subject}_hemi-L_space-corobl_den-{hipp_density}_label-hipp_bold.func.gii"
+    fwhm_right_func = shared_surface_store_dir / "4mm" / f"sub-{subject}_hemi-R_space-corobl_den-{hipp_density}_label-hipp_bold.func.gii"
     fwhm_left_path = shared_surface_store_dir / "4mm" / f"sub-{subject}_hemi-L_timeseries.npy"
     fwhm_right_path = shared_surface_store_dir / "4mm" / f"sub-{subject}_hemi-R_timeseries.npy"
     surface_params = {"subject": subject, "smoothings": SMOOTH_ORDER}
@@ -1311,7 +1349,7 @@ def main() -> int:
         ]:
             smooth_dir = shared_surface_store_dir / "4mm"
             smooth_dir.mkdir(parents=True, exist_ok=True)
-            out_metric = smooth_dir / f"sub-{subject}_hemi-{hemi}_space-corobl_den-2mm_label-hipp_bold.func.gii"
+            out_metric = smooth_dir / f"sub-{subject}_hemi-{hemi}_space-corobl_den-{hipp_density}_label-hipp_bold.func.gii"
             run(
                 [
                     WB_COMMAND,
@@ -1403,15 +1441,15 @@ def main() -> int:
                 workbench_dir
                 / smooth_name
                 / "final"
-                / f"sub-{subject}_hemi-L_space-corobl_den-2mm_label-hipp_cluster_{branch_tag}.label.gii",
+                / f"sub-{subject}_hemi-L_space-corobl_den-{hipp_density}_label-hipp_cluster_{branch_tag}.label.gii",
                 workbench_dir
                 / smooth_name
                 / "final"
-                / f"sub-{subject}_hemi-R_space-corobl_den-2mm_label-hipp_cluster_{branch_tag}.label.gii",
+                / f"sub-{subject}_hemi-R_space-corobl_den-{hipp_density}_label-hipp_cluster_{branch_tag}.label.gii",
                 workbench_dir
                 / smooth_name
                 / "final"
-                / f"sub-{subject}_space-corobl_den-2mm_label-hipp_cluster_{branch_tag}.dlabel.nii",
+                / f"sub-{subject}_space-corobl_den-{hipp_density}_label-hipp_cluster_{branch_tag}.dlabel.nii",
             ]
         )
     if not stage_is_up_to_date(
@@ -1504,6 +1542,7 @@ def main() -> int:
                 left_key_to_name=left_result["key_to_name"],  # type: ignore[arg-type]
                 right_key_to_name=right_result["key_to_name"],  # type: ignore[arg-type]
                 stem=f"hipp_cluster_{branch_tag}",
+                density=hipp_density,
             )
 
             hemi_nodes = {}

@@ -174,6 +174,15 @@ export WB_FALLBACK_PY=/path/to/python
 
 ## Input Contract
 
+### Density and naming contract (strict)
+
+1. The passed density is authoritative for every stage.
+2. Consumed hippocampal assets must match `den-<density>` in file names.
+3. Legacy hippocampal files without `den-` are rejected (explicit failure, no fallback).
+4. Surface lookup is restricted to canonical HippUnfold surf path only:
+   `<hippunfold-root>/sub-<id>/surf`.
+5. Do not mix multiple density tokens within one processing step.
+
 ### Preferred mode
 
 If inputs are already staged, point the bundle at a `data/hippunfold_input`-style tree:

@@ -4,9 +4,16 @@ from __future__ import annotations
 import argparse
 import importlib.metadata
 import importlib.util
+import sys
 from pathlib import Path
 
 import numpy as np
+
+COMMON_DIR = Path(__file__).resolve().parent / "common"
+if str(COMMON_DIR) not in sys.path:
+    sys.path.insert(0, str(COMMON_DIR))
+
+from hipp_density_assets import detect_space_strict, subject_surf_dir
 
 
 def load_surface_to_volume():
@@ -17,43 +24,6 @@ def load_surface_to_volume():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module.surface_to_volume
-
-
-def detect_space(hippunfold_dir: Path, subject: str, hemi: str, density: str, preferred: str | None) -> str:
-    if preferred and preferred != "auto":
-        return preferred
-    surf_dir = hippunfold_dir / f"sub-{subject}" / "surf"
-    patterns = [
-        "sub-{subject}_hemi-{hemi}_space-{space}_den-{density}_label-hipp_midthickness.surf.gii",
-        "sub-{subject}_hemi-{hemi}_space-{space}_label-hipp_midthickness.surf.gii",
-    ]
-    for candidate in ["T2w", "T1w", "nativepro", "corobl"]:
-        for pattern in patterns:
-            resolved = pattern.format(subject=subject, hemi=hemi, space=candidate, density=density)
-            if list(surf_dir.glob(resolved)):
-                return candidate
-    raise FileNotFoundError(
-        f"Could not auto-detect folded surface space in {surf_dir} for hemi={hemi}, density={density}"
-    )
-
-
-def ensure_coords_bridge(hippunfold_dir: Path, subject: str) -> None:
-    subject_dir = hippunfold_dir / f"sub-{subject}"
-    coords_dir = subject_dir / "coords"
-    if coords_dir.is_symlink() and not coords_dir.exists():
-        coords_dir.unlink()
-    if coords_dir.exists():
-        return
-
-    work_coords_dir = hippunfold_dir / "work" / f"sub-{subject}" / "coords"
-    if not work_coords_dir.exists():
-        return
-
-    subject_dir.mkdir(parents=True, exist_ok=True)
-    try:
-        coords_dir.symlink_to(work_coords_dir.resolve())
-    except FileExistsError:
-        return
 
 
 def main() -> int:
@@ -71,8 +41,14 @@ def main() -> int:
     surf_labels = np.load(args.surf_labels)
     surface_to_volume = load_surface_to_volume()
     hippunfold_dir = Path(args.hippunfold_dir)
-    ensure_coords_bridge(hippunfold_dir, args.subject)
-    resolved_space = detect_space(hippunfold_dir, args.subject, args.hemi, args.density, args.space)
+    surf_dir = subject_surf_dir(hippunfold_dir, args.subject)
+    resolved_space = detect_space_strict(
+        surf_dir=surf_dir,
+        subject=args.subject,
+        density=args.density,
+        preferred=args.space,
+        candidates=["T2w", "T1w", "nativepro", "corobl"],
+    )
     surface_to_volume(
         surf_data=surf_labels.astype(np.float32),
         indensity=args.density,

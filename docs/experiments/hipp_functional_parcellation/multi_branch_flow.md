@@ -40,6 +40,9 @@ subjects   hcp_7t_hippocampus_struct_complete_166
 4. `network-wta` does not perform clustering; it directly outputs one label per predefined cortical network.
 5. Smoothing is compared inside each overview; it is not promoted to a separate top-level comparison dimension.
 6. Every `branch x atlas x subject` produces one overview image copied to `present_network/`.
+7. Density semantics are strict: all consumed hippocampal assets must be `den-<density>` files matching the run argument.
+8. Legacy assets without `den-` are invalid for analysis in this worktree and must trigger explicit failure.
+9. Cross-directory fallback is disallowed: only `<hippunfold-dir>/sub-<id>/surf` is a valid structural surface source.
 
 ## Shared Upstream
 

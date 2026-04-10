@@ -9,6 +9,11 @@ from pathlib import Path
 from time import perf_counter
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+COMMON_DIR = REPO_ROOT / "scripts" / "common"
+if str(COMMON_DIR) not in sys.path:
+    sys.path.insert(0, str(COMMON_DIR))
+
+from hipp_density_assets import load_surface_density_from_pipeline_config
 
 
 def run(cmd: list[str]) -> subprocess.CompletedProcess[str]:
@@ -37,10 +42,12 @@ def run_step(cmd: list[str], step: str, timings: list[dict[str, object]]) -> Non
 
 
 def main() -> int:
+    default_density = load_surface_density_from_pipeline_config(REPO_ROOT / "config" / "hippo_pipeline.toml")
     parser = argparse.ArgumentParser(description="Sequentially rerun multiple subjects and render dense corobl figures")
     parser.add_argument("--subjects", nargs="+", required=True)
     parser.add_argument("--input-dir", default=str(REPO_ROOT / "data" / "hippunfold_input"))
     parser.add_argument("--out-root", default=str(REPO_ROOT / "outputs" / "dense_corobl_batch"))
+    parser.add_argument("--density", default=default_density)
     args = parser.parse_args()
 
     python_exe = sys.executable or "python"
@@ -96,6 +103,8 @@ def main() -> int:
                 str(hippunfold_dir),
                 "--space",
                 "corobl",
+                "--density",
+                args.density,
                 "--outdir",
                 str(post_dir),
             ]

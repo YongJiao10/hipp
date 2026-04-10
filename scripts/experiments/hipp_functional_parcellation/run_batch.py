@@ -11,7 +11,15 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
+COMMON_DIR = REPO_ROOT / "scripts" / "common"
+if str(COMMON_DIR) not in sys.path:
+    sys.path.insert(0, str(COMMON_DIR))
+
+from hipp_density_assets import load_surface_density_from_pipeline_config
+
 PYTHON_EXE = sys.executable or "/opt/miniconda3/envs/py314/bin/python"
+DEFAULT_OUT_ROOT = REPO_ROOT / "outputs_migration" / "hipp_functional_parcellation"
+DEFAULT_PRESENT_DIR = REPO_ROOT / "present_migration"
 BRANCHES = ["gradient", "prob-cluster", "prob-soft"]
 ATLASES = ["lynch2024", "kong2019"]
 SUPPORTED_ATLASES = ["lynch2024", "hermosillo2024", "kong2019"]
@@ -47,10 +55,10 @@ def move_path(src: Path, dst: Path, manifest: list[dict[str, str]]) -> None:
     manifest.append({"src": str(src), "dst": str(dst)})
 
 
-def cleanup_subject_outputs(branch_slug: str, atlas_slug: str, subject: str, cleanup_level: str) -> None:
+def cleanup_subject_outputs(branch_slug: str, atlas_slug: str, subject: str, cleanup_level: str, out_root: Path) -> None:
     if cleanup_level == "none":
         return
-    root = REPO_ROOT / "outputs" / "hipp_functional_parcellation" / branch_slug / atlas_slug / f"sub-{subject}"
+    root = out_root / branch_slug / atlas_slug / f"sub-{subject}"
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     archive_root = (
         REPO_ROOT
@@ -95,11 +103,12 @@ def run_subject_atlas(
     retain_level: str,
     views: str,
     layout: str,
+    hipp_density: str,
     shared_surface_store_root: str | None,
     summaries_only: bool,
     rebuild_shortlist: bool,
+    out_root: Path,
 ) -> Path:
-    out_root = REPO_ROOT / "outputs" / "hipp_functional_parcellation"
     subject_root = out_root / branch_slug / atlas_slug / f"sub-{subject}"
     if not summaries_only:
         run(
@@ -122,6 +131,8 @@ def run_subject_atlas(
                 views,
                 "--layout",
                 layout,
+                "--hipp-density",
+                hipp_density,
             ]
             + (
                 ["--shared-surface-store-root", shared_surface_store_root]
@@ -143,27 +154,24 @@ def run_subject_atlas(
     return subject_root
 
 
-def copy_present(branch_slug: str, atlas_slug: str, subject: str) -> None:
-    subject_root = REPO_ROOT / "outputs" / "hipp_functional_parcellation" / branch_slug / atlas_slug / f"sub-{subject}"
+def copy_present(branch_slug: str, atlas_slug: str, subject: str, out_root: Path, present_dir: Path) -> None:
+    subject_root = out_root / branch_slug / atlas_slug / f"sub-{subject}"
     src = subject_root / "hipp_functional_parcellation_overview.png"
     if not src.exists():
         raise FileNotFoundError(f"Missing overview for present copy: {src}")
-    present_dir = REPO_ROOT / "present"
     present_dir.mkdir(parents=True, exist_ok=True)
     dst = present_dir / f"sub-{subject}_{atlas_slug}_{branch_slug}_overview.png"
     shutil.copyfile(src, dst)
 
 
-def clear_present_overviews() -> None:
-    present_dir = REPO_ROOT / "present"
+def clear_present_overviews(present_dir: Path) -> None:
     if not present_dir.exists():
         return
     for path in present_dir.glob("sub-*_overview.png"):
         path.unlink()
 
 
-def validate(branches: list[str], atlases: list[str], subjects: list[str]) -> None:
-    present_dir = REPO_ROOT / "present"
+def validate(branches: list[str], atlases: list[str], subjects: list[str], out_root: Path, present_dir: Path) -> None:
     expected_present = {
         f"sub-{subject}_{atlas}_{branch}_overview.png"
         for branch in branches
@@ -179,13 +187,14 @@ def validate(branches: list[str], atlases: list[str], subjects: list[str]) -> No
     for branch_slug in branches:
         for atlas_slug in atlases:
             for subject in subjects:
-                root = REPO_ROOT / "outputs" / "hipp_functional_parcellation" / branch_slug / atlas_slug / f"sub-{subject}"
+                root = out_root / branch_slug / atlas_slug / f"sub-{subject}"
                 for name in ["final_selection_summary.json", "summary_manifest.json", "hipp_functional_parcellation_overview.png"]:
                     if not (root / name).exists():
                         raise RuntimeError(f"Missing required output for {branch_slug}/{atlas_slug}/sub-{subject}: {name}")
 
 
 def main() -> int:
+    default_density = load_surface_density_from_pipeline_config(REPO_ROOT / "config" / "hippo_pipeline.toml")
     parser = argparse.ArgumentParser(description="Batch run hippocampal functional parcellation with resumable stage-aware outputs")
     parser.add_argument("--branches", nargs="+", default=BRANCHES)
     parser.add_argument("--atlases", nargs="+", default=ATLASES, choices=SUPPORTED_ATLASES)
@@ -195,7 +204,10 @@ def main() -> int:
     parser.add_argument("--views", default="ventral,dorsal")
     parser.add_argument("--layout", choices=["1x2", "2x2"], default="2x2")
     parser.add_argument("--shared-surface-store-root", default=None)
+    parser.add_argument("--hipp-density", default=default_density)
     parser.add_argument("--cleanup-level", choices=["none", "label", "render", "feature"], default="none")
+    parser.add_argument("--out-root", default=str(DEFAULT_OUT_ROOT))
+    parser.add_argument("--present-dir", default=str(DEFAULT_PRESENT_DIR))
     parser.add_argument("--clear-present", action="store_true")
     parser.add_argument(
         "--summaries-only",
@@ -212,9 +224,11 @@ def main() -> int:
     branches = [str(item) for item in args.branches]
     atlases = [str(item) for item in args.atlases]
     subjects = [str(item) for item in args.subjects]
+    out_root = Path(args.out_root).resolve()
+    present_dir = Path(args.present_dir).resolve()
 
     if args.clear_present:
-        clear_present_overviews()
+        clear_present_overviews(present_dir)
     for branch_slug in branches:
         for atlas_slug in atlases:
             for subject in subjects:
@@ -226,13 +240,15 @@ def main() -> int:
                     retain_level=args.retain_level,
                     views=args.views,
                     layout=args.layout,
+                    hipp_density=args.hipp_density,
                     shared_surface_store_root=args.shared_surface_store_root,
                     summaries_only=bool(args.summaries_only),
                     rebuild_shortlist=bool(args.rebuild_shortlist),
+                    out_root=out_root,
                 )
-                copy_present(branch_slug, atlas_slug, subject)
-                cleanup_subject_outputs(branch_slug, atlas_slug, subject, args.cleanup_level)
-    validate(branches, atlases, subjects)
+                copy_present(branch_slug, atlas_slug, subject, out_root, present_dir)
+                cleanup_subject_outputs(branch_slug, atlas_slug, subject, args.cleanup_level, out_root)
+    validate(branches, atlases, subjects, out_root, present_dir)
     summary = {
         "branches": branches,
         "atlases": atlases,
@@ -245,7 +261,8 @@ def main() -> int:
         "shared_surface_store_root": args.shared_surface_store_root,
         "layout": args.layout,
         "views": args.views,
-        "present": str(REPO_ROOT / "present"),
+        "out_root": str(out_root),
+        "present": str(present_dir),
     }
     print(json.dumps(summary, indent=2))
     return 0

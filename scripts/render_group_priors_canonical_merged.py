@@ -15,7 +15,6 @@ from nibabel.gifti import GiftiDataArray, GiftiImage, GiftiLabel, GiftiLabelTabl
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-LEGACY_SOURCE_ROOT = REPO_ROOT.parent / "HippoMaps"
 CORTEX_DIR = REPO_ROOT / "scripts" / "cortex"
 if str(CORTEX_DIR) not in sys.path:
     sys.path.insert(0, str(CORTEX_DIR))
@@ -35,13 +34,6 @@ FOUR_PANEL_OUT_NAME = "group_priors_canonical_merged_4panel_ordered.png"
 EXPLICIT_LABEL_PANEL = "Schaefer400_Kong2022_Deterministic_canonical_merged_shape.png"
 
 
-def resolve_local_or_legacy_path(relative_path: str) -> Path:
-    local_path = REPO_ROOT / relative_path
-    if local_path.exists():
-        return local_path
-    return LEGACY_SOURCE_ROOT / relative_path
-
-
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Render group-level canonical-merged cortical labels for Kong2019/Hermosillo2024/Lynch2024"
@@ -54,11 +46,11 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--merge-config",
-        default=str(resolve_local_or_legacy_path("config/cross_atlas_network_merge.json")),
+        default=str(REPO_ROOT / "config" / "cross_atlas_network_merge.json"),
     )
     parser.add_argument(
         "--source-scene",
-        default=str(resolve_local_or_legacy_path("config/manual_wb_scenes/cortex_manual.scene")),
+        default=str(REPO_ROOT / "config" / "manual_wb_scenes" / "cortex_manual.scene"),
     )
     parser.add_argument(
         "--out-root",
@@ -220,11 +212,11 @@ def render_shape_figure(
     n_canonical: int,
 ) -> Path:
     subject = TEMPLATE_SUBJECT
-    anat_dir = resolve_local_or_legacy_path(f"data/hippunfold_input/sub-{subject}/anat")
+    anat_dir = REPO_ROOT / "data" / "hippunfold_input" / f"sub-{subject}" / "anat"
     left_inflated = anat_dir / f"sub-{subject}_hemi-L_space-fsLR_den-32k_desc-MSMAll_inflated.surf.gii"
     right_inflated = anat_dir / f"sub-{subject}_hemi-R_space-fsLR_den-32k_desc-MSMAll_inflated.surf.gii"
     sulc_dscalar = anat_dir / f"sub-{subject}_space-fsLR_den-32k_desc-MSMAll_sulc.dscalar.nii"
-    assets_dir = resolve_local_or_legacy_path(f"outputs/cortex_pfm/sub-{subject}/assets")
+    assets_dir = REPO_ROOT / "outputs" / "cortex_pfm" / f"sub-{subject}" / "assets"
     left_sulc = assets_dir / f"sub-{subject}_hemi-L_space-fsLR_den-32k_desc-MSMAll_sulc.func.gii"
     right_sulc = assets_dir / f"sub-{subject}_hemi-R_space-fsLR_den-32k_desc-MSMAll_sulc.func.gii"
 
@@ -286,7 +278,7 @@ def render_one_atlas(
     if atlas_slug not in atlas_mapping:
         raise KeyError(f"Atlas '{atlas_slug}' not found in merge config")
 
-    priors_root = resolve_local_or_legacy_path(f"external/FASTANS/resources/PFM/priors/{prior_dir}")
+    priors_root = REPO_ROOT / "external" / "FASTANS" / "resources" / "PFM" / "priors" / prior_dir
     pickle_path = priors_root / f"{atlas_name}_priors.pickle"
     label_path = priors_root / f"{atlas_name}_LabelList.txt"
 
