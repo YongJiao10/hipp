@@ -110,10 +110,10 @@ def run_subject_atlas(
     retain_level: str,
     views: str,
     layout: str,
+    k_selection_mode: str,
     hipp_density: str,
     shared_surface_store_root: str | None,
     summaries_only: bool,
-    rebuild_shortlist: bool,
     out_root: Path,
 ) -> Path:
     subject_root = out_root / branch_slug / atlas_slug / f"sub-{subject}"
@@ -138,6 +138,8 @@ def run_subject_atlas(
                 views,
                 "--layout",
                 layout,
+                "--k-selection-mode",
+                k_selection_mode,
                 "--hipp-density",
                 hipp_density,
             ]
@@ -156,7 +158,6 @@ def run_subject_atlas(
             "--root",
             str(subject_root),
         ]
-        + (["--rebuild-shortlist"] if rebuild_shortlist else [])
     )
     return subject_root
 
@@ -210,6 +211,7 @@ def main() -> int:
     parser.add_argument("--retain-level", choices=["label", "render", "feature", "all"], default="render")
     parser.add_argument("--views", default="ventral,dorsal")
     parser.add_argument("--layout", choices=["1x2", "2x2"], default="2x2")
+    parser.add_argument("--k-selection-mode", choices=["updated", "legacy"], default="updated")
     parser.add_argument("--shared-surface-store-root", default=None)
     parser.add_argument("--hipp-density", default=default_density)
     parser.add_argument("--cleanup-level", choices=["none", "label", "render", "feature"], default="none")
@@ -220,11 +222,6 @@ def main() -> int:
         "--summaries-only",
         action="store_true",
         help="Skip run_subject and only regenerate summarize_outputs + present copies from existing outputs.",
-    )
-    parser.add_argument(
-        "--rebuild-shortlist",
-        action="store_true",
-        help="Forward to summarize_outputs: force regenerate _overview_shortlist renders.",
     )
     args = parser.parse_args()
 
@@ -247,10 +244,10 @@ def main() -> int:
                     retain_level=args.retain_level,
                     views=args.views,
                     layout=args.layout,
+                    k_selection_mode=args.k_selection_mode,
                     hipp_density=args.hipp_density,
                     shared_surface_store_root=args.shared_surface_store_root,
                     summaries_only=bool(args.summaries_only),
-                    rebuild_shortlist=bool(args.rebuild_shortlist),
                     out_root=out_root,
                 )
                 copy_present(branch_slug, atlas_slug, subject, out_root, present_dir)
@@ -264,9 +261,10 @@ def main() -> int:
         "retain_level": args.retain_level,
         "cleanup_level": args.cleanup_level,
         "summaries_only": bool(args.summaries_only),
-        "rebuild_shortlist": bool(args.rebuild_shortlist),
+        "shortlist_policy": "always_rebuild",
         "shared_surface_store_root": args.shared_surface_store_root,
         "layout": args.layout,
+        "k_selection_mode": args.k_selection_mode,
         "views": args.views,
         "out_root": str(out_root),
         "present": str(present_dir),

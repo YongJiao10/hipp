@@ -102,6 +102,8 @@ def split_native_hemi_panels(image: Image.Image) -> dict[str, Image.Image]:
     if len(col_runs) < 2:
         raise RuntimeError("Could not detect bilateral foreground runs in native render")
     selected_runs = sorted(col_runs, key=lambda item: item[1] - item[0], reverse=True)[:2]
+    # Keep left-to-right visual order. L expects to be physically rendered on the left window,
+    # and R expects to be rendered on the right.
     selected_runs = sorted(selected_runs, key=lambda item: item[0])
     panels: dict[str, Image.Image] = {}
     for hemi, (x0, x1) in zip(["L", "R"], selected_runs, strict=True):
@@ -223,70 +225,95 @@ def main() -> int:
     right_labels, right_table = load_labels(Path(args.right_labels))
     style = build_style(left_table, right_table, Path(args.style_json) if args.style_json else None)
 
-    combined = np.concatenate([left_labels[left_labels > 0], right_labels[right_labels > 0]])
-    total = max(1, combined.size)
-    present = sorted(int(k) for k in np.unique(combined) if int(k) > 0)
+    def get_group_props(labels):
+        group_props: dict[str, float] = {}
+        total = max(1, (labels > 0).sum())
+        present = sorted(int(k) for k in np.unique(labels) if int(k) > 0)
+        for key in present:
+            if key not in style:
+                raise KeyError(f"Missing style entry for key={key}")
+            label_name, rgba = style[key]
+            group_name = label_name.rsplit("_", 1)[-1] if args.legend_group == "network" else label_name
+            prop = float((labels == key).sum()) / total
+            group_props[group_name] = group_props.get(group_name, 0.0) + prop
+        return group_props
 
-    group_props: dict[str, float] = {}
-    group_colors: dict[str, tuple[int, int, int, int]] = {}
-    for key in present:
-        if key not in style:
-            raise KeyError(f"Missing style entry for key={key}")
-        label_name, rgba = style[key]
+    left_group_props = get_group_props(left_labels)
+    right_group_props = get_group_props(right_labels)
+
+    group_colors = {}
+    for key, (label_name, rgba) in style.items():
         group_name = label_name.rsplit("_", 1)[-1] if args.legend_group == "network" else label_name
-        prop = float((combined == key).sum()) / total
-        group_props[group_name] = group_props.get(group_name, 0.0) + prop
-        color = tuple(int(round(v)) for v in rgba[:4])
-        if group_name in group_colors and group_colors[group_name] != color:
-            raise ValueError(f"Inconsistent colors within legend group '{group_name}'")
-        group_colors[group_name] = color
+        group_colors[group_name] = tuple(int(round(v)) for v in rgba[:4])
 
     title_font = load_font(34)
     item_font = load_font(34)
-    side_pad = 24
+    side_pad = 30
     gap_after_swatch = 16
     swatch_w = 34
     swatch_h = 34
     row_h = 48
 
     title_text = args.title.strip()
-    group_names = sorted(group_props, key=lambda name: (-group_props[name], name))
-    item_texts = [f"{name}  {group_props[name] * 100:.1f}%" for name in group_names]
-
+    
     measure_image = Image.new("RGBA", (8, 8), (0, 0, 0, 0))
     measure_draw = ImageDraw.Draw(measure_image)
-    text_widths = []
-    for text in item_texts:
+
+    # Accumulate all items to measure max text width
+    left_item_texts = [f"{n}  {left_group_props[n] * 100:.1f}%" for n in left_group_props]
+    right_item_texts = [f"{n}  {right_group_props[n] * 100:.1f}%" for n in right_group_props]
+    all_item_texts = left_item_texts + right_item_texts
+    
+    max_text_w = 0
+    for text in all_item_texts:
         bbox = measure_draw.textbbox((0, 0), text, font=item_font)
-        text_widths.append(bbox[2] - bbox[0])
-    max_text_w = max(text_widths, default=0)
+        max_text_w = max(max_text_w, bbox[2] - bbox[0])
+
     panel_w = side_pad * 2 + swatch_w + gap_after_swatch + max_text_w + 8
-    title_lines = wrap_text(measure_draw, title_text, title_font, max(panel_w - 2 * side_pad, 1))
+
+    # Ensure panel is wide enough for the titles too
+    left_title = f"{title_text} (Left)" if title_text else "Left"
+    left_title_lines = wrap_text(measure_draw, left_title, title_font, max(panel_w - 2 * side_pad, 1))
+
+    right_title = f"{title_text} (Right)" if title_text else "Right"
+    right_title_lines = wrap_text(measure_draw, right_title, title_font, max(panel_w - 2 * side_pad, 1))
 
     canvas = Image.new("RGBA", (img_w + panel_w, img_h), (0, 0, 0, 255))
     canvas.alpha_composite(grid, (0, 0))
     draw = ImageDraw.Draw(canvas)
 
+    def draw_legend(group_props_map, x0, y_start, title_lines):
+        y = y_start
+        if title_lines:
+            for line in title_lines:
+                draw.text((x0, y), line, fill=(255, 255, 255, 255), font=title_font)
+                y += 44
+            y += 10
+        
+        group_names = sorted(group_props_map, key=lambda name: (-group_props_map[name], name))
+        item_texts = [f"{name}  {group_props_map[name] * 100:.1f}%" for name in group_names]
+        
+        for group_name, item_text in zip(group_names, item_texts):
+            color = group_colors[group_name]
+            draw.rectangle((x0, y + 6, x0 + swatch_w, y + 6 + swatch_h), fill=color)
+            draw.text((x0 + swatch_w + gap_after_swatch, y), item_text, fill=(255, 255, 255, 255), font=item_font)
+            y += row_h
+        return y
+
+    # Draw Left Legend (Top)
     x0 = img_w + side_pad
     y = 28
-    if title_lines:
-        for line in title_lines:
-            draw.text((x0, y), line, fill=(255, 255, 255, 255), font=title_font)
-            y += 44
-        y += 10
+    y = draw_legend(left_group_props, x0, y, left_title_lines)
 
-    for group_name, item_text in zip(group_names, item_texts):
-        color = group_colors[group_name]
-        draw.rectangle((x0, y + 6, x0 + swatch_w, y + 6 + swatch_h), fill=color)
-        draw.text((x0 + swatch_w + gap_after_swatch, y), item_text, fill=(255, 255, 255, 255), font=item_font)
-        y += row_h
+    # Add a gap before drawing Right Legend
+    y += 48
+    y = draw_legend(right_group_props, x0, y, right_title_lines)
 
     out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     canvas.save(out_path)
     print(out_path)
     return 0
-
 
 if __name__ == "__main__":
     raise SystemExit(main())

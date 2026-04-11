@@ -551,7 +551,7 @@ def render_shortlist_panels(
     return shortlist_panels
 
 
-def create_overview(root: Path, final_selection: dict[str, object], *, reuse_existing_shortlist: bool) -> Path:
+def create_overview(root: Path, final_selection: dict[str, object]) -> Path:
     out_path = root / "hipp_functional_parcellation_overview.png"
     subject = str(final_selection["subject"])
     branch_slug = str(final_selection["branch_slug"])
@@ -567,7 +567,7 @@ def create_overview(root: Path, final_selection: dict[str, object], *, reuse_exi
     row1_path = root / "k_selection_curves.png"
     row1 = fit_image(row1_path, canvas_w - 2 * margin) if row1_path.exists() else None
     row2 = fit_image(root / "cluster_probability_heatmaps.png", canvas_w - 2 * margin)
-    shortlist = render_shortlist_panels(root, final_selection, reuse_existing=reuse_existing_shortlist)
+    shortlist = render_shortlist_panels(root, final_selection, reuse_existing=False)
     render_rows: list[tuple[list[str], list[Image.Image], int]] = []
     max_cols = max(len(shortlist[s]) for s in SMOOTHS)
     cell_w = (canvas_w - 2 * margin - gutter * (max_cols - 1)) // max_cols
@@ -619,11 +619,6 @@ def create_overview(root: Path, final_selection: dict[str, object], *, reuse_exi
 def main() -> int:
     parser = argparse.ArgumentParser(description="Summarize hippocampal functional parcellation outputs")
     parser.add_argument("--root", required=True, help="Branch output root, e.g. outputs/hipp_functional_parcellation/gradient/lynch2024/sub-100610")
-    parser.add_argument(
-        "--rebuild-shortlist",
-        action="store_true",
-        help="Force regenerate shortlist K-panel renders instead of reusing existing _overview_shortlist images.",
-    )
     args = parser.parse_args()
 
     root = Path(args.root).resolve()
@@ -634,7 +629,7 @@ def main() -> int:
     if branch_slug != "wta":
         curves = create_curve_figure(root, final_selection)
     probs = create_probability_figure(root, final_selection)
-    overview = create_overview(root, final_selection, reuse_existing_shortlist=not args.rebuild_shortlist)
+    overview = create_overview(root, final_selection)
     manifest = {
         "root": str(root),
         "branch_slug": str(final_selection["branch_slug"]),
@@ -650,7 +645,7 @@ def main() -> int:
             "branch_slug": str(final_selection["branch_slug"]),
             "subject": str(final_selection["subject"]),
             "atlas_slug": str(final_selection["atlas_slug"]),
-            "rebuild_shortlist": bool(args.rebuild_shortlist),
+            "shortlist_policy": "always_rebuild",
         },
         inputs=[root / "final_selection_summary.json"],
         outputs=([curves] if curves else []) + [probs, overview, root / "summary_manifest.json"],

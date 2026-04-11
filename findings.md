@@ -12,7 +12,7 @@
 - 已下载官方 `Schaefer2018_400Parcels_7Networks_order.dlabel.nii` 与 `...FSLMNI152_2mm.nii.gz`。
 - 本机 `wb_command` 可用路径为 `/Applications/wb_view.app/Contents/usr/bin/wb_command`。
 - 本机无 `docker`，无已安装的 `hippunfold`。
-- conda 频道当前可见 `hippunfold 2.0.0`，但实际安装后 `hippunfold --version` 输出为 `1.5.2-pre.2`。
+- 当前支线环境口径统一为 `hippunfold 2.0.0`（`hippo2`）。
 - 当前被试本地输入经脚本自动检测为 `functional_mode = volume`，并被规则性阻断。
 - `HippoMaps 0.1.17` 已装入 `hippo` 环境，但顶层 `import hippomaps` 会触发 Qt/VTK crash。
 - 可绕过顶层导入，直接按文件路径加载 `/opt/miniconda3/envs/hippo/lib/python3.11/site-packages/hippomaps/utils.py`。

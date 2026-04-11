@@ -22,6 +22,13 @@ present_network/
 
 If local inputs are missing in this worktree, the network-first scripts automatically read upstream inputs from `/Users/jy/Documents/HippoMaps` as a read-only source while keeping all new outputs isolated here.
 
+## K Selection Mode
+
+Always set `--k-selection-mode` explicitly to avoid ambiguity:
+
+- `updated`: new post-update rule (local-minimum + 1-SE + non-triviality).
+- `legacy`: pre-update rule (best-ARI-within-0.02 and min cluster fraction guard).
+
 ## Network Definition
 
 This worktree uses the true direct network-first path:
@@ -50,6 +57,7 @@ python scripts/experiments/hipp_functional_parcellation_network/run_batch.py \
   --branches network-gradient network-prob-cluster network-prob-cluster-nonneg network-prob-soft network-prob-soft-nonneg network-wta \
   --atlases lynch2024 \
   --subjects 100610 \
+  --k-selection-mode updated \
   --resume-mode force \
   --retain-level render \
   --cleanup-level none \
@@ -64,6 +72,7 @@ python scripts/experiments/hipp_functional_parcellation_network/run_batch.py \
   --branches network-gradient network-prob-cluster network-prob-cluster-nonneg network-prob-soft network-prob-soft-nonneg network-wta \
   --atlases lynch2024 hermosillo2024 kong2019 \
   --subjects 100610 102311 102816 \
+  --k-selection-mode updated \
   --resume-mode resume \
   --retain-level render \
   --cleanup-level none \

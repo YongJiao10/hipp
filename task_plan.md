@@ -14,7 +14,7 @@
 | 6. 修复 102311 HippUnfold surface-volume 对齐失败 | complete | 已在 `scripts/wb_command` 增加零映射检测与负-x 校正 fallback，`102311` 已于 2026-03-26 10:39 完成 145/145 steps |
 
 ## Fixed Decisions
-- 工具基线：当前机器实际可运行的 HippUnfold CLI 1.5.2-pre.2
+- 工具基线：当前支线统一使用 HippUnfold CLI 2.0.0
 - 海马 surface density：2mm
 - 单被试优先
 - 新皮层参考默认走 archive 中的 CIFTI/dtseries + Schaefer400 surface atlas
@@ -30,7 +30,7 @@
 | `rsync` 无法处理带空格的远端路径 | 1 | 改为统一使用 `ssh + binary stream` 复制远端文件 |
 | 系统 `python3` 缺少 `tomllib` | 1 | 改为脚本内置 TOML 兼容解析 |
 | 当前被试仅发现 volume rsfMRI，无 CIFTI | 1 | 由主控脚本显式阻断，等待用户批准 volume-based 分支 |
-| conda 包名与实际 CLI 版本不一致 | 1 | 以实际 `hippunfold --version = 1.5.2-pre.2` 为准，密度回退到 2mm |
+| 早期 conda 包名与 CLI 版本不一致 | 1 | 当前支线已统一到 `hippunfold --version = 2.0.0` |
 | `hippomaps` 顶层导入触发 Qt/VTK crash | 1 | 改为项目内脚本直接按文件路径加载 `hippomaps/utils.py` |
 | 直接调用 `wb_command` 在本机触发 processor/Qt 问题 | 1 | 从既有成功目录确认需用 `arch -x86_64` 调用，现已恢复可用 |
 | `nilearn 0.10.2` 不支持 `copy_header` | 1 | 修正参考提取脚本以兼容当前 nilearn 版本 |
