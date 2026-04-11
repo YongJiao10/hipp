@@ -201,7 +201,8 @@ def main() -> int:
             if args.spec_template:
                 spec_target = str(Path(args.spec_template.format(subject=subject)).resolve())
                 replace_exact_ref(root, find_current_spec_ref(root), spec_target)
-        validate_scene_paths(root)
+        if not args.no_template_scene:
+            validate_scene_paths(root)
         subject_dir = outdir / f"sub-{subject}"
         subject_dir.mkdir(parents=True, exist_ok=True)
         scene_out = subject_dir / f"sub-{subject}_template.scene"

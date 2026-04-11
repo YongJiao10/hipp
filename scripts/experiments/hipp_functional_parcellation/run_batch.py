@@ -106,7 +106,6 @@ def run_subject_atlas(
     hipp_density: str,
     shared_surface_store_root: str | None,
     summaries_only: bool,
-    rebuild_shortlist: bool,
     out_root: Path,
 ) -> Path:
     subject_root = out_root / branch_slug / atlas_slug / f"sub-{subject}"
@@ -149,7 +148,6 @@ def run_subject_atlas(
             "--root",
             str(subject_root),
         ]
-        + (["--rebuild-shortlist"] if rebuild_shortlist else [])
     )
     return subject_root
 
@@ -214,11 +212,6 @@ def main() -> int:
         action="store_true",
         help="Skip run_subject and only regenerate summarize_outputs + present copies from existing outputs.",
     )
-    parser.add_argument(
-        "--rebuild-shortlist",
-        action="store_true",
-        help="Forward to summarize_outputs: force regenerate _overview_shortlist renders.",
-    )
     args = parser.parse_args()
 
     branches = [str(item) for item in args.branches]
@@ -243,7 +236,6 @@ def main() -> int:
                     hipp_density=args.hipp_density,
                     shared_surface_store_root=args.shared_surface_store_root,
                     summaries_only=bool(args.summaries_only),
-                    rebuild_shortlist=bool(args.rebuild_shortlist),
                     out_root=out_root,
                 )
                 copy_present(branch_slug, atlas_slug, subject, out_root, present_dir)
@@ -257,7 +249,7 @@ def main() -> int:
         "retain_level": args.retain_level,
         "cleanup_level": args.cleanup_level,
         "summaries_only": bool(args.summaries_only),
-        "rebuild_shortlist": bool(args.rebuild_shortlist),
+        "shortlist_policy": "always_rebuild",
         "shared_surface_store_root": args.shared_surface_store_root,
         "layout": args.layout,
         "views": args.views,

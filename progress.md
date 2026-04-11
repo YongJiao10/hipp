@@ -13,7 +13,7 @@
 - 验证本机 `wb_command` 可用，但 `docker`/`hippunfold` 缺失。
 - 用主控脚本确认当前本地输入为 `volume`，并按规则在方法切换前停止。
 - 用户批准切换到 volume-based 分支，并同意继续安装最新可用工具链。
-- 创建 `conda hippo` 环境，实际可运行的 `hippunfold --version` 为 `1.5.2-pre.2`。
+- 创建 `conda hippo` 环境；该项为历史阶段记录，当前支线执行口径已统一为 `hippunfold 2.0.0`（`hippo2`）。
 - 安装 `HippoMaps 0.1.17`，发现顶层导入会因 Qt/VTK 崩溃，改为绕过顶层导入的实现路线。
 - 发现本机 `wb_command` 同样因 Qt/processor 问题不可作为稳定依赖。
 - 新增单一分析输入 staging、volume Schaefer 参考提取、WTA、surface-to-volume、seed FC 等脚本。

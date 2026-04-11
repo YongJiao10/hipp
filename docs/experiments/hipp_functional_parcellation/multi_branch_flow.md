@@ -44,6 +44,20 @@ subjects   hcp_7t_hippocampus_struct_complete_166
 8. Legacy assets without `den-` are invalid for analysis in this worktree and must trigger explicit failure.
 9. Cross-directory fallback is disallowed: only `<hippunfold-dir>/sub-<id>/surf` is a valid structural surface source.
 
+## K Selection Mode Split (New vs Old)
+
+Use explicit mode flag `--k-selection-mode` in execution commands.
+
+- `updated` (post-update, default):
+  - `local-minimum + 1-SE + non-triviality` constraints.
+  - Includes `V_min` and connectivity checks.
+- `legacy` (pre-update):
+  - Select smallest `K` with `null_corrected_score >= best - 0.02` and `min_cluster_size_fraction >= 0.05`.
+  - No local-minimum / non-triviality gate.
+
+Reproducibility requirement:
+- Every run record and summary must state `k_selection_mode`.
+
 ## Shared Upstream
 
 All branches share the same upstream preprocessing:

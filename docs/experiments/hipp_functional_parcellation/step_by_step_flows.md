@@ -25,6 +25,18 @@ All six methods share the same upstream steps before branch-specific processing:
 6. Sample left and right hippocampal resting-state timeseries on the `corobl` surfaces.
 7. Compute direct hippocampal `vertex-to-network FC` separately for each hemisphere and smoothing condition.
 
+## K Selection Modes (Explicit)
+
+The implementation supports two explicit `K`-selection modes via `--k-selection-mode`:
+
+- `updated` (default): local-minimum + `1-SE` + non-triviality constraints (includes `V_min` and connectivity checks).
+- `legacy`: pre-update rule; choose the smallest `K` within `0.02` of best `null_corrected_score` and with `min_cluster_size_fraction >= 0.05`.
+
+Operational rule:
+- When reproducing pre-update results, always pass `--k-selection-mode legacy`.
+- When running the new protocol, pass `--k-selection-mode updated`.
+- Do not infer mode from branch name or previous runs.
+
 Notation:
 
 - `N_vertex` = number of hippocampal surface vertices in one hemisphere

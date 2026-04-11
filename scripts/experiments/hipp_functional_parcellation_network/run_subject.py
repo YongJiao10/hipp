@@ -25,6 +25,7 @@ from sklearn.metrics import (
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
+UPSTREAM_REPO_ROOT = Path("/Users/jy/Documents/HippoMaps")
 
 
 COMMON_DIR = REPO_ROOT / "scripts" / "common"
@@ -139,7 +140,17 @@ def find_surface_sampling_metric(surface_source_dir: Path, subject: str, hemi: s
 
 
 def find_hippunfold_cifti_asset(*, cifti_dir: Path, subject: str, density: str, suffix: str) -> Path:
-    return find_cifti_asset_strict(cifti_dir=cifti_dir, subject=subject, density=density, suffix=suffix)
+    from hipp_density_assets import DensityAssetError
+    try:
+        return find_cifti_asset_strict(cifti_dir=cifti_dir, subject=subject, density=density, suffix=suffix)
+    except DensityAssetError:
+        surf_dir = cifti_dir.parent / "surf"
+        if surf_dir.exists():
+            try:
+                return find_cifti_asset_strict(cifti_dir=surf_dir, subject=subject, density=density, suffix=suffix)
+            except DensityAssetError:
+                pass
+        raise
 
 
 def separate_hippunfold_structural_dlabel(
@@ -321,6 +332,28 @@ def split_bold_concat_to_runwise(concat_path: Path, out_paths: list[Path]) -> li
         nib.save(out_img, str(out_path))
         run_lengths.append(int(stop - start))
     return run_lengths
+
+
+def split_surface_timeseries_to_runs(
+    concat_path: Path,
+    out_paths: list[Path],
+    run_lengths: list[int],
+) -> None:
+    arr = np.load(concat_path).astype(np.float32)
+    if arr.ndim != 2:
+        raise ValueError(f"Expected 2D surface timeseries, got shape {arr.shape} for {concat_path}")
+    expected = int(sum(int(x) for x in run_lengths))
+    if int(arr.shape[1]) != expected:
+        raise ValueError(
+            "Concat surface timeseries length mismatch: "
+            f"{concat_path} has {arr.shape[1]} frames but run lengths sum to {expected}"
+        )
+    offset = 0
+    for out_path, run_len in zip(out_paths, run_lengths, strict=True):
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        next_offset = offset + int(run_len)
+        np.save(out_path, arr[:, offset:next_offset].astype(np.float32, copy=False))
+        offset = next_offset
 
 
 def resolve_runwise_dtseries(
@@ -725,6 +758,34 @@ def mark_instability_decisions(
         "sensitivity_k": sensitivity,
     }
     return ordered, decision
+
+
+def select_final_k_legacy(rows: list[dict[str, object]]) -> tuple[int, dict[str, object]]:
+    if not rows:
+        raise ValueError("No K rows available for legacy selection")
+    ordered = sorted(rows, key=lambda row: int(row["k"]))
+    best_row = max(ordered, key=lambda row: float(row["null_corrected_score"]))
+    target_ari = float(best_row["null_corrected_score"]) - 0.02
+    eligible = [
+        row
+        for row in ordered
+        if float(row["null_corrected_score"]) >= target_ari
+        and float(row["min_cluster_size_fraction"]) >= 0.05
+    ]
+    selected = eligible[0] if eligible else best_row
+    k_final = int(selected["k"])
+    for row in ordered:
+        row["local_min"] = 0
+        row["within_1se_best"] = int(float(row["null_corrected_score"]) >= target_ari)
+    decision = {
+        "best_by_instability": int(best_row["k"]),
+        "candidate_local_minima": [],
+        "one_se_selected": int(k_final),
+        "post_constraint_selected": int(k_final),
+        "main_analysis_k": int(k_final),
+        "sensitivity_k": [],
+    }
+    return k_final, decision
 
 
 def load_cross_atlas_network_merge(
@@ -1154,6 +1215,7 @@ def evaluate_k_range(
     instability_resamples: int,
     v_min_fraction: float | None,
     v_min_count: int | None,
+    k_selection_mode: str,
 ) -> dict[str, object]:
     k_metrics: list[dict[str, object]] = []
     k_to_annotations: dict[int, list[dict[str, object]]] = {}
@@ -1258,8 +1320,21 @@ def evaluate_k_range(
         }
         k_metrics.append(metric_row)
 
-    k_metrics, decision = mark_instability_decisions(k_metrics)
-    k_final = int(decision["main_analysis_k"])
+    if k_selection_mode == "legacy":
+        k_final, decision = select_final_k_legacy(k_metrics)
+        primary_reason = (
+            "Legacy selection: choose smallest K whose null-corrected score is within 0.02 of best and min cluster fraction >= 0.05."
+        )
+        secondary_reason = "If no K satisfies the threshold, use the K with maximum null-corrected score."
+        deviations = "using pre-k-selection-update legacy rule"
+    elif k_selection_mode == "updated":
+        k_metrics, decision = mark_instability_decisions(k_metrics)
+        k_final = int(decision["main_analysis_k"])
+        primary_reason = "Selected the smallest local instability minimum within 1-SE that passed parcel-size and connectivity constraints."
+        secondary_reason = "Lower-complexity solution retained unless a larger K showed clearly better stability within protocol rules."
+        deviations = "none"
+    else:
+        raise ValueError(f"Unsupported --k-selection-mode: {k_selection_mode}")
     labels_final = np.load(outdir / f"k_{k_final}" / "cluster_labels.npy").astype(np.int32)
     run_metadata = {
         "project_id": "hipp_functional_parcellation_network",
@@ -1277,6 +1352,7 @@ def evaluate_k_range(
         "B_resamples": int(len(resample_pairs)),
         "K_min": int(min(EVAL_K)),
         "K_max": int(max(EVAL_K)),
+        "k_selection_mode": k_selection_mode,
         "V_min": int(resolved_v_min_count),
         "V_min_mode": v_min_mode,
     }
@@ -1290,9 +1366,9 @@ def evaluate_k_range(
             "post_constraint_selected": decision["post_constraint_selected"],
             "main_analysis_K": decision["main_analysis_k"],
             "sensitivity_K": decision["sensitivity_k"],
-            "primary_reason": "Selected the smallest local instability minimum within 1-SE that passed parcel-size and connectivity constraints.",
-            "secondary_reason": "Lower-complexity solution retained unless a larger K showed clearly better stability within protocol rules.",
-            "deviations_from_protocol": "local smoke run with limited run-pair resamples",
+            "primary_reason": primary_reason,
+            "secondary_reason": secondary_reason,
+            "deviations_from_protocol": deviations,
         },
     )
     write_tsv_rows(
@@ -1376,6 +1452,7 @@ def run_gradient_branch(
     instability_resamples: int,
     v_min_fraction: float | None,
     v_min_count: int | None,
+    k_selection_mode: str,
 ) -> dict[str, object]:
     features_full, gradients, eigvals = compute_gradient_state(grouped_fc)
     run_features = [compute_gradient_state(fc_run)[0] for fc_run in run_grouped_fcs]
@@ -1411,6 +1488,7 @@ def run_gradient_branch(
         instability_resamples=instability_resamples,
         v_min_fraction=v_min_fraction,
         v_min_count=v_min_count,
+        k_selection_mode=k_selection_mode,
     )
     cluster["feature_summary"] = {
         "feature_kind": "network-gradient",
@@ -1443,6 +1521,7 @@ def run_probability_branch(
     instability_resamples: int,
     v_min_fraction: float | None,
     v_min_count: int | None,
+    k_selection_mode: str,
 ) -> dict[str, object]:
     probabilities = grouped_fc_to_probabilities(grouped_fc, zero_negative=zero_negative)
     run_probabilities = [grouped_fc_to_probabilities(fc_run, zero_negative=zero_negative) for fc_run in run_grouped_fcs]
@@ -1557,6 +1636,7 @@ def run_probability_branch(
         instability_resamples=instability_resamples,
         v_min_fraction=v_min_fraction,
         v_min_count=v_min_count,
+        k_selection_mode=k_selection_mode,
     )
     cluster["feature_summary"] = {
         "feature_kind": "probability-regularized" if strict_soft_route else "probability",
@@ -1673,6 +1753,8 @@ def main() -> int:
     parser.add_argument("--instability-resamples", type=int, default=DEFAULT_INSTABILITY_RESAMPLES)
     parser.add_argument("--v-min-fraction", type=float, default=DEFAULT_V_MIN_FRACTION)
     parser.add_argument("--v-min-count", type=int, default=None)
+    parser.add_argument("--k-selection-mode", choices=["updated", "legacy"], default="updated")
+    parser.add_argument("--run-split-mode", choices=["none", "runwise"], default="none")
     parser.add_argument("--hipp-density", default=DEFAULT_HIPP_DENSITY)
     parser.add_argument(
         "--surface-source-dir",
@@ -1711,6 +1793,18 @@ def main() -> int:
     )
 
     func_input_dir = input_root / f"sub-{subject}" / "func"
+    if not func_input_dir.exists():
+        upstream_func_dir = UPSTREAM_REPO_ROOT / "data" / "hippunfold_input" / f"sub-{subject}" / "func"
+        if upstream_func_dir.exists():
+            func_input_dir = upstream_func_dir
+
+    roi_summary_probe = cortex_root / "roi_components" / "roi_component_stats.json"
+    if not roi_summary_probe.exists():
+        upstream_cortex_root = UPSTREAM_REPO_ROOT / "outputs" / "cortex_pfm" / f"sub-{subject}" / atlas_slug
+        upstream_probe = upstream_cortex_root / "roi_components" / "roi_component_stats.json"
+        if upstream_probe.exists():
+            cortex_root = upstream_cortex_root
+
     dtseries = func_input_dir / f"sub-{subject}_task-rest_run-concat.dtseries.nii"
     concat_bold = func_input_dir / f"sub-{subject}_task-rest_run-concat_bold.nii.gz"
     runwise_dtseries = [
@@ -1725,25 +1819,37 @@ def main() -> int:
     if not dtseries.exists():
         raise FileNotFoundError(f"Missing dtseries: {dtseries}")
     shared_runwise_input_dir = shared_store_root / f"sub-{subject}" / "runwise_inputs"
-    resolved_runwise_dtseries, dtseries_run_input_mode, dtseries_run_lengths = resolve_runwise_dtseries(
-        subject=subject,
-        concat_dtseries=dtseries,
-        runwise_dtseries=runwise_dtseries,
-        stage_root=shared_runwise_input_dir,
-        resume_mode=resume_mode,
-    )
-    resolved_runwise_bold, bold_run_input_mode, bold_run_lengths = resolve_runwise_bold(
-        subject=subject,
-        concat_bold=concat_bold,
-        runwise_bold=runwise_bold,
-        stage_root=shared_runwise_input_dir,
-        resume_mode=resume_mode,
-    )
-    if dtseries_run_lengths != bold_run_lengths:
-        raise ValueError(
-            "Run-wise dtseries and BOLD lengths do not match after input resolution: "
-            f"dtseries={dtseries_run_lengths}, bold={bold_run_lengths}"
+    if args.run_split_mode == "runwise":
+        resolved_runwise_dtseries, dtseries_run_input_mode, dtseries_run_lengths = resolve_runwise_dtseries(
+            subject=subject,
+            concat_dtseries=dtseries,
+            runwise_dtseries=runwise_dtseries,
+            stage_root=shared_runwise_input_dir,
+            resume_mode=resume_mode,
         )
+        bold_assets_available = concat_bold.exists() or all(path.exists() for path in runwise_bold)
+        resolved_runwise_bold: list[Path] = []
+        bold_run_input_mode = "not_available_split_surface_from_concat_timeseries"
+        if bold_assets_available:
+            resolved_runwise_bold, bold_run_input_mode, bold_run_lengths = resolve_runwise_bold(
+                subject=subject,
+                concat_bold=concat_bold,
+                runwise_bold=runwise_bold,
+                stage_root=shared_runwise_input_dir,
+                resume_mode=resume_mode,
+            )
+            if dtseries_run_lengths != bold_run_lengths:
+                raise ValueError(
+                    "Run-wise dtseries and BOLD lengths do not match after input resolution: "
+                    f"dtseries={dtseries_run_lengths}, bold={bold_run_lengths}"
+                )
+    else:
+        total_tp = int(nib.load(str(dtseries)).shape[0])
+        resolved_runwise_dtseries = [dtseries for _ in RUN_SPECS]
+        dtseries_run_input_mode = "concat_no_split"
+        dtseries_run_lengths = [total_tp for _ in RUN_SPECS]
+        resolved_runwise_bold = []
+        bold_run_input_mode = "not_used_concat_no_split"
 
     left_surface = find_hippunfold_surface_asset(
         surf_dir=surf_dir,
@@ -1861,60 +1967,61 @@ def main() -> int:
         canonical_network_timeseries_path=canonical_network_timeseries_path,
     )
 
-    run_reference_outputs: list[Path] = []
-    run_reference_paths: list[Path] = []
-    for spec, run_dtseries in zip(RUN_SPECS, resolved_runwise_dtseries, strict=True):
-        run_reference_dir = shared_reference_store_dir / "runs" / f"run-{spec['run_id']}"
-        run_reference_summary = run_reference_dir / "reference_summary.json"
-        run_canonical_network_timeseries = run_reference_dir / "cortex_canonical_network_timeseries.npy"
-        run_reference_outputs.extend([run_reference_summary, run_canonical_network_timeseries])
-        run_reference_paths.append(run_canonical_network_timeseries)
-        run_reference_params = {
-            "subject": subject,
-            "atlas_slug": atlas_slug,
-            "label_prefix": str(atlas_cfg["label_prefix"]),
-            "run_id": spec["run_id"],
-        }
-        if not stage_is_up_to_date(
-            stage_dir=run_reference_dir,
-            resume_mode=resume_mode,
-            stage_name="reference_run",
-            params=run_reference_params,
-            inputs=[run_dtseries, left_cortex_labels, right_cortex_labels, roi_summary_path],
-            outputs=[run_reference_summary, run_canonical_network_timeseries],
-        ):
-            run(
-                [
-                    PYTHON_EXE,
-                    str(REPO_ROOT / "scripts" / "cortex" / "extract_cortex_roi_component_timeseries.py"),
-                    "--subject",
-                    subject,
-                    "--dtseries",
-                    str(run_dtseries),
-                    "--left-labels",
-                    str(left_cortex_labels),
-                    "--right-labels",
-                    str(right_cortex_labels),
-                    "--roi-summary",
-                    str(roi_summary_path),
-                    "--atlas-slug",
-                    atlas_slug,
-                    "--outdir",
-                    str(run_reference_dir),
-                ]
-            )
-            write_stage_manifest(
+    reference_summary = json.loads(reference_summary_path.read_text(encoding="utf-8"))
+    canonical_network_rows = load_canonical_network_rows(canonical_network_table_path)
+    network_ts = np.load(canonical_network_timeseries_path).astype(np.float32)
+    if args.run_split_mode == "runwise":
+        run_reference_paths: list[Path] = []
+        for spec, run_dtseries in zip(RUN_SPECS, resolved_runwise_dtseries, strict=True):
+            run_reference_dir = shared_reference_store_dir / "runs" / f"run-{spec['run_id']}"
+            run_reference_summary = run_reference_dir / "reference_summary.json"
+            run_canonical_network_timeseries = run_reference_dir / "cortex_canonical_network_timeseries.npy"
+            run_reference_paths.append(run_canonical_network_timeseries)
+            run_reference_params = {
+                "subject": subject,
+                "atlas_slug": atlas_slug,
+                "label_prefix": str(atlas_cfg["label_prefix"]),
+                "run_id": spec["run_id"],
+            }
+            if not stage_is_up_to_date(
                 stage_dir=run_reference_dir,
+                resume_mode=resume_mode,
                 stage_name="reference_run",
                 params=run_reference_params,
                 inputs=[run_dtseries, left_cortex_labels, right_cortex_labels, roi_summary_path],
                 outputs=[run_reference_summary, run_canonical_network_timeseries],
-            )
-
-    reference_summary = json.loads(reference_summary_path.read_text(encoding="utf-8"))
-    canonical_network_rows = load_canonical_network_rows(canonical_network_table_path)
-    network_ts = np.load(canonical_network_timeseries_path).astype(np.float32)
-    run_network_ts = [np.load(path).astype(np.float32) for path in run_reference_paths]
+            ):
+                run(
+                    [
+                        PYTHON_EXE,
+                        str(REPO_ROOT / "scripts" / "cortex" / "extract_cortex_roi_component_timeseries.py"),
+                        "--subject",
+                        subject,
+                        "--dtseries",
+                        str(run_dtseries),
+                        "--left-labels",
+                        str(left_cortex_labels),
+                        "--right-labels",
+                        str(right_cortex_labels),
+                        "--roi-summary",
+                        str(roi_summary_path),
+                        "--atlas-slug",
+                        atlas_slug,
+                        "--outdir",
+                        str(run_reference_dir),
+                    ]
+                )
+                write_stage_manifest(
+                    stage_dir=run_reference_dir,
+                    stage_name="reference_run",
+                    params=run_reference_params,
+                    inputs=[run_dtseries, left_cortex_labels, right_cortex_labels, roi_summary_path],
+                    outputs=[run_reference_summary, run_canonical_network_timeseries],
+                )
+        run_network_ts = [np.load(path).astype(np.float32) for path in run_reference_paths]
+    else:
+        run_reference_paths = []
+        run_network_ts = [network_ts.astype(np.float32, copy=False) for _ in RUN_SPECS]
     networks = [str(row["canonical_network"]) for row in canonical_network_rows]
 
     left_raw_metric = find_surface_sampling_metric(surface_source_dir, subject, "L", hipp_density)
@@ -2008,113 +2115,204 @@ def main() -> int:
     )
 
     run_surface_specs: list[dict[str, object]] = []
-    for spec, run_bold in zip(RUN_SPECS, resolved_runwise_bold, strict=True):
-        run_surface_dir = shared_surface_store_dir / "runs" / f"run-{spec['run_id']}"
-        raw_dir = run_surface_dir / "raw"
-        run_raw_left_metric = raw_dir / f"sub-{subject}_hemi-L_space-corobl_den-{hipp_density}_label-hipp_bold.func.gii"
-        run_raw_right_metric = raw_dir / f"sub-{subject}_hemi-R_space-corobl_den-{hipp_density}_label-hipp_bold.func.gii"
-        run_two_mm_left_func = run_surface_dir / "2mm" / f"sub-{subject}_hemi-L_space-corobl_den-{hipp_density}_label-hipp_bold.func.gii"
-        run_two_mm_right_func = run_surface_dir / "2mm" / f"sub-{subject}_hemi-R_space-corobl_den-{hipp_density}_label-hipp_bold.func.gii"
-        run_two_mm_left_path = run_surface_dir / "2mm" / f"sub-{subject}_hemi-L_timeseries.npy"
-        run_two_mm_right_path = run_surface_dir / "2mm" / f"sub-{subject}_hemi-R_timeseries.npy"
-        run_four_mm_left_func = run_surface_dir / "4mm" / f"sub-{subject}_hemi-L_space-corobl_den-{hipp_density}_label-hipp_bold.func.gii"
-        run_four_mm_right_func = run_surface_dir / "4mm" / f"sub-{subject}_hemi-R_space-corobl_den-{hipp_density}_label-hipp_bold.func.gii"
-        run_four_mm_left_path = run_surface_dir / "4mm" / f"sub-{subject}_hemi-L_timeseries.npy"
-        run_four_mm_right_path = run_surface_dir / "4mm" / f"sub-{subject}_hemi-R_timeseries.npy"
-        run_surface_params = {"subject": subject, "run_id": spec["run_id"], "smoothings": SMOOTH_ORDER}
-        run_surface_outputs = [
-            run_raw_left_metric,
-            run_raw_right_metric,
-            run_two_mm_left_func,
-            run_two_mm_right_func,
-            run_two_mm_left_path,
-            run_two_mm_right_path,
-            run_four_mm_left_func,
-            run_four_mm_right_func,
-            run_four_mm_left_path,
-            run_four_mm_right_path,
-        ]
-        if not stage_is_up_to_date(
-            stage_dir=run_surface_dir,
-            resume_mode=resume_mode,
-            stage_name="surface_run",
-            params=run_surface_params,
-            inputs=[run_bold, left_surface, right_surface],
-            outputs=run_surface_outputs,
-        ):
-            run(
-                [
-                    PYTHON_EXE,
-                    str(REPO_ROOT / "scripts" / "common" / "sample_hipp_surface_timeseries.py"),
-                    "--bold",
-                    str(run_bold),
-                    "--hippunfold-dir",
-                    str(hipp_root / "hippunfold"),
-                    "--subject",
-                    subject,
-                    "--density",
-                    hipp_density,
-                    "--space",
-                    "corobl",
-                    "--mapping-method",
-                    "trilinear",
-                    "--smooth-iters",
-                    "0",
-                    "--outdir",
-                    str(raw_dir),
-                ]
+    if args.run_split_mode == "none":
+        for spec in RUN_SPECS:
+            run_surface_specs.append(
+                {
+                    "run_id": spec["run_id"],
+                    "label": spec["label"],
+                    "2mm_left": two_mm_left_path,
+                    "2mm_right": two_mm_right_path,
+                    "4mm_left": fwhm_left_path,
+                    "4mm_right": fwhm_right_path,
+                }
             )
-            for hemi, surface_path, metric_path, smooth_mm, out_metric in [
-                ("L", left_surface, run_raw_left_metric, "2", run_two_mm_left_func),
-                ("R", right_surface, run_raw_right_metric, "2", run_two_mm_right_func),
-                ("L", left_surface, run_raw_left_metric, "4", run_four_mm_left_func),
-                ("R", right_surface, run_raw_right_metric, "4", run_four_mm_right_func),
-            ]:
-                out_metric.parent.mkdir(parents=True, exist_ok=True)
-                run(
-                    [
-                        WB_COMMAND,
-                        "-metric-smoothing",
-                        str(surface_path),
-                        str(metric_path),
-                        smooth_mm,
-                        str(out_metric),
-                        "-fwhm",
-                    ]
-                )
-            np.save(
+    elif resolved_runwise_bold:
+        for spec, run_bold in zip(RUN_SPECS, resolved_runwise_bold, strict=True):
+            run_surface_dir = shared_surface_store_dir / "runs" / f"run-{spec['run_id']}"
+            raw_dir = run_surface_dir / "raw"
+            run_raw_left_metric = raw_dir / f"sub-{subject}_hemi-L_space-corobl_den-{hipp_density}_label-hipp_bold.func.gii"
+            run_raw_right_metric = raw_dir / f"sub-{subject}_hemi-R_space-corobl_den-{hipp_density}_label-hipp_bold.func.gii"
+            run_two_mm_left_func = run_surface_dir / "2mm" / f"sub-{subject}_hemi-L_space-corobl_den-{hipp_density}_label-hipp_bold.func.gii"
+            run_two_mm_right_func = run_surface_dir / "2mm" / f"sub-{subject}_hemi-R_space-corobl_den-{hipp_density}_label-hipp_bold.func.gii"
+            run_two_mm_left_path = run_surface_dir / "2mm" / f"sub-{subject}_hemi-L_timeseries.npy"
+            run_two_mm_right_path = run_surface_dir / "2mm" / f"sub-{subject}_hemi-R_timeseries.npy"
+            run_four_mm_left_func = run_surface_dir / "4mm" / f"sub-{subject}_hemi-L_space-corobl_den-{hipp_density}_label-hipp_bold.func.gii"
+            run_four_mm_right_func = run_surface_dir / "4mm" / f"sub-{subject}_hemi-R_space-corobl_den-{hipp_density}_label-hipp_bold.func.gii"
+            run_four_mm_left_path = run_surface_dir / "4mm" / f"sub-{subject}_hemi-L_timeseries.npy"
+            run_four_mm_right_path = run_surface_dir / "4mm" / f"sub-{subject}_hemi-R_timeseries.npy"
+            run_surface_params = {"subject": subject, "run_id": spec["run_id"], "smoothings": SMOOTH_ORDER}
+            run_surface_outputs = [
+                run_raw_left_metric,
+                run_raw_right_metric,
+                run_two_mm_left_func,
+                run_two_mm_right_func,
                 run_two_mm_left_path,
-                sanitize_timeseries(load_metric_array(run_two_mm_left_func, expected_n_vertices=int(left_coords.shape[0]))),
-            )
-            np.save(
                 run_two_mm_right_path,
-                sanitize_timeseries(load_metric_array(run_two_mm_right_func, expected_n_vertices=int(right_coords.shape[0]))),
-            )
-            np.save(
+                run_four_mm_left_func,
+                run_four_mm_right_func,
                 run_four_mm_left_path,
-                sanitize_timeseries(load_metric_array(run_four_mm_left_func, expected_n_vertices=int(left_coords.shape[0]))),
-            )
-            np.save(
                 run_four_mm_right_path,
-                sanitize_timeseries(load_metric_array(run_four_mm_right_func, expected_n_vertices=int(right_coords.shape[0]))),
-            )
-            write_stage_manifest(
+            ]
+            if not stage_is_up_to_date(
                 stage_dir=run_surface_dir,
+                resume_mode=resume_mode,
                 stage_name="surface_run",
                 params=run_surface_params,
                 inputs=[run_bold, left_surface, right_surface],
                 outputs=run_surface_outputs,
+            ):
+                run(
+                    [
+                        PYTHON_EXE,
+                        str(REPO_ROOT / "scripts" / "common" / "sample_hipp_surface_timeseries.py"),
+                        "--bold",
+                        str(run_bold),
+                        "--hippunfold-dir",
+                        str(hipp_root / "hippunfold"),
+                        "--subject",
+                        subject,
+                        "--density",
+                        hipp_density,
+                        "--space",
+                        "corobl",
+                        "--mapping-method",
+                        "trilinear",
+                        "--smooth-iters",
+                        "0",
+                        "--outdir",
+                        str(raw_dir),
+                    ]
+                )
+                for hemi, surface_path, metric_path, smooth_mm, out_metric in [
+                    ("L", left_surface, run_raw_left_metric, "2", run_two_mm_left_func),
+                    ("R", right_surface, run_raw_right_metric, "2", run_two_mm_right_func),
+                    ("L", left_surface, run_raw_left_metric, "4", run_four_mm_left_func),
+                    ("R", right_surface, run_raw_right_metric, "4", run_four_mm_right_func),
+                ]:
+                    out_metric.parent.mkdir(parents=True, exist_ok=True)
+                    run(
+                        [
+                            WB_COMMAND,
+                            "-metric-smoothing",
+                            str(surface_path),
+                            str(metric_path),
+                            smooth_mm,
+                            str(out_metric),
+                            "-fwhm",
+                        ]
+                    )
+                np.save(
+                    run_two_mm_left_path,
+                    sanitize_timeseries(load_metric_array(run_two_mm_left_func, expected_n_vertices=int(left_coords.shape[0]))),
+                )
+                np.save(
+                    run_two_mm_right_path,
+                    sanitize_timeseries(load_metric_array(run_two_mm_right_func, expected_n_vertices=int(right_coords.shape[0]))),
+                )
+                np.save(
+                    run_four_mm_left_path,
+                    sanitize_timeseries(load_metric_array(run_four_mm_left_func, expected_n_vertices=int(left_coords.shape[0]))),
+                )
+                np.save(
+                    run_four_mm_right_path,
+                    sanitize_timeseries(load_metric_array(run_four_mm_right_func, expected_n_vertices=int(right_coords.shape[0]))),
+                )
+                write_stage_manifest(
+                    stage_dir=run_surface_dir,
+                    stage_name="surface_run",
+                    params=run_surface_params,
+                    inputs=[run_bold, left_surface, right_surface],
+                    outputs=run_surface_outputs,
+                )
+            run_surface_specs.append(
+                {
+                    "run_id": spec["run_id"],
+                    "label": spec["label"],
+                    "2mm_left": run_two_mm_left_path,
+                    "2mm_right": run_two_mm_right_path,
+                    "4mm_left": run_four_mm_left_path,
+                    "4mm_right": run_four_mm_right_path,
+                }
             )
-        run_surface_specs.append(
-            {
+    else:
+        run_surface_base_dir = shared_surface_store_dir / "runs_from_concat"
+        for spec, run_len in zip(RUN_SPECS, dtseries_run_lengths, strict=True):
+            run_surface_dir = run_surface_base_dir / f"run-{spec['run_id']}"
+            run_two_mm_left_path = run_surface_dir / "2mm" / f"sub-{subject}_hemi-L_timeseries.npy"
+            run_two_mm_right_path = run_surface_dir / "2mm" / f"sub-{subject}_hemi-R_timeseries.npy"
+            run_four_mm_left_path = run_surface_dir / "4mm" / f"sub-{subject}_hemi-L_timeseries.npy"
+            run_four_mm_right_path = run_surface_dir / "4mm" / f"sub-{subject}_hemi-R_timeseries.npy"
+            run_surface_params = {
+                "subject": subject,
                 "run_id": spec["run_id"],
-                "label": spec["label"],
-                "2mm_left": run_two_mm_left_path,
-                "2mm_right": run_two_mm_right_path,
-                "4mm_left": run_four_mm_left_path,
-                "4mm_right": run_four_mm_right_path,
+                "source_mode": "concat_surface_split",
+                "run_length": int(run_len),
+                "run_lengths": [int(x) for x in dtseries_run_lengths],
             }
-        )
+            run_surface_outputs = [
+                run_two_mm_left_path,
+                run_two_mm_right_path,
+                run_four_mm_left_path,
+                run_four_mm_right_path,
+            ]
+            if not stage_is_up_to_date(
+                stage_dir=run_surface_dir,
+                resume_mode=resume_mode,
+                stage_name="surface_run_from_concat_surface",
+                params=run_surface_params,
+                inputs=[two_mm_left_path, two_mm_right_path, fwhm_left_path, fwhm_right_path],
+                outputs=run_surface_outputs,
+            ):
+                split_surface_timeseries_to_runs(
+                    two_mm_left_path,
+                    [
+                        run_surface_base_dir / f"run-{s['run_id']}" / "2mm" / f"sub-{subject}_hemi-L_timeseries.npy"
+                        for s in RUN_SPECS
+                    ],
+                    dtseries_run_lengths,
+                )
+                split_surface_timeseries_to_runs(
+                    two_mm_right_path,
+                    [
+                        run_surface_base_dir / f"run-{s['run_id']}" / "2mm" / f"sub-{subject}_hemi-R_timeseries.npy"
+                        for s in RUN_SPECS
+                    ],
+                    dtseries_run_lengths,
+                )
+                split_surface_timeseries_to_runs(
+                    fwhm_left_path,
+                    [
+                        run_surface_base_dir / f"run-{s['run_id']}" / "4mm" / f"sub-{subject}_hemi-L_timeseries.npy"
+                        for s in RUN_SPECS
+                    ],
+                    dtseries_run_lengths,
+                )
+                split_surface_timeseries_to_runs(
+                    fwhm_right_path,
+                    [
+                        run_surface_base_dir / f"run-{s['run_id']}" / "4mm" / f"sub-{subject}_hemi-R_timeseries.npy"
+                        for s in RUN_SPECS
+                    ],
+                    dtseries_run_lengths,
+                )
+                write_stage_manifest(
+                    stage_dir=run_surface_dir,
+                    stage_name="surface_run_from_concat_surface",
+                    params=run_surface_params,
+                    inputs=[two_mm_left_path, two_mm_right_path, fwhm_left_path, fwhm_right_path],
+                    outputs=run_surface_outputs,
+                )
+            run_surface_specs.append(
+                {
+                    "run_id": spec["run_id"],
+                    "label": spec["label"],
+                    "2mm_left": run_two_mm_left_path,
+                    "2mm_right": run_two_mm_right_path,
+                    "4mm_left": run_four_mm_left_path,
+                    "4mm_right": run_four_mm_right_path,
+                }
+            )
 
     smooth_specs: dict[str, dict[str, np.ndarray | str]] = {
         "2mm": {
@@ -2138,6 +2336,7 @@ def main() -> int:
         "smoothings": SMOOTH_ORDER,
         "hemisphere_policy": "per-hemi",
         "k_policy": "run-aware-instability_2_to_10_per_hemi",
+        "k_selection_mode": str(args.k_selection_mode),
         "run_input_sources": {
             "dtseries": dtseries_run_input_mode,
             "bold": bold_run_input_mode,
@@ -2157,6 +2356,7 @@ def main() -> int:
         "eval_k": EVAL_K,
         "split_strategy": split_strategy,
         "instability_resamples": int(args.instability_resamples),
+        "k_selection_mode": str(args.k_selection_mode),
         "dtseries_run_input_mode": dtseries_run_input_mode,
         "bold_run_input_mode": bold_run_input_mode,
         "run_lengths": dtseries_run_lengths,
@@ -2265,6 +2465,7 @@ def main() -> int:
                         instability_resamples=int(args.instability_resamples),
                         v_min_fraction=float(args.v_min_fraction),
                         v_min_count=None if args.v_min_count is None else int(args.v_min_count),
+                        k_selection_mode=str(args.k_selection_mode),
                     )
                 elif is_wta_branch(branch_slug):
                     cluster = run_wta_branch(
@@ -2291,6 +2492,7 @@ def main() -> int:
                         instability_resamples=int(args.instability_resamples),
                         v_min_fraction=float(args.v_min_fraction),
                         v_min_count=None if args.v_min_count is None else int(args.v_min_count),
+                        k_selection_mode=str(args.k_selection_mode),
                     )
                 hemi_results[hemi] = cluster
 

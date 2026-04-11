@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import nibabel as nib
 import numpy as np
+import scipy.stats
 from matplotlib.colors import ListedColormap
 
 
@@ -140,7 +141,12 @@ def main() -> int:
     ]
 
     for title, ax, coords, faces, labels in panels:
-        ax.tripcolor(coords[:, 0], coords[:, 1], faces, labels, cmap=cmap, shading="flat", vmin=0, vmax=max(style))
+        try:
+            face_labels = scipy.stats.mode(labels[faces], axis=1, keepdims=False)[0]
+        except TypeError:
+            face_labels = scipy.stats.mode(labels[faces], axis=1)[0].squeeze()
+            
+        ax.tripcolor(coords[:, 0], coords[:, 1], faces, face_labels, cmap=cmap, shading="flat", vmin=0, vmax=max(style))
         ax.set_title(title, fontsize=12, fontweight="bold")
         ax.set_aspect("equal")
         ax.axis("off")

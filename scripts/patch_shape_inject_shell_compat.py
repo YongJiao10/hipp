@@ -13,7 +13,7 @@ OLD = (
 NEW = (
     '"greedy -threads {threads} {params.general_opts} {params.affine_opts} {params.img_pairs} -o {output.matrix} > {log} 2>&1 && "\n'
     '        "greedy -threads {threads} {params.general_opts} {params.greedy_opts} {params.img_pairs} -it {output.matrix} -o {output.warp} >> {log} 2>&1"\n'
-    "        # HIPPOMAPS_MACOS_COMPAT_SHAPE_INJECT_SHELL: use portable redirection syntax matching the 1.5.2 workflow"
+    "        # HIPPOMAPS_MACOS_COMPAT_SHAPE_INJECT_SHELL: use portable redirection syntax matching legacy shell behavior"
 )
 
 

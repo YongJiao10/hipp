@@ -85,7 +85,7 @@ data/hippunfold_input/
 
 ## 6. 依赖与版本锁定
 
-- 分析口径：**当前机器实际可运行的 HippUnfold CLI (`1.5.2-pre.2`) + surface-first / CIFTI-first HippoMaps 实现**
+- 分析口径：**当前分支统一以 HippUnfold CLI `2.0.0` + surface-first / CIFTI-first HippoMaps 实现**
 - 海马 surface density：**`2mm`**
 - 本地项目环境名：**`hippo`**
 - 皮层 atlas 来源：**ThomasYeoLab/CBIG 官方 Schaefer400 7-network**
@@ -98,8 +98,8 @@ remote ssh   OK                    已成功连接 192.168.0.183
 remote data  OK                    已发现 HCP-YA-2025 与被试 100610
 wb_command   OK                    /Applications/wb_view.app/Contents/usr/bin/wb_command，需通过 arch -x86_64 调用
 docker       Missing               本机无 docker
-hippunfold   Installed             hippo 环境中实际可运行 CLI 为 1.5.2-pre.2
-conda pkg    Mismatch observed     conda 包索引显示 2.0.0，但实际安装 CLI 版本为 1.5.2-pre.2
+hippunfold   Installed             hippo2 环境中当前执行口径为 CLI 2.0.0
+conda pkg    Aligned               分支升级目标已统一为 2.0.0
 7T CIFTI     Available             archive zip 内已确认聚合与逐 run dtseries
 ```
 
