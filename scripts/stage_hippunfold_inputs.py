@@ -3,14 +3,17 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 import re
-import shutil
 
 
-def copy_file(src: Path, dst: Path) -> None:
+def link_file(src: Path, dst: Path) -> None:
+    """Create a hardlink dst → src, replacing an existing dst if present."""
     dst.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(src, dst)
+    if dst.exists() or dst.is_symlink():
+        dst.unlink()
+    os.link(src, dst)
 
 
 RUNWISE_DTSERIES_RE = re.compile(
@@ -44,23 +47,23 @@ def main() -> int:
         json.dumps(dataset_description, indent=2), encoding="utf-8"
     )
 
-    copy_file(
+    link_file(
         source_dir / f"sub-{subject}_T1w_acpc_dc_restore.nii.gz",
         anat_dir / f"sub-{subject}_T1w.nii.gz",
     )
-    copy_file(
+    link_file(
         source_dir / f"sub-{subject}_T2w_acpc_dc_restore.nii.gz",
         anat_dir / f"sub-{subject}_T2w.nii.gz",
     )
-    copy_file(
+    link_file(
         source_dir / f"sub-{subject}_rfMRI_REST_7T_hp2000_clean_rclean_tclean.nii.gz",
         func_dir / f"sub-{subject}_task-rest_run-concat_bold.nii.gz",
     )
-    copy_file(
+    link_file(
         source_dir / f"sub-{subject}_rfMRI_REST_7T_Atlas_MSMAll_hp2000_clean_rclean_tclean.dtseries.nii",
         func_dir / f"sub-{subject}_task-rest_run-concat.dtseries.nii",
     )
-    copy_file(
+    link_file(
         source_dir / f"sub-{subject}_rfMRI_REST_7T_brain_mask.nii.gz",
         func_dir / f"sub-{subject}_task-rest_run-concat_desc-brain_mask.nii.gz",
     )
@@ -68,14 +71,14 @@ def main() -> int:
     for path in sorted(source_dir.iterdir()):
         dt_match = RUNWISE_DTSERIES_RE.fullmatch(path.name)
         if dt_match and dt_match.group("subject") == subject:
-            copy_file(
+            link_file(
                 path,
                 func_dir / f"sub-{subject}_task-rest_run-{dt_match.group('run_id')}.dtseries.nii",
             )
             continue
         bold_match = RUNWISE_BOLD_RE.fullmatch(path.name)
         if bold_match and bold_match.group("subject") == subject:
-            copy_file(
+            link_file(
                 path,
                 func_dir / f"sub-{subject}_task-rest_run-{bold_match.group('run_id')}_bold.nii.gz",
             )
