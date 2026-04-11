@@ -12,3 +12,5 @@ _all_archives/
 external/
 temp_*/
 refs/
+outputs_migration/
+present_network_migration/
