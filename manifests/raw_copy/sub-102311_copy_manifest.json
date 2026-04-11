@@ -1,0 +1,37 @@
+{
+  "subject": "102311",
+  "remote_host": "yojiao@192.168.0.113",
+  "remote_root": "/Volumes/Elements/HCP-YA-2025",
+  "files": [
+    {
+      "kind": "structural_t1w",
+      "remote_source": "/Volumes/Elements/HCP-YA-2025/Structural Preprocessed Recommended for 3T and 7T/102311_StructuralRecommended.zip::102311/T1w/T1w_acpc_dc_restore.nii.gz",
+      "local_path": "data/hippunfold_input/sub-102311/anat/sub-102311_T1w.nii.gz",
+      "bytes": 69259288
+    },
+    {
+      "kind": "structural_t2w",
+      "remote_source": "/Volumes/Elements/HCP-YA-2025/Structural Preprocessed Recommended for 3T and 7T/102311_StructuralRecommended.zip::102311/T1w/T2w_acpc_dc_restore.nii.gz",
+      "local_path": "data/hippunfold_input/sub-102311/anat/sub-102311_T2w.nii.gz",
+      "bytes": 68898057
+    },
+    {
+      "kind": "rsfmri_dtseries",
+      "remote_source": "/Volumes/Elements/HCP-YA-2025/Resting State fMRI 7T Preprocessed Recommended archive/102311_Rest7TRecommended.zip::102311/MNINonLinear/Results/rfMRI_REST_7T/rfMRI_REST_7T_Atlas_MSMAll_hp2000_clean_rclean_tclean.dtseries.nii",
+      "local_path": "data/hippunfold_input/sub-102311/func/sub-102311_task-rest_run-concat.dtseries.nii",
+      "bytes": 1315093232
+    },
+    {
+      "kind": "rsfmri_volume",
+      "remote_source": "/Volumes/Elements/HCP-YA-2025/Resting State fMRI 7T Preprocessed Recommended archive/102311_Rest7TRecommended.zip::102311/MNINonLinear/Results/rfMRI_REST_7T/rfMRI_REST_7T_hp2000_clean_rclean_tclean.nii.gz",
+      "local_path": "data/hippunfold_input/sub-102311/func/sub-102311_task-rest_run-concat_bold.nii.gz",
+      "bytes": 6164590503
+    },
+    {
+      "kind": "brain_mask",
+      "remote_source": "/Volumes/Elements/HCP-YA-2025/Resting State fMRI 7T Preprocessed Recommended archive/102311_Rest7TRecommended.zip::102311/MNINonLinear/Results/rfMRI_REST_7T/rfMRI_REST_7T_brain_mask.nii.gz",
+      "local_path": "data/hippunfold_input/sub-102311/func/sub-102311_task-rest_run-concat_desc-brain_mask.nii.gz",
+      "bytes": 42277
+    }
+  ]
+}
