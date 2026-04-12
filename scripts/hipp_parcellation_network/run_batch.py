@@ -42,6 +42,29 @@ SUMMARY_KEEP = {
 }
 
 
+_KNOWN_SKIP_MESSAGES: dict[str, str] = {
+    "No K survived local-minimum, 1-SE, and non-triviality constraints": (
+        "experimental k-selection (mark_instability_decisions) found no K satisfying "
+        "local-minimum filter, 1-SE rule, and min_parcel_ok.\n\n"
+        "Note: connectivity_ok is now a soft constraint — disconnected clusters are accepted with a "
+        "PNG warning. This error means all evaluated K values (2–10) also failed min_parcel_ok "
+        "(at least one parcel too small). Common cause: very small mesh or severe data quality issues."
+    ),
+    "No K survived local-minimum and 1-SE screening": (
+        "experimental k-selection (mark_instability_decisions) found no K satisfying "
+        "both the local-minimum filter and the 1-SE rule.\n\n"
+        "The instability curve has no local minimum within 1 standard error of the global minimum."
+    ),
+}
+
+
+def _known_skip_reason(exc_str: str) -> str | None:
+    for pattern, message in _KNOWN_SKIP_MESSAGES.items():
+        if pattern in exc_str:
+            return message
+    return None
+
+
 def run(cmd: list[str]) -> None:
     proc = subprocess.run(cmd, text=True, capture_output=True)
     if proc.returncode != 0:
@@ -112,6 +135,7 @@ def run_subject_atlas(
     views: str,
     layout: str,
     k_selection_mode: str,
+    run_split_mode: str,
     hipp_density: str,
     shared_surface_store_root: str | None,
     summaries_only: bool,
@@ -141,6 +165,8 @@ def run_subject_atlas(
                 layout,
                 "--k-selection-mode",
                 k_selection_mode,
+                "--run-split-mode",
+                run_split_mode,
                 "--hipp-density",
                 hipp_density,
             ]
@@ -258,6 +284,7 @@ def main() -> int:
     parser.add_argument("--views", default="ventral,dorsal")
     parser.add_argument("--layout", choices=["1x2", "2x2"], default="2x2")
     parser.add_argument("--k-selection-mode", choices=["mainline", "experimental"], default="mainline")
+    parser.add_argument("--run-split-mode", choices=["none", "runwise"], default="none")
     parser.add_argument("--shared-surface-store-root", default=None)
     parser.add_argument("--hipp-density", default=default_density)
     parser.add_argument("--cleanup-level", choices=["none", "label", "render", "feature"], default="none")
@@ -304,6 +331,7 @@ def main() -> int:
                         views=args.views,
                         layout=args.layout,
                         k_selection_mode=args.k_selection_mode,
+                        run_split_mode=args.run_split_mode,
                         hipp_density=args.hipp_density,
                         shared_surface_store_root=args.shared_surface_store_root,
                         summaries_only=bool(args.summaries_only),
@@ -316,12 +344,14 @@ def main() -> int:
                     skipped.append(tag)
                     placeholder = present_dir / f"sub-{subject}_{atlas_slug}_{branch_slug}_overview.md"
                     present_dir.mkdir(parents=True, exist_ok=True)
+                    known = _known_skip_reason(str(exc))
+                    reason_body = known if known is not None else f"```\n{traceback.format_exc()}\n```"
                     placeholder.write_text(
                         f"# SKIPPED: {tag}\n\n"
                         f"**Time:** {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}\n\n"
                         f"**k-selection-mode:** {args.k_selection_mode}\n\n"
                         f"## Reason\n\n"
-                        f"```\n{traceback.format_exc()}\n```\n",
+                        f"{reason_body}\n",
                         encoding="utf-8",
                     )
     if skipped:
@@ -347,6 +377,7 @@ def main() -> int:
         "shared_surface_store_root": args.shared_surface_store_root,
         "layout": args.layout,
         "k_selection_mode": args.k_selection_mode,
+        "run_split_mode": args.run_split_mode,
         "views": args.views,
         "out_root": str(out_root),
         "present": str(present_dir),

@@ -665,6 +665,27 @@ def create_overview(root: Path, final_selection: dict[str, object]) -> Path:
     title_w = title_box[2] - title_box[0]
     draw.text(((canvas_w - title_w) // 2, margin // 2), title, fill="black", font=title_font)
 
+    # Warn if connectivity constraint was relaxed for any selected K
+    _warn_connectivity = False
+    for _sm_data in final_selection.get("per_smooth", {}).values():
+        for _hemi_data in _sm_data.get("hemis", {}).values():
+            _k_sel = _hemi_data.get("k_final")
+            for _row in _hemi_data.get("k_metrics", []):
+                if int(_row.get("k", -1)) == _k_sel and int(_row.get("connectivity_ok", 1)) == 0:
+                    _warn_connectivity = True
+                    break
+    if _warn_connectivity:
+        warn_font = load_font(28)
+        warn_text = "WARNING: disconnected mesh components detected — connectivity constraint relaxed"
+        warn_box = draw.textbbox((0, 0), warn_text, font=warn_font)
+        warn_w = warn_box[2] - warn_box[0]
+        draw.text(
+            ((canvas_w - warn_w) // 2, margin // 2 + int(PLOT_SPEC["title_font"]) + 6),
+            warn_text,
+            fill=(200, 80, 0),
+            font=warn_font,
+        )
+
     y = margin + title_h
     if row1:
         canvas.paste(row1, (margin, y))
