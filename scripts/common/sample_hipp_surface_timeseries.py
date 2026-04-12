@@ -78,14 +78,11 @@ def main() -> int:
         if metric.shape[0] != n_vertices and metric.ndim == 2 and metric.shape[1] == n_vertices:
             metric = metric.T
 
-        npy_path = outdir / f"sub-{args.subject}_hemi-{hemi}_space-{resolved_space}_den-{args.density}_label-hipp_bold.npy"
-        np.save(npy_path, metric.astype(np.float32))
         summary.append(
             {
                 "hemi": hemi,
                 "surface": str(mid),
                 "metric_gii": str(out_metric),
-                "timeseries_npy": str(npy_path),
                 "n_vertices": int(metric.shape[0]),
                 "n_timepoints": int(metric.shape[1]),
                 "space": resolved_space,

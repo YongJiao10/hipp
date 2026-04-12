@@ -14,27 +14,35 @@ For the narrowed HPC handoff profile, also see [network_first_hpc_bundle_handoff
 
 ## Shared Upstream
 
-All six methods share the same upstream steps before branch-specific processing:
+All seven methods share the same upstream steps before branch-specific processing:
 
-1. Extract individualized cortical ROI-component timeseries from the chosen cortical atlas output.
-2. Merge atlas-specific parent networks to canonical cross-atlas network labels using [cross_atlas_network_merge.json](/Users/jy/Documents/HippoMaps-network-first/config/cross_atlas_network_merge.json).
-3. Exclude `Noise`.
-4. Resolve run-wise inputs for run-pair instability:
+1. Compute cortex `tSNR = 10000 / std(t)` directly on left and right cortical grayordinates from the pre-downstream `dtseries`.
+2. Hard-mask all cortical grayordinates with `tSNR < 25`.
+3. Extract individualized cortical ROI-component timeseries from the chosen cortical atlas output using only the remaining high-tSNR cortical grayordinates.
+4. Merge atlas-specific parent networks to canonical cross-atlas network labels using [cross_atlas_network_merge.json](/Users/jy/Documents/HippoMaps-network-first/config/cross_atlas_network_merge.json).
+5. Exclude `Noise`.
+6. Resolve run-wise inputs for run-pair instability:
    if explicit `run-1..4` `dtseries` and `bold` files are available, use them; otherwise split `run-concat` inputs into four equal runs and stage those derived run-wise files.
-5. Average ROI-component timeseries within each retained canonical network to obtain cortex `network` timeseries.
-6. Sample left and right hippocampal resting-state timeseries on the `corobl` surfaces.
-7. Compute direct hippocampal `vertex-to-network FC` separately for each hemisphere and smoothing condition.
+7. Average ROI-component timeseries within each retained canonical network to obtain cortex `network` timeseries.
+8. Generate left and right hippocampal raw surface timeseries inside the shared pipeline store by sampling `run-concat_bold` onto the `corobl` surfaces with `trilinear` mapping and `smooth_iters = 0`; these shared-pipeline `.func.gii` files are the only valid raw source.
+9. Compute hippocampal `tSNR = 10000 / std(t)` on those raw unsmoothed shared-pipeline `.func.gii` timeseries and hard-mask all vertices with `tSNR < 25`.
+10. Perform the required hippocampal sanity-check / topology classification on the masked vertices:
+    - boundary-touching `Null` components -> keep empty
+    - internal `Null` islands with graph diameter `> 2` vertices -> keep empty
+    - internal micro-holes with graph diameter `<= 2` vertices -> mark for later nearest-neighbor feature repair
+11. Run `2mm` and `4mm` smoothing only after the hippocampal tSNR gate and only within the remaining high-tSNR hippocampal ROI so masked vertices never contribute to smoothed values.
+12. Compute direct hippocampal `vertex-to-network FC` separately for each hemisphere and smoothing condition using only high-tSNR vertices, then fill only the marked hippocampal micro-holes in FC / feature space.
 
 ## K Selection Modes (Explicit)
 
 The implementation supports two explicit `K`-selection modes via `--k-selection-mode`:
 
-- `updated` (default): local-minimum + `1-SE` + non-triviality constraints (includes `V_min` and connectivity checks).
-- `legacy`: pre-update rule; choose the smallest `K` within `0.02` of best `null_corrected_score` and with `min_cluster_size_fraction >= 0.05`.
+- `mainline` (default): current production rule; choose the smallest `K` within `0.02` of best `null_corrected_score` and with `min_cluster_size_fraction >= 0.05`.
+- `experimental`: future-testing rule; local-minimum + `1-SE` + non-triviality constraints (includes `V_min` and connectivity checks).
 
 Operational rule:
-- When reproducing pre-update results, always pass `--k-selection-mode legacy`.
-- When running the new protocol, pass `--k-selection-mode updated`.
+- When running the current production workflow, pass `--k-selection-mode mainline` or rely on the default.
+- When testing the newer protocol, pass `--k-selection-mode experimental`.
 - Do not infer mode from branch name or previous runs.
 
 Notation:
@@ -49,14 +57,28 @@ Branch-specific analysis starts only after cortex canonical network timeseries h
 So the effective branch input is:
 
 ```text
+raw cortex dtseries
+  -> cortex tSNR gate (threshold 25)
 cortex ROI-component timeseries
   -> cross-atlas network merge
   -> Noise exclusion
   -> cortex canonical network timeseries
-  -> hippocampal vertex timeseries
+  -> raw hippocampal vertex timeseries
+  -> hippocampal tSNR gate (threshold 25)
+  -> ROI-restricted smoothing
   -> direct vertex-to-network FC (N_vertex x N_network)
+  -> nearest-neighbor fill of hippocampal micro-holes
   -> branch-specific network-first analysis
 ```
+
+Operational consequences:
+
+- cortical `tSNR < 25` grayordinates are removed before any ROI / network mean and never re-enter later steps.
+- hippocampal raw input is strict: use only the shared-pipeline raw `.func.gii` generated from `run-concat_bold` with `trilinear` mapping and `smooth_iters = 0`.
+- hippocampal `.npy` files, archived directories, and any other fallback source are disallowed for formal tSNR gating.
+- hippocampal `tSNR < 25` vertices are excluded before any smoothing; smoothing is not allowed to propagate signal through masked vertices.
+- hippocampal `permanent null` vertices remain empty through clustering and final rendering.
+- hippocampal micro-hole repair happens in FC / probability / feature space only, not in the raw timeseries.
 
 Per-atlas count change:
 
