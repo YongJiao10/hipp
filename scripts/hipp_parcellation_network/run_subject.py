@@ -1137,8 +1137,19 @@ def mark_instability_decisions(
         if int(row["min_parcel_ok"]) == 1
         and int(row["connectivity_ok"]) == 1
     ]
+    connectivity_relaxed = False
     if not eligible:
-        raise RuntimeError("No K survived local-minimum, 1-SE, and non-triviality constraints")
+        # Relax connectivity constraint: allow disconnected clusters when no fully-connected
+        # candidate survives, but still require min_parcel_ok.  The overview PNG will carry
+        # a visible warning when this fallback is used.
+        eligible = [
+            row
+            for row in one_se_candidates
+            if int(row["min_parcel_ok"]) == 1
+        ]
+        if not eligible:
+            raise RuntimeError("No K survived local-minimum, 1-SE, and non-triviality constraints")
+        connectivity_relaxed = True
     selected = eligible[0]
     k_star = int(selected["k"])
     sensitivity = []
@@ -1153,6 +1164,7 @@ def mark_instability_decisions(
         "main_analysis_k": k_star,
         "sensitivity_k": sensitivity,
         "degenerate_instability": bool(all_instability_equal),
+        "connectivity_relaxed": connectivity_relaxed,
     }
     return ordered, decision
 
