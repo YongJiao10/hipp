@@ -24,7 +24,7 @@ from sklearn.metrics import (
     silhouette_score,
 )
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 COMMON_DIR = REPO_ROOT / "scripts" / "common"
@@ -32,9 +32,10 @@ if str(COMMON_DIR) not in sys.path:
     sys.path.insert(0, str(COMMON_DIR))
 
 from compute_fc_gradients import build_sparse_affinity, corrcoef_rows, diffusion_map_embedding
+from spectral_clustering import spectral_cluster_from_features
 from hipp_density_assets import (
+    find_cifti_asset_strict,
     find_surface_asset_strict,
-    find_surface_sampling_metric_strict,
     load_surface_density_from_pipeline_config,
 )
 
@@ -56,14 +57,25 @@ RUN_SPECS = [
 DEFAULT_INSTABILITY_RESAMPLES = 6
 DEFAULT_V_MIN_FRACTION = 0.05
 DEFAULT_HIPP_DENSITY = load_surface_density_from_pipeline_config(REPO_ROOT / "config" / "hippo_pipeline.toml")
+HCP_MODE = 10000.0
+TSNR_THRESHOLD = 25.0
 BRANCHES = [
     "network-gradient",
+    "network-prob-cluster",
     "network-prob-cluster-nonneg",
+    "network-prob-soft",
+    "network-prob-soft-nonneg",
+    "network-wta",
+    "network-spectral",
 ]
 ATLAS_CONFIG = {
     "lynch2024": {
         "label_prefix": "PFM_Lynch2024priors.components",
         "display_name": "Lynch2024",
+    },
+    "hermosillo2024": {
+        "label_prefix": "PFM_Hermosillo2024priors.components",
+        "display_name": "Hermosillo2024",
     },
     "kong2019": {
         "label_prefix": "PFM_Kong2019priors.components",
@@ -73,11 +85,11 @@ ATLAS_CONFIG = {
 
 
 def is_soft_branch(branch_slug: str) -> bool:
-    return False
+    return branch_slug in {"network-prob-soft", "network-prob-soft-nonneg"}
 
 
 def is_wta_branch(branch_slug: str) -> bool:
-    return False
+    return branch_slug == "network-wta"
 
 
 def is_gradient_branch(branch_slug: str) -> bool:
@@ -85,11 +97,15 @@ def is_gradient_branch(branch_slug: str) -> bool:
 
 
 def is_probability_cluster_branch(branch_slug: str) -> bool:
-    return branch_slug == "network-prob-cluster-nonneg"
+    return branch_slug in {"network-prob-cluster", "network-prob-cluster-nonneg"}
 
 
 def uses_nonnegative_probabilities(branch_slug: str) -> bool:
-    return branch_slug == "network-prob-cluster-nonneg"
+    return branch_slug in {"network-prob-cluster-nonneg", "network-prob-soft-nonneg"}
+
+
+def is_spectral_branch(branch_slug: str) -> bool:
+    return branch_slug == "network-spectral"
 
 
 def run(cmd: list[str]) -> None:
@@ -98,6 +114,67 @@ def run(cmd: list[str]) -> None:
         raise RuntimeError(
             f"Command failed ({proc.returncode}): {' '.join(cmd)}\nSTDOUT:\n{proc.stdout}\nSTDERR:\n{proc.stderr}"
         )
+
+
+def find_hippunfold_surface_asset(
+    *,
+    surf_dir: Path,
+    subject: str,
+    hemi: str,
+    space: str,
+    density: str,
+    suffix: str,
+) -> Path:
+    return find_surface_asset_strict(
+        surf_dir=surf_dir,
+        subject=subject,
+        hemi=hemi,
+        space=space,
+        density=density,
+        suffix=suffix,
+    )
+
+def find_hippunfold_cifti_asset(*, cifti_dir: Path, subject: str, density: str, suffix: str) -> Path:
+    from hipp_density_assets import DensityAssetError
+    try:
+        return find_cifti_asset_strict(cifti_dir=cifti_dir, subject=subject, density=density, suffix=suffix)
+    except DensityAssetError:
+        surf_dir = cifti_dir.parent / "surf"
+        if surf_dir.exists():
+            try:
+                return find_cifti_asset_strict(cifti_dir=surf_dir, subject=subject, density=density, suffix=suffix)
+            except DensityAssetError:
+                pass
+        raise
+
+
+def separate_hippunfold_structural_dlabel(
+    *,
+    dlabel_path: Path,
+    output_dir: Path,
+    subject: str,
+    density: str,
+    resume_mode: str,
+) -> tuple[Path, Path]:
+    left_out = output_dir / f"sub-{subject}_hemi-L_space-corobl_den-{density}_label-hipp_atlas-multihist7_subfields.label.gii"
+    right_out = output_dir / f"sub-{subject}_hemi-R_space-corobl_den-{density}_label-hipp_atlas-multihist7_subfields.label.gii"
+    if resume_mode == "force" or not (left_out.exists() and right_out.exists()):
+        output_dir.mkdir(parents=True, exist_ok=True)
+        run(
+            [
+                WB_COMMAND,
+                "-cifti-separate",
+                str(dlabel_path),
+                "COLUMN",
+                "-label",
+                "HIPPOCAMPUS_LEFT",
+                str(left_out),
+                "-label",
+                "HIPPOCAMPUS_RIGHT",
+                str(right_out),
+            ]
+        )
+    return left_out, right_out
 
 
 def utc_now_iso() -> str:
@@ -252,6 +329,28 @@ def split_bold_concat_to_runwise(concat_path: Path, out_paths: list[Path]) -> li
     return run_lengths
 
 
+def split_surface_timeseries_to_runs(
+    concat_path: Path,
+    out_paths: list[Path],
+    run_lengths: list[int],
+) -> None:
+    arr = np.load(concat_path).astype(np.float32)
+    if arr.ndim != 2:
+        raise ValueError(f"Expected 2D surface timeseries, got shape {arr.shape} for {concat_path}")
+    expected = int(sum(int(x) for x in run_lengths))
+    if int(arr.shape[1]) != expected:
+        raise ValueError(
+            "Concat surface timeseries length mismatch: "
+            f"{concat_path} has {arr.shape[1]} frames but run lengths sum to {expected}"
+        )
+    offset = 0
+    for out_path, run_len in zip(out_paths, run_lengths, strict=True):
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        next_offset = offset + int(run_len)
+        np.save(out_path, arr[:, offset:next_offset].astype(np.float32, copy=False))
+        offset = next_offset
+
+
 def resolve_runwise_dtseries(
     *,
     subject: str,
@@ -400,7 +499,7 @@ def apply_retain_level(out_root: Path, retain_level: str) -> None:
         raise ValueError(f"Unsupported retain_level: {retain_level}")
 
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    outputs_root = (REPO_ROOT / "outputs" / "hipp_functional_parcellation_network").resolve()
+    outputs_root = (REPO_ROOT / "outputs_migration" / "hipp_functional_parcellation_network").resolve()
     out_root_resolved = out_root.resolve()
     try:
         out_rel = out_root_resolved.relative_to(outputs_root)
@@ -456,11 +555,33 @@ def load_metric_array(path: Path, expected_n_vertices: int | None = None) -> np.
     return metric.astype(np.float32, copy=False)
 
 
+def load_surface_timeseries_for_tsnr(*, metric_path: Path, expected_n_vertices: int) -> tuple[np.ndarray, str]:
+    return load_metric_array(metric_path, expected_n_vertices=expected_n_vertices), str(metric_path.resolve())
+
+
 def load_surface(path: Path) -> tuple[np.ndarray, np.ndarray]:
     img = nib.load(str(path))
     coords = np.asarray(img.agg_data("pointset"), dtype=np.float32)
     faces = np.asarray(img.agg_data("triangle"), dtype=np.int32)
     return coords, faces
+
+
+def save_shape_gii(values: np.ndarray, out_path: Path) -> None:
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    arr = GiftiDataArray(
+        data=np.asarray(values, dtype=np.float32),
+        intent=nib.nifti1.intent_codes["NIFTI_INTENT_NONE"],
+        datatype="NIFTI_TYPE_FLOAT32",
+    )
+    nib.save(GiftiImage(darrays=[arr]), str(out_path))
+
+
+def compute_tsnr(metric: np.ndarray) -> np.ndarray:
+    if metric.ndim != 2:
+        raise ValueError(f"Expected 2D timeseries array for tSNR, got {metric.shape}")
+    sd = np.nanstd(metric.astype(np.float32, copy=False), axis=1, ddof=1)
+    tsnr = np.where(sd > 0, HCP_MODE / sd, np.nan)
+    return tsnr.astype(np.float32)
 
 
 def build_surface_adjacency(faces: np.ndarray, n_vertices: int) -> sparse.csr_matrix:
@@ -476,6 +597,330 @@ def build_surface_adjacency(faces: np.ndarray, n_vertices: int) -> sparse.csr_ma
     graph.setdiag(0)
     graph.eliminate_zeros()
     return graph
+
+
+def build_boundary_vertex_mask(faces: np.ndarray, n_vertices: int) -> np.ndarray:
+    edge_counts: dict[tuple[int, int], int] = {}
+    for tri in faces:
+        a, b, c = (int(tri[0]), int(tri[1]), int(tri[2]))
+        for u, v in ((a, b), (b, c), (c, a)):
+            key = (u, v) if u < v else (v, u)
+            edge_counts[key] = edge_counts.get(key, 0) + 1
+    boundary = np.zeros(n_vertices, dtype=bool)
+    for (u, v), count in edge_counts.items():
+        if count == 1:
+            boundary[u] = True
+            boundary[v] = True
+    return boundary
+
+
+def induced_subgraph(connectivity: sparse.csr_matrix, vertex_indices: np.ndarray) -> sparse.csr_matrix:
+    if vertex_indices.ndim != 1:
+        raise ValueError(f"Expected 1D vertex indices, got {vertex_indices.shape}")
+    return connectivity[vertex_indices][:, vertex_indices]
+
+
+def component_graph_diameter(subgraph: sparse.csr_matrix) -> int:
+    n_vertices = int(subgraph.shape[0])
+    if n_vertices <= 1:
+        return 0
+    distances = csgraph.shortest_path(subgraph, directed=False, unweighted=True)
+    finite = distances[np.isfinite(distances)]
+    if finite.size == 0:
+        return 0
+    return int(np.max(finite))
+
+
+def classify_invalid_hipp_vertices(
+    invalid_mask: np.ndarray,
+    connectivity: sparse.csr_matrix,
+    boundary_mask: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, list[dict[str, object]]]:
+    permanent_null = np.zeros_like(invalid_mask, dtype=bool)
+    fillable_hole = np.zeros_like(invalid_mask, dtype=bool)
+    components: list[dict[str, object]] = []
+    invalid_indices = np.flatnonzero(invalid_mask)
+    if invalid_indices.size == 0:
+        return permanent_null, fillable_hole, components
+    subgraph = induced_subgraph(connectivity, invalid_indices)
+    n_comp, comp_labels = csgraph.connected_components(subgraph, directed=False, return_labels=True)
+    for comp_id in range(int(n_comp)):
+        comp_vertices = invalid_indices[comp_labels == comp_id]
+        comp_subgraph = induced_subgraph(connectivity, comp_vertices)
+        diameter = component_graph_diameter(comp_subgraph)
+        touches_boundary = bool(boundary_mask[comp_vertices].any())
+        if touches_boundary or diameter > 2:
+            classification = "permanent_null"
+            permanent_null[comp_vertices] = True
+        else:
+            classification = "fillable_hole"
+            fillable_hole[comp_vertices] = True
+        components.append(
+            {
+                "component_id": int(comp_id),
+                "n_vertices": int(comp_vertices.size),
+                "touches_boundary": touches_boundary,
+                "graph_diameter": int(diameter),
+                "classification": classification,
+                "vertex_indices": [int(x) for x in comp_vertices.tolist()],
+            }
+        )
+    return permanent_null, fillable_hole, components
+
+
+def demote_tiny_active_components(
+    active_mask: np.ndarray,
+    connectivity: sparse.csr_matrix,
+    *,
+    max_vertices: int = 2,
+) -> tuple[np.ndarray, list[dict[str, object]]]:
+    demoted = np.zeros_like(active_mask, dtype=bool)
+    details: list[dict[str, object]] = []
+    active_indices = np.flatnonzero(active_mask)
+    if active_indices.size == 0:
+        return demoted, details
+    subgraph = induced_subgraph(connectivity, active_indices)
+    n_comp, comp_labels = csgraph.connected_components(subgraph, directed=False, return_labels=True)
+    for comp_id in range(int(n_comp)):
+        comp_vertices = active_indices[comp_labels == comp_id]
+        if int(comp_vertices.size) > int(max_vertices):
+            continue
+        demoted[comp_vertices] = True
+        details.append(
+            {
+                "component_id": int(comp_id),
+                "n_vertices": int(comp_vertices.size),
+                "classification": "demoted_active_island",
+                "vertex_indices": [int(x) for x in comp_vertices.tolist()],
+            }
+        )
+    return demoted, details
+
+
+def sanitize_timeseries_with_mask(metric: np.ndarray, valid_mask: np.ndarray) -> np.ndarray:
+    metric = sanitize_timeseries(metric)
+    masked = metric.astype(np.float32, copy=True)
+    masked[~valid_mask, :] = np.nan
+    return masked
+
+
+def save_masked_metric(metric: np.ndarray, out_path: Path) -> None:
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    darrays = [
+        GiftiDataArray(data=np.asarray(metric[:, idx], dtype=np.float32), datatype="NIFTI_TYPE_FLOAT32")
+        for idx in range(metric.shape[1])
+    ]
+    nib.save(GiftiImage(darrays=darrays), str(out_path))
+
+
+def smooth_metric_with_roi(
+    *,
+    surface_path: Path,
+    metric_path: Path,
+    smooth_mm: str,
+    out_metric: Path,
+    roi_path: Path,
+) -> None:
+    out_metric.parent.mkdir(parents=True, exist_ok=True)
+    run(
+        [
+            WB_COMMAND,
+            "-metric-smoothing",
+            str(surface_path),
+            str(metric_path),
+            smooth_mm,
+            str(out_metric),
+            "-fwhm",
+            "-roi",
+            str(roi_path),
+        ]
+    )
+
+
+def extract_structure_data(
+    dt_axis: nib.cifti2.cifti2_axes.BrainModelAxis,
+    dt_data_t: np.ndarray,
+    structure_name: str,
+) -> tuple[np.ndarray, np.ndarray]:
+    for name, slc, subaxis in dt_axis.iter_structures():
+        if name == structure_name or name.endswith(structure_name):
+            if getattr(subaxis, "vertex", None) is None:
+                raise RuntimeError(f"Structure {structure_name} does not expose vertices")
+            return np.asarray(subaxis.vertex, dtype=np.int32), dt_data_t[slc, :]
+    raise RuntimeError(f"Could not find structure {structure_name} in dtseries")
+
+
+def compute_cortex_tsnr_gate(
+    *,
+    dtseries_path: Path,
+    output_dir: Path,
+) -> dict[str, object]:
+    img = nib.load(str(dtseries_path))
+    dt_data = np.asarray(img.dataobj, dtype=np.float32)
+    if dt_data.ndim != 2:
+        raise ValueError(f"Expected 2D dtseries, got {dt_data.shape} for {dtseries_path}")
+    dt_axis = img.header.get_axis(1)
+    dt_data_t = dt_data.T
+    left_vertices, left_dt = extract_structure_data(dt_axis, dt_data_t, "CORTEX_LEFT")
+    right_vertices, right_dt = extract_structure_data(dt_axis, dt_data_t, "CORTEX_RIGHT")
+    left_tsnr = compute_tsnr(left_dt)
+    right_tsnr = compute_tsnr(right_dt)
+    left_valid = np.isfinite(left_tsnr) & (left_tsnr >= TSNR_THRESHOLD)
+    right_valid = np.isfinite(right_tsnr) & (right_tsnr >= TSNR_THRESHOLD)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    left_tsnr_path = output_dir / "cortex_left_tsnr.npy"
+    right_tsnr_path = output_dir / "cortex_right_tsnr.npy"
+    left_mask_path = output_dir / "cortex_left_valid_mask.npy"
+    right_mask_path = output_dir / "cortex_right_valid_mask.npy"
+    np.save(left_tsnr_path, left_tsnr.astype(np.float32))
+    np.save(right_tsnr_path, right_tsnr.astype(np.float32))
+    np.save(left_mask_path, left_valid.astype(bool))
+    np.save(right_mask_path, right_valid.astype(bool))
+    summary = {
+        "dtseries": str(dtseries_path.resolve()),
+        "tsnr_definition": "10000/std",
+        "threshold": float(TSNR_THRESHOLD),
+        "left": {
+            "n_grayordinates_total": int(left_dt.shape[0]),
+            "n_grayordinates_used": int(left_valid.sum()),
+            "n_grayordinates_masked": int((~left_valid).sum()),
+            "tsnr_path": str(left_tsnr_path.resolve()),
+            "mask_path": str(left_mask_path.resolve()),
+            "vertex_index_min": int(left_vertices.min(initial=0)),
+            "vertex_index_max": int(left_vertices.max(initial=0)),
+        },
+        "right": {
+            "n_grayordinates_total": int(right_dt.shape[0]),
+            "n_grayordinates_used": int(right_valid.sum()),
+            "n_grayordinates_masked": int((~right_valid).sum()),
+            "tsnr_path": str(right_tsnr_path.resolve()),
+            "mask_path": str(right_mask_path.resolve()),
+            "vertex_index_min": int(right_vertices.min(initial=0)),
+            "vertex_index_max": int(right_vertices.max(initial=0)),
+        },
+        "combined": {
+            "n_grayordinates_total": int(left_dt.shape[0] + right_dt.shape[0]),
+            "n_grayordinates_used": int(left_valid.sum() + right_valid.sum()),
+            "n_grayordinates_masked": int((~left_valid).sum() + (~right_valid).sum()),
+        },
+    }
+    summary_path = output_dir / "cortex_tsnr_gate_summary.json"
+    summary_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    return {
+        "summary_path": summary_path,
+        "left_tsnr_path": left_tsnr_path,
+        "right_tsnr_path": right_tsnr_path,
+        "left_mask_path": left_mask_path,
+        "right_mask_path": right_mask_path,
+        "summary": summary,
+    }
+
+
+def compute_hipp_tsnr_gate(
+    *,
+    subject: str,
+    hemi: str,
+    raw_metric: np.ndarray,
+    raw_metric_source: str,
+    connectivity: sparse.csr_matrix,
+    faces: np.ndarray,
+    output_dir: Path,
+) -> dict[str, object]:
+    tsnr = compute_tsnr(raw_metric)
+    invalid_mask = ~np.isfinite(tsnr) | (tsnr < TSNR_THRESHOLD)
+    boundary_mask = build_boundary_vertex_mask(faces, int(raw_metric.shape[0]))
+    permanent_null, fillable_hole, components = classify_invalid_hipp_vertices(
+        invalid_mask=invalid_mask,
+        connectivity=connectivity,
+        boundary_mask=boundary_mask,
+    )
+    valid_mask = ~(permanent_null | fillable_hole)
+    demoted_active_islands, demoted_details = demote_tiny_active_components(valid_mask, connectivity)
+    if np.any(demoted_active_islands):
+        permanent_null = permanent_null | demoted_active_islands
+        valid_mask = ~(permanent_null | fillable_hole)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    tsnr_path = output_dir / f"sub-{subject}_hemi-{hemi}_tsnr.npy"
+    valid_mask_path = output_dir / f"sub-{subject}_hemi-{hemi}_valid_mask.npy"
+    permanent_mask_path = output_dir / f"sub-{subject}_hemi-{hemi}_permanent_null_mask.npy"
+    fillable_mask_path = output_dir / f"sub-{subject}_hemi-{hemi}_fillable_hole_mask.npy"
+    np.save(tsnr_path, tsnr.astype(np.float32))
+    np.save(valid_mask_path, valid_mask.astype(bool))
+    np.save(permanent_mask_path, permanent_null.astype(bool))
+    np.save(fillable_mask_path, fillable_hole.astype(bool))
+    summary = {
+        "subject": subject,
+        "hemi": hemi,
+        "threshold": float(TSNR_THRESHOLD),
+        "tsnr_definition": "10000/std",
+        "raw_tsnr_input_source": raw_metric_source,
+        "n_vertices_total": int(raw_metric.shape[0]),
+        "n_vertices_valid_high_tsnr": int(valid_mask.sum()),
+        "n_vertices_invalid_initial": int(invalid_mask.sum()),
+        "n_vertices_permanent_null": int(permanent_null.sum()),
+        "n_vertices_fillable_hole": int(fillable_hole.sum()),
+        "n_vertices_demoted_active_island": int(demoted_active_islands.sum()),
+        "n_boundary_vertices": int(boundary_mask.sum()),
+        "paths": {
+            "tsnr": str(tsnr_path.resolve()),
+            "valid_mask": str(valid_mask_path.resolve()),
+            "permanent_null_mask": str(permanent_mask_path.resolve()),
+            "fillable_hole_mask": str(fillable_mask_path.resolve()),
+        },
+        "components": components + demoted_details,
+    }
+    summary_path = output_dir / f"sub-{subject}_hemi-{hemi}_tsnr_gate_summary.json"
+    summary_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    return {
+        "summary_path": summary_path,
+        "tsnr_path": tsnr_path,
+        "valid_mask_path": valid_mask_path,
+        "permanent_mask_path": permanent_mask_path,
+        "fillable_mask_path": fillable_mask_path,
+        "tsnr": tsnr,
+        "valid_mask": valid_mask,
+        "permanent_null_mask": permanent_null,
+        "fillable_hole_mask": fillable_hole,
+        "summary": summary,
+    }
+
+
+def fill_feature_holes_from_valid_neighbors(
+    feature_full: np.ndarray,
+    *,
+    connectivity: sparse.csr_matrix,
+    valid_mask: np.ndarray,
+    fillable_hole_mask: np.ndarray,
+) -> np.ndarray:
+    filled = feature_full.astype(np.float32, copy=True)
+    hole_indices = np.flatnonzero(fillable_hole_mask)
+    valid_indices = np.flatnonzero(valid_mask)
+    if hole_indices.size == 0:
+        return filled
+    if valid_indices.size == 0:
+        raise RuntimeError("No valid high-tSNR vertices available to fill hippocampal holes")
+    distances = csgraph.shortest_path(connectivity, directed=False, unweighted=True, indices=hole_indices)
+    for row_idx, hole_vertex in enumerate(hole_indices):
+        valid_distances = distances[row_idx, valid_indices]
+        finite = np.isfinite(valid_distances)
+        if not np.any(finite):
+            raise RuntimeError(f"Could not find a valid neighbor to fill hippocampal hole at vertex {hole_vertex}")
+        nearest_valid = valid_indices[np.flatnonzero(finite)[np.argmin(valid_distances[finite])]]
+        filled[hole_vertex, :] = filled[int(nearest_valid), :]
+    return filled
+
+
+def compact_active_vertices(
+    data_full: np.ndarray,
+    active_mask: np.ndarray,
+) -> np.ndarray:
+    return np.asarray(data_full[active_mask, :], dtype=np.float32)
+
+
+def expand_cluster_labels(labels_active: np.ndarray, active_mask: np.ndarray, total_vertices: int) -> np.ndarray:
+    labels_full = np.zeros(total_vertices, dtype=np.int32)
+    labels_full[np.flatnonzero(active_mask)] = labels_active.astype(np.int32)
+    return labels_full
 
 
 def zscore_columns(x: np.ndarray) -> np.ndarray:
@@ -515,6 +960,10 @@ def connected_component_count(labels: np.ndarray, connectivity: sparse.csr_matri
 
 
 def compute_silhouette(features: np.ndarray, labels: np.ndarray) -> float:
+    n_samples = int(features.shape[0])
+    n_labels = int(np.unique(labels).size)
+    if n_samples <= 2 or n_labels < 2 or n_labels >= n_samples:
+        return float("nan")
     sample_size = min(4096, int(features.shape[0]))
     kwargs = {"sample_size": sample_size, "random_state": 0} if sample_size < int(features.shape[0]) else {}
     return float(silhouette_score(features, labels, **kwargs))
@@ -546,10 +995,57 @@ def reorder_cluster_labels(raw_labels: np.ndarray) -> np.ndarray:
     return np.asarray([mapping[int(key)] for key in raw_labels], dtype=np.int32)
 
 
+def allocate_component_cluster_counts(component_sizes: list[int], k_total: int) -> list[int]:
+    n_components = len(component_sizes)
+    if n_components <= 0:
+        raise ValueError("component_sizes must be non-empty")
+    if k_total < n_components:
+        raise ValueError(f"k_total={k_total} is smaller than number of connected components={n_components}")
+    total_size = float(sum(component_sizes))
+    raw = [size / total_size * k_total for size in component_sizes]
+    assigned = [max(1, int(math.floor(value))) for value in raw]
+    while sum(assigned) > k_total:
+        idx = int(np.argmax([count for count in assigned]))
+        if assigned[idx] <= 1:
+            break
+        assigned[idx] -= 1
+    remainders = [value - math.floor(value) for value in raw]
+    while sum(assigned) < k_total:
+        candidates = [idx for idx, size in enumerate(component_sizes)]
+        idx = max(candidates, key=lambda i: (remainders[i], component_sizes[i], -i))
+        assigned[idx] += 1
+        remainders[idx] = 0.0
+    return assigned
+
+
 def cluster_embedding(features: np.ndarray, connectivity: sparse.csr_matrix, k: int) -> np.ndarray:
-    model = AgglomerativeClustering(n_clusters=k, linkage="ward", connectivity=connectivity)
-    raw_labels = model.fit_predict(features)
-    return reorder_cluster_labels(raw_labels)
+    n_components, component_labels = csgraph.connected_components(connectivity, directed=False, return_labels=True)
+    if int(n_components) <= 1:
+        model = AgglomerativeClustering(n_clusters=k, linkage="ward", connectivity=connectivity)
+        raw_labels = model.fit_predict(features)
+        return reorder_cluster_labels(raw_labels)
+    if k < int(n_components):
+        model = AgglomerativeClustering(n_clusters=k, linkage="ward", connectivity=connectivity)
+        raw_labels = model.fit_predict(features)
+        return reorder_cluster_labels(raw_labels)
+
+    component_indices = [np.flatnonzero(component_labels == comp_id) for comp_id in range(int(n_components))]
+    cluster_counts = allocate_component_cluster_counts([int(idx.size) for idx in component_indices], k)
+    labels = np.zeros(features.shape[0], dtype=np.int32)
+    next_label = 1
+    for indices, k_component in zip(component_indices, cluster_counts, strict=True):
+        if int(k_component) <= 1 or indices.size <= 1:
+            labels[indices] = next_label
+            next_label += 1
+            continue
+        subgraph = induced_subgraph(connectivity, indices)
+        model = AgglomerativeClustering(n_clusters=int(k_component), linkage="ward", connectivity=subgraph)
+        raw_sub = model.fit_predict(features[indices, :])
+        ordered_sub = reorder_cluster_labels(raw_sub)
+        for local_label in sorted(np.unique(ordered_sub)):
+            labels[indices[ordered_sub == local_label]] = next_label
+            next_label += 1
+    return reorder_cluster_labels(labels)
 
 
 def write_tsv_rows(path: Path, rows: list[dict[str, object]], fieldnames: list[str]) -> None:
@@ -609,12 +1105,16 @@ def mark_instability_decisions(
     best_instability = float(best_row["instability_mean"])
     best_se = float(best_row["instability_se"])
 
+    all_instability_equal = len(set(instabilities)) == 1
+
     local_minima: list[int] = []
     for idx, row in enumerate(ordered):
         current = float(row["instability_mean"])
         left = float(ordered[idx - 1]["instability_mean"]) if idx > 0 else math.inf
         right = float(ordered[idx + 1]["instability_mean"]) if idx < len(ordered) - 1 else math.inf
-        is_local = current <= left and current <= right and (current < left or current < right or len(ordered) == 1)
+        is_local = all_instability_equal or (
+            current <= left and current <= right and (current < left or current < right or len(ordered) == 1)
+        )
         row["local_min"] = int(is_local)
         if is_local:
             local_minima.append(int(row["k"]))
@@ -652,8 +1152,37 @@ def mark_instability_decisions(
         "post_constraint_selected": k_star,
         "main_analysis_k": k_star,
         "sensitivity_k": sensitivity,
+        "degenerate_instability": bool(all_instability_equal),
     }
     return ordered, decision
+
+
+def select_final_k_mainline(rows: list[dict[str, object]]) -> tuple[int, dict[str, object]]:
+    if not rows:
+        raise ValueError("No K rows available for mainline selection")
+    ordered = sorted(rows, key=lambda row: int(row["k"]))
+    best_row = max(ordered, key=lambda row: float(row["null_corrected_score"]))
+    target_ari = float(best_row["null_corrected_score"]) - 0.02
+    eligible = [
+        row
+        for row in ordered
+        if float(row["null_corrected_score"]) >= target_ari
+        and float(row["min_cluster_size_fraction"]) >= 0.05
+    ]
+    selected = eligible[0] if eligible else best_row
+    k_final = int(selected["k"])
+    for row in ordered:
+        row["local_min"] = 0
+        row["within_1se_best"] = int(float(row["null_corrected_score"]) >= target_ari)
+    decision = {
+        "best_by_instability": int(best_row["k"]),
+        "candidate_local_minima": [],
+        "one_se_selected": int(k_final),
+        "post_constraint_selected": int(k_final),
+        "main_analysis_k": int(k_final),
+        "sensitivity_k": [],
+    }
+    return k_final, decision
 
 
 def load_cross_atlas_network_merge(
@@ -835,9 +1364,9 @@ def extract_network_name(cluster_label: str) -> str:
 
 def make_label_gifti(labels: np.ndarray, key_to_name: dict[int, str]) -> GiftiImage:
     table = GiftiLabelTable()
-    unknown = GiftiLabel(key=0, red=0.0, green=0.0, blue=0.0, alpha=0.0)
-    unknown.label = "???"
-    table.labels.append(unknown)
+    null_label = GiftiLabel(key=0, red=0.62, green=0.62, blue=0.62, alpha=1.0)
+    null_label.label = "Null"
+    table.labels.append(null_label)
     for key in sorted(key_to_name):
         cluster_name = key_to_name[key]
         network_name = extract_network_name(cluster_name)
@@ -860,6 +1389,7 @@ def make_label_gifti(labels: np.ndarray, key_to_name: dict[int, str]) -> GiftiIm
 def save_combined_label_assets(
     *,
     subject: str,
+    density: str,
     left_labels: np.ndarray,
     right_labels: np.ndarray,
     output_dir: Path,
@@ -868,7 +1398,6 @@ def save_combined_label_assets(
     left_key_to_name: dict[int, str],
     right_key_to_name: dict[int, str],
     stem: str,
-    density: str,
 ) -> dict[str, str]:
     output_dir.mkdir(parents=True, exist_ok=True)
     right_offset = max(left_key_to_name.keys(), default=0)
@@ -906,11 +1435,13 @@ def render_locked_native_view(
     *,
     subject: str,
     scene: Path,
-    surf_dir: Path | None,
     outdir: Path,
     name: str,
     left_labels: Path,
     right_labels: Path,
+    left_surface: Path,
+    right_surface: Path,
+    spec_path: Path,
 ) -> Path:
     render_root = outdir / "batch"
     render_root.mkdir(parents=True, exist_ok=True)
@@ -935,10 +1466,11 @@ def render_locked_native_view(
         name,
         "--no-template-scene",
     ]
-    if surf_dir is not None:
-        cmd.extend(["--surf-dir-template", str(surf_dir.resolve())])
     cmd.extend(["--left-label-template", str(left_labels)])
     cmd.extend(["--right-label-template", str(right_labels)])
+    cmd.extend(["--left-surface-template", str(left_surface)])
+    cmd.extend(["--right-surface-template", str(right_surface)])
+    cmd.extend(["--spec-template", str(spec_path)])
     run(cmd)
     return render_root / f"sub-{subject}" / f"sub-{subject}_wb_{name}_native.png"
 
@@ -947,7 +1479,6 @@ def render_locked_grid_png(
     *,
     subject: str,
     scene: Path,
-    surf_dir: Path | None = None,
     views: list[str],
     layout: str,
     outdir: Path,
@@ -955,6 +1486,9 @@ def render_locked_grid_png(
     title: str,
     left_labels: Path,
     right_labels: Path,
+    left_surface: Path,
+    right_surface: Path,
+    spec_path: Path,
     legend_group: str = "label",
 ) -> dict[str, str]:
     outdir.mkdir(parents=True, exist_ok=True)
@@ -965,11 +1499,13 @@ def render_locked_grid_png(
     native_png = render_locked_native_view(
         subject=subject,
         scene=scene,
-        surf_dir=surf_dir,
         outdir=outdir / "native",
         name=f"{name}_native",
         left_labels=left_labels,
         right_labels=right_labels,
+        left_surface=left_surface,
+        right_surface=right_surface,
+        spec_path=spec_path,
     )
 
     final_png = outdir / f"sub-{subject}_wb_{name}_biglegend.png"
@@ -1076,6 +1612,8 @@ def evaluate_k_range(
     instability_resamples: int,
     v_min_fraction: float | None,
     v_min_count: int | None,
+    k_selection_mode: str,
+    cluster_fn=None,
 ) -> dict[str, object]:
     k_metrics: list[dict[str, object]] = []
     k_to_annotations: dict[int, list[dict[str, object]]] = {}
@@ -1090,11 +1628,17 @@ def evaluate_k_range(
         v_min_fraction=v_min_fraction,
         v_min_count=v_min_count,
     )
+    valid_eval_k = [int(k) for k in EVAL_K if int(k) <= int(features_full.shape[0])]
+    if not valid_eval_k:
+        raise RuntimeError(
+            f"Not enough active hippocampal vertices to evaluate any K in {EVAL_K}: n_active={features_full.shape[0]}"
+        )
 
     previous_wcss: float | None = None
-    for k in EVAL_K:
-        labels_full = cluster_embedding(features_full, connectivity, k)
-        labels_by_run = [cluster_embedding(features_run, connectivity, k) for features_run in run_features]
+    for k in valid_eval_k:
+        _cluster = cluster_fn if cluster_fn is not None else cluster_embedding
+        labels_full = _cluster(features_full, connectivity, k)
+        labels_by_run = [_cluster(features_run, connectivity, k) for features_run in run_features]
         ari_values: list[float] = []
         resample_rows: list[dict[str, object]] = []
         for pair_idx, (run_idx_a, run_idx_b) in enumerate(resample_pairs, start=1):
@@ -1116,8 +1660,14 @@ def evaluate_k_range(
         min_frac = min_size_vertices / labels_full.size
         total_cc, per_cluster_cc = connected_component_count(labels_full, connectivity)
         sil = compute_silhouette(features_full, labels_full)
-        ch = float(calinski_harabasz_score(features_full, labels_full))
-        db = float(davies_bouldin_score(features_full, labels_full))
+        try:
+            ch = float(calinski_harabasz_score(features_full, labels_full))
+        except ValueError:
+            ch = float("nan")
+        try:
+            db = float(davies_bouldin_score(features_full, labels_full))
+        except ValueError:
+            db = float("nan")
         wcss = compute_wcss(features_full, labels_full)
         bss_ratio = float(1.0 - (wcss / max(tss, 1e-12)))
         entropy = compute_balance_entropy(labels_full)
@@ -1180,8 +1730,21 @@ def evaluate_k_range(
         }
         k_metrics.append(metric_row)
 
-    k_metrics, decision = mark_instability_decisions(k_metrics)
-    k_final = int(decision["main_analysis_k"])
+    if k_selection_mode == "mainline":
+        k_final, decision = select_final_k_mainline(k_metrics)
+        primary_reason = (
+            "Mainline selection: choose smallest K whose null-corrected score is within 0.02 of best and min cluster fraction >= 0.05."
+        )
+        secondary_reason = "If no K satisfies the threshold, use the K with maximum null-corrected score."
+        deviations = "using current mainline rule"
+    elif k_selection_mode == "experimental":
+        k_metrics, decision = mark_instability_decisions(k_metrics)
+        k_final = int(decision["main_analysis_k"])
+        primary_reason = "Selected the smallest local instability minimum within 1-SE that passed parcel-size and connectivity constraints."
+        secondary_reason = "Lower-complexity solution retained unless a larger K showed clearly better stability within protocol rules."
+        deviations = "none"
+    else:
+        raise ValueError(f"Unsupported --k-selection-mode: {k_selection_mode}")
     labels_final = np.load(outdir / f"k_{k_final}" / "cluster_labels.npy").astype(np.int32)
     run_metadata = {
         "project_id": "hipp_functional_parcellation_network",
@@ -1197,8 +1760,9 @@ def evaluate_k_range(
         "spatial_constraints": str(outdir),
         "random_seed_policy": "deterministic run-pair ordering",
         "B_resamples": int(len(resample_pairs)),
-        "K_min": int(min(EVAL_K)),
-        "K_max": int(max(EVAL_K)),
+        "K_min": int(min(valid_eval_k)),
+        "K_max": int(max(valid_eval_k)),
+        "k_selection_mode": k_selection_mode,
         "V_min": int(resolved_v_min_count),
         "V_min_mode": v_min_mode,
     }
@@ -1212,9 +1776,9 @@ def evaluate_k_range(
             "post_constraint_selected": decision["post_constraint_selected"],
             "main_analysis_K": decision["main_analysis_k"],
             "sensitivity_K": decision["sensitivity_k"],
-            "primary_reason": "Selected the smallest local instability minimum within 1-SE that passed parcel-size and connectivity constraints.",
-            "secondary_reason": "Lower-complexity solution retained unless a larger K showed clearly better stability within protocol rules.",
-            "deviations_from_protocol": "local smoke run with limited run-pair resamples",
+            "primary_reason": primary_reason,
+            "secondary_reason": secondary_reason,
+            "deviations_from_protocol": deviations,
         },
     )
     write_tsv_rows(
@@ -1298,6 +1862,7 @@ def run_gradient_branch(
     instability_resamples: int,
     v_min_fraction: float | None,
     v_min_count: int | None,
+    k_selection_mode: str,
 ) -> dict[str, object]:
     features_full, gradients, eigvals = compute_gradient_state(grouped_fc)
     run_features = [compute_gradient_state(fc_run)[0] for fc_run in run_grouped_fcs]
@@ -1333,6 +1898,7 @@ def run_gradient_branch(
         instability_resamples=instability_resamples,
         v_min_fraction=v_min_fraction,
         v_min_count=v_min_count,
+        k_selection_mode=k_selection_mode,
     )
     cluster["feature_summary"] = {
         "feature_kind": "network-gradient",
@@ -1365,6 +1931,7 @@ def run_probability_branch(
     instability_resamples: int,
     v_min_fraction: float | None,
     v_min_count: int | None,
+    k_selection_mode: str,
 ) -> dict[str, object]:
     probabilities = grouped_fc_to_probabilities(grouped_fc, zero_negative=zero_negative)
     run_probabilities = [grouped_fc_to_probabilities(fc_run, zero_negative=zero_negative) for fc_run in run_grouped_fcs]
@@ -1479,6 +2046,7 @@ def run_probability_branch(
         instability_resamples=instability_resamples,
         v_min_fraction=v_min_fraction,
         v_min_count=v_min_count,
+        k_selection_mode=k_selection_mode,
     )
     cluster["feature_summary"] = {
         "feature_kind": "probability-regularized" if strict_soft_route else "probability",
@@ -1541,7 +2109,7 @@ def run_wta_branch(
 
     return {
         "feature_summary": {
-            "feature_kind": "network-fixed-network-labels",
+            "feature_kind": "network-wta",
             "n_vertices": int(grouped_fc.shape[0]),
             "n_networks": int(grouped_fc.shape[1]),
         },
@@ -1562,6 +2130,73 @@ def run_wta_branch(
     }
 
 
+def run_spectral_branch(
+    *,
+    grouped_fc: np.ndarray,
+    run_grouped_fcs: list[np.ndarray],
+    run_labels: list[str],
+    networks: list[str],
+    connectivity: sparse.csr_matrix,
+    hipp_coords: np.ndarray,
+    feature_dir: Path,
+    clustering_dir: Path,
+    hemi: str,
+    k_spatial: int,
+    split_strategy: str,
+    instability_resamples: int,
+    v_min_fraction: float | None,
+    v_min_count: int | None,
+    k_selection_mode: str,
+) -> dict[str, object]:
+    features_full = zscore_columns(grouped_fc)
+    run_features = [zscore_columns(fc_run) for fc_run in run_grouped_fcs]
+
+    feature_dir.mkdir(parents=True, exist_ok=True)
+    np.save(feature_dir / "grouped_fc.npy", grouped_fc.astype(np.float32))
+    save_json(
+        feature_dir / "feature_summary.json",
+        {
+            "hemi": hemi,
+            "feature_kind": "network-spectral",
+            "feature_shape": [int(features_full.shape[0]), int(features_full.shape[1])],
+            "source_networks": networks,
+            "k_spatial": k_spatial,
+            "run_labels": run_labels,
+            "split_strategy": split_strategy,
+        },
+    )
+
+    def _spectral_fn(features: np.ndarray, _connectivity: sparse.csr_matrix, k: int) -> np.ndarray:
+        return spectral_cluster_from_features(features, hipp_coords, k, k_spatial=k_spatial)
+
+    cluster = evaluate_k_range(
+        features_full=features_full,
+        run_features=run_features,
+        run_labels=run_labels,
+        profile_source=grouped_fc,
+        profile_networks=networks,
+        connectivity=connectivity,
+        outdir=clustering_dir,
+        hemi=hemi,
+        profile_mode="fc",
+        split_strategy=split_strategy,
+        instability_resamples=instability_resamples,
+        v_min_fraction=v_min_fraction,
+        v_min_count=v_min_count,
+        k_selection_mode=k_selection_mode,
+        cluster_fn=_spectral_fn,
+    )
+    cluster["feature_summary"] = {
+        "feature_kind": "network-spectral",
+        "feature_shape": [int(features_full.shape[0]), int(features_full.shape[1])],
+        "source_networks": networks,
+        "k_spatial": k_spatial,
+        "run_labels": run_labels,
+        "split_strategy": split_strategy,
+    }
+    return cluster
+
+
 def build_panel_titles(branch_slug: str, smooth_name: str, hemi: str, k_final: int) -> str:
     smooth_label = smooth_name
     if is_soft_branch(branch_slug):
@@ -1579,9 +2214,9 @@ def main() -> int:
     parser.add_argument("--branch", default="network-gradient", choices=BRANCHES)
     parser.add_argument("--atlas-slug", default="lynch2024", choices=sorted(ATLAS_CONFIG))
     parser.add_argument("--input-root", default=str(REPO_ROOT / "data" / "hippunfold_input"))
-    parser.add_argument("--hippunfold-root", default=str(REPO_ROOT / "outputs" / "dense_corobl_batch"))
-    parser.add_argument("--cortex-root", default=str(REPO_ROOT / "outputs" / "cortex_pfm"))
-    parser.add_argument("--out-root", default=str(REPO_ROOT / "outputs" / "hipp_functional_parcellation_network"))
+    parser.add_argument("--hippunfold-root", default=str(REPO_ROOT / "outputs_migration" / "dense_corobl_batch"))
+    parser.add_argument("--cortex-root", default=str(REPO_ROOT / "outputs_migration" / "cortex_pfm"))
+    parser.add_argument("--out-root", default=str(REPO_ROOT / "outputs_migration" / "hipp_functional_parcellation_network"))
     parser.add_argument(
         "--shared-surface-store-root",
         default=None,
@@ -1595,12 +2230,10 @@ def main() -> int:
     parser.add_argument("--instability-resamples", type=int, default=DEFAULT_INSTABILITY_RESAMPLES)
     parser.add_argument("--v-min-fraction", type=float, default=DEFAULT_V_MIN_FRACTION)
     parser.add_argument("--v-min-count", type=int, default=None)
+    parser.add_argument("--k-selection-mode", choices=["mainline", "experimental"], default="mainline")
+    parser.add_argument("--k-spatial", type=int, default=10, help="KNN spatial neighbors for network-spectral branch")
+    parser.add_argument("--run-split-mode", choices=["none", "runwise"], default="none")
     parser.add_argument("--hipp-density", default=DEFAULT_HIPP_DENSITY)
-    parser.add_argument(
-        "--surface-source-dir",
-        default=None,
-        help="Existing corobl hippocampal surface sampling directory containing raw .func.gii/.npy outputs",
-    )
     args = parser.parse_args()
 
     views = [token.strip() for token in args.views.split(",") if token.strip()]
@@ -1609,8 +2242,8 @@ def main() -> int:
         raise ValueError(f"Invalid --views: {args.views}")
     subject = args.subject
     branch_slug = args.branch
-    hipp_density = str(args.hipp_density)
     atlas_slug = args.atlas_slug
+    hipp_density = str(args.hipp_density)
     resume_mode = args.resume_mode
     atlas_cfg = ATLAS_CONFIG[atlas_slug]
     input_root = Path(args.input_root).resolve()
@@ -1626,13 +2259,10 @@ def main() -> int:
     shared_reference_store_dir = shared_store_root / f"sub-{subject}" / "reference" / atlas_slug
     shared_surface_store_dir = shared_store_root / f"sub-{subject}" / "surface"
     scene = Path(args.scene).resolve()
-    surface_source_dir = (
-        Path(args.surface_source_dir).resolve()
-        if args.surface_source_dir
-        else (Path(args.hippunfold_root).resolve() / f"sub-{subject}" / "post_dense_corobl" / "surface")
-    )
-
     func_input_dir = input_root / f"sub-{subject}" / "func"
+
+    roi_summary_probe = cortex_root / "roi_components" / "roi_component_stats.json"
+
     dtseries = func_input_dir / f"sub-{subject}_task-rest_run-concat.dtseries.nii"
     concat_bold = func_input_dir / f"sub-{subject}_task-rest_run-concat_bold.nii.gz"
     runwise_dtseries = [
@@ -1646,28 +2276,45 @@ def main() -> int:
     surf_dir = hipp_root / "hippunfold" / f"sub-{subject}" / "surf"
     if not dtseries.exists():
         raise FileNotFoundError(f"Missing dtseries: {dtseries}")
-    shared_runwise_input_dir = shared_store_root / f"sub-{subject}" / "runwise_inputs"
-    resolved_runwise_dtseries, dtseries_run_input_mode, dtseries_run_lengths = resolve_runwise_dtseries(
-        subject=subject,
-        concat_dtseries=dtseries,
-        runwise_dtseries=runwise_dtseries,
-        stage_root=shared_runwise_input_dir,
-        resume_mode=resume_mode,
-    )
-    resolved_runwise_bold, bold_run_input_mode, bold_run_lengths = resolve_runwise_bold(
-        subject=subject,
-        concat_bold=concat_bold,
-        runwise_bold=runwise_bold,
-        stage_root=shared_runwise_input_dir,
-        resume_mode=resume_mode,
-    )
-    if dtseries_run_lengths != bold_run_lengths:
-        raise ValueError(
-            "Run-wise dtseries and BOLD lengths do not match after input resolution: "
-            f"dtseries={dtseries_run_lengths}, bold={bold_run_lengths}"
+    if not concat_bold.exists():
+        raise FileNotFoundError(
+            "Missing concat BOLD required for strict hippocampal raw surface sampling: "
+            f"{concat_bold}"
         )
+    shared_runwise_input_dir = shared_store_root / f"sub-{subject}" / "runwise_inputs"
+    if args.run_split_mode == "runwise":
+        resolved_runwise_dtseries, dtseries_run_input_mode, dtseries_run_lengths = resolve_runwise_dtseries(
+            subject=subject,
+            concat_dtseries=dtseries,
+            runwise_dtseries=runwise_dtseries,
+            stage_root=shared_runwise_input_dir,
+            resume_mode=resume_mode,
+        )
+        bold_assets_available = concat_bold.exists() or all(path.exists() for path in runwise_bold)
+        resolved_runwise_bold: list[Path] = []
+        bold_run_input_mode = "not_available_split_surface_from_concat_timeseries"
+        if bold_assets_available:
+            resolved_runwise_bold, bold_run_input_mode, bold_run_lengths = resolve_runwise_bold(
+                subject=subject,
+                concat_bold=concat_bold,
+                runwise_bold=runwise_bold,
+                stage_root=shared_runwise_input_dir,
+                resume_mode=resume_mode,
+            )
+            if dtseries_run_lengths != bold_run_lengths:
+                raise ValueError(
+                    "Run-wise dtseries and BOLD lengths do not match after input resolution: "
+                    f"dtseries={dtseries_run_lengths}, bold={bold_run_lengths}"
+                )
+    else:
+        total_tp = int(nib.load(str(dtseries)).shape[0])
+        resolved_runwise_dtseries = [dtseries for _ in RUN_SPECS]
+        dtseries_run_input_mode = "concat_no_split"
+        dtseries_run_lengths = [total_tp for _ in RUN_SPECS]
+        resolved_runwise_bold = []
+        bold_run_input_mode = "not_used_concat_no_split"
 
-    left_surface = find_surface_asset_strict(
+    left_surface = find_hippunfold_surface_asset(
         surf_dir=surf_dir,
         subject=subject,
         hemi="L",
@@ -1675,7 +2322,7 @@ def main() -> int:
         density=hipp_density,
         suffix="midthickness.surf.gii",
     )
-    right_surface = find_surface_asset_strict(
+    right_surface = find_hippunfold_surface_asset(
         surf_dir=surf_dir,
         subject=subject,
         hemi="R",
@@ -1683,22 +2330,20 @@ def main() -> int:
         density=hipp_density,
         suffix="midthickness.surf.gii",
     )
-    left_struct_labels = find_surface_asset_strict(
+    structural_dlabel = find_hippunfold_cifti_asset(
+        cifti_dir=hipp_root / "hippunfold" / f"sub-{subject}" / "cifti",
+        subject=subject,
+        density=hipp_density,
+        suffix="atlas-multihist7_subfields.dlabel.nii",
+    )
+    structural_spec = find_hippunfold_surface_asset(
         surf_dir=surf_dir,
         subject=subject,
         hemi="L",
         space="corobl",
         density=hipp_density,
-        suffix="atlas-multihist7_subfields.label.gii",
-    )
-    right_struct_labels = find_surface_asset_strict(
-        surf_dir=surf_dir,
-        subject=subject,
-        hemi="R",
-        space="corobl",
-        density=hipp_density,
-        suffix="atlas-multihist7_subfields.label.gii",
-    )
+        suffix="midthickness.surf.gii",
+    ).parent / f"sub-{subject}_den-{hipp_density}_surfaces.spec"
 
     reference_dir = out_root / "reference"
     surface_dir = out_root / "surface"
@@ -1713,9 +2358,57 @@ def main() -> int:
     for path in [reference_dir, surface_dir, fc_dir, feature_root, clustering_root, soft_root, workbench_dir, renders_dir]:
         path.mkdir(parents=True, exist_ok=True)
 
+    left_struct_labels, right_struct_labels = separate_hippunfold_structural_dlabel(
+        dlabel_path=structural_dlabel,
+        output_dir=workbench_dir / "structural_input",
+        subject=subject,
+        density=hipp_density,
+        resume_mode=resume_mode,
+    )
+
     left_cortex_labels = cortex_root / "roi_components" / "hemi_L" / f"{atlas_cfg['label_prefix']}.L.label.gii"
     right_cortex_labels = cortex_root / "roi_components" / "hemi_R" / f"{atlas_cfg['label_prefix']}.R.label.gii"
     roi_summary_path = cortex_root / "roi_components" / "roi_component_stats.json"
+
+    cortex_tsnr_dir = shared_reference_store_dir / "tsnr_gate"
+    cortex_tsnr_summary_path = cortex_tsnr_dir / "cortex_tsnr_gate_summary.json"
+    cortex_tsnr_outputs = [
+        cortex_tsnr_summary_path,
+        cortex_tsnr_dir / "cortex_left_tsnr.npy",
+        cortex_tsnr_dir / "cortex_right_tsnr.npy",
+        cortex_tsnr_dir / "cortex_left_valid_mask.npy",
+        cortex_tsnr_dir / "cortex_right_valid_mask.npy",
+    ]
+    cortex_tsnr_params = {
+        "subject": subject,
+        "threshold": float(TSNR_THRESHOLD),
+        "tsnr_definition": "10000/std",
+    }
+    if not stage_is_up_to_date(
+        stage_dir=cortex_tsnr_dir,
+        resume_mode=resume_mode,
+        stage_name="cortex_tsnr_gate",
+        params=cortex_tsnr_params,
+        inputs=[dtseries],
+        outputs=cortex_tsnr_outputs,
+    ):
+        cortex_tsnr_result = compute_cortex_tsnr_gate(
+            dtseries_path=dtseries,
+            output_dir=cortex_tsnr_dir,
+        )
+        write_stage_manifest(
+            stage_dir=cortex_tsnr_dir,
+            stage_name="cortex_tsnr_gate",
+            params=cortex_tsnr_params,
+            inputs=[dtseries],
+            outputs=[
+                cortex_tsnr_result["summary_path"],
+                cortex_tsnr_result["left_tsnr_path"],
+                cortex_tsnr_result["right_tsnr_path"],
+                cortex_tsnr_result["left_mask_path"],
+                cortex_tsnr_result["right_mask_path"],
+            ],
+        )
 
     reference_summary_path = shared_reference_store_dir / "reference_summary.json"
     canonical_network_table_path = shared_reference_store_dir / "cortex_canonical_networks.tsv"
@@ -1724,8 +2417,16 @@ def main() -> int:
         "subject": subject,
         "atlas_slug": atlas_slug,
         "label_prefix": str(atlas_cfg["label_prefix"]),
+        "tsnr_threshold": float(TSNR_THRESHOLD),
     }
-    reference_inputs = [dtseries, left_cortex_labels, right_cortex_labels, roi_summary_path]
+    reference_inputs = [
+        dtseries,
+        left_cortex_labels,
+        right_cortex_labels,
+        roi_summary_path,
+        cortex_tsnr_dir / "cortex_left_valid_mask.npy",
+        cortex_tsnr_dir / "cortex_right_valid_mask.npy",
+    ]
     reference_outputs = [
         reference_summary_path,
         canonical_network_table_path,
@@ -1755,6 +2456,10 @@ def main() -> int:
                 str(roi_summary_path),
                 "--atlas-slug",
                 atlas_slug,
+                "--left-tsnr-mask",
+                str(cortex_tsnr_dir / "cortex_left_valid_mask.npy"),
+                "--right-tsnr-mask",
+                str(cortex_tsnr_dir / "cortex_right_valid_mask.npy"),
                 "--outdir",
                 str(shared_reference_store_dir),
             ]
@@ -1777,81 +2482,248 @@ def main() -> int:
         canonical_network_timeseries_path=canonical_network_timeseries_path,
     )
 
-    run_reference_outputs: list[Path] = []
-    run_reference_paths: list[Path] = []
-    for spec, run_dtseries in zip(RUN_SPECS, resolved_runwise_dtseries, strict=True):
-        run_reference_dir = shared_reference_store_dir / "runs" / f"run-{spec['run_id']}"
-        run_reference_summary = run_reference_dir / "reference_summary.json"
-        run_canonical_network_timeseries = run_reference_dir / "cortex_canonical_network_timeseries.npy"
-        run_reference_outputs.extend([run_reference_summary, run_canonical_network_timeseries])
-        run_reference_paths.append(run_canonical_network_timeseries)
-        run_reference_params = {
-            "subject": subject,
-            "atlas_slug": atlas_slug,
-            "label_prefix": str(atlas_cfg["label_prefix"]),
-            "run_id": spec["run_id"],
-        }
-        if not stage_is_up_to_date(
-            stage_dir=run_reference_dir,
-            resume_mode=resume_mode,
-            stage_name="reference_run",
-            params=run_reference_params,
-            inputs=[run_dtseries, left_cortex_labels, right_cortex_labels, roi_summary_path],
-            outputs=[run_reference_summary, run_canonical_network_timeseries],
-        ):
-            run(
-                [
-                    PYTHON_EXE,
-                    str(REPO_ROOT / "scripts" / "cortex" / "extract_cortex_roi_component_timeseries.py"),
-                    "--subject",
-                    subject,
-                    "--dtseries",
-                    str(run_dtseries),
-                    "--left-labels",
-                    str(left_cortex_labels),
-                    "--right-labels",
-                    str(right_cortex_labels),
-                    "--roi-summary",
-                    str(roi_summary_path),
-                    "--atlas-slug",
-                    atlas_slug,
-                    "--outdir",
-                    str(run_reference_dir),
-                ]
-            )
-            write_stage_manifest(
-                stage_dir=run_reference_dir,
-                stage_name="reference_run",
-                params=run_reference_params,
-                inputs=[run_dtseries, left_cortex_labels, right_cortex_labels, roi_summary_path],
-                outputs=[run_reference_summary, run_canonical_network_timeseries],
-            )
-
     reference_summary = json.loads(reference_summary_path.read_text(encoding="utf-8"))
     canonical_network_rows = load_canonical_network_rows(canonical_network_table_path)
     network_ts = np.load(canonical_network_timeseries_path).astype(np.float32)
-    run_network_ts = [np.load(path).astype(np.float32) for path in run_reference_paths]
+    if args.run_split_mode == "runwise":
+        run_reference_paths: list[Path] = []
+        for spec, run_dtseries in zip(RUN_SPECS, resolved_runwise_dtseries, strict=True):
+            run_reference_dir = shared_reference_store_dir / "runs" / f"run-{spec['run_id']}"
+            run_reference_summary = run_reference_dir / "reference_summary.json"
+            run_canonical_network_timeseries = run_reference_dir / "cortex_canonical_network_timeseries.npy"
+            run_reference_paths.append(run_canonical_network_timeseries)
+            run_reference_params = {
+                "subject": subject,
+                "atlas_slug": atlas_slug,
+                "label_prefix": str(atlas_cfg["label_prefix"]),
+                "run_id": spec["run_id"],
+                "tsnr_threshold": float(TSNR_THRESHOLD),
+            }
+            if not stage_is_up_to_date(
+                stage_dir=run_reference_dir,
+                resume_mode=resume_mode,
+                stage_name="reference_run",
+                params=run_reference_params,
+                inputs=[
+                    run_dtseries,
+                    left_cortex_labels,
+                    right_cortex_labels,
+                    roi_summary_path,
+                    cortex_tsnr_dir / "cortex_left_valid_mask.npy",
+                    cortex_tsnr_dir / "cortex_right_valid_mask.npy",
+                ],
+                outputs=[run_reference_summary, run_canonical_network_timeseries],
+            ):
+                run(
+                    [
+                        PYTHON_EXE,
+                        str(REPO_ROOT / "scripts" / "cortex" / "extract_cortex_roi_component_timeseries.py"),
+                        "--subject",
+                        subject,
+                        "--dtseries",
+                        str(run_dtseries),
+                        "--left-labels",
+                        str(left_cortex_labels),
+                        "--right-labels",
+                        str(right_cortex_labels),
+                        "--roi-summary",
+                        str(roi_summary_path),
+                        "--atlas-slug",
+                        atlas_slug,
+                        "--left-tsnr-mask",
+                        str(cortex_tsnr_dir / "cortex_left_valid_mask.npy"),
+                        "--right-tsnr-mask",
+                        str(cortex_tsnr_dir / "cortex_right_valid_mask.npy"),
+                        "--outdir",
+                        str(run_reference_dir),
+                    ]
+                )
+                write_stage_manifest(
+                    stage_dir=run_reference_dir,
+                    stage_name="reference_run",
+                    params=run_reference_params,
+                    inputs=[
+                        run_dtseries,
+                        left_cortex_labels,
+                        right_cortex_labels,
+                        roi_summary_path,
+                        cortex_tsnr_dir / "cortex_left_valid_mask.npy",
+                        cortex_tsnr_dir / "cortex_right_valid_mask.npy",
+                    ],
+                    outputs=[run_reference_summary, run_canonical_network_timeseries],
+                )
+        run_network_ts = [np.load(path).astype(np.float32) for path in run_reference_paths]
+    else:
+        run_reference_paths = []
+        run_network_ts = [network_ts.astype(np.float32, copy=False) for _ in RUN_SPECS]
     networks = [str(row["canonical_network"]) for row in canonical_network_rows]
 
-    left_raw_metric = find_surface_sampling_metric_strict(
-        surface_source_dir=surface_source_dir,
-        subject=subject,
-        hemi="L",
-        density=hipp_density,
-        space="corobl",
-    )
-    right_raw_metric = find_surface_sampling_metric_strict(
-        surface_source_dir=surface_source_dir,
-        subject=subject,
-        hemi="R",
-        density=hipp_density,
-        space="corobl",
-    )
+    shared_raw_surface_dir = shared_surface_store_dir / "raw"
+    left_raw_metric = shared_raw_surface_dir / f"sub-{subject}_hemi-L_space-corobl_den-{hipp_density}_label-hipp_bold.func.gii"
+    right_raw_metric = shared_raw_surface_dir / f"sub-{subject}_hemi-R_space-corobl_den-{hipp_density}_label-hipp_bold.func.gii"
 
     left_coords, left_faces = load_surface(left_surface)
     right_coords, right_faces = load_surface(right_surface)
     left_adj = build_surface_adjacency(left_faces, int(left_coords.shape[0]))
     right_adj = build_surface_adjacency(right_faces, int(right_coords.shape[0]))
+
+    hipp_tsnr_dir = shared_surface_store_dir / "tsnr_gate"
+    left_roi_path = hipp_tsnr_dir / f"sub-{subject}_hemi-L_valid_roi.shape.gii"
+    right_roi_path = hipp_tsnr_dir / f"sub-{subject}_hemi-R_valid_roi.shape.gii"
+    left_hipp_tsnr_outputs = [
+        hipp_tsnr_dir / f"sub-{subject}_hemi-L_tsnr_gate_summary.json",
+        hipp_tsnr_dir / f"sub-{subject}_hemi-L_tsnr.npy",
+        hipp_tsnr_dir / f"sub-{subject}_hemi-L_valid_mask.npy",
+        hipp_tsnr_dir / f"sub-{subject}_hemi-L_permanent_null_mask.npy",
+        hipp_tsnr_dir / f"sub-{subject}_hemi-L_fillable_hole_mask.npy",
+        left_roi_path,
+    ]
+    right_hipp_tsnr_outputs = [
+        hipp_tsnr_dir / f"sub-{subject}_hemi-R_tsnr_gate_summary.json",
+        hipp_tsnr_dir / f"sub-{subject}_hemi-R_tsnr.npy",
+        hipp_tsnr_dir / f"sub-{subject}_hemi-R_valid_mask.npy",
+        hipp_tsnr_dir / f"sub-{subject}_hemi-R_permanent_null_mask.npy",
+        hipp_tsnr_dir / f"sub-{subject}_hemi-R_fillable_hole_mask.npy",
+        right_roi_path,
+    ]
+    shared_raw_surface_params = {
+        "subject": subject,
+        "hipp_density": hipp_density,
+        "mapping_method": "trilinear",
+        "smooth_iters": 0,
+        "source_bold": str(concat_bold.resolve()),
+        "raw_source_policy": "strict_shared_pipeline_func_gii_only",
+    }
+    shared_raw_surface_outputs = [left_raw_metric, right_raw_metric, shared_raw_surface_dir / "surface_sampling_summary.json"]
+    if not stage_is_up_to_date(
+        stage_dir=shared_raw_surface_dir,
+        resume_mode=resume_mode,
+        stage_name="surface_raw",
+        params=shared_raw_surface_params,
+        inputs=[concat_bold, left_surface, right_surface],
+        outputs=shared_raw_surface_outputs,
+    ):
+        run(
+            [
+                PYTHON_EXE,
+                str(REPO_ROOT / "scripts" / "common" / "sample_hipp_surface_timeseries.py"),
+                "--bold",
+                str(concat_bold),
+                "--hippunfold-dir",
+                str(hipp_root / "hippunfold"),
+                "--subject",
+                subject,
+                "--density",
+                hipp_density,
+                "--space",
+                "corobl",
+                "--mapping-method",
+                "trilinear",
+                "--smooth-iters",
+                "0",
+                "--outdir",
+                str(shared_raw_surface_dir),
+            ]
+        )
+        write_stage_manifest(
+            stage_dir=shared_raw_surface_dir,
+            stage_name="surface_raw",
+            params=shared_raw_surface_params,
+            inputs=[concat_bold, left_surface, right_surface],
+            outputs=shared_raw_surface_outputs,
+        )
+
+    hipp_tsnr_params = {
+        "subject": subject,
+        "threshold": float(TSNR_THRESHOLD),
+        "tsnr_definition": "10000/std",
+        "hipp_density": hipp_density,
+        "raw_source_policy": "strict_shared_pipeline_func_gii_only",
+        "topology_cleanup_version": "invalid-components-plus-tiny-active-islands-v3-strict-func-gii",
+    }
+    if not stage_is_up_to_date(
+        stage_dir=hipp_tsnr_dir / "hemi-L",
+        resume_mode=resume_mode,
+        stage_name="hipp_tsnr_gate",
+        params={**hipp_tsnr_params, "hemi": "L"},
+        inputs=[left_raw_metric, left_surface, concat_bold],
+        outputs=left_hipp_tsnr_outputs,
+    ):
+        left_raw_timeseries, left_raw_tsnr_source = load_surface_timeseries_for_tsnr(
+            metric_path=left_raw_metric,
+            expected_n_vertices=int(left_coords.shape[0]),
+        )
+        left_raw_timeseries = sanitize_timeseries(left_raw_timeseries)
+        left_hipp_tsnr = compute_hipp_tsnr_gate(
+            subject=subject,
+            hemi="L",
+            raw_metric=left_raw_timeseries,
+            raw_metric_source=left_raw_tsnr_source,
+            connectivity=left_adj,
+            faces=left_faces,
+            output_dir=hipp_tsnr_dir,
+        )
+        save_shape_gii(left_hipp_tsnr["valid_mask"].astype(np.float32), left_roi_path)
+        write_stage_manifest(
+            stage_dir=hipp_tsnr_dir / "hemi-L",
+            stage_name="hipp_tsnr_gate",
+            params={**hipp_tsnr_params, "hemi": "L"},
+                inputs=[left_raw_metric, left_surface, concat_bold],
+                outputs=[
+                left_hipp_tsnr["summary_path"],
+                left_hipp_tsnr["tsnr_path"],
+                left_hipp_tsnr["valid_mask_path"],
+                left_hipp_tsnr["permanent_mask_path"],
+                left_hipp_tsnr["fillable_mask_path"],
+                left_roi_path,
+            ],
+        )
+    if not stage_is_up_to_date(
+        stage_dir=hipp_tsnr_dir / "hemi-R",
+        resume_mode=resume_mode,
+        stage_name="hipp_tsnr_gate",
+        params={**hipp_tsnr_params, "hemi": "R"},
+        inputs=[right_raw_metric, right_surface, concat_bold],
+        outputs=right_hipp_tsnr_outputs,
+    ):
+        right_raw_timeseries, right_raw_tsnr_source = load_surface_timeseries_for_tsnr(
+            metric_path=right_raw_metric,
+            expected_n_vertices=int(right_coords.shape[0]),
+        )
+        right_raw_timeseries = sanitize_timeseries(right_raw_timeseries)
+        right_hipp_tsnr = compute_hipp_tsnr_gate(
+            subject=subject,
+            hemi="R",
+            raw_metric=right_raw_timeseries,
+            raw_metric_source=right_raw_tsnr_source,
+            connectivity=right_adj,
+            faces=right_faces,
+            output_dir=hipp_tsnr_dir,
+        )
+        save_shape_gii(right_hipp_tsnr["valid_mask"].astype(np.float32), right_roi_path)
+        write_stage_manifest(
+            stage_dir=hipp_tsnr_dir / "hemi-R",
+            stage_name="hipp_tsnr_gate",
+            params={**hipp_tsnr_params, "hemi": "R"},
+                inputs=[right_raw_metric, right_surface, concat_bold],
+                outputs=[
+                right_hipp_tsnr["summary_path"],
+                right_hipp_tsnr["tsnr_path"],
+                right_hipp_tsnr["valid_mask_path"],
+                right_hipp_tsnr["permanent_mask_path"],
+                right_hipp_tsnr["fillable_mask_path"],
+                right_roi_path,
+            ],
+        )
+
+    left_valid_mask = np.load(hipp_tsnr_dir / f"sub-{subject}_hemi-L_valid_mask.npy").astype(bool)
+    right_valid_mask = np.load(hipp_tsnr_dir / f"sub-{subject}_hemi-R_valid_mask.npy").astype(bool)
+    left_permanent_null_mask = np.load(hipp_tsnr_dir / f"sub-{subject}_hemi-L_permanent_null_mask.npy").astype(bool)
+    right_permanent_null_mask = np.load(hipp_tsnr_dir / f"sub-{subject}_hemi-R_permanent_null_mask.npy").astype(bool)
+    left_fillable_hole_mask = np.load(hipp_tsnr_dir / f"sub-{subject}_hemi-L_fillable_hole_mask.npy").astype(bool)
+    right_fillable_hole_mask = np.load(hipp_tsnr_dir / f"sub-{subject}_hemi-R_fillable_hole_mask.npy").astype(bool)
+    left_hipp_tsnr_summary = json.loads((hipp_tsnr_dir / f"sub-{subject}_hemi-L_tsnr_gate_summary.json").read_text(encoding="utf-8"))
+    right_hipp_tsnr_summary = json.loads((hipp_tsnr_dir / f"sub-{subject}_hemi-R_tsnr_gate_summary.json").read_text(encoding="utf-8"))
 
     two_mm_left_func = shared_surface_store_dir / "2mm" / f"sub-{subject}_hemi-L_space-corobl_den-{hipp_density}_label-hipp_bold.func.gii"
     two_mm_right_func = shared_surface_store_dir / "2mm" / f"sub-{subject}_hemi-R_space-corobl_den-{hipp_density}_label-hipp_bold.func.gii"
@@ -1861,8 +2733,15 @@ def main() -> int:
     fwhm_right_func = shared_surface_store_dir / "4mm" / f"sub-{subject}_hemi-R_space-corobl_den-{hipp_density}_label-hipp_bold.func.gii"
     fwhm_left_path = shared_surface_store_dir / "4mm" / f"sub-{subject}_hemi-L_timeseries.npy"
     fwhm_right_path = shared_surface_store_dir / "4mm" / f"sub-{subject}_hemi-R_timeseries.npy"
-    surface_params = {"subject": subject, "smoothings": SMOOTH_ORDER}
-    surface_inputs = [left_raw_metric, right_raw_metric, left_surface, right_surface]
+    surface_params = {
+        "subject": subject,
+        "smoothings": SMOOTH_ORDER,
+        "tsnr_threshold": float(TSNR_THRESHOLD),
+        "smoothing_roi_policy": "high_tsnr_vertices_only",
+        "raw_source_policy": "strict_shared_pipeline_func_gii_only",
+        "topology_cleanup_version": "invalid-components-plus-tiny-active-islands-v3-strict-func-gii",
+    }
+    surface_inputs = [left_raw_metric, right_raw_metric, left_surface, right_surface, left_roi_path, right_roi_path, concat_bold]
     surface_outputs = [
         two_mm_left_func,
         two_mm_right_func,
@@ -1881,41 +2760,46 @@ def main() -> int:
         inputs=surface_inputs,
         outputs=surface_outputs,
     ):
-        for hemi, surface_path, metric_path, smooth_mm, out_metric in [
-            ("L", left_surface, left_raw_metric, "2", two_mm_left_func),
-            ("R", right_surface, right_raw_metric, "2", two_mm_right_func),
-            ("L", left_surface, left_raw_metric, "4", fwhm_left_func),
-            ("R", right_surface, right_raw_metric, "4", fwhm_right_func),
+        for _hemi, surface_path, metric_path, smooth_mm, out_metric, roi_path in [
+            ("L", left_surface, left_raw_metric, "2", two_mm_left_func, left_roi_path),
+            ("R", right_surface, right_raw_metric, "2", two_mm_right_func, right_roi_path),
+            ("L", left_surface, left_raw_metric, "4", fwhm_left_func, left_roi_path),
+            ("R", right_surface, right_raw_metric, "4", fwhm_right_func, right_roi_path),
         ]:
-            smooth_dir = out_metric.parent
-            smooth_dir.mkdir(parents=True, exist_ok=True)
-            run(
-                [
-                    WB_COMMAND,
-                    "-metric-smoothing",
-                    str(surface_path),
-                    str(metric_path),
-                    smooth_mm,
-                    str(out_metric),
-                    "-fwhm",
-                ]
+            smooth_metric_with_roi(
+                surface_path=surface_path,
+                metric_path=metric_path,
+                smooth_mm=smooth_mm,
+                out_metric=out_metric,
+                roi_path=roi_path,
             )
-
         np.save(
             two_mm_left_path,
-            sanitize_timeseries(load_metric_array(two_mm_left_func, expected_n_vertices=int(left_coords.shape[0]))),
+            sanitize_timeseries_with_mask(
+                load_metric_array(two_mm_left_func, expected_n_vertices=int(left_coords.shape[0])),
+                left_valid_mask,
+            ),
         )
         np.save(
             two_mm_right_path,
-            sanitize_timeseries(load_metric_array(two_mm_right_func, expected_n_vertices=int(right_coords.shape[0]))),
+            sanitize_timeseries_with_mask(
+                load_metric_array(two_mm_right_func, expected_n_vertices=int(right_coords.shape[0])),
+                right_valid_mask,
+            ),
         )
         np.save(
             fwhm_left_path,
-            sanitize_timeseries(load_metric_array(fwhm_left_func, expected_n_vertices=int(left_coords.shape[0]))),
+            sanitize_timeseries_with_mask(
+                load_metric_array(fwhm_left_func, expected_n_vertices=int(left_coords.shape[0])),
+                left_valid_mask,
+            ),
         )
         np.save(
             fwhm_right_path,
-            sanitize_timeseries(load_metric_array(fwhm_right_func, expected_n_vertices=int(right_coords.shape[0]))),
+            sanitize_timeseries_with_mask(
+                load_metric_array(fwhm_right_func, expected_n_vertices=int(right_coords.shape[0])),
+                right_valid_mask,
+            ),
         )
         write_stage_manifest(
             stage_dir=shared_surface_store_dir,
@@ -1936,113 +2820,219 @@ def main() -> int:
     )
 
     run_surface_specs: list[dict[str, object]] = []
-    for spec, run_bold in zip(RUN_SPECS, resolved_runwise_bold, strict=True):
-        run_surface_dir = shared_surface_store_dir / "runs" / f"run-{spec['run_id']}"
-        raw_dir = run_surface_dir / "raw"
-        run_raw_left_metric = raw_dir / f"sub-{subject}_hemi-L_space-corobl_den-{hipp_density}_label-hipp_bold.func.gii"
-        run_raw_right_metric = raw_dir / f"sub-{subject}_hemi-R_space-corobl_den-{hipp_density}_label-hipp_bold.func.gii"
-        run_two_mm_left_func = run_surface_dir / "2mm" / f"sub-{subject}_hemi-L_space-corobl_den-{hipp_density}_label-hipp_bold.func.gii"
-        run_two_mm_right_func = run_surface_dir / "2mm" / f"sub-{subject}_hemi-R_space-corobl_den-{hipp_density}_label-hipp_bold.func.gii"
-        run_two_mm_left_path = run_surface_dir / "2mm" / f"sub-{subject}_hemi-L_timeseries.npy"
-        run_two_mm_right_path = run_surface_dir / "2mm" / f"sub-{subject}_hemi-R_timeseries.npy"
-        run_four_mm_left_func = run_surface_dir / "4mm" / f"sub-{subject}_hemi-L_space-corobl_den-{hipp_density}_label-hipp_bold.func.gii"
-        run_four_mm_right_func = run_surface_dir / "4mm" / f"sub-{subject}_hemi-R_space-corobl_den-{hipp_density}_label-hipp_bold.func.gii"
-        run_four_mm_left_path = run_surface_dir / "4mm" / f"sub-{subject}_hemi-L_timeseries.npy"
-        run_four_mm_right_path = run_surface_dir / "4mm" / f"sub-{subject}_hemi-R_timeseries.npy"
-        run_surface_params = {"subject": subject, "run_id": spec["run_id"], "smoothings": SMOOTH_ORDER}
-        run_surface_outputs = [
-            run_raw_left_metric,
-            run_raw_right_metric,
-            run_two_mm_left_func,
-            run_two_mm_right_func,
-            run_two_mm_left_path,
-            run_two_mm_right_path,
-            run_four_mm_left_func,
-            run_four_mm_right_func,
-            run_four_mm_left_path,
-            run_four_mm_right_path,
-        ]
-        if not stage_is_up_to_date(
-            stage_dir=run_surface_dir,
-            resume_mode=resume_mode,
-            stage_name="surface_run",
-            params=run_surface_params,
-            inputs=[run_bold, left_surface, right_surface],
-            outputs=run_surface_outputs,
-        ):
-            run(
-                [
-                    PYTHON_EXE,
-                    str(REPO_ROOT / "scripts" / "common" / "sample_hipp_surface_timeseries.py"),
-                    "--bold",
-                    str(run_bold),
-                    "--hippunfold-dir",
-                    str(hipp_root / "hippunfold"),
-                    "--subject",
-                    subject,
-                    "--density",
-                    "2mm",
-                    "--space",
-                    "corobl",
-                    "--mapping-method",
-                    "trilinear",
-                    "--smooth-iters",
-                    "0",
-                    "--outdir",
-                    str(raw_dir),
-                ]
+    if args.run_split_mode == "none":
+        for spec in RUN_SPECS:
+            run_surface_specs.append(
+                {
+                    "run_id": spec["run_id"],
+                    "label": spec["label"],
+                    "2mm_left": two_mm_left_path,
+                    "2mm_right": two_mm_right_path,
+                    "4mm_left": fwhm_left_path,
+                    "4mm_right": fwhm_right_path,
+                }
             )
-            for hemi, surface_path, metric_path, smooth_mm, out_metric in [
-                ("L", left_surface, run_raw_left_metric, "2", run_two_mm_left_func),
-                ("R", right_surface, run_raw_right_metric, "2", run_two_mm_right_func),
-                ("L", left_surface, run_raw_left_metric, "4", run_four_mm_left_func),
-                ("R", right_surface, run_raw_right_metric, "4", run_four_mm_right_func),
-            ]:
-                out_metric.parent.mkdir(parents=True, exist_ok=True)
-                run(
-                    [
-                        WB_COMMAND,
-                        "-metric-smoothing",
-                        str(surface_path),
-                        str(metric_path),
-                        smooth_mm,
-                        str(out_metric),
-                        "-fwhm",
-                    ]
-                )
-            np.save(
+    elif resolved_runwise_bold:
+        for spec, run_bold in zip(RUN_SPECS, resolved_runwise_bold, strict=True):
+            run_surface_dir = shared_surface_store_dir / "runs" / f"run-{spec['run_id']}"
+            raw_dir = run_surface_dir / "raw"
+            run_raw_left_metric = raw_dir / f"sub-{subject}_hemi-L_space-corobl_den-{hipp_density}_label-hipp_bold.func.gii"
+            run_raw_right_metric = raw_dir / f"sub-{subject}_hemi-R_space-corobl_den-{hipp_density}_label-hipp_bold.func.gii"
+            run_two_mm_left_func = run_surface_dir / "2mm" / f"sub-{subject}_hemi-L_space-corobl_den-{hipp_density}_label-hipp_bold.func.gii"
+            run_two_mm_right_func = run_surface_dir / "2mm" / f"sub-{subject}_hemi-R_space-corobl_den-{hipp_density}_label-hipp_bold.func.gii"
+            run_two_mm_left_path = run_surface_dir / "2mm" / f"sub-{subject}_hemi-L_timeseries.npy"
+            run_two_mm_right_path = run_surface_dir / "2mm" / f"sub-{subject}_hemi-R_timeseries.npy"
+            run_four_mm_left_func = run_surface_dir / "4mm" / f"sub-{subject}_hemi-L_space-corobl_den-{hipp_density}_label-hipp_bold.func.gii"
+            run_four_mm_right_func = run_surface_dir / "4mm" / f"sub-{subject}_hemi-R_space-corobl_den-{hipp_density}_label-hipp_bold.func.gii"
+            run_four_mm_left_path = run_surface_dir / "4mm" / f"sub-{subject}_hemi-L_timeseries.npy"
+            run_four_mm_right_path = run_surface_dir / "4mm" / f"sub-{subject}_hemi-R_timeseries.npy"
+            run_surface_params = {
+                "subject": subject,
+                "run_id": spec["run_id"],
+                "smoothings": SMOOTH_ORDER,
+                "tsnr_threshold": float(TSNR_THRESHOLD),
+                "smoothing_roi_policy": "high_tsnr_vertices_only",
+                "raw_source_policy": "strict_runwise_pipeline_func_gii_only",
+                "topology_cleanup_version": "invalid-components-plus-tiny-active-islands-v3-strict-func-gii",
+            }
+            run_surface_outputs = [
+                run_raw_left_metric,
+                run_raw_right_metric,
+                run_two_mm_left_func,
+                run_two_mm_right_func,
                 run_two_mm_left_path,
-                sanitize_timeseries(load_metric_array(run_two_mm_left_func, expected_n_vertices=int(left_coords.shape[0]))),
-            )
-            np.save(
                 run_two_mm_right_path,
-                sanitize_timeseries(load_metric_array(run_two_mm_right_func, expected_n_vertices=int(right_coords.shape[0]))),
-            )
-            np.save(
+                run_four_mm_left_func,
+                run_four_mm_right_func,
                 run_four_mm_left_path,
-                sanitize_timeseries(load_metric_array(run_four_mm_left_func, expected_n_vertices=int(left_coords.shape[0]))),
-            )
-            np.save(
                 run_four_mm_right_path,
-                sanitize_timeseries(load_metric_array(run_four_mm_right_func, expected_n_vertices=int(right_coords.shape[0]))),
-            )
-            write_stage_manifest(
+            ]
+            if not stage_is_up_to_date(
                 stage_dir=run_surface_dir,
+                resume_mode=resume_mode,
                 stage_name="surface_run",
                 params=run_surface_params,
                 inputs=[run_bold, left_surface, right_surface],
                 outputs=run_surface_outputs,
+            ):
+                run(
+                    [
+                        PYTHON_EXE,
+                        str(REPO_ROOT / "scripts" / "common" / "sample_hipp_surface_timeseries.py"),
+                        "--bold",
+                        str(run_bold),
+                        "--hippunfold-dir",
+                        str(hipp_root / "hippunfold"),
+                        "--subject",
+                        subject,
+                        "--density",
+                        hipp_density,
+                        "--space",
+                        "corobl",
+                        "--mapping-method",
+                        "trilinear",
+                        "--smooth-iters",
+                        "0",
+                        "--outdir",
+                        str(raw_dir),
+                    ]
+                )
+                for _hemi, surface_path, metric_path, smooth_mm, out_metric, roi_path in [
+                    ("L", left_surface, run_raw_left_metric, "2", run_two_mm_left_func, left_roi_path),
+                    ("R", right_surface, run_raw_right_metric, "2", run_two_mm_right_func, right_roi_path),
+                    ("L", left_surface, run_raw_left_metric, "4", run_four_mm_left_func, left_roi_path),
+                    ("R", right_surface, run_raw_right_metric, "4", run_four_mm_right_func, right_roi_path),
+                ]:
+                    smooth_metric_with_roi(
+                        surface_path=surface_path,
+                        metric_path=metric_path,
+                        smooth_mm=smooth_mm,
+                        out_metric=out_metric,
+                        roi_path=roi_path,
+                    )
+                np.save(
+                    run_two_mm_left_path,
+                    sanitize_timeseries_with_mask(
+                        load_metric_array(run_two_mm_left_func, expected_n_vertices=int(left_coords.shape[0])),
+                        left_valid_mask,
+                    ),
+                )
+                np.save(
+                    run_two_mm_right_path,
+                    sanitize_timeseries_with_mask(
+                        load_metric_array(run_two_mm_right_func, expected_n_vertices=int(right_coords.shape[0])),
+                        right_valid_mask,
+                    ),
+                )
+                np.save(
+                    run_four_mm_left_path,
+                    sanitize_timeseries_with_mask(
+                        load_metric_array(run_four_mm_left_func, expected_n_vertices=int(left_coords.shape[0])),
+                        left_valid_mask,
+                    ),
+                )
+                np.save(
+                    run_four_mm_right_path,
+                    sanitize_timeseries_with_mask(
+                        load_metric_array(run_four_mm_right_func, expected_n_vertices=int(right_coords.shape[0])),
+                        right_valid_mask,
+                    ),
+                )
+                write_stage_manifest(
+                    stage_dir=run_surface_dir,
+                    stage_name="surface_run",
+                    params=run_surface_params,
+                    inputs=[run_bold, left_surface, right_surface],
+                    outputs=run_surface_outputs,
+                )
+            run_surface_specs.append(
+                {
+                    "run_id": spec["run_id"],
+                    "label": spec["label"],
+                    "2mm_left": run_two_mm_left_path,
+                    "2mm_right": run_two_mm_right_path,
+                    "4mm_left": run_four_mm_left_path,
+                    "4mm_right": run_four_mm_right_path,
+                }
             )
-        run_surface_specs.append(
-            {
+    else:
+        run_surface_base_dir = shared_surface_store_dir / "runs_from_concat"
+        for spec, run_len in zip(RUN_SPECS, dtseries_run_lengths, strict=True):
+            run_surface_dir = run_surface_base_dir / f"run-{spec['run_id']}"
+            run_two_mm_left_path = run_surface_dir / "2mm" / f"sub-{subject}_hemi-L_timeseries.npy"
+            run_two_mm_right_path = run_surface_dir / "2mm" / f"sub-{subject}_hemi-R_timeseries.npy"
+            run_four_mm_left_path = run_surface_dir / "4mm" / f"sub-{subject}_hemi-L_timeseries.npy"
+            run_four_mm_right_path = run_surface_dir / "4mm" / f"sub-{subject}_hemi-R_timeseries.npy"
+            run_surface_params = {
+                "subject": subject,
                 "run_id": spec["run_id"],
-                "label": spec["label"],
-                "2mm_left": run_two_mm_left_path,
-                "2mm_right": run_two_mm_right_path,
-                "4mm_left": run_four_mm_left_path,
-                "4mm_right": run_four_mm_right_path,
+                "source_mode": "concat_surface_split",
+                "run_length": int(run_len),
+                "run_lengths": [int(x) for x in dtseries_run_lengths],
             }
-        )
+            run_surface_outputs = [
+                run_two_mm_left_path,
+                run_two_mm_right_path,
+                run_four_mm_left_path,
+                run_four_mm_right_path,
+            ]
+            if not stage_is_up_to_date(
+                stage_dir=run_surface_dir,
+                resume_mode=resume_mode,
+                stage_name="surface_run_from_concat_surface",
+                params=run_surface_params,
+                inputs=[two_mm_left_path, two_mm_right_path, fwhm_left_path, fwhm_right_path],
+                outputs=run_surface_outputs,
+            ):
+                split_surface_timeseries_to_runs(
+                    two_mm_left_path,
+                    [
+                        run_surface_base_dir / f"run-{s['run_id']}" / "2mm" / f"sub-{subject}_hemi-L_timeseries.npy"
+                        for s in RUN_SPECS
+                    ],
+                    dtseries_run_lengths,
+                )
+                split_surface_timeseries_to_runs(
+                    two_mm_right_path,
+                    [
+                        run_surface_base_dir / f"run-{s['run_id']}" / "2mm" / f"sub-{subject}_hemi-R_timeseries.npy"
+                        for s in RUN_SPECS
+                    ],
+                    dtseries_run_lengths,
+                )
+                split_surface_timeseries_to_runs(
+                    fwhm_left_path,
+                    [
+                        run_surface_base_dir / f"run-{s['run_id']}" / "4mm" / f"sub-{subject}_hemi-L_timeseries.npy"
+                        for s in RUN_SPECS
+                    ],
+                    dtseries_run_lengths,
+                )
+                split_surface_timeseries_to_runs(
+                    fwhm_right_path,
+                    [
+                        run_surface_base_dir / f"run-{s['run_id']}" / "4mm" / f"sub-{subject}_hemi-R_timeseries.npy"
+                        for s in RUN_SPECS
+                    ],
+                    dtseries_run_lengths,
+                )
+                write_stage_manifest(
+                    stage_dir=run_surface_dir,
+                    stage_name="surface_run_from_concat_surface",
+                    params=run_surface_params,
+                    inputs=[two_mm_left_path, two_mm_right_path, fwhm_left_path, fwhm_right_path],
+                    outputs=run_surface_outputs,
+                )
+            run_surface_specs.append(
+                {
+                    "run_id": spec["run_id"],
+                    "label": spec["label"],
+                    "2mm_left": run_two_mm_left_path,
+                    "2mm_right": run_two_mm_right_path,
+                    "4mm_left": run_four_mm_left_path,
+                    "4mm_right": run_four_mm_right_path,
+                }
+            )
 
     smooth_specs: dict[str, dict[str, np.ndarray | str]] = {
         "2mm": {
@@ -2062,15 +3052,22 @@ def main() -> int:
         "branch_slug": branch_slug,
         "atlas_slug": atlas_slug,
         "atlas_display_name": atlas_cfg["display_name"],
+        "hipp_density": hipp_density,
         "smoothings": SMOOTH_ORDER,
         "hemisphere_policy": "per-hemi",
         "k_policy": "run-aware-instability_2_to_10_per_hemi",
+        "k_selection_mode": str(args.k_selection_mode),
         "run_input_sources": {
             "dtseries": dtseries_run_input_mode,
             "bold": bold_run_input_mode,
             "run_lengths": dtseries_run_lengths,
         },
         "reference_summary": reference_summary,
+        "cortex_tsnr_gate": json.loads(cortex_tsnr_summary_path.read_text(encoding="utf-8")),
+        "hipp_tsnr_gate": {
+            "left": left_hipp_tsnr_summary,
+            "right": right_hipp_tsnr_summary,
+        },
         "per_smooth": {},
     }
 
@@ -2084,9 +3081,12 @@ def main() -> int:
         "eval_k": EVAL_K,
         "split_strategy": split_strategy,
         "instability_resamples": int(args.instability_resamples),
+        "k_selection_mode": str(args.k_selection_mode),
         "dtseries_run_input_mode": dtseries_run_input_mode,
         "bold_run_input_mode": bold_run_input_mode,
         "run_lengths": dtseries_run_lengths,
+        "hipp_density": hipp_density,
+        "tsnr_threshold": float(TSNR_THRESHOLD),
         "v_min_count": None if args.v_min_count is None else int(args.v_min_count),
         "v_min_fraction": float(args.v_min_fraction),
         "strict_soft_route": bool(is_soft_branch(branch_slug)),
@@ -2106,6 +3106,9 @@ def main() -> int:
         *[Path(spec["4mm_right"]) for spec in run_surface_specs],
         left_surface,
         right_surface,
+        cortex_tsnr_summary_path,
+        hipp_tsnr_dir / f"sub-{subject}_hemi-L_tsnr_gate_summary.json",
+        hipp_tsnr_dir / f"sub-{subject}_hemi-R_tsnr_gate_summary.json",
     ]
     compute_outputs = [core_selection_path]
     for smooth_name in SMOOTH_ORDER:
@@ -2147,30 +3150,59 @@ def main() -> int:
 
             hemi_results: dict[str, dict[str, object]] = {}
             for hemi, ts, adj in [("L", left_clean, left_adj), ("R", right_clean, right_adj)]:
+                valid_mask = left_valid_mask if hemi == "L" else right_valid_mask
+                permanent_null_mask = left_permanent_null_mask if hemi == "L" else right_permanent_null_mask
+                fillable_hole_mask = left_fillable_hole_mask if hemi == "L" else right_fillable_hole_mask
+                active_mask = ~permanent_null_mask
+                adj_active = induced_subgraph(adj, np.flatnonzero(active_mask))
                 hemi_fc_dir = fc_dir / smooth_name / f"hemi_{hemi}"
                 hemi_fc_dir.mkdir(parents=True, exist_ok=True)
-                fc = corrcoef_rows(ts, network_ts)
-                np.save(hemi_fc_dir / "hipp_vertex_to_network_fc.npy", fc.astype(np.float32))
+                fc_valid = corrcoef_rows(ts[valid_mask, :], network_ts)
+                fc_full = np.full((ts.shape[0], network_ts.shape[0]), np.nan, dtype=np.float32)
+                fc_full[valid_mask, :] = fc_valid.astype(np.float32)
+                fc_full = fill_feature_holes_from_valid_neighbors(
+                    fc_full,
+                    connectivity=adj,
+                    valid_mask=valid_mask,
+                    fillable_hole_mask=fillable_hole_mask,
+                )
+                fc_active = compact_active_vertices(fc_full, active_mask)
+                np.save(hemi_fc_dir / "hipp_vertex_to_network_fc.npy", fc_full.astype(np.float32))
                 save_json(
                     hemi_fc_dir / "fc_summary.json",
                     {
                         "smooth": smooth_name,
                         "hemi": hemi,
-                        "fc_shape": [int(fc.shape[0]), int(fc.shape[1])],
+                        "fc_shape": [int(fc_full.shape[0]), int(fc_full.shape[1])],
+                        "active_fc_shape": [int(fc_active.shape[0]), int(fc_active.shape[1])],
                         "n_vertices_total": int(ts.shape[0]),
+                        "n_vertices_valid_high_tsnr": int(valid_mask.sum()),
+                        "n_vertices_fillable_hole": int(fillable_hole_mask.sum()),
+                        "n_vertices_permanent_null": int(permanent_null_mask.sum()),
+                        "n_vertices_clustered": int(active_mask.sum()),
                         "n_timepoints": int(ts.shape[1]),
                         "n_networks_used": int(network_ts.shape[0]),
                         "networks": networks,
+                        "tsnr_threshold": float(TSNR_THRESHOLD),
                     },
                 )
                 run_ts_paths = [
                     Path(spec[f"{smooth_name}_{'left' if hemi == 'L' else 'right'}"])
                     for spec in run_surface_specs
                 ]
-                fc_runs = [
-                    corrcoef_rows(np.load(run_ts_path).astype(np.float32), run_network)
-                    for run_ts_path, run_network in zip(run_ts_paths, run_network_ts, strict=True)
-                ]
+                fc_runs = []
+                for run_ts_path, run_network in zip(run_ts_paths, run_network_ts, strict=True):
+                    run_ts_full = np.load(run_ts_path).astype(np.float32)
+                    run_fc_valid = corrcoef_rows(run_ts_full[valid_mask, :], run_network)
+                    run_fc_full = np.full((run_ts_full.shape[0], run_network.shape[0]), np.nan, dtype=np.float32)
+                    run_fc_full[valid_mask, :] = run_fc_valid.astype(np.float32)
+                    run_fc_full = fill_feature_holes_from_valid_neighbors(
+                        run_fc_full,
+                        connectivity=adj,
+                        valid_mask=valid_mask,
+                        fillable_hole_mask=fillable_hole_mask,
+                    )
+                    fc_runs.append(compact_active_vertices(run_fc_full, active_mask))
                 run_labels = [f"run-{spec['run_id']}" for spec in RUN_SPECS]
 
                 feature_dir = feature_root / smooth_name / f"hemi_{hemi}"
@@ -2179,11 +3211,11 @@ def main() -> int:
 
                 if is_gradient_branch(branch_slug):
                     cluster = run_gradient_branch(
-                        grouped_fc=fc,
+                        grouped_fc=fc_active,
                         run_grouped_fcs=fc_runs,
                         run_labels=run_labels,
                         networks=networks,
-                        connectivity=adj,
+                        connectivity=adj_active,
                         feature_dir=feature_dir,
                         clustering_dir=clustering_dir,
                         hemi=hemi,
@@ -2191,21 +3223,40 @@ def main() -> int:
                         instability_resamples=int(args.instability_resamples),
                         v_min_fraction=float(args.v_min_fraction),
                         v_min_count=None if args.v_min_count is None else int(args.v_min_count),
+                        k_selection_mode=str(args.k_selection_mode),
                     )
                 elif is_wta_branch(branch_slug):
                     cluster = run_wta_branch(
-                        grouped_fc=fc,
+                        grouped_fc=fc_active,
                         networks=networks,
                         soft_dir=soft_dir,
                     )
-                else:
-                    cluster = run_probability_branch(
-                        grouped_fc=fc,
+                elif is_spectral_branch(branch_slug):
+                    cluster = run_spectral_branch(
+                        grouped_fc=fc_active,
                         run_grouped_fcs=fc_runs,
                         run_labels=run_labels,
                         networks=networks,
-                        connectivity=adj,
-                        surface_coords=left_coords if hemi == "L" else right_coords,
+                        connectivity=adj_active,
+                        hipp_coords=(left_coords if hemi == "L" else right_coords)[active_mask],
+                        feature_dir=feature_dir,
+                        clustering_dir=clustering_dir,
+                        hemi=hemi,
+                        k_spatial=int(args.k_spatial),
+                        split_strategy=split_strategy,
+                        instability_resamples=int(args.instability_resamples),
+                        v_min_fraction=float(args.v_min_fraction),
+                        v_min_count=None if args.v_min_count is None else int(args.v_min_count),
+                        k_selection_mode=str(args.k_selection_mode),
+                    )
+                else:
+                    cluster = run_probability_branch(
+                        grouped_fc=fc_active,
+                        run_grouped_fcs=fc_runs,
+                        run_labels=run_labels,
+                        networks=networks,
+                        connectivity=adj_active,
+                        surface_coords=(left_coords if hemi == "L" else right_coords)[active_mask],
                         feature_dir=feature_dir,
                         clustering_dir=clustering_dir,
                         soft_dir=soft_dir,
@@ -2217,13 +3268,32 @@ def main() -> int:
                         instability_resamples=int(args.instability_resamples),
                         v_min_fraction=float(args.v_min_fraction),
                         v_min_count=None if args.v_min_count is None else int(args.v_min_count),
+                        k_selection_mode=str(args.k_selection_mode),
                     )
+                cluster["labels_final"] = expand_cluster_labels(cluster["labels_final"], active_mask, int(ts.shape[0]))
+                for row in cluster["k_metrics"]:
+                    k_value = int(row["k"])
+                    k_dir = clustering_dir / f"k_{k_value}"
+                    k_active_path = k_dir / "cluster_labels.npy"
+                    if k_active_path.exists():
+                        k_active_labels = np.load(k_active_path).astype(np.int32)
+                        k_full_labels = expand_cluster_labels(k_active_labels, active_mask, int(ts.shape[0]))
+                        np.save(k_dir / "cluster_labels_full.npy", k_full_labels.astype(np.int32))
+                cluster["tsnr_gate"] = {
+                    "n_vertices_total": int(ts.shape[0]),
+                    "n_vertices_valid_high_tsnr": int(valid_mask.sum()),
+                    "n_vertices_fillable_hole": int(fillable_hole_mask.sum()),
+                    "n_vertices_permanent_null": int(permanent_null_mask.sum()),
+                    "n_vertices_clustered": int(active_mask.sum()),
+                    "tsnr_threshold": float(TSNR_THRESHOLD),
+                }
                 hemi_results[hemi] = cluster
 
             left_result = hemi_results["L"]
             right_result = hemi_results["R"]
             final_assets = save_combined_label_assets(
                 subject=subject,
+                density=hipp_density,
                 left_labels=left_result["labels_final"],  # type: ignore[arg-type]
                 right_labels=right_result["labels_final"],  # type: ignore[arg-type]
                 output_dir=workbench_dir / smooth_name / "final",
@@ -2232,7 +3302,6 @@ def main() -> int:
                 left_key_to_name=left_result["key_to_name"],  # type: ignore[arg-type]
                 right_key_to_name=right_result["key_to_name"],  # type: ignore[arg-type]
                 stem=f"hipp_network_cluster_{branch_tag}",
-                density=hipp_density,
             )
 
             hemi_nodes = {}
@@ -2311,7 +3380,6 @@ def main() -> int:
         structural_render = render_locked_grid_png(
             subject=subject,
             scene=scene,
-            surf_dir=hipp_root / "hippunfold" / f"sub-{subject}" / "surf",
             views=views,
             layout=args.layout,
             outdir=renders_dir / "structural",
@@ -2319,6 +3387,9 @@ def main() -> int:
             title=f"sub-{subject} Structural",
             left_labels=left_struct_labels,
             right_labels=right_struct_labels,
+            left_surface=left_surface,
+            right_surface=right_surface,
+            spec_path=structural_spec,
             legend_group="label",
         )
         final_selection["structural_png"] = str(structural_render["biglegend_png"])
@@ -2329,7 +3400,6 @@ def main() -> int:
             final_render = render_locked_grid_png(
                 subject=subject,
                 scene=scene,
-                surf_dir=hipp_root / "hippunfold" / f"sub-{subject}" / "surf",
                 views=views,
                 layout=args.layout,
                 outdir=renders_dir / "functional" / smooth_name / "final",
@@ -2337,6 +3407,9 @@ def main() -> int:
                 title=f"sub-{subject} {branch_slug} ({smooth_name})",
                 left_labels=Path(assets["left_label"]),
                 right_labels=Path(assets["right_label"]),
+                left_surface=Path(assets["left_surface"]),
+                right_surface=Path(assets["right_surface"]),
+                spec_path=Path(assets["left_surface"]).parent / f"sub-{subject}_den-{hipp_density}_surfaces.spec",
                 legend_group="network",
             )
             final_selection["per_smooth"][smooth_name]["final_png"] = str(final_render["biglegend_png"])
@@ -2364,6 +3437,7 @@ def main() -> int:
                 "subject": subject,
                 "branch_slug": branch_slug,
                 "atlas_slug": atlas_slug,
+                "source_root": str(REPO_ROOT),
                 "out_root": str(out_root),
                 "shared_reference_store_dir": str(shared_reference_store_dir),
                 "shared_surface_store_dir": str(shared_surface_store_dir),

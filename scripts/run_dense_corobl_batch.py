@@ -45,7 +45,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Sequentially rerun multiple subjects and render dense corobl figures")
     parser.add_argument("--subjects", nargs="+", required=True)
     parser.add_argument("--input-dir", default="data/hippunfold_input")
-    parser.add_argument("--out-root", default="outputs/dense_corobl_batch")
+    parser.add_argument("--out-root", default="outputs_migration/dense_corobl_batch")
     parser.add_argument("--density", default=default_density)
     args = parser.parse_args()
 

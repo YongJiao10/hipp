@@ -23,7 +23,7 @@ import run_cortex_pfm_subject as cortex
 PRIOR_ROOT = REPO_ROOT / "external" / "FASTANS" / "resources" / "PFM" / "priors" / "Lynch2024"
 PICKLE_PATH = PRIOR_ROOT / "Lynch2024_priors.pickle"
 LABEL_PATH = PRIOR_ROOT / "Lynch2024_LabelList.txt"
-OUT_ROOT = REPO_ROOT / "outputs" / "group_priors" / "lynch2024"
+OUT_ROOT = REPO_ROOT / "outputs_migration" / "group_priors" / "lynch2024"
 PRESENT_ROOT = REPO_ROOT / "present"
 TEMPLATE_SUBJECT = "100610"
 SOURCE_SCENE = REPO_ROOT / "config" / "manual_wb_scenes" / "cortex_manual.scene"
@@ -109,7 +109,7 @@ def render_shape_figure(label_rows: list[dict[str, object]], assets: dict[str, P
     left_inflated = anat_dir / f"sub-{subject}_hemi-L_space-fsLR_den-32k_desc-MSMAll_inflated.surf.gii"
     right_inflated = anat_dir / f"sub-{subject}_hemi-R_space-fsLR_den-32k_desc-MSMAll_inflated.surf.gii"
     sulc_dscalar = anat_dir / f"sub-{subject}_space-fsLR_den-32k_desc-MSMAll_sulc.dscalar.nii"
-    assets_dir = REPO_ROOT / "outputs" / "cortex_pfm" / f"sub-{subject}" / "assets"
+    assets_dir = REPO_ROOT / "outputs_migration" / "cortex_pfm" / f"sub-{subject}" / "assets"
     left_sulc = assets_dir / f"sub-{subject}_hemi-L_space-fsLR_den-32k_desc-MSMAll_sulc.func.gii"
     right_sulc = assets_dir / f"sub-{subject}_hemi-R_space-fsLR_den-32k_desc-MSMAll_sulc.func.gii"
 

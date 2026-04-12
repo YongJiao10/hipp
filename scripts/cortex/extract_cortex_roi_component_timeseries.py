@@ -56,6 +56,17 @@ def extract_structure_data(
     raise RuntimeError(f"Could not find structure {structure_name} in dtseries")
 
 
+def load_optional_mask(path: str | None, expected_length: int, label: str) -> np.ndarray | None:
+    if not path:
+        return None
+    mask = np.load(path).astype(bool)
+    if mask.ndim != 1 or mask.shape[0] != expected_length:
+        raise ValueError(
+            f"{label} mask shape mismatch: expected ({expected_length},), got {mask.shape}"
+        )
+    return mask
+
+
 def align_surface_labels(
     full_surface_labels: np.ndarray,
     full_surface_map: dict[int, str],
@@ -77,18 +88,36 @@ def mean_timeseries_by_label(
     aligned_labels: np.ndarray,
     label_map: dict[int, str],
     hemisphere: str,
-) -> tuple[list[np.ndarray], list[dict[str, object]]]:
+    valid_mask: np.ndarray | None = None,
+) -> tuple[list[np.ndarray], list[dict[str, object]], list[dict[str, object]]]:
     ts_rows: list[np.ndarray] = []
     meta_rows: list[dict[str, object]] = []
+    empty_rows: list[dict[str, object]] = []
     for key in sorted(label_map):
         mask = aligned_labels == key
-        if not np.any(mask):
-            continue
         roi_name = label_map[key]
         parent_network, hemi_name, rank = parse_roi_name(roi_name)
         if hemi_name != hemisphere:
             raise ValueError(f"ROI name hemisphere mismatch for {roi_name}: expected {hemisphere}")
-        ts = np.nanmean(dt_data[mask, :], axis=0)
+        grayordinate_mask = mask if valid_mask is None else (mask & valid_mask)
+        n_grayordinates_total = int(mask.sum())
+        n_grayordinates_used = int(grayordinate_mask.sum())
+        if n_grayordinates_used <= 0:
+            empty_rows.append(
+                {
+                    "parcel_id": int(key),
+                    "parcel_name": roi_name,
+                    "parent_network": parent_network,
+                    "hemisphere": hemisphere,
+                    "component_rank": int(rank),
+                    "n_grayordinates_total": n_grayordinates_total,
+                    "n_grayordinates_used": 0,
+                    "excluded_noise": bool(parent_network == "Noise"),
+                    "excluded_by_tsnr_gate": True,
+                }
+            )
+            continue
+        ts = np.nanmean(dt_data[grayordinate_mask, :], axis=0)
         ts_rows.append(ts.astype(np.float32, copy=False))
         meta_rows.append(
             {
@@ -97,11 +126,13 @@ def mean_timeseries_by_label(
                 "parent_network": parent_network,
                 "hemisphere": hemisphere,
                 "component_rank": int(rank),
-                "n_grayordinates": int(mask.sum()),
+                "n_grayordinates_total": n_grayordinates_total,
+                "n_grayordinates_used": n_grayordinates_used,
                 "excluded_noise": bool(parent_network == "Noise"),
+                "excluded_by_tsnr_gate": False,
             }
         )
-    return ts_rows, meta_rows
+    return ts_rows, meta_rows, empty_rows
 
 
 def write_tsv(rows: list[dict[str, object]], path: Path, fieldnames: list[str]) -> None:
@@ -132,6 +163,8 @@ def main() -> int:
     parser.add_argument("--right-labels", required=True)
     parser.add_argument("--roi-summary", required=True, help="roi_component_stats.json")
     parser.add_argument("--atlas-slug", required=True)
+    parser.add_argument("--left-tsnr-mask", default=None)
+    parser.add_argument("--right-tsnr-mask", default=None)
     parser.add_argument("--outdir", required=True)
     args = parser.parse_args()
 
@@ -152,11 +185,18 @@ def main() -> int:
     left_vertices, left_dt = extract_structure_data(dt_axis, dt_data_t, "CORTEX_LEFT")
     right_vertices, right_dt = extract_structure_data(dt_axis, dt_data_t, "CORTEX_RIGHT")
 
+    left_valid_mask = load_optional_mask(args.left_tsnr_mask, int(left_vertices.shape[0]), "left cortex tSNR")
+    right_valid_mask = load_optional_mask(args.right_tsnr_mask, int(right_vertices.shape[0]), "right cortex tSNR")
+
     left_aligned, left_used_map = align_surface_labels(left_all_labels, left_label_map, left_vertices)
     right_aligned, right_used_map = align_surface_labels(right_all_labels, right_label_map, right_vertices)
 
-    left_ts, left_rows = mean_timeseries_by_label(left_dt, left_aligned, left_used_map, "L")
-    right_ts, right_rows = mean_timeseries_by_label(right_dt, right_aligned, right_used_map, "R")
+    left_ts, left_rows, left_empty_rows = mean_timeseries_by_label(
+        left_dt, left_aligned, left_used_map, "L", valid_mask=left_valid_mask
+    )
+    right_ts, right_rows, right_empty_rows = mean_timeseries_by_label(
+        right_dt, right_aligned, right_used_map, "R", valid_mask=right_valid_mask
+    )
 
     all_rows = left_rows + right_rows
     if not all_rows:
@@ -231,8 +271,25 @@ def main() -> int:
             "parent_network",
             "hemisphere",
             "component_rank",
-            "n_grayordinates",
+            "n_grayordinates_total",
+            "n_grayordinates_used",
             "excluded_noise",
+            "excluded_by_tsnr_gate",
+        ],
+    )
+    write_tsv(
+        left_empty_rows + right_empty_rows,
+        outdir / "cortex_roi_parcels_empty_after_tsnr.tsv",
+        [
+            "parcel_id",
+            "parcel_name",
+            "parent_network",
+            "hemisphere",
+            "component_rank",
+            "n_grayordinates_total",
+            "n_grayordinates_used",
+            "excluded_noise",
+            "excluded_by_tsnr_gate",
         ],
     )
     write_tsv(parent_network_rows, outdir / "cortex_parent_networks.tsv", ["parent_network", "n_parcels"])
@@ -255,6 +312,37 @@ def main() -> int:
         "n_canonical_networks_used": int(canonical_network_ts_arr.shape[0]),
         "canonical_networks_used": [row["canonical_network"] for row in canonical_network_rows],
         "n_timepoints": int(parcel_ts.shape[1]),
+        "tsnr_threshold": 25.0 if (left_valid_mask is not None or right_valid_mask is not None) else None,
+        "left_tsnr_mask": str(Path(args.left_tsnr_mask).resolve()) if args.left_tsnr_mask else None,
+        "right_tsnr_mask": str(Path(args.right_tsnr_mask).resolve()) if args.right_tsnr_mask else None,
+        "tsnr_gate_stats": {
+            "left": {
+                "n_grayordinates_total": int(left_dt.shape[0]),
+                "n_grayordinates_used": int(left_valid_mask.sum()) if left_valid_mask is not None else int(left_dt.shape[0]),
+                "n_grayordinates_masked": int((~left_valid_mask).sum()) if left_valid_mask is not None else 0,
+            },
+            "right": {
+                "n_grayordinates_total": int(right_dt.shape[0]),
+                "n_grayordinates_used": int(right_valid_mask.sum()) if right_valid_mask is not None else int(right_dt.shape[0]),
+                "n_grayordinates_masked": int((~right_valid_mask).sum()) if right_valid_mask is not None else 0,
+            },
+            "combined": {
+                "n_grayordinates_total": int(left_dt.shape[0] + right_dt.shape[0]),
+                "n_grayordinates_used": int(
+                    (left_valid_mask.sum() if left_valid_mask is not None else left_dt.shape[0])
+                    + (right_valid_mask.sum() if right_valid_mask is not None else right_dt.shape[0])
+                ),
+                "n_grayordinates_masked": int(
+                    ((~left_valid_mask).sum() if left_valid_mask is not None else 0)
+                    + ((~right_valid_mask).sum() if right_valid_mask is not None else 0)
+                ),
+            },
+            "rois_empty_after_tsnr_gate": {
+                "left": int(len(left_empty_rows)),
+                "right": int(len(right_empty_rows)),
+                "combined": int(len(left_empty_rows) + len(right_empty_rows)),
+            },
+        },
     }
     (outdir / "reference_summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     print(json.dumps(summary, indent=2))

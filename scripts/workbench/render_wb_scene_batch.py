@@ -11,6 +11,10 @@ from pathlib import Path
 
 WB_COMMAND = 'arch -x86_64 "/Applications/wb_view.app/Contents/usr/bin/wb_command"'
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
+_OLD_BATCH = Path.home() / "Documents" / "HippoMaps" / "outputs" / "dense_corobl_batch"
+_NEW_BATCH = REPO_ROOT / "outputs_migration" / "dense_corobl_batch"
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -55,20 +59,12 @@ def absolutize_scene_paths(root: ET.Element, scene_path: Path) -> None:
             if not text:
                 continue
             candidate = Path(text)
-            if candidate.is_absolute():
-                obj.text = str(candidate)
-                continue
-
-            resolved = (base / candidate).resolve()
-            if resolved.exists():
-                obj.text = str(resolved)
-                continue
-
-            parts = candidate.parts
-            if len(parts) >= 3 and parts[1:3] == ("Documents", "HippoMaps"):
-                obj.text = str((Path.home() / Path(*parts[1:])).resolve())
-                continue
-
+            resolved = (base / candidate).resolve() if not candidate.is_absolute() else candidate
+            try:
+                rel = resolved.relative_to(_OLD_BATCH)
+                resolved = _NEW_BATCH / rel
+            except ValueError:
+                pass
             obj.text = str(resolved)
 
 

@@ -8,7 +8,7 @@ This directory is now organized by responsibility rather than keeping every entr
   Cortex PFM derivation, ROI-component extraction, and cortex-specific rendering.
 - `workbench/`
   Workbench scene capture, legend composition, and native-surface rendering helpers.
-- `experiments/hipp_functional_parcellation/`
-  Experimental comparison workflow for hippocampal functional parcellation branches.
+- `hipp_parcellation_network/`
+  Main hippocampal functional parcellation pipeline (network-first). Entry points: `run_batch.py`, `run_subject.py`, `summarize_outputs.py`.
 
 Top-level `scripts/` still contains broad pipeline entrypoints and wrappers that are shared across multiple flows, such as `wb_command`, `run_hippomaps_pipeline.py`, and post-HippUnfold orchestration scripts.

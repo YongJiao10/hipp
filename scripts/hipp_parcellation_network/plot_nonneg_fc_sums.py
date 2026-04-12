@@ -7,7 +7,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.append(str(REPO_ROOT / "scripts"))
 from common.compute_fc_gradients import corrcoef_rows
 
@@ -20,14 +20,14 @@ HEMIS = ["L", "R"]
 COLUMNS = [(atlas, hemi) for atlas in ATLASES for hemi in HEMIS]
 
 def main() -> None:
-    out_dir = REPO_ROOT / "outputs" / "hipp_functional_parcellation_network" / "network-prob-cluster-nonneg"
+    out_dir = REPO_ROOT / "outputs_migration" / "hipp_functional_parcellation_network" / "network-prob-cluster-nonneg"
     out_dir.mkdir(parents=True, exist_ok=True)
     out_file = out_dir / "nonneg_fc_sum_distributions.png"
 
     # 3 rows (Subjects) x 6 columns (Atlas x Hemi)
     fig, axes = plt.subplots(nrows=len(SUBJECTS), ncols=len(COLUMNS), figsize=(24, 12), squeeze=False)
     
-    shared_dir = REPO_ROOT / "outputs" / "hipp_functional_parcellation_network" / "_shared"
+    shared_dir = REPO_ROOT / "outputs_migration" / "hipp_functional_parcellation_network" / "_shared"
     
     for row_idx, subject in enumerate(SUBJECTS):
         for col_idx, (atlas, hemi) in enumerate(COLUMNS):

@@ -19,7 +19,7 @@ if str(CORTEX_DIR) not in sys.path:
 import run_cortex_pfm_subject as cortex
 from render_group_priors_canonical_merged import load_merge_config, render_shape_figure
 
-OUT_ROOT = REPO_ROOT / "outputs" / "group_priors" / "kong2022_areal"
+OUT_ROOT = REPO_ROOT / "outputs_migration" / "group_priors" / "kong2022_areal"
 PRESENT_ROOT = REPO_ROOT / "present"
 DLABEL_FILE = OUT_ROOT / "Schaefer2018_400Parcels_Kong2022_17Networks_order.dlabel.nii"
 LABEL_TXT = OUT_ROOT / "Schaefer2018_400Parcels_Kong2022_17Networks_order_info.txt"

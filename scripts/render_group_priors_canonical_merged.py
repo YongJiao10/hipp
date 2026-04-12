@@ -54,7 +54,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--out-root",
-        default=str(REPO_ROOT / "outputs" / "group_priors"),
+        default=str(REPO_ROOT / "outputs_migration" / "group_priors"),
     )
     parser.add_argument(
         "--present-root",
@@ -216,7 +216,7 @@ def render_shape_figure(
     left_inflated = anat_dir / f"sub-{subject}_hemi-L_space-fsLR_den-32k_desc-MSMAll_inflated.surf.gii"
     right_inflated = anat_dir / f"sub-{subject}_hemi-R_space-fsLR_den-32k_desc-MSMAll_inflated.surf.gii"
     sulc_dscalar = anat_dir / f"sub-{subject}_space-fsLR_den-32k_desc-MSMAll_sulc.dscalar.nii"
-    assets_dir = REPO_ROOT / "outputs" / "cortex_pfm" / f"sub-{subject}" / "assets"
+    assets_dir = REPO_ROOT / "outputs_migration" / "cortex_pfm" / f"sub-{subject}" / "assets"
     left_sulc = assets_dir / f"sub-{subject}_hemi-L_space-fsLR_den-32k_desc-MSMAll_sulc.func.gii"
     right_sulc = assets_dir / f"sub-{subject}_hemi-R_space-fsLR_den-32k_desc-MSMAll_sulc.func.gii"
 

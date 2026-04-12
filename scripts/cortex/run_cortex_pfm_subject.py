@@ -60,7 +60,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--sulc-dscalar", required=True)
     parser.add_argument("--fastans-root", default=str(DEFAULT_FASTANS_ROOT))
     parser.add_argument("--source-scene", default=str(DEFAULT_SCENE))
-    parser.add_argument("--out-root", default=str(REPO_ROOT / "outputs" / "cortex_pfm"))
+    parser.add_argument("--out-root", default=str(REPO_ROOT / "outputs_migration" / "cortex_pfm"))
     parser.add_argument("--methods", nargs="+", default=["Lynch2024", "Hermosillo2024"])
     return parser.parse_args()
 

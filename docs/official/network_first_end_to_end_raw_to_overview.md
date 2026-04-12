@@ -9,7 +9,7 @@ subjects            102311, 102816
 branch              network-prob-cluster-nonneg
 atlas               kong2019
 density             512
-k-selection mode    updated (default) or legacy (explicit)
+k-selection mode    mainline (default) or experimental (explicit)
 raw source          remote Mac external drive archive zip
 raw landing         data/raw/<subject>/
 staging input       data/hippunfold_input/sub-<subject>/
@@ -22,15 +22,15 @@ python env          py314
 
 ## K Selection Modes (Do Not Mix)
 
-`updated` (post-update, default):
-- Selection rule: local-minimum + 1-SE + non-triviality constraints.
-- Includes `V_min` and connectivity constraints.
-- Use when you explicitly want the new protocol.
-
-`legacy` (pre-update):
+`mainline` (default, current production rule):
 - Selection rule: pick smallest `K` whose `null_corrected_score` is within `0.02` of best and `min_cluster_size_fraction >= 0.05`.
 - No local-minimum / non-triviality gate.
-- Use when you explicitly request old protocol reproduction.
+- Use for the current standard workflow.
+
+`experimental` (future-testing rule):
+- Selection rule: local-minimum + 1-SE + non-triviality constraints.
+- Includes `V_min` and connectivity constraints.
+- Use only when you explicitly want the newer protocol.
 
 Mode selection must be passed in commands via `--k-selection-mode`.
 Never assume from context.
@@ -144,6 +144,12 @@ Output (required intermediates):
 - `outputs/dense_corobl_batch/sub-<subject>/post_dense_corobl/surface/sub-<subject>_hemi-L_space-corobl_den-512_label-hipp_bold.func.gii`
 - `outputs/dense_corobl_batch/sub-<subject>/post_dense_corobl/surface/sub-<subject>_hemi-R_space-corobl_den-512_label-hipp_bold.func.gii`
 
+Formal rule:
+- These upstream dense outputs are structural prerequisites only.
+- The formal network-first pipeline regenerates its own hippocampal raw `.func.gii` surface timeseries inside the shared pipeline store from `run-concat_bold` using `trilinear` mapping and `smooth_iters = 0`.
+- Formal hippocampal tSNR gating reads only those shared-pipeline raw `.func.gii` files.
+- No `.npy` substitution, archived-directory reuse, or any other fallback source is allowed.
+
 Verify:
 
 ```bash
@@ -163,14 +169,14 @@ python scripts/experiments/hipp_functional_parcellation_network/run_batch.py \
   --branches network-prob-cluster-nonneg \
   --atlases kong2019 \
   --subjects 102311 102816 \
-  --k-selection-mode updated \
+  --k-selection-mode mainline \
   --resume-mode force \
   --retain-level render \
   --cleanup-level none \
   --clear-present
 ```
 
-Legacy reproduction command:
+Experimental test command:
 
 ```bash
 source /opt/miniconda3/bin/activate py314
@@ -178,7 +184,7 @@ python scripts/experiments/hipp_functional_parcellation_network/run_batch.py \
   --branches network-prob-cluster-nonneg \
   --atlases kong2019 \
   --subjects 102311 102816 \
-  --k-selection-mode legacy \
+  --k-selection-mode experimental \
   --resume-mode force \
   --retain-level render \
   --cleanup-level none \
@@ -229,4 +235,4 @@ Step 5 failure  -> run_batch incomplete copy/summary outputs
   - `present_network_migration/sub-102816_kong2019_network-prob-cluster-nonneg_overview.png`
 - Notes:
   - staging concat files are hard-linked to `data/raw` to avoid duplicate disk usage.
-  - K selection was aligned to pre-update `legacy` mode (git `c3a1289` style) for this run.
+  - K selection was aligned to current production `mainline` mode for this run.

@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
 from PIL import Image
 from pptx import Presentation
 from pptx.dml.color import RGBColor
@@ -90,8 +92,7 @@ def add_subject_slide(prs: Presentation, subject: str, structural_path: Path, gr
 
 
 def main() -> int:
-    repo = Path("/Users/jy/Documents/HippoMaps")
-    final_root = repo / "outputs" / "dense_corobl_batch" / "final_wb_locked"
+    final_root = REPO_ROOT / "outputs_migration" / "dense_corobl_batch" / "final_wb_locked"
     out_path = final_root / "HippoMaps_locked_views_summary.pptx"
 
     subjects = ["100610", "102311", "102816"]
@@ -107,7 +108,7 @@ def main() -> int:
     add_textbox(title_slide, 0.7, 1.15, 12.0, 0.8, "HippoMaps Locked Views Summary", 28, bold=True)
     add_textbox(title_slide, 0.7, 2.0, 10.5, 0.4, "Six finalized figures across three subjects", 15, color=MUTED)
     add_textbox(title_slide, 0.7, 2.55, 11.0, 0.4, "Each subject is summarized on one slide with structural and primary FC gradient views side by side.", 14, color=FG)
-    add_textbox(title_slide, 0.7, 6.55, 5.0, 0.3, "Source: outputs/dense_corobl_batch/final_wb_locked", 11, color=MUTED)
+    add_textbox(title_slide, 0.7, 6.55, 5.0, 0.3, "Source: outputs_migration/dense_corobl_batch/final_wb_locked", 11, color=MUTED)
 
     for subject in subjects:
         subject_dir = final_root / f"sub-{subject}"
