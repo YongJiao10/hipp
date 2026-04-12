@@ -27,7 +27,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--subject", required=True, help="Subject ID without sub- prefix")
     parser.add_argument("--method", required=True, help="PFM method name or slug")
     parser.add_argument("--data-root", default=str(REPO_ROOT / "data" / "hippunfold_input"))
-    parser.add_argument("--out-root", default=str(REPO_ROOT / "outputs" / "cortex_pfm"))
+    parser.add_argument("--out-root", default=str(REPO_ROOT / "outputs_migration" / "cortex_pfm"))
     parser.add_argument("--roi-min-area-mm2", type=float, default=25.0)
     return parser.parse_args()
 

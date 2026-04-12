@@ -227,8 +227,8 @@ def main() -> int:
 
     def get_group_props(labels):
         group_props: dict[str, float] = {}
-        total = max(1, (labels > 0).sum())
-        present = sorted(int(k) for k in np.unique(labels) if int(k) > 0)
+        total = max(1, labels.size)
+        present = sorted(int(k) for k in np.unique(labels))
         for key in present:
             if key not in style:
                 raise KeyError(f"Missing style entry for key={key}")

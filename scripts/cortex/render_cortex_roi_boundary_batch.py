@@ -20,7 +20,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--methods", nargs="+", default=["Lynch2024", "Hermosillo2024"])
     parser.add_argument("--scene", default=str(cortex.REPO_ROOT / "config" / "manual_wb_scenes" / "cortex_manual.scene"))
     parser.add_argument("--data-root", default=str(cortex.REPO_ROOT / "data" / "hippunfold_input"))
-    parser.add_argument("--out-root", default=str(cortex.REPO_ROOT / "outputs" / "cortex_pfm"))
+    parser.add_argument("--out-root", default=str(cortex.REPO_ROOT / "outputs_migration" / "cortex_pfm"))
     parser.add_argument("--roi-min-area-mm2", type=float, default=25.0)
     return parser.parse_args()
 

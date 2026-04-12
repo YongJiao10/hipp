@@ -317,7 +317,7 @@ Step   脚本/方法                              输入                        
 
 当前项目的兼容方案是：
 
-1. 通过 [wb_command](/Users/jy/Documents/HippoMaps/scripts/wb_command) 包装真正的 Workbench 命令
+1. 通过 `arch -x86_64 "/Applications/wb_view.app/Contents/usr/bin/wb_command"` 执行真正的 Workbench 命令
 2. 在正式执行 `-volume-to-surface-mapping` 前，先做统一几何 QC
 3. QC 会检查顶点入体比例、直接采样非零比例，以及采样值是否近似常数
 4. 如果命中已知的负向 `x` 错位模式，就先做负向 `x` 纠偏，再执行正式映射
@@ -427,7 +427,7 @@ volume label 有没有            不属于当前正式主流程
 
 ### 7.1 分析阶段的预览图
 
-[scripts/run_post_hippunfold_pipeline.py](/Users/jy/Documents/HippoMaps/scripts/run_post_hippunfold_pipeline.py) 现在会直接输出正式功能预览图：
+[scripts/run_post_hippunfold_pipeline.py](../../scripts/run_post_hippunfold_pipeline.py) 现在会直接输出正式功能预览图：
 
 - `sub-<id>_hipp_fc_gradient1_native.png`
 

@@ -27,24 +27,6 @@ def run_command(cmd: list[str]) -> None:
         )
 
 
-def maybe_smooth(metric: np.ndarray, faces: np.ndarray, iterations: int) -> np.ndarray:
-    if iterations <= 0:
-        return metric
-    if metric.ndim == 1:
-        metric = metric[:, None]
-    metric = metric.astype(np.float32, copy=True)
-    neighbors: list[np.ndarray] = []
-    for vertex in range(metric.shape[0]):
-        rows = np.where(faces == vertex)[0]
-        neighbors.append(np.unique(faces[rows, :]))
-    for _ in range(iterations):
-        updated = metric.copy()
-        for vertex, neigh in enumerate(neighbors):
-            updated[vertex, :] = np.nanmean(metric[neigh, :], axis=0)
-        metric = updated
-    return metric
-
-
 def main() -> int:
     parser = argparse.ArgumentParser(description="Sample 4D BOLD timeseries onto hippocampal surfaces with wb_command")
     parser.add_argument("--bold", required=True)
@@ -92,11 +74,9 @@ def main() -> int:
         metric = np.asarray(metric_img.agg_data(), dtype=np.float32)
         if metric.ndim == 1:
             metric = metric[:, None]
-        faces = nib.load(str(mid)).agg_data("triangle")
         n_vertices = int(np.asarray(nib.load(str(mid)).agg_data("pointset")).shape[0])
         if metric.shape[0] != n_vertices and metric.ndim == 2 and metric.shape[1] == n_vertices:
             metric = metric.T
-        metric = maybe_smooth(metric, np.asarray(faces), args.smooth_iters)
 
         npy_path = outdir / f"sub-{args.subject}_hemi-{hemi}_space-{resolved_space}_den-{args.density}_label-hipp_bold.npy"
         np.save(npy_path, metric.astype(np.float32))

@@ -4,8 +4,8 @@ Documentation is now grouped by intent.
 
 - `official/`
   Notes that summarize the main HippoMaps-aligned pipeline and project-level context.
-- `experiments/hipp_functional_parcellation/`
-  Experimental design and legacy notes for the hippocampal functional parcellation comparison workflow.
+- `hipp_parcellation_network/`
+  Design notes, runbooks, and reference docs for the main hippocampal network-first parcellation pipeline.
 - `cortex/`
   Cortex ROI-component derivation and related reference notes.
 - `rendering/`

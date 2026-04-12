@@ -555,8 +555,12 @@ def render_shortlist_panels(
                 / "renders"
                 / f"sub-{subject}_wb_{branch_slug.replace('-', '_')}_{smooth_name}_k{k}_biglegend.png"
             )
-            left_label_path = root / "clustering" / smooth_name / "hemi_L" / f"k_{k}" / "cluster_labels.npy"
-            right_label_path = root / "clustering" / smooth_name / "hemi_R" / f"k_{k}" / "cluster_labels.npy"
+            left_label_path = root / "clustering" / smooth_name / "hemi_L" / f"k_{k}" / "cluster_labels_full.npy"
+            right_label_path = root / "clustering" / smooth_name / "hemi_R" / f"k_{k}" / "cluster_labels_full.npy"
+            if not left_label_path.exists():
+                left_label_path = root / "clustering" / smooth_name / "hemi_L" / f"k_{k}" / "cluster_labels.npy"
+            if not right_label_path.exists():
+                right_label_path = root / "clustering" / smooth_name / "hemi_R" / f"k_{k}" / "cluster_labels.npy"
             left_annot_path = root / "clustering" / smooth_name / "hemi_L" / f"k_{k}" / "cluster_annotation.json"
             right_annot_path = root / "clustering" / smooth_name / "hemi_R" / f"k_{k}" / "cluster_annotation.json"
             cache_inputs = [
