@@ -46,7 +46,7 @@ PYTHON_EXE  = sys.executable
 
 # ── Step 1: Compute tSNR and save as shape.gii ────────────────────────────────
 def load_bold(sub: str, hemi: str) -> np.ndarray:
-    surface_dir = BATCH_DIR / sub / "post_dense_corobl" / "surface"
+    surface_dir = REPO_ROOT / "outputs_migration" / "hipp_functional_parcellation_network" / "_shared" / sub / "surface" / "raw"
     npy = surface_dir / f"{sub}_hemi-{hemi}_space-corobl_den-512_label-hipp_bold.npy"
     if npy.exists():
         return np.load(npy).astype(np.float64)

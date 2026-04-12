@@ -18,7 +18,7 @@ For the clean 166-subject HPC transfer package, see [network_first_hpc_bundle_ha
 The current network-first comparison matrix is:
 
 ```text
-branches   network-gradient / network-prob-cluster / network-prob-cluster-nonneg / network-prob-soft / network-prob-soft-nonneg / network-wta
+branches   network-gradient / network-prob-cluster / network-prob-cluster-nonneg / network-prob-soft / network-prob-soft-nonneg / network-wta / network-spectral
 atlases    lynch2024 / hermosillo2024 / kong2019
 subjects   100610 / 102311 / 102816
 smoothing  2mm / 4mm
@@ -36,7 +36,7 @@ subjects   hcp_7t_hippocampus_struct_complete_166
 
 1. Left and right hippocampi are modeled independently.
 2. Every branch starts from direct `vertex-to-network FC` computed against cortex canonical merged network timeseries.
-3. `network-gradient`, `network-prob-cluster`, `network-prob-cluster-nonneg`, `network-prob-soft`, and `network-prob-soft-nonneg` perform hippocampal clustering with final `K` chosen independently for each hemisphere from `2..10` using run-aware instability.
+3. `network-gradient`, `network-prob-cluster`, `network-prob-cluster-nonneg`, `network-prob-soft`, `network-prob-soft-nonneg`, and `network-spectral` perform hippocampal clustering with final `K` chosen independently for each hemisphere from `2..10` using run-aware instability.
 4. `network-wta` does not perform clustering; it directly outputs one label per predefined cortical network.
 5. Smoothing is compared inside each overview; it is not promoted to a separate top-level comparison dimension.
 6. Every `branch x atlas x subject` produces one overview image copied to `present_network/`.
@@ -48,12 +48,12 @@ subjects   hcp_7t_hippocampus_struct_complete_166
 
 Use explicit mode flag `--k-selection-mode` in execution commands.
 
-- `updated` (post-update, default):
-  - `local-minimum + 1-SE + non-triviality` constraints.
-  - Includes `V_min` and connectivity checks.
-- `legacy` (pre-update):
+- `mainline` (default, current production rule):
   - Select smallest `K` with `null_corrected_score >= best - 0.02` and `min_cluster_size_fraction >= 0.05`.
   - No local-minimum / non-triviality gate.
+- `experimental` (future-testing rule):
+  - `local-minimum + 1-SE + non-triviality` constraints.
+  - Includes `V_min` and connectivity checks.
 
 Reproducibility requirement:
 - Every run record and summary must state `k_selection_mode`.
@@ -62,26 +62,45 @@ Reproducibility requirement:
 
 All branches share the same upstream preprocessing:
 
-1. Extract individualized cortical ROI-component timeseries from the chosen cortical atlas output.
-2. Merge atlas-specific parent networks to canonical cross-atlas labels using [cross_atlas_network_merge.json](/Users/jy/Documents/HippoMaps-network-first/config/cross_atlas_network_merge.json).
-3. Exclude `Noise`.
-4. Resolve run-wise inputs for run-aware instability:
+1. Compute cortex `tSNR = 10000 / std(t)` on left and right cortical grayordinates from the pre-downstream `dtseries`, then hard-mask all cortex grayordinates with `tSNR < 25`.
+2. Extract individualized cortical ROI-component timeseries from the chosen cortical atlas output using only the remaining high-tSNR grayordinates.
+3. Merge atlas-specific parent networks to canonical cross-atlas labels using [cross_atlas_network_merge.json](/Users/jy/Documents/HippoMaps-network-first/config/cross_atlas_network_merge.json).
+4. Exclude `Noise`.
+5. Resolve run-wise inputs for run-aware instability:
    if `run-1..4` `dtseries` and `bold` files are present, use them directly; otherwise split `run-concat` inputs into four equal runs before staging downstream artifacts.
-5. Average ROI-component timeseries within each retained canonical network to create cortex canonical network timeseries.
-6. Sample hippocampal resting-state timeseries on the left and right `corobl` surfaces.
-7. Compute direct `vertex-to-network FC` for each smoothing condition.
+6. Average ROI-component timeseries within each retained canonical network to create cortex canonical network timeseries.
+7. Generate the hippocampal raw surface timeseries inside the shared pipeline store by sampling `run-concat_bold` onto the left and right `corobl` surfaces with `trilinear` mapping and `smooth_iters = 0`, then treat the resulting `.func.gii` files as the only valid raw source.
+8. Compute hippocampal `tSNR = 10000 / std(t)` on those raw unsmoothed shared-pipeline `.func.gii` timeseries, hard-mask vertices with `tSNR < 25`, and classify the resulting `Null` components:
+   - boundary-touching components -> keep as `permanent null`
+   - internal components with graph diameter `> 2` vertices -> keep as `permanent null`
+   - internal components with graph diameter `<= 2` vertices -> mark as `fillable hole`
+9. Apply all Workbench `2mm / 4mm` smoothing only inside the high-tSNR hippocampal ROI and only after the tSNR gate; masked hippocampal vertices never participate in smoothing.
+10. Compute direct `vertex-to-network FC` for each smoothing condition on high-tSNR vertices only, then fill hippocampal `fillable hole` vertices by nearest-neighbor copying in the FC / feature space.
 
 In notation:
 
 ```text
+raw cortex dtseries
+  -> cortex tSNR gate (threshold 25)
 cortex ROI components
   -> canonical network merge
   -> Noise exclusion
   -> cortex canonical network timeseries
-  -> hippocampal surface timeseries
+  -> raw hippocampal surface timeseries
+  -> hippocampal tSNR gate (threshold 25)
+  -> ROI-restricted 2mm / 4mm smoothing
   -> direct vertex-to-network FC
+  -> nearest-neighbor fill of micro holes only
   -> branch-specific network-first features
 ```
+
+Hard rules for this upstream:
+
+- Cortical `tSNR < 25` grayordinates do not participate in any ROI average, parent-network average, or canonical-network average.
+- Hippocampal raw input is strict: the analysis reads only the shared-pipeline raw `.func.gii` files generated from `run-concat_bold` with `trilinear` mapping and `smooth_iters = 0`.
+- No hippocampal fallback source is allowed: no archived directory reuse, no `.npy` substitution, and no pre-smoothed raw replacement.
+- Hippocampal `tSNR < 25` vertices do not participate in smoothing, FC estimation, clustering, or rendering unless they are `fillable hole` vertices repaired later in feature space.
+- Hippocampal `permanent null` vertices remain empty in the final label renders.
 
 ## Per-Atlas Merge Summary
 
@@ -275,9 +294,33 @@ Interpretation:
 - hippocampal output type = direct network labels
 - this is the only branch that does not create new hippocampal subregions
 
+### `network-spectral`
+
+This branch implements spatially constrained spectral clustering (`scripts/common/spectral_clustering.py`).
+
+For each hemisphere:
+
+1. Start from direct `vertex-to-network FC` (Pearson correlation, shape `N x 7`).
+2. Build a functional affinity matrix from pairwise cosine similarity of FC rows, mapped to `[0, 1]`.
+3. Build a binary spatial adjacency matrix from K-nearest neighbors (default `K_spatial=10`) in 3D surface coordinates.
+4. Fuse the two graphs by Hadamard (element-wise) product, retaining only spatially adjacent vertex pairs weighted by their functional similarity.
+5. Compute the symmetric normalized Laplacian of the fused graph.
+6. Extract the `K` smallest eigenvectors via `eigsh`, L2-normalize each row, and run KMeans.
+7. Run for `K=2..10`, select the smallest stable `K` via run-aware instability.
+8. Annotate final clusters by their dominant canonical network.
+
+Interpretation:
+
+- cortical feature granularity = canonical merged `network`
+- hippocampal output type = clustered subregions
+- spatial constraint = KNN graph on surface coordinates (not mesh adjacency)
+- clustering algorithm = spectral + KMeans (contrast with Ward used by other clustering branches)
+
+CLI parameter: `--k-spatial` (default `10`).
+
 ## K Evaluation
 
-The final comparison uses `K=2..10` for `network-gradient`, `network-prob-cluster`, `network-prob-cluster-nonneg`, `network-prob-soft`, and `network-prob-soft-nonneg`.
+The final comparison uses `K=2..10` for `network-gradient`, `network-prob-cluster`, `network-prob-cluster-nonneg`, `network-prob-soft`, `network-prob-soft-nonneg`, and `network-spectral`.
 
 Each candidate `K` records:
 
