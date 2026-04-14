@@ -12,7 +12,8 @@
 - 已下载官方 `Schaefer2018_400Parcels_7Networks_order.dlabel.nii` 与 `...FSLMNI152_2mm.nii.gz`。
 - 本机 `wb_command` 可用路径为 `/Applications/wb_view.app/Contents/usr/bin/wb_command`。
 - 本机无 `docker`，无已安装的 `hippunfold`。
-- 当前支线环境口径统一为 `hippunfold 2.0.0`（`hippo2`）。
+- 2026-04-12 本机复核更新：`hippo2` 已原位修复到 `khanlab::hippunfold=2.0.0=py_0`，`hippunfold --version` 返回 `2.0.0`，且 `--output_density 512` 通过。
+- 同日确认错配根因：求解器曾落到 `bioconda::hippunfold-2.0.0-pyh7e72e81_0`，该包实际 CLI/metadata 为 `1.5.2` 口径，导致“conda 2.0.0 / CLI 1.5.2”假统一。
 - 当前被试本地输入经脚本自动检测为 `functional_mode = volume`，并被规则性阻断。
 - `HippoMaps 0.1.17` 已装入 `hippo` 环境，但顶层 `import hippomaps` 会触发 Qt/VTK crash。
 - 可绕过顶层导入，直接按文件路径加载 `/opt/miniconda3/envs/hippo/lib/python3.11/site-packages/hippomaps/utils.py`。
@@ -74,7 +75,7 @@
 - 任何环境不确定性都必须显式汇报。
 - 未经用户批准，不得从 `CIFTI-first` 路线切换到 `volume-based neocortical reference`。
 - 用户已于 2026-04-01 明确要求：从现在开始全部切换成使用 surface 数据，因此当前默认口径应恢复为 surface-first / CIFTI-first。
-- 当前实际可运行的 HippUnfold 密度口径仍为 `0p5mm / 1mm / 2mm / unfoldiso`，不得再按 `512` 继续实现。
+- 当前项目已恢复 `512` 口径；验收以 CLI 门禁为准：`hippunfold --version = 2.0.0` 且 `--output_density 512` 可用。
 - `102311` 的 full-fold nnUNet 推理本身完成，失败点在 HippUnfold `postproc_boundary_vertices`，不是 nnUNet 直接崩溃。
 - `102311` 右侧海马 4 个 `*_sdt.nii.gz` 体数据正常，但对应 4 个 `*.shape.gii` 被 `wb_command -volume-to-surface-mapping` 映射成全零。
 - `sub-102311_hemi-R_space-corobl_label-hipp_midthickness.surf.gii` 与 corobl 分割盒在 `y/z` 方向基本一致，但 `x` 方向整体偏移约 `30.6 mm`，等于 `102 * 0.3 mm`。
@@ -87,3 +88,9 @@
 - 即便新默认切到 CIFTI-first，当前个体化海马功能主链仍依赖 `sample_hipp_surface_timeseries.py` 从体空间 BOLD 映射到 HippUnfold 海马 surface；除非用户再单独批准，不应额外发明新的 hippocampal CIFTI fallback 分支。
 - 用户已明确当前应继续测试 `k_selection`，且不再继续尝试“完全不用 volume 数据”。
 - 用户当前可接受先做本地 smoke，再决定服务器正式 cohort 的 `V_min` 与 `B`。
+
+## 2026-04-13
+- `hippo2` 环境已完成归档，文档位于 `docs/environment/hippo2_reproducibility_manifest.md`，原始 lock 文件位于 `manifests/hippo2/`。
+- `conda list -n hippo2` 与 `hippunfold --version` 都指向 `hippunfold 2.0.0`，但 `importlib.metadata.version("hippunfold")` 仍读到 `1.5.2rc2`，且 `site-packages` 里只看到 `hippunfold-1.5.2rc2.dist-info`；以后复现时不要把 Python metadata 当作唯一依据。
+- `c3d` conda 包存在于 `hippo2`，但 `conda run -n hippo2 bash -lc 'command -v c3d'` 返回空；不要默认它会像 `reg_aladin` 一样在 PATH 上可见。
+- `scripts/run_hippunfold_local.sh` 是正式 launcher，已经把 cache root、runtime source cache、`CONDA_SUBDIR=osx-64`、线程限制、`sitecustomize.py`、以及 `scripts/` wrapper 优先级都固化了。

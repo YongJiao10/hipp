@@ -80,6 +80,10 @@ def _assert_no_mixed_density(surf_dir: Path, den_pattern: str, density: str) -> 
         )
 
 
+def _exact_density_matches(directory: Path, pattern: str) -> list[Path]:
+    return sorted(directory.glob(pattern))
+
+
 def detect_space_strict(
     *,
     surf_dir: Path,
@@ -138,15 +142,23 @@ def find_surface_asset_strict(
     density: str,
     suffix: str,
 ) -> Path:
+    exact_pattern = f"sub-{subject}_hemi-{hemi}_space-{space}_den-{density}_label-hipp_{suffix}"
+    exact_matches = _exact_density_matches(surf_dir, exact_pattern)
+    if exact_matches:
+        return _ensure_single(
+            exact_matches,
+            (
+                f"Ambiguous strict density asset for subject={subject}, hemi={hemi}, space={space}, density={density}, suffix={suffix}. "
+                f"Required pattern: {exact_pattern}."
+            ),
+        )
+
     den_pattern = f"sub-{subject}_hemi-{hemi}_space-{space}_den-*_label-hipp_{suffix}"
     _assert_no_mixed_density(surf_dir, den_pattern, density)
     legacy_pattern = f"sub-{subject}_hemi-{hemi}_space-{space}_label-hipp_{suffix}"
     _assert_no_legacy_without_density(surf_dir, legacy_pattern, density)
-    matches = sorted(
-        surf_dir.glob(f"sub-{subject}_hemi-{hemi}_space-{space}_den-{density}_label-hipp_{suffix}")
-    )
     return _ensure_single(
-        matches,
+        exact_matches,
         (
             f"Missing strict density asset for subject={subject}, hemi={hemi}, space={space}, density={density}, suffix={suffix}. "
             f"Required pattern: sub-{subject}_hemi-{hemi}_space-{space}_den-{density}_label-hipp_{suffix}. "
@@ -156,6 +168,17 @@ def find_surface_asset_strict(
 
 
 def find_cifti_asset_strict(*, cifti_dir: Path, subject: str, density: str, suffix: str) -> Path:
+    exact_pattern = f"sub-{subject}_den-{density}_label-hipp_{suffix}"
+    exact_matches = _exact_density_matches(cifti_dir, exact_pattern)
+    if exact_matches:
+        return _ensure_single(
+            exact_matches,
+            (
+                f"Ambiguous strict CIFTI asset for subject={subject}, density={density}, suffix={suffix}. "
+                f"Required pattern: {exact_pattern}."
+            ),
+        )
+
     den_pattern = f"sub-{subject}_den-*_label-hipp_{suffix}"
     matches = sorted(cifti_dir.glob(den_pattern))
     density_tokens: set[str] = set()
@@ -178,7 +201,7 @@ def find_cifti_asset_strict(*, cifti_dir: Path, subject: str, density: str, suff
             f"{_density_contract_msg(density)} Regenerate with den-{density}."
         )
     return _ensure_single(
-        sorted(cifti_dir.glob(f"sub-{subject}_den-{density}_label-hipp_{suffix}")),
+        exact_matches,
         (
             f"Missing strict CIFTI asset for subject={subject}, density={density}, suffix={suffix}. "
             f"{_density_contract_msg(density)}"
@@ -194,6 +217,17 @@ def find_surface_sampling_metric_strict(
     density: str,
     space: str = "corobl",
 ) -> Path:
+    exact_pattern = f"sub-{subject}_hemi-{hemi}_space-{space}_den-{density}_label-hipp_bold.func.gii"
+    exact_matches = _exact_density_matches(surface_source_dir, exact_pattern)
+    if exact_matches:
+        return _ensure_single(
+            exact_matches,
+            (
+                f"Ambiguous strict raw metric for subject={subject}, hemi={hemi}, density={density} in {surface_source_dir}. "
+                f"Required: {exact_pattern}"
+            ),
+        )
+
     den_pattern = f"sub-{subject}_hemi-{hemi}_space-{space}_den-*_label-hipp_bold.func.gii"
     matches = sorted(surface_source_dir.glob(den_pattern))
     tokens: set[str] = set()
@@ -218,7 +252,7 @@ def find_surface_sampling_metric_strict(
             f"Regenerate post-HippUnfold outputs with density={density}."
         )
     return _ensure_single(
-        sorted(surface_source_dir.glob(f"sub-{subject}_hemi-{hemi}_space-{space}_den-{density}_label-hipp_bold.func.gii")),
+        exact_matches,
         (
             f"Missing strict raw metric for subject={subject}, hemi={hemi}, density={density} in {surface_source_dir}. "
             f"Required: sub-{subject}_hemi-{hemi}_space-{space}_den-{density}_label-hipp_bold.func.gii. "

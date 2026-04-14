@@ -85,10 +85,13 @@ data/hippunfold_input/
 
 ## 6. 依赖与版本锁定
 
-- 分析口径：**当前分支统一以 HippUnfold CLI `2.0.0` + surface-first / CIFTI-first HippoMaps 实现**
+- 分析口径：**HippUnfold 版本以 CLI 实测门禁为准；当前本机已验证 `hippo2` 环境可用 `2.0.0` 且支持 `--output_density 512`**
 - 海马 surface density：**`2mm`**
-- 本地项目环境名：**`hippo`**
+- 本地项目环境名：**`py314`（通用 Python） + `hippo2`（HippUnfold CLI 专用）**
 - 皮层 atlas 来源：**ThomasYeoLab/CBIG 官方 Schaefer400 7-network**
+- HippUnfold 安装来源：**必须包含 `khanlab` 渠道并置于前位**
+- `hippo2` 修复命令：`CONDA_SAFETY_CHECKS=disabled conda install -y -n hippo2 -c khanlab -c conda-forge -c bioconda khanlab::hippunfold=2.0.0=py_0 --force-reinstall`
+- 说明：此前误判源于求解器落到 `bioconda::hippunfold-2.0.0-pyh7e72e81_0`，其 CLI/metadata 实体仍是 `1.5.2` 口径；不能只看 `conda list`。
 
 当前环境核查结果：
 
@@ -98,8 +101,8 @@ remote ssh   OK                    已成功连接 192.168.0.183
 remote data  OK                    已发现 HCP-YA-2025 与被试 100610
 wb_command   OK                    /Applications/wb_view.app/Contents/usr/bin/wb_command，需通过 arch -x86_64 调用
 docker       Missing               本机无 docker
-hippunfold   Installed             hippo2 环境中当前执行口径为 CLI 2.0.0
-conda pkg    Aligned               分支升级目标已统一为 2.0.0
+hippunfold   OK                    hippo2 环境 `--version = 2.0.0`（khanlab::hippunfold=2.0.0=py_0）
+den-512 test Pass                  `--output_density 512 --help` 退出码 0，CLI 显示 `{native,512,2k,8k,18k}`
 7T CIFTI     Available             archive zip 内已确认聚合与逐 run dtseries
 ```
 

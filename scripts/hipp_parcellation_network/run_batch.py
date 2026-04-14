@@ -6,7 +6,6 @@ import json
 import shutil
 import subprocess
 import sys
-import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -25,6 +24,7 @@ BRANCHES = [
     "network-gradient",
     "network-prob-cluster-nonneg",
     "network-spectral",
+    "network-spectral-nonneg",
 ]
 ATLASES = ["lynch2024", "kong2019"]
 SUPPORTED_ATLASES = ["lynch2024", "hermosillo2024", "kong2019"]
@@ -43,12 +43,11 @@ SUMMARY_KEEP = {
 
 
 _KNOWN_SKIP_MESSAGES: dict[str, str] = {
-    "No K survived local-minimum, 1-SE, and non-triviality constraints": (
+    "No K survived local-minimum, 1-SE, and min-parcel constraints": (
         "experimental k-selection (mark_instability_decisions) found no K satisfying "
         "local-minimum filter, 1-SE rule, and min_parcel_ok.\n\n"
-        "Note: connectivity_ok is now a soft constraint — disconnected clusters are accepted with a "
-        "PNG warning. This error means all evaluated K values (2–10) also failed min_parcel_ok "
-        "(at least one parcel too small). Common cause: very small mesh or severe data quality issues."
+        "All evaluated K values (2-10) were eliminated by the minimum parcel-size rule. "
+        "Common cause: very small meshes or severe data quality issues."
     ),
     "No K survived local-minimum and 1-SE screening": (
         "experimental k-selection (mark_instability_decisions) found no K satisfying "
@@ -103,9 +102,9 @@ def cleanup_subject_outputs(branch_slug: str, atlas_slug: str, subject: str, cle
         / f"sub-{subject}"
     )
     if cleanup_level == "label":
-        archive_names = {"surface", "fc", "features", "clustering", "soft_outputs", "renders"}
+        archive_names = {"surface", "features", "clustering", "soft_outputs", "renders"}
     elif cleanup_level == "render":
-        archive_names = {"fc", "features", "clustering", "soft_outputs"}
+        archive_names = {"features", "clustering", "soft_outputs"}
     elif cleanup_level == "feature":
         archive_names = set()
     else:
@@ -196,6 +195,9 @@ def copy_present(branch_slug: str, atlas_slug: str, subject: str, out_root: Path
         raise FileNotFoundError(f"Missing overview for present copy: {src}")
     present_dir.mkdir(parents=True, exist_ok=True)
     dst = present_dir / f"sub-{subject}_{atlas_slug}_{branch_slug}_overview.png"
+    placeholder = present_dir / f"sub-{subject}_{atlas_slug}_{branch_slug}_overview.md"
+    if placeholder.exists():
+        placeholder.unlink()
     shutil.copyfile(src, dst)
 
 
@@ -204,6 +206,21 @@ def clear_present_overviews(present_dir: Path) -> None:
         return
     for path in present_dir.glob("sub-*_overview.png"):
         path.unlink()
+    for path in present_dir.glob("sub-*_overview.md"):
+        path.unlink()
+
+
+def write_skip_placeholder(tag: str, k_selection_mode: str, present_dir: Path, subject: str, atlas_slug: str, branch_slug: str, reason_body: str) -> None:
+    placeholder = present_dir / f"sub-{subject}_{atlas_slug}_{branch_slug}_overview.md"
+    present_dir.mkdir(parents=True, exist_ok=True)
+    placeholder.write_text(
+        f"# SKIPPED: {tag}\n\n"
+        f"**Time:** {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}\n\n"
+        f"**k-selection-mode:** {k_selection_mode}\n\n"
+        f"## Reason\n\n"
+        f"{reason_body}\n",
+        encoding="utf-8",
+    )
 
 
 def validate(branches: list[str], atlases: list[str], subjects: list[str], out_root: Path, present_dir: Path) -> None:
@@ -340,19 +357,19 @@ def main() -> int:
                     copy_present(branch_slug, atlas_slug, subject, out_root, present_dir)
                     cleanup_subject_outputs(branch_slug, atlas_slug, subject, args.cleanup_level, out_root)
                 except Exception as exc:
+                    known = _known_skip_reason(str(exc))
+                    if known is None:
+                        raise RuntimeError(f"Unexpected failure for {tag}") from exc
                     print(f"[SKIP] {tag}: {exc}", flush=True)
                     skipped.append(tag)
-                    placeholder = present_dir / f"sub-{subject}_{atlas_slug}_{branch_slug}_overview.md"
-                    present_dir.mkdir(parents=True, exist_ok=True)
-                    known = _known_skip_reason(str(exc))
-                    reason_body = known if known is not None else f"```\n{traceback.format_exc()}\n```"
-                    placeholder.write_text(
-                        f"# SKIPPED: {tag}\n\n"
-                        f"**Time:** {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}\n\n"
-                        f"**k-selection-mode:** {args.k_selection_mode}\n\n"
-                        f"## Reason\n\n"
-                        f"{reason_body}\n",
-                        encoding="utf-8",
+                    write_skip_placeholder(
+                        tag,
+                        args.k_selection_mode,
+                        present_dir,
+                        subject,
+                        atlas_slug,
+                        branch_slug,
+                        known,
                     )
     if skipped:
         print(f"Skipped {len(skipped)} combination(s): {skipped}", flush=True)

@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 
 base_dir = Path("/Users/jy/Documents/HippoMaps-network-first/outputs_migration/hipp_functional_parcellation_network")
-methods = ["network-gradient", "network-prob-cluster-nonneg", "network-spectral"]
+methods = ["network-gradient", "network-prob-cluster-nonneg", "network-spectral", "network-spectral-nonneg"]
 atlases = ["kong2019", "lynch2024"]
 subjects = ["sub-100610", "sub-102311", "sub-102816"]
 

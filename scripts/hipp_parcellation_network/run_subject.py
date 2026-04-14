@@ -67,6 +67,7 @@ BRANCHES = [
     "network-prob-soft-nonneg",
     "network-wta",
     "network-spectral",
+    "network-spectral-nonneg",
 ]
 ATLAS_CONFIG = {
     "lynch2024": {
@@ -104,8 +105,12 @@ def uses_nonnegative_probabilities(branch_slug: str) -> bool:
     return branch_slug in {"network-prob-cluster-nonneg", "network-prob-soft-nonneg"}
 
 
+def uses_nonnegative_spectral_features(branch_slug: str) -> bool:
+    return branch_slug == "network-spectral-nonneg"
+
+
 def is_spectral_branch(branch_slug: str) -> bool:
-    return branch_slug == "network-spectral"
+    return branch_slug in {"network-spectral", "network-spectral-nonneg"}
 
 
 def run(cmd: list[str]) -> None:
@@ -488,13 +493,31 @@ def write_reference_store_pointer(
     (pointer_dir / "shared_reference_store.json").write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
+def write_fc_store_pointer(
+    *,
+    pointer_dir: Path,
+    shared_fc_store_dir: Path,
+    subject: str,
+    atlas_slug: str,
+) -> None:
+    pointer_dir.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "kind": "shared_fc_store_pointer",
+        "timestamp_utc": utc_now_iso(),
+        "subject": subject,
+        "atlas_slug": atlas_slug,
+        "shared_fc_store_dir": str(shared_fc_store_dir.resolve()),
+    }
+    (pointer_dir / "shared_fc_store.json").write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
 def apply_retain_level(out_root: Path, retain_level: str) -> None:
     if retain_level in {"feature", "all"}:
         return
     if retain_level == "render":
-        archive_names = {"fc", "features"}
+        archive_names = {"features"}
     elif retain_level == "label":
-        archive_names = {"fc", "features", "clustering", "soft_outputs"}
+        archive_names = {"features", "clustering", "soft_outputs"}
     else:
         raise ValueError(f"Unsupported retain_level: {retain_level}")
 
@@ -631,72 +654,6 @@ def component_graph_diameter(subgraph: sparse.csr_matrix) -> int:
     return int(np.max(finite))
 
 
-def classify_invalid_hipp_vertices(
-    invalid_mask: np.ndarray,
-    connectivity: sparse.csr_matrix,
-    boundary_mask: np.ndarray,
-) -> tuple[np.ndarray, np.ndarray, list[dict[str, object]]]:
-    permanent_null = np.zeros_like(invalid_mask, dtype=bool)
-    fillable_hole = np.zeros_like(invalid_mask, dtype=bool)
-    components: list[dict[str, object]] = []
-    invalid_indices = np.flatnonzero(invalid_mask)
-    if invalid_indices.size == 0:
-        return permanent_null, fillable_hole, components
-    subgraph = induced_subgraph(connectivity, invalid_indices)
-    n_comp, comp_labels = csgraph.connected_components(subgraph, directed=False, return_labels=True)
-    for comp_id in range(int(n_comp)):
-        comp_vertices = invalid_indices[comp_labels == comp_id]
-        comp_subgraph = induced_subgraph(connectivity, comp_vertices)
-        diameter = component_graph_diameter(comp_subgraph)
-        touches_boundary = bool(boundary_mask[comp_vertices].any())
-        if touches_boundary or diameter > 2:
-            classification = "permanent_null"
-            permanent_null[comp_vertices] = True
-        else:
-            classification = "fillable_hole"
-            fillable_hole[comp_vertices] = True
-        components.append(
-            {
-                "component_id": int(comp_id),
-                "n_vertices": int(comp_vertices.size),
-                "touches_boundary": touches_boundary,
-                "graph_diameter": int(diameter),
-                "classification": classification,
-                "vertex_indices": [int(x) for x in comp_vertices.tolist()],
-            }
-        )
-    return permanent_null, fillable_hole, components
-
-
-def demote_tiny_active_components(
-    active_mask: np.ndarray,
-    connectivity: sparse.csr_matrix,
-    *,
-    max_vertices: int = 2,
-) -> tuple[np.ndarray, list[dict[str, object]]]:
-    demoted = np.zeros_like(active_mask, dtype=bool)
-    details: list[dict[str, object]] = []
-    active_indices = np.flatnonzero(active_mask)
-    if active_indices.size == 0:
-        return demoted, details
-    subgraph = induced_subgraph(connectivity, active_indices)
-    n_comp, comp_labels = csgraph.connected_components(subgraph, directed=False, return_labels=True)
-    for comp_id in range(int(n_comp)):
-        comp_vertices = active_indices[comp_labels == comp_id]
-        if int(comp_vertices.size) > int(max_vertices):
-            continue
-        demoted[comp_vertices] = True
-        details.append(
-            {
-                "component_id": int(comp_id),
-                "n_vertices": int(comp_vertices.size),
-                "classification": "demoted_active_island",
-                "vertex_indices": [int(x) for x in comp_vertices.tolist()],
-            }
-        )
-    return demoted, details
-
-
 def sanitize_timeseries_with_mask(metric: np.ndarray, valid_mask: np.ndarray) -> np.ndarray:
     metric = sanitize_timeseries(metric)
     masked = metric.astype(np.float32, copy=True)
@@ -828,26 +785,14 @@ def compute_hipp_tsnr_gate(
 ) -> dict[str, object]:
     tsnr = compute_tsnr(raw_metric)
     invalid_mask = ~np.isfinite(tsnr) | (tsnr < TSNR_THRESHOLD)
-    boundary_mask = build_boundary_vertex_mask(faces, int(raw_metric.shape[0]))
-    permanent_null, fillable_hole, components = classify_invalid_hipp_vertices(
-        invalid_mask=invalid_mask,
-        connectivity=connectivity,
-        boundary_mask=boundary_mask,
-    )
-    valid_mask = ~(permanent_null | fillable_hole)
-    demoted_active_islands, demoted_details = demote_tiny_active_components(valid_mask, connectivity)
-    if np.any(demoted_active_islands):
-        permanent_null = permanent_null | demoted_active_islands
-        valid_mask = ~(permanent_null | fillable_hole)
+    valid_mask = ~invalid_mask
     output_dir.mkdir(parents=True, exist_ok=True)
     tsnr_path = output_dir / f"sub-{subject}_hemi-{hemi}_tsnr.npy"
     valid_mask_path = output_dir / f"sub-{subject}_hemi-{hemi}_valid_mask.npy"
-    permanent_mask_path = output_dir / f"sub-{subject}_hemi-{hemi}_permanent_null_mask.npy"
-    fillable_mask_path = output_dir / f"sub-{subject}_hemi-{hemi}_fillable_hole_mask.npy"
+    invalid_mask_path = output_dir / f"sub-{subject}_hemi-{hemi}_invalid_initial_mask.npy"
     np.save(tsnr_path, tsnr.astype(np.float32))
     np.save(valid_mask_path, valid_mask.astype(bool))
-    np.save(permanent_mask_path, permanent_null.astype(bool))
-    np.save(fillable_mask_path, fillable_hole.astype(bool))
+    np.save(invalid_mask_path, invalid_mask.astype(bool))
     summary = {
         "subject": subject,
         "hemi": hemi,
@@ -857,17 +802,11 @@ def compute_hipp_tsnr_gate(
         "n_vertices_total": int(raw_metric.shape[0]),
         "n_vertices_valid_high_tsnr": int(valid_mask.sum()),
         "n_vertices_invalid_initial": int(invalid_mask.sum()),
-        "n_vertices_permanent_null": int(permanent_null.sum()),
-        "n_vertices_fillable_hole": int(fillable_hole.sum()),
-        "n_vertices_demoted_active_island": int(demoted_active_islands.sum()),
-        "n_boundary_vertices": int(boundary_mask.sum()),
         "paths": {
             "tsnr": str(tsnr_path.resolve()),
             "valid_mask": str(valid_mask_path.resolve()),
-            "permanent_null_mask": str(permanent_mask_path.resolve()),
-            "fillable_hole_mask": str(fillable_mask_path.resolve()),
+            "invalid_initial_mask": str(invalid_mask_path.resolve()),
         },
-        "components": components + demoted_details,
     }
     summary_path = output_dir / f"sub-{subject}_hemi-{hemi}_tsnr_gate_summary.json"
     summary_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
@@ -875,39 +814,12 @@ def compute_hipp_tsnr_gate(
         "summary_path": summary_path,
         "tsnr_path": tsnr_path,
         "valid_mask_path": valid_mask_path,
-        "permanent_mask_path": permanent_mask_path,
-        "fillable_mask_path": fillable_mask_path,
+        "invalid_mask_path": invalid_mask_path,
         "tsnr": tsnr,
         "valid_mask": valid_mask,
-        "permanent_null_mask": permanent_null,
-        "fillable_hole_mask": fillable_hole,
+        "invalid_initial_mask": invalid_mask,
         "summary": summary,
     }
-
-
-def fill_feature_holes_from_valid_neighbors(
-    feature_full: np.ndarray,
-    *,
-    connectivity: sparse.csr_matrix,
-    valid_mask: np.ndarray,
-    fillable_hole_mask: np.ndarray,
-) -> np.ndarray:
-    filled = feature_full.astype(np.float32, copy=True)
-    hole_indices = np.flatnonzero(fillable_hole_mask)
-    valid_indices = np.flatnonzero(valid_mask)
-    if hole_indices.size == 0:
-        return filled
-    if valid_indices.size == 0:
-        raise RuntimeError("No valid high-tSNR vertices available to fill hippocampal holes")
-    distances = csgraph.shortest_path(connectivity, directed=False, unweighted=True, indices=hole_indices)
-    for row_idx, hole_vertex in enumerate(hole_indices):
-        valid_distances = distances[row_idx, valid_indices]
-        finite = np.isfinite(valid_distances)
-        if not np.any(finite):
-            raise RuntimeError(f"Could not find a valid neighbor to fill hippocampal hole at vertex {hole_vertex}")
-        nearest_valid = valid_indices[np.flatnonzero(finite)[np.argmin(valid_distances[finite])]]
-        filled[hole_vertex, :] = filled[int(nearest_valid), :]
-    return filled
 
 
 def compact_active_vertices(
@@ -1135,21 +1047,9 @@ def mark_instability_decisions(
         row
         for row in one_se_candidates
         if int(row["min_parcel_ok"]) == 1
-        and int(row["connectivity_ok"]) == 1
     ]
-    connectivity_relaxed = False
     if not eligible:
-        # Relax connectivity constraint: allow disconnected clusters when no fully-connected
-        # candidate survives, but still require min_parcel_ok.  The overview PNG will carry
-        # a visible warning when this fallback is used.
-        eligible = [
-            row
-            for row in one_se_candidates
-            if int(row["min_parcel_ok"]) == 1
-        ]
-        if not eligible:
-            raise RuntimeError("No K survived local-minimum, 1-SE, and non-triviality constraints")
-        connectivity_relaxed = True
+        raise RuntimeError("No K survived local-minimum, 1-SE, and min-parcel constraints")
     selected = eligible[0]
     k_star = int(selected["k"])
     sensitivity = []
@@ -1164,7 +1064,6 @@ def mark_instability_decisions(
         "main_analysis_k": k_star,
         "sensitivity_k": sensitivity,
         "degenerate_instability": bool(all_instability_equal),
-        "connectivity_relaxed": connectivity_relaxed,
     }
     return ordered, decision
 
@@ -1752,7 +1651,7 @@ def evaluate_k_range(
     elif k_selection_mode == "experimental":
         k_metrics, decision = mark_instability_decisions(k_metrics)
         k_final = int(decision["main_analysis_k"])
-        primary_reason = "Selected the smallest local instability minimum within 1-SE that passed parcel-size and connectivity constraints."
+        primary_reason = "Selected the smallest local instability minimum within 1-SE that passed the parcel-size constraint."
         secondary_reason = "Lower-complexity solution retained unless a larger K showed clearly better stability within protocol rules."
         deviations = "none"
     else:
@@ -2149,17 +2048,20 @@ def run_spectral_branch(
     run_labels: list[str],
     networks: list[str],
     connectivity: sparse.csr_matrix,
-    hipp_coords: np.ndarray,
     feature_dir: Path,
     clustering_dir: Path,
     hemi: str,
-    k_spatial: int,
     split_strategy: str,
     instability_resamples: int,
     v_min_fraction: float | None,
     v_min_count: int | None,
     k_selection_mode: str,
+    zero_negative: bool,
 ) -> dict[str, object]:
+    if zero_negative:
+        grouped_fc = np.clip(grouped_fc, 0.0, None)
+        run_grouped_fcs = [np.clip(fc_run, 0.0, None) for fc_run in run_grouped_fcs]
+
     features_full = zscore_columns(grouped_fc)
     run_features = [zscore_columns(fc_run) for fc_run in run_grouped_fcs]
 
@@ -2172,14 +2074,15 @@ def run_spectral_branch(
             "feature_kind": "network-spectral",
             "feature_shape": [int(features_full.shape[0]), int(features_full.shape[1])],
             "source_networks": networks,
-            "k_spatial": k_spatial,
+            "negative_fc_policy": "clip-to-zero" if zero_negative else "preserve-signed-fc",
+            "spatial_constraint": "surface_mesh_adjacency",
             "run_labels": run_labels,
             "split_strategy": split_strategy,
         },
     )
 
-    def _spectral_fn(features: np.ndarray, _connectivity: sparse.csr_matrix, k: int) -> np.ndarray:
-        return spectral_cluster_from_features(features, hipp_coords, k, k_spatial=k_spatial)
+    def _spectral_fn(features: np.ndarray, adjacency: sparse.csr_matrix, k: int) -> np.ndarray:
+        return spectral_cluster_from_features(features, adjacency, k)
 
     cluster = evaluate_k_range(
         features_full=features_full,
@@ -2202,7 +2105,8 @@ def run_spectral_branch(
         "feature_kind": "network-spectral",
         "feature_shape": [int(features_full.shape[0]), int(features_full.shape[1])],
         "source_networks": networks,
-        "k_spatial": k_spatial,
+        "negative_fc_policy": "clip-to-zero" if zero_negative else "preserve-signed-fc",
+        "spatial_constraint": "surface_mesh_adjacency",
         "run_labels": run_labels,
         "split_strategy": split_strategy,
     }
@@ -2243,7 +2147,6 @@ def main() -> int:
     parser.add_argument("--v-min-fraction", type=float, default=DEFAULT_V_MIN_FRACTION)
     parser.add_argument("--v-min-count", type=int, default=None)
     parser.add_argument("--k-selection-mode", choices=["mainline", "experimental"], default="mainline")
-    parser.add_argument("--k-spatial", type=int, default=10, help="KNN spatial neighbors for network-spectral branch")
     parser.add_argument("--run-split-mode", choices=["none", "runwise"], default="none")
     parser.add_argument("--hipp-density", default=DEFAULT_HIPP_DENSITY)
     args = parser.parse_args()
@@ -2270,6 +2173,7 @@ def main() -> int:
     )
     shared_reference_store_dir = shared_store_root / f"sub-{subject}" / "reference" / atlas_slug
     shared_surface_store_dir = shared_store_root / f"sub-{subject}" / "surface"
+    shared_fc_store_dir = shared_store_root / f"sub-{subject}" / "fc" / atlas_slug
     scene = Path(args.scene).resolve()
     func_input_dir = input_root / f"sub-{subject}" / "func"
 
@@ -2493,6 +2397,12 @@ def main() -> int:
         canonical_network_table_path=canonical_network_table_path,
         canonical_network_timeseries_path=canonical_network_timeseries_path,
     )
+    write_fc_store_pointer(
+        pointer_dir=fc_dir,
+        shared_fc_store_dir=shared_fc_store_dir,
+        subject=subject,
+        atlas_slug=atlas_slug,
+    )
 
     reference_summary = json.loads(reference_summary_path.read_text(encoding="utf-8"))
     canonical_network_rows = load_canonical_network_rows(canonical_network_table_path)
@@ -2586,16 +2496,14 @@ def main() -> int:
         hipp_tsnr_dir / f"sub-{subject}_hemi-L_tsnr_gate_summary.json",
         hipp_tsnr_dir / f"sub-{subject}_hemi-L_tsnr.npy",
         hipp_tsnr_dir / f"sub-{subject}_hemi-L_valid_mask.npy",
-        hipp_tsnr_dir / f"sub-{subject}_hemi-L_permanent_null_mask.npy",
-        hipp_tsnr_dir / f"sub-{subject}_hemi-L_fillable_hole_mask.npy",
+        hipp_tsnr_dir / f"sub-{subject}_hemi-L_invalid_initial_mask.npy",
         left_roi_path,
     ]
     right_hipp_tsnr_outputs = [
         hipp_tsnr_dir / f"sub-{subject}_hemi-R_tsnr_gate_summary.json",
         hipp_tsnr_dir / f"sub-{subject}_hemi-R_tsnr.npy",
         hipp_tsnr_dir / f"sub-{subject}_hemi-R_valid_mask.npy",
-        hipp_tsnr_dir / f"sub-{subject}_hemi-R_permanent_null_mask.npy",
-        hipp_tsnr_dir / f"sub-{subject}_hemi-R_fillable_hole_mask.npy",
+        hipp_tsnr_dir / f"sub-{subject}_hemi-R_invalid_initial_mask.npy",
         right_roi_path,
     ]
     shared_raw_surface_params = {
@@ -2651,7 +2559,7 @@ def main() -> int:
         "tsnr_definition": "10000/std",
         "hipp_density": hipp_density,
         "raw_source_policy": "strict_shared_pipeline_func_gii_only",
-        "topology_cleanup_version": "invalid-components-plus-tiny-active-islands-v3-strict-func-gii",
+        "null_policy": "strict_invalid_initial_only",
     }
     if not stage_is_up_to_date(
         stage_dir=hipp_tsnr_dir / "hemi-L",
@@ -2685,8 +2593,7 @@ def main() -> int:
                 left_hipp_tsnr["summary_path"],
                 left_hipp_tsnr["tsnr_path"],
                 left_hipp_tsnr["valid_mask_path"],
-                left_hipp_tsnr["permanent_mask_path"],
-                left_hipp_tsnr["fillable_mask_path"],
+                left_hipp_tsnr["invalid_mask_path"],
                 left_roi_path,
             ],
         )
@@ -2722,18 +2629,15 @@ def main() -> int:
                 right_hipp_tsnr["summary_path"],
                 right_hipp_tsnr["tsnr_path"],
                 right_hipp_tsnr["valid_mask_path"],
-                right_hipp_tsnr["permanent_mask_path"],
-                right_hipp_tsnr["fillable_mask_path"],
+                right_hipp_tsnr["invalid_mask_path"],
                 right_roi_path,
             ],
         )
 
     left_valid_mask = np.load(hipp_tsnr_dir / f"sub-{subject}_hemi-L_valid_mask.npy").astype(bool)
     right_valid_mask = np.load(hipp_tsnr_dir / f"sub-{subject}_hemi-R_valid_mask.npy").astype(bool)
-    left_permanent_null_mask = np.load(hipp_tsnr_dir / f"sub-{subject}_hemi-L_permanent_null_mask.npy").astype(bool)
-    right_permanent_null_mask = np.load(hipp_tsnr_dir / f"sub-{subject}_hemi-R_permanent_null_mask.npy").astype(bool)
-    left_fillable_hole_mask = np.load(hipp_tsnr_dir / f"sub-{subject}_hemi-L_fillable_hole_mask.npy").astype(bool)
-    right_fillable_hole_mask = np.load(hipp_tsnr_dir / f"sub-{subject}_hemi-R_fillable_hole_mask.npy").astype(bool)
+    left_invalid_initial_mask = np.load(hipp_tsnr_dir / f"sub-{subject}_hemi-L_invalid_initial_mask.npy").astype(bool)
+    right_invalid_initial_mask = np.load(hipp_tsnr_dir / f"sub-{subject}_hemi-R_invalid_initial_mask.npy").astype(bool)
     left_hipp_tsnr_summary = json.loads((hipp_tsnr_dir / f"sub-{subject}_hemi-L_tsnr_gate_summary.json").read_text(encoding="utf-8"))
     right_hipp_tsnr_summary = json.loads((hipp_tsnr_dir / f"sub-{subject}_hemi-R_tsnr_gate_summary.json").read_text(encoding="utf-8"))
 
@@ -2751,7 +2655,7 @@ def main() -> int:
         "tsnr_threshold": float(TSNR_THRESHOLD),
         "smoothing_roi_policy": "high_tsnr_vertices_only",
         "raw_source_policy": "strict_shared_pipeline_func_gii_only",
-        "topology_cleanup_version": "invalid-components-plus-tiny-active-islands-v3-strict-func-gii",
+        "null_policy": "strict_invalid_initial_only",
     }
     surface_inputs = [left_raw_metric, right_raw_metric, left_surface, right_surface, left_roi_path, right_roi_path, concat_bold]
     surface_outputs = [
@@ -2865,7 +2769,7 @@ def main() -> int:
                 "tsnr_threshold": float(TSNR_THRESHOLD),
                 "smoothing_roi_policy": "high_tsnr_vertices_only",
                 "raw_source_policy": "strict_runwise_pipeline_func_gii_only",
-                "topology_cleanup_version": "invalid-components-plus-tiny-active-islands-v3-strict-func-gii",
+                "null_policy": "strict_invalid_initial_only",
             }
             run_surface_outputs = [
                 run_raw_left_metric,
@@ -2981,6 +2885,7 @@ def main() -> int:
                 "source_mode": "concat_surface_split",
                 "run_length": int(run_len),
                 "run_lengths": [int(x) for x in dtseries_run_lengths],
+                "null_policy": "strict_invalid_initial_only",
             }
             run_surface_outputs = [
                 run_two_mm_left_path,
@@ -3059,12 +2964,115 @@ def main() -> int:
         },
     }
 
+    shared_fc_stage_inputs = [
+        canonical_network_timeseries_path,
+        *run_reference_paths,
+        two_mm_left_path,
+        two_mm_right_path,
+        fwhm_left_path,
+        fwhm_right_path,
+        *[Path(item["2mm_left"]) for item in run_surface_specs],
+        *[Path(item["2mm_right"]) for item in run_surface_specs],
+        *[Path(item["4mm_left"]) for item in run_surface_specs],
+        *[Path(item["4mm_right"]) for item in run_surface_specs],
+        hipp_tsnr_dir / f"sub-{subject}_hemi-L_valid_mask.npy",
+        hipp_tsnr_dir / f"sub-{subject}_hemi-R_valid_mask.npy",
+        hipp_tsnr_dir / f"sub-{subject}_hemi-L_invalid_initial_mask.npy",
+        hipp_tsnr_dir / f"sub-{subject}_hemi-R_invalid_initial_mask.npy",
+    ]
+    shared_fc_params = {
+        "subject": subject,
+        "atlas_slug": atlas_slug,
+        "smoothings": SMOOTH_ORDER,
+        "run_labels": [f"run-{spec['run_id']}" for spec in RUN_SPECS],
+        "dtseries_run_input_mode": dtseries_run_input_mode,
+        "bold_run_input_mode": bold_run_input_mode,
+        "run_lengths": dtseries_run_lengths,
+        "hipp_density": hipp_density,
+        "tsnr_threshold": float(TSNR_THRESHOLD),
+        "fc_definition": "pearson_vertex_to_canonical_network_timeseries",
+    }
+    for smooth_name in SMOOTH_ORDER:
+        spec = smooth_specs[smooth_name]
+        for hemi in HEMIS:
+            ts = np.asarray(spec["left" if hemi == "L" else "right"], dtype=np.float32)
+            valid_mask = left_valid_mask if hemi == "L" else right_valid_mask
+            invalid_initial_mask = left_invalid_initial_mask if hemi == "L" else right_invalid_initial_mask
+            active_mask = valid_mask
+            run_ts_paths = [Path(item[f"{smooth_name}_{'left' if hemi == 'L' else 'right'}"]) for item in run_surface_specs]
+            shared_hemi_fc_dir = shared_fc_store_dir / smooth_name / f"hemi_{hemi}"
+            shared_hemi_fc_outputs = [
+                shared_hemi_fc_dir / "hipp_vertex_to_network_fc.npy",
+                shared_hemi_fc_dir / "hipp_vertex_to_network_fc_active.npy",
+                shared_hemi_fc_dir / "fc_summary.json",
+                *[shared_hemi_fc_dir / "runs" / f"run-{item['run_id']}" / "hipp_vertex_to_network_fc_active.npy" for item in RUN_SPECS],
+            ]
+            shared_hemi_fc_params = {
+                **shared_fc_params,
+                "smooth": smooth_name,
+                "hemi": hemi,
+            }
+            if not stage_is_up_to_date(
+                stage_dir=shared_hemi_fc_dir,
+                resume_mode=resume_mode,
+                stage_name="shared_fc",
+                params=shared_hemi_fc_params,
+                inputs=[*shared_fc_stage_inputs, *run_ts_paths],
+                outputs=shared_hemi_fc_outputs,
+            ):
+                shared_hemi_fc_dir.mkdir(parents=True, exist_ok=True)
+                fc_valid = corrcoef_rows(ts[valid_mask, :], network_ts)
+                fc_full = np.full((ts.shape[0], network_ts.shape[0]), np.nan, dtype=np.float32)
+                fc_full[valid_mask, :] = fc_valid.astype(np.float32)
+                fc_active = compact_active_vertices(fc_full, active_mask).astype(np.float32)
+                np.save(shared_hemi_fc_dir / "hipp_vertex_to_network_fc.npy", fc_full.astype(np.float32))
+                np.save(shared_hemi_fc_dir / "hipp_vertex_to_network_fc_active.npy", fc_active)
+                save_json(
+                    shared_hemi_fc_dir / "fc_summary.json",
+                    {
+                        "subject": subject,
+                        "atlas_slug": atlas_slug,
+                        "smooth": smooth_name,
+                        "hemi": hemi,
+                        "fc_shape": [int(fc_full.shape[0]), int(fc_full.shape[1])],
+                        "active_fc_shape": [int(fc_active.shape[0]), int(fc_active.shape[1])],
+                        "n_vertices_total": int(ts.shape[0]),
+                        "n_vertices_valid_high_tsnr": int(valid_mask.sum()),
+                        "n_vertices_invalid_initial": int(invalid_initial_mask.sum()),
+                        "n_vertices_clustered": int(active_mask.sum()),
+                        "n_timepoints": int(ts.shape[1]),
+                        "n_networks_used": int(network_ts.shape[0]),
+                        "networks": networks,
+                        "tsnr_threshold": float(TSNR_THRESHOLD),
+                        "run_labels": [f"run-{item['run_id']}" for item in RUN_SPECS],
+                        "dtseries_run_input_mode": dtseries_run_input_mode,
+                        "bold_run_input_mode": bold_run_input_mode,
+                    },
+                )
+                for run_spec, run_ts_path, run_network in zip(RUN_SPECS, run_ts_paths, run_network_ts, strict=True):
+                    run_ts_full = np.load(run_ts_path).astype(np.float32)
+                    run_fc_valid = corrcoef_rows(run_ts_full[valid_mask, :], run_network)
+                    run_fc_full = np.full((run_ts_full.shape[0], run_network.shape[0]), np.nan, dtype=np.float32)
+                    run_fc_full[valid_mask, :] = run_fc_valid.astype(np.float32)
+                    run_fc_active = compact_active_vertices(run_fc_full, active_mask).astype(np.float32)
+                    run_fc_dir = shared_hemi_fc_dir / "runs" / f"run-{run_spec['run_id']}"
+                    run_fc_dir.mkdir(parents=True, exist_ok=True)
+                    np.save(run_fc_dir / "hipp_vertex_to_network_fc_active.npy", run_fc_active)
+                write_stage_manifest(
+                    stage_dir=shared_hemi_fc_dir,
+                    stage_name="shared_fc",
+                    params=shared_hemi_fc_params,
+                    inputs=[*shared_fc_stage_inputs, *run_ts_paths],
+                    outputs=shared_hemi_fc_outputs,
+                )
+
     final_selection_core: dict[str, object] = {
         "subject": subject,
         "branch_slug": branch_slug,
         "atlas_slug": atlas_slug,
         "atlas_display_name": atlas_cfg["display_name"],
         "hipp_density": hipp_density,
+        "shared_fc_store_dir": str(shared_fc_store_dir),
         "smoothings": SMOOTH_ORDER,
         "hemisphere_policy": "per-hemi",
         "k_policy": "run-aware-instability_2_to_10_per_hemi",
@@ -3102,7 +3110,11 @@ def main() -> int:
         "v_min_count": None if args.v_min_count is None else int(args.v_min_count),
         "v_min_fraction": float(args.v_min_fraction),
         "strict_soft_route": bool(is_soft_branch(branch_slug)),
-        "negative_fc_policy": "clip-to-zero" if uses_nonnegative_probabilities(branch_slug) else "row-min-shift",
+        "negative_fc_policy": (
+            "clip-to-zero"
+            if uses_nonnegative_probabilities(branch_slug) or uses_nonnegative_spectral_features(branch_slug)
+            else ("preserve-signed-fc" if is_spectral_branch(branch_slug) else "row-min-shift")
+        ),
     }
     compute_inputs = [
         canonical_network_table_path,
@@ -3122,6 +3134,20 @@ def main() -> int:
         hipp_tsnr_dir / f"sub-{subject}_hemi-L_tsnr_gate_summary.json",
         hipp_tsnr_dir / f"sub-{subject}_hemi-R_tsnr_gate_summary.json",
     ]
+    for smooth_name in SMOOTH_ORDER:
+        for hemi in HEMIS:
+            shared_hemi_fc_dir = shared_fc_store_dir / smooth_name / f"hemi_{hemi}"
+            compute_inputs.extend(
+                [
+                    shared_hemi_fc_dir / "hipp_vertex_to_network_fc.npy",
+                    shared_hemi_fc_dir / "hipp_vertex_to_network_fc_active.npy",
+                    shared_hemi_fc_dir / "fc_summary.json",
+                    *[
+                        shared_hemi_fc_dir / "runs" / f"run-{spec['run_id']}" / "hipp_vertex_to_network_fc_active.npy"
+                        for spec in RUN_SPECS
+                    ],
+                ]
+            )
     compute_outputs = [core_selection_path]
     for smooth_name in SMOOTH_ORDER:
         if not is_wta_branch(branch_slug):
@@ -3163,58 +3189,16 @@ def main() -> int:
             hemi_results: dict[str, dict[str, object]] = {}
             for hemi, ts, adj in [("L", left_clean, left_adj), ("R", right_clean, right_adj)]:
                 valid_mask = left_valid_mask if hemi == "L" else right_valid_mask
-                permanent_null_mask = left_permanent_null_mask if hemi == "L" else right_permanent_null_mask
-                fillable_hole_mask = left_fillable_hole_mask if hemi == "L" else right_fillable_hole_mask
-                active_mask = ~permanent_null_mask
+                invalid_initial_mask = left_invalid_initial_mask if hemi == "L" else right_invalid_initial_mask
+                active_mask = valid_mask
                 adj_active = induced_subgraph(adj, np.flatnonzero(active_mask))
-                hemi_fc_dir = fc_dir / smooth_name / f"hemi_{hemi}"
-                hemi_fc_dir.mkdir(parents=True, exist_ok=True)
-                fc_valid = corrcoef_rows(ts[valid_mask, :], network_ts)
-                fc_full = np.full((ts.shape[0], network_ts.shape[0]), np.nan, dtype=np.float32)
-                fc_full[valid_mask, :] = fc_valid.astype(np.float32)
-                fc_full = fill_feature_holes_from_valid_neighbors(
-                    fc_full,
-                    connectivity=adj,
-                    valid_mask=valid_mask,
-                    fillable_hole_mask=fillable_hole_mask,
-                )
-                fc_active = compact_active_vertices(fc_full, active_mask)
-                np.save(hemi_fc_dir / "hipp_vertex_to_network_fc.npy", fc_full.astype(np.float32))
-                save_json(
-                    hemi_fc_dir / "fc_summary.json",
-                    {
-                        "smooth": smooth_name,
-                        "hemi": hemi,
-                        "fc_shape": [int(fc_full.shape[0]), int(fc_full.shape[1])],
-                        "active_fc_shape": [int(fc_active.shape[0]), int(fc_active.shape[1])],
-                        "n_vertices_total": int(ts.shape[0]),
-                        "n_vertices_valid_high_tsnr": int(valid_mask.sum()),
-                        "n_vertices_fillable_hole": int(fillable_hole_mask.sum()),
-                        "n_vertices_permanent_null": int(permanent_null_mask.sum()),
-                        "n_vertices_clustered": int(active_mask.sum()),
-                        "n_timepoints": int(ts.shape[1]),
-                        "n_networks_used": int(network_ts.shape[0]),
-                        "networks": networks,
-                        "tsnr_threshold": float(TSNR_THRESHOLD),
-                    },
-                )
-                run_ts_paths = [
-                    Path(spec[f"{smooth_name}_{'left' if hemi == 'L' else 'right'}"])
-                    for spec in run_surface_specs
+                shared_hemi_fc_dir = shared_fc_store_dir / smooth_name / f"hemi_{hemi}"
+                fc_active = np.load(shared_hemi_fc_dir / "hipp_vertex_to_network_fc_active.npy").astype(np.float32)
+                fc_summary = json.loads((shared_hemi_fc_dir / "fc_summary.json").read_text(encoding="utf-8"))
+                fc_runs = [
+                    np.load(shared_hemi_fc_dir / "runs" / f"run-{spec['run_id']}" / "hipp_vertex_to_network_fc_active.npy").astype(np.float32)
+                    for spec in RUN_SPECS
                 ]
-                fc_runs = []
-                for run_ts_path, run_network in zip(run_ts_paths, run_network_ts, strict=True):
-                    run_ts_full = np.load(run_ts_path).astype(np.float32)
-                    run_fc_valid = corrcoef_rows(run_ts_full[valid_mask, :], run_network)
-                    run_fc_full = np.full((run_ts_full.shape[0], run_network.shape[0]), np.nan, dtype=np.float32)
-                    run_fc_full[valid_mask, :] = run_fc_valid.astype(np.float32)
-                    run_fc_full = fill_feature_holes_from_valid_neighbors(
-                        run_fc_full,
-                        connectivity=adj,
-                        valid_mask=valid_mask,
-                        fillable_hole_mask=fillable_hole_mask,
-                    )
-                    fc_runs.append(compact_active_vertices(run_fc_full, active_mask))
                 run_labels = [f"run-{spec['run_id']}" for spec in RUN_SPECS]
 
                 feature_dir = feature_root / smooth_name / f"hemi_{hemi}"
@@ -3250,16 +3234,15 @@ def main() -> int:
                         run_labels=run_labels,
                         networks=networks,
                         connectivity=adj_active,
-                        hipp_coords=(left_coords if hemi == "L" else right_coords)[active_mask],
                         feature_dir=feature_dir,
                         clustering_dir=clustering_dir,
                         hemi=hemi,
-                        k_spatial=int(args.k_spatial),
                         split_strategy=split_strategy,
                         instability_resamples=int(args.instability_resamples),
                         v_min_fraction=float(args.v_min_fraction),
                         v_min_count=None if args.v_min_count is None else int(args.v_min_count),
                         k_selection_mode=str(args.k_selection_mode),
+                        zero_negative=uses_nonnegative_spectral_features(branch_slug),
                     )
                 else:
                     cluster = run_probability_branch(
@@ -3294,11 +3277,11 @@ def main() -> int:
                 cluster["tsnr_gate"] = {
                     "n_vertices_total": int(ts.shape[0]),
                     "n_vertices_valid_high_tsnr": int(valid_mask.sum()),
-                    "n_vertices_fillable_hole": int(fillable_hole_mask.sum()),
-                    "n_vertices_permanent_null": int(permanent_null_mask.sum()),
+                    "n_vertices_invalid_initial": int(invalid_initial_mask.sum()),
                     "n_vertices_clustered": int(active_mask.sum()),
                     "tsnr_threshold": float(TSNR_THRESHOLD),
                 }
+                cluster["fc_summary"] = fc_summary
                 hemi_results[hemi] = cluster
 
             left_result = hemi_results["L"]
@@ -3320,6 +3303,7 @@ def main() -> int:
             for hemi in HEMIS:
                 node = hemi_results[hemi]
                 hemi_nodes[hemi] = {
+                    "fc_summary": node.get("fc_summary"),
                     "feature_summary": node["feature_summary"],
                     "k_metrics": node["k_metrics"],
                     "k_final": node["k_final"],

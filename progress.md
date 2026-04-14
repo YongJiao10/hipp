@@ -13,7 +13,7 @@
 - 验证本机 `wb_command` 可用，但 `docker`/`hippunfold` 缺失。
 - 用主控脚本确认当前本地输入为 `volume`，并按规则在方法切换前停止。
 - 用户批准切换到 volume-based 分支，并同意继续安装最新可用工具链。
-- 创建 `conda hippo` 环境；该项为历史阶段记录，当前支线执行口径已统一为 `hippunfold 2.0.0`（`hippo2`）。
+- 创建 `conda hippo` 环境；该项为历史阶段记录。2026-04-12 复核更新：`hippo2` 已原位修复到 `khanlab::hippunfold=2.0.0=py_0`，`hippunfold --version = 2.0.0` 且 `--output_density 512` 哨兵测试通过；同时确认此前误判由 `bioconda` 错配包导致。
 - 安装 `HippoMaps 0.1.17`，发现顶层导入会因 Qt/VTK 崩溃，改为绕过顶层导入的实现路线。
 - 发现本机 `wb_command` 同样因 Qt/processor 问题不可作为稳定依赖。
 - 新增单一分析输入 staging、volume Schaefer 参考提取、WTA、surface-to-volume、seed FC 等脚本。
@@ -106,3 +106,10 @@
   - `manifests/hcp_7t_hippocampus_struct_complete_166.txt`
   - `manifests/hcp_7t_hippocampus_struct_complete_166.json`
 - 已按仓库规则删除 `/tmp/hipp_k_selection_smoke`、`/tmp/hipp_k_selection_smoke_prob_cluster` 以及对应的 Matplotlib 缓存目录，仅保留源码改动和结论记录。
+# Session Progress
+
+## 2026-04-13
+- 新增 `docs/environment/hippo2_reproducibility_manifest.md`，把 `hippo2` 环境按 host / conda / Python / binary / runtime 分层记录。
+- 导出原始环境快照到 `manifests/hippo2/`，包含 `conda-explicit.txt`、`conda-list.txt`、`pip-freeze.txt`、`conda-info.json`、`uname.txt`、`sw_vers.txt`。
+- 核对到一个重要不一致：`conda list -n hippo2` 和 `hippunfold --version` 显示 `2.0.0`，但 Python metadata 仍读到 `1.5.2rc2`。
+- 记录了 `c3d` 在 conda 包中存在但 PATH 不可见的现象，防止后续 agent 默认它一定可直接调用。

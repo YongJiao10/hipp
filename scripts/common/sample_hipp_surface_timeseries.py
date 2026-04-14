@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 from pathlib import Path
 
@@ -61,22 +62,28 @@ def main() -> int:
             suffix="midthickness.surf.gii",
         )
         out_metric = outdir / f"sub-{args.subject}_hemi-{hemi}_space-{resolved_space}_den-{args.density}_label-hipp_bold.func.gii"
+        tmp_metric = outdir / f"sub-{args.subject}_hemi-{hemi}_space-{resolved_space}_den-{args.density}_label-hipp_bold.tmp.{os.getpid()}.func.gii"
         cmd = wb_prefix + [
             "-volume-to-surface-mapping",
             args.bold,
             str(mid),
-            str(out_metric),
+            str(tmp_metric),
             f"-{args.mapping_method}",
         ]
-        run_command(cmd)
+        try:
+            run_command(cmd)
 
-        metric_img = nib.load(str(out_metric))
-        metric = np.asarray(metric_img.agg_data(), dtype=np.float32)
-        if metric.ndim == 1:
-            metric = metric[:, None]
-        n_vertices = int(np.asarray(nib.load(str(mid)).agg_data("pointset")).shape[0])
-        if metric.shape[0] != n_vertices and metric.ndim == 2 and metric.shape[1] == n_vertices:
-            metric = metric.T
+            metric_img = nib.load(str(tmp_metric))
+            metric = np.asarray(metric_img.agg_data(), dtype=np.float32)
+            if metric.ndim == 1:
+                metric = metric[:, None]
+            n_vertices = int(np.asarray(nib.load(str(mid)).agg_data("pointset")).shape[0])
+            if metric.shape[0] != n_vertices and metric.ndim == 2 and metric.shape[1] == n_vertices:
+                metric = metric.T
+            tmp_metric.replace(out_metric)
+        finally:
+            if tmp_metric.exists():
+                tmp_metric.unlink()
 
         summary.append(
             {
