@@ -9,6 +9,7 @@
 - `network-prob-soft-nonneg`
 - `network-wta`
 - `network-spectral`
+- `network-spectral-nonneg`
 
 ## Output Roots
 
@@ -47,8 +48,8 @@ The atlas-to-canonical merge is defined in [cross_atlas_network_merge.json](/Use
 ## Expected Final Figure Count
 
 ```text
-7 branches x 3 atlases x 3 subjects = 63 overview images
-(network-wta and network-spectral each count as 1 branch)
+8 branches x 3 atlases x 3 subjects = 72 overview images
+(network-wta, network-spectral, and network-spectral-nonneg each count as 1 branch)
 ```
 
 ## Smoke Run
@@ -56,7 +57,7 @@ The atlas-to-canonical merge is defined in [cross_atlas_network_merge.json](/Use
 ```bash
 source /opt/miniconda3/bin/activate py314
 python scripts/experiments/hipp_functional_parcellation_network/run_batch.py \
-  --branches network-gradient network-prob-cluster network-prob-cluster-nonneg network-prob-soft network-prob-soft-nonneg network-wta network-spectral \
+  --branches network-gradient network-prob-cluster network-prob-cluster-nonneg network-prob-soft network-prob-soft-nonneg network-wta network-spectral network-spectral-nonneg \
   --atlases lynch2024 \
   --subjects 100610 \
   --k-selection-mode mainline \
@@ -71,7 +72,7 @@ python scripts/experiments/hipp_functional_parcellation_network/run_batch.py \
 ```bash
 source /opt/miniconda3/bin/activate py314
 python scripts/experiments/hipp_functional_parcellation_network/run_batch.py \
-  --branches network-gradient network-prob-cluster network-prob-cluster-nonneg network-prob-soft network-prob-soft-nonneg network-wta network-spectral \
+  --branches network-gradient network-prob-cluster network-prob-cluster-nonneg network-prob-soft network-prob-soft-nonneg network-wta network-spectral network-spectral-nonneg \
   --atlases lynch2024 hermosillo2024 kong2019 \
   --subjects 100610 102311 102816 \
   --k-selection-mode mainline \

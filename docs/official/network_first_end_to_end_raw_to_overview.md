@@ -1,6 +1,7 @@
-# Network-First End-to-End: Raw to Migration Overview
+# Network-First End-to-End: Data Input to Migration Overview
 
-This runbook is the single execution source for producing migration overviews from raw HCP 7T archives without re-analyzing code.
+This document is synced to the **current executable code paths** in this repository.
+It does **not** use remote archive pulling as part of this runbook.
 
 ## Scope and Fixed Parameters
 
@@ -8,164 +9,74 @@ This runbook is the single execution source for producing migration overviews fr
 subjects            102311, 102816
 branch              network-prob-cluster-nonneg
 atlas               kong2019
-density             512
 k-selection mode    mainline (default) or experimental (explicit)
-raw source          remote Mac external drive archive zip
-raw landing         data/raw/<subject>/
-staging input       data/hippunfold_input/sub-<subject>/
-dense output        outputs/dense_corobl_batch/sub-<subject>/
+primary input       data/hippunfold_input/sub-<subject>/
+input subdirs        anat/, func/ only
+dense prerequisite  outputs_migration/dense_corobl_batch/sub-<subject>/hippunfold/sub-<subject>/...
+cortex prerequisite outputs_migration/cortex_pfm/sub-<subject>/<atlas>/roi_components/...
 migration output    outputs_migration/hipp_functional_parcellation_network/
 present output      present_network_migration/
-log file            logs/network_migration_102311_102816_<timestamp>.md
 python env          py314
+entrypoint          scripts/hipp_parcellation_network/run_batch.py
+```
+
+## Authoritative Runtime Entry Points
+
+- Batch entrypoint:
+  - `scripts/hipp_parcellation_network/run_batch.py`
+- Subject worker:
+  - `scripts/hipp_parcellation_network/run_subject.py`
+
+Important defaults from code:
+- `--input-root` defaults to `data/hippunfold_input`
+- `--hippunfold-root` defaults to `outputs_migration/dense_corobl_batch`
+- `--cortex-root` defaults to `outputs_migration/cortex_pfm`
+- `--out-root` defaults to `outputs_migration/hipp_functional_parcellation_network`
+- `--present-dir` defaults to `present_network_migration`
+
+## Preflight (Hard Requirements)
+
+Run this first. If any file is missing, do **not** proceed.
+
+```bash
+source /opt/miniconda3/bin/activate py314
+
+for s in 102311 102816; do
+  # Primary input (authoritative)
+  test -f "data/hippunfold_input/sub-${s}/func/sub-${s}_task-rest_run-concat.dtseries.nii" || echo "missing dtseries ${s}"
+  test -f "data/hippunfold_input/sub-${s}/func/sub-${s}_task-rest_run-concat_bold.nii.gz" || echo "missing concat_bold ${s}"
+  test -f "data/hippunfold_input/sub-${s}/anat/sub-${s}_T1w.nii.gz" || echo "missing T1w ${s}"
+  test -f "data/hippunfold_input/sub-${s}/anat/sub-${s}_T2w.nii.gz" || echo "missing T2w ${s}"
+
+  # Dense corobl prerequisite consumed by run_subject.py
+  test -f "outputs_migration/dense_corobl_batch/sub-${s}/hippunfold/sub-${s}/surf/sub-${s}_hemi-L_space-corobl_den-512_label-hipp_midthickness.surf.gii" || echo "missing dense L midthickness ${s}"
+  test -f "outputs_migration/dense_corobl_batch/sub-${s}/hippunfold/sub-${s}/surf/sub-${s}_hemi-R_space-corobl_den-512_label-hipp_midthickness.surf.gii" || echo "missing dense R midthickness ${s}"
+  test -f "outputs_migration/dense_corobl_batch/sub-${s}/hippunfold/sub-${s}/cifti/sub-${s}_space-corobl_den-512_label-hipp_atlas-multihist7_subfields.dlabel.nii" || echo "missing dense structural dlabel ${s}"
+
+  # Cortex ROI prerequisite consumed by run_subject.py reference stage
+  test -f "outputs_migration/cortex_pfm/sub-${s}/kong2019/roi_components/hemi_L/PFM_Kong2019priors.components.L.label.gii" || echo "missing cortex L ROI labels ${s}"
+  test -f "outputs_migration/cortex_pfm/sub-${s}/kong2019/roi_components/hemi_R/PFM_Kong2019priors.components.R.label.gii" || echo "missing cortex R ROI labels ${s}"
+  test -f "outputs_migration/cortex_pfm/sub-${s}/kong2019/roi_components/roi_component_stats.json" || echo "missing cortex ROI stats ${s}"
+done
 ```
 
 ## K Selection Modes (Do Not Mix)
 
-`mainline` (default, current production rule):
-- Selection rule: pick smallest `K` whose `null_corrected_score` is within `0.02` of best and `min_cluster_size_fraction >= 0.05`.
-- No local-minimum / non-triviality gate.
-- Use for the current standard workflow.
+`mainline` (default production):
+- smallest `K` within `0.02` of best `null_corrected_score`
+- requires `min_cluster_size_fraction >= 0.05`
 
-`experimental` (future-testing rule):
-- Selection rule: local-minimum + 1-SE + non-triviality constraints.
-- Includes `V_min` and connectivity constraints.
-- Use only when you explicitly want the newer protocol.
+`experimental`:
+- local-minimum + 1-SE + non-triviality constraints
+- strict screening may skip combinations if no valid `K`
 
-Mode selection must be passed in commands via `--k-selection-mode`.
-Never assume from context.
+Always pass mode explicitly via `--k-selection-mode`.
 
-## Remote Access Rule
-
-1. Resolve `MPM619.local` current IP first.
-2. Connect by IP directly: `ssh yojiao@<ip>`.
-3. Pull data from `Resting State fMRI 7T Preprocessed Recommended archive/*.zip`.
-
-Example resolution and check:
-
-```bash
-IP=$(dns-sd -G v4v6 MPM619.local | awk '/Add/ && $NF ~ /([0-9]{1,3}\.){3}[0-9]{1,3}/ {ip=$NF} END{print ip}')
-ssh yojiao@"${IP}" 'hostname; ls -la "/Volumes/Elements/HCP-YA-2025/Resting State fMRI 7T Preprocessed Recommended archive" | head'
-```
-
-## Step 1: Pull Raw Files From Archive Zip
-
-Input:
-- Remote archive zip for each subject
-
-Command template:
+## Step 1: Run Network Migration (Current Canonical Command)
 
 ```bash
 source /opt/miniconda3/bin/activate py314
-python scripts/copy_hcp_minimal.py \
-  --remote-host yojiao@<ip> \
-  --remote-root "/Volumes/Elements/HCP-YA-2025" \
-  --subject <subject> \
-  --outdir data/raw/<subject> \
-  --manifest manifests/raw_copy/sub-<subject>_copy_manifest.json
-```
-
-Output:
-- `data/raw/<subject>/sub-<subject>_rfMRI_REST_7T_Atlas_MSMAll_hp2000_clean_rclean_tclean.dtseries.nii`
-- `data/raw/<subject>/sub-<subject>_rfMRI_REST_7T_hp2000_clean_rclean_tclean.nii.gz`
-- `data/raw/<subject>/sub-<subject>_rfMRI_REST_7T_brain_mask.nii.gz`
-- `data/raw/<subject>/sub-<subject>_T1w_acpc_dc_restore.nii.gz`
-- `data/raw/<subject>/sub-<subject>_T2w_acpc_dc_restore.nii.gz`
-
-Verify:
-
-```bash
-ls -lh data/raw/<subject>
-```
-
-## Step 2: Stage HippUnfold-Compatible Inputs
-
-Input:
-- `data/raw/<subject>/` files from Step 1
-
-Command template:
-
-```bash
-source /opt/miniconda3/bin/activate py314
-python scripts/stage_hippunfold_inputs.py \
-  --subject <subject> \
-  --source-dir data/raw/<subject> \
-  --input-dir data/hippunfold_input
-```
-
-Disk-safe canonicalization (required after staging):
-
-```bash
-for s in 102311 102816; do
-  rm -f data/hippunfold_input/sub-${s}/func/sub-${s}_task-rest_run-concat.dtseries.nii
-  rm -f data/hippunfold_input/sub-${s}/func/sub-${s}_task-rest_run-concat_bold.nii.gz
-  rm -f data/hippunfold_input/sub-${s}/func/sub-${s}_task-rest_run-concat_desc-brain_mask.nii.gz
-  ln data/raw/${s}/sub-${s}_rfMRI_REST_7T_Atlas_MSMAll_hp2000_clean_rclean_tclean.dtseries.nii \
-     data/hippunfold_input/sub-${s}/func/sub-${s}_task-rest_run-concat.dtseries.nii
-  ln data/raw/${s}/sub-${s}_rfMRI_REST_7T_hp2000_clean_rclean_tclean.nii.gz \
-     data/hippunfold_input/sub-${s}/func/sub-${s}_task-rest_run-concat_bold.nii.gz
-  ln data/raw/${s}/sub-${s}_rfMRI_REST_7T_brain_mask.nii.gz \
-     data/hippunfold_input/sub-${s}/func/sub-${s}_task-rest_run-concat_desc-brain_mask.nii.gz
-done
-```
-
-Output:
-- `data/hippunfold_input/sub-<subject>/func/sub-<subject>_task-rest_run-concat.dtseries.nii`
-- `data/hippunfold_input/sub-<subject>/func/sub-<subject>_task-rest_run-concat_bold.nii.gz`
-- `data/hippunfold_input/sub-<subject>/func/sub-<subject>_task-rest_run-concat_desc-brain_mask.nii.gz`
-
-Verify:
-
-```bash
-ls -lh data/hippunfold_input/sub-<subject>/func
-ls -li data/raw/<subject>/sub-<subject>_rfMRI_REST_7T_hp2000_clean_rclean_tclean.nii.gz \
-       data/hippunfold_input/sub-<subject>/func/sub-<subject>_task-rest_run-concat_bold.nii.gz
-```
-
-## Step 3: Produce Dense Corobl Intermediate Assets
-
-Input:
-- Staged `data/hippunfold_input/sub-<subject>/`
-
-Command:
-
-```bash
-source /opt/miniconda3/bin/activate py314
-python scripts/run_dense_corobl_batch.py \
-  --subjects 102311 102816 \
-  --input-dir data/hippunfold_input \
-  --out-root outputs/dense_corobl_batch \
-  --density 512
-```
-
-Output (required intermediates):
-- `outputs/dense_corobl_batch/sub-<subject>/hippunfold/sub-<subject>/surf/sub-<subject>_hemi-L_space-corobl_den-512_label-hipp_midthickness.surf.gii`
-- `outputs/dense_corobl_batch/sub-<subject>/hippunfold/sub-<subject>/surf/sub-<subject>_hemi-R_space-corobl_den-512_label-hipp_midthickness.surf.gii`
-- `outputs/dense_corobl_batch/sub-<subject>/post_dense_corobl/surface/sub-<subject>_hemi-L_space-corobl_den-512_label-hipp_bold.func.gii`
-- `outputs/dense_corobl_batch/sub-<subject>/post_dense_corobl/surface/sub-<subject>_hemi-R_space-corobl_den-512_label-hipp_bold.func.gii`
-
-Formal rule:
-- These upstream dense outputs are structural prerequisites only.
-- The formal network-first pipeline regenerates its own hippocampal raw `.func.gii` surface timeseries inside the shared pipeline store from `run-concat_bold` using `trilinear` mapping and `smooth_iters = 0`.
-- Formal hippocampal tSNR gating reads only those shared-pipeline raw `.func.gii` files.
-- No `.npy` substitution, archived-directory reuse, or any other fallback source is allowed.
-
-Verify:
-
-```bash
-find outputs/dense_corobl_batch/sub-<subject> -maxdepth 6 -type f | rg 'den-512.*(midthickness\.surf\.gii|bold\.func\.gii)'
-```
-
-## Step 4: Run Network Migration and Copy Overviews
-
-Input:
-- Step 3 dense assets + staged dtseries
-
-Command:
-
-```bash
-source /opt/miniconda3/bin/activate py314
-python scripts/experiments/hipp_functional_parcellation_network/run_batch.py \
+python scripts/hipp_parcellation_network/run_batch.py \
   --branches network-prob-cluster-nonneg \
   --atlases kong2019 \
   --subjects 102311 102816 \
@@ -176,11 +87,11 @@ python scripts/experiments/hipp_functional_parcellation_network/run_batch.py \
   --clear-present
 ```
 
-Experimental test command:
+Experimental mode:
 
 ```bash
 source /opt/miniconda3/bin/activate py314
-python scripts/experiments/hipp_functional_parcellation_network/run_batch.py \
+python scripts/hipp_parcellation_network/run_batch.py \
   --branches network-prob-cluster-nonneg \
   --atlases kong2019 \
   --subjects 102311 102816 \
@@ -191,18 +102,14 @@ python scripts/experiments/hipp_functional_parcellation_network/run_batch.py \
   --clear-present
 ```
 
-Output:
-- `outputs_migration/hipp_functional_parcellation_network/network-prob-cluster-nonneg/kong2019/sub-<subject>/hipp_functional_parcellation_network_overview.png`
-- `present_network_migration/sub-<subject>_kong2019_network-prob-cluster-nonneg_overview.png`
-
-## Step 5: Final Acceptance
+## Step 2: Final Acceptance
 
 Required files for both subjects:
 - `present_network_migration/sub-102311_kong2019_network-prob-cluster-nonneg_overview.png`
 - `present_network_migration/sub-102816_kong2019_network-prob-cluster-nonneg_overview.png`
-- `outputs_migration/.../sub-<subject>/final_selection_summary.json`
-- `outputs_migration/.../sub-<subject>/summary_manifest.json`
-- `outputs_migration/.../sub-<subject>/hipp_functional_parcellation_network_overview.png`
+- `outputs_migration/hipp_functional_parcellation_network/network-prob-cluster-nonneg/kong2019/sub-<subject>/final_selection_summary.json`
+- `outputs_migration/hipp_functional_parcellation_network/network-prob-cluster-nonneg/kong2019/sub-<subject>/summary_manifest.json`
+- `outputs_migration/hipp_functional_parcellation_network/network-prob-cluster-nonneg/kong2019/sub-<subject>/hipp_functional_parcellation_network_overview.png`
 
 Verification command:
 
@@ -216,23 +123,10 @@ for s in 102311 102816; do
 done
 ```
 
-## Failure Triage (Fast Map)
+## Notes
 
-```text
-Step 1 failure  -> remote archive zip missing or ssh/ip issue
-Step 2 failure  -> raw files incomplete; concat_bold not staged
-Step 3 failure  -> hippunfold/post step missing required staged files or den-512 assets
-Step 4 failure  -> missing dense intermediates or atlas/cortex dependencies
-Step 5 failure  -> run_batch incomplete copy/summary outputs
-```
-
-## Validated Example (This Round)
-
-- Run date: 2026-04-10
-- Subjects: 102311, 102816
-- Present overview paths:
-  - `present_network_migration/sub-102311_kong2019_network-prob-cluster-nonneg_overview.png`
-  - `present_network_migration/sub-102816_kong2019_network-prob-cluster-nonneg_overview.png`
-- Notes:
-  - staging concat files are hard-linked to `data/raw` to avoid duplicate disk usage.
-  - K selection was aligned to current production `mainline` mode for this run.
+- `data/hippunfold_input` is the authoritative analysis input tree.
+- `run_subject.py` regenerates strict shared raw hippocampal `.func.gii` in
+  `outputs_migration/hipp_functional_parcellation_network/_shared/.../surface/raw/`
+  from `run-concat_bold` using `trilinear` mapping and `smooth_iters=0`.
+- No archive fallback and no `_archive` reuse is part of this runbook.

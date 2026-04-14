@@ -48,7 +48,6 @@ def ssh(host: str, remote_cmd: str, check: bool = True) -> str:
 
 
 def stream_zip_member(host: str, zip_path: str, member: str, local_path: Path) -> None:
-    local_path.parent.mkdir(parents=True, exist_ok=True)
     remote_cmd = f"unzip -p {shlex.quote(zip_path)} {shlex.quote(member)}"
     with local_path.open("wb") as f:
         proc = subprocess.run(["ssh", host, remote_cmd], stdout=f, stderr=subprocess.PIPE)
@@ -110,6 +109,8 @@ def main() -> int:
         "DatasetType": "raw",
     }
     input_dir.mkdir(parents=True, exist_ok=True)
+    anat_dir.mkdir(parents=True, exist_ok=True)
+    func_dir.mkdir(parents=True, exist_ok=True)
     (input_dir / "dataset_description.json").write_text(
         json.dumps(dataset_description, indent=2), encoding="utf-8"
     )

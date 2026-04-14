@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+real_bin="${HIPPUNFOLD_LN2_LAYERS_BIN:-}"
+if [[ -z "${real_bin}" ]]; then
+  real_bin="$(type -a -p LN2_LAYERS | grep -v "^$0$" | head -n 1 || true)"
+fi
+if [[ -z "${real_bin}" ]]; then
+  echo "LN2_LAYERS wrapper error: real binary not found" >&2
+  exit 127
+fi
+
+args=()
+rim_gz=""
+rim_nii=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -rim)
+      if [[ $# -lt 2 ]]; then
+        echo "LN2_LAYERS wrapper error: -rim expects a value" >&2
+        exit 2
+      fi
+      rim_input="$2"
+      if [[ "${rim_input}" == *.nii.gz ]] && [[ -f "${rim_input}" ]]; then
+        rim_gz="${rim_input}"
+        rim_nii="${rim_input%.gz}"
+        gunzip -c "${rim_gz}" > "${rim_nii}"
+        args+=("-rim" "${rim_nii}")
+      else
+        args+=("-rim" "${rim_input}")
+      fi
+      shift 2
+      ;;
+    *)
+      args+=("$1")
+      shift
+      ;;
+  esac
+done
+
+"${real_bin}" "${args[@]}"
+rc=$?
+if [[ ${rc} -ne 0 ]]; then
+  exit "${rc}"
+fi
+
+if [[ -n "${rim_gz}" ]] && [[ -n "${rim_nii}" ]]; then
+  base="${rim_nii%.nii}"
+  for suffix in metric_equidist layers_equidist midGM_equidist; do
+    nii_out="${base}_${suffix}.nii"
+    gz_out="${base}_${suffix}.nii.gz"
+    if [[ -f "${nii_out}" ]]; then
+      gzip -c "${nii_out}" > "${gz_out}"
+    fi
+  done
+fi
+

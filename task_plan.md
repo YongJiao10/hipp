@@ -14,7 +14,7 @@
 | 6. 修复 102311 HippUnfold surface-volume 对齐失败 | complete | 已在 `scripts/wb_command` 增加零映射检测与负-x 校正 fallback，`102311` 已于 2026-03-26 10:39 完成 145/145 steps |
 
 ## Fixed Decisions
-- 工具基线：当前支线统一使用 HippUnfold CLI 2.0.0
+- 工具基线：HippUnfold 版本必须以 CLI 实测为准（`--version` + `--output_density 512` 哨兵测试）；当前本机已在 `hippo2` 验证通过 `2.0.0`
 - 海马 surface density：2mm
 - 单被试优先
 - 新皮层参考默认走 archive 中的 CIFTI/dtseries + Schaefer400 surface atlas
@@ -30,7 +30,7 @@
 | `rsync` 无法处理带空格的远端路径 | 1 | 改为统一使用 `ssh + binary stream` 复制远端文件 |
 | 系统 `python3` 缺少 `tomllib` | 1 | 改为脚本内置 TOML 兼容解析 |
 | 当前被试仅发现 volume rsfMRI，无 CIFTI | 1 | 由主控脚本显式阻断，等待用户批准 volume-based 分支 |
-| 早期 conda 包名与 CLI 版本不一致 | 1 | 当前支线已统一到 `hippunfold --version = 2.0.0` |
+| conda 标注版本与 CLI 实际版本不一致 | 3 | 已定位根因为求解器落到 `bioconda::hippunfold-2.0.0-pyh7e72e81_0`（实体仍是 1.5.2 口径）；现已改为显式安装 `khanlab::hippunfold=2.0.0=py_0` 并在 `hippo2` 通过 `--version=2.0.0` + `--output_density 512` 验收 |
 | `hippomaps` 顶层导入触发 Qt/VTK crash | 1 | 改为项目内脚本直接按文件路径加载 `hippomaps/utils.py` |
 | 直接调用 `wb_command` 在本机触发 processor/Qt 问题 | 1 | 从既有成功目录确认需用 `arch -x86_64` 调用，现已恢复可用 |
 | `nilearn 0.10.2` 不支持 `copy_header` | 1 | 修正参考提取脚本以兼容当前 nilearn 版本 |
@@ -40,3 +40,9 @@
 | `102311` 右海马 `postproc_boundary_vertices` 报 `Label 0 has less than minimum number of vertices` | 1 | 已定位为 Workbench 将全零 `sdt.shape.gii` 传给后处理，原因是 corobl surface 与 volume 在 x 轴负向 affine 下发生整体平移错位，准备在本地 `wb_command` 包装器中对零映射结果做自动负-x 校正采样 |
 | 早期远端发现只查了未归档目录，误以为没有 7T CIFTI | 1 | 已在 `Resting State fMRI 7T Preprocessed Recommended archive/*.zip` 中确认聚合与分 run `dtseries` 均存在，主流程改回 surface-first |
 | 严格“完全不用单独 volume 数据”要求与当前 overview workflow 冲突 | 1 | 已确认 `dtseries` 中海马为 volume grayordinates，现有 overview workflow 又要求海马 surface 输入，因此该路线停止 |
+
+## 2026-04-13 hippo2 Environment Manifest
+
+| Phase | Status | Notes |
+|---|---|---|
+| 7. 记录 hippo2 环境与运行时分层 | complete | 已新增 `docs/environment/hippo2_reproducibility_manifest.md`，并导出 `manifests/hippo2/*` 原始锁文件；同时记录了 `hippunfold` CLI / Python metadata 不一致、`c3d` PATH 可见性、以及 launcher 的 cache/wrapper 层。 |

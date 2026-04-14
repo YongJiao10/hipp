@@ -1,0 +1,198 @@
+{
+  "platform": "osx-arm64",
+  "conda_version": "26.3.1",
+  "conda_env_version": "26.3.1",
+  "conda_build_version": "not installed",
+  "root_prefix": "/opt/miniconda3",
+  "conda_prefix": "/opt/miniconda3",
+  "av_data_dir": "/opt/miniconda3/etc/conda",
+  "av_metadata_url_base": null,
+  "root_writable": false,
+  "pkgs_dirs": [
+    "/opt/miniconda3/pkgs",
+    "/Users/jy/.conda/pkgs"
+  ],
+  "envs_dirs": [
+    "/Users/jy/.conda/envs",
+    "/opt/miniconda3/envs"
+  ],
+  "default_prefix": "/opt/miniconda3",
+  "active_prefix": null,
+  "active_prefix_name": null,
+  "conda_shlvl": 0,
+  "channels": [
+    "https://conda.anaconda.org/conda-forge/osx-arm64",
+    "https://conda.anaconda.org/conda-forge/noarch",
+    "https://repo.anaconda.com/pkgs/main/osx-arm64",
+    "https://repo.anaconda.com/pkgs/main/noarch",
+    "https://repo.anaconda.com/pkgs/r/osx-arm64",
+    "https://repo.anaconda.com/pkgs/r/noarch"
+  ],
+  "user_rc_path": "/Users/jy/.condarc",
+  "rc_path": "/Users/jy/.condarc",
+  "sys_rc_path": "/opt/miniconda3/.condarc",
+  "offline": false,
+  "envs": [
+    "/Users/jy/Library/Caches/hippunfold/conda/8c9cdf14d3bb095f2dd1f221868c9dc3_",
+    "/Users/jy/Library/Caches/hippunfold/conda/9d61240e0b716c72a8a12a55f982fe77_",
+    "/opt/miniconda3",
+    "/opt/miniconda3/envs/cca",
+    "/opt/miniconda3/envs/decode_py313",
+    "/opt/miniconda3/envs/hippo2",
+    "/opt/miniconda3/envs/jobmon",
+    "/opt/miniconda3/envs/mricrogl_env",
+    "/opt/miniconda3/envs/py312",
+    "/opt/miniconda3/envs/py314"
+  ],
+  "python_version": "3.13.11.final.0",
+  "requests_version": "2.33.1",
+  "user_agent": "conda/26.3.1 requests/2.33.1 CPython/3.13.11 Darwin/25.4.0 OSX/26.4.1 solver/libmamba conda-libmamba-solver/25.11.0 libmambapy/2.5.0 aau/0.7.6 c/FzRBag2RLtbWzZxtHip-0M s/msgbGGyiNfbwhul8Taez08 e/lF5HbWZJTExT53rBlOFzRO",
+  "conda_location": "/opt/miniconda3/lib/python3.13/site-packages/conda",
+  "config_files": [
+    "/opt/miniconda3/.condarc",
+    "/opt/miniconda3/condarc.d/anaconda-auth.yml",
+    "/Users/jy/.condarc"
+  ],
+  "netrc_file": null,
+  "virtual_pkgs": [
+    [
+      "__archspec",
+      "1",
+      "x86_64"
+    ],
+    [
+      "__conda",
+      "26.3.1",
+      "0"
+    ],
+    [
+      "__osx",
+      "26.4.1",
+      "0"
+    ],
+    [
+      "__unix",
+      "0",
+      "0"
+    ]
+  ],
+  "solver": {
+    "name": "libmamba",
+    "user_agent": "solver/libmamba conda-libmamba-solver/25.11.0 libmambapy/2.5.0",
+    "default": true
+  },
+  "tmp_dir": "/var/folders/w3/2qbl51_16cj7n0n0wrxsj9th0000gn/T",
+  "UID": 501,
+  "GID": 20,
+  "sys.version": "3.13.11 | packaged by Anaconda, Inc. | (main, Dec 10 2025, 21:21:08) [Clang 20.1.8 ]",
+  "sys.prefix": "/opt/miniconda3",
+  "sys.executable": "/opt/miniconda3/bin/python",
+  "site_dirs": [
+    "~/.local/lib/python3.13"
+  ],
+  "env_vars": {
+    "SSL_CERT_FILE": "<not set>",
+    "LD_PRELOAD": "<not set>",
+    "CONDA_EXE": "/opt/miniconda3/bin/conda",
+    "CIO_TEST": "<not set>",
+    "CONDA_ROOT": "/opt/miniconda3",
+    "REQUESTS_CA_BUNDLE": "<not set>",
+    "PATH": "/Users/jy/.codex/tmp/arg0/codex-arg0BwkX3r:/Users/jy/.antigravity/antigravity/bin:/Users/jy/.antigravity/antigravity/bin:/Users/jy/.opencode/bin:/Users/jy/.local/bin:/Users/jy/bin:/opt/miniconda3/condabin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/opt/pkg/env/active/bin:/opt/pmk/env/global/bin:/Library/TeX/texbin:/Applications/Codex.app/Contents/Resources",
+    "CONDA_PYTHON_EXE": "/opt/miniconda3/bin/python",
+    "CURL_CA_BUNDLE": "<not set>",
+    "INFOPATH": "/opt/homebrew/share/info:/opt/homebrew/share/info:",
+    "CONDA_SHLVL": "0"
+  },
+  "envs_details": {
+    "/Users/jy/Library/Caches/hippunfold/conda/8c9cdf14d3bb095f2dd1f221868c9dc3_": {
+      "name": "",
+      "created": "2026-04-13T04:00:07.345648+00:00",
+      "last_modified": "2026-04-13T04:00:41.887086+00:00",
+      "active": false,
+      "base": false,
+      "frozen": false,
+      "writable": false
+    },
+    "/Users/jy/Library/Caches/hippunfold/conda/9d61240e0b716c72a8a12a55f982fe77_": {
+      "name": "",
+      "created": "2026-04-13T04:00:51.224673+00:00",
+      "last_modified": "2026-04-13T04:00:58.508426+00:00",
+      "active": false,
+      "base": false,
+      "frozen": false,
+      "writable": false
+    },
+    "/opt/miniconda3": {
+      "name": "base",
+      "created": "2025-12-16T20:28:52+00:00",
+      "last_modified": "2026-04-07T05:25:10.989626+00:00",
+      "active": false,
+      "base": true,
+      "frozen": false,
+      "writable": false
+    },
+    "/opt/miniconda3/envs/cca": {
+      "name": "cca",
+      "created": "2026-02-26T05:26:00.621863+00:00",
+      "last_modified": "2026-02-26T05:26:14.843488+00:00",
+      "active": false,
+      "base": false,
+      "frozen": false,
+      "writable": false
+    },
+    "/opt/miniconda3/envs/decode_py313": {
+      "name": "decode_py313",
+      "created": "2026-01-23T01:57:02.557327+00:00",
+      "last_modified": "2026-01-23T01:57:17.316970+00:00",
+      "active": false,
+      "base": false,
+      "frozen": false,
+      "writable": false
+    },
+    "/opt/miniconda3/envs/hippo2": {
+      "name": "hippo2",
+      "created": "2026-04-09T13:05:56.407551+00:00",
+      "last_modified": "2026-04-13T09:51:38.526854+00:00",
+      "active": false,
+      "base": false,
+      "frozen": false,
+      "writable": false
+    },
+    "/opt/miniconda3/envs/jobmon": {
+      "name": "jobmon",
+      "created": "2026-01-15T04:11:48.590674+00:00",
+      "last_modified": "2026-01-15T04:11:57.834790+00:00",
+      "active": false,
+      "base": false,
+      "frozen": false,
+      "writable": false
+    },
+    "/opt/miniconda3/envs/mricrogl_env": {
+      "name": "mricrogl_env",
+      "created": "2026-03-05T00:56:56.168792+00:00",
+      "last_modified": "2026-03-05T00:57:06.744657+00:00",
+      "active": false,
+      "base": false,
+      "frozen": false,
+      "writable": false
+    },
+    "/opt/miniconda3/envs/py312": {
+      "name": "py312",
+      "created": "2026-01-16T03:31:34.758547+00:00",
+      "last_modified": "2026-01-16T03:34:19.493563+00:00",
+      "active": false,
+      "base": false,
+      "frozen": false,
+      "writable": false
+    },
+    "/opt/miniconda3/envs/py314": {
+      "name": "py314",
+      "created": "2026-01-23T01:37:46.502171+00:00",
+      "last_modified": "2026-03-08T04:16:45.070949+00:00",
+      "active": false,
+      "base": false,
+      "frozen": false,
+      "writable": false
+    }
+  }
+}
