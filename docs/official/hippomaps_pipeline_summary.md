@@ -139,6 +139,16 @@ Step   脚本/方法                              输入                        
 
 这是正式结构链路的入口脚本。它激活 `hippo` 环境并调用 `hippunfold` CLI。
 
+`run_hippunfold_local.sh` 还会把外部二进制目录插到 `PATH` 前面；默认值是
+`/Applications/ITK-SNAP.app/Contents/bin`。这一步是为了让 `greedy` 和
+`c3d_affine_tool` 在 HippUnfold 运行时可见。
+
+另外，`c3d` 本身不是这个外部 bundle 的一部分，而是 `hippo2` 里的
+`conda-forge::c3d` 包。服务器侧如果换了安装布局，要同时满足这两类依赖：
+
+1. `hippo2` 里能找到 `c3d`
+2. `HIPPUNFOLD_EXTERNAL_BIN_DIR` 指向包含 `greedy` 和 `c3d_affine_tool` 的目录
+
 - 输入示例
   - `data/hippunfold_input/sub-102311/anat/sub-102311_T1w.nii.gz`（`0.7 mm`）
   - `data/hippunfold_input/sub-102311/anat/sub-102311_T2w.nii.gz`（`0.7 mm`）

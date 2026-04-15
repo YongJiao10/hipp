@@ -22,6 +22,7 @@ cleanup_runtime_dirs() {
   if [[ -d "${home_cache}" ]]; then
     find "${home_cache}" -type d -empty -delete 2>/dev/null || true
   fi
+  rm -rf "${CACHE_ROOT}"
 }
 trap cleanup_runtime_dirs EXIT
 

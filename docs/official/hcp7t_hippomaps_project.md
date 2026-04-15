@@ -90,8 +90,15 @@ data/hippunfold_input/
 - 本地项目环境名：**`py314`（通用 Python） + `hippo2`（HippUnfold CLI 专用）**
 - 皮层 atlas 来源：**ThomasYeoLab/CBIG 官方 Schaefer400 7-network**
 - HippUnfold 安装来源：**必须包含 `khanlab` 渠道并置于前位**
+- `c3d` 来源：**`hippo2` 内的 `conda-forge::c3d` 包**
+- `greedy` 来源：**`greedyreg` 包提供的医学图像注册二进制；服务器上优先用 `conda install -n hippo2 -c khanlab greedyreg`**
+- `c3d_affine_tool` 来源：**外部 `ITK-SNAP.app/Contents/bin` 二进制目录，通过 `HIPPUNFOLD_EXTERNAL_BIN_DIR` 注入**
+- `LN2_LAYERS` 来源：**`laynii` 包提供的 LAYNII 二进制；服务器上优先用 `conda install -n hippo2 -c conda-forge laynii`**
+- 环境入口：**`environment/hippo2_server.yml` + `scripts/bootstrap_hippo2_server.sh`**
+- 说明：**`environment/hippo2_server.yml` 中除 `greedyreg` / `laynii` 外均已按现有锁文件尽量写成精确版本，避免“写了等于没写”**
 - `hippo2` 修复命令：`CONDA_SAFETY_CHECKS=disabled conda install -y -n hippo2 -c khanlab -c conda-forge -c bioconda khanlab::hippunfold=2.0.0=py_0 --force-reinstall`
 - 说明：此前误判源于求解器落到 `bioconda::hippunfold-2.0.0-pyh7e72e81_0`，其 CLI/metadata 实体仍是 `1.5.2` 口径；不能只看 `conda list`。
+- 说明：`runtime/hippunfold_cache` 只用于 HippUnfold 阶段的运行时缓存，脚本结束后会自动清理，不作为后续功能分区流程输入。
 
 当前环境核查结果：
 
@@ -100,6 +107,8 @@ Item         Status                Notes
 remote ssh   OK                    已成功连接 192.168.0.183
 remote data  OK                    已发现 HCP-YA-2025 与被试 100610
 wb_command   OK                    /Applications/wb_view.app/Contents/usr/bin/wb_command，需通过 arch -x86_64 调用
+c3d          OK                    `conda-forge::c3d` 已在 `hippo2` 中；外部 helper 另见 `greedy`
+LN2_LAYERS   OK                    需要 `laynii` 包或外部 LAYNII 目录；缺失会直接 127
 docker       Missing               本机无 docker
 hippunfold   OK                    hippo2 环境 `--version = 2.0.0`（khanlab::hippunfold=2.0.0=py_0）
 den-512 test Pass                  `--output_density 512 --help` 退出码 0，CLI 显示 `{native,512,2k,8k,18k}`
