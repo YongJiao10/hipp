@@ -20,3 +20,8 @@ present/
 present_network/
 runtime/
 .runtime_py/
+*.tar.gz
+*.zip
+*.7z
+*.rar
+*.gz

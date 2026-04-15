@@ -24,6 +24,11 @@ Raw snapshots are stored in:
 - `manifests/hippo2/conda-list.txt`
 - `manifests/hippo2/pip-freeze.txt`
 
+Bootstrap sources for new servers:
+
+- `environment/hippo2_server.yml`
+- `scripts/bootstrap_hippo2_server.sh`
+
 ## Host Layer
 
 ```text
@@ -50,7 +55,8 @@ bash         5.2.37       h5b2bd6a_0               Installed into hippo2 so
                                                   Snakemake can use a Bash
                                                   that supports the launcher
                                                   shell features.
-c3d          0.6.0        pyhd8ed1ab_0             Present in conda list.
+c3d          0.6.0        pyhd8ed1ab_0             Conda-forge package that
+                                                  provides the `c3d` binary.
 hippunfold   2.0.0        py_0 / khanlab           CLI version used in runs.
 nilearn      0.10.4       pyhd8ed1ab_0             Downgraded for compatibility.
 nnunet       1.7.1        pypi_0                   Used by HippUnfold inference.
@@ -67,6 +73,15 @@ torchvision  0.26.0        pip/conda mixed           Used by nnUNet.
 The full package inventory is in `manifests/hippo2/conda-list.txt`.
 
 The explicit conda lock snapshot is in `manifests/hippo2/conda-explicit.txt`.
+
+The supported bootstrap spec for new servers is `environment/hippo2_server.yml`.
+Most entries in that file are pinned to exact versions recovered from
+`manifests/hippo2/conda-list.txt` and `manifests/hippo2/pip-freeze.txt`.
+The only intentionally unpinned entries are `greedyreg` and `laynii`, because
+the captured manifest does not record an exact build string for those external
+entry-point packages.
+It is intentionally narrower than the lock snapshot so it is easier to read and
+maintain, while the explicit snapshot remains the bit-for-bit historical record.
 
 The `pip freeze` snapshot is archival and audit-friendly, but it should not be treated as the only bootstrap source because it contains file URL references from the build environment.
 
@@ -130,11 +145,68 @@ hippunfold         /opt/miniconda3/envs/hippo2/bin/hippunfold
 nnUNet_predict     /opt/miniconda3/envs/hippo2/bin/nnUNet_predict
 reg_aladin         /opt/miniconda3/envs/hippo2/bin/reg_aladin
 bash               /opt/miniconda3/envs/hippo2/bin/bash
+c3d                /opt/miniconda3/envs/hippo2/bin/c3d
+greedy             `HIPPUNFOLD_EXTERNAL_BIN_DIR` / ITK-SNAP bundle
+c3d_affine_tool     `HIPPUNFOLD_EXTERNAL_BIN_DIR` / ITK-SNAP bundle
 wb_command         /Applications/wb_view.app/Contents/usr/bin/wb_command
 LN2_LAYERS         resolved through `scripts/LN2_LAYERS` wrapper
 ```
 
 There is no PATH-stable `wb_command` in this repo. Use the wrapper in `scripts/wb_command`.
+
+### HippUnfold External Binary Bundle
+
+`scripts/run_hippunfold_local.sh` prepends `HIPPUNFOLD_EXTERNAL_BIN_DIR` to `PATH`
+before calling `hippunfold`. The default on this Mac is:
+
+```text
+/Applications/ITK-SNAP.app/Contents/bin
+```
+
+That bundle is the expected source of the external registration helpers used by
+the HippUnfold workflow, especially `greedy` and `c3d_affine_tool`.
+
+On a server, make the equivalent directory available somewhere stable and set:
+
+```bash
+export HIPPUNFOLD_EXTERNAL_BIN_DIR=/path/to/your/bin-dir
+```
+
+Then verify the bundle with:
+
+```bash
+command -v c3d
+command -v greedy
+command -v c3d_affine_tool
+```
+
+If `c3d` is missing, install the conda-forge `c3d` package into `hippo2` or an
+equivalent environment. If `greedy` or `c3d_affine_tool` is missing, the
+launcher will not have the external helper bundle it expects.
+
+### Greedy Binary Source
+
+The HippUnfold workflow expects the medical-image registration binary `greedy`,
+not the unrelated GeoPandas package named `greedy`.
+
+On this workspace, the launcher gets `greedy` from the ITK-SNAP bundle listed
+above. On a server, the shortest supported install path is usually the conda
+package:
+
+```bash
+conda install -n hippo2 -c khanlab greedyreg
+```
+
+That package is the one that provides the `greedy` executable used by the
+registration helpers. After installation, verify:
+
+```bash
+conda run -n hippo2 bash -lc 'command -v greedy; greedy -help | head -n 1'
+```
+
+If you already have an ITK-SNAP bundle or another vendor-supplied binary
+directory, you can keep using it by pointing `HIPPUNFOLD_EXTERNAL_BIN_DIR` at
+that directory instead.
 
 ### Workbench Wrapper
 
@@ -147,6 +219,35 @@ There is no PATH-stable `wb_command` in this repo. Use the wrapper in `scripts/w
 ### LAYNII Wrapper
 
 [`scripts/LN2_LAYERS`](/Users/jy/Documents/HippoMaps-network-first/scripts/LN2_LAYERS) wraps the real `LN2_LAYERS` binary so `.nii.gz` rims are decompressed to `.nii` before execution and the expected outputs are recompressed afterward.
+
+### LAYNII Binary Source
+
+`LN2_LAYERS` is part of the [LAYNII](https://github.com/layerfMRI/LAYNII) tool
+suite. On this workspace it may come either from:
+
+1. A conda installation of `laynii`
+2. A manually unpacked LAYNII binary directory
+
+For a server, the shortest supported install path is usually:
+
+```bash
+conda install -n hippo2 -c conda-forge laynii
+```
+
+After installation, verify the executable is visible:
+
+```bash
+conda run -n hippo2 bash -lc 'command -v LN2_LAYERS; LN2_LAYERS -help | head -n 1'
+```
+
+If the binary lives outside `hippo2`, point the launcher at it explicitly:
+
+```bash
+export HIPPUNFOLD_LN2_LAYERS_BIN=/path/to/LAYNII/LN2_LAYERS
+```
+
+The wrapper in `scripts/LN2_LAYERS` exits with code `127` when neither the
+environment variable nor `PATH` yields a real binary.
 
 ## Runtime Layer
 
@@ -180,6 +281,10 @@ torch.multiprocessing.set_sharing_strategy("file_system")
 ```
 
 That file is created under `.runtime_py/` inside the repo root.
+
+The `runtime/hippunfold_cache` tree is treated as disposable runtime state for
+the HippUnfold step. `scripts/run_hippunfold_local.sh` removes it on exit so the
+later functional-parcellation workflow does not inherit a large leftover cache.
 
 ## HippUnfold Inputs and Outputs
 
@@ -225,10 +330,13 @@ From scratch, a future agent should:
 3. Verify `conda list -n hippo2` reports `hippunfold 2.0.0`.
 4. Verify `hippunfold --version` reports `2.0.0`.
 5. Ignore `importlib.metadata.version("hippunfold")` if it still reports `1.5.2rc2`.
-6. Make sure `scripts/run_hippunfold_local.sh` is the only launcher used for local runs.
-7. Make sure the repo `scripts/` directory stays first on `PATH` so `wb_command` and `LN2_LAYERS` wrappers win.
-8. Keep caches under `runtime/hippunfold_cache`, not in hidden `~/.cache` or `~/Library/Caches`.
-9. Use `data/hippunfold_input` as the input root and `outputs_migration/dense_corobl_batch/sub-<id>/hippunfold` as the output root.
+6. Build or update the server environment from `environment/hippo2_server.yml` before first run.
+7. Use `scripts/bootstrap_hippo2_server.sh` if you want a one-shot verifier after install.
+8. Make sure `scripts/run_hippunfold_local.sh` is the only launcher used for local runs.
+9. Make sure the repo `scripts/` directory stays first on `PATH` so `wb_command` and `LN2_LAYERS` wrappers win.
+10. Make sure `c3d`, `greedy`, `LN2_LAYERS`, and `N4BiasFieldCorrection` resolve from the conda env or explicit binary paths.
+11. Allow `scripts/run_hippunfold_local.sh` to clean up `runtime/hippunfold_cache` on exit; the tree is disposable once HippUnfold finishes.
+12. Use `data/hippunfold_input` as the input root and `outputs_migration/dense_corobl_batch/sub-<id>/hippunfold` as the output root.
 
 ## Minimal Verification Commands
 
@@ -236,8 +344,9 @@ From scratch, a future agent should:
 conda activate hippo2
 hippunfold --version
 conda list -n hippo2 | rg '^hippunfold\s'
+conda list -n hippo2 | rg '^c3d\s'
 conda run -n hippo2 python -c 'import importlib.metadata as m; print(m.version("hippunfold"))'
-conda run -n hippo2 bash -lc 'command -v reg_aladin; command -v nnUNet_predict; command -v bash'
+conda run -n hippo2 bash -lc 'command -v c3d; command -v reg_aladin; command -v nnUNet_predict; command -v bash'
 ```
 
 For Workbench, use:

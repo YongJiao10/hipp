@@ -16,6 +16,7 @@
 #
 # REQUIREMENTS:
 #   - conda env hippo2  (hippunfold 2.0.0 from khanlab channel)
+#   - c3d from the hippo2 conda env
 #   - /Applications/ITK-SNAP.app/  (provides greedy + c3d_affine_tool)
 #   - Template cache at .cache/hippunfold/hippunfold_cache/  (already present;
 #     set HIPPUNFOLD_CACHE_ROOT to that dir to avoid re-downloading ~500 MB)
