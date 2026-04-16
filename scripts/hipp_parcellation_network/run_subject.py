@@ -32,7 +32,11 @@ if str(COMMON_DIR) not in sys.path:
     sys.path.insert(0, str(COMMON_DIR))
 
 from compute_fc_gradients import build_sparse_affinity, corrcoef_rows, diffusion_map_embedding
-from spectral_clustering import spectral_cluster_from_features
+from spectral_clustering import (
+    fisher_z_transform_fc,
+    prepare_intrinsic_spectral_features,
+    spectral_cluster_from_features,
+)
 from hipp_density_assets import (
     find_cifti_asset_strict,
     find_surface_asset_strict,
@@ -68,6 +72,8 @@ BRANCHES = [
     "network-wta",
     "network-spectral",
     "network-spectral-nonneg",
+    "intrinsic-spectral",
+    "intrinsic-spectral-nonneg",
 ]
 ATLAS_CONFIG = {
     "lynch2024": {
@@ -109,8 +115,21 @@ def uses_nonnegative_spectral_features(branch_slug: str) -> bool:
     return branch_slug == "network-spectral-nonneg"
 
 
+def uses_nonnegative_intrinsic_spectral_features(branch_slug: str) -> bool:
+    return branch_slug == "intrinsic-spectral-nonneg"
+
+
+def is_intrinsic_spectral_branch(branch_slug: str) -> bool:
+    return branch_slug in {"intrinsic-spectral", "intrinsic-spectral-nonneg"}
+
+
 def is_spectral_branch(branch_slug: str) -> bool:
-    return branch_slug in {"network-spectral", "network-spectral-nonneg"}
+    return branch_slug in {
+        "network-spectral",
+        "network-spectral-nonneg",
+        "intrinsic-spectral",
+        "intrinsic-spectral-nonneg",
+    }
 
 
 def run(cmd: list[str]) -> None:
@@ -1119,7 +1138,7 @@ _MERGED_NETWORK_ORDER, _EXCLUDED_MERGED_NETWORKS, _ATLAS_NETWORK_MERGE, MERGED_N
 
 
 def grouped_fc_to_probabilities(grouped_fc: np.ndarray, *, zero_negative: bool = False) -> np.ndarray:
-    fisher = np.arctanh(np.clip(grouped_fc, -0.999999, 0.999999)).astype(np.float32)
+    fisher = fisher_z_transform_fc(grouped_fc)
     if zero_negative:
         fisher = np.clip(fisher, 0.0, None)
     else:
@@ -1524,6 +1543,8 @@ def evaluate_k_range(
     v_min_fraction: float | None,
     v_min_count: int | None,
     k_selection_mode: str,
+    clustering_method: str = "AgglomerativeClustering(linkage=ward)",
+    distance_metric: str = "euclidean",
     cluster_fn=None,
 ) -> dict[str, object]:
     k_metrics: list[dict[str, object]] = []
@@ -1666,8 +1687,8 @@ def evaluate_k_range(
         "hemisphere": hemi,
         "subject_set": run_labels,
         "split_strategy": split_strategy,
-        "clustering_method": "AgglomerativeClustering(linkage=ward)",
-        "distance_metric": "euclidean",
+        "clustering_method": clustering_method,
+        "distance_metric": distance_metric,
         "spatial_constraints": str(outdir),
         "random_seed_policy": "deterministic run-pair ordering",
         "B_resamples": int(len(resample_pairs)),
@@ -1754,7 +1775,8 @@ def evaluate_k_range(
 
 
 def compute_gradient_state(grouped_fc: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    gradients, eigvals = diffusion_map_embedding(build_sparse_affinity(grouped_fc, 0.1), n_components=5)
+    fisher_fc = fisher_z_transform_fc(grouped_fc)
+    gradients, eigvals = diffusion_map_embedding(build_sparse_affinity(fisher_fc, 0.1), n_components=5)
     features = zscore_columns(gradients[:, :3])
     return features, gradients.astype(np.float32), eigvals.astype(np.float32)
 
@@ -1789,6 +1811,7 @@ def run_gradient_branch(
             "feature_shape": [int(features_full.shape[0]), int(features_full.shape[1])],
             "source_shape": [int(grouped_fc.shape[0]), int(grouped_fc.shape[1])],
             "source_networks": networks,
+            "fisher_z_transform": True,
             "eigenvalues": [float(x) for x in eigvals.tolist()],
             "run_labels": run_labels,
             "split_strategy": split_strategy,
@@ -1810,12 +1833,15 @@ def run_gradient_branch(
         v_min_fraction=v_min_fraction,
         v_min_count=v_min_count,
         k_selection_mode=k_selection_mode,
+        clustering_method="AgglomerativeClustering(linkage=ward)",
+        distance_metric="euclidean",
     )
     cluster["feature_summary"] = {
         "feature_kind": "network-gradient",
         "feature_shape": [int(features_full.shape[0]), int(features_full.shape[1])],
         "source_shape": [int(grouped_fc.shape[0]), int(grouped_fc.shape[1])],
         "source_networks": networks,
+        "fisher_z_transform": True,
         "eigenvalues": [float(x) for x in eigvals.tolist()],
         "run_labels": run_labels,
         "split_strategy": split_strategy,
@@ -1875,6 +1901,7 @@ def run_probability_branch(
             "feature_kind": "probability-regularized" if strict_soft_route else "probability",
             "feature_shape": [int(features_full.shape[0]), int(features_full.shape[1])],
             "networks": networks,
+            "fisher_z_transform": True,
             "negative_fc_policy": "clip-to-zero" if zero_negative else "row-min-shift",
             "regularization": (
                 {
@@ -1958,11 +1985,14 @@ def run_probability_branch(
         v_min_fraction=v_min_fraction,
         v_min_count=v_min_count,
         k_selection_mode=k_selection_mode,
+        clustering_method="AgglomerativeClustering(linkage=ward)",
+        distance_metric="euclidean",
     )
     cluster["feature_summary"] = {
         "feature_kind": "probability-regularized" if strict_soft_route else "probability",
         "feature_shape": [int(features_full.shape[0]), int(features_full.shape[1])],
         "networks": networks,
+        "fisher_z_transform": True,
         "negative_fc_policy": "clip-to-zero" if zero_negative else "row-min-shift",
         "run_labels": run_labels,
         "split_strategy": split_strategy,
@@ -1986,15 +2016,17 @@ def run_wta_branch(
 ) -> dict[str, object]:
     soft_dir.mkdir(parents=True, exist_ok=True)
 
-    order = np.argsort(grouped_fc, axis=1)
+    fisher_fc = fisher_z_transform_fc(grouped_fc)
+    order = np.argsort(fisher_fc, axis=1)
     best = order[:, -1]
     second = order[:, -2] if grouped_fc.shape[1] > 1 else order[:, -1]
     labels_final = best + 1
-    confidence = grouped_fc[np.arange(grouped_fc.shape[0]), best] - grouped_fc[np.arange(grouped_fc.shape[0]), second]
+    confidence = fisher_fc[np.arange(fisher_fc.shape[0]), best] - fisher_fc[np.arange(fisher_fc.shape[0]), second]
 
     np.save(soft_dir / "hipp_wta_labels.npy", labels_final.astype(np.int32))
     np.save(soft_dir / "hipp_wta_confidence.npy", confidence.astype(np.float32))
     np.save(soft_dir / "hipp_to_network_correlations.npy", grouped_fc.astype(np.float32))
+    np.save(soft_dir / "hipp_to_network_correlations_fisherz.npy", fisher_fc.astype(np.float32))
 
     key_to_name = {idx + 1: f"WTA_{net}" for idx, net in enumerate(networks)}
 
@@ -2023,6 +2055,8 @@ def run_wta_branch(
             "feature_kind": "network-wta",
             "n_vertices": int(grouped_fc.shape[0]),
             "n_networks": int(grouped_fc.shape[1]),
+            "fisher_z_transform": True,
+            "winner_selection_basis": "fisher-z-fc",
         },
         "k_metrics": [],
         "k_final": len(networks),
@@ -2034,6 +2068,7 @@ def run_wta_branch(
         "soft_outputs": {
             "networks": networks,
             "mean_grouped_fc": grouped_fc.mean(axis=0).astype(np.float32).tolist(),
+            "mean_grouped_fc_fisherz": fisher_fc.mean(axis=0).astype(np.float32).tolist(),
             "network_occupancy": occupancy,
             "mean_confidence": float(np.mean(confidence)),
             "median_confidence": float(np.median(confidence)),
@@ -2058,6 +2093,8 @@ def run_spectral_branch(
     k_selection_mode: str,
     zero_negative: bool,
 ) -> dict[str, object]:
+    grouped_fc = fisher_z_transform_fc(grouped_fc)
+    run_grouped_fcs = [fisher_z_transform_fc(fc_run) for fc_run in run_grouped_fcs]
     if zero_negative:
         grouped_fc = np.clip(grouped_fc, 0.0, None)
         run_grouped_fcs = [np.clip(fc_run, 0.0, None) for fc_run in run_grouped_fcs]
@@ -2074,6 +2111,7 @@ def run_spectral_branch(
             "feature_kind": "network-spectral",
             "feature_shape": [int(features_full.shape[0]), int(features_full.shape[1])],
             "source_networks": networks,
+            "fisher_z_transform": True,
             "negative_fc_policy": "clip-to-zero" if zero_negative else "preserve-signed-fc",
             "spatial_constraint": "surface_mesh_adjacency",
             "run_labels": run_labels,
@@ -2099,12 +2137,101 @@ def run_spectral_branch(
         v_min_fraction=v_min_fraction,
         v_min_count=v_min_count,
         k_selection_mode=k_selection_mode,
+        clustering_method="SpectralClustering(affinity=precomputed, assign_labels=kmeans)",
+        distance_metric="cosine-similarity-affinity",
         cluster_fn=_spectral_fn,
     )
     cluster["feature_summary"] = {
         "feature_kind": "network-spectral",
         "feature_shape": [int(features_full.shape[0]), int(features_full.shape[1])],
         "source_networks": networks,
+        "fisher_z_transform": True,
+        "negative_fc_policy": "clip-to-zero" if zero_negative else "preserve-signed-fc",
+        "spatial_constraint": "surface_mesh_adjacency",
+        "run_labels": run_labels,
+        "split_strategy": split_strategy,
+    }
+    return cluster
+
+
+def run_intrinsic_spectral_branch(
+    *,
+    intrinsic_fc: np.ndarray,
+    run_intrinsic_fcs: list[np.ndarray],
+    grouped_fc_for_annotation: np.ndarray,
+    run_labels: list[str],
+    networks: list[str],
+    connectivity: sparse.csr_matrix,
+    feature_dir: Path,
+    clustering_dir: Path,
+    hemi: str,
+    split_strategy: str,
+    instability_resamples: int,
+    v_min_fraction: float | None,
+    v_min_count: int | None,
+    k_selection_mode: str,
+    zero_negative: bool,
+) -> dict[str, object]:
+    transformed_full = prepare_intrinsic_spectral_features(intrinsic_fc, zero_negative=zero_negative)
+    transformed_runs = [
+        prepare_intrinsic_spectral_features(run_fc, zero_negative=zero_negative)
+        for run_fc in run_intrinsic_fcs
+    ]
+
+    features_full = zscore_columns(transformed_full)
+    run_features = [zscore_columns(run_fc) for run_fc in transformed_runs]
+
+    feature_dir.mkdir(parents=True, exist_ok=True)
+    np.save(feature_dir / "intrinsic_vertex_to_vertex_fc.npy", intrinsic_fc.astype(np.float32))
+    np.save(feature_dir / "intrinsic_vertex_to_vertex_fc_fisherz.npy", transformed_full.astype(np.float32))
+    save_json(
+        feature_dir / "feature_summary.json",
+        {
+            "hemi": hemi,
+            "feature_kind": "intrinsic-spectral",
+            "feature_shape": [int(features_full.shape[0]), int(features_full.shape[1])],
+            "source_type": "vertex-to-vertex-fc",
+            "annotation_source_type": "vertex-to-network-fc",
+            "source_networks": networks,
+            "fisher_z_transform": True,
+            "diagonal_policy": "set-to-zero",
+            "negative_fc_policy": "clip-to-zero" if zero_negative else "preserve-signed-fc",
+            "spatial_constraint": "surface_mesh_adjacency",
+            "run_labels": run_labels,
+            "split_strategy": split_strategy,
+        },
+    )
+
+    def _spectral_fn(features: np.ndarray, adjacency: sparse.csr_matrix, k: int) -> np.ndarray:
+        return spectral_cluster_from_features(features, adjacency, k)
+
+    cluster = evaluate_k_range(
+        features_full=features_full,
+        run_features=run_features,
+        run_labels=run_labels,
+        profile_source=grouped_fc_for_annotation,
+        profile_networks=networks,
+        connectivity=connectivity,
+        outdir=clustering_dir,
+        hemi=hemi,
+        profile_mode="fc",
+        split_strategy=split_strategy,
+        instability_resamples=instability_resamples,
+        v_min_fraction=v_min_fraction,
+        v_min_count=v_min_count,
+        k_selection_mode=k_selection_mode,
+        clustering_method="SpectralClustering(affinity=precomputed, assign_labels=kmeans)",
+        distance_metric="cosine-similarity-affinity",
+        cluster_fn=_spectral_fn,
+    )
+    cluster["feature_summary"] = {
+        "feature_kind": "intrinsic-spectral",
+        "feature_shape": [int(features_full.shape[0]), int(features_full.shape[1])],
+        "source_type": "vertex-to-vertex-fc",
+        "annotation_source_type": "vertex-to-network-fc",
+        "source_networks": networks,
+        "fisher_z_transform": True,
+        "diagonal_policy": "set-to-zero",
         "negative_fc_policy": "clip-to-zero" if zero_negative else "preserve-signed-fc",
         "spatial_constraint": "surface_mesh_adjacency",
         "run_labels": run_labels,
@@ -2121,6 +2248,8 @@ def build_panel_titles(branch_slug: str, smooth_name: str, hemi: str, k_final: i
         return f"{smooth_label} {hemi} network winner-takes-all"
     if is_gradient_branch(branch_slug):
         return f"{smooth_label} {hemi} network-gradient final K={k_final}"
+    if is_intrinsic_spectral_branch(branch_slug):
+        return f"{smooth_label} {hemi} {branch_slug} final K={k_final}"
     return f"{smooth_label} {hemi} network-cluster final K={k_final}"
 
 
@@ -2980,6 +3109,7 @@ def main() -> int:
         hipp_tsnr_dir / f"sub-{subject}_hemi-L_invalid_initial_mask.npy",
         hipp_tsnr_dir / f"sub-{subject}_hemi-R_invalid_initial_mask.npy",
     ]
+    need_intrinsic_fc = is_intrinsic_spectral_branch(branch_slug)
     shared_fc_params = {
         "subject": subject,
         "atlas_slug": atlas_slug,
@@ -2990,7 +3120,11 @@ def main() -> int:
         "run_lengths": dtseries_run_lengths,
         "hipp_density": hipp_density,
         "tsnr_threshold": float(TSNR_THRESHOLD),
-        "fc_definition": "pearson_vertex_to_canonical_network_timeseries",
+        "fc_definition": (
+            "pearson_vertex_to_canonical_network_timeseries_and_vertex_to_vertex_timeseries"
+            if need_intrinsic_fc
+            else "pearson_vertex_to_canonical_network_timeseries"
+        ),
     }
     for smooth_name in SMOOTH_ORDER:
         spec = smooth_specs[smooth_name]
@@ -3006,6 +3140,17 @@ def main() -> int:
                 shared_hemi_fc_dir / "hipp_vertex_to_network_fc_active.npy",
                 shared_hemi_fc_dir / "fc_summary.json",
                 *[shared_hemi_fc_dir / "runs" / f"run-{item['run_id']}" / "hipp_vertex_to_network_fc_active.npy" for item in RUN_SPECS],
+                *(
+                    [
+                        shared_hemi_fc_dir / "hipp_vertex_to_vertex_fc_active.npy",
+                        *[
+                            shared_hemi_fc_dir / "runs" / f"run-{item['run_id']}" / "hipp_vertex_to_vertex_fc_active.npy"
+                            for item in RUN_SPECS
+                        ],
+                    ]
+                    if need_intrinsic_fc
+                    else []
+                ),
             ]
             shared_hemi_fc_params = {
                 **shared_fc_params,
@@ -3027,27 +3172,37 @@ def main() -> int:
                 fc_active = compact_active_vertices(fc_full, active_mask).astype(np.float32)
                 np.save(shared_hemi_fc_dir / "hipp_vertex_to_network_fc.npy", fc_full.astype(np.float32))
                 np.save(shared_hemi_fc_dir / "hipp_vertex_to_network_fc_active.npy", fc_active)
+                intrinsic_fc_active = None
+                if need_intrinsic_fc:
+                    intrinsic_fc_active = corrcoef_rows(ts[active_mask, :], ts[active_mask, :]).astype(np.float32)
+                    np.save(shared_hemi_fc_dir / "hipp_vertex_to_vertex_fc_active.npy", intrinsic_fc_active)
+                summary_payload: dict[str, object] = {
+                    "subject": subject,
+                    "atlas_slug": atlas_slug,
+                    "smooth": smooth_name,
+                    "hemi": hemi,
+                    "fc_shape": [int(fc_full.shape[0]), int(fc_full.shape[1])],
+                    "active_fc_shape": [int(fc_active.shape[0]), int(fc_active.shape[1])],
+                    "n_vertices_total": int(ts.shape[0]),
+                    "n_vertices_valid_high_tsnr": int(valid_mask.sum()),
+                    "n_vertices_invalid_initial": int(invalid_initial_mask.sum()),
+                    "n_vertices_clustered": int(active_mask.sum()),
+                    "n_timepoints": int(ts.shape[1]),
+                    "n_networks_used": int(network_ts.shape[0]),
+                    "networks": networks,
+                    "tsnr_threshold": float(TSNR_THRESHOLD),
+                    "run_labels": [f"run-{item['run_id']}" for item in RUN_SPECS],
+                    "dtseries_run_input_mode": dtseries_run_input_mode,
+                    "bold_run_input_mode": bold_run_input_mode,
+                }
+                if intrinsic_fc_active is not None:
+                    summary_payload["vertex_to_vertex_fc_shape"] = [
+                        int(intrinsic_fc_active.shape[0]),
+                        int(intrinsic_fc_active.shape[1]),
+                    ]
                 save_json(
                     shared_hemi_fc_dir / "fc_summary.json",
-                    {
-                        "subject": subject,
-                        "atlas_slug": atlas_slug,
-                        "smooth": smooth_name,
-                        "hemi": hemi,
-                        "fc_shape": [int(fc_full.shape[0]), int(fc_full.shape[1])],
-                        "active_fc_shape": [int(fc_active.shape[0]), int(fc_active.shape[1])],
-                        "n_vertices_total": int(ts.shape[0]),
-                        "n_vertices_valid_high_tsnr": int(valid_mask.sum()),
-                        "n_vertices_invalid_initial": int(invalid_initial_mask.sum()),
-                        "n_vertices_clustered": int(active_mask.sum()),
-                        "n_timepoints": int(ts.shape[1]),
-                        "n_networks_used": int(network_ts.shape[0]),
-                        "networks": networks,
-                        "tsnr_threshold": float(TSNR_THRESHOLD),
-                        "run_labels": [f"run-{item['run_id']}" for item in RUN_SPECS],
-                        "dtseries_run_input_mode": dtseries_run_input_mode,
-                        "bold_run_input_mode": bold_run_input_mode,
-                    },
+                    summary_payload,
                 )
                 for run_spec, run_ts_path, run_network in zip(RUN_SPECS, run_ts_paths, run_network_ts, strict=True):
                     run_ts_full = np.load(run_ts_path).astype(np.float32)
@@ -3058,6 +3213,12 @@ def main() -> int:
                     run_fc_dir = shared_hemi_fc_dir / "runs" / f"run-{run_spec['run_id']}"
                     run_fc_dir.mkdir(parents=True, exist_ok=True)
                     np.save(run_fc_dir / "hipp_vertex_to_network_fc_active.npy", run_fc_active)
+                    if need_intrinsic_fc:
+                        run_intrinsic_fc_active = corrcoef_rows(
+                            run_ts_full[active_mask, :],
+                            run_ts_full[active_mask, :],
+                        ).astype(np.float32)
+                        np.save(run_fc_dir / "hipp_vertex_to_vertex_fc_active.npy", run_intrinsic_fc_active)
                 write_stage_manifest(
                     stage_dir=shared_hemi_fc_dir,
                     stage_name="shared_fc",
@@ -3112,7 +3273,11 @@ def main() -> int:
         "strict_soft_route": bool(is_soft_branch(branch_slug)),
         "negative_fc_policy": (
             "clip-to-zero"
-            if uses_nonnegative_probabilities(branch_slug) or uses_nonnegative_spectral_features(branch_slug)
+            if (
+                uses_nonnegative_probabilities(branch_slug)
+                or uses_nonnegative_spectral_features(branch_slug)
+                or uses_nonnegative_intrinsic_spectral_features(branch_slug)
+            )
             else ("preserve-signed-fc" if is_spectral_branch(branch_slug) else "row-min-shift")
         ),
     }
@@ -3146,6 +3311,17 @@ def main() -> int:
                         shared_hemi_fc_dir / "runs" / f"run-{spec['run_id']}" / "hipp_vertex_to_network_fc_active.npy"
                         for spec in RUN_SPECS
                     ],
+                    *(
+                        [
+                            shared_hemi_fc_dir / "hipp_vertex_to_vertex_fc_active.npy",
+                            *[
+                                shared_hemi_fc_dir / "runs" / f"run-{spec['run_id']}" / "hipp_vertex_to_vertex_fc_active.npy"
+                                for spec in RUN_SPECS
+                            ],
+                        ]
+                        if need_intrinsic_fc
+                        else []
+                    ),
                 ]
             )
     compute_outputs = [core_selection_path]
@@ -3193,12 +3369,27 @@ def main() -> int:
                 active_mask = valid_mask
                 adj_active = induced_subgraph(adj, np.flatnonzero(active_mask))
                 shared_hemi_fc_dir = shared_fc_store_dir / smooth_name / f"hemi_{hemi}"
-                fc_active = np.load(shared_hemi_fc_dir / "hipp_vertex_to_network_fc_active.npy").astype(np.float32)
+                network_fc_active = np.load(shared_hemi_fc_dir / "hipp_vertex_to_network_fc_active.npy").astype(np.float32)
                 fc_summary = json.loads((shared_hemi_fc_dir / "fc_summary.json").read_text(encoding="utf-8"))
-                fc_runs = [
+                network_fc_runs = [
                     np.load(shared_hemi_fc_dir / "runs" / f"run-{spec['run_id']}" / "hipp_vertex_to_network_fc_active.npy").astype(np.float32)
                     for spec in RUN_SPECS
                 ]
+                intrinsic_fc_active = None
+                intrinsic_fc_runs = None
+                if is_intrinsic_spectral_branch(branch_slug):
+                    intrinsic_fc_active = np.load(
+                        shared_hemi_fc_dir / "hipp_vertex_to_vertex_fc_active.npy"
+                    ).astype(np.float32)
+                    intrinsic_fc_runs = [
+                        np.load(
+                            shared_hemi_fc_dir
+                            / "runs"
+                            / f"run-{spec['run_id']}"
+                            / "hipp_vertex_to_vertex_fc_active.npy"
+                        ).astype(np.float32)
+                        for spec in RUN_SPECS
+                    ]
                 run_labels = [f"run-{spec['run_id']}" for spec in RUN_SPECS]
 
                 feature_dir = feature_root / smooth_name / f"hemi_{hemi}"
@@ -3207,8 +3398,8 @@ def main() -> int:
 
                 if is_gradient_branch(branch_slug):
                     cluster = run_gradient_branch(
-                        grouped_fc=fc_active,
-                        run_grouped_fcs=fc_runs,
+                        grouped_fc=network_fc_active,
+                        run_grouped_fcs=network_fc_runs,
                         run_labels=run_labels,
                         networks=networks,
                         connectivity=adj_active,
@@ -3223,14 +3414,36 @@ def main() -> int:
                     )
                 elif is_wta_branch(branch_slug):
                     cluster = run_wta_branch(
-                        grouped_fc=fc_active,
+                        grouped_fc=network_fc_active,
                         networks=networks,
                         soft_dir=soft_dir,
                     )
+                elif is_intrinsic_spectral_branch(branch_slug):
+                    if intrinsic_fc_active is None or intrinsic_fc_runs is None:
+                        raise RuntimeError(
+                            f"Missing intrinsic FC features for {branch_slug} at {shared_hemi_fc_dir}"
+                        )
+                    cluster = run_intrinsic_spectral_branch(
+                        intrinsic_fc=intrinsic_fc_active,
+                        run_intrinsic_fcs=intrinsic_fc_runs,
+                        grouped_fc_for_annotation=network_fc_active,
+                        run_labels=run_labels,
+                        networks=networks,
+                        connectivity=adj_active,
+                        feature_dir=feature_dir,
+                        clustering_dir=clustering_dir,
+                        hemi=hemi,
+                        split_strategy=split_strategy,
+                        instability_resamples=int(args.instability_resamples),
+                        v_min_fraction=float(args.v_min_fraction),
+                        v_min_count=None if args.v_min_count is None else int(args.v_min_count),
+                        k_selection_mode=str(args.k_selection_mode),
+                        zero_negative=uses_nonnegative_intrinsic_spectral_features(branch_slug),
+                    )
                 elif is_spectral_branch(branch_slug):
                     cluster = run_spectral_branch(
-                        grouped_fc=fc_active,
-                        run_grouped_fcs=fc_runs,
+                        grouped_fc=network_fc_active,
+                        run_grouped_fcs=network_fc_runs,
                         run_labels=run_labels,
                         networks=networks,
                         connectivity=adj_active,
@@ -3246,8 +3459,8 @@ def main() -> int:
                     )
                 else:
                     cluster = run_probability_branch(
-                        grouped_fc=fc_active,
-                        run_grouped_fcs=fc_runs,
+                        grouped_fc=network_fc_active,
+                        run_grouped_fcs=network_fc_runs,
                         run_labels=run_labels,
                         networks=networks,
                         connectivity=adj_active,
