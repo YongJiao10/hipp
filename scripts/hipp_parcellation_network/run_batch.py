@@ -25,6 +25,8 @@ BRANCHES = [
     "network-prob-cluster-nonneg",
     "network-spectral",
     "network-spectral-nonneg",
+    "intrinsic-spectral",
+    "intrinsic-spectral-nonneg",
 ]
 ATLASES = ["lynch2024", "kong2019"]
 SUPPORTED_ATLASES = ["lynch2024", "hermosillo2024", "kong2019"]

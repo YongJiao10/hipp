@@ -105,6 +105,54 @@ def _spectral_embed_and_cluster(
     return _reorder_cluster_labels(raw_labels)
 
 
+def fisher_z_transform_fc(fc: np.ndarray) -> np.ndarray:
+    """Apply Fisher z-transform to an FC matrix with conservative clipping.
+
+    Args:
+        fc: FC matrix with values nominally in [-1, 1].
+
+    Returns:
+        Fisher-z transformed matrix.
+    """
+    clipped = np.clip(np.asarray(fc, dtype=np.float32), -0.999999, 0.999999)
+    out = np.arctanh(clipped).astype(np.float32)
+    out[~np.isfinite(out)] = 0.0
+    return out
+
+
+def prepare_intrinsic_spectral_features(
+    vertex_to_vertex_fc: np.ndarray,
+    *,
+    zero_negative: bool,
+) -> np.ndarray:
+    """Prepare intrinsic spectral features from vertex-to-vertex FC.
+
+    Processing order follows branch policy:
+      1) Fisher z-transform
+      2) Set self-connections (diagonal) to zero
+      3) Optionally clip negative values to zero for nonneg variant
+
+    Args:
+        vertex_to_vertex_fc: Square FC matrix of shape (N, N).
+        zero_negative: Whether to clip negative Fisher-z values to zero.
+
+    Returns:
+        Processed feature matrix of shape (N, N), float32.
+    """
+    fc = np.asarray(vertex_to_vertex_fc, dtype=np.float32)
+    if fc.ndim != 2 or fc.shape[0] != fc.shape[1]:
+        raise ValueError(
+            "Intrinsic spectral features require a square vertex-to-vertex FC matrix, "
+            f"got shape={fc.shape}"
+        )
+    transformed = fisher_z_transform_fc(fc)
+    np.fill_diagonal(transformed, 0.0)
+    if zero_negative:
+        transformed = np.clip(transformed, 0.0, None)
+    transformed[~np.isfinite(transformed)] = 0.0
+    return transformed.astype(np.float32, copy=False)
+
+
 def spectral_cluster_from_features(
     features: np.ndarray,
     spatial_adjacency: sparse.csr_matrix,

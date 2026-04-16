@@ -4,21 +4,23 @@
 
 This document defines the network-first variant implemented in this worktree.
 
-It is intentionally separate from the parcel-informed line in the main workspace. In this worktree, the defining feature basis is:
+It is intentionally separate from the parcel-informed line in the main workspace. In this worktree, the defining feature bases are:
 
 ```text
 cortex canonical merged network timeseries
   -> direct hippocampal vertex-to-network FC
+raw hippocampal vertex timeseries
+  -> direct hippocampal vertex-to-vertex FC
 ```
 
-For step-by-step per-branch procedures, see [step_by_step_flows.md](/Users/jy/Documents/HippoMaps-network-first/docs/experiments/hipp_functional_parcellation/step_by_step_flows.md).
-For execution notes, see [network_first_runbook.md](/Users/jy/Documents/HippoMaps-network-first/docs/experiments/hipp_functional_parcellation/network_first_runbook.md).
-For the clean 166-subject HPC transfer package, see [network_first_hpc_bundle_handoff.md](/Users/jy/Documents/HippoMaps-network-first/docs/experiments/hipp_functional_parcellation/network_first_hpc_bundle_handoff.md).
+For step-by-step per-branch procedures, see [step_by_step_flows.md](/Users/jy/Documents/HippoMaps-network-first/docs/hipp_parcellation_network/step_by_step_flows.md).
+For execution notes, see [network_first_runbook.md](/Users/jy/Documents/HippoMaps-network-first/docs/hipp_parcellation_network/network_first_runbook.md).
+For the clean 166-subject HPC transfer package, see [network_first_hpc_bundle_handoff.md](/Users/jy/Documents/HippoMaps-network-first/docs/hipp_parcellation_network/network_first_hpc_bundle_handoff.md).
 
 The current network-first comparison matrix is:
 
 ```text
-branches   network-gradient / network-prob-cluster / network-prob-cluster-nonneg / network-prob-soft / network-prob-soft-nonneg / network-wta / network-spectral / network-spectral-nonneg
+branches   network-gradient / network-prob-cluster / network-prob-cluster-nonneg / network-prob-soft / network-prob-soft-nonneg / network-wta / network-spectral / network-spectral-nonneg / intrinsic-spectral / intrinsic-spectral-nonneg
 atlases    lynch2024 / hermosillo2024 / kong2019
 subjects   100610 / 102311 / 102816
 smoothing  2mm / 4mm
@@ -35,8 +37,8 @@ subjects   hcp_7t_hippocampus_struct_complete_166
 ## Core Rules
 
 1. Left and right hippocampi are modeled independently.
-2. Every branch starts from shared direct `vertex-to-network FC` computed against atlas-specific cortex canonical merged network timeseries.
-3. `network-gradient`, `network-prob-cluster`, `network-prob-cluster-nonneg`, `network-prob-soft`, `network-prob-soft-nonneg`, `network-spectral`, and `network-spectral-nonneg` perform hippocampal clustering with final `K` chosen independently for each hemisphere from `2..10` using run-aware instability.
+2. Every branch starts from shared direct feature stores computed against atlas-specific cortex canonical merged network timeseries: `vertex-to-network FC` for network branches and `vertex-to-vertex FC` for intrinsic branches.
+3. `network-gradient`, `network-prob-cluster`, `network-prob-cluster-nonneg`, `network-prob-soft`, `network-prob-soft-nonneg`, `network-spectral`, `network-spectral-nonneg`, `intrinsic-spectral`, and `intrinsic-spectral-nonneg` perform hippocampal clustering with final `K` chosen independently for each hemisphere from `2..10` using run-aware instability.
 4. `network-wta` does not perform clustering; it directly outputs one label per predefined cortical network.
 5. Smoothing is compared inside each overview; it is not promoted to a separate top-level comparison dimension.
 6. Every `branch x atlas x subject` produces one overview image copied to `present_network/`.
@@ -72,7 +74,7 @@ All branches share the same upstream preprocessing:
 7. Generate the hippocampal raw surface timeseries inside the shared pipeline store by sampling `run-concat_bold` onto the left and right `corobl` surfaces with `trilinear` mapping and `smooth_iters = 0`, then treat the resulting `.func.gii` files as the only valid raw source.
 8. Compute hippocampal `tSNR = 10000 / std(t)` on those raw unsmoothed shared-pipeline `.func.gii` timeseries and hard-mask vertices with `tSNR < 25`.
 9. Apply all Workbench `2mm / 4mm` smoothing only inside the high-tSNR hippocampal ROI and only after the tSNR gate; masked hippocampal vertices never participate in smoothing.
-10. Compute direct `vertex-to-network FC` for each smoothing condition and hemisphere on high-tSNR vertices only, and store those FC matrices in the shared upstream store at the `subject x atlas x smoothing x hemisphere` level.
+10. Compute direct `vertex-to-network FC` and `vertex-to-vertex FC` for each smoothing condition and hemisphere on high-tSNR vertices only, and store those matrices in the shared upstream store at the `subject x atlas x smoothing x hemisphere` level.
 
 In notation:
 
@@ -86,7 +88,7 @@ cortex ROI components
   -> raw hippocampal surface timeseries
   -> hippocampal tSNR gate (threshold 25)
   -> ROI-restricted 2mm / 4mm smoothing
-  -> shared direct vertex-to-network FC
+  -> shared direct vertex-to-network / vertex-to-vertex FC
   -> branch-specific network-first features
 ```
 
@@ -95,7 +97,7 @@ Hard rules for this upstream:
 - Cortical `tSNR < 25` grayordinates do not participate in any ROI average, parent-network average, or canonical-network average.
 - Hippocampal raw input is strict: the analysis reads only the shared-pipeline raw `.func.gii` files generated from `run-concat_bold` with `trilinear` mapping and `smooth_iters = 0`.
 - No hippocampal fallback source is allowed: no archived directory reuse, no `.npy` substitution, and no pre-smoothed raw replacement.
-- Direct hippocampal `vertex-to-network FC` is shared upstream by `subject x atlas x smoothing x hemisphere`; branch routes must read that shared FC rather than recomputing it.
+- Direct hippocampal `vertex-to-network FC` and `vertex-to-vertex FC` are shared upstream by `subject x atlas x smoothing x hemisphere`; branch routes must read those shared FC artifacts rather than recomputing them.
 - Hippocampal `tSNR < 25` vertices do not participate in smoothing, FC estimation, clustering, or final label assignment.
 
 ## Per-Atlas Merge Summary
@@ -179,13 +181,15 @@ This branch preserves the gradient logic, but the embedding is computed on direc
 
 For each hemisphere:
 
-1. Treat each vertex as a network-FC feature vector.
-2. Build a sparse vertex-by-vertex affinity graph from network profiles.
-3. Run diffusion-map embedding.
-4. Use the first `3` gradients as clustering features.
-5. Run spatially constrained Ward clustering for `K=2..10`.
-6. Select the smallest stable `K`.
-7. Annotate final clusters by their dominant canonical network.
+1. Start from direct `vertex-to-network FC` cached as Pearson correlation.
+2. Apply Fisher z-transform to each vertex network profile.
+3. Treat each vertex as a Fisher-z network-FC feature vector.
+4. Build a sparse vertex-by-vertex affinity graph from those transformed network profiles.
+5. Run diffusion-map embedding.
+6. Use the first `3` gradients as clustering features.
+7. Run spatially constrained Ward clustering for `K=2..10`.
+8. Select the smallest stable `K`.
+9. Annotate final clusters by their dominant canonical network.
 
 Interpretation:
 
@@ -278,11 +282,12 @@ This branch is the pure hard-assignment network route.
 
 For each hemisphere:
 
-1. Start from direct `vertex-to-network FC`.
-2. For each hippocampal vertex, find the network with the highest FC score.
-3. Assign that vertex to the winning network.
-4. Save confidence as `max_score - second_max_score`.
-5. Skip clustering and `K` selection.
+1. Start from direct `vertex-to-network FC` cached as Pearson correlation.
+2. Apply Fisher z-transform to the network FC profile of each vertex.
+3. For each hippocampal vertex, find the network with the highest Fisher-z FC score.
+4. Assign that vertex to the winning network.
+5. Save confidence as `max_score - second_max_score` in Fisher-z units.
+6. Skip clustering and `K` selection.
 
 Interpretation:
 
@@ -297,12 +302,13 @@ This branch implements spatially constrained spectral clustering (`scripts/commo
 For each hemisphere:
 
 1. Start from direct `vertex-to-network FC` (Pearson correlation, shape `N x N_network`, where `N_network` is atlas-specific after canonical merging).
-2. Build a functional affinity matrix from pairwise cosine similarity of FC rows, mapped to `[0, 1]`.
-3. Build a binary spatial adjacency matrix from the HippUnfold hippocampal surface mesh triangles.
-4. Fuse the two graphs by Hadamard (element-wise) product, retaining only spatially adjacent vertex pairs weighted by their functional similarity.
-5. Run spectral clustering on the fused graph with a precomputed affinity matrix.
-6. Run for `K=2..10`, select the smallest stable `K` via run-aware instability.
-7. Annotate final clusters by their dominant canonical network.
+2. Apply Fisher z-transform to the network FC rows.
+3. Build a functional affinity matrix from pairwise cosine similarity of Fisher-z FC rows, mapped to `[0, 1]`.
+4. Build a binary spatial adjacency matrix from the HippUnfold hippocampal surface mesh triangles.
+5. Fuse the two graphs by Hadamard (element-wise) product, retaining only spatially adjacent vertex pairs weighted by their functional similarity.
+6. Run spectral clustering on the fused graph with a precomputed affinity matrix.
+7. Run for `K=2..10`, select the smallest stable `K` via run-aware instability.
+8. Annotate final clusters by their dominant canonical network.
 
 Interpretation:
 
@@ -313,19 +319,20 @@ Interpretation:
 
 ### `network-spectral-nonneg`
 
-This branch matches `network-spectral`, except negative direct `vertex-to-network FC` values are clipped to `0` before the standard spectral feature preprocessing.
+This branch matches `network-spectral`, except negative Fisher-z `vertex-to-network FC` values are clipped to `0` before the standard spectral feature preprocessing.
 
 For each hemisphere:
 
 1. Start from direct `vertex-to-network FC` (Pearson correlation, shape `N x N_network`, where `N_network` is atlas-specific after canonical merging).
-2. Clip negative FC values to `0`.
-3. Z-score those nonnegative FC features across vertices, matching the standard spectral branch thereafter.
-4. Build a functional affinity matrix from pairwise cosine similarity of the clipped FC rows, mapped to `[0, 1]`.
-5. Build a binary spatial adjacency matrix from the HippUnfold hippocampal surface mesh triangles.
-6. Fuse the two graphs by Hadamard (element-wise) product, retaining only spatially adjacent vertex pairs weighted by their functional similarity.
-7. Run spectral clustering on the fused graph with a precomputed affinity matrix.
-8. Run for `K=2..10`, select the smallest stable `K` via run-aware instability.
-9. Annotate final clusters by their dominant canonical network.
+2. Apply Fisher z-transform to the network FC rows.
+3. Clip negative transformed FC values to `0`.
+4. Z-score those nonnegative Fisher-z features across vertices, matching the standard spectral branch thereafter.
+5. Build a functional affinity matrix from pairwise cosine similarity of the clipped FC rows, mapped to `[0, 1]`.
+6. Build a binary spatial adjacency matrix from the HippUnfold hippocampal surface mesh triangles.
+7. Fuse the two graphs by Hadamard (element-wise) product, retaining only spatially adjacent vertex pairs weighted by their functional similarity.
+8. Run spectral clustering on the fused graph with a precomputed affinity matrix.
+9. Run for `K=2..10`, select the smallest stable `K` via run-aware instability.
+10. Annotate final clusters by their dominant canonical network.
 
 Interpretation:
 
@@ -335,9 +342,59 @@ Interpretation:
 - negative FC policy = clip to `0` before spectral feature standardization
 - clustering algorithm = spectral + KMeans (contrast with Ward used by other clustering branches)
 
+### `intrinsic-spectral`
+
+This branch applies spatially constrained spectral clustering to intrinsic hippocampal coupling profiles.
+
+For each hemisphere:
+
+1. Start from direct `vertex-to-vertex FC` on high-tSNR hippocampal vertices (shape `N x N`).
+2. Apply Fisher z-transform to the intrinsic FC matrix with clipped input bounds and set the diagonal to `0`.
+3. Treat each vertex row of that Fisher-z matrix as a feature profile.
+4. Build a functional affinity matrix from pairwise cosine similarity of those intrinsic profiles, mapped to `[0, 1]`.
+5. Build a binary spatial adjacency matrix from the HippUnfold hippocampal surface mesh triangles.
+6. Fuse the two graphs by Hadamard (element-wise) product, retaining only spatially adjacent vertex pairs weighted by intrinsic functional similarity.
+7. Run spectral clustering on the fused graph with a precomputed affinity matrix.
+8. Run for `K=2..10`, select the smallest stable `K` via run-aware instability.
+9. After clustering, summarize each cluster with post hoc `cluster-to-network FC` against canonical cortical networks for interpretation.
+
+Interpretation:
+
+- cortical feature granularity = none during clustering (intrinsic-only)
+- hippocampal output type = clustered subregions
+- spatial constraint = HippUnfold surface mesh adjacency
+- clustering algorithm = spectral + KMeans
+- network labeling policy = post hoc `cluster-to-network FC` annotation
+
+### `intrinsic-spectral-nonneg`
+
+This branch matches `intrinsic-spectral`, except negative Fisher-z intrinsic FC values are clipped to `0` before spectral feature standardization.
+
+For each hemisphere:
+
+1. Start from direct `vertex-to-vertex FC` on high-tSNR hippocampal vertices (shape `N x N`).
+2. Apply Fisher z-transform with clipped input bounds and set diagonal to `0`.
+3. Clip negative Fisher-z values to `0`.
+4. Treat each vertex row of the clipped intrinsic matrix as a feature profile.
+5. Build a functional affinity matrix from pairwise cosine similarity of those intrinsic profiles, mapped to `[0, 1]`.
+6. Build a binary spatial adjacency matrix from the HippUnfold hippocampal surface mesh triangles.
+7. Fuse the two graphs by Hadamard (element-wise) product.
+8. Run spectral clustering on the fused graph with a precomputed affinity matrix.
+9. Run for `K=2..10`, select the smallest stable `K` via run-aware instability.
+10. Summarize each final cluster with post hoc `cluster-to-network FC` profiles against canonical cortical networks.
+
+Interpretation:
+
+- cortical feature granularity = none during clustering (intrinsic-only)
+- hippocampal output type = clustered subregions
+- spatial constraint = HippUnfold surface mesh adjacency
+- negative FC policy = Fisher-z then clip to `0`
+- clustering algorithm = spectral + KMeans
+- network labeling policy = post hoc `cluster-to-network FC` annotation
+
 ## K Evaluation
 
-The final comparison uses `K=2..10` for `network-gradient`, `network-prob-cluster`, `network-prob-cluster-nonneg`, `network-prob-soft`, `network-prob-soft-nonneg`, `network-spectral`, and `network-spectral-nonneg`.
+The final comparison uses `K=2..10` for `network-gradient`, `network-prob-cluster`, `network-prob-cluster-nonneg`, `network-prob-soft`, `network-prob-soft-nonneg`, `network-spectral`, `network-spectral-nonneg`, `intrinsic-spectral`, and `intrinsic-spectral-nonneg`.
 
 Each candidate `K` records:
 
