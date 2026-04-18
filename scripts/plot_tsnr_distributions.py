@@ -30,14 +30,11 @@ COLORS = {
     "sub-102816": "#55A868",
 }
 
-# ── Helper: load bold timeseries (prefer .npy, fallback to .func.gii) ───────
+# ── Helper: load bold timeseries (.func.gii only) ────────────────────────────
 def load_bold(subject: str, hemi: str) -> np.ndarray:
     """Return array of shape (512, T)."""
     surface_dir = BATCH_DIR / subject / "post_dense_corobl" / "surface"
-    npy = surface_dir / f"{subject}_hemi-{hemi}_space-corobl_den-512_label-hipp_bold.npy"
     gii = surface_dir / f"{subject}_hemi-{hemi}_space-corobl_den-512_label-hipp_bold.func.gii"
-    if npy.exists():
-        return np.load(npy).astype(np.float64)          # (512, T)
     img = nib.load(str(gii))
     return np.stack([d.data for d in img.darrays], axis=1).astype(np.float64)  # (512, T)
 

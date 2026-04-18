@@ -9,20 +9,28 @@ It does **not** use remote archive pulling as part of this runbook.
 subjects            102311, 102816
 branch              network-prob-cluster-nonneg
 atlas               kong2019
-k-selection mode    mainline (default) or experimental (explicit)
+k-selection mode    fixed by launcher (mainline vs experimental)
+run split mode      fixed by launcher: runwise
 primary input       data/hippunfold_input/sub-<subject>/
 input subdirs        anat/, func/ only
 dense prerequisite  outputs_migration/dense_corobl_batch/sub-<subject>/hippunfold/sub-<subject>/...
 cortex prerequisite outputs_migration/cortex_pfm/sub-<subject>/<atlas>/roi_components/...
-migration output    outputs_migration/hipp_functional_parcellation_network/
-present output      present_network_migration/
+migration output    outputs_migration/hipp_functional_parcellation_network/     (run_mainline.sh)
+present output      present_network_migration/                                   (run_mainline.sh)
+experimental output outputs_experimental/hipp_functional_parcellation_network/   (run_experimental.sh)
+experimental present present_network_experimental/                                (run_experimental.sh)
 python env          py314
-entrypoint          scripts/hipp_parcellation_network/run_batch.py
+canonical launchers scripts/hipp_parcellation_network/run_mainline.sh
+                    scripts/hipp_parcellation_network/run_experimental.sh
+low-level entrypoint scripts/hipp_parcellation_network/run_batch.py
 ```
 
 ## Authoritative Runtime Entry Points
 
-- Batch entrypoint:
+- Canonical batch launchers (must use by default):
+  - `scripts/hipp_parcellation_network/run_mainline.sh`
+  - `scripts/hipp_parcellation_network/run_experimental.sh`
+- Low-level batch entrypoint (debugging only):
   - `scripts/hipp_parcellation_network/run_batch.py`
 - Subject worker:
   - `scripts/hipp_parcellation_network/run_subject.py`
@@ -33,6 +41,10 @@ Important defaults from code:
 - `--cortex-root` defaults to `outputs_migration/cortex_pfm`
 - `--out-root` defaults to `outputs_migration/hipp_functional_parcellation_network`
 - `--present-dir` defaults to `present_network_migration`
+
+Batch launcher scope:
+- `run_batch.py` (and fixed launchers that wrap it) now stop after branch outputs + present-copy updates.
+- The batch path no longer runs trailing `plot_*tsnr*.py` figure generation as part of success criteria.
 
 ## Preflight (Hard Requirements)
 
@@ -70,17 +82,15 @@ done
 - local-minimum + 1-SE + non-triviality constraints
 - strict screening may skip combinations if no valid `K`
 
-Always pass mode explicitly via `--k-selection-mode`.
+Always use the fixed launcher scripts. Do not hand-write `--k-selection-mode`, `--run-split-mode`, `--out-root`, or `--present-dir` for canonical runs.
 
 ## Step 1: Run Network Migration (Current Canonical Command)
 
 ```bash
-source /opt/miniconda3/bin/activate py314
-python scripts/hipp_parcellation_network/run_batch.py \
+scripts/hipp_parcellation_network/run_mainline.sh \
   --branches network-prob-cluster-nonneg \
   --atlases kong2019 \
   --subjects 102311 102816 \
-  --k-selection-mode mainline \
   --resume-mode force \
   --retain-level render \
   --cleanup-level none \
@@ -90,12 +100,10 @@ python scripts/hipp_parcellation_network/run_batch.py \
 Experimental mode:
 
 ```bash
-source /opt/miniconda3/bin/activate py314
-python scripts/hipp_parcellation_network/run_batch.py \
+scripts/hipp_parcellation_network/run_experimental.sh \
   --branches network-prob-cluster-nonneg \
   --atlases kong2019 \
   --subjects 102311 102816 \
-  --k-selection-mode experimental \
   --resume-mode force \
   --retain-level render \
   --cleanup-level none \

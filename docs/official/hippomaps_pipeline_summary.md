@@ -279,17 +279,14 @@ Step   脚本/方法                              输入                        
 - 方法
   - 调用 Workbench `-volume-to-surface-mapping`
   - 将 BOLD 体信号映射到海马 surface 顶点
-  - 生成可视化/兼容用的 `.func.gii`
-  - 同时保存数值计算更方便的 `.npy`
+  - 生成 `.func.gii` 作为标准海马 vertex BOLD 时序输出
 - 输出示例
   - `sub-102311_hemi-L_space-corobl_den-2mm_label-hipp_bold.func.gii`
-  - `sub-102311_hemi-L_space-corobl_den-2mm_label-hipp_bold.npy`
   - `surface_sampling_summary.json`
 - 输出内容
   - 每个海马顶点的 BOLD 时间序列
 - 输出格式
   - `.func.gii`
-  - `.npy`
   - `.json`
 - 性质
   - `论文/方法学核心步骤` + `本地工程实现`
@@ -344,7 +341,7 @@ Step   脚本/方法                              输入                        
 这一步是当前正式主流程的功能核心步骤。
 
 - 输入示例
-  - `sub-102311_hemi-L_space-corobl_den-2mm_label-hipp_bold.npy`
+  - `sub-102311_hemi-L_space-corobl_den-2mm_label-hipp_bold.func.gii`
   - `schaefer400_parcel_timeseries.npy`
 - 输入内容
   - 海马顶点时序
@@ -495,7 +492,7 @@ volume label 有没有            不属于当前正式主流程
 类别         示例文件名                                                                  内容                                   主/辅   格式
 结构 surface  sub-102311_hemi-L_space-corobl_label-hipp_midthickness.surf.gii           海马 folded/native surface 几何         主     .surf.gii
 结构 label    sub-102311_hemi-L_space-corobl_label-hipp_atlas-multihist7_subfields.label.gii  海马结构亚区 surface label       主     .label.gii
-功能时序      sub-102311_hemi-L_space-corobl_den-2mm_label-hipp_bold.npy                海马 vertex BOLD 时序                  主     .npy
+功能时序      sub-102311_hemi-L_space-corobl_den-2mm_label-hipp_bold.func.gii           海马 vertex BOLD 时序                  主     .func.gii
 FC 结果       hipp_vertex_to_parcel_fc.npy                                               海马 vertex 到 parcel 的 FC            主     .npy
 梯度结果      hipp_fc_gradients.npy                                                      海马连续功能梯度                       主     .npy
 主梯度图      sub-102311_hipp_fc_gradient1_native.png                                    单被试 Gradient 1 图                   主     .png

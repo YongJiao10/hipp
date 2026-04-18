@@ -22,7 +22,9 @@ All ten methods share the same upstream steps before branch-specific processing:
 4. Merge atlas-specific parent networks to canonical cross-atlas network labels using [cross_atlas_network_merge.json](/Users/jy/Documents/HippoMaps-network-first/config/cross_atlas_network_merge.json).
 5. Exclude `Noise`.
 6. Resolve run-wise inputs for run-pair instability:
-   if explicit `run-1..4` `dtseries` and `bold` files are available, use them; otherwise split `run-concat` inputs into four equal runs and stage those derived run-wise files.
+   if explicit `run-1..4` `dtseries` files are available, use them to derive run lengths; otherwise infer equal four-way run boundaries from `run-concat.dtseries` length.
+   Do not materialize run-level `dtseries` files.
+   Run-wise hippocampal inputs are then generated only by splitting shared concat hippocampal surface timeseries with those run boundaries (no raw volume BOLD run-splitting).
 7. Average ROI-component timeseries within each retained canonical network to obtain cortex `network` timeseries.
 8. Generate left and right hippocampal raw surface timeseries inside the shared pipeline store by sampling `run-concat_bold` onto the `corobl` surfaces with `trilinear` mapping and `smooth_iters = 0`; these shared-pipeline `.func.gii` files are the only valid raw source.
 9. Compute hippocampal `tSNR = 10000 / std(t)` on those raw unsmoothed shared-pipeline `.func.gii` timeseries and hard-mask all vertices with `tSNR < 25`.
@@ -38,8 +40,10 @@ The implementation supports two explicit `K`-selection modes via `--k-selection-
 - `experimental`: future-testing rule; local-minimum + `1-SE` + minimum parcel-size constraint (`V_min` only; connectivity is diagnostic but not a gate).
 
 Operational rule:
-- When running the current production workflow, pass `--k-selection-mode mainline` or rely on the default.
-- When testing the newer protocol, pass `--k-selection-mode experimental`.
+- For canonical batch runs, use fixed launchers:
+  - `scripts/hipp_parcellation_network/run_mainline.sh`
+  - `scripts/hipp_parcellation_network/run_experimental.sh`
+- Do not hand-write `--k-selection-mode`, `--run-split-mode`, `--out-root`, or `--present-dir` in canonical run commands.
 - Do not infer mode from branch name or previous runs.
 
 Notation:
@@ -348,7 +352,9 @@ This branch applies spectral clustering to a graph that combines atlas-specific 
 9. Evaluate each `K` with run-pair instability, `ARI`, homogeneity, parcel-size, and connectivity metrics.
 10. Choose the final `K` with the repository instability rule: local minima -> `1-SE` -> `V_min` vertex-count.
 11. Save the final hippocampal subregion labels.
-12. Summarize each cluster by its dominant canonical network profile.
+12. For each cluster, average hippocampal vertex timeseries across all vertices assigned to that cluster.
+13. Compute `cluster-mean-timeseries -> canonical-network-timeseries` Pearson FC.
+14. Apply Fisher z-transform to that cluster-level FC vector, then summarize each cluster by its dominant canonical network profile.
 
 ### Shapes
 
@@ -360,6 +366,8 @@ functional affinity                  N_vertex x N_vertex
 surface mesh adjacency               N_vertex x N_vertex
 fused spectral graph                 N_vertex x N_vertex
 final subregion labels               N_vertex
+cluster mean timeseries              K x N_time
+cluster Fisher-z FC profile          K x N_network
 cluster probability rows             K x N_network
 ```
 
@@ -389,7 +397,9 @@ This branch matches `network-spectral`, except negative Fisher-z `vertex-to-netw
 11. Evaluate each `K` with run-pair instability, `ARI`, homogeneity, parcel-size, and connectivity metrics.
 12. Choose the final `K` with the repository instability rule: local minima -> `1-SE` -> `V_min` vertex-count.
 13. Save the final hippocampal subregion labels.
-14. Summarize each cluster by its dominant canonical network profile.
+14. For each cluster, average hippocampal vertex timeseries across all vertices assigned to that cluster.
+15. Compute `cluster-mean-timeseries -> canonical-network-timeseries` Pearson FC.
+16. Apply Fisher z-transform and clip negatives to `0`, then summarize each cluster by its dominant canonical network profile.
 
 ### Shapes
 
@@ -402,6 +412,8 @@ functional affinity                  N_vertex x N_vertex
 surface mesh adjacency               N_vertex x N_vertex
 fused spectral graph                 N_vertex x N_vertex
 final subregion labels               N_vertex
+cluster mean timeseries              K x N_time
+cluster Fisher-z FC profile          K x N_network
 cluster probability rows             K x N_network
 ```
 
@@ -432,7 +444,9 @@ Rendered panel titles keep the explicit branch slug (`intrinsic-spectral`) so si
 10. Evaluate each `K` with run-pair instability, `ARI`, homogeneity, parcel-size, and connectivity metrics.
 11. Choose the final `K` with the repository instability rule.
 12. Save the final hippocampal subregion labels.
-13. Compute post hoc `cluster-to-network FC` summaries against canonical cortical networks and label each cluster by dominant network.
+13. For each cluster, average hippocampal vertex timeseries across all vertices assigned to that cluster.
+14. Compute `cluster-mean-timeseries -> canonical-network-timeseries` Pearson FC.
+15. Apply Fisher z-transform to that cluster-level FC vector, then label each cluster by dominant network.
 
 ### Shapes
 
@@ -444,6 +458,8 @@ functional affinity                 N_vertex x N_vertex
 surface mesh adjacency              N_vertex x N_vertex
 fused spectral graph                N_vertex x N_vertex
 final subregion labels              N_vertex
+cluster mean timeseries             K x N_time
+cluster Fisher-z FC profile         K x N_network
 cluster probability rows            K x N_network
 ```
 
@@ -472,7 +488,10 @@ Rendered panel titles keep the explicit branch slug (`intrinsic-spectral-nonneg`
 9. Run spectral clustering for each `K` in `2..10`.
 10. Evaluate each `K` with run-pair instability, `ARI`, homogeneity, parcel-size, and connectivity metrics.
 11. Choose final `K` with the repository instability rule.
-12. Save final labels and compute post hoc `cluster-to-network FC` summaries.
+12. Save final labels.
+13. For each cluster, average hippocampal vertex timeseries across all vertices assigned to that cluster.
+14. Compute `cluster-mean-timeseries -> canonical-network-timeseries` Pearson FC.
+15. Apply Fisher z-transform, clip negatives to `0`, and export post hoc `cluster-to-network FC` summaries.
 
 ### Shapes
 
@@ -485,6 +504,8 @@ functional affinity                 N_vertex x N_vertex
 surface mesh adjacency              N_vertex x N_vertex
 fused spectral graph                N_vertex x N_vertex
 final subregion labels              N_vertex
+cluster mean timeseries             K x N_time
+cluster Fisher-z FC profile         K x N_network
 cluster probability rows            K x N_network
 ```
 
@@ -539,7 +560,53 @@ network occupancy summary            N_network
 - Default retention keeps render-layer artifacts so legend/layout changes can rerender without recomputing feature or clustering stages
 - Structural hippocampal labels for network-first renders are sourced from HippUnfold's subject-level structural `dlabel.nii`, then separated into left/right label files inside the run output tree for rendering
 - In `network_probability_heatmaps.png`, the x-axis always shows all retained merged networks for that atlas in canonical order
+- For `network-spectral` and `intrinsic-spectral`, heatmap values are cluster-level Fisher-z `vertex-to-network FC` profiles computed from `cluster mean timeseries` (signed)
+- For `network-spectral-nonneg` and `intrinsic-spectral-nonneg`, the same cluster-level Fisher-z profiles are clipped to `0` before export
+- Spectral heatmaps use these raw cluster profiles, not probability-normalized rows
 - The left and right hemisphere heatmaps are rendered as separate panels with widened spacing for readability
+
+## Downstream Group Prior + Fast-PFM (Spectral)
+
+This optional downstream stage is designed for cross-subject prior construction and individualized remapping after spectral clustering outputs are already available.
+
+Input contract:
+
+1. Existing spectral branch subject outputs under `outputs_migration/hipp_functional_parcellation_network/<branch>/<atlas>/sub-<subject>/`.
+2. Existing shared hippocampal timeseries and tSNR masks under `outputs_migration/hipp_functional_parcellation_network/_shared/sub-<subject>/surface/`.
+
+Workflow steps per `branch x atlas x smoothing x hemi`:
+
+1. Read each subject `per_k_summary.tsv`, aggregate `instability_mean` by `K`, compute group mean/SE and pass-rate.
+2. Choose group `K` using `local minima -> 1-SE -> min_parcel_pass_rate`, then smallest surviving `K`.
+3. Load each subject `cluster_labels_full.npy` at chosen `K`.
+4. Align subject labels to the first-subject reference with Hungarian matching on overlapping labeled vertices.
+5. Build `prior_matrix (K x N_vertex)` as the mean aligned one-hot map.
+6. Read each subject `cluster_annotation.json` probability rows, reorder by the same mapping, average to `cluster_network_probs (K x N_network)`, and assign dominant network by `argmax`.
+
+Individual inference steps:
+
+1. Load subject hemisphere timeseries `X (N_vertex x T)` and valid mask.
+2. Intersect subject valid mask with prior-supported mask.
+3. Standardize time series in time domain, project with `prior_ts = prior_matrix @ X^T`.
+4. Standardize `prior_ts`, compute correlation-like scores `scores_raw (K x N_vertex)`.
+5. Convert to `scores_prob` using row-min-shift + per-vertex normalization.
+6. Save `wta_labels` and `confidence_margin` as auxiliary outputs.
+
+Output contract:
+
+- group prior pickle:
+  - required keys include `prior_matrix`, `k_final`, `cluster_network_probs`, `cluster_dominant_network`, `valid_vertex_mask`
+- individual soft map pickle:
+  - required keys include `scores_raw`, `scores_prob`, `wta_labels`, `confidence_margin`, `valid_vertex_mask`, `prior_pickle`
+- manifests:
+  - `group_k_selection.json`
+  - `group_prior_manifest.json`
+  - `individual_softmap_manifest.json`
+
+Rendering:
+
+- group template and individual WTA views are rendered by converting pickles to Workbench labels and reusing the locked scene batch renderer.
+- current implementation uses `layout=1x2` for the locked native scene.
 
 ## Maintenance Note
 

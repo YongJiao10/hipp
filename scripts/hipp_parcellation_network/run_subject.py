@@ -46,6 +46,7 @@ from hipp_density_assets import (
 
 WB_COMMAND = str((REPO_ROOT / "scripts" / "wb_command").resolve())
 PYTHON_EXE = sys.executable or "/opt/miniconda3/envs/py314/bin/python"
+SUMMARIZE_OUTPUTS_SCRIPT = REPO_ROOT / "scripts" / "hipp_parcellation_network" / "summarize_outputs.py"
 NETWORK_STYLE_JSON = REPO_ROOT / "config" / "hipp_network_style.json"
 CROSS_ATLAS_NETWORK_MERGE_JSON = REPO_ROOT / "config" / "cross_atlas_network_merge.json"
 DEFAULT_SCENE = REPO_ROOT / "config" / "wb_locked_native_view_lateral_medial.scene"
@@ -310,49 +311,6 @@ def split_run_bounds(n_timepoints: int, n_runs: int) -> list[tuple[int, int]]:
     return [(idx * run_length, (idx + 1) * run_length) for idx in range(n_runs)]
 
 
-def split_dtseries_concat_to_runwise(concat_path: Path, out_paths: list[Path]) -> list[int]:
-    img = nib.load(str(concat_path))
-    series_axis = img.header.get_axis(0)
-    brain_axis = img.header.get_axis(1)
-    shape = img.shape
-    if len(shape) != 2:
-        raise ValueError(f"Expected 2D dtseries data, got shape {shape} for {concat_path}")
-    bounds = split_run_bounds(int(shape[0]), len(out_paths))
-    run_lengths: list[int] = []
-    for (start, stop), out_path in zip(bounds, out_paths, strict=True):
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        block = np.asarray(img.dataobj[start:stop, :], dtype=np.float32)
-        run_axis = series_axis[start:stop]
-        header = nib.cifti2.Cifti2Header.from_axes((run_axis, brain_axis))
-        out_img = nib.Cifti2Image(block, header=header, nifti_header=img.nifti_header.copy())
-        out_img.update_headers()
-        nib.save(out_img, str(out_path))
-        run_lengths.append(int(stop - start))
-    return run_lengths
-
-
-def split_bold_concat_to_runwise(concat_path: Path, out_paths: list[Path]) -> list[int]:
-    img = nib.load(str(concat_path))
-    shape = img.shape
-    if len(shape) != 4:
-        raise ValueError(f"Expected 4D BOLD image, got shape {shape} for {concat_path}")
-    bounds = split_run_bounds(int(shape[3]), len(out_paths))
-    run_lengths: list[int] = []
-    qform, qform_code = img.get_qform(coded=True)
-    sform, sform_code = img.get_sform(coded=True)
-    for (start, stop), out_path in zip(bounds, out_paths, strict=True):
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        block = np.asarray(img.dataobj[..., start:stop], dtype=np.float32)
-        out_img = nib.Nifti1Image(block, affine=img.affine, header=img.header.copy())
-        if qform is not None:
-            out_img.set_qform(qform, int(qform_code))
-        if sform is not None:
-            out_img.set_sform(sform, int(sform_code))
-        nib.save(out_img, str(out_path))
-        run_lengths.append(int(stop - start))
-    return run_lengths
-
-
 def split_surface_timeseries_to_runs(
     concat_path: Path,
     out_paths: list[Path],
@@ -377,83 +335,18 @@ def split_surface_timeseries_to_runs(
 
 def resolve_runwise_dtseries(
     *,
-    subject: str,
     concat_dtseries: Path,
     runwise_dtseries: list[Path],
-    stage_root: Path,
-    resume_mode: str,
-) -> tuple[list[Path], str, list[int]]:
+) -> tuple[str, list[int]]:
     if all(path.exists() for path in runwise_dtseries):
         lengths = [int(nib.load(str(path)).shape[0]) for path in runwise_dtseries]
-        return runwise_dtseries, "provided", lengths
+        return "run_boundaries_from_explicit_run_dtseries", lengths
     if not concat_dtseries.exists():
         raise FileNotFoundError(f"Missing concat dtseries required to split runs: {concat_dtseries}")
-    stage_dir = stage_root / "dtseries"
-    staged_paths = [stage_dir / path.name for path in runwise_dtseries]
-    params = {"subject": subject, "source": str(concat_dtseries.resolve()), "n_runs": len(staged_paths)}
-    if not stage_is_up_to_date(
-        stage_dir=stage_dir,
-        resume_mode=resume_mode,
-        stage_name="runwise_dtseries_from_concat",
-        params=params,
-        inputs=[concat_dtseries],
-        outputs=staged_paths,
-    ):
-        lengths = split_dtseries_concat_to_runwise(concat_dtseries, staged_paths)
-        write_stage_manifest(
-            stage_dir=stage_dir,
-            stage_name="runwise_dtseries_from_concat",
-            params={**params, "run_lengths": lengths},
-            inputs=[concat_dtseries],
-            outputs=staged_paths,
-        )
-    payload = json.loads(stage_manifest_path(stage_dir).read_text(encoding="utf-8"))
-    lengths = [int(x) for x in payload.get("params", {}).get("run_lengths", [])]
-    if len(lengths) != len(staged_paths):
-        lengths = [int(nib.load(str(path)).shape[0]) for path in staged_paths]
-    return staged_paths, "split_from_concat", lengths
-
-
-def resolve_runwise_bold(
-    *,
-    subject: str,
-    concat_bold: Path,
-    runwise_bold: list[Path],
-    stage_root: Path,
-    resume_mode: str,
-) -> tuple[list[Path], str, list[int]]:
-    if all(path.exists() for path in runwise_bold):
-        lengths = [int(nib.load(str(path)).shape[3]) for path in runwise_bold]
-        return runwise_bold, "provided", lengths
-    if not concat_bold.exists():
-        raise FileNotFoundError(
-            "Missing run-wise volume BOLD inputs and concat BOLD is unavailable for splitting: "
-            f"{concat_bold}"
-        )
-    stage_dir = stage_root / "bold"
-    staged_paths = [stage_dir / path.name for path in runwise_bold]
-    params = {"subject": subject, "source": str(concat_bold.resolve()), "n_runs": len(staged_paths)}
-    if not stage_is_up_to_date(
-        stage_dir=stage_dir,
-        resume_mode=resume_mode,
-        stage_name="runwise_bold_from_concat",
-        params=params,
-        inputs=[concat_bold],
-        outputs=staged_paths,
-    ):
-        lengths = split_bold_concat_to_runwise(concat_bold, staged_paths)
-        write_stage_manifest(
-            stage_dir=stage_dir,
-            stage_name="runwise_bold_from_concat",
-            params={**params, "run_lengths": lengths},
-            inputs=[concat_bold],
-            outputs=staged_paths,
-        )
-    payload = json.loads(stage_manifest_path(stage_dir).read_text(encoding="utf-8"))
-    lengths = [int(x) for x in payload.get("params", {}).get("run_lengths", [])]
-    if len(lengths) != len(staged_paths):
-        lengths = [int(nib.load(str(path)).shape[3]) for path in staged_paths]
-    return staged_paths, "split_from_concat", lengths
+    n_timepoints = int(nib.load(str(concat_dtseries)).shape[0])
+    bounds = split_run_bounds(n_timepoints, len(runwise_dtseries))
+    lengths = [int(stop - start) for start, stop in bounds]
+    return "run_boundaries_from_concat_dtseries", lengths
 
 
 def write_surface_store_pointer(
@@ -1494,13 +1387,33 @@ def build_cluster_annotations(
     profile_networks: list[str],
     hemi: str,
     profile_mode: str,
-) -> tuple[list[dict[str, object]], dict[int, str], np.ndarray]:
+    use_cluster_mean_timeseries_profiles: bool = False,
+    profile_vertex_timeseries: np.ndarray | None = None,
+    profile_network_timeseries: np.ndarray | None = None,
+    profile_negative_policy: str = "preserve-signed-fc",
+) -> tuple[list[dict[str, object]], dict[int, str], np.ndarray, np.ndarray]:
     annotations: list[dict[str, object]] = []
     key_to_name: dict[int, str] = {}
     probability_rows: list[np.ndarray] = []
+    raw_profile_rows: list[np.ndarray] = []
     for cluster_id in sorted(int(x) for x in np.unique(labels)):
         mask = labels == cluster_id
-        profile = np.nanmean(profile_source[mask, :], axis=0).astype(np.float32)
+        if use_cluster_mean_timeseries_profiles:
+            if profile_vertex_timeseries is None or profile_network_timeseries is None:
+                raise RuntimeError(
+                    "use_cluster_mean_timeseries_profiles=True requires "
+                    "profile_vertex_timeseries and profile_network_timeseries"
+                )
+            cluster_mean_ts = np.nanmean(profile_vertex_timeseries[mask, :], axis=0, keepdims=True).astype(np.float32)
+            cluster_fc = corrcoef_rows(cluster_mean_ts, profile_network_timeseries)[0:1, :]
+            profile = fisher_z_transform_fc(cluster_fc)[0].astype(np.float32)
+            if profile_negative_policy == "clip-to-zero":
+                profile = np.clip(profile, 0.0, None).astype(np.float32, copy=False)
+            elif profile_negative_policy != "preserve-signed-fc":
+                raise ValueError(f"Unsupported profile_negative_policy: {profile_negative_policy}")
+        else:
+            profile = np.nanmean(profile_source[mask, :], axis=0).astype(np.float32)
+        raw_profile_rows.append(profile.astype(np.float32, copy=True))
         order = np.argsort(profile)[::-1]
         top1 = int(order[0])
         top2 = int(order[1]) if len(order) > 1 else int(order[0])
@@ -1524,7 +1437,12 @@ def build_cluster_annotations(
                 "top1_minus_top2_margin": margin,
             }
         )
-    return annotations, key_to_name, np.asarray(probability_rows, dtype=np.float32)
+    return (
+        annotations,
+        key_to_name,
+        np.asarray(probability_rows, dtype=np.float32),
+        np.asarray(raw_profile_rows, dtype=np.float32),
+    )
 
 
 def evaluate_k_range(
@@ -1546,11 +1464,16 @@ def evaluate_k_range(
     clustering_method: str = "AgglomerativeClustering(linkage=ward)",
     distance_metric: str = "euclidean",
     cluster_fn=None,
+    use_cluster_mean_timeseries_profiles: bool = False,
+    profile_vertex_timeseries: np.ndarray | None = None,
+    profile_network_timeseries: np.ndarray | None = None,
+    profile_negative_policy: str = "preserve-signed-fc",
 ) -> dict[str, object]:
     k_metrics: list[dict[str, object]] = []
     k_to_annotations: dict[int, list[dict[str, object]]] = {}
     k_to_key_names: dict[int, dict[int, str]] = {}
     k_to_probability_rows: dict[int, np.ndarray] = {}
+    k_to_raw_profile_rows: dict[int, np.ndarray] = {}
     tss = float(np.sum((features_full - np.mean(features_full, axis=0, keepdims=True)) ** 2))
     resample_pairs = build_run_pair_resamples(len(run_features), instability_resamples)
     if not resample_pairs:
@@ -1613,16 +1536,21 @@ def evaluate_k_range(
         min_parcel_ok = int(min_size_vertices >= resolved_v_min_count)
         connectivity_ok = int(total_cc == k)
 
-        annotations, key_to_name, probability_rows = build_cluster_annotations(
+        annotations, key_to_name, probability_rows, raw_profile_rows = build_cluster_annotations(
             labels=labels_full,
             profile_source=profile_source,
             profile_networks=profile_networks,
             hemi=hemi,
             profile_mode=profile_mode,
+            use_cluster_mean_timeseries_profiles=use_cluster_mean_timeseries_profiles,
+            profile_vertex_timeseries=profile_vertex_timeseries,
+            profile_network_timeseries=profile_network_timeseries,
+            profile_negative_policy=profile_negative_policy,
         )
         k_to_annotations[k] = annotations
         k_to_key_names[k] = key_to_name
         k_to_probability_rows[k] = probability_rows
+        k_to_raw_profile_rows[k] = raw_profile_rows
 
         k_dir = outdir / f"k_{k}"
         k_dir.mkdir(parents=True, exist_ok=True)
@@ -1635,6 +1563,7 @@ def evaluate_k_range(
                 "k": int(k),
                 "clusters": annotations,
                 "probability_rows": probability_rows.tolist(),
+                "raw_profile_rows": raw_profile_rows.tolist(),
                 "networks": profile_networks,
             },
         )
@@ -1751,6 +1680,7 @@ def evaluate_k_range(
             },
             "clusters": k_to_annotations[k_final],
             "probability_rows": k_to_probability_rows[k_final].tolist(),
+            "raw_profile_rows": k_to_raw_profile_rows[k_final].tolist(),
             "networks": profile_networks,
         },
     )
@@ -1769,6 +1699,7 @@ def evaluate_k_range(
         "labels_final": labels_final,
         "cluster_annotations": k_to_annotations[k_final],
         "probability_rows": k_to_probability_rows[k_final],
+        "raw_profile_rows": k_to_raw_profile_rows[k_final],
         "profile_networks": profile_networks,
         "key_to_name": k_to_key_names[k_final],
     }
@@ -2092,6 +2023,8 @@ def run_spectral_branch(
     v_min_count: int | None,
     k_selection_mode: str,
     zero_negative: bool,
+    active_timeseries: np.ndarray,
+    network_timeseries: np.ndarray,
 ) -> dict[str, object]:
     grouped_fc = fisher_z_transform_fc(grouped_fc)
     run_grouped_fcs = [fisher_z_transform_fc(fc_run) for fc_run in run_grouped_fcs]
@@ -2140,6 +2073,10 @@ def run_spectral_branch(
         clustering_method="SpectralClustering(affinity=precomputed, assign_labels=kmeans)",
         distance_metric="cosine-similarity-affinity",
         cluster_fn=_spectral_fn,
+        use_cluster_mean_timeseries_profiles=True,
+        profile_vertex_timeseries=active_timeseries,
+        profile_network_timeseries=network_timeseries,
+        profile_negative_policy="clip-to-zero" if zero_negative else "preserve-signed-fc",
     )
     cluster["feature_summary"] = {
         "feature_kind": "network-spectral",
@@ -2171,6 +2108,8 @@ def run_intrinsic_spectral_branch(
     v_min_count: int | None,
     k_selection_mode: str,
     zero_negative: bool,
+    active_timeseries: np.ndarray,
+    network_timeseries: np.ndarray,
 ) -> dict[str, object]:
     transformed_full = prepare_intrinsic_spectral_features(intrinsic_fc, zero_negative=zero_negative)
     transformed_runs = [
@@ -2223,6 +2162,10 @@ def run_intrinsic_spectral_branch(
         clustering_method="SpectralClustering(affinity=precomputed, assign_labels=kmeans)",
         distance_metric="cosine-similarity-affinity",
         cluster_fn=_spectral_fn,
+        use_cluster_mean_timeseries_profiles=True,
+        profile_vertex_timeseries=active_timeseries,
+        profile_network_timeseries=network_timeseries,
+        profile_negative_policy="clip-to-zero" if zero_negative else "preserve-signed-fc",
     )
     cluster["feature_summary"] = {
         "feature_kind": "intrinsic-spectral",
@@ -2272,11 +2215,24 @@ def main() -> int:
     parser.add_argument("--layout", choices=["1x2", "2x2"], default="2x2")
     parser.add_argument("--resume-mode", choices=["resume", "force"], default="resume")
     parser.add_argument("--retain-level", choices=["label", "render", "feature", "all"], default="render")
+    parser.add_argument(
+        "--skip-summary",
+        action="store_true",
+        help="Skip summarize_outputs.py (enabled by default for direct run_subject execution).",
+    )
     parser.add_argument("--instability-resamples", type=int, default=DEFAULT_INSTABILITY_RESAMPLES)
     parser.add_argument("--v-min-fraction", type=float, default=DEFAULT_V_MIN_FRACTION)
     parser.add_argument("--v-min-count", type=int, default=None)
     parser.add_argument("--k-selection-mode", choices=["mainline", "experimental"], default="mainline")
-    parser.add_argument("--run-split-mode", choices=["none", "runwise"], default="none")
+    parser.add_argument(
+        "--run-split-mode",
+        choices=["none", "runwise"],
+        default="none",
+        help=(
+            "runwise uses run-length boundaries from dtseries and splits already-extracted hippocampal "
+            "surface timeseries; raw volume BOLD is never run-split."
+        ),
+    )
     parser.add_argument("--hipp-density", default=DEFAULT_HIPP_DENSITY)
     args = parser.parse_args()
 
@@ -2314,10 +2270,6 @@ def main() -> int:
         func_input_dir / f"sub-{subject}_task-rest_run-{spec['run_id']}.dtseries.nii"
         for spec in RUN_SPECS
     ]
-    runwise_bold = [
-        func_input_dir / f"sub-{subject}_task-rest_run-{spec['run_id']}_bold.nii.gz"
-        for spec in RUN_SPECS
-    ]
     surf_dir = hipp_root / "hippunfold" / f"sub-{subject}" / "surf"
     if not dtseries.exists():
         raise FileNotFoundError(f"Missing dtseries: {dtseries}")
@@ -2326,38 +2278,17 @@ def main() -> int:
             "Missing concat BOLD required for strict hippocampal raw surface sampling: "
             f"{concat_bold}"
         )
-    shared_runwise_input_dir = shared_store_root / f"sub-{subject}" / "runwise_inputs"
     if args.run_split_mode == "runwise":
-        resolved_runwise_dtseries, dtseries_run_input_mode, dtseries_run_lengths = resolve_runwise_dtseries(
-            subject=subject,
+        dtseries_run_input_mode, dtseries_run_lengths = resolve_runwise_dtseries(
             concat_dtseries=dtseries,
             runwise_dtseries=runwise_dtseries,
-            stage_root=shared_runwise_input_dir,
-            resume_mode=resume_mode,
         )
-        bold_assets_available = concat_bold.exists() or all(path.exists() for path in runwise_bold)
-        resolved_runwise_bold: list[Path] = []
-        bold_run_input_mode = "not_available_split_surface_from_concat_timeseries"
-        if bold_assets_available:
-            resolved_runwise_bold, bold_run_input_mode, bold_run_lengths = resolve_runwise_bold(
-                subject=subject,
-                concat_bold=concat_bold,
-                runwise_bold=runwise_bold,
-                stage_root=shared_runwise_input_dir,
-                resume_mode=resume_mode,
-            )
-            if dtseries_run_lengths != bold_run_lengths:
-                raise ValueError(
-                    "Run-wise dtseries and BOLD lengths do not match after input resolution: "
-                    f"dtseries={dtseries_run_lengths}, bold={bold_run_lengths}"
-                )
+        surface_run_input_mode = "split_from_concat_surface"
     else:
         total_tp = int(nib.load(str(dtseries)).shape[0])
-        resolved_runwise_dtseries = [dtseries for _ in RUN_SPECS]
         dtseries_run_input_mode = "concat_no_split"
         dtseries_run_lengths = [total_tp for _ in RUN_SPECS]
-        resolved_runwise_bold = []
-        bold_run_input_mode = "not_used_concat_no_split"
+        surface_run_input_mode = "not_used_concat_no_split"
 
     left_surface = find_hippunfold_surface_asset(
         surf_dir=surf_dir,
@@ -2537,72 +2468,68 @@ def main() -> int:
     canonical_network_rows = load_canonical_network_rows(canonical_network_table_path)
     network_ts = np.load(canonical_network_timeseries_path).astype(np.float32)
     if args.run_split_mode == "runwise":
+        if int(sum(int(x) for x in dtseries_run_lengths)) != int(network_ts.shape[1]):
+            raise ValueError(
+                "Run-length sum mismatch for runwise reference slicing: "
+                f"sum(run_lengths)={sum(int(x) for x in dtseries_run_lengths)} vs "
+                f"concat_canonical_network_timepoints={network_ts.shape[1]}"
+            )
         run_reference_paths: list[Path] = []
-        for spec, run_dtseries in zip(RUN_SPECS, resolved_runwise_dtseries, strict=True):
+        offset = 0
+        for spec, run_len in zip(RUN_SPECS, dtseries_run_lengths, strict=True):
             run_reference_dir = shared_reference_store_dir / "runs" / f"run-{spec['run_id']}"
             run_reference_summary = run_reference_dir / "reference_summary.json"
             run_canonical_network_timeseries = run_reference_dir / "cortex_canonical_network_timeseries.npy"
             run_reference_paths.append(run_canonical_network_timeseries)
+            start = int(offset)
+            stop = int(offset + int(run_len))
             run_reference_params = {
                 "subject": subject,
                 "atlas_slug": atlas_slug,
-                "label_prefix": str(atlas_cfg["label_prefix"]),
                 "run_id": spec["run_id"],
                 "tsnr_threshold": float(TSNR_THRESHOLD),
+                "run_length": int(run_len),
+                "run_start": int(start),
+                "run_stop": int(stop),
+                "run_boundary_source": dtseries_run_input_mode,
+                "run_lengths": [int(x) for x in dtseries_run_lengths],
             }
+            run_reference_inputs = [canonical_network_timeseries_path, reference_summary_path]
             if not stage_is_up_to_date(
                 stage_dir=run_reference_dir,
                 resume_mode=resume_mode,
                 stage_name="reference_run",
                 params=run_reference_params,
-                inputs=[
-                    run_dtseries,
-                    left_cortex_labels,
-                    right_cortex_labels,
-                    roi_summary_path,
-                    cortex_tsnr_dir / "cortex_left_valid_mask.npy",
-                    cortex_tsnr_dir / "cortex_right_valid_mask.npy",
-                ],
+                inputs=run_reference_inputs,
                 outputs=[run_reference_summary, run_canonical_network_timeseries],
             ):
-                run(
-                    [
-                        PYTHON_EXE,
-                        str(REPO_ROOT / "scripts" / "cortex" / "extract_cortex_roi_component_timeseries.py"),
-                        "--subject",
-                        subject,
-                        "--dtseries",
-                        str(run_dtseries),
-                        "--left-labels",
-                        str(left_cortex_labels),
-                        "--right-labels",
-                        str(right_cortex_labels),
-                        "--roi-summary",
-                        str(roi_summary_path),
-                        "--atlas-slug",
-                        atlas_slug,
-                        "--left-tsnr-mask",
-                        str(cortex_tsnr_dir / "cortex_left_valid_mask.npy"),
-                        "--right-tsnr-mask",
-                        str(cortex_tsnr_dir / "cortex_right_valid_mask.npy"),
-                        "--outdir",
-                        str(run_reference_dir),
-                    ]
-                )
+                run_reference_dir.mkdir(parents=True, exist_ok=True)
+                run_ts = network_ts[:, start:stop].astype(np.float32, copy=False)
+                np.save(run_canonical_network_timeseries, run_ts)
+                run_summary_payload = {
+                    "subject": subject,
+                    "atlas_slug": atlas_slug,
+                    "run_id": str(spec["run_id"]),
+                    "run_label": str(spec["label"]),
+                    "run_boundary_source": dtseries_run_input_mode,
+                    "run_start": int(start),
+                    "run_stop": int(stop),
+                    "run_length": int(run_len),
+                    "n_timepoints": int(run_ts.shape[1]),
+                    "n_canonical_networks_used": int(run_ts.shape[0]),
+                    "canonical_network_timeseries_source": str(canonical_network_timeseries_path.resolve()),
+                    "canonical_network_timeseries_run": str(run_canonical_network_timeseries.resolve()),
+                    "tsnr_threshold": float(TSNR_THRESHOLD),
+                }
+                save_json(run_reference_summary, run_summary_payload)
                 write_stage_manifest(
                     stage_dir=run_reference_dir,
                     stage_name="reference_run",
                     params=run_reference_params,
-                    inputs=[
-                        run_dtseries,
-                        left_cortex_labels,
-                        right_cortex_labels,
-                        roi_summary_path,
-                        cortex_tsnr_dir / "cortex_left_valid_mask.npy",
-                        cortex_tsnr_dir / "cortex_right_valid_mask.npy",
-                    ],
+                    inputs=run_reference_inputs,
                     outputs=[run_reference_summary, run_canonical_network_timeseries],
                 )
+            offset = stop
         run_network_ts = [np.load(path).astype(np.float32) for path in run_reference_paths]
     else:
         run_reference_paths = []
@@ -2877,129 +2804,6 @@ def main() -> int:
                     "4mm_right": fwhm_right_path,
                 }
             )
-    elif resolved_runwise_bold:
-        for spec, run_bold in zip(RUN_SPECS, resolved_runwise_bold, strict=True):
-            run_surface_dir = shared_surface_store_dir / "runs" / f"run-{spec['run_id']}"
-            raw_dir = run_surface_dir / "raw"
-            run_raw_left_metric = raw_dir / f"sub-{subject}_hemi-L_space-corobl_den-{hipp_density}_label-hipp_bold.func.gii"
-            run_raw_right_metric = raw_dir / f"sub-{subject}_hemi-R_space-corobl_den-{hipp_density}_label-hipp_bold.func.gii"
-            run_two_mm_left_func = run_surface_dir / "2mm" / f"sub-{subject}_hemi-L_space-corobl_den-{hipp_density}_label-hipp_bold.func.gii"
-            run_two_mm_right_func = run_surface_dir / "2mm" / f"sub-{subject}_hemi-R_space-corobl_den-{hipp_density}_label-hipp_bold.func.gii"
-            run_two_mm_left_path = run_surface_dir / "2mm" / f"sub-{subject}_hemi-L_timeseries.npy"
-            run_two_mm_right_path = run_surface_dir / "2mm" / f"sub-{subject}_hemi-R_timeseries.npy"
-            run_four_mm_left_func = run_surface_dir / "4mm" / f"sub-{subject}_hemi-L_space-corobl_den-{hipp_density}_label-hipp_bold.func.gii"
-            run_four_mm_right_func = run_surface_dir / "4mm" / f"sub-{subject}_hemi-R_space-corobl_den-{hipp_density}_label-hipp_bold.func.gii"
-            run_four_mm_left_path = run_surface_dir / "4mm" / f"sub-{subject}_hemi-L_timeseries.npy"
-            run_four_mm_right_path = run_surface_dir / "4mm" / f"sub-{subject}_hemi-R_timeseries.npy"
-            run_surface_params = {
-                "subject": subject,
-                "run_id": spec["run_id"],
-                "smoothings": SMOOTH_ORDER,
-                "tsnr_threshold": float(TSNR_THRESHOLD),
-                "smoothing_roi_policy": "high_tsnr_vertices_only",
-                "raw_source_policy": "strict_runwise_pipeline_func_gii_only",
-                "null_policy": "strict_invalid_initial_only",
-            }
-            run_surface_outputs = [
-                run_raw_left_metric,
-                run_raw_right_metric,
-                run_two_mm_left_func,
-                run_two_mm_right_func,
-                run_two_mm_left_path,
-                run_two_mm_right_path,
-                run_four_mm_left_func,
-                run_four_mm_right_func,
-                run_four_mm_left_path,
-                run_four_mm_right_path,
-            ]
-            if not stage_is_up_to_date(
-                stage_dir=run_surface_dir,
-                resume_mode=resume_mode,
-                stage_name="surface_run",
-                params=run_surface_params,
-                inputs=[run_bold, left_surface, right_surface],
-                outputs=run_surface_outputs,
-            ):
-                run(
-                    [
-                        PYTHON_EXE,
-                        str(REPO_ROOT / "scripts" / "common" / "sample_hipp_surface_timeseries.py"),
-                        "--bold",
-                        str(run_bold),
-                        "--hippunfold-dir",
-                        str(hipp_root / "hippunfold"),
-                        "--subject",
-                        subject,
-                        "--density",
-                        hipp_density,
-                        "--space",
-                        "corobl",
-                        "--mapping-method",
-                        "trilinear",
-                        "--smooth-iters",
-                        "0",
-                        "--outdir",
-                        str(raw_dir),
-                    ]
-                )
-                for _hemi, surface_path, metric_path, smooth_mm, out_metric, roi_path in [
-                    ("L", left_surface, run_raw_left_metric, "2", run_two_mm_left_func, left_roi_path),
-                    ("R", right_surface, run_raw_right_metric, "2", run_two_mm_right_func, right_roi_path),
-                    ("L", left_surface, run_raw_left_metric, "4", run_four_mm_left_func, left_roi_path),
-                    ("R", right_surface, run_raw_right_metric, "4", run_four_mm_right_func, right_roi_path),
-                ]:
-                    smooth_metric_with_roi(
-                        surface_path=surface_path,
-                        metric_path=metric_path,
-                        smooth_mm=smooth_mm,
-                        out_metric=out_metric,
-                        roi_path=roi_path,
-                    )
-                np.save(
-                    run_two_mm_left_path,
-                    sanitize_timeseries_with_mask(
-                        load_metric_array(run_two_mm_left_func, expected_n_vertices=int(left_coords.shape[0])),
-                        left_valid_mask,
-                    ),
-                )
-                np.save(
-                    run_two_mm_right_path,
-                    sanitize_timeseries_with_mask(
-                        load_metric_array(run_two_mm_right_func, expected_n_vertices=int(right_coords.shape[0])),
-                        right_valid_mask,
-                    ),
-                )
-                np.save(
-                    run_four_mm_left_path,
-                    sanitize_timeseries_with_mask(
-                        load_metric_array(run_four_mm_left_func, expected_n_vertices=int(left_coords.shape[0])),
-                        left_valid_mask,
-                    ),
-                )
-                np.save(
-                    run_four_mm_right_path,
-                    sanitize_timeseries_with_mask(
-                        load_metric_array(run_four_mm_right_func, expected_n_vertices=int(right_coords.shape[0])),
-                        right_valid_mask,
-                    ),
-                )
-                write_stage_manifest(
-                    stage_dir=run_surface_dir,
-                    stage_name="surface_run",
-                    params=run_surface_params,
-                    inputs=[run_bold, left_surface, right_surface],
-                    outputs=run_surface_outputs,
-                )
-            run_surface_specs.append(
-                {
-                    "run_id": spec["run_id"],
-                    "label": spec["label"],
-                    "2mm_left": run_two_mm_left_path,
-                    "2mm_right": run_two_mm_right_path,
-                    "4mm_left": run_four_mm_left_path,
-                    "4mm_right": run_four_mm_right_path,
-                }
-            )
     else:
         run_surface_base_dir = shared_surface_store_dir / "runs_from_concat"
         for spec, run_len in zip(RUN_SPECS, dtseries_run_lengths, strict=True):
@@ -3116,7 +2920,7 @@ def main() -> int:
         "smoothings": SMOOTH_ORDER,
         "run_labels": [f"run-{spec['run_id']}" for spec in RUN_SPECS],
         "dtseries_run_input_mode": dtseries_run_input_mode,
-        "bold_run_input_mode": bold_run_input_mode,
+        "surface_run_input_mode": surface_run_input_mode,
         "run_lengths": dtseries_run_lengths,
         "hipp_density": hipp_density,
         "tsnr_threshold": float(TSNR_THRESHOLD),
@@ -3193,7 +2997,7 @@ def main() -> int:
                     "tsnr_threshold": float(TSNR_THRESHOLD),
                     "run_labels": [f"run-{item['run_id']}" for item in RUN_SPECS],
                     "dtseries_run_input_mode": dtseries_run_input_mode,
-                    "bold_run_input_mode": bold_run_input_mode,
+                    "surface_run_input_mode": surface_run_input_mode,
                 }
                 if intrinsic_fc_active is not None:
                     summary_payload["vertex_to_vertex_fc_shape"] = [
@@ -3240,7 +3044,7 @@ def main() -> int:
         "k_selection_mode": str(args.k_selection_mode),
         "run_input_sources": {
             "dtseries": dtseries_run_input_mode,
-            "bold": bold_run_input_mode,
+            "surface": surface_run_input_mode,
             "run_lengths": dtseries_run_lengths,
         },
         "reference_summary": reference_summary,
@@ -3264,7 +3068,7 @@ def main() -> int:
         "instability_resamples": int(args.instability_resamples),
         "k_selection_mode": str(args.k_selection_mode),
         "dtseries_run_input_mode": dtseries_run_input_mode,
-        "bold_run_input_mode": bold_run_input_mode,
+        "surface_run_input_mode": surface_run_input_mode,
         "run_lengths": dtseries_run_lengths,
         "hipp_density": hipp_density,
         "tsnr_threshold": float(TSNR_THRESHOLD),
@@ -3281,6 +3085,8 @@ def main() -> int:
             else ("preserve-signed-fc" if is_spectral_branch(branch_slug) else "row-min-shift")
         ),
     }
+    if is_spectral_branch(branch_slug):
+        compute_params["spectral_profile_export"] = "raw_profile_rows_cluster_mean_timeseries_fisherz_v2"
     compute_inputs = [
         canonical_network_table_path,
         canonical_network_timeseries_path,
@@ -3439,6 +3245,8 @@ def main() -> int:
                         v_min_count=None if args.v_min_count is None else int(args.v_min_count),
                         k_selection_mode=str(args.k_selection_mode),
                         zero_negative=uses_nonnegative_intrinsic_spectral_features(branch_slug),
+                        active_timeseries=ts[active_mask, :].astype(np.float32, copy=False),
+                        network_timeseries=network_ts,
                     )
                 elif is_spectral_branch(branch_slug):
                     cluster = run_spectral_branch(
@@ -3456,6 +3264,8 @@ def main() -> int:
                         v_min_count=None if args.v_min_count is None else int(args.v_min_count),
                         k_selection_mode=str(args.k_selection_mode),
                         zero_negative=uses_nonnegative_spectral_features(branch_slug),
+                        active_timeseries=ts[active_mask, :].astype(np.float32, copy=False),
+                        network_timeseries=network_ts,
                     )
                 else:
                     cluster = run_probability_branch(
@@ -3525,6 +3335,9 @@ def main() -> int:
                     "cluster_annotations": node["cluster_annotations"],
                     "profile_networks": node["profile_networks"],
                     "probability_rows": node["probability_rows"].tolist(),
+                    "raw_profile_rows": (
+                        node["raw_profile_rows"].tolist() if node.get("raw_profile_rows") is not None else None
+                    ),
                     "panel_title": build_panel_titles(
                         branch_slug,
                         smooth_name,
@@ -3639,6 +3452,8 @@ def main() -> int:
         )
 
     final_selection = json.loads(summary_selection_path.read_text(encoding="utf-8"))
+    if not args.skip_summary:
+        run([PYTHON_EXE, str(SUMMARIZE_OUTPUTS_SCRIPT), "--root", str(out_root)])
     apply_retain_level(out_root, args.retain_level)
     print(
         json.dumps(
@@ -3655,6 +3470,9 @@ def main() -> int:
                 "layout": args.layout,
                 "views": views,
                 "final_selection_summary": str(summary_selection_path),
+                "summary_manifest": str(out_root / "summary_manifest.json"),
+                "overview_png": str(out_root / "hipp_functional_parcellation_network_overview.png"),
+                "summary_auto_generated": not args.skip_summary,
             },
             indent=2,
         )
