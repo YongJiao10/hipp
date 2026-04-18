@@ -336,9 +336,14 @@ def create_curve_figure(root: Path, final_selection: dict[str, object]) -> Path:
     return out_path
 
 
-def heatmap_text_color(value: float, vmax: float, cmap_name: str = "magma") -> str:
+def heatmap_text_color(value: float, vmin: float, vmax: float, cmap_name: str = "magma") -> str:
     cmap = plt.get_cmap(cmap_name)
-    norm_value = 0.0 if vmax <= 0 else float(np.clip(value / vmax, 0.0, 1.0))
+    if not np.isfinite(value):
+        value = 0.0
+    if vmax <= vmin:
+        norm_value = 0.5
+    else:
+        norm_value = float((np.clip(value, vmin, vmax) - vmin) / (vmax - vmin))
     r, g, b, _ = cmap(norm_value)
     luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b
     return "black" if luminance >= 0.55 else "white"
@@ -350,6 +355,15 @@ def is_soft_branch(branch_slug: str) -> bool:
 
 def is_wta_branch(branch_slug: str) -> bool:
     return branch_slug == "network-wta"
+
+
+def is_spectral_branch(branch_slug: str) -> bool:
+    return branch_slug in {
+        "network-spectral",
+        "network-spectral-nonneg",
+        "intrinsic-spectral",
+        "intrinsic-spectral-nonneg",
+    }
 
 
 def shorten_cluster_name(cluster_name: str) -> str:
@@ -367,6 +381,7 @@ def create_probability_figure(root: Path, final_selection: dict[str, object]) ->
     axs = [fig.add_subplot(heatmaps[0, idx]) for idx in range(2)]
     cax = fig.add_subplot(outer[0, 1])
     last_image = None
+    cbar_label = "Probability / Score"
     summaries: dict[str, dict[str, object]] = {}
 
     for ax, hemi in zip(axs, HEMIS, strict=True):
@@ -398,8 +413,14 @@ def create_probability_figure(root: Path, final_selection: dict[str, object]) ->
                         for row in hemi_node["cluster_annotations"]
                     ]
                 )
-            probs = np.asarray(block_rows, dtype=np.float32)
+            heat_values = np.asarray(block_rows, dtype=np.float32)
             keep = np.arange(len(networks), dtype=np.int32)
+            panel_label = "soft summaries"
+            mode = "soft+subregions"
+            value_kind = "probability_score"
+            cmap_name = "magma"
+            vmin = 0.0
+            vmax = max(0.12, float(np.nanmax(heat_values[:, keep])))
         elif is_wta_branch(branch_slug):
             networks = list(final_selection["per_smooth"]["2mm"]["hemis"][hemi]["soft_outputs"]["networks"])
             block_rows = []
@@ -418,8 +439,42 @@ def create_probability_figure(root: Path, final_selection: dict[str, object]) ->
                         f"{SMOOTH_LABEL[smooth_name]} occupancy",
                     ]
                 )
-            probs = np.asarray(block_rows, dtype=np.float32)
+            heat_values = np.asarray(block_rows, dtype=np.float32)
             keep = np.arange(len(networks), dtype=np.int32)
+            panel_label = "WTA confidence + occupancy"
+            mode = "wta"
+            value_kind = "probability_score"
+            cmap_name = "magma"
+            vmin = 0.0
+            vmax = max(0.12, float(np.nanmax(heat_values[:, keep])))
+        elif is_spectral_branch(branch_slug):
+            networks = list(final_selection["per_smooth"]["2mm"]["hemis"][hemi]["profile_networks"])
+            block_rows = []
+            row_labels = []
+            for smooth_name in SMOOTHS:
+                hemi_node = final_selection["per_smooth"][smooth_name]["hemis"][hemi]
+                if hemi_node.get("raw_profile_rows") is None:
+                    raise RuntimeError(
+                        "Missing raw_profile_rows in final_selection_summary for spectral branch. "
+                        "Please rerun run_subject.py (or run_batch.py) to recompute spectral outputs."
+                    )
+                block_rows.extend(np.asarray(hemi_node["raw_profile_rows"], dtype=np.float32))
+                row_labels.extend(
+                    [
+                        f"{SMOOTH_LABEL[smooth_name]} {shorten_cluster_name(str(row['cluster_name']))}"
+                        for row in hemi_node["cluster_annotations"]
+                    ]
+                )
+            heat_values = np.asarray(block_rows, dtype=np.float32)
+            keep = np.arange(len(networks), dtype=np.int32)
+            panel_label = "raw cluster profiles"
+            mode = "cluster-raw-profile"
+            value_kind = "raw_profile"
+            cmap_name = "RdBu_r"
+            vmax_abs = max(0.05, float(np.nanmax(np.abs(heat_values[:, keep]))))
+            vmin = -vmax_abs
+            vmax = vmax_abs
+            cbar_label = "Raw Profile (cluster-mean-timeseries Fisher-z FC)"
         else:
             networks = list(final_selection["per_smooth"]["2mm"]["hemis"][hemi]["profile_networks"])
             block_rows = []
@@ -433,14 +488,19 @@ def create_probability_figure(root: Path, final_selection: dict[str, object]) ->
                         for row in hemi_node["cluster_annotations"]
                     ]
                 )
-            probs = np.asarray(block_rows, dtype=np.float32)
+            heat_values = np.asarray(block_rows, dtype=np.float32)
             keep = np.arange(len(networks), dtype=np.int32)
-        probs_plot = probs[:, keep]
+            panel_label = "cluster profiles"
+            mode = "cluster"
+            value_kind = "probability_score"
+            cmap_name = "magma"
+            vmin = 0.0
+            vmax = max(0.12, float(np.nanmax(heat_values[:, keep])))
+        heat_plot = heat_values[:, keep]
         networks_plot = [networks[idx] for idx in keep]
-        vmax = max(0.12, float(np.nanmax(probs_plot)))
-        image = ax.imshow(probs_plot, aspect="auto", cmap="magma", vmin=0.0, vmax=vmax)
+        image = ax.imshow(heat_plot, aspect="auto", cmap=cmap_name, vmin=vmin, vmax=vmax)
         last_image = image
-        title = f"{hemi} {'soft summaries' if is_soft_branch(branch_slug) else ('WTA confidence + occupancy' if is_wta_branch(branch_slug) else 'cluster profiles')}"
+        title = f"{hemi} {panel_label}"
         ax.set_title(title, fontsize=PLOT_SPEC["metric_font"])
         ax.set_yticks(range(len(row_labels)))
         ax.set_yticklabels(row_labels, fontsize=PLOT_SPEC["tick_font"])
@@ -454,13 +514,13 @@ def create_probability_figure(root: Path, final_selection: dict[str, object]) ->
         )
         for label in ax.get_yticklabels():
             label.set_horizontalalignment("right")
-        for i in range(probs_plot.shape[0]):
-            dominant_idx = int(np.argmax(probs[i, :]))
-            for j in range(probs_plot.shape[1]):
-                value = float(probs_plot[i, j])
+        for i in range(heat_plot.shape[0]):
+            dominant_idx = int(np.argmax(heat_values[i, :]))
+            for j in range(heat_plot.shape[1]):
+                value = float(heat_plot[i, j])
                 network_idx = int(keep[j])
                 is_selected = network_idx == dominant_idx
-                text_color = heatmap_text_color(value, vmax, "magma")
+                text_color = heatmap_text_color(value, vmin, vmax, cmap_name)
                 if is_selected:
                     ax.add_patch(
                         Rectangle(
@@ -484,16 +544,17 @@ def create_probability_figure(root: Path, final_selection: dict[str, object]) ->
                 )
         summaries[hemi] = {
             "networks": networks,
-            "probabilities": probs.tolist(),
-            "mode": "soft+subregions" if is_soft_branch(branch_slug) else ("wta" if is_wta_branch(branch_slug) else "cluster"),
+            "mode": mode,
+            "value_kind": value_kind,
+            "heatmap_values": heat_values.tolist(),
             "display_networks": networks_plot,
-            "display_probabilities": probs_plot.tolist(),
+            "display_values": heat_plot.tolist(),
             "row_labels": row_labels,
         }
 
     if last_image is not None:
         cbar = fig.colorbar(last_image, cax=cax)
-        cbar.set_label("Probability / Score", fontsize=12)
+        cbar.set_label(cbar_label, fontsize=12)
         cbar.ax.tick_params(labelsize=10)
     fig.subplots_adjust(left=0.18, right=0.94, bottom=0.18, top=0.86)
     out_path = root / "network_probability_heatmaps.png"

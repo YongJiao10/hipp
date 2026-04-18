@@ -36,7 +36,7 @@ def main() -> int:
     parser.add_argument("--density", required=True)
     parser.add_argument("--space", default="auto")
     parser.add_argument("--mapping-method", choices=["enclosing", "trilinear"], default="enclosing")
-    parser.add_argument("--smooth-iters", type=int, default=1)
+    parser.add_argument("--smooth-iters", type=int, default=0)
     parser.add_argument("--outdir", required=True)
     args = parser.parse_args()
 

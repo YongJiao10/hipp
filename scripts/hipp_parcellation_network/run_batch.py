@@ -31,9 +31,6 @@ BRANCHES = [
 ATLASES = ["lynch2024", "kong2019"]
 SUPPORTED_ATLASES = ["lynch2024", "hermosillo2024", "kong2019"]
 SUBJECTS = ["100610", "102311", "102816"]
-CORTEX_TSNR_FIG = REPO_ROOT / "outputs_migration" / "cortex_tsnr_distributions.png"
-HIPP_TSNR_FIG = REPO_ROOT / "outputs_migration" / "tsnr_distributions.png"
-HIPP_TSNR_SURFACE_FIG = REPO_ROOT / "outputs_migration" / "tsnr_surface_masked.png"
 SUMMARY_KEEP = {
     "hipp_functional_parcellation_network_overview.png",
     "k_selection_curves.png",
@@ -170,6 +167,7 @@ def run_subject_atlas(
                 run_split_mode,
                 "--hipp-density",
                 hipp_density,
+                "--skip-summary",
             ]
             + (
                 ["--shared-surface-store-root", shared_surface_store_root]
@@ -251,47 +249,6 @@ def validate(branches: list[str], atlases: list[str], subjects: list[str], out_r
                         raise RuntimeError(f"Missing required output for {branch_slug}/{atlas_slug}/sub-{subject}: {name}")
 
 
-def build_cortex_tsnr_figure(subjects: list[str], input_root: Path, out_path: Path) -> None:
-    run(
-        [
-            PYTHON_EXE,
-            str(REPO_ROOT / "scripts" / "plot_cortex_tsnr_distributions.py"),
-            "--input-root",
-            str(input_root),
-            "--out",
-            str(out_path),
-            "--subjects",
-            *subjects,
-        ]
-    )
-
-
-def build_hipp_tsnr_figure(batch_dir: Path, out_path: Path) -> None:
-    run(
-        [
-            PYTHON_EXE,
-            str(REPO_ROOT / "scripts" / "plot_tsnr_distributions.py"),
-            "--batch-dir",
-            str(batch_dir),
-            "--out",
-            str(out_path),
-        ]
-    )
-
-
-def build_hipp_tsnr_surface_figure(batch_dir: Path, out_masked: Path) -> None:
-    run(
-        [
-            PYTHON_EXE,
-            str(REPO_ROOT / "scripts" / "plot_tsnr_surface.py"),
-            "--batch-dir",
-            str(batch_dir),
-            "--out-masked",
-            str(out_masked),
-        ]
-    )
-
-
 def main() -> int:
     default_density = load_surface_density_from_pipeline_config(REPO_ROOT / "config" / "hippo_pipeline.toml")
     parser = argparse.ArgumentParser(description="Batch run network-first hippocampal functional parcellation with resumable stage-aware outputs")
@@ -303,17 +260,20 @@ def main() -> int:
     parser.add_argument("--views", default="ventral,dorsal")
     parser.add_argument("--layout", choices=["1x2", "2x2"], default="2x2")
     parser.add_argument("--k-selection-mode", choices=["mainline", "experimental"], default="mainline")
-    parser.add_argument("--run-split-mode", choices=["none", "runwise"], default="none")
+    parser.add_argument(
+        "--run-split-mode",
+        choices=["none", "runwise"],
+        default="none",
+        help=(
+            "none: use concat timeseries for all run slots; runwise: derive run boundaries from dtseries and split "
+            "already-extracted hippocampal surface timeseries only (no raw volume BOLD run-splitting)."
+        ),
+    )
     parser.add_argument("--shared-surface-store-root", default=None)
     parser.add_argument("--hipp-density", default=default_density)
     parser.add_argument("--cleanup-level", choices=["none", "label", "render", "feature"], default="none")
     parser.add_argument("--out-root", default=str(DEFAULT_OUT_ROOT))
     parser.add_argument("--present-dir", default=str(DEFAULT_PRESENT_DIR))
-    parser.add_argument("--input-root", default=str(REPO_ROOT / "data" / "hippunfold_input"))
-    parser.add_argument("--dense-corobl-batch-dir", default=str(REPO_ROOT / "outputs_migration" / "dense_corobl_batch"))
-    parser.add_argument("--cortex-tsnr-fig", default=str(CORTEX_TSNR_FIG))
-    parser.add_argument("--hipp-tsnr-fig", default=str(HIPP_TSNR_FIG))
-    parser.add_argument("--hipp-tsnr-surface-fig", default=str(HIPP_TSNR_SURFACE_FIG))
     parser.add_argument("--clear-present", action="store_true")
     parser.add_argument(
         "--summaries-only",
@@ -327,11 +287,6 @@ def main() -> int:
     subjects = [str(item) for item in args.subjects]
     out_root = Path(args.out_root).resolve()
     present_dir = Path(args.present_dir).resolve()
-    input_root = Path(args.input_root).resolve()
-    dense_corobl_batch_dir = Path(args.dense_corobl_batch_dir).resolve()
-    cortex_tsnr_fig = Path(args.cortex_tsnr_fig).resolve()
-    hipp_tsnr_fig = Path(args.hipp_tsnr_fig).resolve()
-    hipp_tsnr_surface_fig = Path(args.hipp_tsnr_surface_fig).resolve()
 
     if args.clear_present:
         clear_present_overviews(present_dir)
@@ -375,15 +330,6 @@ def main() -> int:
                     )
     if skipped:
         print(f"Skipped {len(skipped)} combination(s): {skipped}", flush=True)
-    build_cortex_tsnr_figure(subjects, input_root, cortex_tsnr_fig)
-    if not cortex_tsnr_fig.exists():
-        raise RuntimeError(f"Missing cortex tSNR figure: {cortex_tsnr_fig}")
-    build_hipp_tsnr_figure(dense_corobl_batch_dir, hipp_tsnr_fig)
-    if not hipp_tsnr_fig.exists():
-        raise RuntimeError(f"Missing hipp tSNR figure: {hipp_tsnr_fig}")
-    build_hipp_tsnr_surface_figure(dense_corobl_batch_dir, hipp_tsnr_surface_fig)
-    if not hipp_tsnr_surface_fig.exists():
-        raise RuntimeError(f"Missing hipp tSNR surface figure: {hipp_tsnr_surface_fig}")
     summary = {
         "branches": branches,
         "atlases": atlases,
@@ -397,14 +343,14 @@ def main() -> int:
         "layout": args.layout,
         "k_selection_mode": args.k_selection_mode,
         "run_split_mode": args.run_split_mode,
+        "run_split_behavior": (
+            "split_hipp_surface_from_concat_by_dtseries_run_lengths"
+            if args.run_split_mode == "runwise"
+            else "no_runwise_split_concat_only"
+        ),
         "views": args.views,
         "out_root": str(out_root),
         "present": str(present_dir),
-        "input_root": str(input_root),
-        "dense_corobl_batch_dir": str(dense_corobl_batch_dir),
-        "cortex_tsnr_figure": str(cortex_tsnr_fig),
-        "hipp_tsnr_figure": str(hipp_tsnr_fig),
-        "hipp_tsnr_surface_figure": str(hipp_tsnr_surface_fig),
     }
     print(json.dumps(summary, indent=2))
     return 0

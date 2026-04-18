@@ -48,7 +48,12 @@ subjects   hcp_7t_hippocampus_struct_complete_166
 
 ## K Selection Mode Split (New vs Old)
 
-Use explicit mode flag `--k-selection-mode` in execution commands.
+For canonical batch runs, use fixed launchers:
+
+- `scripts/hipp_parcellation_network/run_mainline.sh`
+- `scripts/hipp_parcellation_network/run_experimental.sh`
+
+Do not hand-write `--k-selection-mode`, `--run-split-mode`, `--out-root`, or `--present-dir` in canonical run commands.
 
 - `mainline` (default, current production rule):
   - Select smallest `K` with `null_corrected_score >= best - 0.02` and `min_cluster_size_fraction >= 0.05`.
@@ -69,7 +74,9 @@ All branches share the same upstream preprocessing:
 3. Merge atlas-specific parent networks to canonical cross-atlas labels using [cross_atlas_network_merge.json](/Users/jy/Documents/HippoMaps-network-first/config/cross_atlas_network_merge.json).
 4. Exclude `Noise`.
 5. Resolve run-wise inputs for run-aware instability:
-   if `run-1..4` `dtseries` and `bold` files are present, use them directly; otherwise split `run-concat` inputs into four equal runs before staging downstream artifacts.
+   use explicit `run-1..4` `dtseries` files when present to derive run lengths; otherwise infer equal four-way run boundaries from `run-concat.dtseries` length.
+   The workflow does not materialize run-level `dtseries` files.
+   Run-wise hippocampal inputs are then derived only by splitting shared concat hippocampal surface timeseries with those run boundaries (no raw volume BOLD run-splitting).
 6. Average ROI-component timeseries within each retained canonical network to create cortex canonical network timeseries.
 7. Generate the hippocampal raw surface timeseries inside the shared pipeline store by sampling `run-concat_bold` onto the left and right `corobl` surfaces with `trilinear` mapping and `smooth_iters = 0`, then treat the resulting `.func.gii` files as the only valid raw source.
 8. Compute hippocampal `tSNR = 10000 / std(t)` on those raw unsmoothed shared-pipeline `.func.gii` timeseries and hard-mask vertices with `tSNR < 25`.
@@ -308,7 +315,8 @@ For each hemisphere:
 5. Fuse the two graphs by Hadamard (element-wise) product, retaining only spatially adjacent vertex pairs weighted by their functional similarity.
 6. Run spectral clustering on the fused graph with a precomputed affinity matrix.
 7. Run for `K=2..10`, select the smallest stable `K` via run-aware instability.
-8. Annotate final clusters by their dominant canonical network.
+8. For each cluster, average hippocampal vertex timeseries across all vertices assigned to that cluster.
+9. Compute `cluster-mean-timeseries -> canonical-network-timeseries` Pearson FC, apply Fisher z-transform, and annotate final clusters by dominant canonical network.
 
 Interpretation:
 
@@ -332,7 +340,8 @@ For each hemisphere:
 7. Fuse the two graphs by Hadamard (element-wise) product, retaining only spatially adjacent vertex pairs weighted by their functional similarity.
 8. Run spectral clustering on the fused graph with a precomputed affinity matrix.
 9. Run for `K=2..10`, select the smallest stable `K` via run-aware instability.
-10. Annotate final clusters by their dominant canonical network.
+10. For each cluster, average hippocampal vertex timeseries across all vertices assigned to that cluster.
+11. Compute `cluster-mean-timeseries -> canonical-network-timeseries` Pearson FC, apply Fisher z-transform, clip negatives to `0`, and annotate final clusters by dominant canonical network.
 
 Interpretation:
 
@@ -356,7 +365,7 @@ For each hemisphere:
 6. Fuse the two graphs by Hadamard (element-wise) product, retaining only spatially adjacent vertex pairs weighted by intrinsic functional similarity.
 7. Run spectral clustering on the fused graph with a precomputed affinity matrix.
 8. Run for `K=2..10`, select the smallest stable `K` via run-aware instability.
-9. After clustering, summarize each cluster with post hoc `cluster-to-network FC` against canonical cortical networks for interpretation.
+9. After clustering, average hippocampal vertex timeseries within each cluster, compute `cluster-mean-timeseries -> canonical-network-timeseries` Pearson FC, apply Fisher z-transform, and summarize each cluster for post hoc network interpretation.
 
 Interpretation:
 
@@ -381,7 +390,7 @@ For each hemisphere:
 7. Fuse the two graphs by Hadamard (element-wise) product.
 8. Run spectral clustering on the fused graph with a precomputed affinity matrix.
 9. Run for `K=2..10`, select the smallest stable `K` via run-aware instability.
-10. Summarize each final cluster with post hoc `cluster-to-network FC` profiles against canonical cortical networks.
+10. Summarize each final cluster by averaging cluster timeseries, computing `cluster-mean-timeseries -> canonical-network-timeseries` Pearson FC, applying Fisher z-transform, and clipping negatives to `0` before post hoc network interpretation.
 
 Interpretation:
 
@@ -414,7 +423,7 @@ Each candidate `K` records:
 Selection rule:
 
 1. Compute run-aware instability from independent run pairs, with `ARI` as the chance-corrected agreement score.
-   Run-wise inputs come either from explicit `run-1..4` files or from an equal four-way split of `run-concat` inputs staged by the workflow.
+   Run-wise inputs come from explicit `run-1..4` `dtseries` files or four-way boundaries inferred from `run-concat.dtseries` length (without writing run-level `dtseries` files), and run-wise hippocampal features are generated by splitting shared concat surface timeseries with those run boundaries.
 2. Restrict candidates to local minima of `I_mean(K)`.
 3. Apply the `1-SE` rule relative to the best instability point.
 4. Among surviving candidates, choose the smallest `K` that also passes the pre-registered `V_min` vertex-count threshold.
@@ -449,4 +458,42 @@ Structural render input rule:
 Overview heatmap semantics:
 
 - the probability/score heatmap x-axis shows all retained merged networks for that atlas in canonical order
+- for `network-spectral` and `intrinsic-spectral`, heatmap rows display raw cluster-level Fisher-z `vertex-to-network FC` profiles computed from cluster-mean timeseries (signed)
+- for `network-spectral-nonneg` and `intrinsic-spectral-nonneg`, those cluster-level Fisher-z profiles are clipped to `0` before export
+- spectral heatmap rows are raw cluster profiles, not probability-normalized rows
 - the left and right hemisphere heatmaps are displayed as separate panels with widened spacing for readability
+
+## Downstream Group Prior + Fast-PFM Mapping
+
+An optional downstream workflow consumes spectral branch outputs to produce reusable group priors and individual soft functional maps for new subjects.
+
+Script:
+
+- `scripts/hipp_parcellation_network/run_group_prior_fastpfm.py`
+
+Scope:
+
+- input branches: `network-spectral`, `network-spectral-nonneg`, `intrinsic-spectral`, `intrinsic-spectral-nonneg`
+- grouping unit: `branch x atlas x smoothing x hemi`
+- group `K` rule: aggregate subject `instability_mean` by `K`, then `local-min + 1-SE + min_parcel_pass_rate`, choose smallest surviving `K`
+- label alignment: Hungarian matching to the first subject reference
+- group prior payload: `prior_matrix (K x N_vertex)` plus `cluster_network_probs (K x N_network)` and dominant network labels
+- individual mapping: Fast-PFM-style temporal projection and correlation scoring against prior clusters, then row-min-shift normalization to `scores_prob (K x N_vertex)`
+
+Downstream outputs:
+
+```text
+outputs_migration/hipp_group_prior_fastpfm/<branch>/<atlas>/<smoothing>/
+  group_k_selection.tsv/json
+  priors/group_prior_*_hemi-{L|R}.pickle
+  individual_soft_maps/sub-*/sub-*_soft_functional_map.pickle
+  template + subject workbench assets/renders
+  group_prior_manifest.json
+  individual_softmap_manifest.json
+```
+
+Operational guardrails:
+
+- this workflow never reruns `run_subject.py`; it only consumes existing subject outputs plus `_shared` hippocampal surface timeseries
+- missing required inputs fail fast with explicit absolute paths (no fallback)
+- current locked-scene rendering mode is `layout=1x2` (ventral extraction from native scene capture)
