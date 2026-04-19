@@ -581,7 +581,7 @@ Workflow steps per `branch x atlas x smoothing x hemi`:
 3. Load each subject `cluster_labels_full.npy` at chosen `K`.
 4. Align subject labels to the first-subject reference with Hungarian matching on overlapping labeled vertices.
 5. Build `prior_matrix (K x N_vertex)` as the mean aligned one-hot map.
-6. Read each subject `cluster_annotation.json` probability rows, reorder by the same mapping, average to `cluster_network_probs (K x N_network)`, and assign dominant network by `argmax`.
+6. Read each subject `cluster_annotation.json` probability rows, reorder by the same mapping, average to `cluster_network_probs (K x N_network)`, then derive `p_net_v = cluster_network_probs^T @ prior_matrix (N_network x N_vertex)`.
 
 Individual inference steps:
 
@@ -589,15 +589,15 @@ Individual inference steps:
 2. Intersect subject valid mask with prior-supported mask.
 3. Standardize time series in time domain, project with `prior_ts = prior_matrix @ X^T`.
 4. Standardize `prior_ts`, compute correlation-like scores `scores_raw (K x N_vertex)`.
-5. Convert to `scores_prob` using row-min-shift + per-vertex normalization.
-6. Save `wta_labels` and `confidence_margin` as auxiliary outputs.
+5. Convert to `cluster_scores_prob` using row-min-shift + per-vertex normalization.
+6. Project to `network_scores_prob (N_network x N_vertex)` and save network-probability-dominant `network_wta_labels` + `network_confidence_margin`.
 
 Output contract:
 
 - group prior pickle:
-  - required keys include `prior_matrix`, `k_final`, `cluster_network_probs`, `cluster_dominant_network`, `valid_vertex_mask`
+  - required keys include `prior_matrix`, `k_final`, `cluster_network_probs`, derived `p_net_v`, `valid_vertex_mask`
 - individual soft map pickle:
-  - required keys include `scores_raw`, `scores_prob`, `wta_labels`, `confidence_margin`, `valid_vertex_mask`, `prior_pickle`
+  - required keys include `cluster_scores_raw`, `cluster_scores_prob`, `network_scores_prob`, `network_wta_labels`, `network_confidence_margin`, `valid_vertex_mask`, `prior_pickle`
 - manifests:
   - `group_k_selection.json`
   - `group_prior_manifest.json`
@@ -605,8 +605,17 @@ Output contract:
 
 Rendering:
 
-- group template and individual WTA views are rendered by converting pickles to Workbench labels and reusing the locked scene batch renderer.
+- group template and individual views are rendered using network-probability-dominant WTA labels (cluster-dominant WTA render path removed).
 - current implementation uses `layout=1x2` for the locked native scene.
+
+Group-level present overview:
+
+1. Run `scripts/hipp_parcellation_network/build_present_group_overview.py`.
+2. For each `atlas+method`, assemble one figure with two smoothing rows (`2mm`, `4mm`), each row in compact `2x2` layout.
+3. `kfree` rows include left/right `P_net_v`, WTA surface, and coverage summary.
+4. Each smoothing row uses two columns: left = info `2x2`, right = enlarged WTA surface.
+5. Spectral info `2x2` includes group-K instability curve, `cluster_network_probs` (cell values shown), `P_net_v` (network-name y labels), and `prior_matrix`.
+6. Write index artifacts to `present_group/group_overview_manifest.json` and `present_group/README.md`.
 
 ## Maintenance Note
 

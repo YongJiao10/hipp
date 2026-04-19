@@ -122,6 +122,11 @@ scripts/hipp_parcellation_network/run_experimental.sh \
   - `hipp_functional_parcellation_network_overview.png`
   - `summary_manifest.json`
 - Use `--skip-summary` only when you intentionally want to defer summary generation.
+- Overview rendering in `summarize_outputs.py` is now cross-platform font aware (macOS + Linux TrueType fallbacks, including DejaVu/Noto) and writes `300 DPI` metadata for consistent display scaling across viewers.
+- Workbench functional renders now use a `3200x2048` viewport before legend composition, and the composed `functional_*.png` files are written with `300 DPI` metadata. This keeps the label overlays sharper than the old `1600x1024` capture and prevents viewer-side downscaling from making them look soft.
+- The `functional_*.png` legend/title text is rendered with larger TrueType fonts in `compose_wb_grid_with_legend.py` so the subject panels are readable without zooming.
+- `k_selection_curves.png` keeps the original smaller curve-font sizing so the K-selection panel matches the pre-change look.
+- Summary subfigures are rendered at final overview content width to avoid additional downsampling blur in composed overview PNGs.
 
 ## Group Prior + Fast-PFM Downstream
 
@@ -136,9 +141,9 @@ Current implementation scope:
 - Input branches supported: `network-spectral`, `network-spectral-nonneg`, `intrinsic-spectral`, `intrinsic-spectral-nonneg`
 - Group `K` rule: `mean-instability-1se`
 - Group `K` unit: each `branch x atlas x smoothing x hemi`
-- Prior form: `K`-cluster dominant group prior (`prior_matrix: K x N_vertex`)
-- Individual inference: Fast-PFM-style soft map (`scores_prob: K x N_vertex`)
-- Render mode: locked native scene, `--layout 1x2` (ventral panel extraction)
+- Prior form: cluster prior + network projection (`prior_matrix: K x N_vertex`, `cluster_network_probs: K x N_network`, derived `p_net_v: N_network x N_vertex`)
+- Individual inference: Fast-PFM-style cluster soft map (`cluster_scores_prob: K x N_vertex`) projected to `network_scores_prob: N_network x N_vertex`
+- Render mode: locked native scene, `--layout 1x2` (ventral panel extraction), network-probability-dominant WTA only
 
 Group `K` rule details:
 
@@ -182,7 +187,7 @@ outputs_migration/hipp_group_prior_fastpfm/<branch>/<atlas>/<smoothing>/
   group_k_selection.json
   priors/group_prior_<branch>_<atlas>_<smoothing>_hemi-{L|R}.pickle
   template/workbench_assets/*
-  template/renders/*
+  template/renders/*  # group_netprob_wta_* (cluster-dominant render removed)
   group_prior_manifest.json
   individual_soft_maps/sub-<subject>/*
   individual_softmap_manifest.json
@@ -193,3 +198,36 @@ Failure policy:
 - No silent fallback.
 - Missing required inputs fail fast during preflight with full absolute missing-path list.
 - Missing `K`-specific assets fail with explicit file path.
+
+## Group-Level Present Overview
+
+Use `present_group/` for atlas+method level quick comparison across `2mm` and `4mm`.
+
+Script:
+
+- `scripts/hipp_parcellation_network/build_present_group_overview.py`
+
+Canonical command:
+
+```bash
+/opt/miniconda3/envs/py314/bin/python scripts/hipp_parcellation_network/build_present_group_overview.py
+```
+
+Outputs:
+
+```text
+present_group/
+  <atlas>_kfree_group_overview.png
+  <atlas>_network-spectral_group_overview.png
+  <atlas>_intrinsic-spectral_group_overview.png
+  components/<atlas>/<method>/<smoothing>/*.png
+  group_overview_manifest.json
+  README.md
+```
+
+Panel policy:
+
+- each smoothing row is rendered as a compact `2x2` block for quick side-by-side review.
+- each smoothing row uses `2 columns`: left = `2x2` info panel, right = enlarged hippocampal WTA surface.
+- `kfree`: left/right `P_net_v` heatmaps, probability-WTA hippocampal surface, and coverage summary.
+- `network-spectral` / `intrinsic-spectral` info `2x2`: group-K instability curve, `cluster_network_probs` (cell values annotated), `P_net_v` (network-name y labels), `prior_matrix`; right column is enlarged WTA hippocampal surface.
