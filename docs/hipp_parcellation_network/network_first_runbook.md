@@ -206,11 +206,33 @@ Use `present_group/` for atlas+method level quick comparison across `2mm` and `4
 Script:
 
 - `scripts/hipp_parcellation_network/build_present_group_overview.py`
+- `scripts/hipp_parcellation_network/build_present_group_overview_merged_canonical.py`
 
 Canonical command:
 
 ```bash
 /opt/miniconda3/envs/py314/bin/python scripts/hipp_parcellation_network/build_present_group_overview.py
+```
+
+Merged-canonical group atlas command pair:
+
+```bash
+/home/yojiao/.conda/envs/py314/bin/python scripts/hipp_parcellation_network/materialize_kong8_and_partial_fc.py \
+  --jobs 6
+
+/home/yojiao/.conda/envs/py314/bin/python scripts/hipp_parcellation_network/run_merged_canonical_group_atlas.py \
+  --resume \
+  --coverage-thresholds 0.80 \
+  --atlases kong2019 kong2019_8net \
+  --methods group-network-spectral group-network-partial-spectral group-intrinsic-spectral \
+  --out-root outputs_migration/hipp_group_merged_canonical_atlas
+
+/home/yojiao/.conda/envs/py314/bin/python scripts/hipp_parcellation_network/build_present_group_overview_merged_canonical.py \
+  --group-root outputs_migration/hipp_group_merged_canonical_atlas \
+  --present-dir present_group \
+  --atlases kong2019 kong2019_8net \
+  --methods group-network-spectral group-network-partial-spectral group-intrinsic-spectral \
+  --coverage-threshold 0.80
 ```
 
 Outputs:
@@ -220,6 +242,9 @@ present_group/
   <atlas>_kfree_group_overview.png
   <atlas>_network-spectral_group_overview.png
   <atlas>_intrinsic-spectral_group_overview.png
+  <atlas>_group-network-spectral_group_overview.png
+  <atlas>_group-network-partial-spectral_group_overview.png
+  <atlas>_group-intrinsic-spectral_group_overview.png
   components/<atlas>/<method>/<smoothing>/*.png
   group_overview_manifest.json
   README.md
@@ -231,3 +256,6 @@ Panel policy:
 - each smoothing row uses `2 columns`: left = `2x2` info panel, right = enlarged hippocampal WTA surface.
 - `kfree`: left/right `P_net_v` heatmaps, probability-WTA hippocampal surface, and coverage summary.
 - `network-spectral` / `intrinsic-spectral` info `2x2`: group-K instability curve, `cluster_network_probs` (cell values annotated), `P_net_v` (network-name y labels), `prior_matrix`; right column is enlarged WTA hippocampal surface.
+- `group-network-spectral` / `group-network-partial-spectral` / `group-intrinsic-spectral` keep the same row layout and right-column surface render style; the top-right heatmap is signed `cluster_network_profile` and the lower-left panel is long-axis `cluster_indicator (KxV)`.
+- merged-canonical group K-selection panels display subject-split `ARI = 1 - instability`; dotted curves show the strong-null ARI 5th percentile reference (`1 - I_null_95pct`), and vertical dashed lines mark selected `K*`.
+- The fixed Kong group-analysis set is six overview figures: three methods crossed with `kong2019` and `kong2019_8net`. `kong2019_8net` keeps `TemporalParietal` independent. `group-network-partial-spectral` uses one-sided networks-only partial FC: residualize hippocampal vertex or cluster timeseries by other canonical networks, then correlate with the raw target network; do not residualize the target network and do not control other hippocampal vertices.

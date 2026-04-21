@@ -89,6 +89,10 @@ ATLAS_CONFIG = {
         "label_prefix": "PFM_Kong2019priors.components",
         "display_name": "Kong2019",
     },
+    "kong2019_8net": {
+        "label_prefix": "PFM_Kong2019priors.components",
+        "display_name": "Kong2019 8net",
+    },
 }
 
 

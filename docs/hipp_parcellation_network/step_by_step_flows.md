@@ -617,6 +617,29 @@ Group-level present overview:
 5. Spectral info `2x2` includes group-K instability curve, `cluster_network_probs` (cell values shown), `P_net_v` (network-name y labels), and `prior_matrix`.
 6. Write index artifacts to `present_group/group_overview_manifest.json` and `present_group/README.md`.
 
+Merged canonical group atlas (v3):
+
+1. Run `scripts/hipp_parcellation_network/run_merged_canonical_group_atlas.py`.
+2. This script consumes `_shared` caches directly and builds group atlases for:
+   - `group-network-spectral`
+   - `group-network-partial-spectral`
+   - `group-intrinsic-spectral`
+   - `kong2019` and `kong2019_8net`
+   - `kong2019_8net` keeps `TemporalParietal` as an independent canonical network
+   - `group-network-partial-spectral` uses one-sided networks-only partial FC; the hippocampal vertex or cluster timeseries is residualized by other canonical networks, the target canonical network is left raw, and no other hippocampal vertices are controlled.
+3. It exports per-run products including:
+   - `group_support_mask.npy`
+   - `k_selection_summary.tsv/json`
+   - `group_labels_final.npy`
+   - `cluster_network_profile.npy`
+   - `cluster_assignment_status.json`
+   - `group_atlas_manifest.json`
+4. Build the atlas+method present overview figures with:
+   - `scripts/hipp_parcellation_network/build_present_group_overview_merged_canonical.py`
+5. The merged-canonical overview keeps the same `2x2 + right-column surface` row layout and uses signed `cluster_network_profile` plus `cluster_indicator (KxV)` panels.
+6. K-selection panels plot subject-split `ARI = 1 - instability`; dotted curves show the strong-null ARI 5th percentile reference (`1 - I_null_95pct`), and vertical dashed lines mark selected `K*`.
+7. The fixed Kong group-analysis presentation set contains six overview PNGs: three methods crossed with `kong2019` and `kong2019_8net`.
+
 ## Maintenance Note
 
 If any network-first branch definition, feature construction rule, regularization rule, clustering rule, selection rule, output naming rule, or overview interpretation changes, this document and [multi_branch_flow.md](/Users/jy/Documents/HippoMaps-network-first/docs/hipp_parcellation_network/multi_branch_flow.md) must be updated in the same change.
