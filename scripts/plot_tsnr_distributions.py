@@ -35,11 +35,11 @@ COLORS = {
 def load_bold(subject: str, hemi: str) -> np.ndarray:
     """Return array of shape (512, T).
 
-    Checks new pipeline path first (hipp_functional_parcellation_network/_shared),
+    Checks active group-input path first (`hipp_group_inputs_shared`),
     then falls back to old dense_corobl_batch path.
     """
-    new_dir = (_REPO_ROOT / "outputs_migration" / "hipp_functional_parcellation_network"
-               / "_shared" / subject / "surface" / "raw")
+    new_dir = (_REPO_ROOT / "outputs_migration" / "hipp_group_inputs_shared"
+               / subject / "surface" / "raw")
     new_gii = new_dir / f"{subject}_hemi-{hemi}_space-corobl_den-512_label-hipp_bold.func.gii"
     if new_gii.exists():
         img = nib.load(str(new_gii))

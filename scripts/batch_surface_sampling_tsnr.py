@@ -6,7 +6,7 @@ For each subject:
   1. Run sample_hipp_surface_timeseries.py  (wb_command -volume-to-surface-mapping -trilinear)
      Input  : rsfmri_volume/<id>/func_uncompressed.nii
      Surface: dense_corobl_batch/sub-<id>/hippunfold  (den-512, space-corobl)
-     Output : hipp_functional_parcellation_network/_shared/sub-<id>/surface/raw/*_label-hipp_bold.func.gii  (L + R)
+     Output : hipp_group_inputs_shared/sub-<id>/surface/raw/*_label-hipp_bold.func.gii  (L + R)
   2. Compute tSNR = 10000 / std(t) per vertex, record ratio < 25.
 
 Concurrency: capped at 10 (hard limit per CLAUDE.md / AGENTS.md).
@@ -28,8 +28,8 @@ import numpy as np
 REPO_ROOT      = Path(__file__).resolve().parents[1]
 BOLD_ROOT      = Path("/home/yojiao/LSS/jianglab/3_Data_Working/HCP_7T_Hippocampus/rsfmri_volume")
 HIPP_BATCH_DIR = REPO_ROOT / "outputs_migration" / "dense_corobl_batch"
-SHARED_ROOT    = REPO_ROOT / "outputs_migration" / "hipp_functional_parcellation_network" / "_shared"
-LOG_DIR        = REPO_ROOT / "outputs_migration" / "hipp_functional_parcellation_network" / "_batch_logs_sampling"
+SHARED_ROOT    = REPO_ROOT / "outputs_migration" / "hipp_group_inputs_shared"
+LOG_DIR        = REPO_ROOT / "outputs_migration" / "hipp_group_inputs_shared_logs_sampling"
 SAMPLE_SCRIPT  = REPO_ROOT / "scripts" / "common" / "sample_hipp_surface_timeseries.py"
 
 DENSITY        = "512"
@@ -50,7 +50,7 @@ def all_subjects() -> list[str]:
 
 
 def subject_raw_surface_dir(subject: str) -> Path:
-    """Canonical path: _shared/sub-{id}/surface/raw  (mirrors run_subject.py)."""
+    """Canonical path: hipp_group_inputs_shared/sub-{id}/surface/raw."""
     return SHARED_ROOT / f"sub-{subject}" / "surface" / "raw"
 
 

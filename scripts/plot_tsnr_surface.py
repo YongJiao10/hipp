@@ -23,7 +23,7 @@ Requirements:
   - outputs_migration/dense_corobl_batch/sub-{100610,102311,102816}/hippunfold/
       sub-X/surf/sub-X_hemi-{L,R}_space-corobl_den-512_label-hipp_midthickness.surf.gii
     (regenerate with: bash scripts/regen_corobl_batch.sh if missing)
-  - outputs_migration/hipp_functional_parcellation_network/_shared/
+  - outputs_migration/hipp_group_inputs_shared/
       sub-X/surface/raw/sub-X_hemi-{L,R}_space-corobl_den-512_label-hipp_bold.func.gii
 
 Usage (from repo root):
@@ -46,7 +46,7 @@ from PIL import Image, ImageDraw, ImageFont
 REPO_ROOT  = Path(__file__).resolve().parents[1]
 SCENE_SRC  = REPO_ROOT / "config" / "wb_locked_native_view_lateral_medial.scene"
 BATCH_DIR  = REPO_ROOT / "outputs_migration" / "dense_corobl_batch"
-BOLD_DIR   = REPO_ROOT / "outputs_migration" / "hipp_functional_parcellation_network" / "_shared"
+BOLD_DIR   = REPO_ROOT / "outputs_migration" / "hipp_group_inputs_shared"
 OUT_PATH   = REPO_ROOT / "outputs_migration" / "tsnr_surface_masked.png"
 WB_CMD     = '/home/yojiao/hpchome/hipp/software/workbench/bin_linux64/wb_command'
 

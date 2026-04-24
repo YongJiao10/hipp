@@ -15,7 +15,7 @@ from pathlib import Path
 
 # ── Paths ────────────────────────────────────────────────────────────────────
 REPO_ROOT  = Path(__file__).resolve().parents[1]
-SHARED_DIR = REPO_ROOT / "outputs_migration" / "hipp_functional_parcellation_network" / "_shared"
+SHARED_DIR = REPO_ROOT / "outputs_migration" / "hipp_group_inputs_shared"
 OUT_FIG    = REPO_ROOT / "outputs_migration" / "null_pct_distribution.png"
 
 HCP_MODE   = 10000.0

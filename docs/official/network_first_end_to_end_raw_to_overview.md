@@ -1,14 +1,15 @@
-# Archived Historical Note
+# Archived Workflow Note
 
-This document previously described the retired subject-level network-first parcellation workflow.
+This note exists only to point readers away from the retired subject-level workflow.
 
-That workflow is no longer part of the active public surface in this repository area.
+The active hippocampal surface in this repository area is group-only.
 
-Use instead:
+Use:
 
 - `docs/hipp_parcellation_network/network_first_runbook.md`
 - `docs/hipp_parcellation_network/merged_canonical_group_atlas_plan.md`
+- `docs/hipp_parcellation_network/fmri_qc.md`
 
-Archived implementation and related legacy docs now live under:
+Archived implementation and legacy flow material live under:
 
 - `_archive/hipp_parcellation_network/`
