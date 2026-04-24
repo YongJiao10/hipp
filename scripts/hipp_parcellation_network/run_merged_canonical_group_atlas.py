@@ -24,7 +24,7 @@ if str(REPO_ROOT / "scripts" / "common") not in sys.path:
 from surface_utils import infer_spec_path, long_axis_order
 
 
-DEFAULT_SHARED_ROOT = REPO_ROOT / "outputs_migration" / "hipp_functional_parcellation_network" / "_shared"
+DEFAULT_SHARED_ROOT = REPO_ROOT / "outputs_migration" / "hipp_group_inputs_shared"
 DEFAULT_OUT_ROOT = REPO_ROOT / "outputs_migration" / "hipp_group_merged_canonical_atlas"
 DEFAULT_SUBJECTS = REPO_ROOT / "manifests" / "hcp_7t_hippocampus_fmri_qc_pass_153.txt"
 DEFAULT_NETWORK_STYLE = REPO_ROOT / "config" / "hipp_network_style.json"

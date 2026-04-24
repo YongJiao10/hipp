@@ -1,11 +1,11 @@
 # Docs Layout
 
-Documentation is now grouped by intent.
+Documentation is grouped by intent.
 
 - `official/`
-  Notes that summarize the main HippoMaps-aligned pipeline and project-level context.
+  Project-level context and cross-cutting summaries.
 - `hipp_parcellation_network/`
-  Design notes, runbooks, and reference docs for the main hippocampal network-first parcellation pipeline.
+  Active hippocampal **group-analysis** runbook and reference docs.
 - `cortex/`
   Cortex ROI-component derivation and related reference notes.
 - `rendering/`
@@ -13,9 +13,10 @@ Documentation is now grouped by intent.
 - `structural/`
   Structural-only formalizations and related writeups.
 
-Loose top-level documents are reserved for cross-cutting handoff or prompt material.
+Active hippocampal group-analysis docs are intentionally reduced to:
 
-- `official/network_first_end_to_end_raw_to_overview.md`
-  End-to-end executable runbook for `raw zip -> staging -> dense_corobl -> migration overview` (subjects `102311/102816` baseline profile).
-- `official/data_provenance_end_to_end.md`
-  Data-lineage reference that includes both local runtime inputs and external LSS/source roots (for full provenance tracing).
+- `hipp_parcellation_network/network_first_runbook.md`
+- `hipp_parcellation_network/merged_canonical_group_atlas_plan.md`
+- `hipp_parcellation_network/fmri_qc.md`
+
+Legacy hippocampal parcellation flow docs were moved to `_archive/hipp_parcellation_network/legacy_docs/`.
