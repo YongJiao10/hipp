@@ -259,7 +259,7 @@ Preferred input path:
 
 - `_shared/.../fc/intrinsic/<smoothing>/hemi_<L|R>/hipp_vertex_to_vertex_fc_active.npy`
 
-Legacy compatibility: if the atlas-agnostic intrinsic path is missing, the implementation may read legacy atlas-specific intrinsic caches (`_shared/.../fc/<atlas>/<smoothing>/hemi_<L|R>/...`) and record the actual consumed path in the manifest. Intrinsic FC remains expected to be atlas-invariant; any non-identical intrinsic objects for the same `subject x smoothing x hemi` are treated as cache bugs and must fail fast.
+The implementation requires this atlas-agnostic intrinsic path. Missing intrinsic cache is a hard error (no atlas-specific fallback). Intrinsic FC remains expected to be atlas-invariant; any non-identical intrinsic objects for the same `subject x smoothing x hemi` are treated as cache bugs and must fail fast.
 
 Baseline feature definition:
 

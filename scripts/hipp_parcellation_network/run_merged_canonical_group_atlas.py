@@ -414,28 +414,23 @@ def subject_network_feature(shared_root: Path, subject: str, atlas: str, smoothi
 def intrinsic_feature_candidates(
     shared_root: Path,
     subject: str,
-    atlas: str,
     smoothing: str,
     hemi: str,
     run_id: int | None = None,
 ) -> list[Path]:
     file_rel = Path("hipp_vertex_to_vertex_fc_active.npy")
     run_rel = Path("runs") / f"run-{run_id}" / file_rel if run_id is not None else file_rel
-    return [
-        shared_root / f"sub-{subject}" / "fc" / "intrinsic" / smoothing / f"hemi_{hemi}" / run_rel,
-        shared_root / f"sub-{subject}" / "fc" / atlas / smoothing / f"hemi_{hemi}" / run_rel,
-    ]
+    return [shared_root / f"sub-{subject}" / "fc" / "intrinsic" / smoothing / f"hemi_{hemi}" / run_rel]
 
 
 def resolve_intrinsic_feature_path(
     shared_root: Path,
     subject: str,
-    atlas: str,
     smoothing: str,
     hemi: str,
     run_id: int | None = None,
 ) -> Path:
-    candidates = intrinsic_feature_candidates(shared_root, subject, atlas, smoothing, hemi, run_id)
+    candidates = intrinsic_feature_candidates(shared_root, subject, smoothing, hemi, run_id)
     for p in candidates:
         if p.exists():
             return p
@@ -445,7 +440,7 @@ def resolve_intrinsic_feature_path(
 
 
 def subject_intrinsic_feature(shared_root: Path, subject: str, atlas: str, smoothing: str, hemi: str, valid_mask: np.ndarray) -> np.ndarray:
-    p = resolve_intrinsic_feature_path(shared_root, subject, atlas, smoothing, hemi)
+    p = resolve_intrinsic_feature_path(shared_root, subject, smoothing, hemi)
     arr = np.load(p).astype(np.float32)
     n_v = int(valid_mask.size)
     n_valid = int(np.sum(valid_mask))
@@ -713,7 +708,7 @@ def runwise_feature_bank(
                     raise ValueError(f"Unexpected runwise network feature shape for {p}: {active.shape}")
                 out[rid][s] = full
             else:
-                p = resolve_intrinsic_feature_path(shared_root, s, atlas, smoothing, hemi, rid)
+                p = resolve_intrinsic_feature_path(shared_root, s, smoothing, hemi, rid)
                 arr = np.load(p).astype(np.float32)
                 arr = fisher_z_if_needed(arr)
                 np.fill_diagonal(arr, 0.0)
@@ -1076,7 +1071,7 @@ def main() -> int:
                             actual_input_paths[s] = str(p)
                             feature_bank[s] = subject_network_feature(shared_root, s, atlas, smoothing, hemi, method)
                         else:
-                            p = resolve_intrinsic_feature_path(shared_root, s, atlas, smoothing, hemi)
+                            p = resolve_intrinsic_feature_path(shared_root, s, smoothing, hemi)
                             actual_input_paths[s] = str(p)
                             feature_bank[s] = subject_intrinsic_feature(shared_root, s, atlas, smoothing, hemi, valid_masks[s])
 
