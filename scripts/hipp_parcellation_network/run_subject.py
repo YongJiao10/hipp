@@ -7,6 +7,7 @@ import json
 import math
 import subprocess
 import sys
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -315,26 +316,26 @@ def split_run_bounds(n_timepoints: int, n_runs: int) -> list[tuple[int, int]]:
     return [(idx * run_length, (idx + 1) * run_length) for idx in range(n_runs)]
 
 
-def split_surface_timeseries_to_runs(
-    concat_path: Path,
-    out_paths: list[Path],
+def split_surface_timeseries_array_to_runs(
+    concat_arr: np.ndarray,
     run_lengths: list[int],
-) -> None:
-    arr = np.load(concat_path).astype(np.float32)
+) -> list[np.ndarray]:
+    arr = np.asarray(concat_arr, dtype=np.float32)
     if arr.ndim != 2:
-        raise ValueError(f"Expected 2D surface timeseries, got shape {arr.shape} for {concat_path}")
+        raise ValueError(f"Expected 2D surface timeseries, got shape {arr.shape}")
     expected = int(sum(int(x) for x in run_lengths))
     if int(arr.shape[1]) != expected:
         raise ValueError(
             "Concat surface timeseries length mismatch: "
-            f"{concat_path} has {arr.shape[1]} frames but run lengths sum to {expected}"
+            f"surface timeseries has {arr.shape[1]} frames but run lengths sum to {expected}"
         )
+    chunks: list[np.ndarray] = []
     offset = 0
-    for out_path, run_len in zip(out_paths, run_lengths, strict=True):
-        out_path.parent.mkdir(parents=True, exist_ok=True)
+    for run_len in run_lengths:
         next_offset = offset + int(run_len)
-        np.save(out_path, arr[:, offset:next_offset].astype(np.float32, copy=False))
+        chunks.append(arr[:, offset:next_offset].astype(np.float32, copy=False))
         offset = next_offset
+    return chunks
 
 
 def resolve_runwise_dtseries(
@@ -2265,6 +2266,7 @@ def main() -> int:
     shared_reference_store_dir = shared_store_root / f"sub-{subject}" / "reference" / atlas_slug
     shared_surface_store_dir = shared_store_root / f"sub-{subject}" / "surface"
     shared_fc_store_dir = shared_store_root / f"sub-{subject}" / "fc" / atlas_slug
+    shared_intrinsic_store_dir = shared_store_root / f"sub-{subject}" / "fc" / "intrinsic"
     scene = Path(args.scene).resolve()
     func_input_dir = input_root / f"sub-{subject}" / "func"
 
@@ -2294,7 +2296,7 @@ def main() -> int:
             concat_dtseries=dtseries,
             runwise_dtseries=runwise_dtseries,
         )
-        surface_run_input_mode = "split_from_concat_surface"
+        surface_run_input_mode = "split_from_concat_surface_in_memory"
     else:
         total_tp = int(nib.load(str(dtseries)).shape[0])
         dtseries_run_input_mode = "concat_no_split"
@@ -2708,12 +2710,8 @@ def main() -> int:
     left_hipp_tsnr_summary = json.loads((hipp_tsnr_dir / f"sub-{subject}_hemi-L_tsnr_gate_summary.json").read_text(encoding="utf-8"))
     right_hipp_tsnr_summary = json.loads((hipp_tsnr_dir / f"sub-{subject}_hemi-R_tsnr_gate_summary.json").read_text(encoding="utf-8"))
 
-    two_mm_left_func = shared_surface_store_dir / "2mm" / f"sub-{subject}_hemi-L_space-corobl_den-{hipp_density}_label-hipp_bold.func.gii"
-    two_mm_right_func = shared_surface_store_dir / "2mm" / f"sub-{subject}_hemi-R_space-corobl_den-{hipp_density}_label-hipp_bold.func.gii"
     two_mm_left_path = shared_surface_store_dir / "2mm" / f"sub-{subject}_hemi-L_timeseries.npy"
     two_mm_right_path = shared_surface_store_dir / "2mm" / f"sub-{subject}_hemi-R_timeseries.npy"
-    fwhm_left_func = shared_surface_store_dir / "4mm" / f"sub-{subject}_hemi-L_space-corobl_den-{hipp_density}_label-hipp_bold.func.gii"
-    fwhm_right_func = shared_surface_store_dir / "4mm" / f"sub-{subject}_hemi-R_space-corobl_den-{hipp_density}_label-hipp_bold.func.gii"
     fwhm_left_path = shared_surface_store_dir / "4mm" / f"sub-{subject}_hemi-L_timeseries.npy"
     fwhm_right_path = shared_surface_store_dir / "4mm" / f"sub-{subject}_hemi-R_timeseries.npy"
     surface_params = {
@@ -2723,15 +2721,12 @@ def main() -> int:
         "smoothing_roi_policy": "high_tsnr_vertices_only",
         "raw_source_policy": "strict_shared_pipeline_func_gii_only",
         "null_policy": "strict_invalid_initial_only",
+        "persist_smoothed_metric_func_gii": False,
     }
     surface_inputs = [left_raw_metric, right_raw_metric, left_surface, right_surface, left_roi_path, right_roi_path, *_bold_inputs]
     surface_outputs = [
-        two_mm_left_func,
-        two_mm_right_func,
         two_mm_left_path,
         two_mm_right_path,
-        fwhm_left_func,
-        fwhm_right_func,
         fwhm_left_path,
         fwhm_right_path,
     ]
@@ -2743,47 +2738,54 @@ def main() -> int:
         inputs=surface_inputs,
         outputs=surface_outputs,
     ):
-        for _hemi, surface_path, metric_path, smooth_mm, out_metric, roi_path in [
-            ("L", left_surface, left_raw_metric, "2", two_mm_left_func, left_roi_path),
-            ("R", right_surface, right_raw_metric, "2", two_mm_right_func, right_roi_path),
-            ("L", left_surface, left_raw_metric, "4", fwhm_left_func, left_roi_path),
-            ("R", right_surface, right_raw_metric, "4", fwhm_right_func, right_roi_path),
-        ]:
-            smooth_metric_with_roi(
-                surface_path=surface_path,
-                metric_path=metric_path,
-                smooth_mm=smooth_mm,
-                out_metric=out_metric,
-                roi_path=roi_path,
+        shared_surface_store_dir.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix=f"sub-{subject}_surface_smooth_", dir=str(shared_surface_store_dir)) as tmp_dir:
+            tmp_root = Path(tmp_dir)
+            two_mm_left_func = tmp_root / f"sub-{subject}_hemi-L_2mm.func.gii"
+            two_mm_right_func = tmp_root / f"sub-{subject}_hemi-R_2mm.func.gii"
+            fwhm_left_func = tmp_root / f"sub-{subject}_hemi-L_4mm.func.gii"
+            fwhm_right_func = tmp_root / f"sub-{subject}_hemi-R_4mm.func.gii"
+            for _hemi, surface_path, metric_path, smooth_mm, out_metric, roi_path in [
+                ("L", left_surface, left_raw_metric, "2", two_mm_left_func, left_roi_path),
+                ("R", right_surface, right_raw_metric, "2", two_mm_right_func, right_roi_path),
+                ("L", left_surface, left_raw_metric, "4", fwhm_left_func, left_roi_path),
+                ("R", right_surface, right_raw_metric, "4", fwhm_right_func, right_roi_path),
+            ]:
+                smooth_metric_with_roi(
+                    surface_path=surface_path,
+                    metric_path=metric_path,
+                    smooth_mm=smooth_mm,
+                    out_metric=out_metric,
+                    roi_path=roi_path,
+                )
+            np.save(
+                two_mm_left_path,
+                sanitize_timeseries_with_mask(
+                    load_metric_array(two_mm_left_func, expected_n_vertices=int(left_coords.shape[0])),
+                    left_valid_mask,
+                ),
             )
-        np.save(
-            two_mm_left_path,
-            sanitize_timeseries_with_mask(
-                load_metric_array(two_mm_left_func, expected_n_vertices=int(left_coords.shape[0])),
-                left_valid_mask,
-            ),
-        )
-        np.save(
-            two_mm_right_path,
-            sanitize_timeseries_with_mask(
-                load_metric_array(two_mm_right_func, expected_n_vertices=int(right_coords.shape[0])),
-                right_valid_mask,
-            ),
-        )
-        np.save(
-            fwhm_left_path,
-            sanitize_timeseries_with_mask(
-                load_metric_array(fwhm_left_func, expected_n_vertices=int(left_coords.shape[0])),
-                left_valid_mask,
-            ),
-        )
-        np.save(
-            fwhm_right_path,
-            sanitize_timeseries_with_mask(
-                load_metric_array(fwhm_right_func, expected_n_vertices=int(right_coords.shape[0])),
-                right_valid_mask,
-            ),
-        )
+            np.save(
+                two_mm_right_path,
+                sanitize_timeseries_with_mask(
+                    load_metric_array(two_mm_right_func, expected_n_vertices=int(right_coords.shape[0])),
+                    right_valid_mask,
+                ),
+            )
+            np.save(
+                fwhm_left_path,
+                sanitize_timeseries_with_mask(
+                    load_metric_array(fwhm_left_func, expected_n_vertices=int(left_coords.shape[0])),
+                    left_valid_mask,
+                ),
+            )
+            np.save(
+                fwhm_right_path,
+                sanitize_timeseries_with_mask(
+                    load_metric_array(fwhm_right_func, expected_n_vertices=int(right_coords.shape[0])),
+                    right_valid_mask,
+                ),
+            )
         write_stage_manifest(
             stage_dir=shared_surface_store_dir,
             stage_name="surface",
@@ -2801,99 +2803,6 @@ def main() -> int:
         fwhm_left_path=fwhm_left_path,
         fwhm_right_path=fwhm_right_path,
     )
-
-    run_surface_specs: list[dict[str, object]] = []
-    if args.run_split_mode == "none":
-        for spec in RUN_SPECS:
-            run_surface_specs.append(
-                {
-                    "run_id": spec["run_id"],
-                    "label": spec["label"],
-                    "2mm_left": two_mm_left_path,
-                    "2mm_right": two_mm_right_path,
-                    "4mm_left": fwhm_left_path,
-                    "4mm_right": fwhm_right_path,
-                }
-            )
-    else:
-        run_surface_base_dir = shared_surface_store_dir / "runs_from_concat"
-        for spec, run_len in zip(RUN_SPECS, dtseries_run_lengths, strict=True):
-            run_surface_dir = run_surface_base_dir / f"run-{spec['run_id']}"
-            run_two_mm_left_path = run_surface_dir / "2mm" / f"sub-{subject}_hemi-L_timeseries.npy"
-            run_two_mm_right_path = run_surface_dir / "2mm" / f"sub-{subject}_hemi-R_timeseries.npy"
-            run_four_mm_left_path = run_surface_dir / "4mm" / f"sub-{subject}_hemi-L_timeseries.npy"
-            run_four_mm_right_path = run_surface_dir / "4mm" / f"sub-{subject}_hemi-R_timeseries.npy"
-            run_surface_params = {
-                "subject": subject,
-                "run_id": spec["run_id"],
-                "source_mode": "concat_surface_split",
-                "run_length": int(run_len),
-                "run_lengths": [int(x) for x in dtseries_run_lengths],
-                "null_policy": "strict_invalid_initial_only",
-            }
-            run_surface_outputs = [
-                run_two_mm_left_path,
-                run_two_mm_right_path,
-                run_four_mm_left_path,
-                run_four_mm_right_path,
-            ]
-            if not stage_is_up_to_date(
-                stage_dir=run_surface_dir,
-                resume_mode=resume_mode,
-                stage_name="surface_run_from_concat_surface",
-                params=run_surface_params,
-                inputs=[two_mm_left_path, two_mm_right_path, fwhm_left_path, fwhm_right_path],
-                outputs=run_surface_outputs,
-            ):
-                split_surface_timeseries_to_runs(
-                    two_mm_left_path,
-                    [
-                        run_surface_base_dir / f"run-{s['run_id']}" / "2mm" / f"sub-{subject}_hemi-L_timeseries.npy"
-                        for s in RUN_SPECS
-                    ],
-                    dtseries_run_lengths,
-                )
-                split_surface_timeseries_to_runs(
-                    two_mm_right_path,
-                    [
-                        run_surface_base_dir / f"run-{s['run_id']}" / "2mm" / f"sub-{subject}_hemi-R_timeseries.npy"
-                        for s in RUN_SPECS
-                    ],
-                    dtseries_run_lengths,
-                )
-                split_surface_timeseries_to_runs(
-                    fwhm_left_path,
-                    [
-                        run_surface_base_dir / f"run-{s['run_id']}" / "4mm" / f"sub-{subject}_hemi-L_timeseries.npy"
-                        for s in RUN_SPECS
-                    ],
-                    dtseries_run_lengths,
-                )
-                split_surface_timeseries_to_runs(
-                    fwhm_right_path,
-                    [
-                        run_surface_base_dir / f"run-{s['run_id']}" / "4mm" / f"sub-{subject}_hemi-R_timeseries.npy"
-                        for s in RUN_SPECS
-                    ],
-                    dtseries_run_lengths,
-                )
-                write_stage_manifest(
-                    stage_dir=run_surface_dir,
-                    stage_name="surface_run_from_concat_surface",
-                    params=run_surface_params,
-                    inputs=[two_mm_left_path, two_mm_right_path, fwhm_left_path, fwhm_right_path],
-                    outputs=run_surface_outputs,
-                )
-            run_surface_specs.append(
-                {
-                    "run_id": spec["run_id"],
-                    "label": spec["label"],
-                    "2mm_left": run_two_mm_left_path,
-                    "2mm_right": run_two_mm_right_path,
-                    "4mm_left": run_four_mm_left_path,
-                    "4mm_right": run_four_mm_right_path,
-                }
-            )
 
     smooth_specs: dict[str, dict[str, np.ndarray | str]] = {
         "2mm": {
@@ -2915,10 +2824,6 @@ def main() -> int:
         two_mm_right_path,
         fwhm_left_path,
         fwhm_right_path,
-        *[Path(item["2mm_left"]) for item in run_surface_specs],
-        *[Path(item["2mm_right"]) for item in run_surface_specs],
-        *[Path(item["4mm_left"]) for item in run_surface_specs],
-        *[Path(item["4mm_right"]) for item in run_surface_specs],
         hipp_tsnr_dir / f"sub-{subject}_hemi-L_valid_mask.npy",
         hipp_tsnr_dir / f"sub-{subject}_hemi-R_valid_mask.npy",
         hipp_tsnr_dir / f"sub-{subject}_hemi-L_invalid_initial_mask.npy",
@@ -2948,8 +2853,12 @@ def main() -> int:
             valid_mask = left_valid_mask if hemi == "L" else right_valid_mask
             invalid_initial_mask = left_invalid_initial_mask if hemi == "L" else right_invalid_initial_mask
             active_mask = valid_mask
-            run_ts_paths = [Path(item[f"{smooth_name}_{'left' if hemi == 'L' else 'right'}"]) for item in run_surface_specs]
+            if args.run_split_mode == "runwise":
+                run_ts_arrays = split_surface_timeseries_array_to_runs(ts, dtseries_run_lengths)
+            else:
+                run_ts_arrays = [ts for _ in RUN_SPECS]
             shared_hemi_fc_dir = shared_fc_store_dir / smooth_name / f"hemi_{hemi}"
+            intrinsic_hemi_fc_dir = shared_intrinsic_store_dir / smooth_name / f"hemi_{hemi}"
             shared_hemi_fc_outputs = [
                 shared_hemi_fc_dir / "hipp_vertex_to_network_fc.npy",
                 shared_hemi_fc_dir / "hipp_vertex_to_network_fc_active.npy",
@@ -2957,9 +2866,9 @@ def main() -> int:
                 *[shared_hemi_fc_dir / "runs" / f"run-{item['run_id']}" / "hipp_vertex_to_network_fc_active.npy" for item in RUN_SPECS],
                 *(
                     [
-                        shared_hemi_fc_dir / "hipp_vertex_to_vertex_fc_active.npy",
+                        intrinsic_hemi_fc_dir / "hipp_vertex_to_vertex_fc_active.npy",
                         *[
-                            shared_hemi_fc_dir / "runs" / f"run-{item['run_id']}" / "hipp_vertex_to_vertex_fc_active.npy"
+                            intrinsic_hemi_fc_dir / "runs" / f"run-{item['run_id']}" / "hipp_vertex_to_vertex_fc_active.npy"
                             for item in RUN_SPECS
                         ],
                     ]
@@ -2977,7 +2886,7 @@ def main() -> int:
                 resume_mode=resume_mode,
                 stage_name="shared_fc",
                 params=shared_hemi_fc_params,
-                inputs=[*shared_fc_stage_inputs, *run_ts_paths],
+                inputs=shared_fc_stage_inputs,
                 outputs=shared_hemi_fc_outputs,
             ):
                 shared_hemi_fc_dir.mkdir(parents=True, exist_ok=True)
@@ -2990,7 +2899,8 @@ def main() -> int:
                 intrinsic_fc_active = None
                 if need_intrinsic_fc:
                     intrinsic_fc_active = corrcoef_rows(ts[active_mask, :], ts[active_mask, :]).astype(np.float32)
-                    np.save(shared_hemi_fc_dir / "hipp_vertex_to_vertex_fc_active.npy", intrinsic_fc_active)
+                    intrinsic_hemi_fc_dir.mkdir(parents=True, exist_ok=True)
+                    np.save(intrinsic_hemi_fc_dir / "hipp_vertex_to_vertex_fc_active.npy", intrinsic_fc_active)
                 summary_payload: dict[str, object] = {
                     "subject": subject,
                     "atlas_slug": atlas_slug,
@@ -3019,8 +2929,7 @@ def main() -> int:
                     shared_hemi_fc_dir / "fc_summary.json",
                     summary_payload,
                 )
-                for run_spec, run_ts_path, run_network in zip(RUN_SPECS, run_ts_paths, run_network_ts, strict=True):
-                    run_ts_full = np.load(run_ts_path).astype(np.float32)
+                for run_spec, run_ts_full, run_network in zip(RUN_SPECS, run_ts_arrays, run_network_ts, strict=True):
                     run_fc_valid = corrcoef_rows(run_ts_full[valid_mask, :], run_network)
                     run_fc_full = np.full((run_ts_full.shape[0], run_network.shape[0]), np.nan, dtype=np.float32)
                     run_fc_full[valid_mask, :] = run_fc_valid.astype(np.float32)
@@ -3033,12 +2942,14 @@ def main() -> int:
                             run_ts_full[active_mask, :],
                             run_ts_full[active_mask, :],
                         ).astype(np.float32)
-                        np.save(run_fc_dir / "hipp_vertex_to_vertex_fc_active.npy", run_intrinsic_fc_active)
+                        run_intrinsic_dir = intrinsic_hemi_fc_dir / "runs" / f"run-{run_spec['run_id']}"
+                        run_intrinsic_dir.mkdir(parents=True, exist_ok=True)
+                        np.save(run_intrinsic_dir / "hipp_vertex_to_vertex_fc_active.npy", run_intrinsic_fc_active)
                 write_stage_manifest(
                     stage_dir=shared_hemi_fc_dir,
                     stage_name="shared_fc",
                     params=shared_hemi_fc_params,
-                    inputs=[*shared_fc_stage_inputs, *run_ts_paths],
+                    inputs=shared_fc_stage_inputs,
                     outputs=shared_hemi_fc_outputs,
                 )
 
@@ -3049,6 +2960,7 @@ def main() -> int:
         "atlas_display_name": atlas_cfg["display_name"],
         "hipp_density": hipp_density,
         "shared_fc_store_dir": str(shared_fc_store_dir),
+        "shared_intrinsic_store_dir": str(shared_intrinsic_store_dir),
         "smoothings": SMOOTH_ORDER,
         "hemisphere_policy": "per-hemi",
         "k_policy": "run-aware-instability_2_to_10_per_hemi",
@@ -3106,10 +3018,6 @@ def main() -> int:
         two_mm_right_path,
         fwhm_left_path,
         fwhm_right_path,
-        *[Path(spec["2mm_left"]) for spec in run_surface_specs],
-        *[Path(spec["2mm_right"]) for spec in run_surface_specs],
-        *[Path(spec["4mm_left"]) for spec in run_surface_specs],
-        *[Path(spec["4mm_right"]) for spec in run_surface_specs],
         left_surface,
         right_surface,
         cortex_tsnr_summary_path,
@@ -3130,9 +3038,14 @@ def main() -> int:
                     ],
                     *(
                         [
-                            shared_hemi_fc_dir / "hipp_vertex_to_vertex_fc_active.npy",
+                            shared_intrinsic_store_dir / smooth_name / f"hemi_{hemi}" / "hipp_vertex_to_vertex_fc_active.npy",
                             *[
-                                shared_hemi_fc_dir / "runs" / f"run-{spec['run_id']}" / "hipp_vertex_to_vertex_fc_active.npy"
+                                shared_intrinsic_store_dir
+                                / smooth_name
+                                / f"hemi_{hemi}"
+                                / "runs"
+                                / f"run-{spec['run_id']}"
+                                / "hipp_vertex_to_vertex_fc_active.npy"
                                 for spec in RUN_SPECS
                             ],
                         ]
@@ -3196,11 +3109,13 @@ def main() -> int:
                 intrinsic_fc_runs = None
                 if is_intrinsic_spectral_branch(branch_slug):
                     intrinsic_fc_active = np.load(
-                        shared_hemi_fc_dir / "hipp_vertex_to_vertex_fc_active.npy"
+                        shared_intrinsic_store_dir / smooth_name / f"hemi_{hemi}" / "hipp_vertex_to_vertex_fc_active.npy"
                     ).astype(np.float32)
                     intrinsic_fc_runs = [
                         np.load(
-                            shared_hemi_fc_dir
+                            shared_intrinsic_store_dir
+                            / smooth_name
+                            / f"hemi_{hemi}"
                             / "runs"
                             / f"run-{spec['run_id']}"
                             / "hipp_vertex_to_vertex_fc_active.npy"

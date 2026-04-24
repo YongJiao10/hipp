@@ -4,7 +4,6 @@ from __future__ import annotations
 import argparse
 import csv
 import json
-import shutil
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
@@ -187,25 +186,6 @@ def materialize_reference(shared_root: Path, subject: str) -> None:
         raise RuntimeError(f"Run lengths do not sum to full Kong8 time series for sub-{subject}: {offset} vs {ts.shape[1]}")
 
 
-def copy_intrinsic_if_needed(shared_root: Path, subject: str, smoothing: str, hemi: str) -> None:
-    src = shared_root / f"sub-{subject}" / "fc" / KONG7 / smoothing / f"hemi_{hemi}"
-    dst = shared_root / f"sub-{subject}" / "fc" / KONG8 / smoothing / f"hemi_{hemi}"
-    dst.mkdir(parents=True, exist_ok=True)
-    for rel in ["hipp_vertex_to_vertex_fc_active.npy", *[f"runs/run-{rid}/hipp_vertex_to_vertex_fc_active.npy" for rid in RUN_IDS]]:
-        src_file = src / rel
-        dst_file = dst / rel
-        if not src_file.exists():
-            raise FileNotFoundError(f"Missing intrinsic source cache: {src_file}")
-        dst_file.parent.mkdir(parents=True, exist_ok=True)
-        if dst_file.exists():
-            a = np.load(src_file)
-            b = np.load(dst_file)
-            if a.shape != b.shape or not np.allclose(a, b, rtol=1e-6, atol=1e-7, equal_nan=True):
-                raise RuntimeError(f"Kong8 intrinsic cache differs from Kong7 source: {dst_file}")
-        else:
-            shutil.copy2(src_file, dst_file)
-
-
 def materialize_fc(shared_root: Path, subject: str, atlas: str, smoothing: str, hemi: str) -> None:
     fc_dir = shared_root / f"sub-{subject}" / "fc" / atlas / smoothing / f"hemi_{hemi}"
     fc_dir.mkdir(parents=True, exist_ok=True)
@@ -240,19 +220,20 @@ def materialize_fc(shared_root: Path, subject: str, atlas: str, smoothing: str, 
             "n_timepoints": int(ts.shape[1]),
         },
     )
+    offset = 0
     for rid in RUN_IDS:
-        run_ts = np.load(
-            shared_root
-            / f"sub-{subject}"
-            / "surface"
-            / "runs_from_concat"
-            / f"run-{rid}"
-            / smoothing
-            / f"sub-{subject}_hemi-{hemi}_timeseries.npy"
-        ).astype(np.float32)
         run_net = np.load(
             shared_root / f"sub-{subject}" / "reference" / atlas / "runs" / f"run-{rid}" / "cortex_canonical_network_timeseries.npy"
         ).astype(np.float32)
+        run_len = int(run_net.shape[1])
+        next_offset = offset + run_len
+        run_ts = ts[:, offset:next_offset].astype(np.float32, copy=False)
+        if run_ts.shape[1] != run_len:
+            raise RuntimeError(
+                f"Runwise time mismatch for sub-{subject} {atlas} {smoothing} hemi-{hemi} run-{rid}: "
+                f"slice_len={run_ts.shape[1]} expected={run_len}"
+            )
+        offset = next_offset
         if run_ts.shape[1] != run_net.shape[1]:
             raise RuntimeError(f"Runwise time mismatch for sub-{subject} {atlas} {smoothing} hemi-{hemi} run-{rid}")
         run_dir = fc_dir / "runs" / f"run-{rid}"
@@ -261,6 +242,11 @@ def materialize_fc(shared_root: Path, subject: str, atlas: str, smoothing: str, 
         np.save(run_dir / "hipp_vertex_to_network_fc_active.npy", run_pearson_valid.astype(np.float32))
         run_partial_valid = one_sided_network_partial_corr_rows(run_ts[valid_mask, :], run_net)
         np.save(run_dir / "hipp_vertex_to_network_partial_fc_active.npy", run_partial_valid.astype(np.float32))
+    if offset != int(ts.shape[1]):
+        raise RuntimeError(
+            f"Run lengths do not sum to full hippocampal timeseries for sub-{subject} {atlas} {smoothing} hemi-{hemi}: "
+            f"{offset} vs {ts.shape[1]}"
+        )
 
 
 def process_subject(
@@ -276,8 +262,6 @@ def process_subject(
         materialize_reference(shared_root, subject)
     for smoothing in smoothings:
         for hemi in hemis:
-            if KONG8 in atlases:
-                copy_intrinsic_if_needed(shared_root, subject, smoothing, hemi)
             for atlas in atlases:
                 materialize_fc(shared_root, subject, atlas, smoothing, hemi)
                 n_fc += 1

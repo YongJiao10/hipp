@@ -384,18 +384,31 @@ def load_atlas_reference(shared_root: Path, subject: str, atlas: str) -> AtlasRe
     )
 
 
-def load_runwise_hipp_timeseries(shared_root: Path, subject: str, smoothing: str, hemi: str) -> tuple[np.ndarray, list[np.ndarray]]:
+def load_runwise_hipp_timeseries(
+    shared_root: Path,
+    subject: str,
+    smoothing: str,
+    hemi: str,
+    run_bounds: list[tuple[int, int]],
+) -> tuple[np.ndarray, list[np.ndarray]]:
     base = shared_root / "_shared" / f"sub-{subject}" / "surface"
     valid_mask_path = base / "tsnr_gate" / f"sub-{subject}_hemi-{hemi}_valid_mask.npy"
     if not valid_mask_path.exists():
         raise FileNotFoundError(f"Missing hippocampal valid mask: {valid_mask_path}")
     valid_mask = np.load(valid_mask_path).astype(bool)
-    runs = []
-    for run_id in RUN_IDS:
-        path = base / "runs_from_concat" / f"run-{run_id}" / smoothing / f"sub-{subject}_hemi-{hemi}_timeseries.npy"
-        if not path.exists():
-            raise FileNotFoundError(f"Missing runwise hippocampal timeseries: {path}")
-        runs.append(np.load(path).astype(np.float32))
+    concat_path = base / smoothing / f"sub-{subject}_hemi-{hemi}_timeseries.npy"
+    if not concat_path.exists():
+        raise FileNotFoundError(f"Missing concatenated hippocampal timeseries: {concat_path}")
+    concat = np.load(concat_path).astype(np.float32)
+    runs: list[np.ndarray] = []
+    for run_id, (start, stop) in zip(RUN_IDS, run_bounds, strict=True):
+        run = concat[:, int(start) : int(stop)].astype(np.float32, copy=False)
+        if run.shape[1] != int(stop - start):
+            raise DataConsistencyError(
+                f"Runwise slice mismatch for sub-{subject} run-{run_id}: "
+                f"slice_len={run.shape[1]} expected={int(stop - start)}"
+            )
+        runs.append(run)
     for run in runs:
         if run.shape[0] != valid_mask.size:
             raise DataConsistencyError(
@@ -527,7 +540,13 @@ def ensure_step1_subject(
         selected_idx = np.asarray([label_to_idx[str(label)] for label in seed_basis["roi_labels"]], dtype=np.int32)
     except KeyError as exc:
         raise DataConsistencyError(f"Subject sub-{subject} is missing shared seed ROI label: {exc}") from exc
-    valid_mask, hipp_runs = load_runwise_hipp_timeseries(shared_root, subject, combo.smoothing, combo.hemi)
+    valid_mask, hipp_runs = load_runwise_hipp_timeseries(
+        shared_root,
+        subject,
+        combo.smoothing,
+        combo.hemi,
+        atlas_ref.run_bounds,
+    )
 
     if len(atlas_ref.run_bounds) != len(hipp_runs):
         raise DataConsistencyError(f"Run-count mismatch for sub-{subject} {combo.atlas} {combo.smoothing} hemi-{combo.hemi}")

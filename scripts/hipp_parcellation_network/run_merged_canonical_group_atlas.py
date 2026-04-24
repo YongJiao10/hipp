@@ -411,10 +411,41 @@ def subject_network_feature(shared_root: Path, subject: str, atlas: str, smoothi
     return arr
 
 
+def intrinsic_feature_candidates(
+    shared_root: Path,
+    subject: str,
+    atlas: str,
+    smoothing: str,
+    hemi: str,
+    run_id: int | None = None,
+) -> list[Path]:
+    file_rel = Path("hipp_vertex_to_vertex_fc_active.npy")
+    run_rel = Path("runs") / f"run-{run_id}" / file_rel if run_id is not None else file_rel
+    return [
+        shared_root / f"sub-{subject}" / "fc" / "intrinsic" / smoothing / f"hemi_{hemi}" / run_rel,
+        shared_root / f"sub-{subject}" / "fc" / atlas / smoothing / f"hemi_{hemi}" / run_rel,
+    ]
+
+
+def resolve_intrinsic_feature_path(
+    shared_root: Path,
+    subject: str,
+    atlas: str,
+    smoothing: str,
+    hemi: str,
+    run_id: int | None = None,
+) -> Path:
+    candidates = intrinsic_feature_candidates(shared_root, subject, atlas, smoothing, hemi, run_id)
+    for p in candidates:
+        if p.exists():
+            return p
+    raise FileNotFoundError(
+        "Missing intrinsic FC cache. Tried:\n" + "\n".join(str(p) for p in candidates)
+    )
+
+
 def subject_intrinsic_feature(shared_root: Path, subject: str, atlas: str, smoothing: str, hemi: str, valid_mask: np.ndarray) -> np.ndarray:
-    p = shared_root / f"sub-{subject}" / "fc" / atlas / smoothing / f"hemi_{hemi}" / "hipp_vertex_to_vertex_fc_active.npy"
-    if not p.exists():
-        raise FileNotFoundError(f"Missing intrinsic FC cache: {p}")
+    p = resolve_intrinsic_feature_path(shared_root, subject, atlas, smoothing, hemi)
     arr = np.load(p).astype(np.float32)
     n_v = int(valid_mask.size)
     n_valid = int(np.sum(valid_mask))
@@ -435,29 +466,29 @@ def subject_intrinsic_feature(shared_root: Path, subject: str, atlas: str, smoot
 
 
 def verify_intrinsic_atlas_invariance(shared_root: Path, subjects: list[str], smoothing: str, hemi: str, atlases: list[str]) -> None:
-    if len(atlases) < 2:
-        return
-    ref_atlas = atlases[0]
     for subject in subjects:
-        p_ref = shared_root / f"sub-{subject}" / "fc" / ref_atlas / smoothing / f"hemi_{hemi}" / "hipp_vertex_to_vertex_fc_active.npy"
-        if not p_ref.exists():
-            continue
-        ref = np.load(p_ref)
-        for atlas in atlases[1:]:
+        p_intrinsic = shared_root / f"sub-{subject}" / "fc" / "intrinsic" / smoothing / f"hemi_{hemi}" / "hipp_vertex_to_vertex_fc_active.npy"
+        ref = np.load(p_intrinsic) if p_intrinsic.exists() else None
+        ref_path = p_intrinsic if p_intrinsic.exists() else None
+        for atlas in atlases:
             p_cmp = shared_root / f"sub-{subject}" / "fc" / atlas / smoothing / f"hemi_{hemi}" / "hipp_vertex_to_vertex_fc_active.npy"
             if not p_cmp.exists():
                 continue
             cmp = np.load(p_cmp)
+            if ref is None:
+                ref = cmp
+                ref_path = p_cmp
+                continue
             if ref.shape != cmp.shape:
                 raise RuntimeError(
                     f"Intrinsic cache atlas-invariance violation for sub-{subject} {smoothing} hemi-{hemi}: "
-                    f"{p_ref} vs {p_cmp}"
+                    f"{ref_path} vs {p_cmp}"
                 )
             if not np.allclose(ref, cmp, rtol=1e-6, atol=1e-7, equal_nan=True):
                 max_abs = float(np.nanmax(np.abs(ref - cmp)))
                 raise RuntimeError(
                     f"Intrinsic cache atlas-invariance violation for sub-{subject} {smoothing} hemi-{hemi}: "
-                    f"{p_ref} vs {p_cmp}; max_abs_diff={max_abs:.3e}"
+                    f"{ref_path} vs {p_cmp}; max_abs_diff={max_abs:.3e}"
                 )
 
 
@@ -682,19 +713,7 @@ def runwise_feature_bank(
                     raise ValueError(f"Unexpected runwise network feature shape for {p}: {active.shape}")
                 out[rid][s] = full
             else:
-                p = (
-                    shared_root
-                    / f"sub-{s}"
-                    / "fc"
-                    / atlas
-                    / smoothing
-                    / f"hemi_{hemi}"
-                    / "runs"
-                    / f"run-{rid}"
-                    / "hipp_vertex_to_vertex_fc_active.npy"
-                )
-                if not p.exists():
-                    raise FileNotFoundError(f"Missing runwise intrinsic feature: {p}")
+                p = resolve_intrinsic_feature_path(shared_root, s, atlas, smoothing, hemi, rid)
                 arr = np.load(p).astype(np.float32)
                 arr = fisher_z_if_needed(arr)
                 np.fill_diagonal(arr, 0.0)
@@ -1057,7 +1076,7 @@ def main() -> int:
                             actual_input_paths[s] = str(p)
                             feature_bank[s] = subject_network_feature(shared_root, s, atlas, smoothing, hemi, method)
                         else:
-                            p = shared_root / f"sub-{s}" / "fc" / atlas / smoothing / f"hemi_{hemi}" / "hipp_vertex_to_vertex_fc_active.npy"
+                            p = resolve_intrinsic_feature_path(shared_root, s, atlas, smoothing, hemi)
                             actual_input_paths[s] = str(p)
                             feature_bank[s] = subject_intrinsic_feature(shared_root, s, atlas, smoothing, hemi, valid_masks[s])
 

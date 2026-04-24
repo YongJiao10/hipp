@@ -76,12 +76,13 @@ All branches share the same upstream preprocessing:
 5. Resolve run-wise inputs for run-aware instability:
    use explicit `run-1..4` `dtseries` files when present to derive run lengths; otherwise infer equal four-way run boundaries from `run-concat.dtseries` length.
    The workflow does not materialize run-level `dtseries` files.
-   Run-wise hippocampal inputs are then derived only by splitting shared concat hippocampal surface timeseries with those run boundaries (no raw volume BOLD run-splitting).
+   Run-wise hippocampal inputs are then derived only by in-memory slicing of shared concat hippocampal surface timeseries with those run boundaries (no raw volume BOLD run-splitting and no persisted `runs_from_concat` surface cache).
 6. Average ROI-component timeseries within each retained canonical network to create cortex canonical network timeseries.
 7. Generate the hippocampal raw surface timeseries inside the shared pipeline store by sampling `run-concat_bold` onto the left and right `corobl` surfaces with `trilinear` mapping and `smooth_iters = 0`, then treat the resulting `.func.gii` files as the only valid raw source.
 8. Compute hippocampal `tSNR = 10000 / std(t)` on those raw unsmoothed shared-pipeline `.func.gii` timeseries and hard-mask vertices with `tSNR < 25`.
 9. Apply all Workbench `2mm / 4mm` smoothing only inside the high-tSNR hippocampal ROI and only after the tSNR gate; masked hippocampal vertices never participate in smoothing.
-10. Compute direct `vertex-to-network FC` and `vertex-to-vertex FC` for each smoothing condition and hemisphere on high-tSNR vertices only, and store those matrices in the shared upstream store at the `subject x atlas x smoothing x hemisphere` level.
+   Intermediate smoothed `.func.gii` files are transient and not retained; only sanitized smoothed `.npy` timeseries are persisted in `_shared/.../surface/{2mm,4mm}/`.
+10. Compute direct `vertex-to-network FC` and `vertex-to-vertex FC` for each smoothing condition and hemisphere on high-tSNR vertices only. `vertex-to-network FC` is stored at `subject x atlas x smoothing x hemisphere`, while intrinsic `vertex-to-vertex FC` is stored in atlas-agnostic shared paths `_shared/.../fc/intrinsic/<smoothing>/hemi_<L|R>/...`.
 
 In notation:
 
@@ -104,7 +105,7 @@ Hard rules for this upstream:
 - Cortical `tSNR < 25` grayordinates do not participate in any ROI average, parent-network average, or canonical-network average.
 - Hippocampal raw input is strict: the analysis reads only the shared-pipeline raw `.func.gii` files generated from `run-concat_bold` with `trilinear` mapping and `smooth_iters = 0`.
 - No hippocampal fallback source is allowed: no archived directory reuse, no `.npy` substitution, and no pre-smoothed raw replacement.
-- Direct hippocampal `vertex-to-network FC` and `vertex-to-vertex FC` are shared upstream by `subject x atlas x smoothing x hemisphere`; branch routes must read those shared FC artifacts rather than recomputing them.
+- Direct hippocampal `vertex-to-network FC` and `vertex-to-vertex FC` are shared upstream artifacts; network FC is atlas-specific, intrinsic FC is atlas-agnostic. Branch routes must read these shared FC artifacts rather than recomputing them.
 - Hippocampal `tSNR < 25` vertices do not participate in smoothing, FC estimation, clustering, or final label assignment.
 
 ## Per-Atlas Merge Summary
@@ -496,12 +497,10 @@ Group-level present outputs (atlas+method comparison):
 
 ```text
 present_group/
-  <atlas>_kfree_group_overview.png
   <atlas>_network-spectral_group_overview.png
   <atlas>_intrinsic-spectral_group_overview.png
   <atlas>_group-network-spectral_group_overview.png
   <atlas>_group-intrinsic-spectral_group_overview.png
-  components/<atlas>/<method>/<smoothing>/*.png
   group_overview_manifest.json
   README.md
 ```
@@ -529,7 +528,7 @@ Scope:
 - coverage axis: threshold set includes `{0.70, 0.80, 0.90}`; default presentation threshold is `0.80`
 - K axis: `2..10` with `k_selection_mode=experimental`
 - stability: subject-split `ARI` (`B` resamples), plus weak/strong null diagnostics
-- overview K-selection panels plot subject-split `ARI = 1 - instability`; dotted curves are the strong-null ARI 5th percentile reference (`1 - I_null_95pct`) and vertical dashed lines mark selected `K*`
+- overview K-selection panels plot direct subject-split `group_ari_mean`; dotted curves are the strong-null ARI 5th percentile reference (`ARI_null_5pct`) and vertical dashed lines mark selected `K*`
 - outputs: `group_labels_final`, `cluster_network_profile`, assignment status (`dominant/unassigned` plus top1/top2 margin diagnostics), and run manifests with `V_min_fraction=0.03`
 
 Presentation companion:

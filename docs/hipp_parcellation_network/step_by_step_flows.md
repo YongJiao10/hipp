@@ -24,13 +24,14 @@ All ten methods share the same upstream steps before branch-specific processing:
 6. Resolve run-wise inputs for run-pair instability:
    if explicit `run-1..4` `dtseries` files are available, use them to derive run lengths; otherwise infer equal four-way run boundaries from `run-concat.dtseries` length.
    Do not materialize run-level `dtseries` files.
-   Run-wise hippocampal inputs are then generated only by splitting shared concat hippocampal surface timeseries with those run boundaries (no raw volume BOLD run-splitting).
+   Run-wise hippocampal inputs are then generated only by in-memory slicing of shared concat hippocampal surface timeseries with those run boundaries (no raw volume BOLD run-splitting and no persisted `runs_from_concat` surface cache).
 7. Average ROI-component timeseries within each retained canonical network to obtain cortex `network` timeseries.
 8. Generate left and right hippocampal raw surface timeseries inside the shared pipeline store by sampling `run-concat_bold` onto the `corobl` surfaces with `trilinear` mapping and `smooth_iters = 0`; these shared-pipeline `.func.gii` files are the only valid raw source.
 9. Compute hippocampal `tSNR = 10000 / std(t)` on those raw unsmoothed shared-pipeline `.func.gii` timeseries and hard-mask all vertices with `tSNR < 25`.
 10. Run `2mm` and `4mm` smoothing only after the hippocampal tSNR gate and only within the remaining high-tSNR hippocampal ROI so masked vertices never contribute to smoothed values.
+    The intermediate smoothed `.func.gii` files are transient and not retained; only sanitized smoothed `.npy` timeseries are persisted in `_shared/.../surface/{2mm,4mm}/`.
 11. Compute direct hippocampal `vertex-to-network FC` separately for each hemisphere and smoothing condition using only high-tSNR vertices, then cache those FC matrices in the shared upstream store at the `subject x atlas x smoothing x hemisphere` level.
-12. Compute direct hippocampal `vertex-to-vertex FC` separately for each hemisphere and smoothing condition on the same high-tSNR vertices, and cache those intrinsic FC matrices in the same shared upstream store for intrinsic branch reuse.
+12. Compute direct hippocampal `vertex-to-vertex FC` separately for each hemisphere and smoothing condition on the same high-tSNR vertices, and cache those intrinsic FC matrices in atlas-agnostic shared paths (`_shared/.../fc/intrinsic/<smoothing>/hemi_<L|R>/...`) for intrinsic branch reuse.
 
 ## K Selection Modes (Explicit)
 
@@ -78,7 +79,7 @@ Operational consequences:
 - hippocampal raw input is strict: use only the shared-pipeline raw `.func.gii` generated from `run-concat_bold` with `trilinear` mapping and `smooth_iters = 0`.
 - hippocampal `.npy` files, archived directories, and any other fallback source are disallowed for formal tSNR gating.
 - hippocampal `tSNR < 25` vertices are excluded before any smoothing; smoothing is not allowed to propagate signal through masked vertices.
-- direct hippocampal `vertex-to-network FC` and `vertex-to-vertex FC` are shared upstream artifacts keyed by `subject x atlas x smoothing x hemisphere`, not branch-local recomputation.
+- direct hippocampal `vertex-to-network FC` is keyed by `subject x atlas x smoothing x hemisphere`; direct hippocampal `vertex-to-vertex FC` is keyed by `subject x smoothing x hemisphere` (atlas-agnostic intrinsic cache). Both are shared upstream artifacts, not branch-local recomputation.
 - hippocampal `tSNR < 25` vertices remain excluded through clustering and final rendering.
 
 Per-atlas count change:
@@ -612,7 +613,6 @@ Group-level present overview:
 
 1. Run `scripts/hipp_parcellation_network/build_present_group_overview.py`.
 2. For each `atlas+method`, assemble one figure with two smoothing rows (`2mm`, `4mm`), each row in compact `2x2` layout.
-3. `kfree` rows include left/right `P_net_v`, WTA surface, and coverage summary.
 4. Each smoothing row uses two columns: left = info `2x2`, right = enlarged WTA surface.
 5. Spectral info `2x2` includes group-K instability curve, `cluster_network_probs` (cell values shown), `P_net_v` (network-name y labels), and `prior_matrix`.
 6. Write index artifacts to `present_group/group_overview_manifest.json` and `present_group/README.md`.

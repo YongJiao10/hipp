@@ -67,6 +67,7 @@ For each strategy and hemisphere, the final atlas is a **data-driven cluster atl
 The final product must provide:
 
 - hippocampal hard cluster labels `z(v) in {1..K_hipp}` on supported vertices
+- cluster ID numbering ordered along hippocampal long axis (`head -> tail`), not by cluster size
 - cluster sizes and support statistics
 - cluster-to-canonical-network association profiles
 - dominant canonical-network annotation per cluster
@@ -256,9 +257,9 @@ Data object definition:
 
 Preferred input path:
 
-- `_shared/.../fc/<atlas>/<smoothing>/hemi_<L|R>/hipp_vertex_to_vertex_fc_active.npy`
+- `_shared/.../fc/intrinsic/<smoothing>/hemi_<L|R>/hipp_vertex_to_vertex_fc_active.npy`
 
-If the implementation discovers a different cache filename with the same data semantics, it may consume that path instead, but the actual consumed path must be recorded in the manifest. The intrinsic FC cache is expected to be atlas-invariant. If the two atlas subtrees contain non-identical intrinsic FC objects for the same `subject x smoothing x hemi`, that is a cache bug and the workflow must fail fast.
+Legacy compatibility: if the atlas-agnostic intrinsic path is missing, the implementation may read legacy atlas-specific intrinsic caches (`_shared/.../fc/<atlas>/<smoothing>/hemi_<L|R>/...`) and record the actual consumed path in the manifest. Intrinsic FC remains expected to be atlas-invariant; any non-identical intrinsic objects for the same `subject x smoothing x hemi` are treated as cache bugs and must fail fast.
 
 Baseline feature definition:
 
@@ -595,7 +596,7 @@ Phase 1 should add one new downstream driver script:
 
 The Kong 8net / partial-FC cache preparation helper is:
 
-- `scripts/hipp_parcellation_network/materialize_kong8_and_partial_fc.py`
+- `scripts/hipp_parcellation_network/materialize_kong7_kong8_pearson_partial_fc.py`
 
 This script should:
 
