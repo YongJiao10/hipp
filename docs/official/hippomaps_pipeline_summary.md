@@ -135,9 +135,27 @@ Step   脚本/方法                              输入                        
 
 ## 3. HippUnfold 结构链路
 
-### 3.1 Step 3: `run_hippunfold_local.sh`
+### 3.0 版本状态记录（按时间）
 
-这是正式结构链路的入口脚本。它激活 `hippo` 环境并调用 `hippunfold` CLI。
+- 最早版本：`T2-only`（`--modality T2w`）。
+- 第二版：`T2w + --t1-reg-template` 独立批次，运行中途停止，未全量完成。
+- 最新版本：`T1-only` 独立批次（`--modality T1w`），目录与前两版完全隔离，作为当前继续推进口径。
+
+### 3.1 Step 3: `run_hippunfold_local.sh` / `run_hippunfold_local_t2w_t1reg_isolated_cache.sh`
+
+这是正式结构链路的入口脚本。它激活 `hippo2` 环境并调用 `hippunfold` CLI。
+
+当前推荐并行入口是：
+
+- `scripts/run_hippunfold_local_t2w_t1reg_isolated_cache.sh`
+  - 固定使用 `T2w + --t1-reg-template`
+  - 每被试独立临时工作目录（避免并行互相清理）
+  - 模板/nnUNet 模型下载复用持久 asset store：
+    - `runtime/hippunfold_asset_store_shared/hippunfold_assets`
+    - `runtime/hippunfold_asset_store_shared/runtime_source_assets`
+- `scripts/run_hippunfold_local_t1w_isolated_cache.sh`
+  - 固定使用 `T1w-only`
+  - 每被试独立临时工作目录 + 同一套共享 asset store
 
 `run_hippunfold_local.sh` 还会把外部二进制目录插到 `PATH` 前面；默认值是
 `/Applications/ITK-SNAP.app/Contents/bin`。这一步是为了让 `greedy` 和
@@ -157,9 +175,9 @@ Step   脚本/方法                              输入                        
 - 输入格式
   - `.nii.gz`
 - 方法
-  - 通过 `hippunfold <input> <output> participant --modality T2w --output-density 2mm ...` 调用 `HippUnfold`。
+  - 通过 `hippunfold <input> <output> participant --modality T2w --t1-reg-template --output-density 512 ...` 调用 `HippUnfold`（推荐口径）。
   - 当前正式结构主模态是 `T2w`。
-  - `T1w` 仍作为结构输入的一部分保留在输入树中，便于需要时参与配准或派生步骤。
+  - `T1w` 作为结构输入参与 `--t1-reg-template` 配准路径。
 - 输出示例
   - `outputs/<subject>/hippunfold/sub-<id>/surf/sub-<id>_hemi-L_space-corobl_label-hipp_midthickness.surf.gii`
   - `outputs/<subject>/hippunfold/sub-<id>/surf/sub-<id>_hemi-R_space-corobl_label-hipp_midthickness.surf.gii`
@@ -184,8 +202,8 @@ Step   脚本/方法                              输入                        
 这一步包含一个核心分辨率/表示转换：
 
 - 输入是 `0.7 mm` 结构体数据
-- `HippUnfold` 当前正式输出 density 固定为 `2 mm`
-- 因此这里完成了“高分辨率结构体数据 -> 海马 2mm surface density 表示”的转换
+- `HippUnfold` 当前正式输出 density 口径为 `512`（corobl surface 顶点网格）
+- 因此这里完成了“高分辨率结构体数据 -> 海马 `den-512` surface 表示”的转换
 
 在这一步里，`nnUNet` 并不是一个独立的下游步骤，而是 `HippUnfold` 内部的结构分割前端：
 

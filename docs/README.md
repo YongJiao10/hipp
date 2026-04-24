@@ -17,3 +17,5 @@ Loose top-level documents are reserved for cross-cutting handoff or prompt mater
 
 - `official/network_first_end_to_end_raw_to_overview.md`
   End-to-end executable runbook for `raw zip -> staging -> dense_corobl -> migration overview` (subjects `102311/102816` baseline profile).
+- `official/data_provenance_end_to_end.md`
+  Data-lineage reference that includes both local runtime inputs and external LSS/source roots (for full provenance tracing).

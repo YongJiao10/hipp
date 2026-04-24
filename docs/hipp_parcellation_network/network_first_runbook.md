@@ -217,35 +217,41 @@ Canonical command:
 Merged-canonical group atlas command pair:
 
 ```bash
-/home/yojiao/.conda/envs/py314/bin/python scripts/hipp_parcellation_network/materialize_kong8_and_partial_fc.py \
+/home/yojiao/.conda/envs/py314/bin/python scripts/hipp_parcellation_network/materialize_kong7_kong8_pearson_partial_fc.py \
   --jobs 6
 
 /home/yojiao/.conda/envs/py314/bin/python scripts/hipp_parcellation_network/run_merged_canonical_group_atlas.py \
   --resume \
   --coverage-thresholds 0.80 \
   --atlases kong2019 kong2019_8net \
-  --methods group-network-spectral group-network-partial-spectral group-intrinsic-spectral \
+  --methods group-network-spectral group-network-partial-spectral group-intrinsic-spectral group-intrinsic-partial-spectral \
   --out-root outputs_migration/hipp_group_merged_canonical_atlas
 
 /home/yojiao/.conda/envs/py314/bin/python scripts/hipp_parcellation_network/build_present_group_overview_merged_canonical.py \
   --group-root outputs_migration/hipp_group_merged_canonical_atlas \
   --present-dir present_group \
   --atlases kong2019 kong2019_8net \
-  --methods group-network-spectral group-network-partial-spectral group-intrinsic-spectral \
+  --methods group-network-spectral group-network-partial-spectral group-intrinsic-spectral group-intrinsic-partial-spectral \
   --coverage-threshold 0.80
 ```
+
+Label-order policy:
+
+- merged-canonical group outputs use cluster IDs ordered by hippocampal long-axis position (`head -> tail`), not by cluster size.
+- merged-canonical preparation/analysis consumes canonical-network references and FC caches; it does not use cortex ROI parcel files (`cortex_roi_parcels.tsv`, `cortex_roi_parcel_timeseries.npy`).
+- authoritative template/output source is `outputs_migration/hipp_group_merged_canonical_atlas/*`; do not treat presentation-export paths as canonical runtime inputs.
+- `run_merged_canonical_group_atlas.py` now hard-requires `--group-average-surfaces-dir` under `outputs_migration/*` and fails if group-average `.surf.gii` files are missing; fallback to `subjects[0]` template is disabled.
 
 Outputs:
 
 ```text
 present_group/
-  <atlas>_kfree_group_overview.png
   <atlas>_network-spectral_group_overview.png
   <atlas>_intrinsic-spectral_group_overview.png
   <atlas>_group-network-spectral_group_overview.png
   <atlas>_group-network-partial-spectral_group_overview.png
   <atlas>_group-intrinsic-spectral_group_overview.png
-  components/<atlas>/<method>/<smoothing>/*.png
+  <atlas>_group-intrinsic-partial-spectral_group_overview.png
   group_overview_manifest.json
   README.md
 ```
@@ -254,8 +260,7 @@ Panel policy:
 
 - each smoothing row is rendered as a compact `2x2` block for quick side-by-side review.
 - each smoothing row uses `2 columns`: left = `2x2` info panel, right = enlarged hippocampal WTA surface.
-- `kfree`: left/right `P_net_v` heatmaps, probability-WTA hippocampal surface, and coverage summary.
-- `network-spectral` / `intrinsic-spectral` info `2x2`: group-K instability curve, `cluster_network_probs` (cell values annotated), `P_net_v` (network-name y labels), `prior_matrix`; right column is enlarged WTA hippocampal surface.
-- `group-network-spectral` / `group-network-partial-spectral` / `group-intrinsic-spectral` keep the same row layout and right-column surface render style; the top-right heatmap is signed `cluster_network_profile` and the lower-left panel is long-axis `cluster_indicator (KxV)`.
-- merged-canonical group K-selection panels display subject-split `ARI = 1 - instability`; dotted curves show the strong-null ARI 5th percentile reference (`1 - I_null_95pct`), and vertical dashed lines mark selected `K*`.
-- The fixed Kong group-analysis set is six overview figures: three methods crossed with `kong2019` and `kong2019_8net`. `kong2019_8net` keeps `TemporalParietal` independent. `group-network-partial-spectral` uses one-sided networks-only partial FC: residualize hippocampal vertex or cluster timeseries by other canonical networks, then correlate with the raw target network; do not residualize the target network and do not control other hippocampal vertices.
+- `network-spectral` / `intrinsic-spectral` info `2x2`: group-K ARI curve, `cluster_network_probs` (cell values annotated), `P_net_v` (network-name y labels), `prior_matrix`; right column is enlarged WTA hippocampal surface.
+- `group-network-spectral` / `group-network-partial-spectral` / `group-intrinsic-spectral` / `group-intrinsic-partial-spectral` keep the same row layout and right-column surface render style; the top-right heatmap is signed `cluster_network_profile` and the lower-left panel is long-axis `cluster_indicator (KxV)`.
+- merged-canonical group K-selection panels display direct subject-split `group_ari_mean`; dotted curves show the strong-null ARI 5th percentile reference (`ARI_null_5pct`), and vertical dashed lines mark selected `K*`.
+- The fixed Kong group-analysis set is eight overview figures: four methods crossed with `kong2019` and `kong2019_8net`. `kong2019_8net` keeps `TemporalParietal` independent. `group-network-partial-spectral` and `group-intrinsic-partial-spectral` use one-sided networks-only partial FC for `cluster_network_profile`: residualize hippocampal cluster timeseries by other canonical networks, then correlate with the raw target network; do not residualize the target network and do not control other hippocampal vertices. `group-intrinsic-partial-spectral` keeps the same intrinsic (`vertex-to-vertex`) clustering features as `group-intrinsic-spectral`; only the profile annotation step is partial.

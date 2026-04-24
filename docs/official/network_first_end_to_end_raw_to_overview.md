@@ -2,6 +2,8 @@
 
 This document is synced to the **current executable code paths** in this repository.
 It does **not** use remote archive pulling as part of this runbook.
+For full upstream provenance (including external LSS/source roots), see:
+`docs/official/data_provenance_end_to_end.md`.
 
 ## Scope and Fixed Parameters
 
@@ -34,6 +36,10 @@ low-level entrypoint scripts/hipp_parcellation_network/run_batch.py
   - `scripts/hipp_parcellation_network/run_batch.py`
 - Subject worker:
   - `scripts/hipp_parcellation_network/run_subject.py`
+- Dense prerequisite generation (recommended):
+  - `scripts/run_hippunfold_local_t2w_t1reg_isolated_cache.sh`
+  - mode: `T2w + --t1-reg-template`
+  - runtime isolation: per-subject disposable workdir + shared persistent asset store (`runtime/hippunfold_asset_store_shared`)
 
 Important defaults from code:
 - `--input-root` defaults to `data/hippunfold_input`
@@ -45,6 +51,7 @@ Important defaults from code:
 Batch launcher scope:
 - `run_batch.py` (and fixed launchers that wrap it) now stop after branch outputs + present-copy updates.
 - The batch path no longer runs trailing `plot_*tsnr*.py` figure generation as part of success criteria.
+- Functional Workbench renders are captured at `3200x2048` before legend composition, and the composed `functional_*.png` files are written with `300 DPI` metadata and larger legend fonts, so the subject panels stay readable in the exported overview artifacts.
 
 ## Preflight (Hard Requirements)
 

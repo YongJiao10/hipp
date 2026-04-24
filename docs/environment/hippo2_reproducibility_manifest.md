@@ -55,8 +55,9 @@ bash         5.2.37       h5b2bd6a_0               Installed into hippo2 so
                                                   Snakemake can use a Bash
                                                   that supports the launcher
                                                   shell features.
-c3d          0.6.0        pyhd8ed1ab_0             Conda-forge package that
-                                                  provides the `c3d` binary.
+c3d          0.6.0        pyhd8ed1ab_0             Present in conda list.
+mamba        2.3.2        hae34dd5_2 / conda-forge  Snakemake conda frontend
+                                                  when `--use-conda` is enabled.
 hippunfold   2.0.0        py_0 / khanlab           CLI version used in runs.
 nilearn      0.10.4       pyhd8ed1ab_0             Downgraded for compatibility.
 nnunet       1.7.1        pypi_0                   Used by HippUnfold inference.
@@ -96,7 +97,7 @@ Python              3.11.15
 hippunfold module   /opt/miniconda3/envs/hippo2/lib/python3.11/
                     site-packages/hippunfold/__init__.py
 nnUNet_predict      /opt/miniconda3/envs/hippo2/bin/nnUNet_predict
-reg_aladin          /opt/miniconda3/envs/hippo2/bin/reg_aladin
+reg_aladin          /home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2/bin/reg_aladin
 bash                /opt/miniconda3/envs/hippo2/bin/bash
 ```
 
@@ -132,6 +133,8 @@ Source                       Observed version
 
 The successful runs in this workspace were driven by the `hippunfold --version == 2.0.0` CLI behavior.
 
+A local runtime hotfix is also required in this workspace: `hippunfold/workflow/scripts/gen_volume_tsv.py` must use `pd.concat(...)` instead of the removed `DataFrame.append()` API when running under the current pandas build. The active `hippo2` runtime used for direct local runs also needs `seaborn` importable because `plot_subj_subfields.py` executes in the main environment when `--use-conda` is disabled.
+
 Do not rely on `importlib.metadata.version("hippunfold")` alone when reproducing the environment. That lookup currently resolves to the stale `1.5.2rc2` dist-info record even though the CLI reports `2.0.0`.
 
 ## Binary Layer
@@ -143,12 +146,9 @@ Command            Location / Behavior
 -----------------  ----------------------------------------------------------
 hippunfold         /opt/miniconda3/envs/hippo2/bin/hippunfold
 nnUNet_predict     /opt/miniconda3/envs/hippo2/bin/nnUNet_predict
-reg_aladin         /opt/miniconda3/envs/hippo2/bin/reg_aladin
+reg_aladin          /home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2/bin/reg_aladin
 bash               /opt/miniconda3/envs/hippo2/bin/bash
-c3d                /opt/miniconda3/envs/hippo2/bin/c3d
-greedy             `HIPPUNFOLD_EXTERNAL_BIN_DIR` / ITK-SNAP bundle
-c3d_affine_tool     `HIPPUNFOLD_EXTERNAL_BIN_DIR` / ITK-SNAP bundle
-wb_command         /Applications/wb_view.app/Contents/usr/bin/wb_command
+wb_command         /home/yojiao/hpchome/hipp/software/workbench/bin_linux64/wb_command
 LN2_LAYERS         resolved through `scripts/LN2_LAYERS` wrapper
 ```
 
@@ -210,11 +210,10 @@ that directory instead.
 
 ### Workbench Wrapper
 
-[`scripts/wb_command`](/Users/jy/Documents/HippoMaps-network-first/scripts/wb_command) wraps the macOS Workbench binary and handles three cases:
+[`scripts/wb_command`](/Users/jy/Documents/HippoMaps-network-first/scripts/wb_command) is a thin wrapper around the repo-local Workbench binary:
 
 1. Fails fast if the app binary is missing
-2. For `-volume-to-surface-mapping`, routes through the fallback helper
-3. On Apple Silicon macOS, runs the app via `arch -x86_64`
+2. Otherwise execs `software/workbench/bin_linux64/wb_command` directly
 
 ### LAYNII Wrapper
 
@@ -259,14 +258,19 @@ It sets the following runtime layers before starting HippUnfold:
 Setting / Path                                 Purpose
 --------------------------------------------  -------------------------------------------
 `runtime/hippunfold_cache`                    Central cache root for this repo
+`runtime/hippunfold_asset_store_shared`       Persistent shared asset store for reusable template/model downloads
 `runtime_source_cache`                        Snakemake runtime source cache
 `snakemake_conda`                             Optional local conda prefix for rule envs
 `conda_pkgs`                                  Local conda package cache
+`pip_cache`                                   Local pip wheel cache
+`tmp`                                         Local temporary build scratch
 `.runtime_py/sitecustomize.py`                 Multiprocessing + torch sharing tweaks
 `PATH` precedence                             `scripts/` first, external binaries second
 `XDG_CACHE_HOME`                               Redirects cache writes out of `~/Library`
 `HIPPUNFOLD_CACHE_DIR`                        HippUnfold cache root
-`CONDA_SUBDIR=osx-64`                         Needed for some x86_64-only dependencies
+`CONDA_SUBDIR=platform-default`              Selected by launcher based on host OS
+`HIPPUNFOLD_USE_GPU=1`                       Launcher defaults nnUNet inference to CUDA when available
+`LD_LIBRARY_PATH`                             Prepend `hippo2/lib` so the env libstdc++ overrides the system copy
 `nnUNet_n_proc_DA=1`                           Prevents runaway multiprocessing
 `OMP/MKL/OPENBLAS/VECLIB=1`                  Keeps numeric libs single-threaded
 `KMP_DUPLICATE_LIB_OK=TRUE`                   Avoids OpenMP duplicate-runtime crashes
@@ -282,9 +286,21 @@ torch.multiprocessing.set_sharing_strategy("file_system")
 
 That file is created under `.runtime_py/` inside the repo root.
 
-The `runtime/hippunfold_cache` tree is treated as disposable runtime state for
-the HippUnfold step. `scripts/run_hippunfold_local.sh` removes it on exit so the
-later functional-parcellation workflow does not inherit a large leftover cache.
+For persistent conda installs outside the launcher, `~/.condarc` is set to keep
+`pkgs_dirs` and `envs_dirs` under the repo-local `.cache/` tree so package
+downloads and future env creation stop consuming `/home/yojiao`.
+
+For interactive shells, use `source scripts/activate_hippo2.sh` to activate the
+repo-local `hippo2` clone directly.
+If the prefix has not been fully registered with conda metadata, the helper
+falls back to a PATH-based activation so the repo-local binaries still work.
+
+When `HIPPUNFOLD_USE_GPU=1` (the default), the launcher passes `--use_gpu` to
+HippUnfold so nnUNet inference requests one GPU and uses the CUDA device path.
+
+When `HIPPUNFOLD_USE_CONDA=1`, the launcher now prefers `mamba` as the
+Snakemake conda frontend so it does not depend on the older base `conda`
+executable.
 
 ## HippUnfold Inputs and Outputs
 
@@ -319,6 +335,8 @@ Stale `hippunfold-1.5.2rc2.dist-info`             Confuses Python metadata check
 Hidden `.cache` growth                           Replaced with `runtime/hippunfold_cache`
 `LN2_LAYERS` on `.nii.gz` rims                    Needs wrapper decompression/recompression
 `nnUNet` multiprocessing on macOS                Needed a fork/sharing workaround here
+`/home/yojiao` quota                              Keep `conda`/`pip` caches in repo-local `.cache`
+Parallel HippUnfold with shared disposable cache  Can fail due to cache-cleanup races across workers
 ```
 
 ## Rebuild Recipe
@@ -335,12 +353,42 @@ From scratch, a future agent should:
 8. Make sure `scripts/run_hippunfold_local.sh` is the only launcher used for local runs.
 9. Make sure the repo `scripts/` directory stays first on `PATH` so `wb_command` and `LN2_LAYERS` wrappers win.
 10. Make sure `c3d`, `greedy`, `LN2_LAYERS`, and `N4BiasFieldCorrection` resolve from the conda env or explicit binary paths.
-11. Allow `scripts/run_hippunfold_local.sh` to clean up `runtime/hippunfold_cache` on exit; the tree is disposable once HippUnfold finishes.
+11. `scripts/run_hippunfold_local.sh` cleans up `runtime/hippunfold_cache` on exit by design.
+    This is safe for single-subject/single-process runs, but for parallel subject runs you must isolate cache roots per worker (or otherwise avoid a shared disposable cache root), or workers may delete each other's runtime artifacts.
+    For recommended parallel reruns in this repo, use:
+    `scripts/run_hippunfold_local_t2w_t1reg_isolated_cache.sh`
+    which keeps per-subject disposable runtime workdirs while reusing a persistent shared asset store at
+    `runtime/hippunfold_asset_store_shared`.
 12. Use `data/hippunfold_input` as the input root and `outputs_migration/dense_corobl_batch/sub-<id>/hippunfold` as the output root.
+
+## Activation Path Guardrail
+
+This workspace has seen both Conda layouts in different sessions:
+
+- `/opt/miniconda3/...`
+- `/opt/conda/...`
+
+On the current host, `/opt/conda/etc/profile.d/conda.sh` is available and should
+be sourced first for interactive gate checks.
+
+Recommended activation fallback order:
+
+```bash
+if [ -f /opt/conda/etc/profile.d/conda.sh ]; then
+  source /opt/conda/etc/profile.d/conda.sh
+elif [ -f /opt/miniconda3/etc/profile.d/conda.sh ]; then
+  source /opt/miniconda3/etc/profile.d/conda.sh
+else
+  echo "conda.sh not found under /opt/conda or /opt/miniconda3" >&2
+  return 1
+fi
+conda activate hippo2
+```
 
 ## Minimal Verification Commands
 
 ```bash
+source /opt/conda/etc/profile.d/conda.sh
 conda activate hippo2
 hippunfold --version
 conda list -n hippo2 | rg '^hippunfold\s'
@@ -358,5 +406,5 @@ scripts/wb_command -help
 On this Mac, that wrapper will internally invoke:
 
 ```bash
-arch -x86_64 /Applications/wb_view.app/Contents/usr/bin/wb_command
+scripts/wb_command -help
 ```

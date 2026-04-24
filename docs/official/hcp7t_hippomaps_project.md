@@ -98,7 +98,15 @@ data/hippunfold_input/
 - 说明：**`environment/hippo2_server.yml` 中除 `greedyreg` / `laynii` 外均已按现有锁文件尽量写成精确版本，避免“写了等于没写”**
 - `hippo2` 修复命令：`CONDA_SAFETY_CHECKS=disabled conda install -y -n hippo2 -c khanlab -c conda-forge -c bioconda khanlab::hippunfold=2.0.0=py_0 --force-reinstall`
 - 说明：此前误判源于求解器落到 `bioconda::hippunfold-2.0.0-pyh7e72e81_0`，其 CLI/metadata 实体仍是 `1.5.2` 口径；不能只看 `conda list`。
-- 说明：`runtime/hippunfold_cache` 只用于 HippUnfold 阶段的运行时缓存，脚本结束后会自动清理，不作为后续功能分区流程输入。
+- 说明：`runtime/hippunfold_cache` 是每次运行的临时工作目录（可清理）；并行场景必须做每被试隔离，避免互相清理。
+- 说明：可复用的大文件资产（模板/nnUNet 模型）应落在持久共享 asset_store：`runtime/hippunfold_asset_store_shared`，供多被试、多轮运行复用。
+- 推荐并行入口：`scripts/run_hippunfold_local_t2w_t1reg_isolated_cache.sh`（`T2w + --t1-reg-template`，每被试独立 workdir + 共享 asset_store）。
+- `T1-only` 并行入口：`scripts/run_hippunfold_local_t1w_isolated_cache.sh`（每被试独立 workdir + 共享 asset_store）。
+
+运行历史口径（避免混淆）：
+- 最早版本：`T2-only`（`--modality T2w`）。
+- 第二版：`T2w + --t1-reg-template` 独立批次，跑到中途未完成。
+- 最新版：`T1-only` 独立批次（`--modality T1w`），与前两版目录完全隔离。
 
 当前环境核查结果：
 
@@ -106,9 +114,7 @@ data/hippunfold_input/
 Item         Status                Notes
 remote ssh   OK                    已成功连接 192.168.0.183
 remote data  OK                    已发现 HCP-YA-2025 与被试 100610
-wb_command   OK                    /Applications/wb_view.app/Contents/usr/bin/wb_command，需通过 arch -x86_64 调用
-c3d          OK                    `conda-forge::c3d` 已在 `hippo2` 中；外部 helper 另见 `greedy`
-LN2_LAYERS   OK                    需要 `laynii` 包或外部 LAYNII 目录；缺失会直接 127
+wb_command   OK                    `software/workbench/bin_linux64/wb_command`
 docker       Missing               本机无 docker
 hippunfold   OK                    hippo2 环境 `--version = 2.0.0`（khanlab::hippunfold=2.0.0=py_0）
 den-512 test Pass                  `--output_density 512 --help` 退出码 0，CLI 显示 `{native,512,2k,8k,18k}`
