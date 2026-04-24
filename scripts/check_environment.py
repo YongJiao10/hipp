@@ -9,6 +9,9 @@ import subprocess
 import sys
 
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
 def which(path: str) -> str | None:
     return shutil.which(path)
 
@@ -21,24 +24,20 @@ def run_text(cmd: list[str]) -> str:
 
 
 def main() -> int:
-    wb = which("wb_command")
-    if wb is None:
-        app_wb = Path("/Applications/wb_view.app/Contents/usr/bin/wb_command")
-        wb = str(app_wb) if app_wb.exists() else None
+    wb = REPO_ROOT / "software" / "workbench" / "bin_linux64" / "wb_command"
+    if not wb.exists():
+        wb = None
 
     wb_arch_test = ""
     if wb is not None:
-        cmd = [wb, "-help"]
-        if platform.system() == "Darwin" and platform.machine() == "arm64":
-            cmd = ["arch", "-x86_64"] + cmd
-        wb_arch_test = run_text(cmd)
+        wb_arch_test = run_text([str(wb), "-help"])
 
     report = {
         "platform": run_text(["uname", "-a"]),
         "architecture": run_text(["uname", "-m"]),
         "commands": {
             "python3": which("python3"),
-            "wb_command": wb,
+            "wb_command": str(wb) if wb is not None else None,
             "docker": which("docker"),
             "hippunfold": which("hippunfold"),
             "conda": which("conda"),
@@ -53,8 +52,6 @@ def main() -> int:
         report["notes"].append("hippunfold missing")
     if report["commands"]["wb_command"] is None:
         report["notes"].append("wb_command missing")
-    elif platform.system() == "Darwin" and platform.machine() == "arm64":
-        report["notes"].append("wb_command should be invoked via arch -x86_64 on this machine")
 
     print(json.dumps(report, indent=2))
     return 0

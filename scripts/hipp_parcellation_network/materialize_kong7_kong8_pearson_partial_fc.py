@@ -141,9 +141,6 @@ def materialize_reference(shared_root: Path, subject: str) -> None:
     for name in [
         "cortex_parent_networks.tsv",
         "cortex_parent_network_timeseries.npy",
-        "cortex_roi_parcels.tsv",
-        "cortex_roi_parcel_timeseries.npy",
-        "cortex_roi_parcels_empty_after_tsnr.tsv",
     ]:
         src_file = src / name
         if src_file.exists():

@@ -11,6 +11,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
+from matplotlib import font_manager
 from matplotlib.patches import Rectangle
 
 from run_subject import EVAL_K, REPO_ROOT, is_soft_branch, render_locked_grid_png, save_combined_label_assets
@@ -60,10 +61,17 @@ PLOT_SPEC = {
     "section_gap": 42,
     "title_h": 64,
     "panel_title_h": 66,
-    "title_font": 40,
-    "panel_title_font": 32,
+    "title_font": 48,
+    "panel_title_font": 36,
+    "metric_font": 22,
+    "tick_font": 18,
+    "figure_dpi": 300,
+}
+CURVE_PLOT_SPEC = {
     "metric_font": 15,
     "tick_font": 11,
+    "suptitle_font": 18,
+    "dpi": 220,
 }
 RENDER_SHORTLIST = [2, 3, 4, 5, 6]
 SMOOTH_COLORS = {"2mm": "#f58518", "4mm": "#54a24b"}
@@ -179,6 +187,10 @@ def load_font(size: int) -> ImageFont.ImageFont | ImageFont.FreeTypeFont:
         "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
         "/System/Library/Fonts/Supplemental/Arial.ttf",
         "/System/Library/Fonts/SFNS.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+        "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
     ]:
         path = Path(candidate)
         if path.exists():
@@ -186,28 +198,43 @@ def load_font(size: int) -> ImageFont.ImageFont | ImageFont.FreeTypeFont:
                 return ImageFont.truetype(str(path), size=size)
             except OSError:
                 continue
+    # Matplotlib always ships with DejaVu; use it before falling back to PIL bitmap font.
+    try:
+        mpl_font = Path(font_manager.findfont("DejaVu Sans", fallback_to_default=True))
+        if mpl_font.exists():
+            return ImageFont.truetype(str(mpl_font), size=size)
+    except Exception:
+        pass
     return ImageFont.load_default()
 
 
 def fit_image(path: Path, width: int, max_height: int | None = None) -> Image.Image:
     img = Image.open(path).convert("RGB")
-    scale = width / img.width
+    scale = min(1.0, width / img.width)
     height = max(1, int(round(img.height * scale)))
     if max_height is not None and height > max_height:
         scale = max_height / img.height
         width = max(1, int(round(img.width * scale)))
         height = max_height
-    return img.resize((width, height), Image.Resampling.LANCZOS)
+    target_w = max(1, int(round(img.width * scale)))
+    target_h = max(1, int(round(img.height * scale)))
+    if target_w == img.width and target_h == img.height:
+        return img
+    return img.resize((target_w, target_h), Image.Resampling.LANCZOS)
 
 
 def fit_image_obj(img: Image.Image, width: int, max_height: int | None = None) -> Image.Image:
-    scale = width / img.width
+    scale = min(1.0, width / img.width)
     height = max(1, int(round(img.height * scale)))
     if max_height is not None and height > max_height:
         scale = max_height / img.height
         width = max(1, int(round(img.width * scale)))
         height = max_height
-    return img.resize((width, height), Image.Resampling.LANCZOS)
+    target_w = max(1, int(round(img.width * scale)))
+    target_h = max(1, int(round(img.height * scale)))
+    if target_w == img.width and target_h == img.height:
+        return img
+    return img.resize((target_w, target_h), Image.Resampling.LANCZOS)
 
 
 def paste_center(canvas: Image.Image, img: Image.Image, x: int, y: int, cell_w: int, cell_h: int) -> None:
@@ -273,16 +300,16 @@ def plot_curves(axs: list[plt.Axes], final_selection: dict[str, object], hemi: s
                     textcoords="offset points",
                     xytext=(0, 6),
                     ha="center",
-                    fontsize=PLOT_SPEC["tick_font"],
+                    fontsize=CURVE_PLOT_SPEC["tick_font"],
                     color=SMOOTH_COLORS[smooth_name],
                     fontweight="bold",
                 )
-        ax.set_title(f"{hemi} {metric_label} ({direction_label})", fontsize=PLOT_SPEC["metric_font"])
-        ax.set_xlabel(f"K ({suffix})", fontsize=PLOT_SPEC["tick_font"])
+        ax.set_title(f"{hemi} {metric_label} ({direction_label})", fontsize=CURVE_PLOT_SPEC["metric_font"])
+        ax.set_xlabel(f"K ({suffix})", fontsize=CURVE_PLOT_SPEC["tick_font"])
         ax.set_xticks(EVAL_K)
-        ax.tick_params(axis="both", labelsize=PLOT_SPEC["tick_font"])
+        ax.tick_params(axis="both", labelsize=CURVE_PLOT_SPEC["tick_font"])
         ax.grid(alpha=0.25, linewidth=0.5)
-    axs[0].legend(frameon=False, fontsize=PLOT_SPEC["tick_font"], loc="best")
+    axs[0].legend(frameon=False, fontsize=CURVE_PLOT_SPEC["tick_font"], loc="best")
 
 
 def plot_soft_diagnostics(ax: plt.Axes, final_selection: dict[str, object], hemi: str) -> None:
@@ -326,12 +353,13 @@ def plot_soft_diagnostics(ax: plt.Axes, final_selection: dict[str, object], hemi
 def create_curve_figure(root: Path, final_selection: dict[str, object]) -> Path:
     atlas = str(final_selection.get("atlas_display_name", final_selection["atlas_slug"]))
     branch_slug = str(final_selection["branch_slug"])
+    dpi = int(CURVE_PLOT_SPEC["dpi"])
     fig, axs = plt.subplots(2, 8, figsize=(24, 8.8), constrained_layout=True)
     plot_curves(list(axs[:, :4].ravel()), final_selection, "L")
     plot_curves(list(axs[:, 4:].ravel()), final_selection, "R")
-    fig.suptitle(f"sub-{final_selection['subject']} {atlas} {branch_slug} K-selection", fontsize=18)
+    fig.suptitle(f"sub-{final_selection['subject']} {atlas} {branch_slug} K-selection", fontsize=CURVE_PLOT_SPEC["suptitle_font"])
     out_path = root / "k_selection_curves.png"
-    fig.savefig(out_path, dpi=220, facecolor="white")
+    fig.savefig(out_path, dpi=dpi, facecolor="white")
     plt.close(fig)
     return out_path
 
@@ -375,7 +403,11 @@ def shorten_cluster_name(cluster_name: str) -> str:
 
 def create_probability_figure(root: Path, final_selection: dict[str, object]) -> Path:
     branch_slug = str(final_selection["branch_slug"])
-    fig = plt.figure(figsize=(22.5, 7.6))
+    dpi = int(PLOT_SPEC["figure_dpi"])
+    content_w_px = int(PLOT_SPEC["canvas_w"]) - 2 * int(PLOT_SPEC["margin"])
+    fig_w = content_w_px / dpi
+    fig_h = fig_w * (7.6 / 22.5)
+    fig = plt.figure(figsize=(fig_w, fig_h))
     outer = fig.add_gridspec(1, 2, width_ratios=[1.0, 0.035], wspace=0.08)
     heatmaps = outer[0, 0].subgridspec(1, 2, wspace=0.55)
     axs = [fig.add_subplot(heatmaps[0, idx]) for idx in range(2)]
@@ -554,11 +586,11 @@ def create_probability_figure(root: Path, final_selection: dict[str, object]) ->
 
     if last_image is not None:
         cbar = fig.colorbar(last_image, cax=cax)
-        cbar.set_label(cbar_label, fontsize=12)
-        cbar.ax.tick_params(labelsize=10)
+        cbar.set_label(cbar_label, fontsize=16)
+        cbar.ax.tick_params(labelsize=14)
     fig.subplots_adjust(left=0.18, right=0.94, bottom=0.18, top=0.86)
     out_path = root / "network_probability_heatmaps.png"
-    fig.savefig(out_path, dpi=220, facecolor="white")
+    fig.savefig(out_path, dpi=dpi, facecolor="white")
     plt.close(fig)
     (root / "overview_probability_summary.json").write_text(json.dumps(summaries, indent=2), encoding="utf-8")
     return out_path
@@ -761,7 +793,7 @@ def create_overview(root: Path, final_selection: dict[str, object]) -> Path:
             x = margin + idx * (row_cell_w + gutter)
             paste_center(canvas, img, x, y, row_cell_w, row_h)
         y += row_h + section_gap
-    canvas.save(out_path)
+    canvas.save(out_path, dpi=(300, 300))
     return out_path
 
 

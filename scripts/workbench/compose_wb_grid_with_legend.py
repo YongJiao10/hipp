@@ -8,6 +8,7 @@ from pathlib import Path
 import nibabel as nib
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
+from matplotlib import font_manager
 
 
 def load_font(size: int) -> ImageFont.ImageFont:
@@ -15,6 +16,10 @@ def load_font(size: int) -> ImageFont.ImageFont:
         "/System/Library/Fonts/Supplemental/Arial.ttf",
         "/System/Library/Fonts/Supplemental/Helvetica.ttc",
         "/System/Library/Fonts/SFNS.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+        "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
     ]
     for candidate in candidates:
         path = Path(candidate)
@@ -23,6 +28,12 @@ def load_font(size: int) -> ImageFont.ImageFont:
                 return ImageFont.truetype(str(path), size=size)
             except Exception:
                 continue
+    try:
+        mpl_font = Path(font_manager.findfont("DejaVu Sans", fallback_to_default=True))
+        if mpl_font.exists():
+            return ImageFont.truetype(str(mpl_font), size=size)
+    except Exception:
+        pass
     return ImageFont.load_default()
 
 
@@ -246,13 +257,13 @@ def main() -> int:
         group_name = label_name.rsplit("_", 1)[-1] if args.legend_group == "network" else label_name
         group_colors[group_name] = tuple(int(round(v)) for v in rgba[:4])
 
-    title_font = load_font(34)
-    item_font = load_font(34)
-    side_pad = 30
-    gap_after_swatch = 16
-    swatch_w = 34
-    swatch_h = 34
-    row_h = 48
+    title_font = load_font(48)
+    item_font = load_font(44)
+    side_pad = 34
+    gap_after_swatch = 18
+    swatch_w = 40
+    swatch_h = 40
+    row_h = 56
 
     title_text = args.title.strip()
     
@@ -278,8 +289,26 @@ def main() -> int:
     right_title = f"{title_text} (Right)" if title_text else "Right"
     right_title_lines = wrap_text(measure_draw, right_title, title_font, max(panel_w - 2 * side_pad, 1))
 
-    canvas = Image.new("RGBA", (img_w + panel_w, img_h), (0, 0, 0, 255))
-    canvas.alpha_composite(grid, (0, 0))
+    top_pad = 24
+    bottom_pad = 24
+    inter_legend_gap = 60
+    title_line_h = 54
+
+    def legend_block_height(title_lines: list[str], item_count: int) -> int:
+        h = 0
+        if title_lines:
+            h += len(title_lines) * title_line_h + 12
+        h += item_count * row_h
+        return h
+
+    left_block_h = legend_block_height(left_title_lines, len(left_group_props))
+    right_block_h = legend_block_height(right_title_lines, len(right_group_props))
+    legend_total_h = top_pad + left_block_h + inter_legend_gap + right_block_h + bottom_pad
+
+    canvas_h = max(img_h, legend_total_h)
+    canvas = Image.new("RGBA", (img_w + panel_w, canvas_h), (0, 0, 0, 255))
+    grid_y = max(0, (canvas_h - img_h) // 2)
+    canvas.alpha_composite(grid, (0, grid_y))
     draw = ImageDraw.Draw(canvas)
 
     def draw_legend(group_props_map, x0, y_start, title_lines):
@@ -287,31 +316,31 @@ def main() -> int:
         if title_lines:
             for line in title_lines:
                 draw.text((x0, y), line, fill=(255, 255, 255, 255), font=title_font)
-                y += 44
-            y += 10
+                y += title_line_h
+            y += 12
         
         group_names = sorted(group_props_map, key=lambda name: (-group_props_map[name], name))
         item_texts = [f"{name}  {group_props_map[name] * 100:.1f}%" for name in group_names]
         
         for group_name, item_text in zip(group_names, item_texts):
             color = group_colors[group_name]
-            draw.rectangle((x0, y + 6, x0 + swatch_w, y + 6 + swatch_h), fill=color)
+            draw.rectangle((x0, y + 5, x0 + swatch_w, y + 5 + swatch_h), fill=color)
             draw.text((x0 + swatch_w + gap_after_swatch, y), item_text, fill=(255, 255, 255, 255), font=item_font)
             y += row_h
         return y
 
     # Draw Left Legend (Top)
     x0 = img_w + side_pad
-    y = 28
+    y = max(top_pad, (canvas_h - (left_block_h + inter_legend_gap + right_block_h)) // 2)
     y = draw_legend(left_group_props, x0, y, left_title_lines)
 
     # Add a gap before drawing Right Legend
-    y += 48
+    y += inter_legend_gap
     y = draw_legend(right_group_props, x0, y, right_title_lines)
 
     out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    canvas.save(out_path)
+    canvas.save(out_path, dpi=(300, 300))
     print(out_path)
     return 0
 

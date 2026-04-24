@@ -105,6 +105,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--group-k-rule", default="mean-instability-1se", choices=["mean-instability-1se"])
     parser.add_argument("--min-parcel-pass-rate", type=float, default=0.67)
     parser.add_argument("--inference-subjects", nargs="+", default=None)
+    parser.add_argument("--skip-inference", action="store_true", help="Skip per-subject soft-map inference and rendering; only produce group-level outputs.")
     parser.add_argument("--out-root", default=str(DEFAULT_OUT_ROOT))
     parser.add_argument("--group-out-root", default=str(DEFAULT_GROUP_OUT_ROOT))
     parser.add_argument("--scene", default=str(DEFAULT_SCENE))
@@ -753,7 +754,7 @@ def process_combo(
     group_selection_by_hemi: dict[str, dict[str, object]] = {}
     group_prior_pickles: dict[str, str] = {}
     prior_meta_by_hemi: dict[str, dict[str, object]] = {}
-    key_to_name_by_hemi: dict[str, dict[int, str]] = {}
+    network_key_to_name_by_hemi: dict[str, dict[int, str]] = {}
     wta_labels_by_hemi: dict[str, np.ndarray] = {}
 
     # choose template subject for group rendering from training list
@@ -879,23 +880,24 @@ def process_combo(
         prior_matrix = np.mean(np.stack(aligned_onehot, axis=0), axis=0).astype(np.float32)
         cluster_network_probs = np.mean(np.stack(aligned_probs, axis=0), axis=0).astype(np.float32)
 
-        dominant_idx = np.argmax(cluster_network_probs, axis=1)
-        dominant_network = [profile_networks[int(idx)] for idx in dominant_idx]
-        valid_vertex_mask = (prior_matrix.sum(axis=0) > 0).astype(np.uint8)
+        # Convert cluster priors to network priors (N_network x N_vertex) for network-probability-dominant visualization.
+        p_net_v = (cluster_network_probs.T @ prior_matrix).astype(np.float32)
+        valid_vertex_mask = (np.sum(p_net_v, axis=0) > 0).astype(np.uint8)
 
-        hemi_key_to_name: dict[int, str] = {
-            int(cluster_id): f"{hemi}C{cluster_id}_{dominant_network[cluster_id - 1]}"
-            for cluster_id in range(1, k_final + 1)
+        network_key_to_name: dict[int, str] = {
+            int(net_idx + 1): f"{hemi}N{net_idx + 1}_{net_name}"
+            for net_idx, net_name in enumerate(profile_networks)
         }
-        key_to_name_by_hemi[hemi] = hemi_key_to_name
+        network_key_to_name_by_hemi[hemi] = network_key_to_name
 
-        wta = np.zeros(prior_matrix.shape[1], dtype=np.int32)
-        nz = prior_matrix.sum(axis=0) > 0
-        wta[nz] = np.argmax(prior_matrix[:, nz], axis=0).astype(np.int32) + 1
+        wta = np.zeros(p_net_v.shape[1], dtype=np.int32)
+        nz = np.sum(p_net_v, axis=0) > 0
+        wta[nz] = np.argmax(p_net_v[:, nz], axis=0).astype(np.int32) + 1
         wta_labels_by_hemi[hemi] = wta
 
         prior_payload: dict[str, object] = {
             "prior_matrix": prior_matrix,
+            "p_net_v": p_net_v,
             "k_final": int(k_final),
             "subjects": subjects,
             "branch": combo.branch,
@@ -904,7 +906,6 @@ def process_combo(
             "hemi": hemi,
             "profile_networks": profile_networks,
             "cluster_network_probs": cluster_network_probs,
-            "cluster_dominant_network": dominant_network,
             "valid_vertex_mask": valid_vertex_mask,
             "selection_log": selection_log,
             "label_mappings_to_reference": mappings,
@@ -924,9 +925,9 @@ def process_combo(
         prior_meta_by_hemi[hemi] = {
             "k_final": int(k_final),
             "prior_shape": [int(prior_matrix.shape[0]), int(prior_matrix.shape[1])],
+            "p_net_v_shape": [int(p_net_v.shape[0]), int(p_net_v.shape[1])],
             "n_valid_vertices": int(valid_vertex_mask.sum()),
             "profile_networks": profile_networks,
-            "cluster_dominant_network": dominant_network,
             "prior_pickle": str(prior_path),
         }
 
@@ -977,18 +978,18 @@ def process_combo(
         output_dir=combo_root / "template" / "workbench_assets",
         left_surface=template_assets.left_surface,
         right_surface=template_assets.right_surface,
-        left_key_to_name=key_to_name_by_hemi["L"],
-        right_key_to_name=key_to_name_by_hemi["R"],
-        stem=f"group_prior_{combo.branch}_{combo.atlas}_{combo.smoothing}",
+        left_key_to_name=network_key_to_name_by_hemi["L"],
+        right_key_to_name=network_key_to_name_by_hemi["R"],
+        stem=f"group_netprob_wta_{combo.branch}_{combo.atlas}_{combo.smoothing}",
         network_colors=network_colors,
     )
     group_render = render_locked_grid_png(
         subject=template_subject,
         scene=scene,
         outdir=combo_root / "template" / "renders",
-        name=f"group_prior_{combo.branch}_{combo.atlas}_{combo.smoothing}",
+        name=f"group_netprob_wta_{combo.branch}_{combo.atlas}_{combo.smoothing}",
         title=(
-            f"Group prior {combo.branch} {combo.atlas} {combo.smoothing} "
+            f"Group network-prob WTA {combo.branch} {combo.atlas} {combo.smoothing} "
             f"(L K={group_selection_by_hemi['L']['k_final']}, R K={group_selection_by_hemi['R']['k_final']})"
         ),
         left_labels=Path(group_assets["left_label"]),
@@ -1012,7 +1013,7 @@ def process_combo(
 
         soft_pickles_by_hemi: dict[str, str] = {}
         hemi_wta: dict[str, np.ndarray] = {}
-        hemi_key_to_name = key_to_name_by_hemi
+        hemi_key_to_name = network_key_to_name_by_hemi
 
         for hemi in HEMIS:
             prior_path = Path(group_prior_pickles[hemi])
@@ -1051,23 +1052,39 @@ def process_combo(
                 )
             inference_valid_mask = valid_mask & valid_prior_mask
 
-            scores_raw, scores_prob, wta_labels, confidence_margin = inference_soft_map(
+            scores_raw, scores_prob, _wta_labels_cluster, _confidence_cluster = inference_soft_map(
                 prior_matrix=prior_matrix,
                 timeseries_vt=timeseries,
                 valid_mask=inference_valid_mask,
             )
 
+            cluster_network_probs = np.asarray(prior_obj["cluster_network_probs"], dtype=np.float32)
+            network_scores_prob = (cluster_network_probs.T @ scores_prob).astype(np.float32)
+
             inactive = ~inference_valid_mask
             scores_raw[:, inactive] = 0.0
             scores_prob[:, inactive] = 0.0
-            wta_labels[inactive] = 0
-            confidence_margin[inactive] = 0.0
+            network_scores_prob[:, inactive] = 0.0
+
+            network_wta_labels = np.zeros((scores_prob.shape[1],), dtype=np.int32)
+            network_confidence_margin = np.zeros((scores_prob.shape[1],), dtype=np.float32)
+            active = np.sum(network_scores_prob, axis=0) > 0
+            if np.any(active):
+                active_prob = network_scores_prob[:, active]
+                order = np.argsort(active_prob, axis=0)
+                best_idx = order[-1, :]
+                second_idx = order[-2, :] if active_prob.shape[0] > 1 else order[-1, :]
+                best_prob = active_prob[best_idx, np.arange(active_prob.shape[1])]
+                second_prob = active_prob[second_idx, np.arange(active_prob.shape[1])]
+                network_wta_labels[active] = best_idx.astype(np.int32) + 1
+                network_confidence_margin[active] = (best_prob - second_prob).astype(np.float32)
 
             soft_payload: dict[str, object] = {
-                "scores_raw": scores_raw,
-                "scores_prob": scores_prob,
-                "wta_labels": wta_labels,
-                "confidence_margin": confidence_margin,
+                "cluster_scores_raw": scores_raw,
+                "cluster_scores_prob": scores_prob,
+                "network_scores_prob": network_scores_prob,
+                "network_wta_labels": network_wta_labels,
+                "network_confidence_margin": network_confidence_margin,
                 "k_final": int(k_final),
                 "hemi": hemi,
                 "smoothing": combo.smoothing,
@@ -1082,12 +1099,12 @@ def process_combo(
                 combo_root
                 / "individual_soft_maps"
                 / f"sub-{subject}"
-                / f"sub-{subject}_{combo.branch}_{combo.atlas}_{combo.smoothing}_hemi-{hemi}_soft_functional_map.pickle"
+                / f"sub-{subject}_{combo.branch}_{combo.atlas}_{combo.smoothing}_hemi-{hemi}_soft_netprob_map.pickle"
             )
             soft_path.parent.mkdir(parents=True, exist_ok=True)
             soft_path.write_bytes(pickle.dumps(soft_payload))
             soft_pickles_by_hemi[hemi] = str(soft_path)
-            hemi_wta[hemi] = wta_labels.astype(np.int32)
+            hemi_wta[hemi] = network_wta_labels.astype(np.int32)
 
         subject_assets = save_combined_label_assets(
             subject=subject,
@@ -1099,16 +1116,16 @@ def process_combo(
             right_surface=render_assets.right_surface,
             left_key_to_name=hemi_key_to_name["L"],
             right_key_to_name=hemi_key_to_name["R"],
-            stem=f"soft_map_{combo.branch}_{combo.atlas}_{combo.smoothing}",
+            stem=f"soft_netprob_map_{combo.branch}_{combo.atlas}_{combo.smoothing}",
             network_colors=network_colors,
         )
         render_payload = render_locked_grid_png(
             subject=subject,
             scene=scene,
             outdir=combo_root / "individual_soft_maps" / f"sub-{subject}" / "renders",
-            name=f"soft_map_{combo.branch}_{combo.atlas}_{combo.smoothing}",
+            name=f"soft_netprob_map_{combo.branch}_{combo.atlas}_{combo.smoothing}",
             title=(
-                f"Soft map {combo.branch} {combo.atlas} {combo.smoothing} sub-{subject} "
+                f"Soft network-prob map {combo.branch} {combo.atlas} {combo.smoothing} sub-{subject} "
                 f"(L K={group_selection_by_hemi['L']['k_final']}, R K={group_selection_by_hemi['R']['k_final']})"
             ),
             left_labels=Path(subject_assets["left_label"]),

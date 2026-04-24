@@ -21,18 +21,30 @@ _args = _p.parse_args()
 BATCH_DIR = Path(_args.batch_dir)
 OUT_FIG   = Path(_args.out)
 
-SUBJECTS = ["sub-100610", "sub-102311", "sub-102816"]
+SUBJECTS = ["sub-100610", "sub-102311", "sub-102816", "sub-104416"]
 HEMIS    = ["L", "R"]
 
 COLORS = {
     "sub-100610": "#4C72B0",
     "sub-102311": "#DD8452",
     "sub-102816": "#55A868",
+    "sub-104416": "#C44E52",
 }
 
 # ── Helper: load bold timeseries (.func.gii only) ────────────────────────────
 def load_bold(subject: str, hemi: str) -> np.ndarray:
-    """Return array of shape (512, T)."""
+    """Return array of shape (512, T).
+
+    Checks new pipeline path first (hipp_functional_parcellation_network/_shared),
+    then falls back to old dense_corobl_batch path.
+    """
+    new_dir = (_REPO_ROOT / "outputs_migration" / "hipp_functional_parcellation_network"
+               / "_shared" / subject / "surface" / "raw")
+    new_gii = new_dir / f"{subject}_hemi-{hemi}_space-corobl_den-512_label-hipp_bold.func.gii"
+    if new_gii.exists():
+        img = nib.load(str(new_gii))
+        return np.stack([d.data for d in img.darrays], axis=1).astype(np.float64)
+
     surface_dir = BATCH_DIR / subject / "post_dense_corobl" / "surface"
     gii = surface_dir / f"{subject}_hemi-{hemi}_space-corobl_den-512_label-hipp_bold.func.gii"
     img = nib.load(str(gii))
@@ -71,11 +83,12 @@ for sub in SUBJECTS:
               f"std={np.nanstd(vals):.2f}  n_nan={np.isnan(vals).sum()}")
 
 # ── Plot ─────────────────────────────────────────────────────────────────────
-fig = plt.figure(figsize=(16, 11))
+n_rows = len(SUBJECTS)
+fig = plt.figure(figsize=(16, 3.5 * n_rows))
 fig.patch.set_facecolor("#F8F8F8")
 
 gs = gridspec.GridSpec(
-    3, 2,
+    n_rows, 2,
     figure=fig,
     hspace=0.52,
     wspace=0.32,

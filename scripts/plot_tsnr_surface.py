@@ -48,10 +48,10 @@ SCENE_SRC  = REPO_ROOT / "config" / "wb_locked_native_view_lateral_medial.scene"
 BATCH_DIR  = REPO_ROOT / "outputs_migration" / "dense_corobl_batch"
 BOLD_DIR   = REPO_ROOT / "outputs_migration" / "hipp_functional_parcellation_network" / "_shared"
 OUT_PATH   = REPO_ROOT / "outputs_migration" / "tsnr_surface_masked.png"
-WB_CMD     = 'arch -x86_64 "/Applications/wb_view.app/Contents/usr/bin/wb_command"'
+WB_CMD     = '/home/yojiao/hpchome/hipp/software/workbench/bin_linux64/wb_command'
 
 # ── Constants ─────────────────────────────────────────────────────────────────
-SUBJECTS    = ["sub-100610", "sub-102311", "sub-102816"]
+SUBJECTS    = ["sub-100610", "sub-102311", "sub-102816", "sub-104416"]
 HEMIS       = ["L", "R"]
 HEMI_LABEL  = {"L": "Left", "R": "Right"}
 HCP_MODE    = 10000.0   # tSNR = 10000 / σ  (HCP convention)
@@ -112,21 +112,29 @@ def save_shape_gii(values: np.ndarray, out_path: Path) -> None:
 
 
 def absolutize(root: ET.Element, scene_path: Path) -> None:
-    """Resolve relative scene pathName entries → absolute, remapped to BATCH_DIR."""
+    """Resolve pathName entries → absolute paths under current BATCH_DIR.
+
+    Handles both relative paths and absolute paths that use any legacy
+    dense_corobl_batch root (detects the sub-XXXXXX anchor to find the suffix).
+    """
     base = scene_path.parent
-    old_batch = Path.home() / "Documents" / "HippoMaps" / "outputs" / "dense_corobl_batch"
     for obj in root.iter("Object"):
-        if obj.attrib.get("Type") == "pathName" and obj.text:
-            text = obj.text.strip()
-            if not text:
-                continue
-            p = Path(text)
-            resolved = (base / p).resolve() if not p.is_absolute() else p
-            try:
-                resolved = BATCH_DIR / resolved.relative_to(old_batch)
-            except ValueError:
-                pass
-            obj.text = str(resolved)
+        if obj.attrib.get("Type") != "pathName" or not obj.text:
+            continue
+        text = obj.text.strip()
+        if not text:
+            continue
+        p = Path(text)
+        # Resolve relative paths against scene directory
+        if not p.is_absolute():
+            p = (base / p).resolve()
+        # Remap any absolute path that contains dense_corobl_batch/sub-XXXXXX
+        # by replacing everything up to and including "dense_corobl_batch" with BATCH_DIR
+        import re as _re
+        m = _re.search(r"dense_corobl_batch(/.*)", str(p))
+        if m:
+            p = BATCH_DIR / m.group(1).lstrip("/")
+        obj.text = str(p)
 
 
 def detect_template_subject(root: ET.Element) -> str:
@@ -275,7 +283,7 @@ cropped = {k: tight_crop(v) for k, v in panels.items()}
 cell_h = max(v.shape[0] for v in cropped.values())
 cell_w = max(v.shape[1] for v in cropped.values())
 
-n_rows, n_cols = 3, 2
+n_rows, n_cols = 4, 2
 canvas_w = MARGIN * 2 + n_cols * cell_w + (n_cols - 1) * GUTTER + GUTTER + BAR_W
 canvas_h = MARGIN * 2 + n_rows * (LABEL_H + cell_h) + (n_rows - 1) * GUTTER + 36
 canvas   = Image.new("RGBA", (canvas_w, canvas_h), BG_COLOR)

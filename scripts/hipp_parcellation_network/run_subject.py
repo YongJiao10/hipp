@@ -1272,6 +1272,8 @@ def render_locked_native_view(
 ) -> Path:
     render_root = outdir / "batch"
     render_root.mkdir(parents=True, exist_ok=True)
+    # Render the native Workbench view at a higher viewport resolution so
+    # scene text and label overlays remain sharp after PNG capture.
     cmd = [
         PYTHON_EXE,
         str(REPO_ROOT / "scripts" / "workbench" / "render_wb_scene_batch.py"),
@@ -1284,9 +1286,9 @@ def render_locked_native_view(
         "--scene-index",
         "1",
         "--width",
-        "1600",
+        "3200",
         "--height",
-        "1024",
+        "2048",
         "--renderer",
         "OSMesa",
         "--name",
@@ -2278,10 +2280,15 @@ def main() -> int:
     if not dtseries.exists():
         raise FileNotFoundError(f"Missing dtseries: {dtseries}")
     if not concat_bold.exists():
-        raise FileNotFoundError(
-            "Missing concat BOLD required for strict hippocampal raw surface sampling: "
-            f"{concat_bold}"
-        )
+        _raw_dir = shared_surface_store_dir / "raw"
+        _l_cached = _raw_dir / f"sub-{subject}_hemi-L_space-corobl_den-{hipp_density}_label-hipp_bold.func.gii"
+        _r_cached = _raw_dir / f"sub-{subject}_hemi-R_space-corobl_den-{hipp_density}_label-hipp_bold.func.gii"
+        if not (_l_cached.exists() and _r_cached.exists()):
+            raise FileNotFoundError(
+                "Missing concat BOLD required for strict hippocampal raw surface sampling: "
+                f"{concat_bold}"
+            )
+    _bold_inputs: list[Path] = [concat_bold] if concat_bold.exists() else []
     if args.run_split_mode == "runwise":
         dtseries_run_input_mode, dtseries_run_lengths = resolve_runwise_dtseries(
             concat_dtseries=dtseries,
@@ -2575,12 +2582,12 @@ def main() -> int:
         "raw_source_policy": "strict_shared_pipeline_func_gii_only",
     }
     shared_raw_surface_outputs = [left_raw_metric, right_raw_metric, shared_raw_surface_dir / "surface_sampling_summary.json"]
-    if not stage_is_up_to_date(
+    if not (left_raw_metric.exists() and right_raw_metric.exists()) and not stage_is_up_to_date(
         stage_dir=shared_raw_surface_dir,
         resume_mode=resume_mode,
         stage_name="surface_raw",
         params=shared_raw_surface_params,
-        inputs=[concat_bold, left_surface, right_surface],
+        inputs=[*_bold_inputs, left_surface, right_surface],
         outputs=shared_raw_surface_outputs,
     ):
         run(
@@ -2609,7 +2616,7 @@ def main() -> int:
             stage_dir=shared_raw_surface_dir,
             stage_name="surface_raw",
             params=shared_raw_surface_params,
-            inputs=[concat_bold, left_surface, right_surface],
+            inputs=[*_bold_inputs, left_surface, right_surface],
             outputs=shared_raw_surface_outputs,
         )
 
@@ -2626,7 +2633,7 @@ def main() -> int:
         resume_mode=resume_mode,
         stage_name="hipp_tsnr_gate",
         params={**hipp_tsnr_params, "hemi": "L"},
-        inputs=[left_raw_metric, left_surface, concat_bold],
+        inputs=[left_raw_metric, left_surface, *_bold_inputs],
         outputs=left_hipp_tsnr_outputs,
     ):
         left_raw_timeseries, left_raw_tsnr_source = load_surface_timeseries_for_tsnr(
@@ -2648,7 +2655,7 @@ def main() -> int:
             stage_dir=hipp_tsnr_dir / "hemi-L",
             stage_name="hipp_tsnr_gate",
             params={**hipp_tsnr_params, "hemi": "L"},
-                inputs=[left_raw_metric, left_surface, concat_bold],
+                inputs=[left_raw_metric, left_surface, *_bold_inputs],
                 outputs=[
                 left_hipp_tsnr["summary_path"],
                 left_hipp_tsnr["tsnr_path"],
@@ -2662,7 +2669,7 @@ def main() -> int:
         resume_mode=resume_mode,
         stage_name="hipp_tsnr_gate",
         params={**hipp_tsnr_params, "hemi": "R"},
-        inputs=[right_raw_metric, right_surface, concat_bold],
+        inputs=[right_raw_metric, right_surface, *_bold_inputs],
         outputs=right_hipp_tsnr_outputs,
     ):
         right_raw_timeseries, right_raw_tsnr_source = load_surface_timeseries_for_tsnr(
@@ -2684,7 +2691,7 @@ def main() -> int:
             stage_dir=hipp_tsnr_dir / "hemi-R",
             stage_name="hipp_tsnr_gate",
             params={**hipp_tsnr_params, "hemi": "R"},
-                inputs=[right_raw_metric, right_surface, concat_bold],
+                inputs=[right_raw_metric, right_surface, *_bold_inputs],
                 outputs=[
                 right_hipp_tsnr["summary_path"],
                 right_hipp_tsnr["tsnr_path"],
@@ -2717,7 +2724,7 @@ def main() -> int:
         "raw_source_policy": "strict_shared_pipeline_func_gii_only",
         "null_policy": "strict_invalid_initial_only",
     }
-    surface_inputs = [left_raw_metric, right_raw_metric, left_surface, right_surface, left_roi_path, right_roi_path, concat_bold]
+    surface_inputs = [left_raw_metric, right_raw_metric, left_surface, right_surface, left_roi_path, right_roi_path, *_bold_inputs]
     surface_outputs = [
         two_mm_left_func,
         two_mm_right_func,

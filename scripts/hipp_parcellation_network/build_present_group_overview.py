@@ -15,7 +15,6 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_KFREE_ROOT = REPO_ROOT / "outputs_migration" / "hipp_group_prior_kfree_pnetv"
 DEFAULT_SPECTRAL_ROOT = REPO_ROOT / "outputs_migration" / "hipp_group_prior_fastpfm"
 DEFAULT_PRESENT_DIR = REPO_ROOT / "present_group"
 NETWORK_STYLE_JSON = REPO_ROOT / "config" / "hipp_network_style.json"
@@ -30,9 +29,6 @@ def resolve_existing_path(path_str: str) -> Path:
     p = Path(path_str)
     if p.exists():
         return p
-    alt = Path(str(p).replace("hipp_group_prior_kfree_pnetv_nobranch", "hipp_group_prior_kfree_pnetv"))
-    if alt.exists():
-        return alt
     raise FileNotFoundError(f"Missing file path in manifest: {path_str}")
 
 
@@ -91,16 +87,6 @@ def combine_lr_with_named_rows(
 def read_group_k_rows(tsv_path: Path) -> list[dict[str, str]]:
     with tsv_path.open("r", encoding="utf-8") as f:
         return list(csv.DictReader(f, delimiter="\t"))
-
-
-def parse_kfree_items(kfree_manifest: Path) -> dict[tuple[str, str], dict]:
-    payload = load_json(kfree_manifest)
-    out: dict[tuple[str, str], dict] = {}
-    for item in payload.get("items", []):
-        atlas = str(item["atlas"])
-        smoothing = str(item["smoothing"])
-        out[(atlas, smoothing)] = item
-    return out
 
 
 def collect_spectral_manifests(spectral_root: Path) -> dict[tuple[str, str, str], Path]:
@@ -227,135 +213,6 @@ def save_k_curve_png(rows: list[dict[str, str]], title: str, out_png: Path, *, k
     fig.tight_layout()
     fig.savefig(out_png, dpi=300)
     plt.close(fig)
-
-
-def render_kfree_overview(
-    *,
-    atlas: str,
-    rows: list[dict],
-    out_png: Path,
-) -> dict[str, object]:
-    fig = plt.figure(figsize=(15.4, 12.2), dpi=180, constrained_layout=True)
-    gs = fig.add_gridspec(nrows=2, ncols=2, width_ratios=[1.40, 1.30], hspace=0.10, wspace=0.05)
-
-    meta_rows = []
-    comp_root = out_png.parent / "components" / atlas / "kfree"
-    for ridx, smoothing in enumerate(SMOOTHINGS):
-        row = next((x for x in rows if x["smoothing"] == smoothing), None)
-        if row is None:
-            sub = gs[ridx, 0].subgridspec(2, 2, wspace=0.08, hspace=0.08)
-            for rr in range(2):
-                for cc in range(2):
-                    ax = fig.add_subplot(sub[rr, cc])
-                    ax.axis("off")
-                    ax.text(0.5, 0.5, f"{smoothing} missing", ha="center", va="center", fontsize=12)
-            ax_big = fig.add_subplot(gs[ridx, 1])
-            ax_big.axis("off")
-            ax_big.text(0.5, 0.5, f"{smoothing} missing", ha="center", va="center", fontsize=12)
-            continue
-
-        sub = gs[ridx, 0].subgridspec(2, 2, wspace=0.08, hspace=0.08)
-
-        left = row["hemis"]["L"]
-        right = row["hemis"]["R"]
-        p_l = np.load(resolve_existing_path(left["p_net_v"]))
-        p_r = np.load(resolve_existing_path(right["p_net_v"]))
-        o_l = np.load(resolve_existing_path(left["longaxis_order"]))
-        o_r = np.load(resolve_existing_path(right["longaxis_order"]))
-        c_l = np.load(resolve_existing_path(left["coverage"]))
-        c_r = np.load(resolve_existing_path(right["coverage"]))
-
-        source_manifest = resolve_existing_path(str(row["source_manifests"][0]))
-        net_names = load_network_names_from_group_manifest(source_manifest)
-
-        ax0 = fig.add_subplot(sub[0, 0])
-        draw_pnet_panel(
-            fig=fig,
-            ax=ax0,
-            p_net_v=p_l[:, o_l],
-            title=f"{smoothing} | L P_net_v",
-            yticks=np.arange(len(net_names)),
-            yticklabels=net_names,
-            xlabel="Vertex (long-axis)",
-        )
-
-        ax1 = fig.add_subplot(sub[0, 1])
-        draw_pnet_panel(
-            fig=fig,
-            ax=ax1,
-            p_net_v=p_r[:, o_r],
-            title=f"{smoothing} | R P_net_v",
-            yticks=np.arange(len(net_names)),
-            yticklabels=net_names,
-            xlabel="Vertex (long-axis)",
-        )
-        comp_sm = comp_root / smoothing
-        save_pnet_component_png(
-            p_net_v=p_l[:, o_l],
-            title=f"{atlas} kfree {smoothing} hemi-L P_net_v",
-            out_png=comp_sm / "p_net_v_hemi-L.png",
-            yticklabels=net_names,
-        )
-        save_pnet_component_png(
-            p_net_v=p_r[:, o_r],
-            title=f"{atlas} kfree {smoothing} hemi-R P_net_v",
-            out_png=comp_sm / "p_net_v_hemi-R.png",
-            yticklabels=net_names,
-        )
-
-        ax2 = fig.add_subplot(sub[1, 0])
-        ax2.plot(c_l, color="#1f77b4", lw=1.2)
-        ax2.set_title(f"{smoothing} | L coverage", fontsize=9)
-        ax2.set_xlabel("Vertex (native order)", fontsize=8)
-        ax2.set_ylabel("Coverage", fontsize=8)
-        ax2.set_ylim(0.0, 1.02)
-        ax2.tick_params(labelsize=7)
-
-        ax3 = fig.add_subplot(sub[1, 1])
-        ax3.plot(c_r, color="#d62728", lw=1.2)
-        ax3.set_title(f"{smoothing} | R coverage", fontsize=9)
-        ax3.set_xlabel("Vertex (native order)", fontsize=8)
-        ax3.set_ylabel("Coverage", fontsize=8)
-        ax3.set_ylim(0.0, 1.02)
-        ax3.tick_params(labelsize=7)
-
-        ax_big = fig.add_subplot(gs[ridx, 1])
-        wta_png = resolve_existing_path(str(row["wta_render"]["biglegend_png"]))
-        ax_big.imshow(plt.imread(wta_png))
-        ax_big.set_title(f"{smoothing} | WTA surface", fontsize=11)
-        ax_big.axis("off")
-        shutil.copy2(wta_png, comp_sm / "wta_surface.png")
-
-        # Keep numeric summary in metadata and component manifest.
-        mean_l = float(np.mean(c_l))
-        mean_r = float(np.mean(c_r))
-        min_l = float(np.min(c_l))
-        min_r = float(np.min(c_r))
-        n_exp = int(left["n_subjects_expected"])
-        n_missing = int(left["n_subjects_missing_fc"])
-
-        meta_rows.append(
-            {
-                "smoothing": smoothing,
-                "n_subjects": n_exp,
-                "n_missing_fc": n_missing,
-                "coverage_L_mean": mean_l,
-                "coverage_R_mean": mean_r,
-                "coverage_L_min": min_l,
-                "coverage_R_min": min_r,
-                "components": {
-                    "p_net_v_hemi_L": str(comp_sm / "p_net_v_hemi-L.png"),
-                    "p_net_v_hemi_R": str(comp_sm / "p_net_v_hemi-R.png"),
-                    "wta_surface": str(comp_sm / "wta_surface.png"),
-                },
-            }
-        )
-
-    fig.suptitle(f"Group Overview | {atlas} | kfree", fontsize=16)
-    out_png.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out_png, dpi=300)
-    plt.close(fig)
-    return {"rows": meta_rows}
 
 
 def render_spectral_overview(
@@ -565,55 +422,21 @@ def write_readme(*, present_dir: Path, items: list[dict[str, object]]) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Build atlas+method group overviews into present_group")
-    parser.add_argument("--kfree-root", default=str(DEFAULT_KFREE_ROOT))
     parser.add_argument("--spectral-root", default=str(DEFAULT_SPECTRAL_ROOT))
     parser.add_argument("--present-dir", default=str(DEFAULT_PRESENT_DIR))
     args = parser.parse_args()
 
-    kfree_root = Path(args.kfree_root).resolve()
     spectral_root = Path(args.spectral_root).resolve()
     present_dir = Path(args.present_dir).resolve()
     present_dir.mkdir(parents=True, exist_ok=True)
 
     items_out: list[dict[str, object]] = []
 
-    kfree_manifest = kfree_root / "kfree_p_net_v_manifest.json"
-    kfree_items: dict[tuple[str, str], dict] = {}
-    if kfree_manifest.exists():
-        kfree_items = parse_kfree_items(kfree_manifest)
+
 
     spectral_manifests = collect_spectral_manifests(spectral_root)
 
-    atlases = sorted({a for (a, _s) in kfree_items.keys()} | {a for (_b, a, _s) in spectral_manifests.keys()})
-
-    # kfree
-    for atlas in atlases:
-        rows = []
-        for sm in SMOOTHINGS:
-            item = kfree_items.get((atlas, sm))
-            if item is not None:
-                rows.append(item)
-        if rows:
-            out_png = present_dir / f"{atlas}_kfree_group_overview.png"
-            meta = render_kfree_overview(atlas=atlas, rows=rows, out_png=out_png)
-            smoothings = [r["smoothing"] for r in meta["rows"]]
-            metric = "; ".join(
-                [
-                    f"{r['smoothing']}: N={r['n_subjects']} miss={r['n_missing_fc']} Lmean={r['coverage_L_mean']:.3f} Rmean={r['coverage_R_mean']:.3f}"
-                    for r in meta["rows"]
-                ]
-            )
-            items_out.append(
-                {
-                    "atlas": atlas,
-                    "method": "kfree",
-                    "overview_png": str(out_png),
-                    "smoothings": smoothings,
-                    "metric_summary": metric,
-                    "row_details": meta["rows"],
-                    "components_dir": str((present_dir / "components" / atlas / "kfree").resolve()),
-                }
-            )
+    atlases = sorted({a for (_b, a, _s) in spectral_manifests.keys()})
 
     # spectral methods
     for method in ["network-spectral", "intrinsic-spectral"]:

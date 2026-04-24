@@ -29,6 +29,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--data-root", default=str(REPO_ROOT / "data" / "hippunfold_input"))
     parser.add_argument("--out-root", default=str(REPO_ROOT / "outputs_migration" / "cortex_pfm"))
     parser.add_argument("--roi-min-area-mm2", type=float, default=25.0)
+    parser.add_argument("--left-midthickness", default=None,
+                        help="Override left midthickness surface path (skips data-root lookup)")
+    parser.add_argument("--right-midthickness", default=None,
+                        help="Override right midthickness surface path (skips data-root lookup)")
     return parser.parse_args()
 
 
@@ -297,6 +301,8 @@ def derive_roi_components(
     data_root: Path,
     out_root: Path,
     roi_min_area_mm2: float,
+    left_midthickness: Path | None = None,
+    right_midthickness: Path | None = None,
 ) -> dict[str, object]:
     method = canonical_method(method)
     slug = METHODS[method]["slug"]
@@ -305,17 +311,22 @@ def derive_roi_components(
     roi_dir = method_dir / "roi_components"
     roi_dir.mkdir(parents=True, exist_ok=True)
 
+    surface_overrides = {"L": left_midthickness, "R": right_midthickness}
     hemi_results: dict[str, dict[str, object]] = {}
     all_rows: list[dict[str, object]] = []
     for hemisphere in ("L", "R"):
+        override = surface_overrides[hemisphere]
+        surface = override if override is not None else (
+            data_root
+            / f"sub-{subject}"
+            / "anat"
+            / f"sub-{subject}_hemi-{hemisphere}_space-fsLR_den-32k_desc-MSMAll_midthickness.surf.gii"
+        )
         hemi_result, rows = derive_hemisphere(
             subject=subject,
             method=method,
             hemisphere=hemisphere,
-            surface=data_root
-            / f"sub-{subject}"
-            / "anat"
-            / f"sub-{subject}_hemi-{hemisphere}_space-fsLR_den-32k_desc-MSMAll_midthickness.surf.gii",
+            surface=surface,
             label_path=method_dir / f"PFM_{method}priors.{hemisphere}.label.gii",
             out_dir=roi_dir / f"hemi_{hemisphere}",
             roi_min_area_mm2=roi_min_area_mm2,
@@ -348,6 +359,8 @@ def main() -> int:
         data_root=Path(args.data_root).resolve(),
         out_root=Path(args.out_root).resolve(),
         roi_min_area_mm2=args.roi_min_area_mm2,
+        left_midthickness=Path(args.left_midthickness) if args.left_midthickness else None,
+        right_midthickness=Path(args.right_midthickness) if args.right_midthickness else None,
     )
     print(json.dumps(stats, indent=2))
     return 0

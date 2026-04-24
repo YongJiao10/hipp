@@ -9,7 +9,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 
-WB_COMMAND = 'arch -x86_64 "/Applications/wb_view.app/Contents/usr/bin/wb_command"'
+WB_COMMAND = str(Path(__file__).resolve().parents[2] / "scripts" / "wb_command")
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 _OLD_BATCH = Path.home() / "Documents" / "HippoMaps" / "outputs" / "dense_corobl_batch"
@@ -24,8 +24,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--subjects", nargs="+", required=True, help="Subject IDs without sub- prefix")
     parser.add_argument("--outdir", required=True, help="Output directory")
     parser.add_argument("--scene-index", type=int, default=1)
-    parser.add_argument("--width", type=int, default=1600)
-    parser.add_argument("--height", type=int, default=1024)
+    parser.add_argument("--width", type=int, default=3200)
+    parser.add_argument("--height", type=int, default=2048)
     parser.add_argument("--renderer", default="OSMesa")
     parser.add_argument("--left-label-template", default=None, help="Optional absolute path template, e.g. /path/sub-{subject}_...label.gii")
     parser.add_argument("--right-label-template", default=None, help="Optional absolute path template, e.g. /path/sub-{subject}_...label.gii")
@@ -118,6 +118,9 @@ def replace_label_refs(root: ET.Element, current_ref: str, target_ref: str) -> N
     current_name = Path(current_ref).name
     target_name = Path(target_ref).name
     for elem in root.iter():
+        # update Name attributes on CaretDataFile elements so Workbench matches overlays correctly
+        if elem.get("Name") and current_name in elem.get("Name", ""):
+            elem.set("Name", elem.get("Name").replace(current_name, target_name))
         if not elem.text:
             continue
         if current_ref in elem.text:

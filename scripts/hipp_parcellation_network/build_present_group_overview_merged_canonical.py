@@ -4,7 +4,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
-import shutil
+import tempfile
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -14,14 +14,19 @@ from matplotlib.colors import ListedColormap
 from matplotlib.patches import Rectangle
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
-from build_kfree_pnetv import long_axis_order, render_locked_grid
+from surface_utils import long_axis_order, render_locked_grid
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_GROUP_ROOT = REPO_ROOT / "outputs_migration" / "hipp_group_merged_canonical_atlas"
 DEFAULT_PRESENT_DIR = REPO_ROOT / "present_group"
 DEFAULT_SCENE = REPO_ROOT / "config" / "wb_locked_native_view_lateral_medial.scene"
-METHODS = ["group-network-spectral", "group-network-partial-spectral", "group-intrinsic-spectral"]
+METHODS = [
+    "group-network-spectral",
+    "group-network-partial-spectral",
+    "group-intrinsic-spectral",
+    "group-intrinsic-partial-spectral",
+]
 ATLASES = ["kong2019", "kong2019_8net"]
 SMOOTHINGS = ["2mm", "4mm"]
 FS_TITLE = 11
@@ -79,6 +84,16 @@ def ordered_cluster_ids_by_position(labels: np.ndarray, order: np.ndarray, k: in
         rows.append((pos, int(cid)))
     rows.sort(key=lambda t: (t[0], t[1]))
     return [cid for _, cid in rows]
+
+
+def resolve_cluster_order_from_manifest(manifest: dict, labels: np.ndarray, order: np.ndarray, k: int) -> list[int]:
+    fixed = manifest.get("cluster_order_head_to_tail")
+    if isinstance(fixed, list):
+        vals = [int(x) for x in fixed]
+        expect = set(range(1, int(k) + 1))
+        if set(vals) == expect and len(vals) == int(k):
+            return vals
+    return ordered_cluster_ids_by_position(labels, order, k)
 
 
 def labels_to_indicator_by_ids(labels: np.ndarray, order: np.ndarray, cluster_ids: list[int]) -> np.ndarray:
@@ -187,7 +202,6 @@ def render_combo(
     fig = plt.figure(figsize=(15.4, 12.2), dpi=180, constrained_layout=True)
     gs = fig.add_gridspec(nrows=2, ncols=2, width_ratios=[1.40, 1.30], hspace=0.06, wspace=0.05)
     rows_meta: list[dict[str, object]] = []
-    comp_root = present_dir / "components" / atlas / method
 
     for ridx, smoothing in enumerate(SMOOTHINGS):
         left_manifest = group_root / method / atlas / smoothing / coverage_tag / "hemi_L" / "group_atlas_manifest.json"
@@ -222,8 +236,8 @@ def render_combo(
 
         k_l = int(m_l["chosen_k_final"])
         k_r = int(m_r["chosen_k_final"])
-        cids_l = ordered_cluster_ids_by_position(lbl_l, order_l, k_l)
-        cids_r = ordered_cluster_ids_by_position(lbl_r, order_r, k_r)
+        cids_l = resolve_cluster_order_from_manifest(m_l, lbl_l, order_l, k_l)
+        cids_r = resolve_cluster_order_from_manifest(m_r, lbl_r, order_r, k_r)
         ind_l = labels_to_indicator_by_ids(lbl_l, order_l, cids_l)
         ind_r = labels_to_indicator_by_ids(lbl_r, order_r, cids_r)
         prof_l_o = reorder_profile(prof_l, cids_l)
@@ -239,11 +253,11 @@ def render_combo(
         for hemi, rows, color in [("L", rows_l, "#1f77b4"), ("R", rows_r, "#d62728")]:
             rows = sorted(rows, key=lambda r: int(r["k"]))
             ks = np.array([int(r["k"]) for r in rows], dtype=int)
-            mean = 1.0 - np.array([float(r["group_instability_mean"]) for r in rows], dtype=float)
-            se = np.array([float(r["group_instability_se"]) for r in rows], dtype=float)
+            mean = np.array([float(r["group_ari_mean"]) for r in rows], dtype=float)
+            se = np.array([float(r["group_ari_se"]) for r in rows], dtype=float)
             ax0.plot(ks, mean, marker="o", lw=1.3, color=color, label=hemi)
             ax0.fill_between(ks, mean - se, mean + se, color=color, alpha=0.18)
-            null_ref = 1.0 - np.array([float(r["I_null_95pct"]) for r in rows], dtype=float)
+            null_ref = np.array([float(r["ARI_null_5pct"]) for r in rows], dtype=float)
             ax0.plot(ks, null_ref, ls=":", lw=1.0, color=color, alpha=0.85)
         ax0.axvline(k_l, color="#1f77b4", ls="--", lw=1.0)
         ax0.axvline(k_r, color="#d62728", ls="--", lw=1.0)
@@ -301,24 +315,23 @@ def render_combo(
         right_label = Path(str(m_r.get("template_functional_atlas_label", m_r["template_cluster_label"])))
         spec_path = Path(str(m_l["template_spec_path"]))
         template_subject = str(m_l["template_subject"]).replace("sub-", "")
-        render = render_locked_grid(
-            subject=template_subject,
-            scene=scene,
-            outdir=comp_root / smoothing / "surface_render",
-            name=f"merged_group_cluster_wta_{method}_{atlas}_{smoothing}",
-            title=f"Group functional atlas {method} {atlas} {smoothing}",
-            left_labels=left_label,
-            right_labels=right_label,
-            left_surface=surf_l,
-            right_surface=surf_r,
-            spec_path=spec_path,
-        )
-        big = Path(str(render["biglegend_png"]))
-        ax_big.imshow(plt.imread(big))
+        with tempfile.TemporaryDirectory(prefix="present_group_surface_render_") as tmp:
+            render = render_locked_grid(
+                subject=template_subject,
+                scene=scene,
+                outdir=Path(tmp),
+                name=f"merged_group_cluster_wta_{method}_{atlas}_{smoothing}",
+                title=f"Group functional atlas {method} {atlas} {smoothing}",
+                left_labels=left_label,
+                right_labels=right_label,
+                left_surface=surf_l,
+                right_surface=surf_r,
+                spec_path=spec_path,
+            )
+            big = Path(str(render["biglegend_png"]))
+            ax_big.imshow(plt.imread(big))
         ax_big.set_title(f"{smoothing} | functional atlas surface", fontsize=FS_BIG_TITLE)
         ax_big.axis("off")
-        (comp_root / smoothing).mkdir(parents=True, exist_ok=True)
-        shutil.copy2(big, comp_root / smoothing / "wta_surface.png")
 
         rows_meta.append(
             {
@@ -326,7 +339,6 @@ def render_combo(
                 "k_final_L": k_l,
                 "k_final_R": k_r,
                 "n_subjects": int(m_l["n_subjects"]),
-                "components": {"wta_surface": str((comp_root / smoothing / "wta_surface.png").resolve())},
             }
         )
 

@@ -7,14 +7,28 @@ OUT_DIR="${3:-outputs_migration/dense_corobl_batch/sub-${SUBJECT}/hippunfold}"
 AUTOTOP_LABELS="${HIPPUNFOLD_AUTOTOP_LABELS:-hipp dentate}"
 BUNDLE_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 HIPPUNFOLD_ENV_NAME="${HIPPUNFOLD_ENV_NAME:-hippo2}"
+HIPPUNFOLD_MODALITY="${HIPPUNFOLD_MODALITY:-T2w}"
+HIPPUNFOLD_USE_T1_REG_TEMPLATE="${HIPPUNFOLD_USE_T1_REG_TEMPLATE:-0}"
 HIPPUNFOLD_OUTPUT_DENSITY="${HIPPUNFOLD_OUTPUT_DENSITY:-512}"
+HIPPUNFOLD_USE_GPU="${HIPPUNFOLD_USE_GPU:-1}"
 HIPPUNFOLD_USE_CONDA="${HIPPUNFOLD_USE_CONDA:-0}"
 HIPPUNFOLD_WORKFLOW_PROFILE="${HIPPUNFOLD_WORKFLOW_PROFILE:-none}"
 HIPPUNFOLD_SDM="${HIPPUNFOLD_SDM:-env-modules}"
 HIPPUNFOLD_EXTERNAL_BIN_DIR="${HIPPUNFOLD_EXTERNAL_BIN_DIR:-/Applications/ITK-SNAP.app/Contents/bin}"
 CACHE_ROOT="${HIPPUNFOLD_CACHE_ROOT:-${BUNDLE_ROOT}/runtime/hippunfold_cache}"
 
-source /opt/miniconda3/etc/profile.d/conda.sh >/dev/null 2>&1
+CONDA_SH=""
+for candidate in /opt/conda/etc/profile.d/conda.sh /opt/miniconda3/etc/profile.d/conda.sh; do
+  if [[ -f "${candidate}" ]]; then
+    CONDA_SH="${candidate}"
+    break
+  fi
+done
+if [[ -z "${CONDA_SH}" ]]; then
+  echo "run_hippunfold_local.sh: conda.sh not found under /opt/conda or /opt/miniconda3" >&2
+  exit 1
+fi
+source "${CONDA_SH}" >/dev/null 2>&1
 conda activate "${HIPPUNFOLD_ENV_NAME}"
 
 cleanup_runtime_dirs() {
@@ -28,16 +42,23 @@ trap cleanup_runtime_dirs EXIT
 
 export XDG_CACHE_HOME="${XDG_CACHE_HOME:-${CACHE_ROOT}/xdg_cache}"
 export HIPPUNFOLD_CACHE_DIR="${HIPPUNFOLD_CACHE_DIR:-${CACHE_ROOT}/hippunfold_cache}"
+export PIP_CACHE_DIR="${PIP_CACHE_DIR:-${CACHE_ROOT}/pip_cache}"
+export TMPDIR="${TMPDIR:-${CACHE_ROOT}/tmp}"
 export PATH="${BUNDLE_ROOT}/scripts:${PATH}"
 if [[ -d "${HIPPUNFOLD_EXTERNAL_BIN_DIR}" ]]; then
   export PATH="${HIPPUNFOLD_EXTERNAL_BIN_DIR}:${PATH}"
 fi
 export HIPPUNFOLD_CONDA_PREFIX="${HIPPUNFOLD_CONDA_PREFIX:-${CACHE_ROOT}/snakemake_conda}"
 mkdir -p "${HIPPUNFOLD_CONDA_PREFIX}"
-export CONDA_SUBDIR="${CONDA_SUBDIR:-osx-64}"
+case "$(uname -s)" in
+  Darwin) default_conda_subdir="osx-64" ;;
+  *) default_conda_subdir="linux-64" ;;
+esac
+export CONDA_SUBDIR="${CONDA_SUBDIR:-${default_conda_subdir}}"
 export CONDA_PKGS_DIRS="${CONDA_PKGS_DIRS:-${CACHE_ROOT}/conda_pkgs}"
 mkdir -p "${CONDA_PKGS_DIRS}"
 export HIPPUNFOLD_RUNTIME_SOURCE_CACHE="${HIPPUNFOLD_RUNTIME_SOURCE_CACHE:-${CACHE_ROOT}/runtime_source_cache}"
+mkdir -p "${PIP_CACHE_DIR}" "${TMPDIR}"
 laynii_bin="$(find "${HIPPUNFOLD_CONDA_PREFIX}" -maxdepth 3 -type f -name LN2_LAYERS 2>/dev/null | head -n 1 || true)"
 if [[ -n "${laynii_bin}" ]]; then
   export HIPPUNFOLD_LN2_LAYERS_BIN="${HIPPUNFOLD_LN2_LAYERS_BIN:-${laynii_bin}}"
@@ -72,7 +93,7 @@ cmd=(
   "${INPUT_DIR}"
   "${OUT_DIR}"
   participant
-  --modality T2w
+  --modality "${HIPPUNFOLD_MODALITY}"
   --output-density "${HIPPUNFOLD_OUTPUT_DENSITY}"
   --output-spaces corobl
   --autotop_labels ${=AUTOTOP_LABELS}
@@ -84,11 +105,24 @@ cmd=(
   --notemp
 )
 
+if [[ "${HIPPUNFOLD_USE_T1_REG_TEMPLATE}" == "1" ]]; then
+  cmd+=(--t1-reg-template)
+fi
+
+if [[ "${HIPPUNFOLD_USE_GPU}" == "1" ]]; then
+  cmd+=(--use_gpu)
+fi
+
+
 if [[ "${HIPPUNFOLD_USE_CONDA}" == "1" ]]; then
+  conda_frontend="${HIPPUNFOLD_CONDA_FRONTEND:-mamba}"
+  if [[ "${conda_frontend}" == "mamba" && -z "$(command -v mamba 2>/dev/null || true)" ]]; then
+    conda_frontend="conda"
+  fi
   cmd+=(
     --use-conda
     --conda-prefix "${HIPPUNFOLD_CONDA_PREFIX}"
-    --conda-frontend conda
+    --conda-frontend "${conda_frontend}"
   )
 fi
 

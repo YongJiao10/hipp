@@ -21,7 +21,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT / "scripts" / "common") not in sys.path:
     sys.path.insert(0, str(REPO_ROOT / "scripts" / "common"))
 
-from build_kfree_pnetv import infer_spec_path
+from surface_utils import infer_spec_path, long_axis_order
 
 
 DEFAULT_SHARED_ROOT = REPO_ROOT / "outputs_migration" / "hipp_functional_parcellation_network" / "_shared"
@@ -29,8 +29,14 @@ DEFAULT_OUT_ROOT = REPO_ROOT / "outputs_migration" / "hipp_group_merged_canonica
 DEFAULT_SUBJECTS = REPO_ROOT / "manifests" / "hcp_7t_hippocampus_fmri_qc_pass_153.txt"
 DEFAULT_NETWORK_STYLE = REPO_ROOT / "config" / "hipp_network_style.json"
 DEFAULT_CROSS_ATLAS_MERGE = REPO_ROOT / "config" / "cross_atlas_network_merge.json"
+DEFAULT_GROUP_AVG_SURFACES_DIR = DEFAULT_OUT_ROOT / "group_average_surfaces"
 
-METHODS = ["group-network-spectral", "group-network-partial-spectral", "group-intrinsic-spectral"]
+METHODS = [
+    "group-network-spectral",
+    "group-network-partial-spectral",
+    "group-intrinsic-spectral",
+    "group-intrinsic-partial-spectral",
+]
 ATLASES = ["kong2019", "kong2019_8net"]
 SMOOTHINGS = ["2mm", "4mm"]
 HEMIS = ["L", "R"]
@@ -98,6 +104,41 @@ def reorder_labels_by_size(labels_zero: np.ndarray) -> np.ndarray:
     pairs = sorted(((int(np.sum(labels_zero == k)), k) for k in keys), key=lambda x: (-x[0], x[1]))
     mapping = {old: idx + 1 for idx, (_sz, old) in enumerate(pairs)}
     return np.asarray([mapping[int(k)] for k in labels_zero], dtype=np.int32)
+
+
+def reorder_labels_by_long_axis(labels_full: np.ndarray, axis_order: np.ndarray) -> np.ndarray:
+    labels = np.asarray(labels_full, dtype=np.int32)
+    order = np.asarray(axis_order, dtype=np.int64)
+    if labels.ndim != 1:
+        raise ValueError(f"Expected 1D labels, got shape={labels.shape}")
+    if order.ndim != 1 or int(order.size) != int(labels.size):
+        raise ValueError(f"Long-axis order size mismatch: order={order.shape}, labels={labels.shape}")
+
+    x = labels[order]
+    rows: list[tuple[float, int]] = []
+    for cid in sorted(int(v) for v in np.unique(labels) if int(v) > 0):
+        idx = np.flatnonzero(x == int(cid))
+        pos = float(np.mean(idx)) if idx.size else float("inf")
+        rows.append((pos, int(cid)))
+    rows.sort(key=lambda t: (t[0], t[1]))
+    mapping = {old: new_idx + 1 for new_idx, (_pos, old) in enumerate(rows)}
+    out = np.zeros_like(labels, dtype=np.int32)
+    for old, new in mapping.items():
+        out[labels == int(old)] = int(new)
+    return out
+
+
+def cluster_ids_by_long_axis(labels_full: np.ndarray, axis_order: np.ndarray) -> list[int]:
+    labels = np.asarray(labels_full, dtype=np.int32)
+    order = np.asarray(axis_order, dtype=np.int64)
+    x = labels[order]
+    rows: list[tuple[float, int]] = []
+    for cid in sorted(int(v) for v in np.unique(labels) if int(v) > 0):
+        idx = np.flatnonzero(x == int(cid))
+        pos = float(np.mean(idx)) if idx.size else float("inf")
+        rows.append((pos, int(cid)))
+    rows.sort(key=lambda t: (t[0], t[1]))
+    return [int(cid) for _pos, cid in rows]
 
 
 def spectral_cluster_from_affinity(aff: np.ndarray, k: int, seed: int) -> np.ndarray:
@@ -259,15 +300,15 @@ def remap_labels(labels: np.ndarray, mapping: dict[int, int]) -> np.ndarray:
     return out
 
 
-def local_minima_flags(values: list[float]) -> list[bool]:
+def local_maxima_flags(values: list[float]) -> list[bool]:
     if not values:
         return []
     all_equal = len(set(float(x) for x in values)) == 1
     flags: list[bool] = []
     for i, v in enumerate(values):
-        left = values[i - 1] if i > 0 else math.inf
-        right = values[i + 1] if i < len(values) - 1 else math.inf
-        is_local = all_equal or (v <= left and v <= right and (v < left or v < right or len(values) == 1))
+        left = values[i - 1] if i > 0 else -math.inf
+        right = values[i + 1] if i < len(values) - 1 else -math.inf
+        is_local = all_equal or (v >= left and v >= right and (v > left or v > right or len(values) == 1))
         flags.append(bool(is_local))
     return flags
 
@@ -441,7 +482,7 @@ def group_feature_matrix(
         group[~np.isfinite(group)] = 0.0
         return zscore_cols(group)
 
-    if method == "group-intrinsic-spectral":
+    if method in {"group-intrinsic-spectral", "group-intrinsic-partial-spectral"}:
         mats = []
         for s in subjects_subset:
             m = feature_bank[s][np.ix_(idx, idx)]
@@ -483,7 +524,7 @@ def cluster_for_subset(
     return labels.astype(np.int32), full
 
 
-def subject_split_instability(
+def subject_split_ari(
     *,
     method: str,
     feature_bank: dict[str, np.ndarray],
@@ -543,7 +584,7 @@ def subject_split_instability(
         mapping = build_hungarian_mapping(ref, tgt, int(k))
         tgt_r = remap_labels(tgt, mapping)
         ari = float(adjusted_rand_score(ref, tgt_r))
-        vals.append(float(1.0 - ari))
+        vals.append(float(ari))
     return {
         "values": vals,
         "n_requested": int(len(seeds)),
@@ -553,7 +594,7 @@ def subject_split_instability(
     }
 
 
-def strong_null_instability(
+def strong_null_ari(
     *,
     method: str,
     feature_bank: dict[str, np.ndarray],
@@ -573,7 +614,7 @@ def strong_null_instability(
             null_bank[s] = arr[perm, :].astype(np.float32)
         else:
             null_bank[s] = arr[np.ix_(perm, perm)].astype(np.float32)
-    out = subject_split_instability(
+    out = subject_split_ari(
         method=method,
         feature_bank=null_bank,
         valid_masks_by_subject=valid_masks_by_subject,
@@ -587,14 +628,14 @@ def strong_null_instability(
     return out
 
 
-def weak_null_instability(k: int, n_vertices: int, seeds: list[int]) -> dict[str, object]:
+def weak_null_ari(k: int, n_vertices: int, seeds: list[int]) -> dict[str, object]:
     vals: list[float] = []
     for seed in seeds:
         rng = np.random.RandomState(int(seed))
         a = rng.randint(1, int(k) + 1, size=(int(n_vertices),), dtype=np.int32)
         b = rng.randint(1, int(k) + 1, size=(int(n_vertices),), dtype=np.int32)
         ari = float(adjusted_rand_score(a, b))
-        vals.append(float(1.0 - ari))
+        vals.append(float(ari))
     return {
         "values": vals,
         "n_requested": int(len(seeds)),
@@ -669,7 +710,7 @@ def runwise_feature_bank(
     return out
 
 
-def run_aware_instability(
+def run_aware_ari(
     *,
     method: str,
     run_feature_banks: dict[int, dict[str, np.ndarray]],
@@ -702,7 +743,7 @@ def run_aware_instability(
             mapping = build_hungarian_mapping(a, b, int(k))
             b_r = remap_labels(b, mapping)
             ari = float(adjusted_rand_score(a, b_r))
-            vals.append(float(1.0 - ari))
+            vals.append(float(ari))
     return {
         "values": vals,
         "n_pairs": int(n_pairs),
@@ -926,6 +967,13 @@ def main() -> int:
     parser.add_argument("--resume", action="store_true", help="Skip combos that already have group_atlas_manifest.json.")
     parser.add_argument("--k-selection-mode", default="experimental", choices=["experimental"])
     parser.add_argument("--overview-threshold", type=float, default=0.80)
+    parser.add_argument(
+        "--group-average-surfaces-dir",
+        default=str(DEFAULT_GROUP_AVG_SURFACES_DIR),
+        help="Directory containing group-average midthickness surf.gii files named "
+             "group-average_hemi-{L|R}_space-corobl_den-512_label-hipp_midthickness.surf.gii. "
+             "When present, these are used as the template geometry instead of subjects[0].",
+    )
     args = parser.parse_args()
 
     shared_root = Path(args.shared_root).resolve()
@@ -939,21 +987,45 @@ def main() -> int:
     split_seeds = [int(x) for x in rng.randint(1, 2_000_000_000, size=int(args.instability_resamples))]
     null_seeds = [int(x) for x in rng.randint(1, 2_000_000_000, size=int(args.null_resamples))]
 
-    template_subject = subjects[0]
-    surfaces = {hemi: infer_surface_path(template_subject, hemi) for hemi in args.hemis}
+    avg_surf_dir = Path(args.group_average_surfaces_dir).resolve()
+    outputs_migration_root = (REPO_ROOT / "outputs_migration").resolve()
+    if "present_group" in avg_surf_dir.parts:
+        raise ValueError(
+            f"Invalid --group-average-surfaces-dir={avg_surf_dir}: present_group paths are non-canonical. "
+            f"Use outputs_migration group-average surfaces."
+        )
+    if not avg_surf_dir.is_relative_to(outputs_migration_root):
+        raise ValueError(
+            f"Invalid --group-average-surfaces-dir={avg_surf_dir}: expected a path under {outputs_migration_root}."
+        )
+    avg_surf_paths = {
+        hemi: avg_surf_dir / f"group-average_hemi-{hemi}_space-corobl_den-512_label-hipp_midthickness.surf.gii"
+        for hemi in args.hemis
+    }
+    missing_avg = [str(p) for p in avg_surf_paths.values() if not p.exists()]
+    if missing_avg:
+        raise FileNotFoundError(
+            "Missing required group-average surfaces. "
+            "Run from outputs_migration/hipp_group_merged_canonical_atlas/group_average_surfaces only.\n"
+            + "\n".join(missing_avg)
+        )
+    template_label = "group-average"
+    surfaces = {hemi: avg_surf_paths[hemi] for hemi in args.hemis}
     topology_audit = verify_surface_topology_consistency(subjects, args.hemis, surfaces)
     surface_meta: dict[str, dict[str, object]] = {}
     adjacency_by_hemi: dict[str, sparse.csr_matrix] = {}
+    long_axis_order_by_hemi: dict[str, np.ndarray] = {}
     for hemi in args.hemis:
         coords, faces = load_surface(surfaces[hemi])
         adjacency_by_hemi[hemi] = build_surface_adjacency(faces, int(coords.shape[0]))
+        long_axis_order_by_hemi[hemi] = long_axis_order(surfaces[hemi])
         surface_meta[hemi] = {
             "surface_path": str(surfaces[hemi]),
             "n_vertices": int(coords.shape[0]),
             "n_faces": int(faces.shape[0]),
         }
 
-    if "group-intrinsic-spectral" in args.methods:
+    if any(m in args.methods for m in ("group-intrinsic-spectral", "group-intrinsic-partial-spectral")):
         for smoothing in args.smoothings:
             for hemi in args.hemis:
                 print(f"[check] intrinsic atlas-invariance smoothing={smoothing} hemi={hemi}", flush=True)
@@ -1056,7 +1128,7 @@ def main() -> int:
                             )
                             min_coh, mean_coh = cluster_profile_coherence(group_features_active, labels_active, int(k))
 
-                            inst_obj = subject_split_instability(
+                            ari_obj = subject_split_ari(
                                 method=method,
                                 feature_bank=feature_bank,
                                 valid_masks_by_subject=valid_masks,
@@ -1066,16 +1138,16 @@ def main() -> int:
                                 k=int(k),
                                 seeds=split_seeds,
                             )
-                            inst_vals = list(inst_obj["values"])
-                            if not inst_vals:
-                                raise RuntimeError(f"No valid instability resamples for combo={combo} k={k}")
-                            inst = np.asarray(inst_vals, dtype=np.float64)
-                            i_mean = float(np.mean(inst))
-                            i_se = float(np.std(inst, ddof=1) / np.sqrt(inst.size)) if inst.size > 1 else 0.0
+                            ari_vals = list(ari_obj["values"])
+                            if not ari_vals:
+                                raise RuntimeError(f"No valid ARI resamples for combo={combo} k={k}")
+                            ari_arr = np.asarray(ari_vals, dtype=np.float64)
+                            ari_mean = float(np.mean(ari_arr))
+                            ari_se = float(np.std(ari_arr, ddof=1) / np.sqrt(ari_arr.size)) if ari_arr.size > 1 else 0.0
 
-                            weak_obj = weak_null_instability(int(k), int(n_support), null_seeds)
+                            weak_obj = weak_null_ari(int(k), int(n_support), null_seeds)
                             weak = list(weak_obj["values"])
-                            strong_obj = strong_null_instability(
+                            strong_obj = strong_null_ari(
                                 method=method,
                                 feature_bank=feature_bank,
                                 valid_masks_by_subject=valid_masks,
@@ -1086,8 +1158,8 @@ def main() -> int:
                                 seeds=null_seeds,
                             )
                             strong = list(strong_obj["values"])
-                            strong_arr = np.asarray(strong, dtype=np.float64) if strong else np.array([1.0], dtype=np.float64)
-                            run_obj = run_aware_instability(
+                            strong_arr = np.asarray(strong, dtype=np.float64) if strong else np.array([0.0], dtype=np.float64)
+                            run_obj = run_aware_ari(
                                 method=method,
                                 run_feature_banks=run_feature_banks,
                                 subjects=subjects,
@@ -1098,8 +1170,8 @@ def main() -> int:
                             )
                             run_vals = list(run_obj["values"])
                             run_arr = np.asarray(run_vals, dtype=np.float64) if run_vals else np.array([np.nan], dtype=np.float64)
-                            run_mean = float(np.nanmean(run_arr))
-                            run_se = (
+                            run_ari_mean = float(np.nanmean(run_arr))
+                            run_ari_se = (
                                 float(np.nanstd(run_arr, ddof=1) / np.sqrt(np.sum(np.isfinite(run_arr))))
                                 if np.sum(np.isfinite(run_arr)) > 1
                                 else 0.0
@@ -1116,19 +1188,19 @@ def main() -> int:
                                     "n_subjects": int(len(subjects)),
                                     "n_support_vertices": int(n_support),
                                     "V_min_effective": int(v_min),
-                                    "group_instability_mean": i_mean,
-                                    "group_instability_se": i_se,
-                                    "subject_split_requested": int(inst_obj["n_requested"]),
-                                    "subject_split_used": int(inst_obj["n_used"]),
-                                    "subject_split_skipped_overlap": int(inst_obj["n_skipped_overlap"]),
-                                    "subject_split_skipped_empty": int(inst_obj["n_skipped_empty"]),
-                                    "run_aware_instability_mean": run_mean,
-                                    "run_aware_instability_se": run_se,
+                                    "group_ari_mean": ari_mean,
+                                    "group_ari_se": ari_se,
+                                    "subject_split_requested": int(ari_obj["n_requested"]),
+                                    "subject_split_used": int(ari_obj["n_used"]),
+                                    "subject_split_skipped_overlap": int(ari_obj["n_skipped_overlap"]),
+                                    "subject_split_skipped_empty": int(ari_obj["n_skipped_empty"]),
+                                    "run_aware_ari_mean": run_ari_mean,
+                                    "run_aware_ari_se": run_ari_se,
                                     "run_aware_n_pairs": int(run_obj["n_pairs"]),
                                     "run_aware_n_used": int(run_obj["n_used"]),
-                                    "I_null_mean": float(np.mean(strong_arr)),
-                                    "I_null_95pct": float(np.percentile(strong_arr, 95.0)),
-                                    "I_weak_null_mean": float(np.mean(np.asarray(weak, dtype=np.float64))),
+                                    "ARI_null_mean": float(np.mean(strong_arr)),
+                                    "ARI_null_5pct": float(np.percentile(strong_arr, 5.0)),
+                                    "ARI_weak_null_mean": float(np.mean(np.asarray(weak, dtype=np.float64))),
                                     "B_null_requested": int(args.null_resamples),
                                     "B_null_used_strong": int(strong_obj["n_used"]),
                                     "B_null_used_weak": int(weak_obj["n_used"]),
@@ -1143,14 +1215,14 @@ def main() -> int:
                             )
 
                         rows = sorted(rows, key=lambda r: int(r["k"]))
-                        means = [float(r["group_instability_mean"]) for r in rows]
-                        ses = [float(r["group_instability_se"]) for r in rows]
-                        locals_ = local_minima_flags(means)
-                        best_idx = int(np.argmin(np.asarray(means, dtype=np.float64)))
-                        cutoff = float(means[best_idx] + ses[best_idx])
+                        means = [float(r["group_ari_mean"]) for r in rows]
+                        ses = [float(r["group_ari_se"]) for r in rows]
+                        locals_ = local_maxima_flags(means)
+                        best_idx = int(np.argmax(np.asarray(means, dtype=np.float64)))
+                        cutoff = float(means[best_idx] - ses[best_idx])
                         for i, row in enumerate(rows):
-                            row["local_min"] = int(locals_[i])
-                            row["within_1se_best"] = int(float(row["group_instability_mean"]) <= cutoff + 1e-12)
+                            row["local_max"] = int(locals_[i])
+                            row["within_1se_best"] = int(float(row["group_ari_mean"]) >= cutoff - 1e-12)
                             row["selected_nontrivial"] = int(
                                 int(row["nontrivial_min_size_ok"]) == 1
                                 and int(row["nontrivial_connectedness_ok"]) == 1
@@ -1160,14 +1232,21 @@ def main() -> int:
                         survivors = [
                             r
                             for r in rows
-                            if int(r["local_min"]) == 1
+                            if int(r["local_max"]) == 1
                             and int(r["within_1se_best"]) == 1
                             and int(r["selected_nontrivial"]) == 1
                         ]
                         if not survivors:
                             raise RuntimeError(f"No K survived selection constraints for combo={combo}")
                         k_final = int(sorted(survivors, key=lambda x: int(x["k"]))[0]["k"])
-                        labels_final = labels_by_k[k_final]
+                        labels_final = reorder_labels_by_long_axis(
+                            labels_by_k[k_final],
+                            long_axis_order_by_hemi[hemi],
+                        )
+                        fixed_cluster_order = cluster_ids_by_long_axis(
+                            labels_final,
+                            long_axis_order_by_hemi[hemi],
+                        )
 
                         profile = cluster_network_profile(
                             group_labels_final=labels_final,
@@ -1180,7 +1259,7 @@ def main() -> int:
                             valid_masks_by_subject=valid_masks,
                             profile_fc_mode=(
                                 "partial_networks_only_one_sided"
-                                if method == "group-network-partial-spectral"
+                                if method in {"group-network-partial-spectral", "group-intrinsic-partial-spectral"}
                                 else "pearson"
                             ),
                         )
@@ -1212,19 +1291,19 @@ def main() -> int:
                                 "n_subjects",
                                 "n_support_vertices",
                                 "V_min_effective",
-                                "group_instability_mean",
-                                "group_instability_se",
+                                "group_ari_mean",
+                                "group_ari_se",
                                 "subject_split_requested",
                                 "subject_split_used",
                                 "subject_split_skipped_overlap",
                                 "subject_split_skipped_empty",
-                                "run_aware_instability_mean",
-                                "run_aware_instability_se",
+                                "run_aware_ari_mean",
+                                "run_aware_ari_se",
                                 "run_aware_n_pairs",
                                 "run_aware_n_used",
-                                "I_null_mean",
-                                "I_null_95pct",
-                                "I_weak_null_mean",
+                                "ARI_null_mean",
+                                "ARI_null_5pct",
+                                "ARI_weak_null_mean",
                                 "B_null_requested",
                                 "B_null_used_strong",
                                 "B_null_used_weak",
@@ -1235,7 +1314,7 @@ def main() -> int:
                                 "nontrivial_min_size_ok",
                                 "nontrivial_connectedness_ok",
                                 "nontrivial_coherence_ok",
-                                "local_min",
+                                "local_max",
                                 "within_1se_best",
                                 "selected_nontrivial",
                             ],
@@ -1248,7 +1327,7 @@ def main() -> int:
                             run_dir
                             / "template"
                             / "workbench_assets"
-                            / f"sub-{template_subject}_hemi-{hemi}_space-corobl_den-512_label-group_cluster_{method}_{atlas}_{smoothing}_cov-{tau_tag}.label.gii"
+                            / f"{template_label}_hemi-{hemi}_space-corobl_den-512_label-group_cluster_{method}_{atlas}_{smoothing}_cov-{tau_tag}.label.gii"
                         )
                         lbl_path.parent.mkdir(parents=True, exist_ok=True)
                         nib.save(lbl, str(lbl_path))
@@ -1257,7 +1336,7 @@ def main() -> int:
                             run_dir
                             / "template"
                             / "workbench_assets"
-                            / f"sub-{template_subject}_hemi-{hemi}_space-corobl_den-512_label-group_functional_atlas_{method}_{atlas}_{smoothing}_cov-{tau_tag}.label.gii"
+                            / f"{template_label}_hemi-{hemi}_space-corobl_den-512_label-group_functional_atlas_{method}_{atlas}_{smoothing}_cov-{tau_tag}.label.gii"
                         )
                         func_lbl_path.parent.mkdir(parents=True, exist_ok=True)
                         nib.save(func_lbl, str(func_lbl_path))
@@ -1277,13 +1356,21 @@ def main() -> int:
                                 else (
                                     "vertex_to_canonical_network_partial_fc_networks_only_one_sided_fisherz_colzscore"
                                     if method == "group-network-partial-spectral"
-                                    else "vertex_to_vertex_intrinsic_fc_fisherz_diag0"
+                                    else (
+                                        "vertex_to_vertex_intrinsic_fc_fisherz_diag0"
+                                        if method == "group-intrinsic-spectral"
+                                        else "vertex_to_vertex_intrinsic_fc_fisherz_diag0_plus_partial_profile"
+                                    )
                                 )
                             ),
                             "fc_mode": (
                                 "partial_networks_only_one_sided"
-                                if method == "group-network-partial-spectral"
-                                else ("pearson" if method == "group-network-spectral" else "intrinsic_vertex_to_vertex_pearson")
+                                if method in {"group-network-partial-spectral", "group-intrinsic-partial-spectral"}
+                                else (
+                                    "pearson"
+                                    if method == "group-network-spectral"
+                                    else "intrinsic_vertex_to_vertex_pearson"
+                                )
                             ),
                             "partial_fc_definition": (
                                 {
@@ -1292,7 +1379,7 @@ def main() -> int:
                                     "hippocampal_vertex_covariates": False,
                                     "profile_annotation_uses_same_one_sided_partial_fc": True,
                                 }
-                                if method == "group-network-partial-spectral"
+                                if method in {"group-network-partial-spectral", "group-intrinsic-partial-spectral"}
                                 else None
                             ),
                             "actual_consumed_input_paths": actual_input_paths,
@@ -1331,9 +1418,11 @@ def main() -> int:
                             "cluster_dominant_network": str((run_dir / "cluster_dominant_network.json").resolve()),
                             "cluster_assignment_status": str((run_dir / "cluster_assignment_status.json").resolve()),
                             "group_functional_atlas_label_map": str((run_dir / "group_functional_atlas_label_map.json").resolve()),
-                            "template_subject": f"sub-{template_subject}",
+                            "template_subject": template_label,
+                            "cluster_label_ordering": "long_axis_head_to_tail",
+                            "cluster_order_head_to_tail": fixed_cluster_order,
                             "template_left_or_right_surface": str(surfaces[hemi]),
-                            "template_spec_path": str(infer_spec_path(template_subject, surfaces[hemi])),
+                            "template_spec_path": str(infer_spec_path(subjects[0], infer_surface_path(subjects[0], hemi))),
                             "template_cluster_label": str(lbl_path.resolve()),
                             "template_functional_atlas_label": str(func_lbl_path.resolve()),
                         }
