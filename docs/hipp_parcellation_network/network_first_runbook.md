@@ -11,6 +11,13 @@ Active workflow:
 - present-group overview generation
 - optional backfill of group functional atlas labels
 
+The canonical network axis is still atlas-specific, and the merge map is preserved in [merged_canonical_group_atlas_plan.md](/home/yojiao/hpchome/hipp/docs/hipp_parcellation_network/merged_canonical_group_atlas_plan.md). The important cases are:
+
+- `Kong2019`: `TemporalParietal -> Default`, `Noise` is not retained
+- `kong2019_8net`: same canonical merge logic, but `TemporalParietal` stays independent in the 8-network layout where required by the upstream mapping file
+- `Hermosillo2024`: `MTL + Tpole -> Limbic`
+- `Lynch2024`: `Noise` is excluded, `Language` is retained
+
 Retired workflows are archived and are no longer public entrypoints:
 
 - subject-level hippocampal clustering

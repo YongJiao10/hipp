@@ -36,6 +36,27 @@ Default subject manifest:
 
 - `manifests/hcp_7t_hippocampus_fmri_qc_pass_153.txt`
 
+## Canonical Network Merge
+
+The active group analysis still depends on atlas-specific parent-network merges into a shared canonical network axis. For the active Kong atlases, the preserved merge rule is:
+
+```text
+Kong2019
+  DefaultA + DefaultB + DefaultC        -> Default
+  VisualA + VisualB + VisualC           -> Visual
+  SomatomotorA + SomatomotorB           -> Somatomotor
+  DorsalAttentionA + DorsalAttentionB   -> DorsalAttention
+  VentralAttentionA + VentralAttentionB -> VentralAttention
+  ControlA + ControlB + ControlC        -> Control
+  Auditory                              -> Auditory
+  TemporalParietal                      -> Default
+
+kong2019_8net
+  same base merge map, except `TemporalParietal` remains independent in the 8-network atlas
+```
+
+The upstream merge file also defines other atlas mappings, but the active merged-canonical group workflow only consumes the Kong2019 / kong2019_8net pair.
+
 ## Core Rules
 
 - analyze left and right hippocampus separately
