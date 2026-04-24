@@ -66,16 +66,16 @@ def write_tsv(path: Path, rows: list[dict[str, object]], fieldnames: list[str]) 
             w.writerow(row)
 
 
-def fisher_z_if_needed(x: np.ndarray) -> np.ndarray:
+def fisher_z_transform_fc(x: np.ndarray) -> np.ndarray:
+    """Unconditional Fisher-z transform for FC caches (raw r in [-1, 1] on disk).
+
+    NaN is preserved for invalid vertices so downstream `np.nanmean` can skip them.
+    """
     arr = np.asarray(x, dtype=np.float32)
-    finite = arr[np.isfinite(arr)]
-    if finite.size == 0:
-        return np.zeros_like(arr, dtype=np.float32)
-    if float(np.nanmax(finite)) <= 1.0 and float(np.nanmin(finite)) >= -1.0:
-        out = np.arctanh(np.clip(arr, -0.999999, 0.999999))
-        out[~np.isfinite(out)] = np.nan
-        return out.astype(np.float32)
-    return arr.astype(np.float32)
+    clipped = np.clip(arr, -0.999999, 0.999999)
+    out = np.arctanh(clipped).astype(np.float32)
+    out[~np.isfinite(arr)] = np.nan
+    return out
 
 
 def zscore_cols(x: np.ndarray) -> np.ndarray:
@@ -93,7 +93,7 @@ def cosine_affinity(features: np.ndarray) -> np.ndarray:
     x = x / np.clip(norms, 1e-12, None)
     sim = x @ x.T
     sim = np.clip(sim, -1.0, 1.0)
-    aff = (sim + 1.0) * 0.5
+    aff = np.maximum(sim, 0.0)
     np.fill_diagonal(aff, 1.0)
     return aff.astype(np.float32)
 
@@ -407,7 +407,7 @@ def subject_network_feature(shared_root: Path, subject: str, atlas: str, smoothi
     arr = np.load(p).astype(np.float32)
     if arr.ndim != 2:
         raise ValueError(f"Expected 2D network feature matrix: {p} shape={arr.shape}")
-    arr = fisher_z_if_needed(arr)
+    arr = fisher_z_transform_fc(arr)
     return arr
 
 
@@ -455,7 +455,7 @@ def subject_intrinsic_feature(shared_root: Path, subject: str, atlas: str, smoot
             f"Unexpected intrinsic FC shape for sub-{subject} {atlas} {smoothing} hemi-{hemi}: {arr.shape}; "
             f"expected ({n_v},{n_v}) or ({n_valid},{n_valid})"
         )
-    full = fisher_z_if_needed(full)
+    full = fisher_z_transform_fc(full)
     np.fill_diagonal(full, 0.0)
     return full
 
@@ -543,7 +543,6 @@ def cluster_for_subset(
     aff = cosine_affinity(features)
     fused = sparse.csr_matrix(aff).multiply(adj).tocsr()
     fused = fused.maximum(fused.T)
-    fused.setdiag(1.0)
     labels = spectral_cluster_from_affinity(fused.toarray(), int(k), int(seed))
     full = np.zeros((support_mask.size,), dtype=np.int32)
     full[idx] = labels
@@ -697,7 +696,7 @@ def runwise_feature_bank(
                 )
                 if not p.exists():
                     raise FileNotFoundError(f"Missing runwise network feature: {p}")
-                active = fisher_z_if_needed(np.load(p).astype(np.float32))
+                active = fisher_z_transform_fc(np.load(p).astype(np.float32))
                 full = np.full((valid_masks[s].size, active.shape[1]), np.nan, dtype=np.float32)
                 idx = np.flatnonzero(valid_masks[s])
                 if active.shape[0] == idx.size:
@@ -710,7 +709,7 @@ def runwise_feature_bank(
             else:
                 p = resolve_intrinsic_feature_path(shared_root, s, smoothing, hemi, rid)
                 arr = np.load(p).astype(np.float32)
-                arr = fisher_z_if_needed(arr)
+                arr = fisher_z_transform_fc(arr)
                 np.fill_diagonal(arr, 0.0)
                 idx = np.flatnonzero(valid_masks[s])
                 full = np.full((valid_masks[s].size, valid_masks[s].size), np.nan, dtype=np.float32)
@@ -1397,8 +1396,8 @@ def main() -> int:
                                 else None
                             ),
                             "actual_consumed_input_paths": actual_input_paths,
-                            "clustering_algorithm": "spectral_clustering_precomputed_affinity_plus_kmeans_n_init_50",
-                            "affinity_description": "cosine_similarity_to_[0,1]_hadamard_surface_adjacency",
+                            "clustering_algorithm": "spectral_clustering_precomputed_affinity_relu_cosine_diag0_kmeans_n_init_50",
+                            "affinity_description": "max(cosine_similarity,0)_hadamard_surface_adjacency_diag0",
                             "candidate_k_range_requested": [int(min(k_values)), int(max(k_values))],
                             "candidate_k_range_effective": [int(min(k_eff)), int(max(k_eff))],
                             "chosen_k_final": int(k_final),

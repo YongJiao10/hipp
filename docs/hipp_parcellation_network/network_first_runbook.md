@@ -20,10 +20,11 @@ The canonical network axis is still atlas-specific, and the merge map is preserv
 
 Retired workflows are archived and are no longer public entrypoints:
 
-- subject-level hippocampal clustering
+- subject-level hippocampal clustering (`scripts/common/spectral_clustering.py` has no live caller and is retained as reference only)
 - batch subject orchestration
 - `group prior + fast-PFM`
 - MSHBM experiments
+- `group-network-partial-spectral` and `group-intrinsic-partial-spectral` methods (code preserved, not running)
 
 ## Canonical Input Roots
 
@@ -63,14 +64,14 @@ Do not silently expand to 166 subjects.
   --resume \
   --coverage-thresholds 0.80 \
   --atlases kong2019 kong2019_8net \
-  --methods group-network-spectral group-network-partial-spectral group-intrinsic-spectral group-intrinsic-partial-spectral \
+  --methods group-network-spectral group-intrinsic-spectral \
   --out-root outputs_migration/hipp_group_merged_canonical_atlas
 
 /home/yojiao/.conda/envs/py314/bin/python scripts/hipp_parcellation_network/build_present_group_overview_merged_canonical.py \
   --group-root outputs_migration/hipp_group_merged_canonical_atlas \
   --present-dir present_group \
   --atlases kong2019 kong2019_8net \
-  --methods group-network-spectral group-network-partial-spectral group-intrinsic-spectral group-intrinsic-partial-spectral \
+  --methods group-network-spectral group-intrinsic-spectral \
   --coverage-threshold 0.80
 
 /home/yojiao/.conda/envs/py314/bin/python scripts/hipp_parcellation_network/materialize_group_functional_atlas_labels.py \
@@ -86,13 +87,9 @@ outputs_migration/hipp_group_merged_canonical_atlas/
 
 present_group/
   kong2019_group-network-spectral_group_overview.png
-  kong2019_group-network-partial-spectral_group_overview.png
   kong2019_group-intrinsic-spectral_group_overview.png
-  kong2019_group-intrinsic-partial-spectral_group_overview.png
   kong2019_8net_group-network-spectral_group_overview.png
-  kong2019_8net_group-network-partial-spectral_group_overview.png
   kong2019_8net_group-intrinsic-spectral_group_overview.png
-  kong2019_8net_group-intrinsic-partial-spectral_group_overview.png
   group_overview_manifest.json
   README.md
 ```

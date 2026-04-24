@@ -9,9 +9,12 @@ The workflow builds merged-canonical hippocampal group atlases for the default 1
 ## Active Methods
 
 - `group-network-spectral`
-- `group-network-partial-spectral`
 - `group-intrinsic-spectral`
-- `group-intrinsic-partial-spectral`
+
+Retired (no longer run; code retained for reference):
+
+- ~~`group-network-partial-spectral`~~ — one-sided partial correlation features; retired, not running
+- ~~`group-intrinsic-partial-spectral`~~ — intrinsic + partial; retired, not running
 
 Active atlases:
 
@@ -26,11 +29,12 @@ Canonical shared input root:
 
 Required input classes:
 
-- canonical-network FC caches
-- one-sided partial-FC caches
-- intrinsic FC caches
+- canonical-network FC caches (raw Pearson r in [-1, 1] on disk; unconditionally Fisher-z transformed at load)
+- intrinsic FC caches (raw Pearson r, same treatment)
 - per-subject valid masks
 - canonical network order metadata
+
+Note: one-sided partial-FC caches (`hipp_vertex_to_network_partial_fc*.npy`) remain on disk but are no longer consumed by active methods.
 
 Default subject manifest:
 
@@ -65,6 +69,9 @@ The upstream merge file also defines other atlas mappings, but the active merged
 - order final cluster IDs along hippocampal long axis (`head -> tail`)
 - record exact subject list, coverage threshold, and non-triviality settings in manifests
 - use direct ARI-space reporting for K-selection summaries and null references
+- FC features are **unconditionally** Fisher-z transformed at load (raw r ∈ [-1, 1] on disk); no conditional fallback
+- cosine similarity is mapped to affinity via `max(cosine, 0)` — anti-correlations contribute zero weight, not a positive attraction
+- after Hadamard fusion with mesh adjacency, `W` has `diag=0` (no self-loops); symmetrized via `W.maximum(W.T)` for float safety
 
 ## Output Contract
 
@@ -90,7 +97,8 @@ Presentation companion:
 
 The following are retired and archived under `_archive/hipp_parcellation_network/`:
 
-- subject-level clustering pipeline
+- subject-level clustering pipeline (including `scripts/common/spectral_clustering.py`, which has no live caller)
 - `group prior + fast-PFM`
 - legacy flow docs
 - MSHBM experiments
+- `group-network-partial-spectral` and `group-intrinsic-partial-spectral` branches (code remains in `run_merged_canonical_group_atlas.py` but no runs are planned)
