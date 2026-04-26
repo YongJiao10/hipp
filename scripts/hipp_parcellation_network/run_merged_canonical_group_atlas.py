@@ -20,24 +20,32 @@ from sklearn.metrics import adjusted_rand_score
 REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT / "scripts" / "common") not in sys.path:
     sys.path.insert(0, str(REPO_ROOT / "scripts" / "common"))
+if str(REPO_ROOT / "scripts" / "cortex") not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT / "scripts" / "cortex"))
 
 from surface_utils import infer_spec_path, long_axis_order
+from kong2022_label_utils import load_kong2022_bundle
 
 
 DEFAULT_SHARED_ROOT = REPO_ROOT / "outputs_migration" / "hipp_group_inputs_shared"
 DEFAULT_OUT_ROOT = REPO_ROOT / "outputs_migration" / "hipp_group_merged_canonical_atlas"
 DEFAULT_SUBJECTS = REPO_ROOT / "manifests" / "hcp_7t_hippocampus_fmri_qc_pass_153.txt"
+DEFAULT_HIPPUNFOLD_BATCH_ROOT = REPO_ROOT / "outputs_migration" / "dense_corobl_batch"
 DEFAULT_NETWORK_STYLE = REPO_ROOT / "config" / "hipp_network_style.json"
 DEFAULT_CROSS_ATLAS_MERGE = REPO_ROOT / "config" / "cross_atlas_network_merge.json"
 DEFAULT_GROUP_AVG_SURFACES_DIR = DEFAULT_OUT_ROOT / "group_average_surfaces"
 
-METHODS = [
+METHOD_CHOICES = [
     "group-network-spectral",
     "group-network-partial-spectral",
     "group-intrinsic-spectral",
     "group-intrinsic-partial-spectral",
 ]
-ATLASES = ["kong2019", "kong2019_8net"]
+METHODS_DEFAULT = [
+    "group-network-spectral",
+    "group-intrinsic-spectral",
+]
+ATLASES = ["kong2019", "kong2019_8net", "kong2022"]
 SMOOTHINGS = ["2mm", "4mm"]
 HEMIS = ["L", "R"]
 K_RANGE = list(range(2, 11))
@@ -377,11 +385,10 @@ def make_named_label_gifti(labels: np.ndarray, label_table_items: list[tuple[int
     return GiftiImage(darrays=[da], labeltable=tab)
 
 
-def infer_surface_path(subject: str, hemi: str) -> Path:
+def infer_surface_path(subject: str, hemi: str, batch_root: Path | None = None) -> Path:
+    root = Path(batch_root).resolve() if batch_root is not None else DEFAULT_HIPPUNFOLD_BATCH_ROOT.resolve()
     p = (
-        REPO_ROOT
-        / "outputs_migration"
-        / "dense_corobl_batch"
+        root
         / f"sub-{subject}"
         / "hippunfold"
         / f"sub-{subject}"
@@ -764,7 +771,12 @@ def run_aware_ari(
     }
 
 
-def verify_surface_topology_consistency(subjects: list[str], hemis: list[str], template_surfaces: dict[str, Path]) -> dict[str, object]:
+def verify_surface_topology_consistency(
+    subjects: list[str],
+    hemis: list[str],
+    template_surfaces: dict[str, Path],
+    batch_root: Path,
+) -> dict[str, object]:
     out: dict[str, object] = {}
     for hemi in hemis:
         t_coords, t_faces = load_surface(template_surfaces[hemi])
@@ -772,7 +784,7 @@ def verify_surface_topology_consistency(subjects: list[str], hemis: list[str], t
         n_faces = int(t_faces.shape[0])
         mismatched: list[str] = []
         for s in subjects:
-            p = infer_surface_path(s, hemi)
+            p = infer_surface_path(s, hemi, batch_root)
             coords, faces = load_surface(p)
             if int(coords.shape[0]) != n_vertices or int(faces.shape[0]) != n_faces:
                 mismatched.append(f"sub-{s}")
@@ -796,8 +808,8 @@ def corrcoef_rows(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     y = np.asarray(b, dtype=np.float32)
     x_mu = np.nanmean(x, axis=1, keepdims=True)
     y_mu = np.nanmean(y, axis=1, keepdims=True)
-    x_sd = np.nanstd(x, axis=1, keepdims=True)
-    y_sd = np.nanstd(y, axis=1, keepdims=True)
+    x_sd = np.nanstd(x, axis=1, keepdims=True, ddof=1)
+    y_sd = np.nanstd(y, axis=1, keepdims=True, ddof=1)
     x_z = (x - x_mu) / np.clip(x_sd, 1e-12, None)
     y_z = (y - y_mu) / np.clip(y_sd, 1e-12, None)
     x_z[~np.isfinite(x_z)] = 0.0
@@ -884,6 +896,158 @@ def cluster_network_profile(
     return out
 
 
+def load_kong2022_roi_registry() -> list[dict[str, object]]:
+    bundle = load_kong2022_bundle()
+    rows: list[dict[str, object]] = []
+    for row in bundle["roi_registry"]:
+        rows.append(
+            {
+                "roi_id": int(row["roi_id"]),
+                "roi_name": str(row["roi_name"]),
+                "hemi": str(row["hemi"]),
+                "family17": str(row["family17"]),
+                "subregion": str(row["subregion"]),
+                "rank": int(row["rank"]),
+                "canonical8": str(row["canonical8"]),
+            }
+        )
+    if len(rows) != 400:
+        raise RuntimeError(f"Expected 400 Kong2022 registry rows, got {len(rows)}")
+    return rows
+
+
+def read_kong2022_roi_tsv(path: Path) -> list[dict[str, object]]:
+    with path.open("r", encoding="utf-8", newline="") as f:
+        out = []
+        for row in csv.DictReader(f, delimiter="\t"):
+            out.append(
+                {
+                    "parcel_id": int(row["parcel_id"]),
+                    "parcel_name": str(row["parcel_name"]),
+                    "family17": str(row["family17"]),
+                    "canonical8": str(row["canonical8"]),
+                    "hemisphere": str(row["hemisphere"]),
+                    "subregion": str(row.get("subregion", "")),
+                    "rank": int(row.get("rank", "0")),
+                }
+            )
+    return out
+
+
+def cluster_roi_profile(
+    *,
+    group_labels_final: np.ndarray,
+    support_mask: np.ndarray,
+    subjects: list[str],
+    shared_root: Path,
+    smoothing: str,
+    hemi: str,
+    valid_masks_by_subject: dict[str, np.ndarray],
+) -> tuple[np.ndarray, list[dict[str, object]]]:
+    k_final = int(np.max(group_labels_final))
+    full_registry = load_kong2022_roi_registry()
+    reg_by_id = {int(r["roi_id"]): r for r in full_registry}
+    col_by_id = {int(r["roi_id"]): i for i, r in enumerate(full_registry)}
+
+    profiles: list[np.ndarray] = []
+    for subject in subjects:
+        ts_path = shared_root / f"sub-{subject}" / "surface" / smoothing / f"sub-{subject}_hemi-{hemi}_timeseries.npy"
+        roi_path = shared_root / f"sub-{subject}" / "reference" / "kong2022" / "cortex_roi_parcel_timeseries.npy"
+        roi_tsv = shared_root / f"sub-{subject}" / "reference" / "kong2022" / "cortex_roi_parcels.tsv"
+        if not (ts_path.exists() and roi_path.exists() and roi_tsv.exists()):
+            continue
+        ts = np.load(ts_path).astype(np.float32)
+        roi = np.load(roi_path).astype(np.float32)
+        rows = read_kong2022_roi_tsv(roi_tsv)
+        if ts.ndim != 2 or roi.ndim != 2:
+            continue
+        if ts.shape[1] != roi.shape[1]:
+            continue
+        if roi.shape[0] != len(rows):
+            raise RuntimeError(
+                f"ROI TSV rows mismatch for sub-{subject}: roi_shape={roi.shape} rows={len(rows)}"
+            )
+
+        valid = support_mask & valid_masks_by_subject[subject]
+        cluster_ts = np.full((k_final, ts.shape[1]), np.nan, dtype=np.float32)
+        for c in range(1, k_final + 1):
+            m = (group_labels_final == c) & valid
+            if int(np.sum(m)) == 0:
+                continue
+            with np.errstate(invalid="ignore"):
+                cluster_ts[c - 1, :] = np.nanmean(ts[m, :], axis=0).astype(np.float32)
+
+        corr = corrcoef_rows(cluster_ts, roi)
+        corr = np.clip(corr, -0.999999, 0.999999)
+        fisher = np.arctanh(corr).astype(np.float32)
+        fisher[~np.isfinite(fisher)] = np.nan
+
+        scatter = np.full((k_final, 400), np.nan, dtype=np.float32)
+        cols: list[int] = []
+        for row in rows:
+            roi_id = int(row["parcel_id"])
+            reg = reg_by_id.get(roi_id)
+            if reg is None:
+                raise KeyError(f"Unexpected ROI id in sub-{subject}: {roi_id}")
+            if str(row["parcel_name"]) != str(reg["roi_name"]):
+                raise RuntimeError(
+                    f"ROI name mismatch in sub-{subject} for id={roi_id}: "
+                    f"{row['parcel_name']} vs {reg['roi_name']}"
+                )
+            if str(row["family17"]) != str(reg["family17"]) or str(row["canonical8"]) != str(reg["canonical8"]):
+                raise RuntimeError(
+                    f"ROI metadata mismatch in sub-{subject} for id={roi_id}: "
+                    f"family17/canonical8 inconsistent with registry"
+                )
+            cols.append(int(col_by_id[roi_id]))
+        scatter[:, np.asarray(cols, dtype=np.int32)] = fisher
+        profiles.append(scatter)
+
+    if not profiles:
+        raise RuntimeError("No subject-level ROI profiles available for kong2022 cluster annotation")
+    out = np.nanmean(np.stack(profiles, axis=0), axis=0).astype(np.float32)
+    return out, full_registry
+
+
+def cluster_roi_top_k(
+    profile_400: np.ndarray,
+    roi_registry: list[dict[str, object]],
+    k_top: int = 20,
+) -> dict[str, object]:
+    out: dict[str, object] = {}
+    for cidx in range(profile_400.shape[0]):
+        row = profile_400[cidx, :]
+        valid = np.flatnonzero(np.isfinite(row))
+        if valid.size == 0:
+            out[str(cidx + 1)] = {"top_positive": [], "top_negative": []}
+            continue
+        row_valid = row[valid]
+        pos_order = valid[np.argsort(-row_valid)]
+        neg_order = valid[np.argsort(row_valid)]
+        n_take = int(min(k_top, valid.size))
+
+        def build_items(indices: np.ndarray) -> list[dict[str, object]]:
+            items: list[dict[str, object]] = []
+            for col in indices[:n_take]:
+                reg = roi_registry[int(col)]
+                items.append(
+                    {
+                        "roi_idx": int(reg["roi_id"]),
+                        "roi_name": str(reg["roi_name"]),
+                        "family17": str(reg["family17"]),
+                        "canonical8": str(reg["canonical8"]),
+                        "fisher_z": float(row[int(col)]),
+                    }
+                )
+            return items
+
+        out[str(cidx + 1)] = {
+            "top_positive": build_items(pos_order),
+            "top_negative": build_items(neg_order),
+        }
+    return {"cluster_id_to_top20": out, "roi_registry": roi_registry}
+
+
 def assignment_status(profile: np.ndarray, network_names: list[str]) -> tuple[list[dict[str, object]], list[str | None]]:
     rows: list[dict[str, object]] = []
     dominant: list[str | None] = []
@@ -964,7 +1128,8 @@ def main() -> int:
     parser.add_argument("--shared-root", default=str(DEFAULT_SHARED_ROOT))
     parser.add_argument("--out-root", default=str(DEFAULT_OUT_ROOT))
     parser.add_argument("--subjects-manifest", default=str(DEFAULT_SUBJECTS))
-    parser.add_argument("--methods", nargs="+", default=METHODS, choices=METHODS)
+    parser.add_argument("--hippunfold-batch-root", default=str(DEFAULT_HIPPUNFOLD_BATCH_ROOT))
+    parser.add_argument("--methods", nargs="+", default=METHODS_DEFAULT, choices=METHOD_CHOICES)
     parser.add_argument("--atlases", nargs="+", default=ATLASES)
     parser.add_argument("--smoothings", nargs="+", default=SMOOTHINGS)
     parser.add_argument("--hemis", nargs="+", default=HEMIS)
@@ -991,6 +1156,7 @@ def main() -> int:
 
     shared_root = Path(args.shared_root).resolve()
     out_root = Path(args.out_root).resolve()
+    hippunfold_batch_root = Path(args.hippunfold_batch_root).resolve()
     out_root.mkdir(parents=True, exist_ok=True)
 
     subjects = load_subjects(Path(args.subjects_manifest).resolve())
@@ -1001,15 +1167,15 @@ def main() -> int:
     null_seeds = [int(x) for x in rng.randint(1, 2_000_000_000, size=int(args.null_resamples))]
 
     avg_surf_dir = Path(args.group_average_surfaces_dir).resolve()
-    outputs_migration_root = (REPO_ROOT / "outputs_migration").resolve()
+    allowed_roots = [(REPO_ROOT / "outputs_migration").resolve(), (REPO_ROOT / "outputs_experiments").resolve()]
     if "present_group" in avg_surf_dir.parts:
         raise ValueError(
             f"Invalid --group-average-surfaces-dir={avg_surf_dir}: present_group paths are non-canonical. "
-            f"Use outputs_migration group-average surfaces."
+            f"Use a canonical outputs_migration or outputs_experiments group-average surface directory."
         )
-    if not avg_surf_dir.is_relative_to(outputs_migration_root):
+    if not any(avg_surf_dir.is_relative_to(root) for root in allowed_roots):
         raise ValueError(
-            f"Invalid --group-average-surfaces-dir={avg_surf_dir}: expected a path under {outputs_migration_root}."
+            f"Invalid --group-average-surfaces-dir={avg_surf_dir}: expected a path under one of {allowed_roots}."
         )
     avg_surf_paths = {
         hemi: avg_surf_dir / f"group-average_hemi-{hemi}_space-corobl_den-512_label-hipp_midthickness.surf.gii"
@@ -1024,7 +1190,7 @@ def main() -> int:
         )
     template_label = "group-average"
     surfaces = {hemi: avg_surf_paths[hemi] for hemi in args.hemis}
-    topology_audit = verify_surface_topology_consistency(subjects, args.hemis, surfaces)
+    topology_audit = verify_surface_topology_consistency(subjects, args.hemis, surfaces, hippunfold_batch_root)
     surface_meta: dict[str, dict[str, object]] = {}
     adjacency_by_hemi: dict[str, sparse.csr_matrix] = {}
     long_axis_order_by_hemi: dict[str, np.ndarray] = {}
@@ -1054,6 +1220,13 @@ def main() -> int:
 
     for method in args.methods:
         for atlas in args.atlases:
+            if atlas == "kong2022" and method in {"group-network-partial-spectral", "group-intrinsic-partial-spectral"}:
+                print(
+                    f"[warn] skipping unsupported combo atlas={atlas} method={method} "
+                    "(partial methods are not defined for Kong2022 Route B)",
+                    flush=True,
+                )
+                continue
             network_names = canonical_network_order_by_atlas[atlas]
             for smoothing in args.smoothings:
                 for hemi in args.hemis:
@@ -1277,11 +1450,34 @@ def main() -> int:
                             ),
                         )
                         status_rows, dominant = assignment_status(profile, network_names)
+                        roi_profile: np.ndarray | None = None
+                        roi_registry: list[dict[str, object]] | None = None
+                        roi_top20: dict[str, object] | None = None
+                        if atlas == "kong2022":
+                            roi_profile, roi_registry = cluster_roi_profile(
+                                group_labels_final=labels_final,
+                                support_mask=support,
+                                subjects=subjects,
+                                shared_root=shared_root,
+                                smoothing=smoothing,
+                                hemi=hemi,
+                                valid_masks_by_subject=valid_masks,
+                            )
+                            roi_top20 = cluster_roi_top_k(roi_profile, roi_registry, k_top=20)
 
                         np.save(run_dir / "group_labels_final.npy", labels_final.astype(np.int32))
                         np.save(run_dir / "cluster_network_profile.npy", profile.astype(np.float32))
                         save_json(run_dir / "cluster_assignment_status.json", {"items": status_rows})
                         save_json(run_dir / "cluster_dominant_network.json", {"dominant": dominant, "network_names": network_names})
+                        if atlas == "kong2022":
+                            assert roi_profile is not None and roi_registry is not None and roi_top20 is not None
+                            np.save(run_dir / "cluster_roi_profile.npy", roi_profile.astype(np.float32))
+                            save_json(run_dir / "cluster_roi_top20.json", roi_top20)
+                            write_tsv(
+                                run_dir / "cluster_roi_registry.tsv",
+                                roi_registry,
+                                ["roi_id", "roi_name", "hemi", "family17", "subregion", "rank", "canonical8"],
+                            )
                         functional_labels, functional_meta, functional_label_items = functional_atlas_from_clusters(
                             group_labels_final=labels_final,
                             status_rows=status_rows,
@@ -1364,15 +1560,19 @@ def main() -> int:
                             "V_min_fraction": float(args.v_min_fraction),
                             "V_min_effective": int(v_min),
                             "feature_family": (
-                                "vertex_to_canonical_network_fc_fisherz_colzscore"
-                                if method == "group-network-spectral"
+                                "vertex_to_kong2022_400roi_fc_fisherz_colzscore"
+                                if method == "group-network-spectral" and atlas == "kong2022"
                                 else (
-                                    "vertex_to_canonical_network_partial_fc_networks_only_one_sided_fisherz_colzscore"
-                                    if method == "group-network-partial-spectral"
+                                    "vertex_to_canonical_network_fc_fisherz_colzscore"
+                                    if method == "group-network-spectral"
                                     else (
-                                        "vertex_to_vertex_intrinsic_fc_fisherz_diag0"
-                                        if method == "group-intrinsic-spectral"
-                                        else "vertex_to_vertex_intrinsic_fc_fisherz_diag0_plus_partial_profile"
+                                        "vertex_to_canonical_network_partial_fc_networks_only_one_sided_fisherz_colzscore"
+                                        if method == "group-network-partial-spectral"
+                                        else (
+                                            "vertex_to_vertex_intrinsic_fc_fisherz_diag0"
+                                            if method == "group-intrinsic-spectral"
+                                            else "vertex_to_vertex_intrinsic_fc_fisherz_diag0_plus_partial_profile"
+                                        )
                                     )
                                 )
                             ),
@@ -1382,7 +1582,11 @@ def main() -> int:
                                 else (
                                     "pearson"
                                     if method == "group-network-spectral"
-                                    else "intrinsic_vertex_to_vertex_pearson"
+                                    else (
+                                        "intrinsic_vertex_to_vertex_pearson"
+                                        if method == "group-intrinsic-spectral"
+                                        else "intrinsic_vertex_to_vertex_partial_profile"
+                                    )
                                 )
                             ),
                             "partial_fc_definition": (
@@ -1431,11 +1635,22 @@ def main() -> int:
                             "cluster_dominant_network": str((run_dir / "cluster_dominant_network.json").resolve()),
                             "cluster_assignment_status": str((run_dir / "cluster_assignment_status.json").resolve()),
                             "group_functional_atlas_label_map": str((run_dir / "group_functional_atlas_label_map.json").resolve()),
+                            "cluster_roi_profile": (
+                                str((run_dir / "cluster_roi_profile.npy").resolve()) if atlas == "kong2022" else None
+                            ),
+                            "cluster_roi_top20": (
+                                str((run_dir / "cluster_roi_top20.json").resolve()) if atlas == "kong2022" else None
+                            ),
+                            "cluster_roi_registry": (
+                                str((run_dir / "cluster_roi_registry.tsv").resolve()) if atlas == "kong2022" else None
+                            ),
                             "template_subject": template_label,
                             "cluster_label_ordering": "long_axis_head_to_tail",
                             "cluster_order_head_to_tail": fixed_cluster_order,
                             "template_left_or_right_surface": str(surfaces[hemi]),
-                            "template_spec_path": str(infer_spec_path(subjects[0], infer_surface_path(subjects[0], hemi))),
+                            "template_spec_path": str(
+                                infer_spec_path(subjects[0], infer_surface_path(subjects[0], hemi, hippunfold_batch_root))
+                            ),
                             "template_cluster_label": str(lbl_path.resolve()),
                             "template_functional_atlas_label": str(func_lbl_path.resolve()),
                         }

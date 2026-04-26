@@ -61,8 +61,8 @@ def corrcoef_rows(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     y = np.asarray(b, dtype=np.float32)
     x_mu = np.nanmean(x, axis=1, keepdims=True)
     y_mu = np.nanmean(y, axis=1, keepdims=True)
-    x_sd = np.nanstd(x, axis=1, keepdims=True)
-    y_sd = np.nanstd(y, axis=1, keepdims=True)
+    x_sd = np.nanstd(x, axis=1, keepdims=True, ddof=1)
+    y_sd = np.nanstd(y, axis=1, keepdims=True, ddof=1)
     x_z = (x - x_mu) / np.clip(x_sd, 1e-12, None)
     y_z = (y - y_mu) / np.clip(y_sd, 1e-12, None)
     x_z[~np.isfinite(x_z)] = 0.0

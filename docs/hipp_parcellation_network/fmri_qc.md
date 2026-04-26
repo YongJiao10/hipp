@@ -4,10 +4,18 @@ The default hippocampal group-analysis cohort is the 153-subject QC-passed set:
 
 - `manifests/hcp_7t_hippocampus_fmri_qc_pass_153.txt`
 
+This file is not reused for the T1only branch. T1only QC is recomputed from the T1only HippUnfold outputs and written under:
+
+- `outputs_experiments/hippunfold_recommended_t1w_20260423/kong2022_route_b/manifests/`
+
 QC criteria:
 
 1. HippUnfold Dice `>= 0.70` for both hemispheres
 2. fMRI null-vertex rate `< 20%` for both hemispheres
+
+T1only uses the same thresholds, but the consumed HippUnfold surfaces and Dice TSVs come from:
+
+- `outputs_experiments/hippunfold_recommended_t1w_20260423/dense_corobl_batch/`
 
 Excluded subjects:
 

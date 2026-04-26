@@ -181,6 +181,33 @@
         "SomatoCognitiveAction": "Somatomotor",
         "Noise": "Noise"
       }
+    },
+    "kong2022": {
+      "display_name": "Kong2022",
+      "original_network_count": 17,
+      "merged_functional_network_count": 8,
+      "roi_count": 400,
+      "source_dlabel_relpath": "external/Schaefer2018_Kong2022/Schaefer2018_400Parcels_Kong2022_17Networks_order.dlabel.nii",
+      "source_info_relpath": "external/Schaefer2018_Kong2022/Schaefer2018_400Parcels_Kong2022_17Networks_order_info.txt",
+      "mapping": {
+        "DefaultA": "Default",
+        "DefaultB": "Default",
+        "DefaultC": "Default",
+        "ContA": "Control",
+        "ContB": "Control",
+        "ContC": "Control",
+        "SalVenAttnA": "VentralAttention",
+        "SalVenAttnB": "VentralAttention",
+        "DorsAttnA": "DorsalAttention",
+        "DorsAttnB": "DorsalAttention",
+        "SomMotA": "Somatomotor",
+        "SomMotB": "Somatomotor",
+        "VisualA": "Visual",
+        "VisualB": "Visual",
+        "VisualC": "Visual",
+        "Aud": "Auditory",
+        "Language": "Language"
+      }
     }
   }
 }

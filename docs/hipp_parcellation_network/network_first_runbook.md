@@ -6,15 +6,23 @@ This directory now supports **group analysis only**.
 
 Active workflow:
 
-- canonical-network materialization for `kong2019` / `kong2019_8net`
+- cortex reference extraction for `kong2022` (Route B: public 400-ROI dlabel)
+- FC materialization for `kong2019` / `kong2019_8net` / `kong2022`
 - merged-canonical group atlas construction
 - present-group overview generation
 - optional backfill of group functional atlas labels
+
+For the T1only HippUnfold branch, do not use the default 153-subject T2only-era manifest or the default shared root. Use the dedicated runbook:
+
+- `docs/hipp_parcellation_network/t1only_kong2022_route_b_runbook.md`
 
 The canonical network axis is still atlas-specific, and the merge map is preserved in [merged_canonical_group_atlas_plan.md](/home/yojiao/hpchome/hipp/docs/hipp_parcellation_network/merged_canonical_group_atlas_plan.md). The important cases are:
 
 - `Kong2019`: `TemporalParietal -> Default`, `Noise` is not retained
 - `kong2019_8net`: same canonical merge logic, but `TemporalParietal` stays independent in the 8-network layout where required by the upstream mapping file
+- `kong2022`: 400 ROI labels (`Schaefer2018_400Parcels_Kong2022_17Networks_order`) are merged to canonical-8 via
+  `Default* -> Default`, `Cont* -> Control`, `SalVenAttn* -> VentralAttention`, `DorsAttn* -> DorsalAttention`,
+  `SomMot* -> Somatomotor`, `Visual* -> Visual`, `Aud -> Auditory`, `Language -> Language`
 - `Hermosillo2024`: `MTL + Tpole -> Limbic`
 - `Lynch2024`: `Noise` is excluded, `Language` is retained
 
@@ -37,6 +45,13 @@ legacy code/docs/results  _archive/hipp_parcellation_network/
 
 The active scripts fail fast if required inputs are missing. There is no fallback to archived subject outputs.
 
+For Route B (`kong2022`), atlas-invariant cortex upstream artifacts are rooted at `sub-*/reference/common/`:
+
+- `reference/common/tsnr_gate/` for cortex valid masks
+- `reference/common/runs/` for run boundary metadata
+
+Atlas-specific cortex reference arrays remain under `sub-*/reference/kong2022/`.
+
 ## Default Cohort
 
 Use the default QC-passed 153-subject cohort:
@@ -45,9 +60,13 @@ Use the default QC-passed 153-subject cohort:
 
 Do not silently expand to 166 subjects.
 
+This default applies only to the legacy/default group input root documented below. T1only derives a new pass manifest after T1only HippUnfold Dice QC and T1only hippocampal tSNR QC.
+
 ## Active Entry Points
 
+- `scripts/cortex/run_cortex_kong2022_reference_batch.py`
 - `scripts/hipp_parcellation_network/materialize_kong7_kong8_pearson_partial_fc.py`
+- `scripts/hipp_parcellation_network/materialize_kong2022_vertex_to_roi_fc.py`
 - `scripts/hipp_parcellation_network/run_merged_canonical_group_atlas.py`
 - `scripts/hipp_parcellation_network/build_present_group_overview_merged_canonical.py`
 - `scripts/hipp_parcellation_network/materialize_group_functional_atlas_labels.py`
@@ -55,7 +74,16 @@ Do not silently expand to 166 subjects.
 ## Canonical Command Sequence
 
 ```bash
+/home/yojiao/.conda/envs/py314/bin/python scripts/cortex/run_cortex_kong2022_reference_batch.py \
+  --shared-root outputs_migration/hipp_group_inputs_shared \
+  --jobs 6 \
+  --resume
+
 /home/yojiao/.conda/envs/py314/bin/python scripts/hipp_parcellation_network/materialize_kong7_kong8_pearson_partial_fc.py \
+  --shared-root outputs_migration/hipp_group_inputs_shared \
+  --jobs 6
+
+/home/yojiao/.conda/envs/py314/bin/python scripts/hipp_parcellation_network/materialize_kong2022_vertex_to_roi_fc.py \
   --shared-root outputs_migration/hipp_group_inputs_shared \
   --jobs 6
 
@@ -63,14 +91,14 @@ Do not silently expand to 166 subjects.
   --shared-root outputs_migration/hipp_group_inputs_shared \
   --resume \
   --coverage-thresholds 0.80 \
-  --atlases kong2019 kong2019_8net \
+  --atlases kong2019 kong2019_8net kong2022 \
   --methods group-network-spectral group-intrinsic-spectral \
   --out-root outputs_migration/hipp_group_merged_canonical_atlas
 
 /home/yojiao/.conda/envs/py314/bin/python scripts/hipp_parcellation_network/build_present_group_overview_merged_canonical.py \
   --group-root outputs_migration/hipp_group_merged_canonical_atlas \
   --present-dir present_group \
-  --atlases kong2019 kong2019_8net \
+  --atlases kong2019 kong2019_8net kong2022 \
   --methods group-network-spectral group-intrinsic-spectral \
   --coverage-threshold 0.80
 
@@ -90,6 +118,8 @@ present_group/
   kong2019_group-intrinsic-spectral_group_overview.png
   kong2019_8net_group-network-spectral_group_overview.png
   kong2019_8net_group-intrinsic-spectral_group_overview.png
+  kong2022_group-network-spectral_group_overview.png
+  kong2022_group-intrinsic-spectral_group_overview.png
   group_overview_manifest.json
   README.md
 ```

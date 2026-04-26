@@ -21,13 +21,17 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_GROUP_ROOT = REPO_ROOT / "outputs_migration" / "hipp_group_merged_canonical_atlas"
 DEFAULT_PRESENT_DIR = REPO_ROOT / "present_group"
 DEFAULT_SCENE = REPO_ROOT / "config" / "wb_locked_native_view_lateral_medial.scene"
-METHODS = [
+METHOD_CHOICES = [
     "group-network-spectral",
     "group-network-partial-spectral",
     "group-intrinsic-spectral",
     "group-intrinsic-partial-spectral",
 ]
-ATLASES = ["kong2019", "kong2019_8net"]
+METHODS_DEFAULT = [
+    "group-network-spectral",
+    "group-intrinsic-spectral",
+]
+ATLASES = ["kong2019", "kong2019_8net", "kong2022"]
 SMOOTHINGS = ["2mm", "4mm"]
 FS_TITLE = 11
 FS_LABEL = 10
@@ -369,7 +373,7 @@ def main() -> int:
     p = argparse.ArgumentParser(description="Build present_group overviews from merged-canonical group atlas outputs.")
     p.add_argument("--group-root", default=str(DEFAULT_GROUP_ROOT))
     p.add_argument("--present-dir", default=str(DEFAULT_PRESENT_DIR))
-    p.add_argument("--methods", nargs="+", default=METHODS, choices=METHODS)
+    p.add_argument("--methods", nargs="+", default=METHODS_DEFAULT, choices=METHOD_CHOICES)
     p.add_argument("--atlases", nargs="+", default=ATLASES)
     p.add_argument("--coverage-threshold", type=float, default=0.80)
     p.add_argument("--scene", default=str(DEFAULT_SCENE))
