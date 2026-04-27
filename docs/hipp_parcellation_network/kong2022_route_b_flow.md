@@ -9,7 +9,7 @@ Route B uses the public atlas label file directly:
 No individualized cortex PFM is run in this route. Each subject gets:
 
 - 400-ROI cortex timeseries (after cortex tSNR gate)
-- merged canonical-8 cortex timeseries derived from those ROI timeseries
+- merged canonical-8 cortex timeseries derived from those ROI timeseries (kept for compatibility; not used by the three active assignment methods)
 
 Atlas slug is fixed to `kong2022`.
 
@@ -30,6 +30,13 @@ For T1only, Route B must compute its own cortex tSNR gate and run slicing from t
    - include `--atlases kong2022`
 4. Render present overview:
    - script: `scripts/hipp_parcellation_network/build_present_group_overview_merged_canonical.py`
+   - pipeline default methods: `group-intrinsic-spectral`, `group-network-top`, `group-network-all`
+5. Render standalone cluster-ROI cortex figures (independent from overview):
+   - script: `scripts/hipp_parcellation_network/build_cluster_roi_cortex_independent.py`
+   - single output root: `present_group_t1only/runtime/` (cluster figures, manifests, and quicklook index all co-located)
+   - merged-hemisphere quicklook overviews are written directly under `present_group_t1only/`
+   - clusterless methods (`group-network-top`, `group-network-all`) write merged-smoothing quicklooks: `cortex_<atlas>_<method>_overview.png`
+   - cluster methods keep per-smoothing quicklooks: `cortex_<atlas>_<method>_<smoothing>_overview.png`
 
 ## Upstream Common Inputs
 
@@ -58,7 +65,7 @@ Run storage policy for Route B is metadata slicing, not duplicate arrays:
 
 For each `(method, smoothing, coverage, hemi)` combo:
 
-- `cluster_network_profile.npy` still reports merged canonical-8 cluster profiles
+- `cluster_network_profile.npy` still reports merged canonical-8 cluster profiles (cluster method only)
 - `cluster_roi_profile.npy` stores `K_final x 400` cluster-to-ROI Fisher-z profile
 - `cluster_roi_top20.json` stores per-cluster:
   - strongest positive 20 ROI
@@ -66,13 +73,57 @@ For each `(method, smoothing, coverage, hemi)` combo:
   - each ROI annotated with `family17` and `canonical8`
 - `cluster_roi_registry.tsv` stores the full 400-ROI registry
 
-Cluster network assignment is based on merged canonical-8 mean timeseries, where each canonical network timeseries is the mean of all corresponding Kong2022 ROI timeseries (for example `Default*` ROI mean for `Default`).
+If a combo cannot produce a valid final `K`, the combo is soft-skipped: `group_atlas_manifest.json` is written with `status=skipped_*`, `k_selection_summary.tsv/json` is still emitted for diagnostics, and downstream renderers should skip that combo.
+
+For `group-intrinsic-spectral`, cluster network assignment uses raw TopN positive ROI majority (`N=min(20, n_positive_roi)` from `mean_z > 0`), not canonical `8 x T` cortex timeseries. One-sided t-test + BH-FDR outputs are still computed for stats fields only. If no positive ROI exists, status is `unassigned` with reason `no_positive_roi`. If TopN ROI belong to only one network, `2nd` is recorded as `none` (not duplicated from `1st`).
+
+For `group-network-top` and `group-network-all`, assignment is vertex-level (clusterless):
+
+- `group-network-top`: raw TopN positive ROI majority (`mean_z > 0`); significance remains stats-only
+- `group-network-all`: network-wide ROI mean score assignment with no significance gate (always assign in support mask); significance remains stats-only
+
+## Independent Cluster-ROI Cortex Figure Outputs
+
+All outputs are co-located under `present_group_t1only/runtime/` for each `(method, smoothing, coverage, hemi)` combo:
+
+- one folder per cluster with:
+  - `cluster_cortex_toproi_4view.png`
+  - `cluster_roi_stats.tsv`
+  - `cluster_roi_stats.json`
+- combo-level `cluster_roi_cortex_combo_manifest.json`
+- top-level `cluster_roi_cortex_runtime_manifest.json`
+- `combo_manifests/` per-combo index JSON
+- top-level `cluster_roi_cortex_manifest.json` (quicklook index)
+
+Top-level `present_group_t1only/` contains direct-access images:
+
+- clusterless: `cortex_<atlas>_<method>_overview.png` merged-hemisphere overview collage
+- cluster mode: `cortex_<atlas>_<method>_<smoothing>_overview.png` merged-hemisphere overview collage
+
+Statistical and selection policy:
+
+- one-sided one-sample t-tests (vs 0) on subject-level cluster-to-ROI Fisher-z values
+- BH-FDR correction per cluster and per sign (positive/negative), threshold `q < 0.05`
+- intrinsic cluster mode: Sig-only selection, capped at top 20 significant ROI per sign
+- clusterless mode: global top connections use TopN positive + TopN negative edges (total up to `2N`) with significance thresholding (`q < 0.05`)
+- network hue follows canonical8 color mapping; sign is encoded by shade (negative uses lighter tone)
+- cluster figure legend is network-color based (no per-ROI name legend)
+- default method set for this stage is `group-intrinsic-spectral`, `group-network-top`, `group-network-all`
+- rendering uses first scene view only (single 4-panel cortex layout), no multi-view expansion
+- overview builder composes from runtime cluster panels and keeps those panel PNGs in runtime
+- per-cluster figure includes network legend with sign-coding note and selected ROI counts
+- merged overview panels annotate `n=total (+pos/-neg)` for each subplot
 
 ## Method Support
 
-Active methods for Kong2022:
+Active default methods for Kong2022:
+
+- `group-intrinsic-spectral`
+- `group-network-top`
+- `group-network-all`
+
+Opt-in only:
 
 - `group-network-spectral`
-- `group-intrinsic-spectral`
 
 Partial methods are unsupported for Kong2022 in this route and are warning+skip in the group driver.

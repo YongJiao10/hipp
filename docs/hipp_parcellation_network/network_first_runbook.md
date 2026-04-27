@@ -91,15 +91,15 @@ This default applies only to the legacy/default group input root documented belo
   --shared-root outputs_migration/hipp_group_inputs_shared \
   --resume \
   --coverage-thresholds 0.80 \
-  --atlases kong2019 kong2019_8net kong2022 \
-  --methods group-network-spectral group-intrinsic-spectral \
+  --atlases kong2022 \
+  --methods group-intrinsic-spectral group-network-top group-network-all \
   --out-root outputs_migration/hipp_group_merged_canonical_atlas
 
 /home/yojiao/.conda/envs/py314/bin/python scripts/hipp_parcellation_network/build_present_group_overview_merged_canonical.py \
   --group-root outputs_migration/hipp_group_merged_canonical_atlas \
   --present-dir present_group \
-  --atlases kong2019 kong2019_8net kong2022 \
-  --methods group-network-spectral group-intrinsic-spectral \
+  --atlases kong2022 \
+  --methods group-intrinsic-spectral group-network-top group-network-all \
   --coverage-threshold 0.80
 
 /home/yojiao/.conda/envs/py314/bin/python scripts/hipp_parcellation_network/materialize_group_functional_atlas_labels.py \
@@ -114,12 +114,9 @@ outputs_migration/hipp_group_merged_canonical_atlas/
   group_average_surfaces/
 
 present_group/
-  kong2019_group-network-spectral_group_overview.png
-  kong2019_group-intrinsic-spectral_group_overview.png
-  kong2019_8net_group-network-spectral_group_overview.png
-  kong2019_8net_group-intrinsic-spectral_group_overview.png
-  kong2022_group-network-spectral_group_overview.png
   kong2022_group-intrinsic-spectral_group_overview.png
+  kong2022_group-network-top_group_overview.png
+  kong2022_group-network-all_group_overview.png
   group_overview_manifest.json
   README.md
 ```
@@ -130,3 +127,6 @@ present_group/
 - authoritative runtime products are under `outputs_migration/hipp_group_merged_canonical_atlas/`
 - `present_group/` is a presentation/export surface, not the canonical runtime input source
 - K-selection panels use direct subject-split `group_ari_mean`; null references are reported in ARI space
+- if a combo cannot select a valid `K`, the driver writes `group_atlas_manifest.json` with `status=skipped_*` and continues remaining combos; `--resume` treats that manifest as completed
+- `group-network-top` / `group-network-all` are clusterless, kong2022-only, and do not emit `group_labels_final.npy`
+- the three active methods (`group-intrinsic-spectral`, `group-network-top`, `group-network-all`) do not consume cortex `8 x T` timeseries for network assignment

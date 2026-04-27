@@ -13,6 +13,7 @@ import nibabel as nib
 import numpy as np
 from nibabel.gifti import GiftiDataArray, GiftiImage, GiftiLabel, GiftiLabelTable
 from scipy import sparse
+from scipy import stats
 from scipy.optimize import linear_sum_assignment
 from sklearn.cluster import SpectralClustering
 from sklearn.metrics import adjusted_rand_score
@@ -40,15 +41,20 @@ METHOD_CHOICES = [
     "group-network-partial-spectral",
     "group-intrinsic-spectral",
     "group-intrinsic-partial-spectral",
+    "group-network-top",
+    "group-network-all",
 ]
 METHODS_DEFAULT = [
-    "group-network-spectral",
     "group-intrinsic-spectral",
+    "group-network-top",
+    "group-network-all",
 ]
 ATLASES = ["kong2019", "kong2019_8net", "kong2022"]
 SMOOTHINGS = ["2mm", "4mm"]
 HEMIS = ["L", "R"]
 K_RANGE = list(range(2, 11))
+KONG2022_ONLY_METHODS = {"group-network-top", "group-network-all"}
+CLUSTERLESS_METHODS = {"group-network-top", "group-network-all"}
 
 
 @dataclass(frozen=True)
@@ -192,11 +198,17 @@ def is_network_method(method: str) -> bool:
     return method in {"group-network-spectral", "group-network-partial-spectral"}
 
 
+def is_clusterless_method(method: str) -> bool:
+    return method in CLUSTERLESS_METHODS
+
+
 def network_feature_filename(method: str) -> str:
     if method == "group-network-spectral":
         return "hipp_vertex_to_network_fc.npy"
     if method == "group-network-partial-spectral":
         return "hipp_vertex_to_network_partial_fc.npy"
+    if method in {"group-network-top", "group-network-all"}:
+        return "hipp_vertex_to_network_fc.npy"
     raise ValueError(f"Not a network feature method: {method}")
 
 
@@ -206,6 +218,106 @@ def runwise_network_feature_filename(method: str) -> str:
     if method == "group-network-partial-spectral":
         return "hipp_vertex_to_network_partial_fc_active.npy"
     raise ValueError(f"Not a network feature method: {method}")
+
+
+def bh_fdr(p_values: np.ndarray) -> np.ndarray:
+    p = np.asarray(p_values, dtype=np.float64)
+    q = np.full_like(p, np.nan, dtype=np.float64)
+    finite = np.isfinite(p)
+    m = int(np.sum(finite))
+    if m == 0:
+        return q
+    p_f = p[finite]
+    order = np.argsort(p_f)
+    sorted_p = p_f[order]
+    ranks = np.arange(1, m + 1, dtype=np.float64)
+    adjusted = sorted_p * float(m) / ranks
+    adjusted = np.minimum.accumulate(adjusted[::-1])[::-1]
+    adjusted = np.clip(adjusted, 0.0, 1.0)
+    q_f = np.empty_like(sorted_p)
+    q_f[order] = adjusted
+    q[finite] = q_f
+    return q
+
+
+def one_sample_one_sided_vector(values: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    arr = np.asarray(values, dtype=np.float64)
+    if arr.ndim != 2:
+        raise ValueError(f"Expected 2D values, got shape={arr.shape}")
+    n = np.sum(np.isfinite(arr), axis=0).astype(np.int32)
+    mean = np.nanmean(arr, axis=0).astype(np.float64)
+    sd = np.nanstd(arr, axis=0, ddof=1).astype(np.float64)
+    t_stat = np.full_like(mean, np.nan, dtype=np.float64)
+    p_pos = np.full_like(mean, np.nan, dtype=np.float64)
+    p_neg = np.full_like(mean, np.nan, dtype=np.float64)
+
+    valid = n >= 2
+    stable = valid & np.isfinite(sd) & (sd > 1e-12)
+    if np.any(stable):
+        nn = n[stable].astype(np.float64)
+        t_stat[stable] = mean[stable] / (sd[stable] / np.sqrt(nn))
+        df = np.clip(n[stable] - 1, 1, None)
+        p_pos[stable] = stats.t.sf(t_stat[stable], df=df)
+        p_neg[stable] = stats.t.cdf(t_stat[stable], df=df)
+
+    degenerate = valid & ~stable
+    if np.any(degenerate):
+        mdeg = mean[degenerate]
+        t_fill = np.zeros_like(mdeg)
+        ppos_fill = np.full_like(mdeg, 0.5)
+        pneg_fill = np.full_like(mdeg, 0.5)
+        pos = mdeg > 0.0
+        neg = mdeg < 0.0
+        t_fill[pos] = np.inf
+        t_fill[neg] = -np.inf
+        ppos_fill[pos] = 0.0
+        ppos_fill[neg] = 1.0
+        pneg_fill[pos] = 1.0
+        pneg_fill[neg] = 0.0
+        t_stat[degenerate] = t_fill
+        p_pos[degenerate] = ppos_fill
+        p_neg[degenerate] = pneg_fill
+
+    return mean, t_stat, p_pos, p_neg, n.astype(np.float64)
+
+
+def split_kong2022_columns_by_network(roi_registry: list[dict[str, object]]) -> tuple[dict[str, list[int]], list[str]]:
+    cols_by_network: dict[str, list[int]] = {}
+    for col, row in enumerate(roi_registry):
+        net = str(row["canonical8"])
+        cols_by_network.setdefault(net, []).append(int(col))
+    network_names = sorted(cols_by_network.keys())
+    return cols_by_network, network_names
+
+
+def top_two_from_counts(
+    count_by_network: dict[str, int],
+    score_sum_by_network: dict[str, float],
+) -> tuple[str, int, str, int]:
+    rows = [
+        (int(count_by_network.get(name, 0)), float(score_sum_by_network.get(name, 0.0)), str(name))
+        for name in count_by_network
+    ]
+    rows.sort(key=lambda x: (-x[0], -x[1], x[2]))
+    if not rows:
+        return "unassigned", 0, "none", 0
+    top1 = rows[0]
+    if len(rows) > 1:
+        top2 = rows[1]
+        return str(top1[2]), int(top1[0]), str(top2[2]), int(top2[0])
+    return str(top1[2]), int(top1[0]), "none", 0
+
+
+def top_two_from_scores(score_by_network: dict[str, float]) -> tuple[str, float, str, float]:
+    rows: list[tuple[float, str, float]] = []
+    for k, v in score_by_network.items():
+        score = float(v)
+        sort_score = score if np.isfinite(score) else -math.inf
+        rows.append((sort_score, str(k), score))
+    rows.sort(key=lambda x: (-x[0], x[1]))
+    top1 = rows[0] if rows else (-math.inf, "unassigned", float("nan"))
+    top2 = rows[1] if len(rows) > 1 else top1
+    return str(top1[1]), float(top1[2]), str(top2[1]), float(top2[2])
 
 
 def verify_canonical_network_order_consistency(shared_root: Path, subjects: list[str], atlas: str) -> list[str]:
@@ -1009,6 +1121,84 @@ def cluster_roi_profile(
     return out, full_registry
 
 
+def cluster_roi_profile_subjectwise(
+    *,
+    group_labels_final: np.ndarray,
+    support_mask: np.ndarray,
+    subjects: list[str],
+    shared_root: Path,
+    smoothing: str,
+    hemi: str,
+    valid_masks_by_subject: dict[str, np.ndarray],
+) -> tuple[np.ndarray, np.ndarray, list[dict[str, object]], list[str]]:
+    k_final = int(np.max(group_labels_final))
+    full_registry = load_kong2022_roi_registry()
+    reg_by_id = {int(r["roi_id"]): r for r in full_registry}
+    col_by_id = {int(r["roi_id"]): i for i, r in enumerate(full_registry)}
+
+    profiles: list[np.ndarray] = []
+    used_subjects: list[str] = []
+    for subject in subjects:
+        ts_path = shared_root / f"sub-{subject}" / "surface" / smoothing / f"sub-{subject}_hemi-{hemi}_timeseries.npy"
+        roi_path = shared_root / f"sub-{subject}" / "reference" / "kong2022" / "cortex_roi_parcel_timeseries.npy"
+        roi_tsv = shared_root / f"sub-{subject}" / "reference" / "kong2022" / "cortex_roi_parcels.tsv"
+        if not (ts_path.exists() and roi_path.exists() and roi_tsv.exists()):
+            continue
+        ts = np.load(ts_path).astype(np.float32)
+        roi = np.load(roi_path).astype(np.float32)
+        rows = read_kong2022_roi_tsv(roi_tsv)
+        if ts.ndim != 2 or roi.ndim != 2:
+            continue
+        if ts.shape[1] != roi.shape[1]:
+            continue
+        if roi.shape[0] != len(rows):
+            raise RuntimeError(
+                f"ROI TSV rows mismatch for sub-{subject}: roi_shape={roi.shape} rows={len(rows)}"
+            )
+
+        valid = support_mask & valid_masks_by_subject[subject]
+        cluster_ts = np.full((k_final, ts.shape[1]), np.nan, dtype=np.float32)
+        for c in range(1, k_final + 1):
+            m = (group_labels_final == c) & valid
+            if int(np.sum(m)) == 0:
+                continue
+            with np.errstate(invalid="ignore"):
+                cluster_ts[c - 1, :] = np.nanmean(ts[m, :], axis=0).astype(np.float32)
+
+        corr = corrcoef_rows(cluster_ts, roi)
+        corr = np.clip(corr, -0.999999, 0.999999)
+        fisher = np.arctanh(corr).astype(np.float32)
+        fisher[~np.isfinite(fisher)] = np.nan
+
+        scatter = np.full((k_final, 400), np.nan, dtype=np.float32)
+        cols: list[int] = []
+        for row in rows:
+            roi_id = int(row["parcel_id"])
+            reg = reg_by_id.get(roi_id)
+            if reg is None:
+                raise KeyError(f"Unexpected ROI id in sub-{subject}: {roi_id}")
+            if str(row["parcel_name"]) != str(reg["roi_name"]):
+                raise RuntimeError(
+                    f"ROI name mismatch in sub-{subject} for id={roi_id}: "
+                    f"{row['parcel_name']} vs {reg['roi_name']}"
+                )
+            if str(row["family17"]) != str(reg["family17"]) or str(row["canonical8"]) != str(reg["canonical8"]):
+                raise RuntimeError(
+                    f"ROI metadata mismatch in sub-{subject} for id={roi_id}: "
+                    f"family17/canonical8 inconsistent with registry"
+                )
+            cols.append(int(col_by_id[roi_id]))
+        scatter[:, np.asarray(cols, dtype=np.int32)] = fisher
+        profiles.append(scatter)
+        used_subjects.append(subject)
+
+    if not profiles:
+        raise RuntimeError("No subject-level ROI profiles available for kong2022 cluster annotation")
+    stack = np.stack(profiles, axis=0).astype(np.float32)
+    out_mean = np.nanmean(stack, axis=0).astype(np.float32)
+    return stack, out_mean, full_registry, used_subjects
+
+
 def cluster_roi_top_k(
     profile_400: np.ndarray,
     roi_registry: list[dict[str, object]],
@@ -1048,7 +1238,7 @@ def cluster_roi_top_k(
     return {"cluster_id_to_top20": out, "roi_registry": roi_registry}
 
 
-def assignment_status(profile: np.ndarray, network_names: list[str]) -> tuple[list[dict[str, object]], list[str | None]]:
+def assignment_status_from_profile(profile: np.ndarray, network_names: list[str]) -> tuple[list[dict[str, object]], list[str | None]]:
     rows: list[dict[str, object]] = []
     dominant: list[str | None] = []
     for cidx in range(profile.shape[0]):
@@ -1059,12 +1249,8 @@ def assignment_status(profile: np.ndarray, network_names: list[str]) -> tuple[li
         top1 = float(row[top1_i])
         top2 = float(row[top2_i])
         margin = float(top1 - top2)
-        if bool(np.all(row <= 0.0)):
-            status = "unassigned"
-            dom = None
-        else:
-            status = "dominant"
-            dom = str(network_names[top1_i])
+        status = "dominant"
+        dom = str(network_names[top1_i])
         rows.append(
             {
                 "cluster_id": int(cidx + 1),
@@ -1079,6 +1265,267 @@ def assignment_status(profile: np.ndarray, network_names: list[str]) -> tuple[li
         )
         dominant.append(dom)
     return rows, dominant
+
+
+def assignment_status_from_cluster_roi_topn(
+    *,
+    profile_3d: np.ndarray,
+    roi_registry: list[dict[str, object]],
+    q_thresh: float,
+    top_n_cap: int,
+) -> tuple[list[dict[str, object]], list[str | None], np.ndarray]:
+    k_final = int(profile_3d.shape[1])
+    mean_profile = np.nanmean(profile_3d, axis=0).astype(np.float32)
+    rows: list[dict[str, object]] = []
+    dominant: list[str | None] = []
+    for cidx in range(k_final):
+        values = profile_3d[:, cidx, :]
+        mean_z, _t_stat, p_pos, p_neg, n_vec = one_sample_one_sided_vector(values)
+        q_pos = bh_fdr(p_pos)
+        q_neg = bh_fdr(p_neg)
+        sig_pos = np.flatnonzero(np.isfinite(q_pos) & (q_pos < float(q_thresh)) & np.isfinite(mean_z) & (mean_z > 0.0))
+        sig_neg = np.flatnonzero(np.isfinite(q_neg) & (q_neg < float(q_thresh)) & np.isfinite(mean_z) & (mean_z < 0.0))
+        pos_idx = np.flatnonzero(np.isfinite(mean_z) & (mean_z > 0.0))
+        sig_order = sig_pos[np.argsort(-mean_z[sig_pos])] if sig_pos.size > 0 else np.asarray([], dtype=np.int32)
+        sig_take = sig_order[: int(min(int(top_n_cap), int(sig_order.size)))]
+        top_items: list[dict[str, object]] = []
+        for col in sig_take:
+            reg = roi_registry[int(col)]
+            top_items.append(
+                {
+                    "roi_idx": int(reg["roi_id"]),
+                    "roi_name": str(reg["roi_name"]),
+                    "family17": str(reg["family17"]),
+                    "canonical8": str(reg["canonical8"]),
+                    "fisher_z": float(mean_z[int(col)]),
+                    "q_positive": float(q_pos[int(col)]),
+                }
+            )
+        if pos_idx.size == 0:
+            status = "unassigned"
+            dom = None
+            top1_network = "unassigned"
+            top2_network = "unassigned"
+            top1_count = 0
+            top2_count = 0
+            margin = 0
+            n_top = 0
+            unassigned_reason: str | None = "no_positive_roi"
+        else:
+            order = pos_idx[np.argsort(-mean_z[pos_idx])]
+            n_top = int(min(int(top_n_cap), int(order.size)))
+            top_idx = order[:n_top]
+            count_by_network: dict[str, int] = {}
+            score_sum_by_network: dict[str, float] = {}
+            for col in top_idx:
+                reg = roi_registry[int(col)]
+                net = str(reg["canonical8"])
+                count_by_network[net] = int(count_by_network.get(net, 0) + 1)
+                score_sum_by_network[net] = float(score_sum_by_network.get(net, 0.0) + float(mean_z[int(col)]))
+            top1_network, top1_count, top2_network, top2_count = top_two_from_counts(count_by_network, score_sum_by_network)
+            margin = int(top1_count - top2_count)
+            status = "dominant"
+            dom = str(top1_network)
+            unassigned_reason = None
+        row_out: dict[str, object] = {
+            "cluster_id": int(cidx + 1),
+            "status": status,
+            "top1_network": str(top1_network),
+            "top2_network": str(top2_network),
+            "top1_count": int(top1_count),
+            "top2_count": int(top2_count),
+            "margin_count": int(margin),
+            "n_significant_positive": int(sig_pos.size),
+            "n_significant_negative": int(sig_neg.size),
+            "n_significant_any": int(sig_pos.size + sig_neg.size),
+            "n_top": int(n_top),
+            "top1_fraction": float(top1_count / n_top) if n_top > 0 else 0.0,
+            "top2_fraction": float(top2_count / n_top) if n_top > 0 else 0.0,
+            "top_positive_selected": top_items,
+            "n_subjects_non_nan_median": int(np.nanmedian(n_vec)) if np.isfinite(np.nanmedian(n_vec)) else 0,
+        }
+        if unassigned_reason is not None:
+            row_out["unassigned_reason"] = str(unassigned_reason)
+        rows.append(row_out)
+        dominant.append(dom)
+    return rows, dominant, mean_profile
+
+
+def vertex_roi_profile_subjectwise(
+    *,
+    feature_bank: dict[str, np.ndarray],
+    subjects: list[str],
+    support_mask: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    idx = np.flatnonzero(support_mask).astype(np.int32)
+    stack = np.stack([feature_bank[s][idx, :] for s in subjects], axis=0).astype(np.float32)
+    mean_profile = np.nanmean(stack, axis=0).astype(np.float32)
+    mean_profile[~np.isfinite(mean_profile)] = np.nan
+    return stack, mean_profile, idx
+
+
+def build_global_top_connections(
+    *,
+    profile_3d: np.ndarray,
+    support_indices: np.ndarray,
+    roi_registry: list[dict[str, object]],
+    q_thresh: float,
+    top_n_cap: int,
+) -> dict[str, object]:
+    pos_rows: list[dict[str, object]] = []
+    neg_rows: list[dict[str, object]] = []
+    for local_vidx, global_vidx in enumerate(support_indices):
+        values = profile_3d[:, local_vidx, :]
+        mean_z, _t_stat, p_pos, p_neg, _n = one_sample_one_sided_vector(values)
+        q_pos = bh_fdr(p_pos)
+        q_neg = bh_fdr(p_neg)
+        sig_pos = np.flatnonzero(np.isfinite(q_pos) & (q_pos < float(q_thresh)) & np.isfinite(mean_z) & (mean_z > 0.0))
+        sig_neg = np.flatnonzero(np.isfinite(q_neg) & (q_neg < float(q_thresh)) & np.isfinite(mean_z) & (mean_z < 0.0))
+        for col in sig_pos:
+            reg = roi_registry[int(col)]
+            pos_rows.append(
+                {
+                    "vertex_index": int(global_vidx),
+                    "roi_idx": int(reg["roi_id"]),
+                    "roi_name": str(reg["roi_name"]),
+                    "canonical8": str(reg["canonical8"]),
+                    "sign": "positive",
+                    "fisher_z": float(mean_z[int(col)]),
+                    "q_value": float(q_pos[int(col)]),
+                }
+            )
+        for col in sig_neg:
+            reg = roi_registry[int(col)]
+            neg_rows.append(
+                {
+                    "vertex_index": int(global_vidx),
+                    "roi_idx": int(reg["roi_id"]),
+                    "roi_name": str(reg["roi_name"]),
+                    "canonical8": str(reg["canonical8"]),
+                    "sign": "negative",
+                    "fisher_z": float(mean_z[int(col)]),
+                    "q_value": float(q_neg[int(col)]),
+                }
+            )
+    pos_rows.sort(key=lambda r: float(r["fisher_z"]), reverse=True)
+    neg_rows.sort(key=lambda r: float(r["fisher_z"]))
+    pos_take = pos_rows[: int(min(int(top_n_cap), len(pos_rows)))]
+    neg_take = neg_rows[: int(min(int(top_n_cap), len(neg_rows)))]
+    return {
+        "top_n_cap": int(top_n_cap),
+        "q_threshold": float(q_thresh),
+        "n_candidates_positive": int(len(pos_rows)),
+        "n_candidates_negative": int(len(neg_rows)),
+        "top_positive": pos_take,
+        "top_negative": neg_take,
+    }
+
+
+def assignment_status_for_vertices_top(
+    *,
+    profile_3d: np.ndarray,
+    support_indices: np.ndarray,
+    roi_registry: list[dict[str, object]],
+    q_thresh: float,
+    top_n_cap: int,
+) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    for local_vidx, global_vidx in enumerate(support_indices):
+        values = profile_3d[:, local_vidx, :]
+        mean_z, _t_stat, p_pos, p_neg, n_vec = one_sample_one_sided_vector(values)
+        q_pos = bh_fdr(p_pos)
+        q_neg = bh_fdr(p_neg)
+        sig_pos = np.flatnonzero(np.isfinite(q_pos) & (q_pos < float(q_thresh)) & np.isfinite(mean_z) & (mean_z > 0.0))
+        sig_neg = np.flatnonzero(np.isfinite(q_neg) & (q_neg < float(q_thresh)) & np.isfinite(mean_z) & (mean_z < 0.0))
+        pos_idx = np.flatnonzero(np.isfinite(mean_z) & (mean_z > 0.0))
+        if pos_idx.size == 0:
+            rows.append(
+                {
+                    "vertex_index": int(global_vidx),
+                    "status": "unassigned",
+                    "unassigned_reason": "no_positive_roi",
+                    "top1_network": "unassigned",
+                    "top2_network": "unassigned",
+                    "top1_count": 0,
+                    "top2_count": 0,
+                    "margin_count": 0,
+                    "n_significant_positive": 0,
+                    "n_significant_negative": int(sig_neg.size),
+                    "n_significant_any": int(sig_neg.size),
+                    "n_top": 0,
+                    "n_subjects_non_nan_median": int(np.nanmedian(n_vec)) if np.isfinite(np.nanmedian(n_vec)) else 0,
+                }
+            )
+            continue
+        order = pos_idx[np.argsort(-mean_z[pos_idx])]
+        n_top = int(min(int(top_n_cap), int(order.size)))
+        top_idx = order[:n_top]
+        count_by_network: dict[str, int] = {}
+        score_sum_by_network: dict[str, float] = {}
+        for col in top_idx:
+            net = str(roi_registry[int(col)]["canonical8"])
+            count_by_network[net] = int(count_by_network.get(net, 0) + 1)
+            score_sum_by_network[net] = float(score_sum_by_network.get(net, 0.0) + float(mean_z[int(col)]))
+        top1_network, top1_count, top2_network, top2_count = top_two_from_counts(count_by_network, score_sum_by_network)
+        rows.append(
+            {
+                "vertex_index": int(global_vidx),
+                "status": "dominant",
+                "top1_network": str(top1_network),
+                "top2_network": str(top2_network),
+                "top1_count": int(top1_count),
+                "top2_count": int(top2_count),
+                "margin_count": int(top1_count - top2_count),
+                "n_significant_positive": int(sig_pos.size),
+                "n_significant_negative": int(sig_neg.size),
+                "n_significant_any": int(sig_pos.size + sig_neg.size),
+                "n_top": int(n_top),
+                "top1_fraction": float(top1_count / n_top) if n_top > 0 else 0.0,
+                "top2_fraction": float(top2_count / n_top) if n_top > 0 else 0.0,
+                "n_subjects_non_nan_median": int(np.nanmedian(n_vec)) if np.isfinite(np.nanmedian(n_vec)) else 0,
+            }
+        )
+    return rows
+
+
+def assignment_status_for_vertices_all(
+    *,
+    profile_3d: np.ndarray,
+    support_indices: np.ndarray,
+    roi_registry: list[dict[str, object]],
+    q_thresh: float,
+) -> list[dict[str, object]]:
+    cols_by_network, _network_names = split_kong2022_columns_by_network(roi_registry)
+    rows: list[dict[str, object]] = []
+    for local_vidx, global_vidx in enumerate(support_indices):
+        values = profile_3d[:, local_vidx, :]
+        mean_z, _t_stat, p_pos, p_neg, n_vec = one_sample_one_sided_vector(values)
+        q_pos = bh_fdr(p_pos)
+        q_neg = bh_fdr(p_neg)
+        sig_pos = np.flatnonzero(np.isfinite(q_pos) & (q_pos < float(q_thresh)) & np.isfinite(mean_z) & (mean_z > 0.0))
+        sig_neg = np.flatnonzero(np.isfinite(q_neg) & (q_neg < float(q_thresh)) & np.isfinite(mean_z) & (mean_z < 0.0))
+        n_sig_any = int(sig_pos.size + sig_neg.size)
+        score_by_network: dict[str, float] = {}
+        for net, cols in cols_by_network.items():
+            vals = mean_z[np.asarray(cols, dtype=np.int32)]
+            score_by_network[str(net)] = float(np.nanmean(vals)) if np.isfinite(vals).any() else float("nan")
+        top1_network, top1_score, top2_network, top2_score = top_two_from_scores(score_by_network)
+        rows.append(
+            {
+                "vertex_index": int(global_vidx),
+                "status": "dominant",
+                "top1_network": str(top1_network),
+                "top2_network": str(top2_network),
+                "top1_score": float(top1_score),
+                "top2_score": float(top2_score),
+                "margin_score": float(top1_score - top2_score),
+                "n_significant_positive": int(sig_pos.size),
+                "n_significant_negative": int(sig_neg.size),
+                "n_significant_any": int(n_sig_any),
+                "n_subjects_non_nan_median": int(np.nanmedian(n_vec)) if np.isfinite(np.nanmedian(n_vec)) else 0,
+            }
+        )
+    return rows
 
 
 def functional_atlas_from_clusters(
@@ -1123,6 +1570,39 @@ def functional_atlas_from_clusters(
     return out, meta, label_items
 
 
+def functional_atlas_from_vertices(
+    *,
+    n_vertices: int,
+    status_rows: list[dict[str, object]],
+    network_names: list[str],
+    color_map: dict[str, tuple[int, int, int, int]],
+) -> tuple[np.ndarray, dict[str, object], list[tuple[int, str, tuple[int, int, int, int]]]]:
+    net_to_key = {str(n): int(i + 1) for i, n in enumerate(network_names)}
+    key_unassigned = int(len(network_names) + 1)
+    out = np.zeros((int(n_vertices),), dtype=np.int32)
+    for row in status_rows:
+        vidx = int(row["vertex_index"])
+        status = str(row.get("status", "unassigned"))
+        top1 = str(row.get("top1_network", "unassigned"))
+        if status == "dominant" and top1 in net_to_key:
+            out[vidx] = int(net_to_key[top1])
+        else:
+            out[vidx] = int(key_unassigned)
+
+    label_items: list[tuple[int, str, tuple[int, int, int, int]]] = [(0, "Null", (158, 158, 158, 255))]
+    for i, n in enumerate(network_names, start=1):
+        label_items.append((int(i), str(n), color_map.get(str(n), (80, 80, 80, 255))))
+    label_items.append((key_unassigned, "unassigned", (20, 20, 20, 255)))
+
+    meta = {
+        "assignment_mode": "vertex_level",
+        "network_names": [str(x) for x in network_names],
+        "network_label_keys": {str(n): int(i + 1) for i, n in enumerate(network_names)},
+        "unassigned_label_key": int(key_unassigned),
+    }
+    return out, meta, label_items
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run merged canonical group hippocampal atlas (v3 plan).")
     parser.add_argument("--shared-root", default=str(DEFAULT_SHARED_ROOT))
@@ -1145,6 +1625,12 @@ def main() -> int:
     parser.add_argument("--resume", action="store_true", help="Skip combos that already have group_atlas_manifest.json.")
     parser.add_argument("--k-selection-mode", default="experimental", choices=["experimental"])
     parser.add_argument("--overview-threshold", type=float, default=0.80)
+    parser.add_argument(
+        "--jobs",
+        type=int,
+        default=1,
+        help="Reserved for pipeline compatibility; current implementation executes combos in-process.",
+    )
     parser.add_argument(
         "--group-average-surfaces-dir",
         default=str(DEFAULT_GROUP_AVG_SURFACES_DIR),
@@ -1220,6 +1706,13 @@ def main() -> int:
 
     for method in args.methods:
         for atlas in args.atlases:
+            if method in KONG2022_ONLY_METHODS and atlas != "kong2022":
+                print(
+                    f"[warn] skipping unsupported combo atlas={atlas} method={method} "
+                    "(method is defined for kong2022 only)",
+                    flush=True,
+                )
+                continue
             if atlas == "kong2022" and method in {"group-network-partial-spectral", "group-intrinsic-partial-spectral"}:
                 print(
                     f"[warn] skipping unsupported combo atlas={atlas} method={method} "
@@ -1238,7 +1731,7 @@ def main() -> int:
                     feature_bank: dict[str, np.ndarray] = {}
                     actual_input_paths: dict[str, str] = {}
                     for s in subjects:
-                        if is_network_method(method):
+                        if is_network_method(method) or method in {"group-network-top", "group-network-all"}:
                             p = shared_root / f"sub-{s}" / "fc" / atlas / smoothing / f"hemi_{hemi}" / network_feature_filename(method)
                             actual_input_paths[s] = str(p)
                             feature_bank[s] = subject_network_feature(shared_root, s, atlas, smoothing, hemi, method)
@@ -1247,14 +1740,18 @@ def main() -> int:
                             actual_input_paths[s] = str(p)
                             feature_bank[s] = subject_intrinsic_feature(shared_root, s, atlas, smoothing, hemi, valid_masks[s])
 
-                    run_feature_banks = runwise_feature_bank(
-                        method=method,
-                        shared_root=shared_root,
-                        subjects=subjects,
-                        atlas=atlas,
-                        smoothing=smoothing,
-                        hemi=hemi,
-                        valid_masks=valid_masks,
+                    run_feature_banks = (
+                        runwise_feature_bank(
+                            method=method,
+                            shared_root=shared_root,
+                            subjects=subjects,
+                            atlas=atlas,
+                            smoothing=smoothing,
+                            hemi=hemi,
+                            valid_masks=valid_masks,
+                        )
+                        if not is_clusterless_method(method)
+                        else {}
                     )
 
                     for tau in coverage_thresholds:
@@ -1276,14 +1773,220 @@ def main() -> int:
                         v_min = int(math.ceil(float(args.v_min_fraction) * max(1, n_support)))
                         k_max_eff = min(max(k_values), n_support // max(1, v_min))
                         k_eff = [k for k in k_values if k <= k_max_eff and k <= n_support - 1]
-                        if not k_eff:
-                            raise RuntimeError(
-                                f"No valid K for combo={combo} n_support={n_support} v_min={v_min} k_max_eff={k_max_eff}"
-                            )
+                        k_selection_fields = [
+                            "method",
+                            "atlas",
+                            "smoothing",
+                            "hemi",
+                            "coverage_threshold",
+                            "k",
+                            "n_subjects",
+                            "n_support_vertices",
+                            "V_min_effective",
+                            "group_ari_mean",
+                            "group_ari_se",
+                            "subject_split_requested",
+                            "subject_split_used",
+                            "subject_split_skipped_overlap",
+                            "subject_split_skipped_empty",
+                            "run_aware_ari_mean",
+                            "run_aware_ari_se",
+                            "run_aware_n_pairs",
+                            "run_aware_n_used",
+                            "ARI_null_mean",
+                            "ARI_null_5pct",
+                            "ARI_weak_null_mean",
+                            "B_null_requested",
+                            "B_null_used_strong",
+                            "B_null_used_weak",
+                            "min_cluster_size",
+                            "max_components_per_cluster",
+                            "min_profile_coherence",
+                            "mean_profile_coherence",
+                            "nontrivial_min_size_ok",
+                            "nontrivial_connectedness_ok",
+                            "nontrivial_coherence_ok",
+                            "local_max",
+                            "within_1se_best",
+                            "selected_nontrivial",
+                        ]
 
                         np.save(run_dir / "group_support_mask.npy", support.astype(np.uint8))
                         np.save(run_dir / "subject_coverage_count.npy", coverage_count.astype(np.int32))
                         np.save(run_dir / "subject_coverage_fraction.npy", coverage_fraction.astype(np.float32))
+
+                        if is_clusterless_method(method):
+                            if atlas != "kong2022":
+                                raise RuntimeError(f"Internal error: clusterless method requires kong2022, got atlas={atlas}")
+                            roi_registry = load_kong2022_roi_registry()
+                            vertex_profile_3d, vertex_profile_mean, support_indices = vertex_roi_profile_subjectwise(
+                                feature_bank=feature_bank,
+                                subjects=subjects,
+                                support_mask=support,
+                            )
+                            if method == "group-network-top":
+                                vertex_status_rows = assignment_status_for_vertices_top(
+                                    profile_3d=vertex_profile_3d,
+                                    support_indices=support_indices,
+                                    roi_registry=roi_registry,
+                                    q_thresh=0.05,
+                                    top_n_cap=20,
+                                )
+                                confidence_metric = "topn_count"
+                            elif method == "group-network-all":
+                                vertex_status_rows = assignment_status_for_vertices_all(
+                                    profile_3d=vertex_profile_3d,
+                                    support_indices=support_indices,
+                                    roi_registry=roi_registry,
+                                    q_thresh=0.05,
+                                )
+                                confidence_metric = "network_mean_score"
+                            else:
+                                raise ValueError(f"Unknown clusterless method: {method}")
+
+                            global_top = build_global_top_connections(
+                                profile_3d=vertex_profile_3d,
+                                support_indices=support_indices,
+                                roi_registry=roi_registry,
+                                q_thresh=0.05,
+                                top_n_cap=20,
+                            )
+                            functional_labels, functional_meta, functional_label_items = functional_atlas_from_vertices(
+                                n_vertices=n_vertices,
+                                status_rows=vertex_status_rows,
+                                network_names=network_names,
+                                color_map=canonical_color_map,
+                            )
+                            np.save(run_dir / "group_functional_atlas_labels.npy", functional_labels.astype(np.int32))
+                            save_json(run_dir / "group_functional_atlas_label_map.json", functional_meta)
+                            np.save(run_dir / "vertex_roi_profile.npy", vertex_profile_mean.astype(np.float32))
+                            np.save(run_dir / "vertex_support_indices.npy", support_indices.astype(np.int32))
+                            save_json(run_dir / "vertex_assignment_status.json", {"items": vertex_status_rows})
+                            save_json(run_dir / "global_top_connections.json", global_top)
+                            save_json(run_dir / "k_selection_summary.json", {"rows": [], "k_final": None, "mode": "clusterless"})
+                            write_tsv(run_dir / "k_selection_summary.tsv", [], k_selection_fields)
+
+                            func_lbl = make_named_label_gifti(functional_labels.astype(np.int32), functional_label_items)
+                            func_lbl_path = (
+                                run_dir
+                                / "template"
+                                / "workbench_assets"
+                                / f"{template_label}_hemi-{hemi}_space-corobl_den-512_label-group_functional_atlas_{method}_{atlas}_{smoothing}_cov-{tau_tag}.label.gii"
+                            )
+                            func_lbl_path.parent.mkdir(parents=True, exist_ok=True)
+                            nib.save(func_lbl, str(func_lbl_path))
+
+                            manifest = {
+                                "status": "ok",
+                                "method": method,
+                                "atlas": atlas,
+                                "smoothing": smoothing,
+                                "hemi": hemi,
+                                "assignment_mode": "vertex_level",
+                                "confidence_metric": confidence_metric,
+                                "coverage_threshold": float(tau),
+                                "chosen_k_final": None,
+                                "q_threshold": 0.05,
+                                "top_n_cap": 20,
+                                "actual_consumed_input_paths": actual_input_paths,
+                                "feature_family": "vertex_to_kong2022_400roi_fc_fisherz",
+                                "fc_mode": "pearson_vertex_to_roi",
+                                "n_subjects": int(len(subjects)),
+                                "subjects": [f"sub-{s}" for s in subjects],
+                                "n_support_vertices": int(n_support),
+                                "n_excluded_vertices": int(n_vertices - n_support),
+                                "group_support_mask": str((run_dir / "group_support_mask.npy").resolve()),
+                                "subject_coverage_count": str((run_dir / "subject_coverage_count.npy").resolve()),
+                                "subject_coverage_fraction": str((run_dir / "subject_coverage_fraction.npy").resolve()),
+                                "group_functional_atlas_labels": str((run_dir / "group_functional_atlas_labels.npy").resolve()),
+                                "group_functional_atlas_label_map": str((run_dir / "group_functional_atlas_label_map.json").resolve()),
+                                "vertex_roi_profile": str((run_dir / "vertex_roi_profile.npy").resolve()),
+                                "vertex_support_indices": str((run_dir / "vertex_support_indices.npy").resolve()),
+                                "vertex_assignment_status": str((run_dir / "vertex_assignment_status.json").resolve()),
+                                "global_top_connections": str((run_dir / "global_top_connections.json").resolve()),
+                                "cluster_network_profile": None,
+                                "cluster_dominant_network": None,
+                                "cluster_assignment_status": None,
+                                "cluster_roi_profile": None,
+                                "cluster_roi_top20": None,
+                                "cluster_roi_registry": str((run_dir / "cluster_roi_registry.tsv").resolve()),
+                                "k_selection_summary_tsv": str((run_dir / "k_selection_summary.tsv").resolve()),
+                                "k_selection_summary_json": str((run_dir / "k_selection_summary.json").resolve()),
+                                "template_subject": template_label,
+                                "template_left_or_right_surface": str(surfaces[hemi]),
+                                "template_spec_path": str(
+                                    infer_spec_path(subjects[0], infer_surface_path(subjects[0], hemi, hippunfold_batch_root))
+                                ),
+                                "template_cluster_label": None,
+                                "template_functional_atlas_label": str(func_lbl_path.resolve()),
+                            }
+                            write_tsv(
+                                run_dir / "cluster_roi_registry.tsv",
+                                roi_registry,
+                                ["roi_id", "roi_name", "hemi", "family17", "subregion", "rank", "canonical8"],
+                            )
+                            save_json(run_dir / "group_feature_summary.json", {"network_names": network_names, "N_ref": int(len(network_names))})
+                            save_json(manifest_path, manifest)
+                            continue
+
+                        if not k_eff:
+                            skip_reason = "no_valid_k_for_support"
+                            skip_detail = (
+                                f"No valid K for combo={combo} n_support={n_support} "
+                                f"v_min={v_min} k_max_eff={k_max_eff}"
+                            )
+                            write_tsv(run_dir / "k_selection_summary.tsv", [], k_selection_fields)
+                            save_json(
+                                run_dir / "k_selection_summary.json",
+                                {
+                                    "rows": [],
+                                    "k_final": None,
+                                    "skip_reason": skip_reason,
+                                    "skip_detail": skip_detail,
+                                },
+                            )
+                            manifest = {
+                                "status": "skipped_no_valid_k",
+                                "skip_reason": skip_reason,
+                                "skip_detail": skip_detail,
+                                "method": method,
+                                "atlas": atlas,
+                                "smoothing": smoothing,
+                                "hemi": hemi,
+                                "k_selection_mode": str(args.k_selection_mode),
+                                "coverage_threshold": float(tau),
+                                "V_min_fraction": float(args.v_min_fraction),
+                                "V_min_effective": int(v_min),
+                                "candidate_k_range_requested": [int(min(k_values)), int(max(k_values))],
+                                "candidate_k_range_effective": [],
+                                "chosen_k_final": None,
+                                "subject_split_seeds": split_seeds,
+                                "null_seeds": null_seeds,
+                                "n_subjects": int(len(subjects)),
+                                "subjects": [f"sub-{s}" for s in subjects],
+                                "n_support_vertices": int(n_support),
+                                "n_excluded_vertices": int(n_vertices - n_support),
+                                "actual_consumed_input_paths": actual_input_paths,
+                                "nontriviality_thresholds": {
+                                    "V_min_fraction": float(args.v_min_fraction),
+                                    "max_components_threshold": int(args.max_components_threshold),
+                                    "min_profile_coherence": float(args.min_profile_coherence),
+                                },
+                                "density_evidence": {
+                                    "surface_path": str(surfaces[hemi]),
+                                    "n_vertices": int(surface_meta[hemi]["n_vertices"]),
+                                    "n_faces": int(surface_meta[hemi]["n_faces"]),
+                                },
+                                "surface_topology_audit": topology_audit[hemi],
+                                "group_support_mask": str((run_dir / "group_support_mask.npy").resolve()),
+                                "subject_coverage_count": str((run_dir / "subject_coverage_count.npy").resolve()),
+                                "subject_coverage_fraction": str((run_dir / "subject_coverage_fraction.npy").resolve()),
+                                "k_selection_summary_tsv": str((run_dir / "k_selection_summary.tsv").resolve()),
+                                "k_selection_summary_json": str((run_dir / "k_selection_summary.json").resolve()),
+                            }
+                            save_json(manifest_path, manifest)
+                            print(f"  [skip] {skip_detail}", flush=True)
+                            continue
 
                         rows: list[dict[str, object]] = []
                         labels_by_k: dict[int, np.ndarray] = {}
@@ -1423,7 +2126,60 @@ def main() -> int:
                             and int(r["selected_nontrivial"]) == 1
                         ]
                         if not survivors:
-                            raise RuntimeError(f"No K survived selection constraints for combo={combo}")
+                            skip_reason = "no_k_survived_selection_constraints"
+                            skip_detail = f"No K survived selection constraints for combo={combo}"
+                            write_tsv(run_dir / "k_selection_summary.tsv", rows, k_selection_fields)
+                            save_json(
+                                run_dir / "k_selection_summary.json",
+                                {
+                                    "rows": rows,
+                                    "k_final": None,
+                                    "skip_reason": skip_reason,
+                                    "skip_detail": skip_detail,
+                                },
+                            )
+                            manifest = {
+                                "status": "skipped_no_k_survived_constraints",
+                                "skip_reason": skip_reason,
+                                "skip_detail": skip_detail,
+                                "method": method,
+                                "atlas": atlas,
+                                "smoothing": smoothing,
+                                "hemi": hemi,
+                                "k_selection_mode": str(args.k_selection_mode),
+                                "coverage_threshold": float(tau),
+                                "V_min_fraction": float(args.v_min_fraction),
+                                "V_min_effective": int(v_min),
+                                "candidate_k_range_requested": [int(min(k_values)), int(max(k_values))],
+                                "candidate_k_range_effective": [int(min(k_eff)), int(max(k_eff))],
+                                "chosen_k_final": None,
+                                "subject_split_seeds": split_seeds,
+                                "null_seeds": null_seeds,
+                                "n_subjects": int(len(subjects)),
+                                "subjects": [f"sub-{s}" for s in subjects],
+                                "n_support_vertices": int(n_support),
+                                "n_excluded_vertices": int(n_vertices - n_support),
+                                "actual_consumed_input_paths": actual_input_paths,
+                                "nontriviality_thresholds": {
+                                    "V_min_fraction": float(args.v_min_fraction),
+                                    "max_components_threshold": int(args.max_components_threshold),
+                                    "min_profile_coherence": float(args.min_profile_coherence),
+                                },
+                                "density_evidence": {
+                                    "surface_path": str(surfaces[hemi]),
+                                    "n_vertices": int(surface_meta[hemi]["n_vertices"]),
+                                    "n_faces": int(surface_meta[hemi]["n_faces"]),
+                                },
+                                "surface_topology_audit": topology_audit[hemi],
+                                "group_support_mask": str((run_dir / "group_support_mask.npy").resolve()),
+                                "subject_coverage_count": str((run_dir / "subject_coverage_count.npy").resolve()),
+                                "subject_coverage_fraction": str((run_dir / "subject_coverage_fraction.npy").resolve()),
+                                "k_selection_summary_tsv": str((run_dir / "k_selection_summary.tsv").resolve()),
+                                "k_selection_summary_json": str((run_dir / "k_selection_summary.json").resolve()),
+                            }
+                            save_json(manifest_path, manifest)
+                            print(f"  [skip] {skip_detail}", flush=True)
+                            continue
                         k_final = int(sorted(survivors, key=lambda x: int(x["k"]))[0]["k"])
                         labels_final = reorder_labels_by_long_axis(
                             labels_by_k[k_final],
@@ -1434,26 +2190,55 @@ def main() -> int:
                             long_axis_order_by_hemi[hemi],
                         )
 
-                        profile = cluster_network_profile(
-                            group_labels_final=labels_final,
-                            support_mask=support,
-                            subjects=subjects,
-                            shared_root=shared_root,
-                            atlas=atlas,
-                            smoothing=smoothing,
-                            hemi=hemi,
-                            valid_masks_by_subject=valid_masks,
-                            profile_fc_mode=(
-                                "partial_networks_only_one_sided"
-                                if method in {"group-network-partial-spectral", "group-intrinsic-partial-spectral"}
-                                else "pearson"
-                            ),
-                        )
-                        status_rows, dominant = assignment_status(profile, network_names)
+                        profile: np.ndarray
+                        status_rows: list[dict[str, object]]
+                        dominant: list[str | None]
                         roi_profile: np.ndarray | None = None
+                        roi_profile_3d: np.ndarray | None = None
+                        roi_profile_subjects_used: list[str] | None = None
                         roi_registry: list[dict[str, object]] | None = None
                         roi_top20: dict[str, object] | None = None
-                        if atlas == "kong2022":
+                        if atlas == "kong2022" and method == "group-intrinsic-spectral":
+                            roi_profile_3d, roi_profile, roi_registry, roi_profile_subjects_used = cluster_roi_profile_subjectwise(
+                                group_labels_final=labels_final,
+                                support_mask=support,
+                                subjects=subjects,
+                                shared_root=shared_root,
+                                smoothing=smoothing,
+                                hemi=hemi,
+                                valid_masks_by_subject=valid_masks,
+                            )
+                            status_rows, dominant, _profile400_mean = assignment_status_from_cluster_roi_topn(
+                                profile_3d=roi_profile_3d,
+                                roi_registry=roi_registry,
+                                q_thresh=0.05,
+                                top_n_cap=20,
+                            )
+                            cols_by_network, _network_names_from_registry = split_kong2022_columns_by_network(roi_registry)
+                            profile = np.full((int(roi_profile.shape[0]), int(len(network_names))), np.nan, dtype=np.float32)
+                            for net_idx, net_name in enumerate(network_names):
+                                cols = cols_by_network.get(str(net_name), [])
+                                if not cols:
+                                    continue
+                                profile[:, net_idx] = np.nanmean(roi_profile[:, np.asarray(cols, dtype=np.int32)], axis=1).astype(np.float32)
+                        else:
+                            profile = cluster_network_profile(
+                                group_labels_final=labels_final,
+                                support_mask=support,
+                                subjects=subjects,
+                                shared_root=shared_root,
+                                atlas=atlas,
+                                smoothing=smoothing,
+                                hemi=hemi,
+                                valid_masks_by_subject=valid_masks,
+                                profile_fc_mode=(
+                                    "partial_networks_only_one_sided"
+                                    if method in {"group-network-partial-spectral", "group-intrinsic-partial-spectral"}
+                                    else "pearson"
+                                ),
+                            )
+                            status_rows, dominant = assignment_status_from_profile(profile, network_names)
+                        if atlas == "kong2022" and roi_profile is None:
                             roi_profile, roi_registry = cluster_roi_profile(
                                 group_labels_final=labels_final,
                                 support_mask=support,
@@ -1463,11 +2248,25 @@ def main() -> int:
                                 hemi=hemi,
                                 valid_masks_by_subject=valid_masks,
                             )
+                        if atlas == "kong2022":
+                            assert roi_profile is not None and roi_registry is not None
                             roi_top20 = cluster_roi_top_k(roi_profile, roi_registry, k_top=20)
 
                         np.save(run_dir / "group_labels_final.npy", labels_final.astype(np.int32))
                         np.save(run_dir / "cluster_network_profile.npy", profile.astype(np.float32))
-                        save_json(run_dir / "cluster_assignment_status.json", {"items": status_rows})
+                        save_json(
+                            run_dir / "cluster_assignment_status.json",
+                            {
+                                "items": status_rows,
+                                "assignment_metric": (
+                                    "topn_count_positive_roi"
+                                    if (atlas == "kong2022" and method == "group-intrinsic-spectral")
+                                    else "top1_fisher_z"
+                                ),
+                                "q_threshold": 0.05 if (atlas == "kong2022" and method == "group-intrinsic-spectral") else None,
+                                "top_n_cap": 20 if (atlas == "kong2022" and method == "group-intrinsic-spectral") else None,
+                            },
+                        )
                         save_json(run_dir / "cluster_dominant_network.json", {"dominant": dominant, "network_names": network_names})
                         if atlas == "kong2022":
                             assert roi_profile is not None and roi_registry is not None and roi_top20 is not None
@@ -1490,43 +2289,7 @@ def main() -> int:
                         write_tsv(
                             run_dir / "k_selection_summary.tsv",
                             rows,
-                            [
-                                "method",
-                                "atlas",
-                                "smoothing",
-                                "hemi",
-                                "coverage_threshold",
-                                "k",
-                                "n_subjects",
-                                "n_support_vertices",
-                                "V_min_effective",
-                                "group_ari_mean",
-                                "group_ari_se",
-                                "subject_split_requested",
-                                "subject_split_used",
-                                "subject_split_skipped_overlap",
-                                "subject_split_skipped_empty",
-                                "run_aware_ari_mean",
-                                "run_aware_ari_se",
-                                "run_aware_n_pairs",
-                                "run_aware_n_used",
-                                "ARI_null_mean",
-                                "ARI_null_5pct",
-                                "ARI_weak_null_mean",
-                                "B_null_requested",
-                                "B_null_used_strong",
-                                "B_null_used_weak",
-                                "min_cluster_size",
-                                "max_components_per_cluster",
-                                "min_profile_coherence",
-                                "mean_profile_coherence",
-                                "nontrivial_min_size_ok",
-                                "nontrivial_connectedness_ok",
-                                "nontrivial_coherence_ok",
-                                "local_max",
-                                "within_1se_best",
-                                "selected_nontrivial",
-                            ],
+                            k_selection_fields,
                         )
                         save_json(run_dir / "k_selection_summary.json", {"rows": rows, "k_final": int(k_final)})
 
@@ -1551,10 +2314,17 @@ def main() -> int:
                         nib.save(func_lbl, str(func_lbl_path))
 
                         manifest = {
+                            "status": "ok",
                             "method": method,
                             "atlas": atlas,
                             "smoothing": smoothing,
                             "hemi": hemi,
+                            "assignment_mode": "cluster_level",
+                            "cluster_assignment_metric": (
+                                "topn_count_positive_roi"
+                                if (atlas == "kong2022" and method == "group-intrinsic-spectral")
+                                else "top1_fisher_z"
+                            ),
                             "k_selection_mode": str(args.k_selection_mode),
                             "coverage_threshold": float(tau),
                             "V_min_fraction": float(args.v_min_fraction),
@@ -1643,6 +2413,11 @@ def main() -> int:
                             ),
                             "cluster_roi_registry": (
                                 str((run_dir / "cluster_roi_registry.tsv").resolve()) if atlas == "kong2022" else None
+                            ),
+                            "cluster_roi_profile_subjects_used": (
+                                [f"sub-{s}" for s in roi_profile_subjects_used]
+                                if roi_profile_subjects_used is not None
+                                else None
                             ),
                             "template_subject": template_label,
                             "cluster_label_ordering": "long_axis_head_to_tail",

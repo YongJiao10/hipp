@@ -1,106 +1,118 @@
-# T1only + Kong2022 Route B Handoff (Updated 2026-04-25 UTC)
+# T1only + Kong2022 Route B Handoff (Updated 2026-04-26)
 
 ## Scope
-This handoff records the live state of the T1only full flow from HippUnfold-based QC prep through downstream Kong2022 group analysis.
+Full T1only flow from HippUnfold-based QC prep through Kong2022 Route B group atlas and overview figures.
 
-## Repository / Branch Context
+## Repository Context
 - Repo: `/home/yojiao/hpchome/hipp`
-- Target branch intent: `T1only`
-- Handoff file policy: keep handoff in repo root
+- Runbook: `docs/hipp_parcellation_network/t1only_kong2022_route_b_runbook.md`
+- Output root: `outputs_experiments/hippunfold_recommended_t1w_20260423/kong2022_route_b/`
 
-## What Changed Since Previous Handoff
-- Fixed run-time concurrency capping so one-off approved runs can exceed 10 when explicitly requested.
-- Added env override `HIPP_MAX_CONCURRENCY` in both launchers.
-- Updated runbook with override usage.
+---
 
-Modified files:
-- `scripts/hipp_parcellation_network/run_t1only_kong2022_route_b_pipeline.py`
-- `scripts/hipp_parcellation_network/prepare_t1only_group_inputs.py`
-- `docs/hipp_parcellation_network/t1only_kong2022_route_b_runbook.md`
+## Pipeline Status (2026-04-26 ~23:00 CDT)
 
-## Concurrency Behavior (Important)
-Default cap remains 10.
-One-off override now supported with env var:
+| Stage | Status |
+|-------|--------|
+| prepare (raw / tSNR / QC / smooth / group-avg) | ✅ Complete |
+| kong2022-reference | ✅ Complete — 151/151 |
+| kong2022-fc | ✅ Complete |
+| intrinsic-fc | ✅ Complete — 604 combos |
+| **group-atlas** | ⏳ In progress — combo 1/8, currently at k=9 |
+| present | Waiting |
 
+**QC result**: 151 subjects pass (T1only Dice + tSNR gate).
+**Group-average surfaces**: generated at `hipp_group_merged_canonical_atlas/group_average_surfaces/`.
+
+### Active Process
+- Pipeline orchestrator: PID `4052505` (setsid, PGID=PID)
+- Watchdog: PID `4054273` (`/tmp/pipeline_watchdog.sh`)
+- Logs: `outputs_experiments/.../kong2022_route_b/logs/pipeline_20260426T032109Z/`
+
+---
+
+## Critical Runtime Rules (Hard-Won Lessons)
+
+### 1. Always launch with `setsid`
 ```bash
-HIPP_MAX_CONCURRENCY=12 \
-/home/yojiao/.conda/envs/py314/bin/python scripts/hipp_parcellation_network/run_t1only_kong2022_route_b_pipeline.py --jobs 12 --resume
+setsid /home/yojiao/.conda/envs/py314/bin/python \
+  scripts/hipp_parcellation_network/run_t1only_kong2022_route_b_pipeline.py \
+  --jobs 4 --resume >> /tmp/pipeline_restart.log 2>&1 &
 ```
-
-Implementation details:
-- `run_t1only_kong2022_route_b_pipeline.py`: `jobs=min(requested, resolve_max_concurrency())`
-- `prepare_t1only_group_inputs.py`: same resolver + removed internal hard cap in `run_parallel()` so effective workers follow `jobs`.
-
-## Live Runtime Status (Latest Check)
-Timestamp: `2026-04-25 03:04:50 UTC`
-
-Active process:
-- PID `3926063`
-- Command:
-  - `/home/yojiao/.conda/envs/py314/bin/python scripts/hipp_parcellation_network/prepare_t1only_group_inputs.py ... --jobs 12 --resume`
-
-Active stage:
-- `prepare` -> `raw sampling`
-
-Effective current parallelism:
-- `sample_hipp_surface_timeseries.py`: 12 active workers
-- `wb_command -volume-to-surface-mapping`: 12 active workers
-
-## Progress Snapshot
-From artifacts/logs:
-- `raw_done` (via `surface_sampling_summary.json`): `91`
-- `raw_full_lr`: `91`
-- `raw_partial`: `3`
-- Latest completed raw subject timestamp: `2026-04-25 02:43:16 UTC` (`sub-246133`)
-
-Current active prepare log:
-- `outputs_experiments/hippunfold_recommended_t1w_20260423/kong2022_route_b/logs/pipeline_20260425T024709Z/prepare.log`
-- This resumed prepare instance started with: `raw sampling todo=74`
-- No FAIL lines yet in this new `pipeline_20260425T024709Z` log.
-
-## Known Runtime Pattern
-- Throughput is bursty/long-tail during raw mapping.
-- Short windows can show no new completions even while 12 `wb_command` are active.
-
-## Next Agent Action Plan
-1. Keep current `prepare` process running (do not launch duplicate prepare/pipeline in parallel).
-2. Monitor until `prepare` completes all substeps (`raw -> tsnr -> qc -> smooth -> group-average`).
-3. After `prepare` done, run orchestrator from next stage:
-
+To kill cleanly (cascades to all workers + wb_command children):
 ```bash
-HIPP_MAX_CONCURRENCY=12 \
-/home/yojiao/.conda/envs/py314/bin/python scripts/hipp_parcellation_network/run_t1only_kong2022_route_b_pipeline.py \
-  --from-step kong2022-reference \
-  --jobs 12 \
-  --resume
+kill -- -<PID>   # PID == PGID when launched with setsid
 ```
+**Never** `kill <PID>` alone — orphans ProcessPoolExecutor workers and wb_command children.
 
-4. Continue to final outputs:
-- `group_present_group_t1only/`
+### 2. wb_command OMP_NUM_THREADS=2 — already fixed in code
+`wb_command -metric-smoothing` defaults to 128 threads/process on this host.
+With `--jobs 4` that was 512 threads → ~10× slowdown (80 min/batch → 5 min/batch).
+Fix applied in `prepare_t1only_group_inputs.py:run_smoothing()`: passes `OMP_NUM_THREADS=2` in subprocess env.
+**Do not remove this.**
 
-5. At QC completion, explicitly report two counts:
-- Dice QC pass count
-- tSNR QC pass count (final T1only pass cohort)
+### 3. --jobs 4 recommended for smooth stage
+Higher values cause NFS I/O contention + wb_command thread explosion.
+
+### 4. prepare is now fully resume-safe
+All sub-stages skip already-completed work on `--resume`:
+- raw: checks `surface_sampling_summary.json`
+- tSNR: checks `tsnr_gate_summary.json` (fixed 2026-04-26)
+- QC manifest: skips if `hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt` exists (fixed 2026-04-26)
+- smooth: checks 4 timeseries.npy files
+- group-average: always reruns (fast, ~seconds)
+
+---
+
+## Completed: group-atlas Combo Parallelism
+
+group-atlas runs these 4 independent combos (default):
+- 1 method: `group-intrinsic-spectral` (`group-network-spectral` is opt-in, not run by default)
+- 2 smoothings: `2mm`, `4mm`
+- 2 hemis: `L`, `R`
+
+`run_merged_canonical_group_atlas.py` now supports `--jobs` and dispatches combo tasks in
+parallel via `ProcessPoolExecutor` (each combo runs in an isolated subprocess with `--jobs 1`).
+
+For this route, pipeline now forwards group-atlas combo parallelism and caps it at **4**:
+- `run_t1only_kong2022_route_b_pipeline.py` → `group_atlas_jobs = min(jobs, 4)`
+- `group-atlas` stage includes `--jobs <group_atlas_jobs>`
+
+Per-combo logs: `hipp_group_merged_canonical_atlas/_combo_logs/*.log`
+
+---
 
 ## Monitoring Commands
+
 ```bash
-# raw completion count
-find outputs_experiments/hippunfold_recommended_t1w_20260423/kong2022_route_b/hipp_group_inputs_shared \
-  -path '*/surface/raw/surface_sampling_summary.json' -type f | wc -l
+# Watchdog log
+tail -5 /tmp/pipeline_watchdog.log
 
-# active prepare PID
-pgrep -af 'prepare_t1only_group_inputs.py'
+# Pipeline stdout
+tail -20 /tmp/pipeline_restart.log
 
-# active worker counts
-ps -ef | rg 'sample_hipp_surface_timeseries.py' | wc -l
-ps -ef | rg 'exe_linux64/wb_command -volume-to-surface-mapping' | wc -l
-ps -ef | rg '/bin/bash .*wb_command -volume-to-surface-mapping' | wc -l
+# group-atlas progress (current combo + k)
+LATEST=$(ls -dt outputs_experiments/hippunfold_recommended_t1w_20260423/kong2022_route_b/logs/pipeline_* | head -1)
+grep -E '^\[combo\]|\[k\] |\[skip\]' "$LATEST/group-atlas.log" | tail -10
 
-# latest prepare log tail
-tail -n 80 outputs_experiments/hippunfold_recommended_t1w_20260423/kong2022_route_b/logs/pipeline_20260425T024709Z/prepare.log
+# Check all stage logs present (= stages completed)
+ls $LATEST/
+
+# CPU sanity check
+ps -eo pid,pgid,pcpu,nlwp,comm | grep wb_command | awk '$3>0'
+ps aux --sort=-%cpu | head -8
 ```
 
-## Process Count Semantics
-- Real compute concurrency: count only `.../exe_linux64/wb_command -volume-to-surface-mapping`.
-- Wrapper processes: `/bin/bash ... wb_command ...` are launcher shells, not additional compute slots.
-- `sample_hipp_surface_timeseries.py` is Python worker count; it may differ briefly from compute count during spawn/teardown.
+## Restart Commands
+
+```bash
+# Full restart from prepare
+setsid /home/yojiao/.conda/envs/py314/bin/python \
+  scripts/hipp_parcellation_network/run_t1only_kong2022_route_b_pipeline.py \
+  --from-step prepare --jobs 4 --resume >> /tmp/pipeline_restart.log 2>&1 &
+
+# From group-atlas only
+setsid /home/yojiao/.conda/envs/py314/bin/python \
+  scripts/hipp_parcellation_network/run_t1only_kong2022_route_b_pipeline.py \
+  --from-step group-atlas --jobs 4 --resume >> /tmp/pipeline_restart.log 2>&1 &
+```

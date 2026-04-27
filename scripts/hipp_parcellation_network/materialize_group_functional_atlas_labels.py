@@ -61,7 +61,14 @@ def network_color_map() -> dict[str, tuple[int, int, int, int]]:
 
 def materialize_combo(manifest_path: Path, color_map: dict[str, tuple[int, int, int, int]]) -> bool:
     manifest = load_json(manifest_path)
+    if str(manifest.get("status", "ok")) != "ok":
+        return False
     run_dir = manifest_path.parent
+    if not (run_dir / "group_labels_final.npy").exists():
+        # Clusterless methods do not emit cluster IDs; nothing to backfill here.
+        return False
+    if not (run_dir / "cluster_assignment_status.json").exists():
+        return False
     labels = np.load(run_dir / "group_labels_final.npy").astype(np.int32)
     status_items = load_json(run_dir / "cluster_assignment_status.json")["items"]
     network_names = load_json(run_dir / "group_feature_summary.json")["network_names"]

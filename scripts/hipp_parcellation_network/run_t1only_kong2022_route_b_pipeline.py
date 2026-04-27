@@ -17,7 +17,7 @@ DEFAULT_BATCH_ROOT = RUN_ID_ROOT / "dense_corobl_batch"
 DEFAULT_ROUTE_ROOT = RUN_ID_ROOT / "kong2022_route_b"
 DEFAULT_SHARED_ROOT = DEFAULT_ROUTE_ROOT / "hipp_group_inputs_shared"
 DEFAULT_GROUP_ROOT = DEFAULT_ROUTE_ROOT / "hipp_group_merged_canonical_atlas"
-DEFAULT_PRESENT_DIR = REPO_ROOT / "group_present_group_t1only"
+DEFAULT_PRESENT_DIR = REPO_ROOT / "present_group_t1only"
 DEFAULT_MANIFEST = DEFAULT_ROUTE_ROOT / "manifests" / "hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt"
 DEFAULT_GROUP_AVG = DEFAULT_GROUP_ROOT / "group_average_surfaces"
 
@@ -27,9 +27,12 @@ KONG2022_FC = REPO_ROOT / "scripts" / "hipp_parcellation_network" / "materialize
 INTRINSIC_FC = REPO_ROOT / "scripts" / "hipp_parcellation_network" / "materialize_intrinsic_vertex_to_vertex_fc.py"
 GROUP_ATLAS = REPO_ROOT / "scripts" / "hipp_parcellation_network" / "run_merged_canonical_group_atlas.py"
 PRESENT = REPO_ROOT / "scripts" / "hipp_parcellation_network" / "build_present_group_overview_merged_canonical.py"
+CLUSTER_ROI_CORTEX = REPO_ROOT / "scripts" / "hipp_parcellation_network" / "build_cluster_roi_cortex_independent.py"
 
-STAGES = ["prepare", "kong2022-reference", "kong2022-fc", "intrinsic-fc", "group-atlas", "present"]
+STAGES = ["prepare", "kong2022-reference", "kong2022-fc", "intrinsic-fc", "group-atlas", "present", "cluster-roi-cortex"]
 DEFAULT_MAX_CONCURRENCY = 10
+DEFAULT_PIPELINE_JOBS = 4
+DEFAULT_GROUP_ATLAS_JOBS = 4
 
 
 def now_utc() -> str:
@@ -96,7 +99,7 @@ def main() -> int:
     parser.add_argument("--shared-root", default=str(DEFAULT_SHARED_ROOT))
     parser.add_argument("--group-root", default=str(DEFAULT_GROUP_ROOT))
     parser.add_argument("--present-dir", default=str(DEFAULT_PRESENT_DIR))
-    parser.add_argument("--jobs", type=int, default=8)
+    parser.add_argument("--jobs", type=int, default=DEFAULT_PIPELINE_JOBS)
     parser.add_argument("--from-step", choices=STAGES, default=None)
     parser.add_argument("--until-step", choices=STAGES, default=None)
     parser.add_argument("--resume", action="store_true", default=True)
@@ -108,6 +111,12 @@ def main() -> int:
     if requested_jobs > max_concurrency:
         print(
             f"[warn] requested jobs={requested_jobs} exceeds max_concurrency={max_concurrency}; using jobs={jobs}",
+            flush=True,
+        )
+    group_atlas_jobs = max(1, min(jobs, DEFAULT_GROUP_ATLAS_JOBS))
+    if group_atlas_jobs != jobs:
+        print(
+            f"[info] group-atlas combo jobs capped at {group_atlas_jobs} (pipeline jobs={jobs})",
             flush=True,
         )
     batch_root = Path(args.hippunfold_batch_root).resolve()
@@ -184,14 +193,17 @@ def main() -> int:
                 str(group_avg),
                 "--out-root",
                 str(group_root),
+                "--jobs",
+                str(group_atlas_jobs),
                 "--resume",
                 "--coverage-thresholds",
                 "0.80",
                 "--atlases",
                 "kong2022",
                 "--methods",
-                "group-network-spectral",
                 "group-intrinsic-spectral",
+                "group-network-top",
+                "group-network-all",
             ]
         elif stage == "present":
             cmd = [
@@ -204,10 +216,40 @@ def main() -> int:
                 "--atlases",
                 "kong2022",
                 "--methods",
-                "group-network-spectral",
                 "group-intrinsic-spectral",
+                "group-network-top",
+                "group-network-all",
                 "--coverage-threshold",
                 "0.80",
+            ]
+        elif stage == "cluster-roi-cortex":
+            cmd = [
+                sys.executable,
+                str(CLUSTER_ROI_CORTEX),
+                "--group-root",
+                str(group_root),
+                "--shared-root",
+                str(shared_root),
+                "--present-dir",
+                str(present_dir),
+                "--atlas",
+                "kong2022",
+                "--methods",
+                "group-intrinsic-spectral",
+                "group-network-top",
+                "group-network-all",
+                "--smoothings",
+                "2mm",
+                "4mm",
+                "--hemis",
+                "L",
+                "R",
+                "--coverage-threshold",
+                "0.80",
+                "--fdr-q",
+                "0.05",
+                "--max-rois-per-sign",
+                "20",
             ]
         else:
             raise AssertionError(stage)
@@ -226,6 +268,7 @@ def main() -> int:
         "subjects_manifest": str(manifest),
         "group_average_surfaces_dir": str(group_avg),
         "jobs": int(jobs),
+        "group_atlas_jobs": int(group_atlas_jobs),
         "max_concurrency": int(max_concurrency),
         "stages": stage_rows,
     }

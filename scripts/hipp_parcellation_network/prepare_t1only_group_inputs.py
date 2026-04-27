@@ -105,6 +105,14 @@ def raw_done(shared_root: Path, subject: str) -> bool:
     ) and (raw_dir / "surface_sampling_summary.json").exists()
 
 
+def tsnr_done(shared_root: Path, subject: str) -> bool:
+    gate_dir = shared_root / f"sub-{subject}" / "surface" / "tsnr_gate"
+    return all(
+        (gate_dir / f"sub-{subject}_hemi-{hemi}_tsnr_gate_summary.json").exists()
+        for hemi in HEMIS
+    )
+
+
 def run_raw_sampling(subject: str, batch_root: str, shared_root: str, bold_root: str, log_dir: str) -> dict[str, object]:
     batch = Path(batch_root)
     shared = Path(shared_root)
@@ -254,6 +262,9 @@ def run_smoothing(subject: str, batch_root: str, shared_root: str) -> dict[str, 
     shared = Path(shared_root)
     inputs: list[dict[str, object]] = []
     outputs: list[dict[str, object]] = []
+    # wb_command defaults to spawning one thread per CPU core; cap it to avoid
+    # saturating the host when multiple subjects run in parallel.
+    _wb_env = {**os.environ, "OMP_NUM_THREADS": "2"}
     for smoothing in SMOOTHINGS:
         fwhm = float(smoothing.replace("mm", ""))
         out_dir = shared / f"sub-{subject}" / "surface" / smoothing
@@ -274,7 +285,7 @@ def run_smoothing(subject: str, batch_root: str, shared_root: str) -> dict[str, 
                 "-roi",
                 str(roi),
             ]
-            proc = subprocess.run(cmd, text=True, capture_output=True)
+            proc = subprocess.run(cmd, text=True, capture_output=True, env=_wb_env)
             if proc.returncode != 0:
                 return {"subject": subject, "ok": False, "stage": "smoothing", "error": proc.stderr[-4000:]}
             arr = load_func_gii(out_gii)
@@ -426,27 +437,31 @@ def main() -> int:
         print(f"[info] raw sampling todo={len(raw_todo)}", flush=True)
         run_parallel("raw", raw_todo, jobs, run_raw_sampling, str(batch_root), str(shared_root), str(bold_root), str(log_dir))
     if args.stage in {"all", "tsnr"}:
-        tsnr_todo = [s for s in dice_subjects]
+        tsnr_todo = [s for s in dice_subjects if not (args.resume and tsnr_done(shared_root, s))]
         print(f"[info] tsnr gate todo={len(tsnr_todo)}", flush=True)
         run_parallel("tsnr", tsnr_todo, jobs, run_tsnr_gate, str(batch_root), str(shared_root))
+    manifest_path = route_root / "manifests" / "hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt"
     if args.stage in {"all", "qc"}:
-        cmd = [
-            sys.executable,
-            str(QC_SCRIPT),
-            "--hippunfold-batch-root",
-            str(batch_root),
-            "--shared-root",
-            str(shared_root),
-            "--out-dir",
-            str(route_root / "qc"),
-            "--manifest-dir",
-            str(route_root / "manifests"),
-        ]
-        cmd.extend(["--subjects", *subjects])
-        proc = subprocess.run(cmd, text=True)
-        if proc.returncode != 0:
-            return proc.returncode
-    pass_subjects = read_latest_manifest(route_root) if (route_root / "manifests" / "hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt").exists() else []
+        if args.resume and manifest_path.exists():
+            print("[info] qc manifest exists, skipping", flush=True)
+        else:
+            cmd = [
+                sys.executable,
+                str(QC_SCRIPT),
+                "--hippunfold-batch-root",
+                str(batch_root),
+                "--shared-root",
+                str(shared_root),
+                "--out-dir",
+                str(route_root / "qc"),
+                "--manifest-dir",
+                str(route_root / "manifests"),
+            ]
+            cmd.extend(["--subjects", *subjects])
+            proc = subprocess.run(cmd, text=True)
+            if proc.returncode != 0:
+                return proc.returncode
+    pass_subjects = read_latest_manifest(route_root) if manifest_path.exists() else []
     if args.stage in {"all", "smooth"}:
         smooth_todo = [s for s in pass_subjects if not (args.resume and smoothing_done(shared_root, s))]
         print(f"[info] smoothing pass_subjects={len(pass_subjects)} todo={len(smooth_todo)}", flush=True)
