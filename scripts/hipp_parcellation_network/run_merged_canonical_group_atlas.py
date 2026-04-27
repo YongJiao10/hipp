@@ -55,19 +55,7 @@ HEMIS = ["L", "R"]
 K_RANGE = list(range(2, 11))
 KONG2022_ONLY_METHODS = {"group-network-top", "group-network-all"}
 CLUSTERLESS_METHODS = {"group-network-top", "group-network-all"}
-STABLE_GROUP_ARI_MIN = 0.85
-STABLE_RUN_AWARE_ARI_MIN = 0.90
 PROFILE_REDUNDANCY_MAX_SIM = 0.90
-PROFILE_GAIN_MIN = 0.10
-
-
-@dataclass(frozen=True)
-class FeaturePreprocessConfig:
-    denoise_mode: str
-    pca_var: float
-    pca_max_components: int
-    spatial_smooth_iters: int
-    spatial_smooth_alpha: float
 
 
 @dataclass(frozen=True)
@@ -114,124 +102,6 @@ def zscore_cols(x: np.ndarray) -> np.ndarray:
     return out.astype(np.float32)
 
 
-def row_stochastic_operator(adjacency: sparse.csr_matrix) -> sparse.csr_matrix:
-    g = adjacency.tocsr().astype(np.float32)
-    deg = np.asarray(g.sum(axis=1)).ravel().astype(np.float32)
-    inv = np.zeros_like(deg, dtype=np.float32)
-    keep = deg > 1e-12
-    inv[keep] = 1.0 / deg[keep]
-    return sparse.diags(inv, offsets=0, format="csr") @ g
-
-
-def graph_diffuse_rows(
-    x: np.ndarray,
-    operator: sparse.csr_matrix,
-    *,
-    iters: int,
-    alpha: float,
-) -> np.ndarray:
-    arr = np.asarray(x, dtype=np.float32)
-    if int(iters) <= 0 or float(alpha) <= 0.0:
-        return arr.astype(np.float32, copy=True)
-    out = arr.copy()
-    out[~np.isfinite(out)] = 0.0
-    a = float(np.clip(alpha, 0.0, 1.0))
-    for _ in range(int(iters)):
-        out = ((1.0 - a) * out + a * (operator @ out)).astype(np.float32)
-    out[~np.isfinite(out)] = 0.0
-    return out.astype(np.float32)
-
-
-def pca_reconstruct_rows(
-    x: np.ndarray,
-    *,
-    var_threshold: float,
-    max_components: int,
-) -> np.ndarray:
-    arr = np.asarray(x, dtype=np.float32)
-    if arr.ndim != 2:
-        raise ValueError(f"Expected 2D matrix for PCA reconstruction, got shape={arr.shape}")
-    arr = arr.copy()
-    arr[~np.isfinite(arr)] = 0.0
-    n_rows, n_cols = int(arr.shape[0]), int(arr.shape[1])
-    if n_rows == 0 or n_cols == 0:
-        return arr.astype(np.float32)
-
-    centered = arr - np.mean(arr, axis=0, keepdims=True, dtype=np.float32)
-    try:
-        u, s, vt = np.linalg.svd(centered, full_matrices=False)
-    except np.linalg.LinAlgError:
-        return arr.astype(np.float32)
-    if s.size == 0:
-        return arr.astype(np.float32)
-
-    s2 = np.square(s.astype(np.float64))
-    total = float(np.sum(s2))
-    if total <= 0.0 or not np.isfinite(total):
-        return arr.astype(np.float32)
-    var_target = float(np.clip(var_threshold, 0.0, 1.0))
-    n_var = int(np.searchsorted(np.cumsum(s2) / total, var_target, side="left") + 1)
-    n_keep = max(1, min(n_var, int(s.size)))
-    if int(max_components) > 0:
-        n_keep = min(n_keep, int(max_components))
-    u_k = u[:, :n_keep]
-    s_k = s[:n_keep]
-    vt_k = vt[:n_keep, :]
-    recon = (u_k * s_k[np.newaxis, :]) @ vt_k
-    recon = recon + np.mean(arr, axis=0, keepdims=True, dtype=np.float32)
-    recon = recon.astype(np.float32)
-    recon[~np.isfinite(recon)] = 0.0
-    return recon
-
-
-def preprocess_group_features(
-    *,
-    method: str,
-    features: np.ndarray,
-    adjacency_support: sparse.csr_matrix,
-    cfg: FeaturePreprocessConfig,
-) -> np.ndarray:
-    out = np.asarray(features, dtype=np.float32)
-    out[~np.isfinite(out)] = 0.0
-    operator = row_stochastic_operator(adjacency_support)
-    if int(cfg.spatial_smooth_iters) > 0 and float(cfg.spatial_smooth_alpha) > 0.0:
-        if is_network_method(method):
-            out = graph_diffuse_rows(
-                out,
-                operator,
-                iters=int(cfg.spatial_smooth_iters),
-                alpha=float(cfg.spatial_smooth_alpha),
-            )
-        else:
-            out = graph_diffuse_rows(
-                out,
-                operator,
-                iters=int(cfg.spatial_smooth_iters),
-                alpha=float(cfg.spatial_smooth_alpha),
-            )
-            out = graph_diffuse_rows(
-                out.T,
-                operator,
-                iters=int(cfg.spatial_smooth_iters),
-                alpha=float(cfg.spatial_smooth_alpha),
-            ).T
-            np.fill_diagonal(out, 0.0)
-
-    if str(cfg.denoise_mode) == "pca":
-        out = pca_reconstruct_rows(
-            out,
-            var_threshold=float(cfg.pca_var),
-            max_components=int(cfg.pca_max_components),
-        )
-
-    if is_network_method(method):
-        out = zscore_cols(out)
-    else:
-        np.fill_diagonal(out, 0.0)
-        out[~np.isfinite(out)] = 0.0
-    return out.astype(np.float32)
-
-
 def centered_cosine_similarity(a: np.ndarray, b: np.ndarray | None = None) -> np.ndarray:
     x = np.asarray(a, dtype=np.float32)
     y = x if b is None else np.asarray(b, dtype=np.float32)
@@ -259,18 +129,6 @@ def profile_redundancy_metrics(profile: np.ndarray) -> tuple[float, int]:
     max_sim = float(np.max(vals))
     redundant_pairs = int(np.sum(vals > float(PROFILE_REDUNDANCY_MAX_SIM)))
     return max_sim, redundant_pairs
-
-
-def profile_gain_against_next(profile_k: np.ndarray, profile_k1: np.ndarray) -> float:
-    prev = np.asarray(profile_k, dtype=np.float32)
-    nxt = np.asarray(profile_k1, dtype=np.float32)
-    if prev.ndim != 2 or nxt.ndim != 2 or prev.shape[1] != nxt.shape[1] or nxt.shape[0] == 0:
-        return 0.0
-    sim = centered_cosine_similarity(nxt, prev)
-    best = np.max(sim, axis=1) if sim.size else np.array([1.0], dtype=np.float32)
-    gain = 1.0 - best
-    gain[~np.isfinite(gain)] = 0.0
-    return float(np.max(gain)) if gain.size else 0.0
 
 
 def cosine_affinity(features: np.ndarray) -> np.ndarray:
@@ -605,6 +463,34 @@ def local_maxima_flags(values: list[float]) -> list[bool]:
     return flags
 
 
+def select_k_final_from_survivors(survivors: list[dict]) -> tuple[int, str]:
+    """Three-tier K selection from the survivor pool.
+
+    Tier 1 — 1-SE rule anchored on the survivor pool's best mean ARI (not the
+    global argmax, which may include rejected K values).
+    Tier 2 — among within-1SE survivors, prefer local-maximum K values (true
+    peaks of the ARI-vs-K curve rather than noise plateaus).
+    Tier 3 — parsimony tiebreak: smallest K wins when quality is genuinely tied.
+
+    Returns (k_final, decision_path) where decision_path is one of:
+      "local_max_within_1se"              — normal path
+      "within_1se_smallest"               — within-1SE but no local max
+      "smallest_among_survivors_fallback" — degenerate fallback (should not occur)
+    """
+    surv_means = np.asarray([float(r["group_ari_mean"]) for r in survivors], dtype=np.float64)
+    best_idx = int(np.argmax(surv_means))
+    cutoff = float(surv_means[best_idx]) - float(survivors[best_idx]["group_ari_se"])
+    within_1se = [s for s in survivors if float(s["group_ari_mean"]) >= cutoff - 1e-12]
+    local_max_in_1se = [s for s in within_1se if int(s.get("local_max", 0)) == 1]
+    if local_max_in_1se:
+        pool, path = local_max_in_1se, "local_max_within_1se"
+    elif within_1se:
+        pool, path = within_1se, "within_1se_smallest"
+    else:
+        pool, path = survivors, "smallest_among_survivors_fallback"
+    return int(min(int(s["k"]) for s in pool)), path
+
+
 def load_cluster_colors() -> list[tuple[int, int, int, int]]:
     payload = json.loads(DEFAULT_NETWORK_STYLE.read_text(encoding="utf-8"))
     colors = [(128, 128, 128, 255)]
@@ -820,7 +706,6 @@ def cluster_for_subset(
     subjects_subset: list[str],
     support_mask: np.ndarray,
     adjacency_full: sparse.csr_matrix,
-    preprocess_cfg: FeaturePreprocessConfig,
     k: int,
     seed: int,
 ) -> tuple[np.ndarray, np.ndarray]:
@@ -833,12 +718,6 @@ def cluster_for_subset(
         feature_bank=feature_bank,
         subjects_subset=subjects_subset,
         support_mask=support_mask,
-    )
-    features = preprocess_group_features(
-        method=method,
-        features=features,
-        adjacency_support=adj,
-        cfg=preprocess_cfg,
     )
     aff = cosine_affinity(features)
     fused = sparse.csr_matrix(aff).multiply(adj).tocsr()
@@ -857,7 +736,6 @@ def subject_split_ari(
     subjects: list[str],
     tau: float,
     adjacency_full: sparse.csr_matrix,
-    preprocess_cfg: FeaturePreprocessConfig,
     k: int,
     seeds: list[int],
 ) -> dict[str, object]:
@@ -890,7 +768,6 @@ def subject_split_ari(
             subjects_subset=sub_a,
             support_mask=mask_a,
             adjacency_full=adjacency_full,
-            preprocess_cfg=preprocess_cfg,
             k=k,
             seed=seed + 1001,
         )
@@ -900,7 +777,6 @@ def subject_split_ari(
             subjects_subset=sub_b,
             support_mask=mask_b,
             adjacency_full=adjacency_full,
-            preprocess_cfg=preprocess_cfg,
             k=k,
             seed=seed + 2001,
         )
@@ -930,7 +806,6 @@ def strong_null_ari(
     subjects: list[str],
     tau: float,
     adjacency_full: sparse.csr_matrix,
-    preprocess_cfg: FeaturePreprocessConfig,
     k: int,
     seeds: list[int],
 ) -> dict[str, object]:
@@ -950,7 +825,6 @@ def strong_null_ari(
         subjects=subjects,
         tau=tau,
         adjacency_full=adjacency_full,
-        preprocess_cfg=preprocess_cfg,
         k=k,
         seeds=seeds,
     )
@@ -1035,7 +909,6 @@ def run_aware_ari(
     subjects: list[str],
     support_mask: np.ndarray,
     adjacency_full: sparse.csr_matrix,
-    preprocess_cfg: FeaturePreprocessConfig,
     k: int,
     seed_base: int,
 ) -> dict[str, object]:
@@ -1048,7 +921,6 @@ def run_aware_ari(
             subjects_subset=subjects,
             support_mask=support_mask,
             adjacency_full=adjacency_full,
-            preprocess_cfg=preprocess_cfg,
             k=int(k),
             seed=int(seed_base + rid * 1000 + k),
         )
@@ -1852,11 +1724,6 @@ def main() -> int:
     parser.add_argument("--min-profile-coherence", type=float, default=0.0)
     parser.add_argument("--resume", action="store_true", help="Skip combos that already have group_atlas_manifest.json.")
     parser.add_argument("--k-selection-mode", default="experimental", choices=["experimental", "redundancy-aware"])
-    parser.add_argument("--feature-denoise-mode", default="none", choices=["none", "pca"])
-    parser.add_argument("--feature-pca-var", type=float, default=0.95)
-    parser.add_argument("--feature-pca-max-components", type=int, default=128)
-    parser.add_argument("--spatial-smooth-iters", type=int, default=0)
-    parser.add_argument("--spatial-smooth-alpha", type=float, default=0.0)
     parser.add_argument("--overview-threshold", type=float, default=0.80)
     parser.add_argument(
         "--jobs",
@@ -1884,21 +1751,6 @@ def main() -> int:
     rng = np.random.RandomState(int(args.seed))
     split_seeds = [int(x) for x in rng.randint(1, 2_000_000_000, size=int(args.instability_resamples))]
     null_seeds = [int(x) for x in rng.randint(1, 2_000_000_000, size=int(args.null_resamples))]
-    preprocess_cfg = FeaturePreprocessConfig(
-        denoise_mode=str(args.feature_denoise_mode),
-        pca_var=float(args.feature_pca_var),
-        pca_max_components=int(args.feature_pca_max_components),
-        spatial_smooth_iters=int(args.spatial_smooth_iters),
-        spatial_smooth_alpha=float(args.spatial_smooth_alpha),
-    )
-    if not (0.0 <= preprocess_cfg.pca_var <= 1.0):
-        raise ValueError(f"--feature-pca-var must be in [0,1], got {preprocess_cfg.pca_var}")
-    if preprocess_cfg.pca_max_components < 1:
-        raise ValueError(f"--feature-pca-max-components must be >=1, got {preprocess_cfg.pca_max_components}")
-    if preprocess_cfg.spatial_smooth_iters < 0:
-        raise ValueError(f"--spatial-smooth-iters must be >=0, got {preprocess_cfg.spatial_smooth_iters}")
-    if not (0.0 <= preprocess_cfg.spatial_smooth_alpha <= 1.0):
-        raise ValueError(f"--spatial-smooth-alpha must be in [0,1], got {preprocess_cfg.spatial_smooth_alpha}")
 
     avg_surf_dir = Path(args.group_average_surfaces_dir).resolve()
     allowed_roots = [(REPO_ROOT / "outputs_migration").resolve(), (REPO_ROOT / "outputs_experiments").resolve()]
@@ -2072,20 +1924,16 @@ def main() -> int:
                             "local_max",
                             "within_1se_best",
                             "selected_nontrivial",
-                            "stable_group_ari_ok",
-                            "stable_run_aware_ari_ok",
-                            "stable_ok",
                             "max_profile_similarity",
                             "redundant_pair_count",
                             "nonredundant_ok",
-                            "profile_gain_to_next",
-                            "underfit_rejected",
-                            "reject_unstable",
                             "reject_nontrivial_fail",
                             "reject_redundant",
-                            "reject_underfit",
                             "reject_reason_primary",
                             "selected_final",
+                            "within_1se_survivor_pool",
+                            "survivor_pool_argmax_k",
+                            "k_final_decision_path",
                         ]
 
                         np.save(run_dir / "group_support_mask.npy", support.astype(np.uint8))
@@ -2249,18 +2097,9 @@ def main() -> int:
                                     "max_components_threshold": int(args.max_components_threshold),
                                     "min_profile_coherence": float(args.min_profile_coherence),
                                 },
-                                "feature_preprocess": {
-                                    "denoise_mode": str(preprocess_cfg.denoise_mode),
-                                    "pca_var": float(preprocess_cfg.pca_var),
-                                    "pca_max_components": int(preprocess_cfg.pca_max_components),
-                                    "spatial_smooth_iters": int(preprocess_cfg.spatial_smooth_iters),
-                                    "spatial_smooth_alpha": float(preprocess_cfg.spatial_smooth_alpha),
-                                },
                                 "redundancy_aware_thresholds": {
-                                    "stable_group_ari_min": float(STABLE_GROUP_ARI_MIN),
-                                    "stable_run_aware_ari_min": float(STABLE_RUN_AWARE_ARI_MIN),
-                                    "max_profile_similarity": float(PROFILE_REDUNDANCY_MAX_SIM),
-                                    "profile_gain_min": float(PROFILE_GAIN_MIN),
+                                    "max_profile_similarity_lte": float(PROFILE_REDUNDANCY_MAX_SIM),
+                                    "redundant_pair_count_eq": 0,
                                 },
                                 "density_evidence": {
                                     "surface_path": str(surfaces[hemi]),
@@ -2280,7 +2119,6 @@ def main() -> int:
 
                         rows: list[dict[str, object]] = []
                         labels_by_k: dict[int, np.ndarray] = {}
-                        roi_profile_by_k: dict[int, np.ndarray] = {}
                         support_idx = np.flatnonzero(support)
                         adjacency_support = adjacency_by_hemi[hemi][support_idx][:, support_idx]
 
@@ -2292,7 +2130,6 @@ def main() -> int:
                                 subjects_subset=subjects,
                                 support_mask=support,
                                 adjacency_full=adjacency_by_hemi[hemi],
-                                preprocess_cfg=preprocess_cfg,
                                 k=k,
                                 seed=int(args.seed + 11 * k),
                             )
@@ -2309,12 +2146,7 @@ def main() -> int:
                                 subjects_subset=subjects,
                                 support_mask=support,
                             )
-                            group_features_active = preprocess_group_features(
-                                method=method,
-                                features=group_features_active_raw,
-                                adjacency_support=adjacency_support,
-                                cfg=preprocess_cfg,
-                            )
+                            group_features_active = group_features_active_raw
                             min_coh, mean_coh = cluster_profile_coherence(group_features_active, labels_active, int(k))
 
                             ari_obj = subject_split_ari(
@@ -2324,7 +2156,6 @@ def main() -> int:
                                 subjects=subjects,
                                 tau=float(tau),
                                 adjacency_full=adjacency_by_hemi[hemi],
-                                preprocess_cfg=preprocess_cfg,
                                 k=int(k),
                                 seeds=split_seeds,
                             )
@@ -2344,7 +2175,6 @@ def main() -> int:
                                 subjects=subjects,
                                 tau=float(tau),
                                 adjacency_full=adjacency_by_hemi[hemi],
-                                preprocess_cfg=preprocess_cfg,
                                 k=int(k),
                                 seeds=null_seeds,
                             )
@@ -2356,7 +2186,6 @@ def main() -> int:
                                 subjects=subjects,
                                 support_mask=support,
                                 adjacency_full=adjacency_by_hemi[hemi],
-                                preprocess_cfg=preprocess_cfg,
                                 k=int(k),
                                 seed_base=int(args.seed),
                             )
@@ -2378,7 +2207,6 @@ def main() -> int:
                                     roi_fc_bank=roi_fc_bank_for_redundancy,
                                     valid_masks_by_subject=valid_masks,
                                 )
-                                roi_profile_by_k[int(k)] = roi_profile_k
                                 max_profile_similarity, redundant_pair_count = profile_redundancy_metrics(roi_profile_k)
 
                             rows.append(
@@ -2415,12 +2243,6 @@ def main() -> int:
                                     "nontrivial_min_size_ok": int(min_size >= v_min),
                                     "nontrivial_connectedness_ok": int(max_components <= int(args.max_components_threshold)),
                                     "nontrivial_coherence_ok": int(min_coh >= float(args.min_profile_coherence)),
-                                    "stable_group_ari_ok": int(ari_mean >= float(STABLE_GROUP_ARI_MIN)),
-                                    "stable_run_aware_ari_ok": int(run_ari_mean >= float(STABLE_RUN_AWARE_ARI_MIN)),
-                                    "stable_ok": int(
-                                        ari_mean >= float(STABLE_GROUP_ARI_MIN)
-                                        and run_ari_mean >= float(STABLE_RUN_AWARE_ARI_MIN)
-                                    ),
                                     "max_profile_similarity": float(max_profile_similarity),
                                     "redundant_pair_count": int(redundant_pair_count),
                                     "nonredundant_ok": int(
@@ -2431,12 +2253,8 @@ def main() -> int:
                                             and int(redundant_pair_count) == 0
                                         )
                                     ),
-                                    "profile_gain_to_next": float("nan"),
-                                    "underfit_rejected": 0,
-                                    "reject_unstable": 0,
                                     "reject_nontrivial_fail": 0,
                                     "reject_redundant": 0,
-                                    "reject_underfit": 0,
                                     "reject_reason_primary": "",
                                     "selected_final": 0,
                                 }
@@ -2456,56 +2274,34 @@ def main() -> int:
                                 and int(row["nontrivial_connectedness_ok"]) == 1
                                 and int(row["nontrivial_coherence_ok"]) == 1
                             )
-                        rows_by_k = {int(r["k"]): r for r in rows}
+                            # Survivor-pool audit columns; overwritten after k_final is chosen.
+                            row["within_1se_survivor_pool"] = 0
+                            row["survivor_pool_argmax_k"] = -1
+                            row["k_final_decision_path"] = "none"
                         if args.k_selection_mode == "redundancy-aware":
                             for row in rows:
-                                k_cur = int(row["k"])
                                 row["nonredundant_ok"] = int(
                                     np.isfinite(float(row["max_profile_similarity"]))
                                     and float(row["max_profile_similarity"]) <= float(PROFILE_REDUNDANCY_MAX_SIM)
                                     and int(row["redundant_pair_count"]) == 0
                                 )
-                                underfit = 0
-                                gain = float("nan")
-                                k_next = int(k_cur + 1)
-                                if k_cur in roi_profile_by_k and k_next in roi_profile_by_k and k_next in rows_by_k:
-                                    next_row = rows_by_k[k_next]
-                                    next_is_actionable = (
-                                        int(next_row["stable_ok"]) == 1
-                                        and int(next_row["selected_nontrivial"]) == 1
-                                        and int(next_row["nonredundant_ok"]) == 1
-                                    )
-                                    if next_is_actionable:
-                                        gain = profile_gain_against_next(
-                                            roi_profile_by_k[k_cur],
-                                            roi_profile_by_k[k_next],
-                                        )
-                                        if float(gain) >= float(PROFILE_GAIN_MIN):
-                                            underfit = 1
-                                row["profile_gain_to_next"] = float(gain)
-                                row["underfit_rejected"] = int(underfit)
-                                row["reject_unstable"] = int(int(row["stable_ok"]) != 1)
                                 row["reject_nontrivial_fail"] = int(int(row["selected_nontrivial"]) != 1)
                                 row["reject_redundant"] = int(int(row["nonredundant_ok"]) != 1)
-                                row["reject_underfit"] = int(underfit)
                                 passed = (
-                                    int(row["stable_ok"]) == 1
+                                    int(row["local_max"]) == 1
+                                    and int(row["within_1se_best"]) == 1
                                     and int(row["selected_nontrivial"]) == 1
                                     and int(row["nonredundant_ok"]) == 1
-                                    and int(underfit) == 0
                                 )
                                 row["selected_final"] = int(passed)
-                                if not passed:
-                                    if int(row["reject_underfit"]) == 1:
-                                        row["reject_reason_primary"] = "underfit"
-                                    elif int(row["reject_redundant"]) == 1:
-                                        row["reject_reason_primary"] = "redundant"
-                                    elif int(row["reject_unstable"]) == 1:
-                                        row["reject_reason_primary"] = "unstable"
-                                    elif int(row["reject_nontrivial_fail"]) == 1:
-                                        row["reject_reason_primary"] = "nontrivial_fail"
-                                else:
+                                if int(row["selected_final"]) == 1:
                                     row["reject_reason_primary"] = ""
+                                elif int(row["reject_nontrivial_fail"]) == 1:
+                                    row["reject_reason_primary"] = "nontrivial_fail"
+                                elif int(row["reject_redundant"]) == 1:
+                                    row["reject_reason_primary"] = "redundant"
+                                else:
+                                    row["reject_reason_primary"] = "outside_selection_rule"
                             survivors = [r for r in rows if int(r["selected_final"]) == 1]
                         else:
                             for row in rows:
@@ -2514,19 +2310,15 @@ def main() -> int:
                                     and int(row["within_1se_best"]) == 1
                                     and int(row["selected_nontrivial"]) == 1
                                 )
-                                row["reject_unstable"] = int(int(row["stable_ok"]) != 1)
                                 row["reject_nontrivial_fail"] = int(int(row["selected_nontrivial"]) != 1)
                                 row["reject_redundant"] = 0
-                                row["reject_underfit"] = 0
                                 row["nonredundant_ok"] = 1
                                 if int(row["selected_final"]) == 1:
                                     row["reject_reason_primary"] = ""
                                 elif int(row["reject_nontrivial_fail"]) == 1:
                                     row["reject_reason_primary"] = "nontrivial_fail"
-                                elif int(row["reject_unstable"]) == 1:
-                                    row["reject_reason_primary"] = "unstable"
                                 else:
-                                    row["reject_reason_primary"] = "unstable"
+                                    row["reject_reason_primary"] = "outside_selection_rule"
                             survivors = [r for r in rows if int(r["selected_final"]) == 1]
                         if not survivors:
                             skip_reason = "no_k_survived_selection_constraints"
@@ -2568,18 +2360,9 @@ def main() -> int:
                                     "max_components_threshold": int(args.max_components_threshold),
                                     "min_profile_coherence": float(args.min_profile_coherence),
                                 },
-                                "feature_preprocess": {
-                                    "denoise_mode": str(preprocess_cfg.denoise_mode),
-                                    "pca_var": float(preprocess_cfg.pca_var),
-                                    "pca_max_components": int(preprocess_cfg.pca_max_components),
-                                    "spatial_smooth_iters": int(preprocess_cfg.spatial_smooth_iters),
-                                    "spatial_smooth_alpha": float(preprocess_cfg.spatial_smooth_alpha),
-                                },
                                 "redundancy_aware_thresholds": {
-                                    "stable_group_ari_min": float(STABLE_GROUP_ARI_MIN),
-                                    "stable_run_aware_ari_min": float(STABLE_RUN_AWARE_ARI_MIN),
-                                    "max_profile_similarity": float(PROFILE_REDUNDANCY_MAX_SIM),
-                                    "profile_gain_min": float(PROFILE_GAIN_MIN),
+                                    "max_profile_similarity_lte": float(PROFILE_REDUNDANCY_MAX_SIM),
+                                    "redundant_pair_count_eq": 0,
                                 },
                                 "density_evidence": {
                                     "surface_path": str(surfaces[hemi]),
@@ -2596,7 +2379,24 @@ def main() -> int:
                             save_json(manifest_path, manifest)
                             print(f"  [skip] {skip_detail}", flush=True)
                             continue
-                        k_final = int(sorted(survivors, key=lambda x: int(x["k"]))[0]["k"])
+                        # Three-tier K selection: 1-SE on survivor pool → local-max
+                        # preference → parsimony tiebreak. Annotate audit columns.
+                        surv_means = np.asarray(
+                            [float(s["group_ari_mean"]) for s in survivors], dtype=np.float64
+                        )
+                        surv_best_idx = int(np.argmax(surv_means))
+                        surv_cutoff = float(surv_means[surv_best_idx]) - float(
+                            survivors[surv_best_idx]["group_ari_se"]
+                        )
+                        surv_argmax_k = int(survivors[surv_best_idx]["k"])
+                        k_final, decision_path = select_k_final_from_survivors(survivors)
+                        for row in rows:
+                            row["survivor_pool_argmax_k"] = surv_argmax_k
+                            row["within_1se_survivor_pool"] = int(
+                                int(row["selected_final"]) == 1
+                                and float(row["group_ari_mean"]) >= surv_cutoff - 1e-12
+                            )
+                            row["k_final_decision_path"] = decision_path
                         labels_final = reorder_labels_by_long_axis(
                             labels_by_k[k_final],
                             long_axis_order_by_hemi[hemi],
@@ -2800,18 +2600,9 @@ def main() -> int:
                                 "max_components_threshold": int(args.max_components_threshold),
                                 "min_profile_coherence": float(args.min_profile_coherence),
                             },
-                            "feature_preprocess": {
-                                "denoise_mode": str(preprocess_cfg.denoise_mode),
-                                "pca_var": float(preprocess_cfg.pca_var),
-                                "pca_max_components": int(preprocess_cfg.pca_max_components),
-                                "spatial_smooth_iters": int(preprocess_cfg.spatial_smooth_iters),
-                                "spatial_smooth_alpha": float(preprocess_cfg.spatial_smooth_alpha),
-                            },
                             "redundancy_aware_thresholds": {
-                                "stable_group_ari_min": float(STABLE_GROUP_ARI_MIN),
-                                "stable_run_aware_ari_min": float(STABLE_RUN_AWARE_ARI_MIN),
-                                "max_profile_similarity": float(PROFILE_REDUNDANCY_MAX_SIM),
-                                "profile_gain_min": float(PROFILE_GAIN_MIN),
+                                "max_profile_similarity_lte": float(PROFILE_REDUNDANCY_MAX_SIM),
+                                "redundant_pair_count_eq": 0,
                             },
                             "density_evidence": {
                                 "surface_path": str(surfaces[hemi]),

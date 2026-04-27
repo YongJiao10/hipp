@@ -35,10 +35,11 @@ Optional spectral branch (opt-in):
   - `unassigned` is used only when no positive ROI exists (`unassigned_reason = no_positive_roi`)
   - if TopN ROI all belong to one network, `2nd` is `none` (never duplicate `1st`)
   - optional `--k-selection-mode redundancy-aware`:
-    - stable gate: `group_ari_mean >= 0.85`, `run_aware_ari_mean >= 0.90`
     - redundant gate: `max_profile_similarity <= 0.90` and `redundant_pair_count == 0`
-    - underfit gate: actionable `K+1` with `profile_gain_to_next >= 0.10` rejects current `K`
-    - choose smallest `K` passing all gates
+    - final K selection (three-tier, over survivor pool):
+      1. 1-SE rule: keep survivors within 1 SE of the survivor-pool best mean ARI
+      2. local-max preference: among within-1SE survivors, prefer ARI-curve local maxima
+      3. parsimony tiebreak: smallest K wins when quality is genuinely tied
 
 ### `group-network-spectral` (opt-in)
 

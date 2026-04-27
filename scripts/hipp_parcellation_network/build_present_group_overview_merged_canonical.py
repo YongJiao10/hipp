@@ -10,7 +10,6 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import nibabel as nib
 import numpy as np
-from matplotlib.colors import ListedColormap
 from matplotlib.patches import Rectangle
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
@@ -169,12 +168,8 @@ def _k_failure_lines(rows_tsv: list[dict[str, str]]) -> list[str]:
         if row.get("selected_final", "0") == "1":
             continue
         reasons: list[str] = []
-        if row.get("reject_underfit", "0") == "1":
-            reasons.append("underfit")
         if row.get("reject_redundant", "0") == "1":
             reasons.append("redundant")
-        if row.get("reject_unstable", "0") == "1":
-            reasons.append("unstable")
         if row.get("reject_nontrivial_fail", "0") == "1":
             reasons.append("nontrivial_fail")
         if not reasons:
@@ -341,6 +336,63 @@ def plot_vertex_confidence(ax, rows: list[dict[str, object]], title: str) -> Non
     ax.grid(axis="y", color="#dddddd", lw=0.5, alpha=0.7)
 
 
+def _metric_array(rows: list[dict[str, str]], key: str) -> np.ndarray:
+    vals: list[float] = []
+    for row in rows:
+        raw = row.get(key, "")
+        try:
+            vals.append(float(raw))
+        except (TypeError, ValueError):
+            vals.append(float("nan"))
+    return np.asarray(vals, dtype=float)
+
+
+def plot_k_gate_panel(
+    ax,
+    *,
+    rows_l: list[dict[str, str]],
+    rows_r: list[dict[str, str]],
+    k_l: int,
+    k_r: int,
+    smoothing: str,
+) -> None:
+    rows_l = sorted(rows_l, key=lambda r: int(r["k"]))
+    rows_r = sorted(rows_r, key=lambda r: int(r["k"]))
+    ks_l = np.asarray([int(r["k"]) for r in rows_l], dtype=int)
+    ks_r = np.asarray([int(r["k"]) for r in rows_r], dtype=int)
+    max_sim_l = _metric_array(rows_l, "max_profile_similarity")
+    max_sim_r = _metric_array(rows_r, "max_profile_similarity")
+
+    has_metric = bool(np.isfinite(max_sim_l).any() or np.isfinite(max_sim_r).any())
+    if not has_metric:
+        ax.axis("off")
+        ax.text(0.5, 0.5, f"{smoothing} metrics unavailable", ha="center", va="center", fontsize=FS_MISSING)
+        return
+
+    ax.plot(ks_l, max_sim_l, color="#1f77b4", lw=1.3, marker="o")
+    ax.plot(ks_r, max_sim_r, color="#d62728", lw=1.3, marker="o")
+    ax.axhline(0.90, color="#b00020", lw=1.0, ls=":", alpha=0.9)
+    ax.axvline(int(k_l), color="#1f77b4", ls="--", lw=1.0)
+    ax.axvline(int(k_r), color="#d62728", ls="--", lw=1.0)
+    ax.set_ylim(-0.02, 1.02)
+    ax.set_xlabel("K", fontsize=FS_LABEL)
+    ax.set_ylabel("max_profile_similarity", fontsize=FS_LABEL)
+    ax.set_title(f"{smoothing} | redundancy gate", fontsize=FS_TITLE)
+    ax.tick_params(labelsize=FS_TICK)
+    ax.grid(axis="y", color="#dddddd", lw=0.5, alpha=0.7)
+    ax.text(
+        0.02,
+        0.02,
+        "blue=L, red=R\nmaxSim<=0.90 pass\nvertical dashed = selected K*",
+        transform=ax.transAxes,
+        ha="left",
+        va="bottom",
+        fontsize=FS_SMALL,
+        color="#333333",
+        bbox={"facecolor": "white", "alpha": 0.72, "edgecolor": "none", "pad": 1.5},
+    )
+
+
 def plot_global_top_connections(ax, payload: dict[str, object], title: str) -> None:
     pos = [dict(x) for x in payload.get("top_positive", [])]
     neg = [dict(x) for x in payload.get("top_negative", [])]
@@ -458,7 +510,17 @@ def render_combo(
             ax0.set_xlabel("K", fontsize=FS_LABEL)
             ax0.set_ylabel("Subject-split ARI", fontsize=FS_LABEL)
             ax0.tick_params(labelsize=FS_TICK)
-            ax0.legend(fontsize=FS_TICK, loc="upper left")
+            ax0.text(
+                0.02,
+                0.98,
+                "blue=L, red=R",
+                transform=ax0.transAxes,
+                ha="left",
+                va="top",
+                fontsize=FS_SMALL,
+                color="#333333",
+                bbox={"facecolor": "white", "alpha": 0.72, "edgecolor": "none", "pad": 1.5},
+            )
             diag_lines: list[str] = []
             for hemi_lbl, k_raw, d_hemi, tsv_rows in [
                 ("L", k_l_raw, d_l, rows_l_tsv),
@@ -499,13 +561,10 @@ def render_combo(
         order_r = long_axis_order(surf_r)
         cids_l = resolve_cluster_order_from_manifest(m_l, lbl_l, order_l, k_l)
         cids_r = resolve_cluster_order_from_manifest(m_r, lbl_r, order_r, k_r)
-        ind_l = labels_to_indicator_by_ids(lbl_l, order_l, cids_l)
-        ind_r = labels_to_indicator_by_ids(lbl_r, order_r, cids_r)
         prof_l_o = reorder_profile(prof_l, cids_l)
         prof_r_o = reorder_profile(prof_r, cids_r)
         row_lbl_l = [f"L-C{i}" for i in range(1, len(cids_l) + 1)]
         row_lbl_r = [f"R-C{i}" for i in range(1, len(cids_r) + 1)]
-        ind_lr, yt_ind, yl_ind = concat_lr(ind_l, row_lbl_l, ind_r, row_lbl_r)
 
         sub = gs[ridx, 0].subgridspec(2, 2, wspace=0.08, hspace=0.035)
         ax0 = fig.add_subplot(sub[0, 0])
@@ -554,7 +613,17 @@ def render_combo(
         ax0.set_xlabel("K", fontsize=FS_LABEL)
         ax0.set_ylabel("Subject-split ARI", fontsize=FS_LABEL)
         ax0.tick_params(labelsize=FS_TICK)
-        ax0.legend(fontsize=FS_TICK, loc="upper left")
+        ax0.text(
+            0.02,
+            0.98,
+            "blue=L, red=R",
+            transform=ax0.transAxes,
+            ha="left",
+            va="top",
+            fontsize=FS_SMALL,
+            color="#333333",
+            bbox={"facecolor": "white", "alpha": 0.72, "edgecolor": "none", "pad": 1.5},
+        )
 
         ax1 = fig.add_subplot(sub[0, 1])
         nets = [str(x) for x in load_json(d_l / "group_feature_summary.json")["network_names"]]
@@ -571,19 +640,14 @@ def render_combo(
         add_cbar(fig, ax1, im1, "Fisher-z")
 
         ax2 = fig.add_subplot(sub[1, 0])
-        im2 = style_imshow(
+        plot_k_gate_panel(
             ax2,
-            ind_lr,
-            f"{smoothing} | cluster_indicator (KxV, C-order head->tail)",
-            vmin=0.0,
-            vmax=1.0,
-            cmap=ListedColormap(["#d9e4f5", "#1f77b4"]),
+            rows_l=rows_l,
+            rows_r=rows_r,
+            k_l=k_l,
+            k_r=k_r,
+            smoothing=smoothing,
         )
-        ax2.set_yticks(yt_ind)
-        ax2.set_yticklabels(yl_ind, fontsize=FS_LABEL)
-        ax2.set_xlabel("Vertex (long-axis)", fontsize=FS_LABEL)
-        ax2.tick_params(labelsize=FS_TICK)
-        add_cbar(fig, ax2, im2, "Indicator", ticks=[0.0, 1.0], ticklabels=["0", "1"])
 
         ax3 = fig.add_subplot(sub[1, 1])
         conf_rows = confidence_rows(status_l, "L", cids_l) + confidence_rows(status_r, "R", cids_r)

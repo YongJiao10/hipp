@@ -127,50 +127,21 @@ Total expected CPU with `--jobs 4` and `OMP_NUM_THREADS=2`: ~4 × 200% = ~800%.
    - Pipeline forwards `--jobs` to group-atlas but caps combo parallelism at 4 (`group_atlas_jobs=4`).
    - If a combo has no valid `K` (or no `K` survives constraints), that combo is marked skipped in `group_atlas_manifest.json` (`status=skipped_*`) and the remaining combos continue.
    - Per-combo logs are written to `hipp_group_merged_canonical_atlas/_combo_logs/`.
-   - Spectral methods support `--k-selection-mode redundancy-aware` with global preprocessing:
-     - `--feature-denoise-mode {none,pca}`
-     - `--feature-pca-var`
-     - `--feature-pca-max-components`
-     - `--spatial-smooth-iters`
-     - `--spatial-smooth-alpha`
+   - Spectral methods support `--k-selection-mode redundancy-aware`.
    - Redundancy-aware gates:
-     - stability: `group_ari_mean >= 0.85` and `run_aware_ari_mean >= 0.90`
      - non-redundancy: `max_profile_similarity <= 0.90` and `redundant_pair_count == 0`
-     - underfit gain: reject `K` when actionable `K+1` adds profile gain `>= 0.10`
-   - Overview `K` diagnostics now expose reason tags per rejected `K`: `underfit`, `redundant`, `unstable`, `nontrivial_fail`.
-
-### Redundancy-Aware Preset Sweep (Spectral Only)
-
-Use one global preset for all methods/smoothings/hemis; do not tune per-combo. Ordered preset grid:
-
-1. `baseline`: `none`, `iters=0`
-2. `pca95`: `pca_var=0.95`, `iters=0`
-3. `pca95_smooth2`: `pca_var=0.95`, `iters=2`, `alpha=0.35`
-4. `pca90_smooth2`: `pca_var=0.90`, `iters=2`, `alpha=0.35`
-5. `pca90_smooth4`: `pca_var=0.90`, `iters=4`, `alpha=0.35`
-6. `pca85_smooth2_alpha50`: `pca_var=0.85`, `iters=2`, `alpha=0.50`
-
-Target combos for this sweep:
-
-- methods: `group-network-spectral`, `group-intrinsic-spectral`
-- atlas: `kong2022`
-- smoothings: `2mm`, `4mm`
-- hemis: `L`, `R`
-- coverage: `0.80`
-
-Success criterion: all 8 combos choose `K=3` while passing the fixed gates above. If none pass, stop and report the failed preset table (do not relax thresholds ad hoc).
-
-Reference command:
-
-```bash
-/home/yojiao/.conda/envs/py314/bin/python \
-  scripts/hipp_parcellation_network/run_redundancy_aware_preset_sweep.py \
-  --jobs 4
-```
+   - Final K selection (three-tier over the survivor pool that passes all gates):
+     1. 1-SE rule: keep survivors within 1 SE of the survivor-pool best mean ARI
+     2. local-max preference: among within-1SE survivors, prefer ARI-curve local maxima
+     3. parsimony tiebreak: smallest K when quality is genuinely tied
+   - Overview `K` diagnostics expose reason tags per rejected `K`: `redundant`, `nontrivial_fail`.
 
 6. `present`
    - Builds overview figures in `present_group_t1only/`.
    - Default present methods in this pipeline are `group-intrinsic-spectral`, `group-network-top`, `group-network-all`.
+   - For cluster methods, the previous `cluster_indicator` panel is replaced by a K-metric gate panel:
+     - `max_profile_similarity` vs K with threshold `0.90`
+     - selected K (`K*`) marked by vertical dashed lines
    - For clusterless methods (`group-network-top`, `group-network-all`), the group overview left pane now contains only `vertex assignment counts`.
 
 7. `cluster-roi-cortex`
