@@ -156,7 +156,7 @@ def run_one_combo(
         str(float(preset["spatial_smooth_alpha"])),
     ]
     env = dict(os.environ)
-    env["PYTHONWARNINGS"] = "ignore:Graph is not fully connected, spectral embedding may not work as expected"
+    env["PYTHONWARNINGS"] = "ignore"
     proc = subprocess.run(cmd, cwd=REPO_ROOT, env=env)
     return int(proc.returncode)
 
