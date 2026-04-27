@@ -75,6 +75,18 @@ For each `(method, smoothing, coverage, hemi)` combo:
 
 If a combo cannot produce a valid final `K`, the combo is soft-skipped: `group_atlas_manifest.json` is written with `status=skipped_*`, `k_selection_summary.tsv/json` is still emitted for diagnostics, and downstream renderers should skip that combo.
 
+For spectral methods, `run_merged_canonical_group_atlas.py` supports `--k-selection-mode redundancy-aware`:
+
+- method-agnostic preprocessing before spectral affinity:
+  - spatial graph smoothing (`--spatial-smooth-iters`, `--spatial-smooth-alpha`)
+  - optional PCA reconstruction (`--feature-denoise-mode pca`, `--feature-pca-var`, `--feature-pca-max-components`)
+- candidate-`K` rejection gates:
+  - unstable: `group_ari_mean < 0.85` or `run_aware_ari_mean < 0.90`
+  - redundant: `max_profile_similarity > 0.90` or `redundant_pair_count > 0`
+  - underfit: actionable `K+1` adds distinct profile gain `>= 0.10`
+  - nontrivial fail: existing min-size/connectedness/coherence checks fail
+- final selection in redundancy-aware mode: choose the smallest `K` that passes all gates.
+
 For `group-intrinsic-spectral`, cluster network assignment uses raw TopN positive ROI majority (`N=min(20, n_positive_roi)` from `mean_z > 0`), not canonical `8 x T` cortex timeseries. One-sided t-test + BH-FDR outputs are still computed for stats fields only. If no positive ROI exists, status is `unassigned` with reason `no_positive_roi`. If TopN ROI belong to only one network, `2nd` is recorded as `none` (not duplicated from `1st`).
 
 For `group-network-top` and `group-network-all`, assignment is vertex-level (clusterless):

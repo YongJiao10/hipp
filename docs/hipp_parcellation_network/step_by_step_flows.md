@@ -19,10 +19,30 @@ python scripts/hipp_parcellation_network/run_merged_canonical_group_atlas.py \
   --methods group-intrinsic-spectral group-network-top group-network-all
 ```
 
+Opt-in spectral run (cluster-based pair):
+
+```bash
+python scripts/hipp_parcellation_network/run_merged_canonical_group_atlas.py \
+  --atlases kong2022 \
+  --methods group-network-spectral group-intrinsic-spectral \
+  --k-selection-mode redundancy-aware \
+  --feature-denoise-mode pca \
+  --feature-pca-var 0.95 \
+  --feature-pca-max-components 128 \
+  --spatial-smooth-iters 2 \
+  --spatial-smooth-alpha 0.35
+```
+
 ### 2.1 `group-intrinsic-spectral`
 
 1. Build support mask from coverage threshold.
 2. Run intrinsic spectral clustering and select `K`.
+   - in `redundancy-aware` mode, reject `K` if:
+     - unstable (`group_ari_mean < 0.85` or `run_aware_ari_mean < 0.90`)
+     - redundant (`max_profile_similarity > 0.90` or `redundant_pair_count > 0`)
+     - underfit (actionable `K+1` gives `profile_gain_to_next >= 0.10`)
+     - nontriviality checks fail
+   - select smallest `K` that passes all gates
 3. Compute cluster-to-ROI Fisher-z profiles (400 ROI).
 4. Per cluster: one-sided t + BH-FDR (`q<0.05`) over ROI.
 5. Keep significance outputs for stats (`n_significant_*`, selected significant ROI list).
@@ -61,6 +81,16 @@ python scripts/hipp_parcellation_network/run_merged_canonical_group_atlas.py \
    - `group_functional_atlas_labels.npy`
    - `global_top_connections.json`
 
+### 2.4 `group-network-spectral` (opt-in)
+
+1. Build support mask from coverage threshold.
+2. Run spectral clustering on vertex-to-ROI Fisher-z features.
+3. Use the same optional `redundancy-aware` `K` selection logic and preprocessing knobs as intrinsic spectral.
+4. Write:
+   - `group_labels_final.npy`
+   - `cluster_assignment_status.json`
+   - `group_functional_atlas_labels.npy`
+
 ## 3. Build Overviews
 
 1. `build_present_group_overview_merged_canonical.py`
@@ -69,6 +99,8 @@ python scripts/hipp_parcellation_network/run_merged_canonical_group_atlas.py \
    - x-axis label uses dynamic TopN-cap (`Top{top_n_cap}` when available, otherwise `TopN`)
    - confidence `1st` bar color follows the `top1_network` canonical color
    - intrinsic heatmap annotation shows numeric magnitude only (no `+/-` sign)
+   - `K` panel text now reports per-K reject reasons with tags:
+     - `underfit`, `redundant`, `unstable`, `nontrivial_fail`
    - clusterless methods render without cluster artifacts
    - for `group-network-top` / `group-network-all`, left pane shows only `vertex assignment counts`
    - clusterless group overview no longer includes left-pane global-top text/metadata blocks

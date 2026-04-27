@@ -165,32 +165,26 @@ def highlight_top1_profile_cells(ax, data: np.ndarray) -> None:
 def _k_failure_lines(rows_tsv: list[dict[str, str]]) -> list[str]:
     rows = sorted(rows_tsv, key=lambda r: int(r["k"]))
     lines: list[str] = []
-    ari_winners = [r for r in rows if r.get("local_max") == "1" and r.get("within_1se_best") == "1"]
-    if ari_winners:
-        w = ari_winners[0]
-        k_w = int(w["k"])
-        failed: list[str] = []
-        if w.get("nontrivial_min_size_ok") != "1":
-            lines.append(f"  ARI winner K={k_w}: min_size BLOCKED"
-                         f" (smallest_cluster={w.get('min_cluster_size','?')} < V_min={w.get('V_min_effective','?')})")
-        if w.get("nontrivial_connectedness_ok") != "1":
-            lines.append(f"  ARI winner K={k_w}: connectedness BLOCKED")
-        if w.get("nontrivial_coherence_ok") != "1":
-            lines.append(f"  ARI winner K={k_w}: coherence BLOCKED")
-        if not failed and not lines:
-            lines.append(f"  ARI winner K={k_w}: passed nontriviality — selection logic mismatch")
-    else:
-        nontrivial_ks = [int(r["k"]) for r in rows if r.get("selected_nontrivial") == "1"]
-        if nontrivial_ks:
-            lines.append(f"  Nontrivial K={nontrivial_ks}: none reached ARI local_max+1se")
-        else:
-            lines.append("  All K failed nontriviality checks")
-    for cond, key in [("min_size", "nontrivial_min_size_ok"),
-                      ("connectedness", "nontrivial_connectedness_ok"),
-                      ("coherence", "nontrivial_coherence_ok")]:
-        blocked = [int(r["k"]) for r in rows if r.get(key) != "1"]
-        if blocked:
-            lines.append(f"  {cond} failed: K={blocked}")
+    for row in rows:
+        if row.get("selected_final", "0") == "1":
+            continue
+        reasons: list[str] = []
+        if row.get("reject_underfit", "0") == "1":
+            reasons.append("underfit")
+        if row.get("reject_redundant", "0") == "1":
+            reasons.append("redundant")
+        if row.get("reject_unstable", "0") == "1":
+            reasons.append("unstable")
+        if row.get("reject_nontrivial_fail", "0") == "1":
+            reasons.append("nontrivial_fail")
+        if not reasons:
+            primary = str(row.get("reject_reason_primary", "")).strip()
+            if primary:
+                reasons.append(primary)
+        if reasons:
+            lines.append(f"  K={int(row['k'])}: {','.join(reasons)}")
+    if not lines and rows:
+        lines.append("  No explicit rejection reasons found")
     return lines
 
 
@@ -539,6 +533,23 @@ def render_combo(
             color="#333333",
             bbox={"facecolor": "white", "alpha": 0.72, "edgecolor": "none", "pad": 1.5},
         )
+        rej_l = _k_failure_lines(rows_l)
+        rej_r = _k_failure_lines(rows_r)
+        rej_text = "\n".join(
+            [f"L: {x.strip()}" for x in rej_l[:3]] + [f"R: {x.strip()}" for x in rej_r[:3]]
+        )
+        if rej_text:
+            ax0.text(
+                0.98,
+                0.98,
+                rej_text,
+                transform=ax0.transAxes,
+                ha="right",
+                va="top",
+                fontsize=FS_SMALL,
+                family="monospace",
+                bbox={"facecolor": "white", "alpha": 0.72, "edgecolor": "none", "pad": 1.5},
+            )
         ax0.set_title(f"{smoothing} | K selection (ARI)", fontsize=FS_TITLE)
         ax0.set_xlabel("K", fontsize=FS_LABEL)
         ax0.set_ylabel("Subject-split ARI", fontsize=FS_LABEL)

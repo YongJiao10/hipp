@@ -127,6 +127,16 @@ present_group/
 - authoritative runtime products are under `outputs_migration/hipp_group_merged_canonical_atlas/`
 - `present_group/` is a presentation/export surface, not the canonical runtime input source
 - K-selection panels use direct subject-split `group_ari_mean`; null references are reported in ARI space
+- spectral methods (`group-network-spectral`, `group-intrinsic-spectral`) can run `--k-selection-mode redundancy-aware`
+- redundancy-aware `K` selection uses:
+  - stability gates: `group_ari_mean >= 0.85`, `run_aware_ari_mean >= 0.90`
+  - profile redundancy gate: `max_profile_similarity <= 0.90`, `redundant_pair_count == 0`
+  - underfit gain gate: reject `K` when actionable `K+1` yields `profile_gain_to_next >= 0.10`
+- global preprocessing knobs are method-agnostic and shared across methods/hemis/smoothings:
+  - `--feature-denoise-mode {none,pca}`
+  - `--feature-pca-var`, `--feature-pca-max-components`
+  - `--spatial-smooth-iters`, `--spatial-smooth-alpha`
+- overview `K` diagnostics show per-K reject reasons: `underfit`, `redundant`, `unstable`, `nontrivial_fail`
 - if a combo cannot select a valid `K`, the driver writes `group_atlas_manifest.json` with `status=skipped_*` and continues remaining combos; `--resume` treats that manifest as completed
 - `group-network-top` / `group-network-all` are clusterless, kong2022-only, and do not emit `group_labels_final.npy`
 - the three active methods (`group-intrinsic-spectral`, `group-network-top`, `group-network-all`) do not consume cortex `8 x T` timeseries for network assignment
