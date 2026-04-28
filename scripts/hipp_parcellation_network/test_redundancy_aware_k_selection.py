@@ -6,6 +6,9 @@ import numpy as np
 from run_merged_canonical_group_atlas import (
     PROFILE_REDUNDANCY_MAX_SIM,
     profile_redundancy_metrics,
+    redundancy_early_stop_triggered,
+    resolve_k_eval_jobs,
+    select_k_final_after_redundancy_filter,
     select_k_final_from_survivors,
 )
 
@@ -123,6 +126,37 @@ def test_k_final_within_1se_fallback_when_no_local_max() -> None:
     assert path == "within_1se_smallest", path
 
 
+def test_redundancy_filter_selects_from_remaining_pool_not_redundant_future_k() -> None:
+    """If higher-K candidates are redundant, pick from the remaining fair pool.
+
+    Mirrors the failure mode the user pointed out: K=2/K=3 should be compared
+    against the nonredundant remainder, not rejected in anticipation of later K
+    values that are ultimately ineligible.
+    """
+    pool = [
+        {"k": 2, "group_ari_mean": 0.88, "group_ari_se": 0.01},
+        {"k": 3, "group_ari_mean": 0.91, "group_ari_se": 0.01},
+        {"k": 4, "group_ari_mean": 0.95, "group_ari_se": 0.01},
+    ]
+    k, path, within_1se_k_set, survivor_argmax_k = select_k_final_after_redundancy_filter(pool[:2])
+    assert survivor_argmax_k == 3, survivor_argmax_k
+    assert within_1se_k_set == {3}, within_1se_k_set
+    assert k == 3, f"expected K=3 after removing redundant higher-K candidates, got K={k}"
+    assert path == "local_max_within_1se_after_redundancy_filter", path
+
+
+def test_resolve_k_eval_jobs_caps_by_requested_candidates_and_repo_limit() -> None:
+    assert resolve_k_eval_jobs(1, 5) == 1
+    assert resolve_k_eval_jobs(4, 2) == 2
+    assert resolve_k_eval_jobs(99, 20) == 10
+
+
+def test_redundancy_early_stop_trigger_only_on_redundant_rows() -> None:
+    assert redundancy_early_stop_triggered({"nonredundant_ok": 0}, enabled=True) is True
+    assert redundancy_early_stop_triggered({"nonredundant_ok": 1}, enabled=True) is False
+    assert redundancy_early_stop_triggered({"nonredundant_ok": 0}, enabled=False) is False
+
+
 def main() -> int:
     test_redundancy_detects_duplicate_profiles()
     test_redundancy_passes_for_distinct_profiles()
@@ -131,6 +165,9 @@ def main() -> int:
     test_k_final_picks_lower_k_when_it_is_the_peak()
     test_k_final_parsimony_breaks_true_tie()
     test_k_final_within_1se_fallback_when_no_local_max()
+    test_redundancy_filter_selects_from_remaining_pool_not_redundant_future_k()
+    test_resolve_k_eval_jobs_caps_by_requested_candidates_and_repo_limit()
+    test_redundancy_early_stop_trigger_only_on_redundant_rows()
     print("ok: redundancy-aware synthetic checks passed")
     return 0
 

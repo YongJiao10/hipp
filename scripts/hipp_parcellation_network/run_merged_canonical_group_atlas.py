@@ -6,6 +6,8 @@ import csv
 import json
 import math
 import sys
+import warnings
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -55,7 +57,10 @@ HEMIS = ["L", "R"]
 K_RANGE = list(range(2, 11))
 KONG2022_ONLY_METHODS = {"group-network-top", "group-network-all"}
 CLUSTERLESS_METHODS = {"group-network-top", "group-network-all"}
-PROFILE_REDUNDANCY_MAX_SIM = 0.90
+PROFILE_REDUNDANCY_MAX_SIM = 0.80
+SUBJECT_FC_PREPROCESS_METHODS = {"group-network-spectral", "group-intrinsic-spectral"}
+SUBJECT_FC_VALUE_RULE = "largest_raw_values"
+MAX_K_EVAL_JOBS = 10
 
 
 @dataclass(frozen=True)
@@ -140,6 +145,14 @@ def cosine_affinity(features: np.ndarray) -> np.ndarray:
     aff = np.maximum(sim, 0.0)
     np.fill_diagonal(aff, 1.0)
     return aff.astype(np.float32)
+
+
+def suppress_known_runtime_warnings() -> None:
+    warnings.filterwarnings(
+        "ignore",
+        message="Graph is not fully connected, spectral embedding may not work as expected",
+        category=UserWarning,
+    )
 
 
 def reorder_labels_by_size(labels_zero: np.ndarray) -> np.ndarray:
@@ -230,6 +243,107 @@ def is_network_method(method: str) -> bool:
 
 def is_clusterless_method(method: str) -> bool:
     return method in CLUSTERLESS_METHODS
+
+
+def method_uses_subject_fc_preprocessing(method: str) -> bool:
+    return method in SUBJECT_FC_PREPROCESS_METHODS
+
+
+def subject_fc_preprocessing_manifest_block(method: str, top_fraction: float, binarize: bool) -> dict[str, object]:
+    return {
+        "enabled": bool(method_uses_subject_fc_preprocessing(method)),
+        "top_fraction": float(top_fraction),
+        "binarize": bool(binarize),
+        "applied_methods": sorted(SUBJECT_FC_PREPROCESS_METHODS),
+        "value_rule": SUBJECT_FC_VALUE_RULE,
+    }
+
+
+def _n_keep_from_fraction(n_total: int, top_fraction: float) -> int:
+    if int(n_total) <= 0:
+        return 0
+    frac = float(np.clip(float(top_fraction), 0.0, 1.0))
+    if frac <= 0.0:
+        return 0
+    if frac >= 1.0:
+        return int(n_total)
+    return int(max(1, math.ceil(frac * float(n_total))))
+
+
+def _select_top_mask_1d(values: np.ndarray, top_fraction: float) -> np.ndarray:
+    x = np.asarray(values, dtype=np.float32).reshape(-1)
+    finite = np.isfinite(x)
+    keep = np.zeros((x.size,), dtype=bool)
+    n_finite = int(np.sum(finite))
+    if n_finite <= 0:
+        return keep
+    n_keep = _n_keep_from_fraction(n_finite, top_fraction)
+    if n_keep <= 0:
+        return keep
+    if n_keep >= n_finite:
+        keep[finite] = True
+        return keep
+    finite_idx = np.flatnonzero(finite)
+    finite_vals = x[finite_idx]
+    top_local = np.argpartition(finite_vals, n_finite - n_keep)[n_finite - n_keep:]
+    keep[finite_idx[top_local]] = True
+    return keep
+
+
+def preprocess_network_fc_map(fc: np.ndarray, top_fraction: float, binarize: bool) -> np.ndarray:
+    arr = np.asarray(fc, dtype=np.float32)
+    if arr.ndim != 2:
+        raise ValueError(f"Expected 2D FC matrix for network preprocessing, got shape={arr.shape}")
+    out = arr.copy()
+    flat = arr.reshape(-1)
+    keep_flat = _select_top_mask_1d(flat, top_fraction)
+    finite_flat = np.isfinite(flat)
+    out_flat = out.reshape(-1)
+    out_flat[finite_flat & ~keep_flat] = 0.0
+    if bool(binarize):
+        out_flat[keep_flat] = 1.0
+    out_flat[~finite_flat] = np.nan
+    return out.astype(np.float32)
+
+
+def preprocess_intrinsic_fc_map(fc: np.ndarray, top_fraction: float, binarize: bool) -> np.ndarray:
+    arr = np.asarray(fc, dtype=np.float32)
+    if arr.ndim != 2 or int(arr.shape[0]) != int(arr.shape[1]):
+        raise ValueError(f"Expected square FC matrix for intrinsic preprocessing, got shape={arr.shape}")
+    out = arr.copy()
+    tri = np.triu_indices(int(arr.shape[0]), k=1)
+    tri_vals = arr[tri]
+    keep_tri = _select_top_mask_1d(tri_vals, top_fraction)
+    finite_tri = np.isfinite(tri_vals)
+    zero_tri = finite_tri & ~keep_tri
+    if np.any(zero_tri):
+        zi = tri[0][zero_tri]
+        zj = tri[1][zero_tri]
+        out[zi, zj] = 0.0
+        out[zj, zi] = 0.0
+    if np.any(keep_tri):
+        ki = tri[0][keep_tri]
+        kj = tri[1][keep_tri]
+        if bool(binarize):
+            kv = np.ones((ki.size,), dtype=np.float32)
+        else:
+            kv = arr[ki, kj].astype(np.float32, copy=False)
+        out[ki, kj] = kv
+        out[kj, ki] = kv
+    out[~np.isfinite(arr)] = np.nan
+    np.fill_diagonal(out, 0.0)
+    return out.astype(np.float32)
+
+
+def preprocess_subject_fc_matrix(method: str, fc: np.ndarray, top_fraction: float, binarize: bool) -> np.ndarray:
+    arr = np.asarray(fc, dtype=np.float32)
+    if not method_uses_subject_fc_preprocessing(method):
+        return arr
+    if method == "group-network-spectral":
+        return preprocess_network_fc_map(arr, top_fraction, binarize)
+    if method == "group-intrinsic-spectral":
+        return preprocess_intrinsic_fc_map(arr, top_fraction, binarize)
+    return arr
 
 
 def network_feature_filename(method: str) -> str:
@@ -491,6 +605,50 @@ def select_k_final_from_survivors(survivors: list[dict]) -> tuple[int, str]:
     return int(min(int(s["k"]) for s in pool)), path
 
 
+def select_k_final_after_redundancy_filter(candidate_pool: list[dict]) -> tuple[int, str, set[int], int]:
+    """Select final K after removing redundant candidates.
+
+    This re-applies the standard 1-SE/local-max/parsimony rule on the
+    remaining nonredundant, nontrivial pool instead of comparing against
+    redundant K values that are no longer eligible.
+
+    Returns:
+      k_final
+      decision_path
+      within_1se_k_set
+      pool_argmax_k
+    """
+    ordered = sorted(candidate_pool, key=lambda r: int(r["k"]))
+    means = [float(r["group_ari_mean"]) for r in ordered]
+    ses = [float(r["group_ari_se"]) for r in ordered]
+    local_flags = local_maxima_flags(means)
+    best_idx = int(np.argmax(np.asarray(means, dtype=np.float64)))
+    cutoff = float(means[best_idx] - ses[best_idx])
+    within_1se = [
+        row
+        for row in ordered
+        if float(row["group_ari_mean"]) >= cutoff - 1e-12
+    ]
+    within_1se_k_set = {int(row["k"]) for row in within_1se}
+    local_max_in_1se = [
+        row
+        for row, is_local in zip(ordered, local_flags, strict=True)
+        if is_local and int(row["k"]) in within_1se_k_set
+    ]
+    if local_max_in_1se:
+        pool, path = local_max_in_1se, "local_max_within_1se_after_redundancy_filter"
+    elif within_1se:
+        pool, path = within_1se, "within_1se_smallest_after_redundancy_filter"
+    else:
+        pool, path = ordered, "smallest_among_nonredundant_fallback"
+    return (
+        int(min(int(row["k"]) for row in pool)),
+        path,
+        within_1se_k_set,
+        int(ordered[best_idx]["k"]),
+    )
+
+
 def load_cluster_colors() -> list[tuple[int, int, int, int]]:
     payload = json.loads(DEFAULT_NETWORK_STYLE.read_text(encoding="utf-8"))
     colors = [(128, 128, 128, 255)]
@@ -709,23 +867,19 @@ def cluster_for_subset(
     k: int,
     seed: int,
 ) -> tuple[np.ndarray, np.ndarray]:
-    idx = np.flatnonzero(support_mask)
-    if idx.size == 0:
-        raise RuntimeError("Support mask has zero vertices")
-    adj = adjacency_full[idx][:, idx]
     features = group_feature_matrix(
         method=method,
         feature_bank=feature_bank,
         subjects_subset=subjects_subset,
         support_mask=support_mask,
     )
-    aff = cosine_affinity(features)
-    fused = sparse.csr_matrix(aff).multiply(adj).tocsr()
-    fused = fused.maximum(fused.T)
-    labels = spectral_cluster_from_affinity(fused.toarray(), int(k), int(seed))
-    full = np.zeros((support_mask.size,), dtype=np.int32)
-    full[idx] = labels
-    return labels.astype(np.int32), full
+    return cluster_from_precomputed_group_features(
+        group_features=features,
+        support_mask=support_mask,
+        adjacency_full=adjacency_full,
+        k=int(k),
+        seed=int(seed),
+    )
 
 
 def subject_split_ari(
@@ -847,6 +1001,190 @@ def weak_null_ari(k: int, n_vertices: int, seeds: list[int]) -> dict[str, object
     }
 
 
+def resolve_k_eval_jobs(requested_jobs: int, n_k: int) -> int:
+    if int(n_k) <= 0:
+        return 1
+    return max(1, min(int(requested_jobs), int(n_k), int(MAX_K_EVAL_JOBS)))
+
+
+def redundancy_early_stop_triggered(row: dict[str, object], enabled: bool) -> bool:
+    return bool(enabled) and int(row.get("nonredundant_ok", 1)) == 0
+
+
+def cluster_from_precomputed_group_features(
+    *,
+    group_features: np.ndarray,
+    support_mask: np.ndarray,
+    adjacency_full: sparse.csr_matrix,
+    k: int,
+    seed: int,
+) -> tuple[np.ndarray, np.ndarray]:
+    idx = np.flatnonzero(support_mask)
+    if idx.size == 0:
+        raise RuntimeError("Support mask has zero vertices")
+    adj = adjacency_full[idx][:, idx]
+    aff = cosine_affinity(group_features)
+    fused = sparse.csr_matrix(aff).multiply(adj).tocsr()
+    fused = fused.maximum(fused.T)
+    labels = spectral_cluster_from_affinity(fused.toarray(), int(k), int(seed))
+    full = np.zeros((support_mask.size,), dtype=np.int32)
+    full[idx] = labels
+    return labels.astype(np.int32), full
+
+
+def evaluate_k_candidate(
+    *,
+    combo: Combo,
+    method: str,
+    k: int,
+    seed: int,
+    n_support: int,
+    v_min: int,
+    group_features_active: np.ndarray,
+    support_mask: np.ndarray,
+    adjacency_full: sparse.csr_matrix,
+    adjacency_support: sparse.csr_matrix,
+    feature_bank: dict[str, np.ndarray],
+    valid_masks: dict[str, np.ndarray],
+    subjects: list[str],
+    tau: float,
+    split_seeds: list[int],
+    null_seeds: list[int],
+    null_resamples: int,
+    run_feature_banks: dict[int, dict[str, np.ndarray]],
+    seed_base: int,
+    max_components_threshold: int,
+    min_profile_coherence_threshold: float,
+    k_selection_mode: str,
+    roi_fc_bank_for_redundancy: dict[str, np.ndarray] | None,
+) -> tuple[int, np.ndarray, dict[str, object]]:
+    labels_active, labels_full = cluster_from_precomputed_group_features(
+        group_features=group_features_active,
+        support_mask=support_mask,
+        adjacency_full=adjacency_full,
+        k=int(k),
+        seed=int(seed),
+    )
+
+    sizes = [int(np.sum(labels_active == c)) for c in range(1, int(k) + 1)]
+    min_size = int(min(sizes)) if sizes else 0
+    comp = connected_components_per_label(labels_active, adjacency_support)
+    max_components = int(max(comp.values())) if comp else 0
+    min_coh, mean_coh = cluster_profile_coherence(group_features_active, labels_active, int(k))
+
+    ari_obj = subject_split_ari(
+        method=method,
+        feature_bank=feature_bank,
+        valid_masks_by_subject=valid_masks,
+        subjects=subjects,
+        tau=float(tau),
+        adjacency_full=adjacency_full,
+        k=int(k),
+        seeds=split_seeds,
+    )
+    ari_vals = list(ari_obj["values"])
+    if not ari_vals:
+        raise RuntimeError(f"No valid ARI resamples for combo={combo} k={k}")
+    ari_arr = np.asarray(ari_vals, dtype=np.float64)
+    ari_mean = float(np.mean(ari_arr))
+    ari_se = float(np.std(ari_arr, ddof=1) / np.sqrt(ari_arr.size)) if ari_arr.size > 1 else 0.0
+
+    weak_obj = weak_null_ari(int(k), int(n_support), null_seeds)
+    weak = list(weak_obj["values"])
+    strong_obj = strong_null_ari(
+        method=method,
+        feature_bank=feature_bank,
+        valid_masks_by_subject=valid_masks,
+        subjects=subjects,
+        tau=float(tau),
+        adjacency_full=adjacency_full,
+        k=int(k),
+        seeds=null_seeds,
+    )
+    strong = list(strong_obj["values"])
+    strong_arr = np.asarray(strong, dtype=np.float64) if strong else np.array([0.0], dtype=np.float64)
+
+    run_obj = run_aware_ari(
+        method=method,
+        run_feature_banks=run_feature_banks,
+        subjects=subjects,
+        support_mask=support_mask,
+        adjacency_full=adjacency_full,
+        k=int(k),
+        seed_base=int(seed_base),
+    )
+    run_vals = list(run_obj["values"])
+    run_arr = np.asarray(run_vals, dtype=np.float64) if run_vals else np.array([np.nan], dtype=np.float64)
+    run_ari_mean = float(np.nanmean(run_arr))
+    run_ari_se = (
+        float(np.nanstd(run_arr, ddof=1) / np.sqrt(np.sum(np.isfinite(run_arr))))
+        if np.sum(np.isfinite(run_arr)) > 1
+        else 0.0
+    )
+
+    max_profile_similarity = float("nan")
+    redundant_pair_count = -1
+    if k_selection_mode == "redundancy-aware" and roi_fc_bank_for_redundancy is not None:
+        roi_profile_k = cluster_roi_profile_from_fc_bank(
+            labels_full=labels_full,
+            support_mask=support_mask,
+            subjects=subjects,
+            roi_fc_bank=roi_fc_bank_for_redundancy,
+            valid_masks_by_subject=valid_masks,
+        )
+        max_profile_similarity, redundant_pair_count = profile_redundancy_metrics(roi_profile_k)
+
+    row = {
+        "method": method,
+        "atlas": combo.atlas,
+        "smoothing": combo.smoothing,
+        "hemi": combo.hemi,
+        "coverage_threshold": float(combo.coverage_threshold),
+        "k": int(k),
+        "n_subjects": int(len(subjects)),
+        "n_support_vertices": int(n_support),
+        "V_min_effective": int(v_min),
+        "group_ari_mean": ari_mean,
+        "group_ari_se": ari_se,
+        "subject_split_requested": int(ari_obj["n_requested"]),
+        "subject_split_used": int(ari_obj["n_used"]),
+        "subject_split_skipped_overlap": int(ari_obj["n_skipped_overlap"]),
+        "subject_split_skipped_empty": int(ari_obj["n_skipped_empty"]),
+        "run_aware_ari_mean": run_ari_mean,
+        "run_aware_ari_se": run_ari_se,
+        "run_aware_n_pairs": int(run_obj["n_pairs"]),
+        "run_aware_n_used": int(run_obj["n_used"]),
+        "ARI_null_mean": float(np.mean(strong_arr)),
+        "ARI_null_5pct": float(np.percentile(strong_arr, 5.0)),
+        "ARI_weak_null_mean": float(np.mean(np.asarray(weak, dtype=np.float64))),
+        "B_null_requested": int(null_resamples),
+        "B_null_used_strong": int(strong_obj["n_used"]),
+        "B_null_used_weak": int(weak_obj["n_used"]),
+        "min_cluster_size": int(min_size),
+        "max_components_per_cluster": int(max_components),
+        "min_profile_coherence": float(min_coh),
+        "mean_profile_coherence": float(mean_coh),
+        "nontrivial_min_size_ok": int(min_size >= v_min),
+        "nontrivial_connectedness_ok": int(max_components <= int(max_components_threshold)),
+        "nontrivial_coherence_ok": int(min_coh >= float(min_profile_coherence_threshold)),
+        "max_profile_similarity": float(max_profile_similarity),
+        "redundant_pair_count": int(redundant_pair_count),
+        "nonredundant_ok": int(
+            k_selection_mode != "redundancy-aware"
+            or (
+                np.isfinite(max_profile_similarity)
+                and max_profile_similarity <= float(PROFILE_REDUNDANCY_MAX_SIM)
+                and int(redundant_pair_count) == 0
+            )
+        ),
+        "reject_nontrivial_fail": 0,
+        "reject_redundant": 0,
+        "reject_reason_primary": "",
+        "selected_final": 0,
+    }
+    return int(k), labels_full.astype(np.int32), row
+
+
 def runwise_feature_bank(
     *,
     method: str,
@@ -856,6 +1194,8 @@ def runwise_feature_bank(
     smoothing: str,
     hemi: str,
     valid_masks: dict[str, np.ndarray],
+    subject_fc_top_fraction: float,
+    subject_fc_binarize: bool,
 ) -> dict[int, dict[str, np.ndarray]]:
     run_ids = [1, 2, 3, 4]
     out: dict[int, dict[str, np.ndarray]] = {rid: {} for rid in run_ids}
@@ -884,7 +1224,12 @@ def runwise_feature_bank(
                     full = active
                 else:
                     raise ValueError(f"Unexpected runwise network feature shape for {p}: {active.shape}")
-                out[rid][s] = full
+                out[rid][s] = preprocess_subject_fc_matrix(
+                    method=method,
+                    fc=full,
+                    top_fraction=subject_fc_top_fraction,
+                    binarize=subject_fc_binarize,
+                )
             else:
                 p = resolve_intrinsic_feature_path(shared_root, s, smoothing, hemi, rid)
                 arr = np.load(p).astype(np.float32)
@@ -898,7 +1243,12 @@ def runwise_feature_bank(
                     full = arr
                 else:
                     raise ValueError(f"Unexpected runwise intrinsic feature shape for {p}: {arr.shape}")
-                out[rid][s] = full
+                out[rid][s] = preprocess_subject_fc_matrix(
+                    method=method,
+                    fc=full,
+                    top_fraction=subject_fc_top_fraction,
+                    binarize=subject_fc_binarize,
+                )
     return out
 
 
@@ -1451,6 +1801,58 @@ def assignment_status_from_cluster_roi_topn(
     return rows, dominant, mean_profile
 
 
+def method_uses_kong2022_topn_cluster_annotation(method: str, atlas: str) -> bool:
+    return str(atlas) == "kong2022" and str(method) in {"group-intrinsic-spectral", "group-network-spectral"}
+
+
+def network_mean_profile_from_kong2022_roi_profile(
+    roi_profile: np.ndarray,
+    roi_registry: list[dict[str, object]],
+    network_names: list[str],
+) -> np.ndarray:
+    cols_by_network, _network_names_from_registry = split_kong2022_columns_by_network(roi_registry)
+    out = np.full((int(roi_profile.shape[0]), int(len(network_names))), np.nan, dtype=np.float32)
+    for net_idx, net_name in enumerate(network_names):
+        cols = cols_by_network.get(str(net_name), [])
+        if not cols:
+            continue
+        out[:, net_idx] = np.nanmean(roi_profile[:, np.asarray(cols, dtype=np.int32)], axis=1).astype(np.float32)
+    return out
+
+
+def annotate_kong2022_clusters_topn(
+    *,
+    group_labels_final: np.ndarray,
+    support_mask: np.ndarray,
+    subjects: list[str],
+    shared_root: Path,
+    smoothing: str,
+    hemi: str,
+    valid_masks_by_subject: dict[str, np.ndarray],
+    network_names: list[str],
+    q_thresh: float,
+    top_n_cap: int,
+) -> tuple[np.ndarray, list[dict[str, object]], list[str | None], np.ndarray, list[dict[str, object]], list[str], dict[str, object]]:
+    roi_profile_3d, roi_profile, roi_registry, roi_profile_subjects_used = cluster_roi_profile_subjectwise(
+        group_labels_final=group_labels_final,
+        support_mask=support_mask,
+        subjects=subjects,
+        shared_root=shared_root,
+        smoothing=smoothing,
+        hemi=hemi,
+        valid_masks_by_subject=valid_masks_by_subject,
+    )
+    status_rows, dominant, _profile400_mean = assignment_status_from_cluster_roi_topn(
+        profile_3d=roi_profile_3d,
+        roi_registry=roi_registry,
+        q_thresh=float(q_thresh),
+        top_n_cap=int(top_n_cap),
+    )
+    profile = network_mean_profile_from_kong2022_roi_profile(roi_profile, roi_registry, network_names)
+    roi_top20 = cluster_roi_top_k(roi_profile, roi_registry, k_top=int(top_n_cap))
+    return profile, status_rows, dominant, roi_profile, roi_registry, roi_profile_subjects_used, roi_top20
+
+
 def vertex_roi_profile_subjectwise(
     *,
     feature_bank: dict[str, np.ndarray],
@@ -1722,14 +2124,38 @@ def main() -> int:
     parser.add_argument("--v-min-fraction", type=float, default=0.03)
     parser.add_argument("--max-components-threshold", type=int, default=3)
     parser.add_argument("--min-profile-coherence", type=float, default=0.0)
+    parser.add_argument(
+        "--subject-fc-top-fraction",
+        type=float,
+        default=0.10,
+        help="Per-subject FC sparsification fraction for spectral methods. Keep largest raw-value Top fraction, set others to zero.",
+    )
+    parser.add_argument(
+        "--subject-fc-binarize",
+        dest="subject_fc_binarize",
+        action="store_true",
+        help="After Top-fraction thresholding, set retained FC entries to 1 (spectral methods).",
+    )
+    parser.add_argument(
+        "--no-subject-fc-binarize",
+        dest="subject_fc_binarize",
+        action="store_false",
+        help="After Top-fraction thresholding, keep retained FC entries as original Fisher-z values.",
+    )
+    parser.set_defaults(subject_fc_binarize=True)
     parser.add_argument("--resume", action="store_true", help="Skip combos that already have group_atlas_manifest.json.")
     parser.add_argument("--k-selection-mode", default="experimental", choices=["experimental", "redundancy-aware"])
+    parser.add_argument(
+        "--redundancy-early-stop",
+        action="store_true",
+        help="Heuristic speed mode for redundancy-aware runs: evaluate K in ascending order and stop once the first redundant K is observed; larger K are skipped.",
+    )
     parser.add_argument("--overview-threshold", type=float, default=0.80)
     parser.add_argument(
         "--jobs",
         type=int,
         default=1,
-        help="Reserved for pipeline compatibility; current implementation executes combos in-process.",
+        help="Maximum parallel K evaluations per (method, atlas, smoothing, hemi, coverage) combo; capped at 10.",
     )
     parser.add_argument(
         "--group-average-surfaces-dir",
@@ -1739,6 +2165,7 @@ def main() -> int:
              "When present, these are used as the template geometry instead of subjects[0].",
     )
     args = parser.parse_args()
+    suppress_known_runtime_warnings()
 
     shared_root = Path(args.shared_root).resolve()
     out_root = Path(args.out_root).resolve()
@@ -1746,6 +2173,10 @@ def main() -> int:
     out_root.mkdir(parents=True, exist_ok=True)
 
     subjects = load_subjects(Path(args.subjects_manifest).resolve())
+    if not (0.0 <= float(args.subject_fc_top_fraction) <= 1.0):
+        raise ValueError(
+            f"--subject-fc-top-fraction must be within [0,1], got {args.subject_fc_top_fraction}"
+        )
     coverage_thresholds = [float(x) for x in args.coverage_thresholds]
     k_values = list(range(int(args.k_min), int(args.k_max) + 1))
     rng = np.random.RandomState(int(args.seed))
@@ -1834,11 +2265,23 @@ def main() -> int:
                         if is_network_method(method) or method in {"group-network-top", "group-network-all"}:
                             p = shared_root / f"sub-{s}" / "fc" / atlas / smoothing / f"hemi_{hemi}" / network_feature_filename(method)
                             actual_input_paths[s] = str(p)
-                            feature_bank[s] = subject_network_feature(shared_root, s, atlas, smoothing, hemi, method)
+                            raw_feature = subject_network_feature(shared_root, s, atlas, smoothing, hemi, method)
+                            feature_bank[s] = preprocess_subject_fc_matrix(
+                                method=method,
+                                fc=raw_feature,
+                                top_fraction=float(args.subject_fc_top_fraction),
+                                binarize=bool(args.subject_fc_binarize),
+                            )
                         else:
                             p = resolve_intrinsic_feature_path(shared_root, s, smoothing, hemi)
                             actual_input_paths[s] = str(p)
-                            feature_bank[s] = subject_intrinsic_feature(shared_root, s, atlas, smoothing, hemi, valid_masks[s])
+                            raw_feature = subject_intrinsic_feature(shared_root, s, atlas, smoothing, hemi, valid_masks[s])
+                            feature_bank[s] = preprocess_subject_fc_matrix(
+                                method=method,
+                                fc=raw_feature,
+                                top_fraction=float(args.subject_fc_top_fraction),
+                                binarize=bool(args.subject_fc_binarize),
+                            )
 
                     run_feature_banks = (
                         runwise_feature_bank(
@@ -1849,6 +2292,8 @@ def main() -> int:
                             smoothing=smoothing,
                             hemi=hemi,
                             valid_masks=valid_masks,
+                            subject_fc_top_fraction=float(args.subject_fc_top_fraction),
+                            subject_fc_binarize=bool(args.subject_fc_binarize),
                         )
                         if not is_clusterless_method(method)
                         else {}
@@ -1860,7 +2305,7 @@ def main() -> int:
                             if atlas == "kong2022" and method == "group-network-spectral":
                                 roi_fc_bank_for_redundancy[s] = feature_bank[s]
                             else:
-                                roi_fc_bank_for_redundancy[s] = subject_network_feature(
+                                roi_raw = subject_network_feature(
                                     shared_root,
                                     s,
                                     "kong2022",
@@ -1868,6 +2313,15 @@ def main() -> int:
                                     hemi,
                                     "group-network-spectral",
                                 )
+                                if method_uses_subject_fc_preprocessing(method):
+                                    roi_fc_bank_for_redundancy[s] = preprocess_subject_fc_matrix(
+                                        method="group-network-spectral",
+                                        fc=roi_raw,
+                                        top_fraction=float(args.subject_fc_top_fraction),
+                                        binarize=bool(args.subject_fc_binarize),
+                                    )
+                                else:
+                                    roi_fc_bank_for_redundancy[s] = roi_raw
 
                     for tau in coverage_thresholds:
                         combo = Combo(method=method, atlas=atlas, smoothing=smoothing, hemi=hemi, coverage_threshold=float(tau))
@@ -1884,6 +2338,11 @@ def main() -> int:
                             continue
 
                         support = coverage_fraction >= float(tau)
+                        subject_fc_preprocessing = subject_fc_preprocessing_manifest_block(
+                            method,
+                            float(args.subject_fc_top_fraction),
+                            bool(args.subject_fc_binarize),
+                        )
                         n_support = int(np.sum(support))
                         v_min = int(math.ceil(float(args.v_min_fraction) * max(1, n_support)))
                         k_max_eff = min(max(k_values), n_support // max(1, v_min))
@@ -2016,6 +2475,7 @@ def main() -> int:
                                 "actual_consumed_input_paths": actual_input_paths,
                                 "feature_family": "vertex_to_kong2022_400roi_fc_fisherz",
                                 "fc_mode": "pearson_vertex_to_roi",
+                                "subject_fc_preprocessing": subject_fc_preprocessing,
                                 "n_subjects": int(len(subjects)),
                                 "subjects": [f"sub-{s}" for s in subjects],
                                 "n_support_vertices": int(n_support),
@@ -2092,6 +2552,7 @@ def main() -> int:
                                 "n_support_vertices": int(n_support),
                                 "n_excluded_vertices": int(n_vertices - n_support),
                                 "actual_consumed_input_paths": actual_input_paths,
+                                "subject_fc_preprocessing": subject_fc_preprocessing,
                                 "nontriviality_thresholds": {
                                     "V_min_fraction": float(args.v_min_fraction),
                                     "max_components_threshold": int(args.max_components_threshold),
@@ -2121,144 +2582,100 @@ def main() -> int:
                         labels_by_k: dict[int, np.ndarray] = {}
                         support_idx = np.flatnonzero(support)
                         adjacency_support = adjacency_by_hemi[hemi][support_idx][:, support_idx]
-
-                        for k in k_eff:
-                            print(f"  [k] {k}", flush=True)
-                            labels_active, labels_full = cluster_for_subset(
-                                method=method,
-                                feature_bank=feature_bank,
-                                subjects_subset=subjects,
-                                support_mask=support,
-                                adjacency_full=adjacency_by_hemi[hemi],
-                                k=k,
-                                seed=int(args.seed + 11 * k),
+                        group_features_active = group_feature_matrix(
+                            method=method,
+                            feature_bank=feature_bank,
+                            subjects_subset=subjects,
+                            support_mask=support,
+                        )
+                        redundancy_early_stop_enabled = bool(
+                            args.redundancy_early_stop and args.k_selection_mode == "redundancy-aware"
+                        )
+                        if redundancy_early_stop_enabled:
+                            print(
+                                f"  [k-seq-heuristic] n_k={len(k_eff)} stop_on_first_redundant=1",
+                                flush=True,
                             )
-                            labels_by_k[int(k)] = labels_full
-                            np.save(run_dir / f"group_labels_k{k}.npy", labels_full.astype(np.int32))
-
-                            sizes = [int(np.sum(labels_active == c)) for c in range(1, k + 1)]
-                            min_size = int(min(sizes)) if sizes else 0
-                            comp = connected_components_per_label(labels_active, adjacency_support)
-                            max_components = int(max(comp.values())) if comp else 0
-                            group_features_active_raw = group_feature_matrix(
-                                method=method,
-                                feature_bank=feature_bank,
-                                subjects_subset=subjects,
-                                support_mask=support,
-                            )
-                            group_features_active = group_features_active_raw
-                            min_coh, mean_coh = cluster_profile_coherence(group_features_active, labels_active, int(k))
-
-                            ari_obj = subject_split_ari(
-                                method=method,
-                                feature_bank=feature_bank,
-                                valid_masks_by_subject=valid_masks,
-                                subjects=subjects,
-                                tau=float(tau),
-                                adjacency_full=adjacency_by_hemi[hemi],
-                                k=int(k),
-                                seeds=split_seeds,
-                            )
-                            ari_vals = list(ari_obj["values"])
-                            if not ari_vals:
-                                raise RuntimeError(f"No valid ARI resamples for combo={combo} k={k}")
-                            ari_arr = np.asarray(ari_vals, dtype=np.float64)
-                            ari_mean = float(np.mean(ari_arr))
-                            ari_se = float(np.std(ari_arr, ddof=1) / np.sqrt(ari_arr.size)) if ari_arr.size > 1 else 0.0
-
-                            weak_obj = weak_null_ari(int(k), int(n_support), null_seeds)
-                            weak = list(weak_obj["values"])
-                            strong_obj = strong_null_ari(
-                                method=method,
-                                feature_bank=feature_bank,
-                                valid_masks_by_subject=valid_masks,
-                                subjects=subjects,
-                                tau=float(tau),
-                                adjacency_full=adjacency_by_hemi[hemi],
-                                k=int(k),
-                                seeds=null_seeds,
-                            )
-                            strong = list(strong_obj["values"])
-                            strong_arr = np.asarray(strong, dtype=np.float64) if strong else np.array([0.0], dtype=np.float64)
-                            run_obj = run_aware_ari(
-                                method=method,
-                                run_feature_banks=run_feature_banks,
-                                subjects=subjects,
-                                support_mask=support,
-                                adjacency_full=adjacency_by_hemi[hemi],
-                                k=int(k),
-                                seed_base=int(args.seed),
-                            )
-                            run_vals = list(run_obj["values"])
-                            run_arr = np.asarray(run_vals, dtype=np.float64) if run_vals else np.array([np.nan], dtype=np.float64)
-                            run_ari_mean = float(np.nanmean(run_arr))
-                            run_ari_se = (
-                                float(np.nanstd(run_arr, ddof=1) / np.sqrt(np.sum(np.isfinite(run_arr))))
-                                if np.sum(np.isfinite(run_arr)) > 1
-                                else 0.0
-                            )
-                            max_profile_similarity = float("nan")
-                            redundant_pair_count = -1
-                            if args.k_selection_mode == "redundancy-aware" and roi_fc_bank_for_redundancy is not None:
-                                roi_profile_k = cluster_roi_profile_from_fc_bank(
-                                    labels_full=labels_full,
+                            for k in k_eff:
+                                print(f"  [k-start] {k}", flush=True)
+                                k_result, labels_full, row = evaluate_k_candidate(
+                                    combo=combo,
+                                    method=method,
+                                    k=int(k),
+                                    seed=int(args.seed + 11 * k),
+                                    n_support=int(n_support),
+                                    v_min=int(v_min),
+                                    group_features_active=group_features_active,
                                     support_mask=support,
+                                    adjacency_full=adjacency_by_hemi[hemi],
+                                    adjacency_support=adjacency_support,
+                                    feature_bank=feature_bank,
+                                    valid_masks=valid_masks,
                                     subjects=subjects,
-                                    roi_fc_bank=roi_fc_bank_for_redundancy,
-                                    valid_masks_by_subject=valid_masks,
+                                    tau=float(tau),
+                                    split_seeds=split_seeds,
+                                    null_seeds=null_seeds,
+                                    null_resamples=int(args.null_resamples),
+                                    run_feature_banks=run_feature_banks,
+                                    seed_base=int(args.seed),
+                                    max_components_threshold=int(args.max_components_threshold),
+                                    min_profile_coherence_threshold=float(args.min_profile_coherence),
+                                    k_selection_mode=str(args.k_selection_mode),
+                                    roi_fc_bank_for_redundancy=roi_fc_bank_for_redundancy,
                                 )
-                                max_profile_similarity, redundant_pair_count = profile_redundancy_metrics(roi_profile_k)
-
-                            rows.append(
-                                {
-                                    "method": method,
-                                    "atlas": atlas,
-                                    "smoothing": smoothing,
-                                    "hemi": hemi,
-                                    "coverage_threshold": float(tau),
-                                    "k": int(k),
-                                    "n_subjects": int(len(subjects)),
-                                    "n_support_vertices": int(n_support),
-                                    "V_min_effective": int(v_min),
-                                    "group_ari_mean": ari_mean,
-                                    "group_ari_se": ari_se,
-                                    "subject_split_requested": int(ari_obj["n_requested"]),
-                                    "subject_split_used": int(ari_obj["n_used"]),
-                                    "subject_split_skipped_overlap": int(ari_obj["n_skipped_overlap"]),
-                                    "subject_split_skipped_empty": int(ari_obj["n_skipped_empty"]),
-                                    "run_aware_ari_mean": run_ari_mean,
-                                    "run_aware_ari_se": run_ari_se,
-                                    "run_aware_n_pairs": int(run_obj["n_pairs"]),
-                                    "run_aware_n_used": int(run_obj["n_used"]),
-                                    "ARI_null_mean": float(np.mean(strong_arr)),
-                                    "ARI_null_5pct": float(np.percentile(strong_arr, 5.0)),
-                                    "ARI_weak_null_mean": float(np.mean(np.asarray(weak, dtype=np.float64))),
-                                    "B_null_requested": int(args.null_resamples),
-                                    "B_null_used_strong": int(strong_obj["n_used"]),
-                                    "B_null_used_weak": int(weak_obj["n_used"]),
-                                    "min_cluster_size": int(min_size),
-                                    "max_components_per_cluster": int(max_components),
-                                    "min_profile_coherence": float(min_coh),
-                                    "mean_profile_coherence": float(mean_coh),
-                                    "nontrivial_min_size_ok": int(min_size >= v_min),
-                                    "nontrivial_connectedness_ok": int(max_components <= int(args.max_components_threshold)),
-                                    "nontrivial_coherence_ok": int(min_coh >= float(args.min_profile_coherence)),
-                                    "max_profile_similarity": float(max_profile_similarity),
-                                    "redundant_pair_count": int(redundant_pair_count),
-                                    "nonredundant_ok": int(
-                                        args.k_selection_mode != "redundancy-aware"
-                                        or (
-                                            np.isfinite(max_profile_similarity)
-                                            and max_profile_similarity <= float(PROFILE_REDUNDANCY_MAX_SIM)
-                                            and int(redundant_pair_count) == 0
-                                        )
-                                    ),
-                                    "reject_nontrivial_fail": 0,
-                                    "reject_redundant": 0,
-                                    "reject_reason_primary": "",
-                                    "selected_final": 0,
-                                }
+                                print(f"  [k-done] {k_result}", flush=True)
+                                labels_by_k[int(k_result)] = labels_full
+                                np.save(run_dir / f"group_labels_k{k_result}.npy", labels_full.astype(np.int32))
+                                rows.append(row)
+                                if redundancy_early_stop_triggered(row, redundancy_early_stop_enabled):
+                                    print(
+                                        f"  [k-early-stop] first_redundant_k={k_result}; skipping larger K",
+                                        flush=True,
+                                    )
+                                    break
+                        else:
+                            k_eval_jobs = resolve_k_eval_jobs(int(args.jobs), len(k_eff))
+                            print(
+                                f"  [k-parallel] n_k={len(k_eff)} jobs={k_eval_jobs}",
+                                flush=True,
                             )
+                            with ThreadPoolExecutor(max_workers=k_eval_jobs) as executor:
+                                future_to_k = {
+                                    executor.submit(
+                                        evaluate_k_candidate,
+                                        combo=combo,
+                                        method=method,
+                                        k=int(k),
+                                        seed=int(args.seed + 11 * k),
+                                        n_support=int(n_support),
+                                        v_min=int(v_min),
+                                        group_features_active=group_features_active,
+                                        support_mask=support,
+                                        adjacency_full=adjacency_by_hemi[hemi],
+                                        adjacency_support=adjacency_support,
+                                        feature_bank=feature_bank,
+                                        valid_masks=valid_masks,
+                                        subjects=subjects,
+                                        tau=float(tau),
+                                        split_seeds=split_seeds,
+                                        null_seeds=null_seeds,
+                                        null_resamples=int(args.null_resamples),
+                                        run_feature_banks=run_feature_banks,
+                                        seed_base=int(args.seed),
+                                        max_components_threshold=int(args.max_components_threshold),
+                                        min_profile_coherence_threshold=float(args.min_profile_coherence),
+                                        k_selection_mode=str(args.k_selection_mode),
+                                        roi_fc_bank_for_redundancy=roi_fc_bank_for_redundancy,
+                                    ): int(k)
+                                    for k in k_eff
+                                }
+                                for future in as_completed(future_to_k):
+                                    k_done = int(future_to_k[future])
+                                    print(f"  [k-done] {k_done}", flush=True)
+                                    k_result, labels_full, row = future.result()
+                                    labels_by_k[int(k_result)] = labels_full
+                                    np.save(run_dir / f"group_labels_k{k_result}.npy", labels_full.astype(np.int32))
+                                    rows.append(row)
 
                         rows = sorted(rows, key=lambda r: int(r["k"]))
                         means = [float(r["group_ari_mean"]) for r in rows]
@@ -2287,22 +2704,32 @@ def main() -> int:
                                 )
                                 row["reject_nontrivial_fail"] = int(int(row["selected_nontrivial"]) != 1)
                                 row["reject_redundant"] = int(int(row["nonredundant_ok"]) != 1)
-                                passed = (
-                                    int(row["local_max"]) == 1
-                                    and int(row["within_1se_best"]) == 1
-                                    and int(row["selected_nontrivial"]) == 1
-                                    and int(row["nonredundant_ok"]) == 1
-                                )
-                                row["selected_final"] = int(passed)
-                                if int(row["selected_final"]) == 1:
-                                    row["reject_reason_primary"] = ""
-                                elif int(row["reject_nontrivial_fail"]) == 1:
+                                row["selected_final"] = 0
+                                if int(row["reject_nontrivial_fail"]) == 1:
                                     row["reject_reason_primary"] = "nontrivial_fail"
                                 elif int(row["reject_redundant"]) == 1:
                                     row["reject_reason_primary"] = "redundant"
                                 else:
                                     row["reject_reason_primary"] = "outside_selection_rule"
-                            survivors = [r for r in rows if int(r["selected_final"]) == 1]
+                            candidate_pool = [
+                                row
+                                for row in rows
+                                if int(row["selected_nontrivial"]) == 1 and int(row["nonredundant_ok"]) == 1
+                            ]
+                            if not candidate_pool:
+                                survivors = []
+                            else:
+                                k_final, decision_path, within_1se_pool, survivor_argmax_k = (
+                                    select_k_final_after_redundancy_filter(candidate_pool)
+                                )
+                                for row in rows:
+                                    row["survivor_pool_argmax_k"] = int(survivor_argmax_k)
+                                    row["within_1se_survivor_pool"] = int(int(row["k"]) in within_1se_pool)
+                                    row["k_final_decision_path"] = decision_path
+                                    if int(row["k"]) == int(k_final):
+                                        row["selected_final"] = 1
+                                        row["reject_reason_primary"] = ""
+                                survivors = [r for r in rows if int(r["selected_final"]) == 1]
                         else:
                             for row in rows:
                                 row["selected_final"] = int(
@@ -2347,6 +2774,8 @@ def main() -> int:
                                 "V_min_effective": int(v_min),
                                 "candidate_k_range_requested": [int(min(k_values)), int(max(k_values))],
                                 "candidate_k_range_effective": [int(min(k_eff)), int(max(k_eff))],
+                                "candidate_k_values_evaluated": [int(r["k"]) for r in rows],
+                                "redundancy_early_stop_enabled": bool(redundancy_early_stop_enabled),
                                 "chosen_k_final": None,
                                 "subject_split_seeds": split_seeds,
                                 "null_seeds": null_seeds,
@@ -2355,6 +2784,7 @@ def main() -> int:
                                 "n_support_vertices": int(n_support),
                                 "n_excluded_vertices": int(n_vertices - n_support),
                                 "actual_consumed_input_paths": actual_input_paths,
+                                "subject_fc_preprocessing": subject_fc_preprocessing,
                                 "nontriviality_thresholds": {
                                     "V_min_fraction": float(args.v_min_fraction),
                                     "max_components_threshold": int(args.max_components_threshold),
@@ -2379,24 +2809,33 @@ def main() -> int:
                             save_json(manifest_path, manifest)
                             print(f"  [skip] {skip_detail}", flush=True)
                             continue
-                        # Three-tier K selection: 1-SE on survivor pool → local-max
-                        # preference → parsimony tiebreak. Annotate audit columns.
-                        surv_means = np.asarray(
-                            [float(s["group_ari_mean"]) for s in survivors], dtype=np.float64
-                        )
-                        surv_best_idx = int(np.argmax(surv_means))
-                        surv_cutoff = float(surv_means[surv_best_idx]) - float(
-                            survivors[surv_best_idx]["group_ari_se"]
-                        )
-                        surv_argmax_k = int(survivors[surv_best_idx]["k"])
-                        k_final, decision_path = select_k_final_from_survivors(survivors)
-                        for row in rows:
-                            row["survivor_pool_argmax_k"] = surv_argmax_k
-                            row["within_1se_survivor_pool"] = int(
-                                int(row["selected_final"]) == 1
-                                and float(row["group_ari_mean"]) >= surv_cutoff - 1e-12
+                        if args.k_selection_mode != "redundancy-aware":
+                            # Three-tier K selection: 1-SE on survivor pool → local-max
+                            # preference → parsimony tiebreak. Annotate audit columns.
+                            surv_means = np.asarray(
+                                [float(s["group_ari_mean"]) for s in survivors], dtype=np.float64
                             )
-                            row["k_final_decision_path"] = decision_path
+                            surv_best_idx = int(np.argmax(surv_means))
+                            surv_cutoff = float(surv_means[surv_best_idx]) - float(
+                                survivors[surv_best_idx]["group_ari_se"]
+                            )
+                            surv_argmax_k = int(survivors[surv_best_idx]["k"])
+                            k_final, decision_path = select_k_final_from_survivors(survivors)
+                            for row in rows:
+                                row["survivor_pool_argmax_k"] = surv_argmax_k
+                                row["within_1se_survivor_pool"] = int(
+                                    int(row["selected_final"]) == 1
+                                    and float(row["group_ari_mean"]) >= surv_cutoff - 1e-12
+                                )
+                                row["k_final_decision_path"] = decision_path
+                        else:
+                            selected_rows = [row for row in rows if int(row["selected_final"]) == 1]
+                            if len(selected_rows) != 1:
+                                raise RuntimeError(
+                                    f"Expected exactly one selected_final row for combo={combo}, got {len(selected_rows)}"
+                                )
+                            k_final = int(selected_rows[0]["k"])
+                            decision_path = str(selected_rows[0]["k_final_decision_path"])
                         labels_final = reorder_labels_by_long_axis(
                             labels_by_k[k_final],
                             long_axis_order_by_hemi[hemi],
@@ -2414,8 +2853,16 @@ def main() -> int:
                         roi_profile_subjects_used: list[str] | None = None
                         roi_registry: list[dict[str, object]] | None = None
                         roi_top20: dict[str, object] | None = None
-                        if atlas == "kong2022" and method == "group-intrinsic-spectral":
-                            roi_profile_3d, roi_profile, roi_registry, roi_profile_subjects_used = cluster_roi_profile_subjectwise(
+                        if method_uses_kong2022_topn_cluster_annotation(method, atlas):
+                            (
+                                profile,
+                                status_rows,
+                                dominant,
+                                roi_profile,
+                                roi_registry,
+                                roi_profile_subjects_used,
+                                roi_top20,
+                            ) = annotate_kong2022_clusters_topn(
                                 group_labels_final=labels_final,
                                 support_mask=support,
                                 subjects=subjects,
@@ -2423,20 +2870,10 @@ def main() -> int:
                                 smoothing=smoothing,
                                 hemi=hemi,
                                 valid_masks_by_subject=valid_masks,
-                            )
-                            status_rows, dominant, _profile400_mean = assignment_status_from_cluster_roi_topn(
-                                profile_3d=roi_profile_3d,
-                                roi_registry=roi_registry,
+                                network_names=network_names,
                                 q_thresh=0.05,
                                 top_n_cap=20,
                             )
-                            cols_by_network, _network_names_from_registry = split_kong2022_columns_by_network(roi_registry)
-                            profile = np.full((int(roi_profile.shape[0]), int(len(network_names))), np.nan, dtype=np.float32)
-                            for net_idx, net_name in enumerate(network_names):
-                                cols = cols_by_network.get(str(net_name), [])
-                                if not cols:
-                                    continue
-                                profile[:, net_idx] = np.nanmean(roi_profile[:, np.asarray(cols, dtype=np.int32)], axis=1).astype(np.float32)
                         else:
                             profile = cluster_network_profile(
                                 group_labels_final=labels_final,
@@ -2464,7 +2901,7 @@ def main() -> int:
                                 hemi=hemi,
                                 valid_masks_by_subject=valid_masks,
                             )
-                        if atlas == "kong2022":
+                        if atlas == "kong2022" and roi_top20 is None:
                             assert roi_profile is not None and roi_registry is not None
                             roi_top20 = cluster_roi_top_k(roi_profile, roi_registry, k_top=20)
 
@@ -2476,11 +2913,15 @@ def main() -> int:
                                 "items": status_rows,
                                 "assignment_metric": (
                                     "topn_count_positive_roi"
-                                    if (atlas == "kong2022" and method == "group-intrinsic-spectral")
+                                    if method_uses_kong2022_topn_cluster_annotation(method, atlas)
                                     else "top1_fisher_z"
                                 ),
-                                "q_threshold": 0.05 if (atlas == "kong2022" and method == "group-intrinsic-spectral") else None,
-                                "top_n_cap": 20 if (atlas == "kong2022" and method == "group-intrinsic-spectral") else None,
+                                "q_threshold": 0.05
+                                if method_uses_kong2022_topn_cluster_annotation(method, atlas)
+                                else None,
+                                "top_n_cap": 20
+                                if method_uses_kong2022_topn_cluster_annotation(method, atlas)
+                                else None,
                             },
                         )
                         save_json(run_dir / "cluster_dominant_network.json", {"dominant": dominant, "network_names": network_names})
@@ -2538,7 +2979,7 @@ def main() -> int:
                             "assignment_mode": "cluster_level",
                             "cluster_assignment_metric": (
                                 "topn_count_positive_roi"
-                                if (atlas == "kong2022" and method == "group-intrinsic-spectral")
+                                if method_uses_kong2022_topn_cluster_annotation(method, atlas)
                                 else "top1_fisher_z"
                             ),
                             "k_selection_mode": str(args.k_selection_mode),
@@ -2586,10 +3027,13 @@ def main() -> int:
                                 else None
                             ),
                             "actual_consumed_input_paths": actual_input_paths,
+                            "subject_fc_preprocessing": subject_fc_preprocessing,
                             "clustering_algorithm": "spectral_clustering_precomputed_affinity_relu_cosine_diag0_kmeans_n_init_50",
                             "affinity_description": "max(cosine_similarity,0)_hadamard_surface_adjacency_diag0",
                             "candidate_k_range_requested": [int(min(k_values)), int(max(k_values))],
                             "candidate_k_range_effective": [int(min(k_eff)), int(max(k_eff))],
+                            "candidate_k_values_evaluated": [int(r["k"]) for r in rows],
+                            "redundancy_early_stop_enabled": bool(redundancy_early_stop_enabled),
                             "chosen_k_final": int(k_final),
                             "subject_split_seeds": split_seeds,
                             "null_seeds": null_seeds,

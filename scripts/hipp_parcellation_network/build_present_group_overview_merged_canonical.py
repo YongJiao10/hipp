@@ -172,10 +172,6 @@ def _k_failure_lines(rows_tsv: list[dict[str, str]]) -> list[str]:
             reasons.append("redundant")
         if row.get("reject_nontrivial_fail", "0") == "1":
             reasons.append("nontrivial_fail")
-        if not reasons:
-            primary = str(row.get("reject_reason_primary", "")).strip()
-            if primary:
-                reasons.append(primary)
         if reasons:
             lines.append(f"  K={int(row['k'])}: {','.join(reasons)}")
     if not lines and rows:
@@ -371,7 +367,7 @@ def plot_k_gate_panel(
 
     ax.plot(ks_l, max_sim_l, color="#1f77b4", lw=1.3, marker="o")
     ax.plot(ks_r, max_sim_r, color="#d62728", lw=1.3, marker="o")
-    ax.axhline(0.90, color="#b00020", lw=1.0, ls=":", alpha=0.9)
+    ax.axhline(0.80, color="#b00020", lw=1.0, ls=":", alpha=0.9)
     ax.axvline(int(k_l), color="#1f77b4", ls="--", lw=1.0)
     ax.axvline(int(k_r), color="#d62728", ls="--", lw=1.0)
     ax.set_ylim(-0.02, 1.02)
@@ -383,7 +379,7 @@ def plot_k_gate_panel(
     ax.text(
         0.02,
         0.02,
-        "blue=L, red=R\nmaxSim<=0.90 pass\nvertical dashed = selected K*",
+        "blue=L, red=R\nmaxSim<=0.80 pass\nvertical dashed = selected K*",
         transform=ax.transAxes,
         ha="left",
         va="bottom",
@@ -584,7 +580,7 @@ def render_combo(
         ax0.text(
             0.02,
             0.02,
-            "dotted = strong-null ARI 5th pct\nvertical dashed = selected K*",
+            "L=blue, R=red\ndotted = strong-null ARI 5th pct\nvertical dashed = selected K*",
             transform=ax0.transAxes,
             ha="left",
             va="bottom",
@@ -592,38 +588,10 @@ def render_combo(
             color="#333333",
             bbox={"facecolor": "white", "alpha": 0.72, "edgecolor": "none", "pad": 1.5},
         )
-        rej_l = _k_failure_lines(rows_l)
-        rej_r = _k_failure_lines(rows_r)
-        rej_text = "\n".join(
-            [f"L: {x.strip()}" for x in rej_l[:3]] + [f"R: {x.strip()}" for x in rej_r[:3]]
-        )
-        if rej_text:
-            ax0.text(
-                0.98,
-                0.98,
-                rej_text,
-                transform=ax0.transAxes,
-                ha="right",
-                va="top",
-                fontsize=FS_SMALL,
-                family="monospace",
-                bbox={"facecolor": "white", "alpha": 0.72, "edgecolor": "none", "pad": 1.5},
-            )
         ax0.set_title(f"{smoothing} | K selection (ARI)", fontsize=FS_TITLE)
         ax0.set_xlabel("K", fontsize=FS_LABEL)
         ax0.set_ylabel("Subject-split ARI", fontsize=FS_LABEL)
         ax0.tick_params(labelsize=FS_TICK)
-        ax0.text(
-            0.02,
-            0.98,
-            "blue=L, red=R",
-            transform=ax0.transAxes,
-            ha="left",
-            va="top",
-            fontsize=FS_SMALL,
-            color="#333333",
-            bbox={"facecolor": "white", "alpha": 0.72, "edgecolor": "none", "pad": 1.5},
-        )
 
         ax1 = fig.add_subplot(sub[0, 1])
         nets = [str(x) for x in load_json(d_l / "group_feature_summary.json")["network_names"]]

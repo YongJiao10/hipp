@@ -26,6 +26,10 @@ Optional spectral branch (opt-in):
 
 ### `group-intrinsic-spectral`
 
+- Per-subject FC preprocessing is applied before group averaging (default):
+  - keep largest raw-value Top `10%` entries in each subject `512 x 512` FC map, set other finite entries to `0`
+  - default binarization sets retained Top entries to `1` (`--no-subject-fc-binarize` disables this)
+  - fraction is configurable via `--subject-fc-top-fraction`
 - Input feature for clustering: hippocampal intrinsic vertex-to-vertex Fisher-z FC.
 - Select `K` by ARI-based constraints.
 - Assign cluster network by raw TopN positive ROI majority:
@@ -35,15 +39,28 @@ Optional spectral branch (opt-in):
   - `unassigned` is used only when no positive ROI exists (`unassigned_reason = no_positive_roi`)
   - if TopN ROI all belong to one network, `2nd` is `none` (never duplicate `1st`)
   - optional `--k-selection-mode redundancy-aware`:
-    - redundant gate: `max_profile_similarity <= 0.90` and `redundant_pair_count == 0`
-    - final K selection (three-tier, over survivor pool):
+    - first remove redundant `K` candidates (`max_profile_similarity <= 0.80` and `redundant_pair_count == 0`)
+    - then run final K selection on the remaining nonredundant, nontrivial pool:
       1. 1-SE rule: keep survivors within 1 SE of the survivor-pool best mean ARI
       2. local-max preference: among within-1SE survivors, prefer ARI-curve local maxima
       3. parsimony tiebreak: smallest K wins when quality is genuinely tied
+    - if any nonredundant, nontrivial candidate remains, the pipeline selects one final `K` from that reduced pool (it does not reject lower `K` in favor of later redundant candidates)
+    - optional urgent speed heuristic: `--redundancy-early-stop`
+      - evaluate `K` in ascending order
+      - once the first redundant `K` is observed, skip all larger `K`
+      - this disables within-combo `K` parallelism and is intended only for interim fast runs, not final paper results
 
 ### `group-network-spectral` (opt-in)
 
+- Per-subject FC preprocessing is applied before group averaging (default):
+  - keep largest raw-value Top `10%` entries in each subject `512 x 400` FC map, set other finite entries to `0`
+  - default binarization sets retained Top entries to `1` (`--no-subject-fc-binarize` disables this)
+  - fraction is configurable via `--subject-fc-top-fraction`
 - Input feature for clustering: hippocampal vertex-to-Kong2022-ROI Fisher-z FC (400 ROI).
+- For `kong2022`, cluster network assignment now follows the same TopN-count rule as intrinsic spectral:
+  - one-sided t-test + BH-FDR (`q<0.05`) over ROI is retained for stats fields only
+  - assignment uses raw TopN positive ROI majority (`N = min(20, n_positive_roi)`)
+  - overview confidence labels, ambiguity text, and network naming use TopN count fields rather than canonical-network Fisher-z maxima
 - Uses the same optional redundancy-aware `K` selection and preprocessing knobs as intrinsic spectral.
 
 ### `group-network-top`

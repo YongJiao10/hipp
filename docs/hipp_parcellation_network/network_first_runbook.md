@@ -93,6 +93,7 @@ This default applies only to the legacy/default group input root documented belo
   --coverage-thresholds 0.80 \
   --atlases kong2022 \
   --methods group-intrinsic-spectral group-network-top group-network-all \
+  --jobs 6 \
   --out-root outputs_migration/hipp_group_merged_canonical_atlas
 
 /home/yojiao/.conda/envs/py314/bin/python scripts/hipp_parcellation_network/build_present_group_overview_merged_canonical.py \
@@ -128,8 +129,10 @@ present_group/
 - `present_group/` is a presentation/export surface, not the canonical runtime input source
 - K-selection panels use direct subject-split `group_ari_mean`; null references are reported in ARI space
 - spectral methods (`group-network-spectral`, `group-intrinsic-spectral`) can run `--k-selection-mode redundancy-aware`
+- `run_merged_canonical_group_atlas.py --jobs N` now parallelizes candidate-`K` evaluation within each combo, capped at `min(N, #K, 10)`
+- the script suppresses scikit-learn's `"Graph is not fully connected"` spectral-embedding warning to keep logs readable during large `K` sweeps
 - redundancy-aware `K` selection uses:
-  - profile redundancy gate: `max_profile_similarity <= 0.90`, `redundant_pair_count == 0`
+  - profile redundancy gate: `max_profile_similarity <= 0.80`, `redundant_pair_count == 0`
   - final K selection (three-tier over the survivor pool that passed all gates):
     1. 1-SE rule: keep survivors within 1 SE of the survivor-pool best mean ARI
     2. local-max preference: among within-1SE survivors, prefer ARI-curve local maxima

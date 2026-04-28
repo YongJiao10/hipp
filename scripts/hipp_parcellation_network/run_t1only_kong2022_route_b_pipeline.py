@@ -116,7 +116,7 @@ def main() -> int:
     group_atlas_jobs = max(1, min(jobs, DEFAULT_GROUP_ATLAS_JOBS))
     if group_atlas_jobs != jobs:
         print(
-            f"[info] group-atlas combo jobs capped at {group_atlas_jobs} (pipeline jobs={jobs})",
+            f"[info] group-atlas K-eval jobs capped at {group_atlas_jobs} (pipeline jobs={jobs})",
             flush=True,
         )
     batch_root = Path(args.hippunfold_batch_root).resolve()

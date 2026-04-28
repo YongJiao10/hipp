@@ -28,25 +28,55 @@ python scripts/hipp_parcellation_network/run_merged_canonical_group_atlas.py \
   --k-selection-mode redundancy-aware
 ```
 
+Canonical urgent T1only spectral rerun:
+
+```bash
+python scripts/hipp_parcellation_network/run_t1only_spectral_fast_rerun.py
+```
+
+This launcher fixes the default urgent runtime policy to:
+
+- `group-intrinsic-spectral` first, then `group-network-spectral`
+- rebuild overview immediately after each method
+- parallelize across the four independent combos (`2mm/4mm x L/R`)
+- keep each combo's `K` loop sequential with `--redundancy-early-stop`
+- default subject FC preprocessing in the launcher is `--subject-fc-top-fraction 0.10 --subject-fc-binarize`
+- launcher override knobs are available: `--subject-fc-top-fraction <0..1>` and `--no-subject-fc-binarize`
+
+Spectral FC preprocessing defaults in this driver:
+
+- `--subject-fc-top-fraction 0.10` (keep largest raw-value Top 10% per subject FC map)
+- `--subject-fc-binarize` (default on; retained Top entries are set to `1`)
+- optional disable: `--no-subject-fc-binarize`
+
 ### 2.1 `group-intrinsic-spectral`
 
 1. Build support mask from coverage threshold.
-2. Run intrinsic spectral clustering and select `K`.
+2. Per subject, preprocess intrinsic FC map (`512 x 512`) before any group averaging:
+   - keep largest raw-value Top `10%` finite entries, set other finite entries to `0`
+   - by default, binarize retained Top entries to `1`
+3. Run intrinsic spectral clustering and select `K`.
    - in `redundancy-aware` mode, reject `K` if:
-     - redundant (`max_profile_similarity > 0.90` or `redundant_pair_count > 0`)
+     - redundant (`max_profile_similarity > 0.80` or `redundant_pair_count > 0`)
      - nontriviality checks fail
-   - final K selection (three-tier over survivor pool that passed all gates):
+   - final K selection is applied after removing redundant/nontrivial-fail candidates
+   - final K selection (three-tier over the remaining eligible pool):
      1. 1-SE rule: keep survivors within 1 SE of the survivor-pool best mean ARI
      2. local-max preference: among within-1SE survivors, prefer ARI-curve local maxima
      3. parsimony tiebreak: smallest K when quality is genuinely tied
-3. Compute cluster-to-ROI Fisher-z profiles (400 ROI).
-4. Per cluster: one-sided t + BH-FDR (`q<0.05`) over ROI.
-5. Keep significance outputs for stats (`n_significant_*`, selected significant ROI list).
-6. Select assignment TopN from raw positive ROI (`mean_z > 0`), `N=min(20, n_positive_roi)`.
-7. Assign cluster network by TopN ROI count majority (raw TopN, not significance-filtered).
-8. If no positive ROI exists, mark `unassigned` with reason `no_positive_roi`.
-9. If TopN ROI are all in one network, set `2nd` to `none` (do not duplicate `1st`).
-10. Write:
+   - if the reduced eligible pool is non-empty, one final `K` is always selected from that pool
+   - urgent heuristic mode `--redundancy-early-stop`:
+     - evaluate `K` in ascending order
+     - stop at the first redundant `K` and skip all larger `K`
+     - this is a speed shortcut for interim runs; do not use it for final reporting runs
+4. Compute cluster-to-ROI Fisher-z profiles (400 ROI).
+5. Per cluster: one-sided t + BH-FDR (`q<0.05`) over ROI.
+6. Keep significance outputs for stats (`n_significant_*`, selected significant ROI list).
+7. Select assignment TopN from raw positive ROI (`mean_z > 0`), `N=min(20, n_positive_roi)`.
+8. Assign cluster network by TopN ROI count majority (raw TopN, not significance-filtered).
+9. If no positive ROI exists, mark `unassigned` with reason `no_positive_roi`.
+10. If TopN ROI are all in one network, set `2nd` to `none` (do not duplicate `1st`).
+11. Write:
    - `group_labels_final.npy`
    - `cluster_assignment_status.json`
    - `group_functional_atlas_labels.npy`
@@ -80,9 +110,17 @@ python scripts/hipp_parcellation_network/run_merged_canonical_group_atlas.py \
 ### 2.4 `group-network-spectral` (opt-in)
 
 1. Build support mask from coverage threshold.
-2. Run spectral clustering on vertex-to-ROI Fisher-z features.
-3. Use the same optional `redundancy-aware` `K` selection logic as intrinsic spectral.
-4. Write:
+2. Per subject, preprocess network FC map (`512 x 400`) before any group averaging:
+   - keep largest raw-value Top `10%` finite entries, set other finite entries to `0`
+   - by default, binarize retained Top entries to `1`
+3. Run spectral clustering on vertex-to-ROI Fisher-z features.
+4. Use the same optional `redundancy-aware` `K` selection logic as intrinsic spectral.
+   - the same optional `--redundancy-early-stop` heuristic applies here
+5. For `kong2022`, assign cluster network by the same raw TopN positive ROI majority rule used by intrinsic spectral:
+   - one-sided t + BH-FDR outputs are kept for stats only
+   - assignment uses `N=min(20, n_positive_roi)` from raw positive ROI (`mean_z > 0`)
+   - overview confidence and legend semantics use TopN count mode, not Fisher-z maxima
+6. Write:
    - `group_labels_final.npy`
    - `cluster_assignment_status.json`
    - `group_functional_atlas_labels.npy`
@@ -98,7 +136,7 @@ python scripts/hipp_parcellation_network/run_merged_canonical_group_atlas.py \
    - `K` panel text now reports per-K reject reasons with tags:
      - `redundant`, `nontrivial_fail`
    - cluster methods now show a K-metric gate panel (replacing `cluster_indicator`):
-     - `max_profile_similarity` (threshold `0.90`)
+     - `max_profile_similarity` (threshold `0.80`)
      - selected K (`K*`) vertical dashed markers for L/R
    - clusterless methods render without cluster artifacts
    - for `group-network-top` / `group-network-all`, left pane shows only `vertex assignment counts`

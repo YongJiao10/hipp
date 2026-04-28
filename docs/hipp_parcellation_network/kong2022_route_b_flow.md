@@ -78,7 +78,7 @@ If a combo cannot produce a valid final `K`, the combo is soft-skipped: `group_a
 For spectral methods, `run_merged_canonical_group_atlas.py` supports `--k-selection-mode redundancy-aware`:
 
 - candidate-`K` rejection gates:
-  - redundant: `max_profile_similarity > 0.90` or `redundant_pair_count > 0`
+  - redundant: `max_profile_similarity > 0.80` or `redundant_pair_count > 0`
   - nontrivial fail: existing min-size/connectedness/coherence checks fail
 - final selection in redundancy-aware mode (three-tier over the survivor pool):
   1. 1-SE rule: keep survivors within 1 SE of the survivor-pool best mean ARI

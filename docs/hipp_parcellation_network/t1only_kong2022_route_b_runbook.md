@@ -63,6 +63,37 @@ setsid /home/yojiao/.conda/envs/py314/bin/python \
   --from-step cluster-roi-cortex --jobs 4 --resume >> /tmp/pipeline_restart.log 2>&1 &
 ```
 
+## Canonical Spectral Fast Rerun
+
+For urgent T1only spectral reruns, the canonical default entrypoint is now:
+
+```bash
+/home/yojiao/.conda/envs/py314/bin/python \
+  scripts/hipp_parcellation_network/run_t1only_spectral_fast_rerun.py
+```
+
+This launcher fixes the runtime policy so future agents do not need ad hoc instructions:
+
+- method order is fixed: `group-intrinsic-spectral` first, then `group-network-spectral`
+- after each method finishes, it immediately rebuilds that method's overview PNG
+- each spectral method runs `2mm/4mm x L/R = 4` combos in parallel
+- each combo runs with `--jobs 1` internally, so `K` is evaluated sequentially within that combo
+- each child process is forced to single-threaded BLAS/OpenMP:
+  - `OMP_NUM_THREADS=1`
+  - `OPENBLAS_NUM_THREADS=1`
+  - `MKL_NUM_THREADS=1`
+  - `NUMEXPR_NUM_THREADS=1`
+- `redundancy-aware` + `--redundancy-early-stop` are enabled by default
+- subject FC preprocessing defaults to:
+  - `--subject-fc-top-fraction 0.10`
+  - `--subject-fc-binarize`
+- fast launcher exposes the same override knobs as group-atlas:
+  - `--subject-fc-top-fraction <0..1>`
+  - `--no-subject-fc-binarize`
+- total concurrency stays at `4`, below the repository hard cap of `10`
+
+This fast rerun launcher is the default for interim spectral refreshes. Do not use it as the final paper run command.
+
 ## wb_command Thread Warning
 
 `wb_command -metric-smoothing` defaults to **one thread per CPU core** via OpenMP.
@@ -123,24 +154,30 @@ Total expected CPU with `--jobs 4` and `OMP_NUM_THREADS=2`: ~4 × 200% = ~800%.
    - Runs three methods for atlas `kong2022` by default: `group-intrinsic-spectral`, `group-network-top`, `group-network-all`.
    - `group-network-spectral` remains opt-in only.
    - Uses coverage threshold `0.80` and the T1only group-average surfaces.
-   - The 8 method/smoothing/hemi combos are now dispatched in parallel by `run_merged_canonical_group_atlas.py --jobs`.
-   - Pipeline forwards `--jobs` to group-atlas but caps combo parallelism at 4 (`group_atlas_jobs=4`).
+   - `run_merged_canonical_group_atlas.py --jobs` now parallelizes candidate-`K` evaluation within each combo, capped at `min(--jobs, #K, 10)`.
+   - Pipeline forwards `--jobs` to group-atlas and caps K-eval parallelism at 4 by default (`group_atlas_jobs=4`).
    - If a combo has no valid `K` (or no `K` survives constraints), that combo is marked skipped in `group_atlas_manifest.json` (`status=skipped_*`) and the remaining combos continue.
    - Per-combo logs are written to `hipp_group_merged_canonical_atlas/_combo_logs/`.
    - Spectral methods support `--k-selection-mode redundancy-aware`.
+   - The script suppresses scikit-learn's `"Graph is not fully connected"` warning so large spectral runs do not spam logs.
    - Redundancy-aware gates:
-     - non-redundancy: `max_profile_similarity <= 0.90` and `redundant_pair_count == 0`
+     - non-redundancy: `max_profile_similarity <= 0.80` and `redundant_pair_count == 0`
    - Final K selection (three-tier over the survivor pool that passes all gates):
      1. 1-SE rule: keep survivors within 1 SE of the survivor-pool best mean ARI
      2. local-max preference: among within-1SE survivors, prefer ARI-curve local maxima
      3. parsimony tiebreak: smallest K when quality is genuinely tied
+   - Urgent speed heuristic `--redundancy-early-stop`:
+     - evaluate `K` in ascending order
+     - once the first redundant `K` is hit, skip all larger `K`
+     - this is intentionally approximate and should be reserved for fast interim reruns, not final paper runs
+   - For T1only spectral reruns, do not parallelize over `K`; the canonical fast path is to parallelize the four independent combos (`2mm/4mm x L/R`) while keeping each combo's `K` loop sequential.
    - Overview `K` diagnostics expose reason tags per rejected `K`: `redundant`, `nontrivial_fail`.
 
 6. `present`
    - Builds overview figures in `present_group_t1only/`.
    - Default present methods in this pipeline are `group-intrinsic-spectral`, `group-network-top`, `group-network-all`.
    - For cluster methods, the previous `cluster_indicator` panel is replaced by a K-metric gate panel:
-     - `max_profile_similarity` vs K with threshold `0.90`
+     - `max_profile_similarity` vs K with threshold `0.80`
      - selected K (`K*`) marked by vertical dashed lines
    - For clusterless methods (`group-network-top`, `group-network-all`), the group overview left pane now contains only `vertex assignment counts`.
 
