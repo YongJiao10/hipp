@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 import math
 import sys
@@ -48,8 +49,7 @@ METHOD_CHOICES = [
 ]
 METHODS_DEFAULT = [
     "group-intrinsic-spectral",
-    "group-network-top",
-    "group-network-all",
+    "group-network-spectral",
 ]
 ATLASES = ["kong2019", "kong2019_8net", "kong2022"]
 SMOOTHINGS = ["2mm", "4mm"]
@@ -61,6 +61,7 @@ PROFILE_REDUNDANCY_MAX_SIM = 0.80
 SUBJECT_FC_PREPROCESS_METHODS = {"group-network-spectral", "group-intrinsic-spectral"}
 SUBJECT_FC_VALUE_RULE = "largest_raw_values"
 MAX_K_EVAL_JOBS = 10
+RESUME_SIGNATURE_VERSION = 1
 
 
 @dataclass(frozen=True)
@@ -84,6 +85,46 @@ def write_tsv(path: Path, rows: list[dict[str, object]], fieldnames: list[str]) 
         w.writeheader()
         for row in rows:
             w.writerow(row)
+
+
+def canonical_json_sha256(payload: object) -> str:
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def file_state(path: Path) -> dict[str, object]:
+    p = Path(path).resolve()
+    out: dict[str, object] = {"path": str(p), "exists": bool(p.exists())}
+    if bool(out["exists"]):
+        st = p.stat()
+        out["size_bytes"] = int(st.st_size)
+        out["mtime_ns"] = int(st.st_mtime_ns)
+    return out
+
+
+def file_state_list(paths: list[Path]) -> list[dict[str, object]]:
+    uniq: dict[str, Path] = {}
+    for p in paths:
+        rp = Path(p).resolve()
+        uniq[str(rp)] = rp
+    return [file_state(uniq[k]) for k in sorted(uniq.keys())]
+
+
+def resume_manifest_matches(manifest_path: Path, expected_signature: str) -> tuple[bool, str]:
+    if not manifest_path.exists():
+        return False, "missing_manifest"
+    try:
+        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except Exception as exc:  # pragma: no cover
+        return False, f"invalid_manifest:{exc.__class__.__name__}"
+    if int(payload.get("resume_input_signature_version", -1)) != int(RESUME_SIGNATURE_VERSION):
+        return False, "missing_or_legacy_signature"
+    got = payload.get("resume_input_signature")
+    if not isinstance(got, str):
+        return False, "missing_signature"
+    if got != expected_signature:
+        return False, "upstream_signature_changed"
+    return True, "signature_match"
 
 
 def fisher_z_transform_fc(x: np.ndarray) -> np.ndarray:
@@ -2172,7 +2213,8 @@ def main() -> int:
     hippunfold_batch_root = Path(args.hippunfold_batch_root).resolve()
     out_root.mkdir(parents=True, exist_ok=True)
 
-    subjects = load_subjects(Path(args.subjects_manifest).resolve())
+    subjects_manifest_path = Path(args.subjects_manifest).resolve()
+    subjects = load_subjects(subjects_manifest_path)
     if not (0.0 <= float(args.subject_fc_top_fraction) <= 1.0):
         raise ValueError(
             f"--subject-fc-top-fraction must be within [0,1], got {args.subject_fc_top_fraction}"
@@ -2323,6 +2365,69 @@ def main() -> int:
                                 else:
                                     roi_fc_bank_for_redundancy[s] = roi_raw
 
+                    subject_fc_preprocessing_for_resume = subject_fc_preprocessing_manifest_block(
+                        method,
+                        float(args.subject_fc_top_fraction),
+                        bool(args.subject_fc_binarize),
+                    )
+                    valid_mask_paths = [
+                        shared_root / f"sub-{s}" / "surface" / "tsnr_gate" / f"sub-{s}_hemi-{hemi}_valid_mask.npy"
+                        for s in subjects
+                    ]
+                    runwise_feature_paths: list[Path] = []
+                    if not is_clusterless_method(method):
+                        for rid in [1, 2, 3, 4]:
+                            for s in subjects:
+                                if is_network_method(method):
+                                    p = (
+                                        shared_root
+                                        / f"sub-{s}"
+                                        / "fc"
+                                        / atlas
+                                        / smoothing
+                                        / f"hemi_{hemi}"
+                                        / "runs"
+                                        / f"run-{rid}"
+                                        / runwise_network_feature_filename(method)
+                                    )
+                                else:
+                                    p = resolve_intrinsic_feature_path(shared_root, s, smoothing, hemi, rid)
+                                runwise_feature_paths.append(p)
+                    reference_network_order_paths = [
+                        shared_root / f"sub-{s}" / "reference" / atlas / "cortex_canonical_networks.tsv"
+                        for s in subjects
+                    ]
+                    reference_network_ts_paths = [
+                        shared_root / f"sub-{s}" / "reference" / atlas / "cortex_canonical_network_timeseries.npy"
+                        for s in subjects
+                    ]
+                    surface_timeseries_paths = [
+                        shared_root / f"sub-{s}" / "surface" / smoothing / f"sub-{s}_hemi-{hemi}_timeseries.npy"
+                        for s in subjects
+                    ]
+                    kong2022_roi_reference_paths: list[Path] = []
+                    if atlas == "kong2022":
+                        for s in subjects:
+                            kong2022_roi_reference_paths.extend(
+                                [
+                                    shared_root / f"sub-{s}" / "reference" / "kong2022" / "cortex_roi_parcel_timeseries.npy",
+                                    shared_root / f"sub-{s}" / "reference" / "kong2022" / "cortex_roi_parcels.tsv",
+                                ]
+                            )
+                    resume_file_state_payload = {
+                        "primary_feature_inputs": file_state_list([Path(p) for p in actual_input_paths.values()]),
+                        "valid_masks": file_state_list(valid_mask_paths),
+                        "runwise_feature_inputs": file_state_list(runwise_feature_paths),
+                        "reference_network_order_tsv": file_state_list(reference_network_order_paths),
+                        "reference_network_timeseries": file_state_list(reference_network_ts_paths),
+                        "surface_timeseries": file_state_list(surface_timeseries_paths),
+                        "kong2022_roi_reference_inputs": file_state_list(kong2022_roi_reference_paths),
+                        "template_surface": file_state_list([surfaces[hemi]]),
+                    }
+                    resume_input_category_hashes = {
+                        k: canonical_json_sha256(v) for k, v in resume_file_state_payload.items()
+                    }
+
                     for tau in coverage_thresholds:
                         combo = Combo(method=method, atlas=atlas, smoothing=smoothing, hemi=hemi, coverage_threshold=float(tau))
                         print(
@@ -2333,16 +2438,45 @@ def main() -> int:
                         run_dir = out_root / method / atlas / smoothing / f"cov_{tau_tag}" / f"hemi_{hemi}"
                         run_dir.mkdir(parents=True, exist_ok=True)
                         manifest_path = run_dir / "group_atlas_manifest.json"
+                        resume_signature_payload = {
+                            "resume_input_signature_version": int(RESUME_SIGNATURE_VERSION),
+                            "combo": {
+                                "method": method,
+                                "atlas": atlas,
+                                "smoothing": smoothing,
+                                "hemi": hemi,
+                                "coverage_threshold": float(tau),
+                            },
+                            "subjects_manifest": str(subjects_manifest_path),
+                            "subjects": [f"sub-{s}" for s in subjects],
+                            "k_selection_mode": str(args.k_selection_mode),
+                            "candidate_k_values": [int(k) for k in k_values],
+                            "seed": int(args.seed),
+                            "instability_resamples": int(args.instability_resamples),
+                            "null_resamples": int(args.null_resamples),
+                            "v_min_fraction": float(args.v_min_fraction),
+                            "max_components_threshold": int(args.max_components_threshold),
+                            "min_profile_coherence": float(args.min_profile_coherence),
+                            "subject_fc_preprocessing": subject_fc_preprocessing_for_resume,
+                            "redundancy_early_stop": bool(args.redundancy_early_stop),
+                            "input_category_hashes": resume_input_category_hashes,
+                        }
+                        resume_input_signature = canonical_json_sha256(resume_signature_payload)
                         if args.resume and manifest_path.exists():
-                            print(f"  [skip] existing manifest: {manifest_path}", flush=True)
-                            continue
+                            skip_ok, resume_reason = resume_manifest_matches(manifest_path, resume_input_signature)
+                            if skip_ok:
+                                print(
+                                    f"  [skip] existing manifest (resume-signature matched): {manifest_path}",
+                                    flush=True,
+                                )
+                                continue
+                            print(
+                                f"  [resume-invalidate] {manifest_path} reason={resume_reason}; recomputing",
+                                flush=True,
+                            )
 
                         support = coverage_fraction >= float(tau)
-                        subject_fc_preprocessing = subject_fc_preprocessing_manifest_block(
-                            method,
-                            float(args.subject_fc_top_fraction),
-                            bool(args.subject_fc_binarize),
-                        )
+                        subject_fc_preprocessing = subject_fc_preprocessing_for_resume
                         n_support = int(np.sum(support))
                         v_min = int(math.ceil(float(args.v_min_fraction) * max(1, n_support)))
                         k_max_eff = min(max(k_values), n_support // max(1, v_min))
@@ -2473,6 +2607,9 @@ def main() -> int:
                                 "q_threshold": 0.05,
                                 "top_n_cap": 20,
                                 "actual_consumed_input_paths": actual_input_paths,
+                                "resume_input_signature_version": int(RESUME_SIGNATURE_VERSION),
+                                "resume_input_signature": resume_input_signature,
+                                "resume_input_signature_payload": resume_signature_payload,
                                 "feature_family": "vertex_to_kong2022_400roi_fc_fisherz",
                                 "fc_mode": "pearson_vertex_to_roi",
                                 "subject_fc_preprocessing": subject_fc_preprocessing,
@@ -2552,6 +2689,9 @@ def main() -> int:
                                 "n_support_vertices": int(n_support),
                                 "n_excluded_vertices": int(n_vertices - n_support),
                                 "actual_consumed_input_paths": actual_input_paths,
+                                "resume_input_signature_version": int(RESUME_SIGNATURE_VERSION),
+                                "resume_input_signature": resume_input_signature,
+                                "resume_input_signature_payload": resume_signature_payload,
                                 "subject_fc_preprocessing": subject_fc_preprocessing,
                                 "nontriviality_thresholds": {
                                     "V_min_fraction": float(args.v_min_fraction),
@@ -2784,6 +2924,9 @@ def main() -> int:
                                 "n_support_vertices": int(n_support),
                                 "n_excluded_vertices": int(n_vertices - n_support),
                                 "actual_consumed_input_paths": actual_input_paths,
+                                "resume_input_signature_version": int(RESUME_SIGNATURE_VERSION),
+                                "resume_input_signature": resume_input_signature,
+                                "resume_input_signature_payload": resume_signature_payload,
                                 "subject_fc_preprocessing": subject_fc_preprocessing,
                                 "nontriviality_thresholds": {
                                     "V_min_fraction": float(args.v_min_fraction),
@@ -3027,6 +3170,9 @@ def main() -> int:
                                 else None
                             ),
                             "actual_consumed_input_paths": actual_input_paths,
+                            "resume_input_signature_version": int(RESUME_SIGNATURE_VERSION),
+                            "resume_input_signature": resume_input_signature,
+                            "resume_input_signature_payload": resume_signature_payload,
                             "subject_fc_preprocessing": subject_fc_preprocessing,
                             "clustering_algorithm": "spectral_clustering_precomputed_affinity_relu_cosine_diag0_kmeans_n_init_50",
                             "affinity_description": "max(cosine_similarity,0)_hadamard_surface_adjacency_diag0",

@@ -12,7 +12,7 @@ Active workflow:
 - present-group overview generation
 - optional backfill of group functional atlas labels
 
-For the T1only HippUnfold branch, do not use the default 153-subject T2only-era manifest or the default shared root. Use the dedicated runbook:
+For the T1only HippUnfold branch, do not use the old 153-subject T2only-era manifest or the default shared root. Use the dedicated runbook:
 
 - `docs/hipp_parcellation_network/t1only_kong2022_route_b_runbook.md`
 
@@ -54,13 +54,12 @@ Atlas-specific cortex reference arrays remain under `sub-*/reference/kong2022/`.
 
 ## Default Cohort
 
-Use the default QC-passed 153-subject cohort:
+Use the active default QC-passed T1only 151-subject cohort:
 
-- `manifests/hcp_7t_hippocampus_fmri_qc_pass_153.txt`
+- `outputs_experiments/hippunfold_recommended_t1w_20260423/kong2022_route_b/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_151.txt`
+- `outputs_experiments/hippunfold_recommended_t1w_20260423/kong2022_route_b/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt`
 
 Do not silently expand to 166 subjects.
-
-This default applies only to the legacy/default group input root documented below. T1only derives a new pass manifest after T1only HippUnfold Dice QC and T1only hippocampal tSNR QC.
 
 ## Active Entry Points
 
@@ -92,7 +91,7 @@ This default applies only to the legacy/default group input root documented belo
   --resume \
   --coverage-thresholds 0.80 \
   --atlases kong2022 \
-  --methods group-intrinsic-spectral group-network-top group-network-all \
+  --methods group-intrinsic-spectral group-network-spectral \
   --jobs 6 \
   --out-root outputs_migration/hipp_group_merged_canonical_atlas
 
@@ -100,7 +99,7 @@ This default applies only to the legacy/default group input root documented belo
   --group-root outputs_migration/hipp_group_merged_canonical_atlas \
   --present-dir present_group \
   --atlases kong2022 \
-  --methods group-intrinsic-spectral group-network-top group-network-all \
+  --methods group-intrinsic-spectral group-network-spectral \
   --coverage-threshold 0.80
 
 /home/yojiao/.conda/envs/py314/bin/python scripts/hipp_parcellation_network/materialize_group_functional_atlas_labels.py \
@@ -116,8 +115,7 @@ outputs_migration/hipp_group_merged_canonical_atlas/
 
 present_group/
   kong2022_group-intrinsic-spectral_group_overview.png
-  kong2022_group-network-top_group_overview.png
-  kong2022_group-network-all_group_overview.png
+  kong2022_group-network-spectral_group_overview.png
   group_overview_manifest.json
   README.md
 ```
@@ -138,6 +136,8 @@ present_group/
     2. local-max preference: among within-1SE survivors, prefer ARI-curve local maxima
     3. parsimony tiebreak: smallest K when quality is genuinely tied
 - overview `K` diagnostics show per-K reject reasons: `redundant`, `nontrivial_fail`
-- if a combo cannot select a valid `K`, the driver writes `group_atlas_manifest.json` with `status=skipped_*` and continues remaining combos; `--resume` treats that manifest as completed
-- `group-network-top` / `group-network-all` are clusterless, kong2022-only, and do not emit `group_labels_final.npy`
-- the three active methods (`group-intrinsic-spectral`, `group-network-top`, `group-network-all`) do not consume cortex `8 x T` timeseries for network assignment
+- if a combo cannot select a valid `K`, the driver writes `group_atlas_manifest.json` with `status=skipped_*` and continues remaining combos
+- `--resume` now skips a combo only when the stored `resume_input_signature` matches current upstream inputs and K-selection controls; legacy/no-signature manifests or upstream-changed inputs are automatically invalidated and recomputed
+- maintained defaults are spectral-only: `group-intrinsic-spectral`, `group-network-spectral`
+- `group-network-top` / `group-network-all` are legacy branches and are retired from default runs
+- `cluster-roi-cortex` rendering now supports shared/public cortex template fallback from `external/` and auto-generates missing hemisphere `sulc.func.gii` from `*_sulc.dscalar.nii` when needed

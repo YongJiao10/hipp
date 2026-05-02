@@ -43,12 +43,13 @@
 
 ## Default Analysis Cohort
 
-- **The default analysis set is 153 subjects**, not the full 166.
-- Subject list: `manifests/hcp_7t_hippocampus_fmri_qc_pass_153.txt` (bare IDs, one per line)
+- **The default analysis set is 151 subjects** for the active T1only branch, not the full 166.
+- Subject list (pinned count): `outputs_experiments/hippunfold_recommended_t1w_20260423/kong2022_route_b/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_151.txt` (bare IDs, one per line)
+- Subject list (rolling pointer): `outputs_experiments/hippunfold_recommended_t1w_20260423/kong2022_route_b/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt`
 - QC criteria (both must pass):
   1. HippUnfold Dice ≥ 0.70 for both hemispheres (`*_desc-unetf3d_dice.tsv`) — all 166 passed
-  2. fMRI null vertex % < 20% for both hemispheres (tSNR < 25 or sd == 0) — 13 excluded
-- Excluded subjects: sub-102816, sub-109123, sub-146129, sub-155938, sub-158136, sub-164131, sub-173334, sub-198653, sub-550439, sub-680957, sub-783462, sub-898176, sub-901442
+  2. fMRI null vertex % < 20% for both hemispheres (tSNR < 25 or sd == 0) — 15 excluded
+- Excluded subjects: sub-102816, sub-109123, sub-155938, sub-158136, sub-164131, sub-173334, sub-182739, sub-198653, sub-550439, sub-680957, sub-783462, sub-878776, sub-878877, sub-898176, sub-901442
 - Full QC details: `docs/hipp_parcellation_network/fmri_qc.md`
 - When iterating over subjects for any analysis, load from the manifest — **do not assume all 166 are usable**.
 

@@ -1,61 +1,58 @@
-# Kong2022 Route A — Official MSHBM Only
+# Kong2022 Route A — ArealMSHBM Only
 
 ## Summary
-Implement Route A using the official CBIG MSHBM MATLAB pipeline with Kong2022 400-ROI priors. Drop the FASTANS/PFM heuristic entirely. The new atlas slug is `kong2022_mshbm`; defaults are `w=100`, `c=50`; the current concat dtseries is split into four run/session dtseries and passed to MSHBM as four sessions.
+Route A minimal loop in this repository targets **official Kong2022_ArealMSHBM** (not Kong2019 compatibility wrappers):
 
-## Key Changes
-- Add a Route A MSHBM subject driver that:
-  - validates `matlab`, `CBIG_CODE_DIR`, CBIG utilities, `CBIG_ComputeCorrelationProfile`, `mtimesx`, and fsLR surface helpers before running;
-  - uses `external/Schaefer2018_Kong2022/Params_Final.mat` as `group_prior`;
-  - generates fsLR32k `fs_LR_900` connectivity profiles via official CBIG profile generation;
-  - calls `CBIG_MSHBM_generate_individual_parcellation(project_dir, 'fs_LR_32k', '4', '400', '1', '100', '50', 'test_set')`;
-  - aborts if dependencies are missing; no heuristic fallback.
+- fs_LR_32k subject-level individualized parcellation via `CBIG_ArealMSHBM_parcellation_single_subject`
+- subject `label.gii` + `dlabel.nii` generation
+- one overview figure per subject
+- strict fail-fast preflight
 
-- Add a thin MATLAB wrapper instead of editing CBIG source:
-  - sets paths for Kong2019_MSHBM `step1`, `step3`, and `lib`;
-  - prepares `project_dir/priors/Params_Final.mat`;
-  - writes `profile_list/test_set/sess1.txt` through `sess4.txt`;
-  - calls official profile generation and official individual parcellation with `num_clusters=400`.
+The default runtime output root is:
 
-- Add CIFTI integration around the MATLAB output:
-  - split each subject’s concat dtseries into four run-level fsLR32k dtseries using existing run boundaries;
-  - convert MSHBM `lh_labels/rh_labels` to a 400-label CIFTI dlabel using the Kong2022 label list and ID/name registry;
-  - output subject atlas files under `outputs_migration/cortex_mshbm/sub-{sid}/kong2022_mshbm/`;
-  - write a summary JSON with paths, `w/c`, `num_sessions=4`, profile dimensions, observed label IDs, and dependency versions.
+- `outputs_experiments/cortex_kong2022_areal_mshbm/`
 
-- Reuse Route B downstream by parameterization:
-  - parameterize the Kong2022 ROI timeseries extractor with `--atlas-slug kong2022_mshbm` and `--kong2022-dlabel <subject dlabel>`;
-  - parameterize the Kong2022 FC materializer with `--atlas-slug`;
-  - extend the group atlas/presentation drivers to include `kong2022_mshbm` wherever the Kong2022 400-ROI family is supported;
-  - keep strict 400-ID registry checks; do not allow name drift unless a later QC failure proves it necessary.
+No new Route A outputs are written to `outputs_migration`.
 
-- Add a Route A pipeline driver:
-  - stages: `prepare`, `kong2022_mshbm-individualize`, `kong2022_mshbm-reference`, `kong2022_mshbm-fc`, `intrinsic-fc`, `group-atlas`, `present`;
-  - hard-cap concurrency at 10;
-  - default full-cohort subject manifest remains `manifests/hcp_7t_hippocampus_fmri_qc_pass_153.txt`.
+## Implemented Scripts
+- `scripts/cortex/run_cortex_mshbm_subject.py`
+- `scripts/cortex/matlab/run_kong2022_mshbm_subject.m`
+- `scripts/cortex/run_cortex_kong2022_mshbm_batch.py`
+- `scripts/cortex/plot_cortex_kong2022_mshbm.py`
 
-## Test Plan
-- Preflight test:
-  - verify `matlab` is callable;
-  - verify `CBIG_CODE_DIR` resolves to the full CBIG tree;
-  - verify required MATLAB functions and MEX dependencies are discoverable.
-- One-subject smoke test on `100610`:
-  - generate four run dtseries;
-  - generate four profile `.mat` files with `profile_mat` shape `64984 x 1483`;
-  - run MSHBM and verify `lh_labels/rh_labels` contain IDs in `1..400`;
-  - convert to dlabel and verify 400-label map metadata.
-- Three-subject pipeline smoke test on `100610 102311 104416`:
-  - extract `reference/kong2022_mshbm` ROI/canonical8 timeseries;
-  - materialize FC caches;
-  - run one group atlas method/smoothing/hemi with `kong2022_mshbm`.
-- Regression checks:
-  - Route B `kong2022` outputs remain untouched;
-  - `kong2022_mshbm` paths are separate;
-  - docs and manifests state this is official MSHBM Route A, not FASTANS/PFM.
+## Defaults
+- `model=gMSHBM`
+- `num_rois=400`
+- `w=30`, `c=30`, `beta=50`
+- `run_lengths=900 900 900 900`
+- SGE MATLAB-only smoke uses single-job submission (`no array`), queue
+  `UI-HM`, and `mem_free=64G`.
+- The local connected-components helper uses MATLAB `graph/conncomp` instead
+  of the old `matlab_bgl` MEX path while preserving the connectedness check.
 
-## Assumptions
-- Use `w=100`, `c=50`.
-- Treat the four HCP runs as four MSHBM sessions.
-- Use slug `kong2022_mshbm`.
-- No FASTANS/PFM fallback is implemented.
-- If the local CBIG checkout lacks required utilities or MATLAB is unavailable, implementation stops at an explicit environment error rather than producing approximate outputs.
+## Preflight Requirements
+- `matlab` executable available in current shell
+- complete CBIG checkout containing:
+  - `stable_projects/brain_parcellation/Kong2022_ArealMSHBM`
+  - `CBIG_ArealMSHBM_parcellation_single_subject.m`
+  - `CBIG_ArealMSHBM_generate_profiles.m`
+  - `CBIG_ArealMSHBM_gMSHBM_generate_individual_parcellation.m`
+- CBIG dependencies present:
+  - `CBIG_ComputeCorrelationProfile.m`
+  - `CBIG_corr.m`
+  - `CBIG_ComputeConnectedComponentsFromSurface.m`
+  - `mtimesx`
+  - `external_packages/python/mapalign-master/mapalign/embed.py`
+  - `data/templates/surface/fs_LR_32k_downsample_900/fslr_downsample_900mesh_parcellation.dlabel.nii`
+- valid group prior `Params_Final.mat`
+- `py313` conda environment import path is used by
+  `CBIG_SPGrad_diffusion_embedding.sh` for diffusion embedding
+
+## Current Workspace Status
+The local `external/CBIG` tree has been supplemented with Kong2022_ArealMSHBM
+dependencies, including the vendored Python `mapalign-master` package required
+by the diffusion embedding step.
+
+The remaining blocker is SGE exit `137` during the MATLAB EM stage after
+`It is EM iteration.. 2..` / `Estep..`; no Route A label text outputs have been
+created yet.

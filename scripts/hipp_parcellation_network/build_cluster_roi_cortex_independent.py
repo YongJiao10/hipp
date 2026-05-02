@@ -34,6 +34,7 @@ DEFAULT_SHARED_ROOT = REPO_ROOT / "outputs_migration" / "hipp_group_inputs_share
 DEFAULT_PRESENT_DIR = REPO_ROOT / "present_group"
 DEFAULT_DATA_ROOT = REPO_ROOT / "data" / "hippunfold_input"
 DEFAULT_CORTEX_ASSETS_ROOT = REPO_ROOT / "outputs_migration" / "cortex_pfm"
+DEFAULT_PUBLIC_TEMPLATE_ROOT = REPO_ROOT / "external"
 DEFAULT_SCENE = REPO_ROOT / "config" / "manual_wb_scenes" / "cortex_manual.scene"
 DEFAULT_HIPP_SCENE = REPO_ROOT / "config" / "wb_locked_native_view_lateral_medial.scene"
 
@@ -45,7 +46,7 @@ METHOD_CHOICES = [
     "group-network-top",
     "group-network-all",
 ]
-METHODS_DEFAULT = ["group-intrinsic-spectral", "group-network-top", "group-network-all"]
+METHODS_DEFAULT = ["group-intrinsic-spectral", "group-network-spectral"]
 SMOOTHINGS = ["2mm", "4mm"]
 HEMIS = ["L", "R"]
 VIEW_SPECS = [
@@ -287,19 +288,96 @@ def make_label_gifti(labels: np.ndarray, label_items: list[tuple[int, str, tuple
 def resolve_cortex_assets(subject: str, data_root: Path, assets_root: Path, scene: Path) -> dict[str, Path]:
     anat = data_root / f"sub-{subject}" / "anat"
     assets = assets_root / f"sub-{subject}" / "assets"
-    out = {
-        "left_inflated": anat / f"sub-{subject}_hemi-L_space-fsLR_den-32k_desc-MSMAll_inflated.surf.gii",
-        "right_inflated": anat / f"sub-{subject}_hemi-R_space-fsLR_den-32k_desc-MSMAll_inflated.surf.gii",
-        "sulc_dscalar": anat / f"sub-{subject}_space-fsLR_den-32k_desc-MSMAll_sulc.dscalar.nii",
-        "left_sulc": assets / f"sub-{subject}_hemi-L_space-fsLR_den-32k_desc-MSMAll_sulc.func.gii",
-        "right_sulc": assets / f"sub-{subject}_hemi-R_space-fsLR_den-32k_desc-MSMAll_sulc.func.gii",
-        "scene": scene,
-        "dlabel": KONG2022_DLABEL_PATH,
+    public_root = DEFAULT_PUBLIC_TEMPLATE_ROOT.resolve()
+    fastans_tpl = public_root / "FASTANS" / "resources" / "templates"
+
+    def first_existing(paths: list[Path]) -> Path | None:
+        for p in paths:
+            if p.exists():
+                return p.resolve()
+        return None
+
+    left_inflated = first_existing(
+        [
+            anat / f"sub-{subject}_hemi-L_space-fsLR_den-32k_desc-MSMAll_inflated.surf.gii",
+            assets_root / f"sub-{subject}_hemi-L_space-fsLR_den-32k_desc-MSMAll_inflated.surf.gii",
+            public_root / f"sub-{subject}_hemi-L_space-fsLR_den-32k_desc-MSMAll_inflated.surf.gii",
+        ]
+    )
+    right_inflated = first_existing(
+        [
+            anat / f"sub-{subject}_hemi-R_space-fsLR_den-32k_desc-MSMAll_inflated.surf.gii",
+            assets_root / f"sub-{subject}_hemi-R_space-fsLR_den-32k_desc-MSMAll_inflated.surf.gii",
+            public_root / f"sub-{subject}_hemi-R_space-fsLR_den-32k_desc-MSMAll_inflated.surf.gii",
+        ]
+    )
+    sulc_dscalar = first_existing(
+        [
+            anat / f"sub-{subject}_space-fsLR_den-32k_desc-MSMAll_sulc.dscalar.nii",
+            assets_root / f"sub-{subject}_space-fsLR_den-32k_desc-MSMAll_sulc.dscalar.nii",
+            public_root / f"sub-{subject}_space-fsLR_den-32k_desc-MSMAll_sulc.dscalar.nii",
+        ]
+    )
+    left_sulc = first_existing(
+        [
+            assets / f"sub-{subject}_hemi-L_space-fsLR_den-32k_desc-MSMAll_sulc.func.gii",
+            assets_root / f"sub-{subject}_hemi-L_space-fsLR_den-32k_desc-MSMAll_sulc.func.gii",
+            fastans_tpl / "CORTEX_LEFT.32k_fs_LR..func.gii",
+        ]
+    )
+    right_sulc = first_existing(
+        [
+            assets / f"sub-{subject}_hemi-R_space-fsLR_den-32k_desc-MSMAll_sulc.func.gii",
+            assets_root / f"sub-{subject}_hemi-R_space-fsLR_den-32k_desc-MSMAll_sulc.func.gii",
+            fastans_tpl / "CORTEX_RIGHT.32k_fs_LR.func.gii",
+        ]
+    )
+    if (left_sulc is None or right_sulc is None) and sulc_dscalar is not None:
+        wb_cmd = (REPO_ROOT / "scripts" / "wb_command").resolve()
+        cache_dir = (REPO_ROOT / "tmp" / "cortex_template_cache" / f"sub-{subject}").resolve()
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        left_gen = cache_dir / f"sub-{subject}_hemi-L_space-fsLR_den-32k_desc-MSMAll_sulc.func.gii"
+        right_gen = cache_dir / f"sub-{subject}_hemi-R_space-fsLR_den-32k_desc-MSMAll_sulc.func.gii"
+        if not left_gen.exists() or not right_gen.exists():
+            run_cmd(
+                [
+                    str(wb_cmd),
+                    "-cifti-separate",
+                    str(sulc_dscalar),
+                    "COLUMN",
+                    "-metric",
+                    "CORTEX_LEFT",
+                    str(left_gen),
+                    "-metric",
+                    "CORTEX_RIGHT",
+                    str(right_gen),
+                ]
+            )
+        if left_sulc is None and left_gen.exists():
+            left_sulc = left_gen.resolve()
+        if right_sulc is None and right_gen.exists():
+            right_sulc = right_gen.resolve()
+
+    out: dict[str, Path | None] = {
+        "left_inflated": left_inflated,
+        "right_inflated": right_inflated,
+        "sulc_dscalar": sulc_dscalar,
+        "left_sulc": left_sulc,
+        "right_sulc": right_sulc,
+        "scene": scene.resolve() if scene.exists() else None,
+        "dlabel": KONG2022_DLABEL_PATH.resolve() if KONG2022_DLABEL_PATH.exists() else None,
     }
-    missing = [str(path) for path in out.values() if not Path(path).exists()]
+    missing = [name for name, path in out.items() if path is None]
     if missing:
-        raise FileNotFoundError("Missing cortex rendering assets:\n" + "\n".join(missing))
-    return out
+        details = {
+            "missing_keys": missing,
+            "subject": f"sub-{subject}",
+            "data_root": str(data_root),
+            "assets_root": str(assets_root),
+            "public_template_root": str(public_root),
+        }
+        raise FileNotFoundError("Missing cortex rendering assets:\n" + json.dumps(details, indent=2))
+    return {k: v for k, v in out.items() if v is not None}
 
 
 def compute_subject_cluster_roi_profiles(

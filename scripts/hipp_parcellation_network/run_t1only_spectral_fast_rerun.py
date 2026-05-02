@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import subprocess
 import sys
@@ -44,6 +45,55 @@ class Combo:
     hemi: str
 
 
+def load_subjects(path: Path) -> list[str]:
+    out: list[str] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        s = line.strip()
+        if not s:
+            continue
+        out.append(s.replace("sub-", ""))
+    if not out:
+        raise RuntimeError(f"No subjects found in manifest: {path}")
+    return out
+
+
+def detect_route_source(shared_root: Path, manifest: Path) -> str:
+    subjects = load_subjects(manifest)
+    tags: set[str] = set()
+    for sid in subjects:
+        ref = shared_root / f"sub-{sid}" / "reference" / "kong2022" / "reference_summary.json"
+        if not ref.exists():
+            raise FileNotFoundError(f"Missing reference summary for source detection: {ref}")
+        payload = json.loads(ref.read_text(encoding="utf-8"))
+        src = str(payload.get("reference_label_source", "")).lower()
+        tags.add("routea" if "route_a" in src else "routeb")
+    if len(tags) != 1:
+        raise RuntimeError(f"Mixed route sources detected in shared_root={shared_root}: {sorted(tags)}")
+    return next(iter(tags))
+
+
+def with_tokens(path: Path, route_tag: str, mode_tag: str) -> Path:
+    name = path.name
+    for token in (route_tag, mode_tag):
+        if token not in name.lower():
+            name = f"{name}_{token}"
+    return path.with_name(name)
+
+
+def enforce_provenance_stamp(root: Path, *, route_tag: str, mode_tag: str, kind: str) -> None:
+    root.mkdir(parents=True, exist_ok=True)
+    stamp = root / "route_isolation_manifest.json"
+    payload = {"kind": kind, "route_source": route_tag, "mode": mode_tag}
+    if stamp.exists():
+        old = json.loads(stamp.read_text(encoding="utf-8"))
+        if str(old.get("route_source")) != route_tag or str(old.get("mode")) != mode_tag:
+            raise RuntimeError(
+                f"{kind} provenance mismatch at {root}: existing={old}, requested={payload}. "
+                "Refusing cross-route or cross-mode reuse."
+            )
+    stamp.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
 def build_group_atlas_cmd(
     *,
     python_exe: str,
@@ -56,9 +106,10 @@ def build_group_atlas_cmd(
     coverage_threshold: float,
     subject_fc_top_fraction: float,
     subject_fc_binarize: bool,
+    redundancy_early_stop: bool,
 ) -> list[str]:
     binarize_flag = "--subject-fc-binarize" if bool(subject_fc_binarize) else "--no-subject-fc-binarize"
-    return [
+    cmd = [
         python_exe,
         str(GROUP_ATLAS),
         "--shared-root",
@@ -77,7 +128,6 @@ def build_group_atlas_cmd(
         f"{coverage_threshold:.2f}",
         "--k-selection-mode",
         "redundancy-aware",
-        "--redundancy-early-stop",
         "--subject-fc-top-fraction",
         f"{float(subject_fc_top_fraction):.6g}",
         binarize_flag,
@@ -90,6 +140,9 @@ def build_group_atlas_cmd(
         "--hemis",
         combo.hemi,
     ]
+    if bool(redundancy_early_stop):
+        cmd.append("--redundancy-early-stop")
+    return cmd
 
 
 def build_present_cmd(
@@ -99,7 +152,10 @@ def build_present_cmd(
     present_dir: Path,
     method: str,
     coverage_threshold: float,
+    route_tag: str,
+    mode_tag: str,
 ) -> list[str]:
+    manifest_name = f"group_overview_manifest_{route_tag}_{mode_tag}_{method}.json"
     return [
         PRESENT_PYTHON,
         str(PRESENT),
@@ -113,6 +169,13 @@ def build_present_cmd(
         method,
         "--coverage-threshold",
         f"{coverage_threshold:.2f}",
+        "--route-tag",
+        route_tag,
+        "--mode-tag",
+        mode_tag,
+        "--manifest-name",
+        manifest_name,
+        "--skip-readme",
     ]
 
 
@@ -130,7 +193,10 @@ def run_method_combo_parallel(
     coverage_threshold: float,
     subject_fc_top_fraction: float,
     subject_fc_binarize: bool,
+    redundancy_early_stop: bool,
     log_dir: Path,
+    route_tag: str,
+    mode_tag: str,
 ) -> None:
     combos = [Combo(method=method, smoothing=smoothing, hemi=hemi) for smoothing in SMOOTHINGS for hemi in HEMIS]
     child_env = os.environ.copy()
@@ -150,6 +216,7 @@ def run_method_combo_parallel(
             coverage_threshold=coverage_threshold,
             subject_fc_top_fraction=subject_fc_top_fraction,
             subject_fc_binarize=subject_fc_binarize,
+            redundancy_early_stop=redundancy_early_stop,
         )
         with log_path.open("wb") as fout:
             fout.write(("CMD: " + " ".join(cmd) + "\n\n").encode("utf-8"))
@@ -186,6 +253,7 @@ def run_method_combo_parallel(
                     coverage_threshold=coverage_threshold,
                     subject_fc_top_fraction=subject_fc_top_fraction,
                     subject_fc_binarize=subject_fc_binarize,
+                    redundancy_early_stop=redundancy_early_stop,
                 )
                 with next_log.open("wb") as fout:
                     fout.write(("CMD: " + " ".join(next_cmd) + "\n\n").encode("utf-8"))
@@ -206,6 +274,8 @@ def run_method_combo_parallel(
         present_dir=present_dir,
         method=method,
         coverage_threshold=coverage_threshold,
+        route_tag=route_tag,
+        mode_tag=mode_tag,
     )
     print(f"[present] {method}", flush=True)
     subprocess.run(present_cmd, check=True, cwd=str(REPO_ROOT), env=child_env)
@@ -226,7 +296,26 @@ def main() -> int:
     parser.add_argument("--subject-fc-binarize", dest="subject_fc_binarize", action="store_true")
     parser.add_argument("--no-subject-fc-binarize", dest="subject_fc_binarize", action="store_false")
     parser.set_defaults(subject_fc_binarize=True)
+    parser.add_argument(
+        "--redundancy-early-stop",
+        dest="redundancy_early_stop",
+        action="store_true",
+        help="Speed mode: stop larger K once first redundant K is observed (default: enabled).",
+    )
+    parser.add_argument(
+        "--no-redundancy-early-stop",
+        dest="redundancy_early_stop",
+        action="store_false",
+        help="Full mode: evaluate all candidate K values without early stopping.",
+    )
+    parser.set_defaults(redundancy_early_stop=True)
     parser.add_argument("--combo-jobs", type=int, default=DEFAULT_COMBO_JOBS)
+    parser.add_argument(
+        "--route-source",
+        choices=["auto", "routea", "routeb"],
+        default="auto",
+        help="Expected upstream source. `auto` detects from shared_root reference summaries.",
+    )
     args = parser.parse_args()
 
     combo_jobs = max(1, min(int(args.combo_jobs), len(SMOOTHINGS) * len(HEMIS), MAX_REPO_CONCURRENCY))
@@ -236,12 +325,24 @@ def main() -> int:
         )
     batch_root = Path(args.hippunfold_batch_root).resolve()
     shared_root = Path(args.shared_root).resolve()
-    group_root = Path(args.group_root).resolve()
     manifest = Path(args.subjects_manifest).resolve()
-    group_avg = Path(args.group_average_surfaces_dir).resolve()
+    route_tag_detected = detect_route_source(shared_root, manifest)
+    route_tag = route_tag_detected if args.route_source == "auto" else str(args.route_source)
+    if str(args.route_source) != "auto" and route_tag != route_tag_detected:
+        raise RuntimeError(
+            f"Requested --route-source={args.route_source} but detected upstream source={route_tag_detected}. "
+            "Refusing to run with mismatched route provenance."
+        )
+    mode_tag = "allon" if bool(args.subject_fc_binarize) else "alloff"
+    group_root = with_tokens(Path(args.group_root).resolve(), route_tag, mode_tag)
     present_dir = Path(args.present_dir).resolve()
+    group_avg = Path(args.group_average_surfaces_dir).resolve()
+    enforce_provenance_stamp(group_root, route_tag=route_tag, mode_tag=mode_tag, kind="group_root")
+    present_dir.mkdir(parents=True, exist_ok=True)
     route_root = manifest.parent.parent
-    log_dir = route_root / "logs" / f"spectral_fast_rerun_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
+    log_dir = route_root / "logs" / (
+        f"spectral_fast_rerun_{route_tag}_{mode_tag}_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
+    )
     log_dir.mkdir(parents=True, exist_ok=True)
 
     print(
@@ -251,6 +352,10 @@ def main() -> int:
         f"coverage_threshold={float(args.coverage_threshold):.2f} "
         f"subject_fc_top_fraction={float(args.subject_fc_top_fraction):.6g} "
         f"subject_fc_binarize={bool(args.subject_fc_binarize)} "
+        f"redundancy_early_stop={bool(args.redundancy_early_stop)} "
+        f"route_source={route_tag} "
+        f"group_root={group_root} "
+        f"present_dir={present_dir} "
         f"thread_env={THREAD_ENV_OVERRIDES}",
         flush=True,
     )
@@ -269,7 +374,10 @@ def main() -> int:
             coverage_threshold=float(args.coverage_threshold),
             subject_fc_top_fraction=float(args.subject_fc_top_fraction),
             subject_fc_binarize=bool(args.subject_fc_binarize),
+            redundancy_early_stop=bool(args.redundancy_early_stop),
             log_dir=log_dir,
+            route_tag=route_tag,
+            mode_tag=mode_tag,
         )
         print(f"[method-done] {method}", flush=True)
     print(f"[done] logs={log_dir}", flush=True)

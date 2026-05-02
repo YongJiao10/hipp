@@ -14,6 +14,8 @@ This directory is organized by responsibility.
   - `materialize_kong7_kong8_pearson_partial_fc.py`
   - `run_merged_canonical_group_atlas.py`
   - `build_present_group_overview_merged_canonical.py`
+  - `build_present_group_t1only_matrix.py`
+  - `run_t1only_spectral_fast_rerun.py`
   - `materialize_group_functional_atlas_labels.py`
 
 Top-level `scripts/` still contains broader workflow helpers shared across the repository, such as HippUnfold wrappers and environment utilities.

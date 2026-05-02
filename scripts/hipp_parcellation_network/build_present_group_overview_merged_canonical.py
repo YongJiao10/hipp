@@ -28,10 +28,11 @@ METHOD_CHOICES = [
     "group-network-top",
     "group-network-all",
 ]
+ROUTE_TAG_CHOICES = ["routea", "routeb"]
+MODE_TAG_CHOICES = ["allon", "alloff"]
 METHODS_DEFAULT = [
     "group-intrinsic-spectral",
-    "group-network-top",
-    "group-network-all",
+    "group-network-spectral",
 ]
 ATLASES = ["kong2019", "kong2019_8net", "kong2022"]
 SMOOTHINGS = ["2mm", "4mm"]
@@ -415,6 +416,8 @@ def render_combo(
     atlas: str,
     coverage_tag: str,
     scene: Path,
+    route_tag: str | None,
+    mode_tag: str | None,
 ) -> dict[str, object]:
     fig = plt.figure(figsize=(15.4, 12.2), dpi=180, constrained_layout=True)
     gs = fig.add_gridspec(nrows=2, ncols=2, width_ratios=[1.40, 1.30], hspace=0.06, wspace=0.05)
@@ -653,8 +656,18 @@ def render_combo(
             }
         )
 
-    out_png = present_dir / f"{atlas}_{method}_group_overview.png"
-    fig.suptitle(f"Group Overview | {atlas} | {method}", fontsize=FS_SUPTITLE)
+    name_bits = [atlas, method, "group_overview"]
+    if route_tag:
+        name_bits.append(route_tag)
+    if mode_tag:
+        name_bits.append(mode_tag)
+    out_png = present_dir / f"{'_'.join(name_bits)}.png"
+    fig.suptitle(
+        f"Group Overview | {atlas} | {method}"
+        + (f" | {route_tag}" if route_tag else "")
+        + (f" | {mode_tag}" if mode_tag else ""),
+        fontsize=FS_SUPTITLE,
+    )
     out_png.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_png, dpi=300)
     plt.close(fig)
@@ -665,15 +678,52 @@ def write_readme(present_dir: Path, items: list[dict[str, object]]) -> None:
     lines = [
         "# present_group merged-canonical overview",
         "",
-        "| atlas | method | overview | smoothings | key metrics |",
-        "|---|---|---|---|---|",
+        "| atlas | method | route | mode | overview | smoothings | key metrics |",
+        "|---|---|---|---|---|---|---|",
     ]
     for item in sorted(items, key=lambda x: (str(x["atlas"]), str(x["method"]))):
         png = Path(str(item["overview_png"])).name
         sm = ", ".join(str(s) for s in item.get("smoothings", []))
         metric = str(item.get("metric_summary", ""))
-        lines.append(f"| {item['atlas']} | {item['method']} | [{png}]({png}) | {sm} | {metric} |")
+        route = str(item.get("route_tag", ""))
+        mode = str(item.get("mode_tag", ""))
+        lines.append(f"| {item['atlas']} | {item['method']} | {route} | {mode} | [{png}]({png}) | {sm} | {metric} |")
     (present_dir / "README.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def ensure_combo_ready(
+    *,
+    group_root: Path,
+    method: str,
+    atlas: str,
+    coverage_tag: str,
+    smoothings: list[str] | None = None,
+    hemis: list[str] | None = None,
+) -> None:
+    sm = smoothings or ["2mm", "4mm"]
+    hs = hemis or ["L", "R"]
+    problems: list[str] = []
+    for smoothing in sm:
+        for hemi in hs:
+            run_dir = group_root / method / atlas / smoothing / coverage_tag / f"hemi_{hemi}"
+            manifest_path = run_dir / "group_atlas_manifest.json"
+            if not manifest_path.exists():
+                problems.append(f"missing_manifest: {manifest_path}")
+                continue
+            m = load_json(manifest_path)
+            if str(m.get("status", "")) != "ok":
+                problems.append(f"manifest_not_ok: {manifest_path} status={m.get('status')}")
+                continue
+            # For cluster-based methods, group labels must exist.
+            if method not in CLUSTERLESS_METHODS:
+                labels = run_dir / "group_labels_final.npy"
+                if not labels.exists():
+                    problems.append(f"missing_group_labels: {labels}")
+    if problems:
+        raise RuntimeError(
+            "Cluster outputs are not ready. Do not skip clustering before present rendering.\n"
+            + "\n".join(problems)
+        )
 
 
 def main() -> int:
@@ -684,6 +734,29 @@ def main() -> int:
     p.add_argument("--atlases", nargs="+", default=ATLASES)
     p.add_argument("--coverage-threshold", type=float, default=0.80)
     p.add_argument("--scene", default=str(DEFAULT_SCENE))
+    p.add_argument("--route-tag", choices=ROUTE_TAG_CHOICES, default=None)
+    p.add_argument("--mode-tag", choices=MODE_TAG_CHOICES, default=None)
+    p.add_argument(
+        "--manifest-name",
+        default="group_overview_manifest.json",
+        help="Output manifest filename under --present-dir.",
+    )
+    p.add_argument(
+        "--skip-readme",
+        action="store_true",
+        help="Skip writing README.md (useful when an upstream driver writes a consolidated README).",
+    )
+    p.add_argument(
+        "--skip-manifest",
+        action="store_true",
+        help="Skip writing manifest JSON (useful when an upstream driver writes a consolidated manifest).",
+    )
+    p.add_argument(
+        "--allow-missing-combos",
+        action="store_true",
+        help="Allow rendering placeholders when group-atlas outputs are missing. "
+        "Default is strict: require complete clustering outputs before rendering.",
+    )
     args = p.parse_args()
 
     group_root = Path(args.group_root).resolve()
@@ -694,6 +767,13 @@ def main() -> int:
     items: list[dict[str, object]] = []
     for atlas in args.atlases:
         for method in args.methods:
+            if not bool(args.allow_missing_combos):
+                ensure_combo_ready(
+                    group_root=group_root,
+                    method=method,
+                    atlas=atlas,
+                    coverage_tag=tau_tag,
+                )
             meta = render_combo(
                 group_root=group_root,
                 present_dir=present_dir,
@@ -701,6 +781,8 @@ def main() -> int:
                 atlas=atlas,
                 coverage_tag=tau_tag,
                 scene=Path(args.scene).resolve(),
+                route_tag=args.route_tag,
+                mode_tag=args.mode_tag,
             )
             row_meta = meta["rows"]
             metric = (
@@ -721,12 +803,17 @@ def main() -> int:
                     "overview_png": meta["overview_png"],
                     "smoothings": [r["smoothing"] for r in row_meta],
                     "metric_summary": metric,
+                    "route_tag": args.route_tag,
+                    "mode_tag": args.mode_tag,
+                    "source_group_root": str(group_root),
                 }
             )
 
     manifest = {"present_dir": str(present_dir), "count": len(items), "items": items}
-    (present_dir / "group_overview_manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
-    write_readme(present_dir, items)
+    if not bool(args.skip_manifest):
+        (present_dir / args.manifest_name).write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    if not bool(args.skip_readme):
+        write_readme(present_dir, items)
     print(json.dumps({"present_dir": str(present_dir), "count": len(items)}, indent=2))
     return 0
 

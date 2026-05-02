@@ -254,6 +254,48 @@ The launcher [`scripts/run_hippunfold_local.sh`](/Users/jy/Documents/HippoMaps-n
 
 It sets the following runtime layers before starting HippUnfold:
 
+### Kong2022 Route A MATLAB Runtime
+
+The SGE-only Kong2022_ArealMSHBM smoke does not use `hippo2` for its diffusion
+embedding helper. `external/CBIG/utilities/matlab/speedup_gradients/CBIG_SPGrad_diffusion_embedding.sh`
+activates `/Users/yojiao/miniconda3` environment `py313`, then imports CBIG's
+vendored Python package from:
+
+```text
+external/CBIG/external_packages/python/mapalign-master/mapalign/embed.py
+```
+
+If that directory is missing, MATLAB reaches `Compute diffusion embedding
+matrix ...` and fails with `ModuleNotFoundError: No module named 'mapalign'`.
+After embedding, profile generation also requires the CBIG fsLR downsample
+template:
+
+```text
+external/CBIG/data/templates/surface/fs_LR_32k_downsample_900/fslr_downsample_900mesh_parcellation.dlabel.nii
+```
+
+The same profile-generation stage calls the CBIG MATLAB stats helper:
+
+```text
+external/CBIG/utilities/matlab/stats/CBIG_corr.m
+```
+
+The individual parcellation connectedness check calls:
+
+```text
+external/CBIG/utilities/matlab/parcellation/CBIG_ComputeConnectedComponentsFromSurface.m
+```
+
+In this workspace that helper is implemented with MATLAB `graph/conncomp`
+instead of the `matlab_bgl` `components_mex` call to avoid relying on the old
+MEX path during the EM connectedness check.
+
+The SGE smoke launcher requests `mem_free=32G` and uses `-tc 1` for the
+two-subject array so only one MATLAB EM job runs at a time.
+Even with this serialized launcher, the current smoke still reaches SGE exit
+`137` after the second EM `Estep..`; this is the current runtime blocker for
+Route A MATLAB label generation.
+
 ```text
 Setting / Path                                 Purpose
 --------------------------------------------  -------------------------------------------

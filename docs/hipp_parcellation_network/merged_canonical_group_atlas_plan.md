@@ -4,7 +4,7 @@
 
 This document is the active reference for hippocampal **group-level** analysis in this repository.
 
-The workflow builds merged-canonical hippocampal group atlases for the default 153-subject QC cohort and stops at the group-atlas stage. Individual inference and learned group priors are out of scope.
+The workflow builds merged-canonical hippocampal group atlases for the active T1only 151-subject QC cohort and stops at the group-atlas stage. Individual inference and learned group priors are out of scope.
 
 ## Active Methods
 
@@ -45,9 +45,10 @@ Required input classes:
 
 Note: one-sided partial-FC caches (`hipp_vertex_to_network_partial_fc*.npy`) remain on disk but are no longer consumed by active methods.
 
-Default subject manifest:
+Default subject manifests:
 
-- `manifests/hcp_7t_hippocampus_fmri_qc_pass_153.txt`
+- `outputs_experiments/hippunfold_recommended_t1w_20260423/kong2022_route_b/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_151.txt`
+- `outputs_experiments/hippunfold_recommended_t1w_20260423/kong2022_route_b/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt`
 
 ## Canonical Network Merge
 
@@ -132,20 +133,27 @@ Presentation companion:
 - built by `build_present_group_overview_merged_canonical.py`
 - public figure set is restricted to the six active atlas+method overview PNGs
 
-## Route A (Kong2022 individualized PFM) - TODO
+## Route A (Kong2022_ArealMSHBM) - Minimal Loop Implemented
 
-Route A is intentionally stubbed in this change set and is not runnable yet.
+Route A minimal loop is now implemented against official `Kong2022_ArealMSHBM` (not Kong2019 compatibility wrappers):
 
-- asset pointer: `external/Schaefer2018_Kong2022/Params_Final.mat`
-- code placeholder: `scripts/cortex/run_cortex_pfm_subject_kong2022.py`
-- planned delta vs Kong2019 Route A:
-  - prior source is `Params_Final.mat` (Kong2022)
-  - individualized target is 400 ROI labels (not 17 parent networks)
-  - expected outputs would be Kong2022 individualized label files plus a companion extractor
-- blockers:
-  - MATLAB/CBIG individualized pipeline is not wired in this repository
-  - per-subject label-id consistency policy for 400 ROI outputs is still open
-  - individualized Kong2022 ROI extractor implementation is pending
+- subject driver: `scripts/cortex/run_cortex_mshbm_subject.py`
+- MATLAB wrapper: `scripts/cortex/matlab/run_kong2022_mshbm_subject.m`
+- batch smoke runner: `scripts/cortex/run_cortex_kong2022_mshbm_batch.py`
+- subject figure renderer: `scripts/cortex/plot_cortex_kong2022_mshbm.py`
+
+Current implemented scope:
+
+- fs_LR_32k ArealMSHBM individualized parcellation (default `gMSHBM`, 400 ROIs)
+- subject-specific `label.gii` and `dlabel.nii`
+- per-subject overview PNG
+- strict fail-fast preflight for MATLAB/CBIG dependency gaps
+- outputs rooted at `outputs_experiments/cortex_kong2022_areal_mshbm/`
+
+Still pending for full Route A integration:
+
+- downstream `kong2022_areal_mshbm` reference extraction/FC/group-atlas wiring
+- cohort-scale production runs beyond two-subject smoke
 
 ## Archive Boundary
 
