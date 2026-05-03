@@ -17,12 +17,20 @@ GROUP_ATLAS = REPO_ROOT / "scripts" / "hipp_parcellation_network" / "run_merged_
 PRESENT = REPO_ROOT / "scripts" / "hipp_parcellation_network" / "build_present_group_overview_merged_canonical.py"
 
 DEFAULT_BATCH_ROOT = REPO_ROOT / "outputs_experiments" / "hippunfold_recommended_t1w_20260423" / "dense_corobl_batch"
-DEFAULT_ROUTE_ROOT = REPO_ROOT / "outputs_experiments" / "hippunfold_recommended_t1w_20260423" / "kong2022_route_b"
-DEFAULT_SHARED_ROOT = DEFAULT_ROUTE_ROOT / "hipp_group_inputs_shared"
+DEFAULT_ROUTE_ROOT = REPO_ROOT / "outputs_experiments" / "hippunfold_recommended_t1w_20260423" / "kong2022"
+DEFAULT_SHARED_ROOT = DEFAULT_ROUTE_ROOT / "shared_inputs" / "routeb_151"
+DEFAULT_SURFACE_ROOT = DEFAULT_ROUTE_ROOT / "shared_inputs" / "surface_151"
 DEFAULT_GROUP_ROOT = DEFAULT_ROUTE_ROOT / "hipp_group_merged_canonical_atlas"
 DEFAULT_PRESENT_DIR = REPO_ROOT / "present_group_t1only"
-DEFAULT_MANIFEST = DEFAULT_ROUTE_ROOT / "manifests" / "hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt"
-DEFAULT_GROUP_AVG = DEFAULT_GROUP_ROOT / "group_average_surfaces"
+DEFAULT_MANIFEST = (
+    REPO_ROOT
+    / "outputs_experiments"
+    / "hippunfold_recommended_t1w_20260423"
+    / "kong2022"
+    / "manifests"
+    / "hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt"
+)
+DEFAULT_GROUP_AVG = DEFAULT_ROUTE_ROOT / "templates" / "hipp_group_average_t1only_151" / "group_average_surfaces"
 
 MAX_REPO_CONCURRENCY = 10
 DEFAULT_COMBO_JOBS = 4
@@ -36,6 +44,7 @@ THREAD_ENV_OVERRIDES = {
     "MKL_NUM_THREADS": "1",
     "NUMEXPR_NUM_THREADS": "1",
 }
+FORBIDDEN_ROUTEB_TOKEN = "kong2022_route_b"
 
 
 @dataclass(frozen=True)
@@ -94,11 +103,28 @@ def enforce_provenance_stamp(root: Path, *, route_tag: str, mode_tag: str, kind:
     stamp.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
+def enforce_routea_path_compliance(shared_root: Path, manifest: Path, group_root_raw: Path) -> None:
+    violations: list[str] = []
+    for name, path in [
+        ("--shared-root", shared_root),
+        ("--subjects-manifest", manifest),
+        ("--group-root", group_root_raw),
+    ]:
+        if FORBIDDEN_ROUTEB_TOKEN in path.parts:
+            violations.append(f"{name}={path}")
+    if violations:
+        raise RuntimeError(
+            "RouteA compliance violation: routea mode forbids RouteB-rooted paths for shared-root/manifest/group-root.\n"
+            + "\n".join(violations)
+        )
+
+
 def build_group_atlas_cmd(
     *,
     python_exe: str,
     combo: Combo,
     shared_root: Path,
+    surface_root: Path,
     group_root: Path,
     manifest: Path,
     batch_root: Path,
@@ -114,6 +140,8 @@ def build_group_atlas_cmd(
         str(GROUP_ATLAS),
         "--shared-root",
         str(shared_root),
+        "--surface-root",
+        str(surface_root),
         "--out-root",
         str(group_root),
         "--subjects-manifest",
@@ -184,6 +212,7 @@ def run_method_combo_parallel(
     python_exe: str,
     method: str,
     shared_root: Path,
+    surface_root: Path,
     group_root: Path,
     manifest: Path,
     batch_root: Path,
@@ -209,6 +238,7 @@ def run_method_combo_parallel(
             python_exe=python_exe,
             combo=combo,
             shared_root=shared_root,
+            surface_root=surface_root,
             group_root=group_root,
             manifest=manifest,
             batch_root=batch_root,
@@ -246,6 +276,7 @@ def run_method_combo_parallel(
                     python_exe=python_exe,
                     combo=next_combo,
                     shared_root=shared_root,
+                    surface_root=surface_root,
                     group_root=group_root,
                     manifest=manifest,
                     batch_root=batch_root,
@@ -287,6 +318,7 @@ def main() -> int:
     )
     parser.add_argument("--hippunfold-batch-root", default=str(DEFAULT_BATCH_ROOT))
     parser.add_argument("--shared-root", default=str(DEFAULT_SHARED_ROOT))
+    parser.add_argument("--surface-root", default=str(DEFAULT_SURFACE_ROOT))
     parser.add_argument("--group-root", default=str(DEFAULT_GROUP_ROOT))
     parser.add_argument("--subjects-manifest", default=str(DEFAULT_MANIFEST))
     parser.add_argument("--group-average-surfaces-dir", default=str(DEFAULT_GROUP_AVG))
@@ -325,7 +357,9 @@ def main() -> int:
         )
     batch_root = Path(args.hippunfold_batch_root).resolve()
     shared_root = Path(args.shared_root).resolve()
+    surface_root = Path(args.surface_root).resolve()
     manifest = Path(args.subjects_manifest).resolve()
+    group_root_raw = Path(args.group_root).resolve()
     route_tag_detected = detect_route_source(shared_root, manifest)
     route_tag = route_tag_detected if args.route_source == "auto" else str(args.route_source)
     if str(args.route_source) != "auto" and route_tag != route_tag_detected:
@@ -333,8 +367,10 @@ def main() -> int:
             f"Requested --route-source={args.route_source} but detected upstream source={route_tag_detected}. "
             "Refusing to run with mismatched route provenance."
         )
+    if route_tag == "routea":
+        enforce_routea_path_compliance(shared_root, manifest, group_root_raw)
     mode_tag = "allon" if bool(args.subject_fc_binarize) else "alloff"
-    group_root = with_tokens(Path(args.group_root).resolve(), route_tag, mode_tag)
+    group_root = with_tokens(group_root_raw, route_tag, mode_tag)
     present_dir = Path(args.present_dir).resolve()
     group_avg = Path(args.group_average_surfaces_dir).resolve()
     enforce_provenance_stamp(group_root, route_tag=route_tag, mode_tag=mode_tag, kind="group_root")
@@ -365,6 +401,7 @@ def main() -> int:
             python_exe=sys.executable,
             method=method,
             shared_root=shared_root,
+            surface_root=surface_root,
             group_root=group_root,
             manifest=manifest,
             batch_root=batch_root,

@@ -11,6 +11,7 @@
 Optional spectral branch (opt-in):
 
 - `group-network-spectral` (cluster-based)
+- `group-roi-sim-spectral` (design frozen in this round; not implemented/enabled)
 
 ## Shared Upstream
 
@@ -21,6 +22,8 @@ Optional spectral branch (opt-in):
    - intrinsic FC: `scripts/hipp_parcellation_network/materialize_intrinsic_vertex_to_vertex_fc.py`
 3. Run group atlas:
    - `scripts/hipp_parcellation_network/run_merged_canonical_group_atlas.py`
+   - Surface topology and long-axis order are derived from the shared group-average template surfaces.
+   - Manifest subjects are validated for topology compatibility against that shared template.
 
 ## Branch-Specific Logic
 
@@ -62,6 +65,12 @@ Optional spectral branch (opt-in):
   - assignment uses raw TopN positive ROI majority (`N = min(20, n_positive_roi)`)
   - overview confidence labels, ambiguity text, and network naming use TopN count fields rather than canonical-network Fisher-z maxima
 - Uses the same optional redundancy-aware `K` selection and preprocessing knobs as intrinsic spectral.
+
+### `group-roi-sim-spectral` (opt-in, experimental)
+
+- Frozen plan only in this round (`status=frozen`, `not implemented`).
+- Refer to `docs/hipp_parcellation_network/group_roi_sim_spectral_frozen_plan.md`.
+- Do not include this branch in default or urgent rerun method sets.
 
 ### `group-network-top`
 

@@ -1283,6 +1283,19 @@ def main() -> int:
                     f"Missing opposite-hemi manifest required for hippomaps rendering: {other_manifest_path}"
                 )
             other_manifest = load_json(other_manifest_path)
+            template_spec_raw = manifest.get("template_spec_path")
+            if template_spec_raw is None or str(template_spec_raw).strip().lower() in {"", "none", "null"}:
+                skipped.append(
+                    {
+                        "atlas": combo.atlas,
+                        "method": combo.method,
+                        "smoothing": combo.smoothing,
+                        "hemi": combo.hemi,
+                        "reason": "missing_template_spec_path_subject_consensus",
+                        "run_dir": str(run_dir),
+                    }
+                )
+                continue
             this_surface = Path(str(manifest["template_left_or_right_surface"]))
             other_surface = Path(str(other_manifest["template_left_or_right_surface"]))
             left_surface = this_surface if combo.hemi == "L" else other_surface
@@ -1304,7 +1317,7 @@ def main() -> int:
                 support_mask=support,
                 combo_hemi=combo.hemi,
                 template_subject=str(manifest.get("template_subject", "")).replace("sub-", ""),
-                template_spec_path=Path(str(manifest["template_spec_path"])),
+                template_spec_path=Path(str(template_spec_raw)),
                 left_surface=left_surface,
                 right_surface=right_surface,
             )

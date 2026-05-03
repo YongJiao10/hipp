@@ -18,8 +18,9 @@ from nibabel.gifti import GiftiDataArray, GiftiImage
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_BATCH_ROOT = REPO_ROOT / "outputs_experiments" / "hippunfold_recommended_t1w_20260423" / "dense_corobl_batch"
-DEFAULT_ROUTE_ROOT = REPO_ROOT / "outputs_experiments" / "hippunfold_recommended_t1w_20260423" / "kong2022_route_b"
-DEFAULT_SHARED_ROOT = DEFAULT_ROUTE_ROOT / "hipp_group_inputs_shared"
+DEFAULT_ROUTE_ROOT = REPO_ROOT / "outputs_experiments" / "hippunfold_recommended_t1w_20260423" / "kong2022"
+DEFAULT_SHARED_ROOT = DEFAULT_ROUTE_ROOT / "shared_inputs" / "surface_151"
+DEFAULT_TEMPLATE_ROOT = DEFAULT_ROUTE_ROOT / "templates" / "hipp_group_average_t1only_151"
 DEFAULT_BOLD_ROOT = Path("/home/yojiao/LSS/jianglab/3_Data_Working/HCP_7T_Hippocampus/rsfmri_volume")
 SAMPLE_SCRIPT = REPO_ROOT / "scripts" / "common" / "sample_hipp_surface_timeseries.py"
 QC_SCRIPT = REPO_ROOT / "scripts" / "hipp_parcellation_network" / "build_t1only_qc_manifest.py"
@@ -334,8 +335,8 @@ def save_surface(path: Path, coords: np.ndarray, faces: np.ndarray) -> None:
     nib.save(img, str(path))
 
 
-def build_group_average_surfaces(batch_root: Path, route_root: Path, subjects: list[str]) -> None:
-    out_dir = route_root / "hipp_group_merged_canonical_atlas" / "group_average_surfaces"
+def build_group_average_surfaces(batch_root: Path, template_root: Path, subjects: list[str]) -> None:
+    out_dir = template_root / "group_average_surfaces"
     outputs: list[dict[str, object]] = []
     inputs: list[dict[str, object]] = []
     for hemi in HEMIS:
@@ -402,6 +403,7 @@ def main() -> int:
     parser.add_argument("--hippunfold-batch-root", default=str(DEFAULT_BATCH_ROOT))
     parser.add_argument("--route-root", default=str(DEFAULT_ROUTE_ROOT))
     parser.add_argument("--shared-root", default=str(DEFAULT_SHARED_ROOT))
+    parser.add_argument("--template-root", default=str(DEFAULT_TEMPLATE_ROOT))
     parser.add_argument("--bold-root", default=str(DEFAULT_BOLD_ROOT))
     parser.add_argument("--subjects-manifest", default=None)
     parser.add_argument("--subjects", nargs="*", default=None)
@@ -414,6 +416,7 @@ def main() -> int:
     batch_root = Path(args.hippunfold_batch_root).resolve()
     route_root = Path(args.route_root).resolve()
     shared_root = Path(args.shared_root).resolve()
+    template_root = Path(args.template_root).resolve()
     bold_root = Path(args.bold_root).resolve()
     log_dir = route_root / "logs" / "prepare_t1only_group_inputs"
     log_dir.mkdir(parents=True, exist_ok=True)
@@ -468,7 +471,7 @@ def main() -> int:
         run_parallel("smooth", smooth_todo, jobs, run_smoothing, str(batch_root), str(shared_root))
     if args.stage in {"all", "group-average"}:
         print(f"[info] group-average subjects={len(pass_subjects)}", flush=True)
-        build_group_average_surfaces(batch_root, route_root, pass_subjects)
+        build_group_average_surfaces(batch_root, template_root, pass_subjects)
 
     save_json(
         route_root / "prepare_t1only_group_inputs_manifest.json",
@@ -479,6 +482,7 @@ def main() -> int:
             "git_commit": git_commit(),
             "hippunfold_batch_root": str(batch_root),
             "shared_root": str(shared_root),
+            "template_root": str(template_root),
             "n_subjects_total": int(len(subjects)),
             "n_subjects_dice_pass": int(len(dice_subjects)),
             "n_subjects_qc_pass": int(len(pass_subjects)),

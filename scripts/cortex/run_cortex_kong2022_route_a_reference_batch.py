@@ -13,19 +13,33 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 PYTHON_EXE = sys.executable or "python"
 EXTRACT_SCRIPT = REPO_ROOT / "scripts" / "cortex" / "extract_cortex_kong2022_route_a_roi_timeseries.py"
 DEFAULT_SHARED_ROOT = (
-    REPO_ROOT / "outputs_experiments" / "hippunfold_recommended_t1w_20260423" / "kong2022_route_a" / "hipp_group_inputs_shared"
+    REPO_ROOT
+    / "outputs_experiments"
+    / "hippunfold_recommended_t1w_20260423"
+    / "kong2022"
+    / "shared_inputs"
+    / "routea_151"
 )
 DEFAULT_ROUTE_A_ROOT = REPO_ROOT / "outputs_experiments" / "cortex_kong2022_areal_mshbm"
 DEFAULT_MANIFEST = (
     REPO_ROOT
     / "outputs_experiments"
     / "hippunfold_recommended_t1w_20260423"
-    / "kong2022_route_b"
+    / "kong2022"
     / "manifests"
     / "hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt"
 )
 MAX_CONCURRENCY = 10
 SOURCE_TAG = "route_a_kong2022_areal_mshbm"
+FORBIDDEN_ROUTEB_TOKEN = "kong2022_route_b"
+
+
+def validate_routea_path(path: Path, arg_name: str) -> None:
+    if FORBIDDEN_ROUTEB_TOKEN in path.parts:
+        raise RuntimeError(
+            f"RouteA compliance violation: {arg_name} points into a RouteB tree: {path}. "
+            "Use route-agnostic/shared kong2022 manifests and RouteA-compatible roots."
+        )
 
 
 def load_subjects_from_manifest(path: Path) -> list[str]:
@@ -94,10 +108,13 @@ def main() -> int:
 
     shared_root = Path(args.shared_root).resolve()
     route_a_root = Path(args.route_a_root).resolve()
+    subjects_manifest = Path(args.subjects_manifest).resolve()
+    validate_routea_path(shared_root, "--shared-root")
+    validate_routea_path(subjects_manifest, "--subjects-manifest")
     subjects = (
         [str(s).replace("sub-", "") for s in args.subjects]
         if args.subjects
-        else load_subjects_from_manifest(Path(args.subjects_manifest).resolve())
+        else load_subjects_from_manifest(subjects_manifest)
     )
 
     if args.resume:

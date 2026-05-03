@@ -12,8 +12,11 @@ import numpy as np
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_SHARED_ROOT = REPO_ROOT / "outputs_migration" / "hipp_group_inputs_shared"
-DEFAULT_SUBJECTS = REPO_ROOT / "manifests" / "hcp_7t_hippocampus_fmri_qc_pass_153.txt"
+DEFAULT_ROUTE_ROOT = REPO_ROOT / "outputs_experiments" / "hippunfold_recommended_t1w_20260423" / "kong2022"
+DEFAULT_SHARED_INPUTS_ROOT = DEFAULT_ROUTE_ROOT / "shared_inputs"
+DEFAULT_SHARED_ROOT = DEFAULT_SHARED_INPUTS_ROOT / "routeb_151"
+DEFAULT_SURFACE_ROOT = DEFAULT_SHARED_INPUTS_ROOT / "surface_151"
+DEFAULT_SUBJECTS = DEFAULT_ROUTE_ROOT / "manifests" / "hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt"
 ATLAS = "kong2022"
 SMOOTHINGS = ["2mm", "4mm"]
 HEMIS = ["L", "R"]
@@ -85,13 +88,14 @@ def compact_active_vertices(full: np.ndarray, valid_mask: np.ndarray) -> np.ndar
     return np.asarray(full[valid_mask, :], dtype=np.float32)
 
 
-def materialize_fc(shared_root: Path, subject: str, smoothing: str, hemi: str) -> None:
+def materialize_fc(shared_root: Path, surface_root: Path, subject: str, smoothing: str, hemi: str) -> None:
     subj_root = shared_root / f"sub-{subject}"
+    surf_subj_root = surface_root / f"sub-{subject}"
     fc_dir = subj_root / "fc" / ATLAS / smoothing / f"hemi_{hemi}"
     fc_dir.mkdir(parents=True, exist_ok=True)
 
-    ts = np.load(subj_root / "surface" / smoothing / f"sub-{subject}_hemi-{hemi}_timeseries.npy").astype(np.float32)
-    valid_mask = np.load(subj_root / "surface" / "tsnr_gate" / f"sub-{subject}_hemi-{hemi}_valid_mask.npy").astype(bool)
+    ts = np.load(surf_subj_root / "surface" / smoothing / f"sub-{subject}_hemi-{hemi}_timeseries.npy").astype(np.float32)
+    valid_mask = np.load(surf_subj_root / "surface" / "tsnr_gate" / f"sub-{subject}_hemi-{hemi}_valid_mask.npy").astype(bool)
     roi_ts = np.load(subj_root / "reference" / ATLAS / "cortex_roi_parcel_timeseries.npy").astype(np.float32)
     roi_names = read_roi_names(subj_root / "reference" / ATLAS / "cortex_roi_parcels.tsv")
 
@@ -185,8 +189,8 @@ def materialize_fc(shared_root: Path, subject: str, smoothing: str, hemi: str) -
             },
             "inputs": [
                 str((subj_root / "reference" / ATLAS / "cortex_roi_parcel_timeseries.npy").resolve()),
-                str((subj_root / "surface" / smoothing / f"sub-{subject}_hemi-{hemi}_timeseries.npy").resolve()),
-                str((subj_root / "surface" / "tsnr_gate" / f"sub-{subject}_hemi-{hemi}_valid_mask.npy").resolve()),
+                str((surf_subj_root / "surface" / smoothing / f"sub-{subject}_hemi-{hemi}_timeseries.npy").resolve()),
+                str((surf_subj_root / "surface" / "tsnr_gate" / f"sub-{subject}_hemi-{hemi}_valid_mask.npy").resolve()),
             ],
             "outputs": [
                 str((fc_dir / "hipp_vertex_to_network_fc.npy").resolve()),
@@ -197,12 +201,19 @@ def materialize_fc(shared_root: Path, subject: str, smoothing: str, hemi: str) -
     )
 
 
-def process_subject(subject: str, shared_root_str: str, smoothings: list[str], hemis: list[str]) -> dict[str, object]:
+def process_subject(
+    subject: str,
+    shared_root_str: str,
+    surface_root_str: str,
+    smoothings: list[str],
+    hemis: list[str],
+) -> dict[str, object]:
     shared_root = Path(shared_root_str)
+    surface_root = Path(surface_root_str)
     n_fc = 0
     for smoothing in smoothings:
         for hemi in hemis:
-            materialize_fc(shared_root, subject, smoothing, hemi)
+            materialize_fc(shared_root, surface_root, subject, smoothing, hemi)
             n_fc += 1
     return {"subject": f"sub-{subject}", "fc_combos": int(n_fc)}
 
@@ -210,6 +221,7 @@ def process_subject(subject: str, shared_root_str: str, smoothings: list[str], h
 def main() -> int:
     parser = argparse.ArgumentParser(description="Materialize Kong2022 hippocampal vertex-to-ROI FC caches.")
     parser.add_argument("--shared-root", default=str(DEFAULT_SHARED_ROOT))
+    parser.add_argument("--surface-root", default=str(DEFAULT_SURFACE_ROOT))
     parser.add_argument("--subjects-manifest", default=str(DEFAULT_SUBJECTS))
     parser.add_argument("--subjects", nargs="*", default=None)
     parser.add_argument("--smoothings", nargs="+", default=SMOOTHINGS, choices=SMOOTHINGS)
@@ -218,6 +230,7 @@ def main() -> int:
     args = parser.parse_args()
 
     shared_root = Path(args.shared_root).resolve()
+    surface_root = Path(args.surface_root).resolve()
     subjects = [s.replace("sub-", "") for s in args.subjects] if args.subjects else load_subjects(
         Path(args.subjects_manifest).resolve()
     )
@@ -225,13 +238,13 @@ def main() -> int:
     n_fc = 0
     if jobs == 1:
         for subject in subjects:
-            obj = process_subject(subject, str(shared_root), list(args.smoothings), list(args.hemis))
+            obj = process_subject(subject, str(shared_root), str(surface_root), list(args.smoothings), list(args.hemis))
             n_fc += int(obj["fc_combos"])
             print(f"[done] {obj['subject']}", flush=True)
     else:
         with ProcessPoolExecutor(max_workers=jobs) as ex:
             futs = [
-                ex.submit(process_subject, s, str(shared_root), list(args.smoothings), list(args.hemis))
+                ex.submit(process_subject, s, str(shared_root), str(surface_root), list(args.smoothings), list(args.hemis))
                 for s in subjects
             ]
             for fut in as_completed(futs):

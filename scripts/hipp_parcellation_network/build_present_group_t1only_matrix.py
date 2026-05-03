@@ -10,7 +10,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 BUILD_PRESENT = REPO_ROOT / "scripts" / "hipp_parcellation_network" / "build_present_group_overview_merged_canonical.py"
 DEFAULT_PYTHON = "/home/yojiao/.conda/envs/py314/bin/python"
-DEFAULT_ROUTE_ROOT = REPO_ROOT / "outputs_experiments" / "hippunfold_recommended_t1w_20260423" / "kong2022_route_b"
+DEFAULT_ROUTE_ROOT = REPO_ROOT / "outputs_experiments" / "hippunfold_recommended_t1w_20260423" / "kong2022"
 DEFAULT_PRESENT_DIR = REPO_ROOT / "present_group_t1only"
 DEFAULT_MANIFEST_NAME = "group_overview_manifest_t1only_8way.json"
 METHODS = ["group-intrinsic-spectral", "group-network-spectral"]

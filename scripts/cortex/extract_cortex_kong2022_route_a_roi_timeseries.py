@@ -17,7 +17,12 @@ from kong2022_label_utils import KONG2022_MERGE_CONFIG, canonical_families_8_ord
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_DATA_ROOT = REPO_ROOT / "data" / "hippunfold_input"
 DEFAULT_SHARED_ROOT = (
-    REPO_ROOT / "outputs_experiments" / "hippunfold_recommended_t1w_20260423" / "kong2022_route_a" / "hipp_group_inputs_shared"
+    REPO_ROOT
+    / "outputs_experiments"
+    / "hippunfold_recommended_t1w_20260423"
+    / "kong2022"
+    / "shared_inputs"
+    / "routea_151"
 )
 DEFAULT_ROUTE_A_ROOT = REPO_ROOT / "outputs_experiments" / "cortex_kong2022_areal_mshbm"
 DEFAULT_RUN_IDS = [1, 2, 3, 4]

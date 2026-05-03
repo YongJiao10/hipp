@@ -5,9 +5,10 @@
 This runbook is the canonical path for the T1only HippUnfold branch:
 
 - HippUnfold batch root: `outputs_experiments/hippunfold_recommended_t1w_20260423/dense_corobl_batch/`
-- Route root: `outputs_experiments/hippunfold_recommended_t1w_20260423/kong2022_route_b/`
-- Shared T1only group inputs: `outputs_experiments/hippunfold_recommended_t1w_20260423/kong2022_route_b/hipp_group_inputs_shared/`
-- Group atlas outputs: `outputs_experiments/hippunfold_recommended_t1w_20260423/kong2022_route_b/hipp_group_merged_canonical_atlas/`
+- Route-agnostic root: `outputs_experiments/hippunfold_recommended_t1w_20260423/kong2022/`
+- Shared T1only group inputs: `outputs_experiments/hippunfold_recommended_t1w_20260423/kong2022/shared_inputs/`
+- Group atlas outputs: `outputs_experiments/hippunfold_recommended_t1w_20260423/kong2022/hipp_group_merged_canonical_atlas/`
+- Shared template surfaces: `outputs_experiments/hippunfold_recommended_t1w_20260423/kong2022/templates/hipp_group_average_t1only_151/group_average_surfaces/`
 - Presentation overview outputs: `present_group_t1only/`
 - Single maintained presentation policy: `present_group_t1only/` only, 8 overview PNGs only
 
@@ -152,11 +153,11 @@ Route A (allon):
 ```bash
 /home/yojiao/.conda/envs/py314/bin/python \
   scripts/hipp_parcellation_network/run_t1only_spectral_fast_rerun.py \
-  --shared-root outputs_experiments/hippunfold_recommended_t1w_20260423/kong2022_route_b/rerun_20260502_routea_routeb_full/shared_routea \
-  --group-root outputs_experiments/hippunfold_recommended_t1w_20260423/kong2022_route_b/rerun_20260502_routea_routeb_nospeed_full_v2/hipp_group_merged_canonical_atlas \
-  --subjects-manifest outputs_experiments/hippunfold_recommended_t1w_20260423/kong2022_route_b/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_151.txt \
-  --group-average-surfaces-dir outputs_experiments/hippunfold_recommended_t1w_20260423/kong2022_route_b/hipp_group_merged_canonical_atlas/group_average_surfaces \
-  --present-dir outputs_experiments/hippunfold_recommended_t1w_20260423/kong2022_route_b/rerun_20260502_routea_routeb_nospeed_full_v2/present_intermediate \
+  --shared-root outputs_experiments/hippunfold_recommended_t1w_20260423/kong2022/shared_inputs/routea_151 \
+  --surface-root outputs_experiments/hippunfold_recommended_t1w_20260423/kong2022/shared_inputs/surface_151 \
+  --group-root outputs_experiments/hippunfold_recommended_t1w_20260423/kong2022/rerun_20260502_routea_routeb_nospeed_full_v2/hipp_group_merged_canonical_atlas \
+  --subjects-manifest outputs_experiments/hippunfold_recommended_t1w_20260423/kong2022/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_151.txt \
+  --present-dir outputs_experiments/hippunfold_recommended_t1w_20260423/kong2022/rerun_20260502_routea_routeb_nospeed_full_v2/present_intermediate \
   --route-source routea \
   --subject-fc-binarize \
   --no-redundancy-early-stop \
@@ -167,20 +168,43 @@ Route A (alloff): same as above but replace `--subject-fc-binarize` with `--no-s
 
 Route B (allon): same command pattern with:
 
-- `--shared-root .../shared_routeb`
+- `--shared-root .../shared_inputs/routeb_151`
+- `--surface-root .../shared_inputs/surface_151`
 - `--route-source routeb`
 - `--subject-fc-binarize`
 
 Route B (alloff): same as routeB-allon but use `--no-subject-fc-binarize`.
+
+RouteA compliance guard:
+
+- In `--route-source routea` mode, the launcher now hard-fails if `--subjects-manifest`, `--shared-root`, or `--group-root` points into `kong2022_route_b`.
 
 Refresh canonical 8 PNGs:
 
 ```bash
 /home/yojiao/.conda/envs/py314/bin/python \
   scripts/hipp_parcellation_network/build_present_group_t1only_matrix.py \
-  --route-root outputs_experiments/hippunfold_recommended_t1w_20260423/kong2022_route_b/rerun_20260502_routea_routeb_nospeed_full_v2 \
+  --route-root outputs_experiments/hippunfold_recommended_t1w_20260423/kong2022/rerun_20260502_routea_routeb_nospeed_full_v2 \
   --present-dir present_group_t1only
 ```
+
+Shared input lineage note:
+
+- Current stable folder name is `kong2022/shared_inputs/`.
+- Shared-input layout is split by semantics (single-copy surface + route-specific reference/fc):
+  - `shared_inputs/surface_151/sub-<id>/surface/...`
+  - `shared_inputs/routea_151/sub-<id>/{reference,fc}/...`
+  - `shared_inputs/routeb_151/sub-<id>/{reference,fc}/...`
+- Spectral reruns consume route roots via `--shared-root` and consume surface data via `--surface-root` (no duplicated surface copy per route).
+- Stage generator scripts:
+  - `scripts/cortex/extract_cortex_kong2022_route_a_roi_timeseries.py` (reference stage)
+  - `scripts/hipp_parcellation_network/materialize_kong2022_vertex_to_roi_fc.py` (shared FC stage)
+  - `scripts/hipp_parcellation_network/prepare_t1only_group_inputs.py` (prep/orchestration entrypoint)
+- Per-subject provenance is recorded in stage manifests under:
+  - `shared_inputs/routea_151/sub-<id>/reference/kong2022/stage_manifest.json`
+  - `shared_inputs/routea_151/sub-<id>/fc/kong2022/<2mm|4mm>/hemi_<L|R>/stage_manifest.json`
+  - `shared_inputs/routeb_151/sub-<id>/reference/kong2022/stage_manifest.json`
+  - `shared_inputs/routeb_151/sub-<id>/fc/kong2022/<2mm|4mm>/hemi_<L|R>/stage_manifest.json`
 
 Post-run verification:
 

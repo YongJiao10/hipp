@@ -31,15 +31,28 @@ from surface_utils import infer_spec_path, long_axis_order
 from kong2022_label_utils import load_kong2022_bundle
 
 
-DEFAULT_SHARED_ROOT = REPO_ROOT / "outputs_migration" / "hipp_group_inputs_shared"
-DEFAULT_OUT_ROOT = REPO_ROOT / "outputs_migration" / "hipp_group_merged_canonical_atlas"
-DEFAULT_SUBJECTS = REPO_ROOT / "manifests" / "hcp_7t_hippocampus_fmri_qc_pass_153.txt"
-DEFAULT_HIPPUNFOLD_BATCH_ROOT = REPO_ROOT / "outputs_migration" / "dense_corobl_batch"
+DEFAULT_T1ONLY_ROOT = REPO_ROOT / "outputs_experiments" / "hippunfold_recommended_t1w_20260423" / "kong2022"
+DEFAULT_SHARED_ROOT = DEFAULT_T1ONLY_ROOT / "shared_inputs" / "routeb_151"
+DEFAULT_SURFACE_ROOT = DEFAULT_T1ONLY_ROOT / "shared_inputs" / "surface_151"
+DEFAULT_OUT_ROOT = DEFAULT_T1ONLY_ROOT / "hipp_group_merged_canonical_atlas"
+DEFAULT_SUBJECTS = DEFAULT_T1ONLY_ROOT / "manifests" / "hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt"
+DEFAULT_HIPPUNFOLD_BATCH_ROOT = (
+    REPO_ROOT / "outputs_experiments" / "hippunfold_recommended_t1w_20260423" / "dense_corobl_batch"
+)
 DEFAULT_NETWORK_STYLE = REPO_ROOT / "config" / "hipp_network_style.json"
 DEFAULT_CROSS_ATLAS_MERGE = REPO_ROOT / "config" / "cross_atlas_network_merge.json"
-DEFAULT_GROUP_AVG_SURFACES_DIR = DEFAULT_OUT_ROOT / "group_average_surfaces"
+DEFAULT_GROUP_AVG_SURFACES_DIR = (
+    REPO_ROOT
+    / "outputs_experiments"
+    / "hippunfold_recommended_t1w_20260423"
+    / "kong2022"
+    / "templates"
+    / "hipp_group_average_t1only_151"
+    / "group_average_surfaces"
+)
 
 METHOD_CHOICES = [
+    "group-roi-sim-spectral",
     "group-network-spectral",
     "group-network-partial-spectral",
     "group-intrinsic-spectral",
@@ -55,10 +68,10 @@ ATLASES = ["kong2019", "kong2019_8net", "kong2022"]
 SMOOTHINGS = ["2mm", "4mm"]
 HEMIS = ["L", "R"]
 K_RANGE = list(range(2, 11))
-KONG2022_ONLY_METHODS = {"group-network-top", "group-network-all"}
+KONG2022_ONLY_METHODS = {"group-roi-sim-spectral", "group-network-top", "group-network-all"}
 CLUSTERLESS_METHODS = {"group-network-top", "group-network-all"}
 PROFILE_REDUNDANCY_MAX_SIM = 0.80
-SUBJECT_FC_PREPROCESS_METHODS = {"group-network-spectral", "group-intrinsic-spectral"}
+SUBJECT_FC_PREPROCESS_METHODS = {"group-roi-sim-spectral", "group-network-spectral", "group-intrinsic-spectral"}
 SUBJECT_FC_VALUE_RULE = "largest_raw_values"
 MAX_K_EVAL_JOBS = 10
 RESUME_SIGNATURE_VERSION = 1
@@ -282,6 +295,14 @@ def is_network_method(method: str) -> bool:
     return method in {"group-network-spectral", "group-network-partial-spectral"}
 
 
+def is_roi_similarity_method(method: str) -> bool:
+    return method == "group-roi-sim-spectral"
+
+
+def method_uses_network_fc_input(method: str) -> bool:
+    return is_network_method(method) or method in {"group-roi-sim-spectral", "group-network-top", "group-network-all"}
+
+
 def is_clusterless_method(method: str) -> bool:
     return method in CLUSTERLESS_METHODS
 
@@ -380,15 +401,27 @@ def preprocess_subject_fc_matrix(method: str, fc: np.ndarray, top_fraction: floa
     arr = np.asarray(fc, dtype=np.float32)
     if not method_uses_subject_fc_preprocessing(method):
         return arr
-    if method == "group-network-spectral":
+    if method in {"group-roi-sim-spectral", "group-network-spectral"}:
         return preprocess_network_fc_map(arr, top_fraction, binarize)
     if method == "group-intrinsic-spectral":
         return preprocess_intrinsic_fc_map(arr, top_fraction, binarize)
     return arr
 
 
+def roi_similarity_from_network_fc(fc: np.ndarray) -> np.ndarray:
+    arr = np.asarray(fc, dtype=np.float32)
+    if arr.ndim != 2:
+        raise ValueError(f"Expected 2D vertex-to-ROI FC matrix, got shape={arr.shape}")
+    sim = centered_cosine_similarity(arr)
+    sim = 0.5 * (sim + sim.T)
+    sim = np.clip(sim, -1.0, 1.0)
+    sim[~np.isfinite(sim)] = 0.0
+    np.fill_diagonal(sim, 0.0)
+    return sim.astype(np.float32)
+
+
 def network_feature_filename(method: str) -> str:
-    if method == "group-network-spectral":
+    if method in {"group-roi-sim-spectral", "group-network-spectral"}:
         return "hipp_vertex_to_network_fc.npy"
     if method == "group-network-partial-spectral":
         return "hipp_vertex_to_network_partial_fc.npy"
@@ -398,7 +431,7 @@ def network_feature_filename(method: str) -> str:
 
 
 def runwise_network_feature_filename(method: str) -> str:
-    if method == "group-network-spectral":
+    if method in {"group-roi-sim-spectral", "group-network-spectral"}:
         return "hipp_vertex_to_network_fc_active.npy"
     if method == "group-network-partial-spectral":
         return "hipp_vertex_to_network_partial_fc_active.npy"
@@ -769,11 +802,40 @@ def infer_surface_path(subject: str, hemi: str, batch_root: Path | None = None) 
     return p
 
 
-def subject_valid_mask(shared_root: Path, subject: str, hemi: str) -> np.ndarray:
-    p = shared_root / f"sub-{subject}" / "surface" / "tsnr_gate" / f"sub-{subject}_hemi-{hemi}_valid_mask.npy"
+def infer_valid_mask_from_fc(shared_root: Path, subject: str, smoothing: str, hemi: str) -> np.ndarray:
+    p = (
+        shared_root
+        / f"sub-{subject}"
+        / "fc"
+        / "kong2022"
+        / smoothing
+        / f"hemi_{hemi}"
+        / "hipp_vertex_to_network_fc.npy"
+    )
     if not p.exists():
-        raise FileNotFoundError(f"Missing valid mask: {p}")
-    return np.load(p).astype(bool)
+        raise FileNotFoundError(
+            "Missing both surface tsnr mask and FC-based fallback source. "
+            f"Expected FC file for fallback: {p}"
+        )
+    arr = np.load(p).astype(np.float32)
+    if arr.ndim != 2:
+        raise ValueError(f"Expected 2D FC array for fallback mask, got {arr.shape} from {p}")
+    mask = np.any(np.isfinite(arr), axis=1)
+    if int(np.sum(mask)) <= 0:
+        raise RuntimeError(f"FC-based fallback valid mask is empty: {p}")
+    return mask.astype(bool)
+
+
+def subject_valid_mask(surface_root: Path, shared_root: Path, subject: str, smoothing: str, hemi: str) -> np.ndarray:
+    p = surface_root / f"sub-{subject}" / "surface" / "tsnr_gate" / f"sub-{subject}_hemi-{hemi}_valid_mask.npy"
+    if p.exists():
+        return np.load(p).astype(bool)
+    print(
+        f"[warn] missing tsnr_gate mask for sub-{subject} {smoothing} hemi-{hemi}; "
+        "inferring valid mask from precomputed FC file",
+        flush=True,
+    )
+    return infer_valid_mask_from_fc(shared_root, subject, smoothing, hemi)
 
 
 def subject_network_feature(shared_root: Path, subject: str, atlas: str, smoothing: str, hemi: str, method: str) -> np.ndarray:
@@ -884,7 +946,7 @@ def group_feature_matrix(
         group[~np.isfinite(group)] = 0.0
         return zscore_cols(group)
 
-    if method in {"group-intrinsic-spectral", "group-intrinsic-partial-spectral"}:
+    if method in {"group-roi-sim-spectral", "group-intrinsic-spectral", "group-intrinsic-partial-spectral"}:
         mats = []
         for s in subjects_subset:
             m = feature_bank[s][np.ix_(idx, idx)]
@@ -1242,7 +1304,7 @@ def runwise_feature_bank(
     out: dict[int, dict[str, np.ndarray]] = {rid: {} for rid in run_ids}
     for rid in run_ids:
         for s in subjects:
-            if is_network_method(method):
+            if method_uses_network_fc_input(method):
                 p = (
                     shared_root
                     / f"sub-{s}"
@@ -1265,11 +1327,16 @@ def runwise_feature_bank(
                     full = active
                 else:
                     raise ValueError(f"Unexpected runwise network feature shape for {p}: {active.shape}")
-                out[rid][s] = preprocess_subject_fc_matrix(
+                run_feature = preprocess_subject_fc_matrix(
                     method=method,
                     fc=full,
                     top_fraction=subject_fc_top_fraction,
                     binarize=subject_fc_binarize,
+                )
+                out[rid][s] = (
+                    roi_similarity_from_network_fc(run_feature)
+                    if is_roi_similarity_method(method)
+                    else run_feature
                 )
             else:
                 p = resolve_intrinsic_feature_path(shared_root, s, smoothing, hemi, rid)
@@ -1334,31 +1401,94 @@ def run_aware_ari(
     }
 
 
-def verify_surface_topology_consistency(
+def build_subject_surface_consensus(
+    subjects: list[str],
+    hemis: list[str],
+    batch_root: Path,
+) -> tuple[dict[str, Path], dict[str, dict[str, object]], dict[str, np.ndarray]]:
+    """Build subject-consensus surface metadata from all subjects in the manifest.
+
+    Consensus policy is strict: any topology mismatch OR long-axis order mismatch
+    causes a hard failure and lists mismatched subjects.
+    """
+    consensus_surfaces: dict[str, Path] = {}
+    topology_audit: dict[str, dict[str, object]] = {}
+    long_axis_order_by_hemi: dict[str, np.ndarray] = {}
+    for hemi in hemis:
+        ref_subject = subjects[0]
+        ref_surface = infer_surface_path(ref_subject, hemi, batch_root)
+        ref_coords, ref_faces = load_surface(ref_surface)
+        ref_order = long_axis_order(ref_surface)
+        topology_mismatched: list[str] = []
+        axis_mismatched: list[str] = []
+        for subject in subjects[1:]:
+            surf_path = infer_surface_path(subject, hemi, batch_root)
+            coords, faces = load_surface(surf_path)
+            topo_ok = (
+                int(coords.shape[0]) == int(ref_coords.shape[0])
+                and int(faces.shape[0]) == int(ref_faces.shape[0])
+                and faces.shape == ref_faces.shape
+                and np.array_equal(faces, ref_faces)
+            )
+            if not topo_ok:
+                topology_mismatched.append(f"sub-{subject}")
+                continue
+            this_order = long_axis_order(surf_path)
+            if this_order.shape != ref_order.shape or not np.array_equal(this_order, ref_order):
+                axis_mismatched.append(f"sub-{subject}")
+        if topology_mismatched:
+            raise RuntimeError(
+                "Subject-consensus surface topology mismatch "
+                f"for hemi-{hemi}; reference=sub-{ref_subject}; mismatched={topology_mismatched[:10]}"
+            )
+        if axis_mismatched:
+            raise RuntimeError(
+                "Subject-consensus long-axis order mismatch "
+                f"for hemi-{hemi}; reference=sub-{ref_subject}; mismatched={axis_mismatched[:10]}"
+            )
+        consensus_surfaces[hemi] = ref_surface
+        long_axis_order_by_hemi[hemi] = ref_order
+        topology_audit[hemi] = {
+            "template_source_mode": "subject_consensus",
+            "reference_subject_for_comparison": f"sub-{ref_subject}",
+            "n_vertices": int(ref_coords.shape[0]),
+            "n_faces": int(ref_faces.shape[0]),
+            "topology_consistent_subjects": int(len(subjects)),
+            "long_axis_order_consistent_subjects": int(len(subjects)),
+        }
+    return consensus_surfaces, topology_audit, long_axis_order_by_hemi
+
+
+def verify_subject_topology_against_template(
     subjects: list[str],
     hemis: list[str],
     template_surfaces: dict[str, Path],
     batch_root: Path,
-) -> dict[str, object]:
-    out: dict[str, object] = {}
+) -> dict[str, dict[str, object]]:
+    out: dict[str, dict[str, object]] = {}
     for hemi in hemis:
         t_coords, t_faces = load_surface(template_surfaces[hemi])
         n_vertices = int(t_coords.shape[0])
         n_faces = int(t_faces.shape[0])
         mismatched: list[str] = []
-        for s in subjects:
-            p = infer_surface_path(s, hemi, batch_root)
+        for subject in subjects:
+            p = infer_surface_path(subject, hemi, batch_root)
             coords, faces = load_surface(p)
-            if int(coords.shape[0]) != n_vertices or int(faces.shape[0]) != n_faces:
-                mismatched.append(f"sub-{s}")
-                continue
-            if faces.shape != t_faces.shape or not np.array_equal(faces, t_faces):
-                mismatched.append(f"sub-{s}")
+            topo_ok = (
+                int(coords.shape[0]) == n_vertices
+                and int(faces.shape[0]) == n_faces
+                and faces.shape == t_faces.shape
+                and np.array_equal(faces, t_faces)
+            )
+            if not topo_ok:
+                mismatched.append(f"sub-{subject}")
         if mismatched:
             raise RuntimeError(
-                f"Surface topology mismatch for hemi-{hemi}: template={template_surfaces[hemi]} mismatched={mismatched[:10]}"
+                "Template topology mismatch against manifest subjects "
+                f"for hemi-{hemi}; template={template_surfaces[hemi]}; mismatched={mismatched[:10]}"
             )
         out[hemi] = {
+            "template_source_mode": "group_average_template",
             "n_vertices": n_vertices,
             "n_faces": n_faces,
             "topology_consistent_subjects": int(len(subjects)),
@@ -1415,6 +1545,7 @@ def cluster_network_profile(
     support_mask: np.ndarray,
     subjects: list[str],
     shared_root: Path,
+    surface_root: Path,
     atlas: str,
     smoothing: str,
     hemi: str,
@@ -1424,7 +1555,7 @@ def cluster_network_profile(
     k_final = int(np.max(group_labels_final))
     profiles: list[np.ndarray] = []
     for subject in subjects:
-        ts_path = shared_root / f"sub-{subject}" / "surface" / smoothing / f"sub-{subject}_hemi-{hemi}_timeseries.npy"
+        ts_path = surface_root / f"sub-{subject}" / "surface" / smoothing / f"sub-{subject}_hemi-{hemi}_timeseries.npy"
         net_path = shared_root / f"sub-{subject}" / "reference" / atlas / "cortex_canonical_network_timeseries.npy"
         if not (ts_path.exists() and net_path.exists()):
             continue
@@ -1543,6 +1674,7 @@ def cluster_roi_profile(
     support_mask: np.ndarray,
     subjects: list[str],
     shared_root: Path,
+    surface_root: Path,
     smoothing: str,
     hemi: str,
     valid_masks_by_subject: dict[str, np.ndarray],
@@ -1554,7 +1686,7 @@ def cluster_roi_profile(
 
     profiles: list[np.ndarray] = []
     for subject in subjects:
-        ts_path = shared_root / f"sub-{subject}" / "surface" / smoothing / f"sub-{subject}_hemi-{hemi}_timeseries.npy"
+        ts_path = surface_root / f"sub-{subject}" / "surface" / smoothing / f"sub-{subject}_hemi-{hemi}_timeseries.npy"
         roi_path = shared_root / f"sub-{subject}" / "reference" / "kong2022" / "cortex_roi_parcel_timeseries.npy"
         roi_tsv = shared_root / f"sub-{subject}" / "reference" / "kong2022" / "cortex_roi_parcels.tsv"
         if not (ts_path.exists() and roi_path.exists() and roi_tsv.exists()):
@@ -1618,6 +1750,7 @@ def cluster_roi_profile_subjectwise(
     support_mask: np.ndarray,
     subjects: list[str],
     shared_root: Path,
+    surface_root: Path,
     smoothing: str,
     hemi: str,
     valid_masks_by_subject: dict[str, np.ndarray],
@@ -1630,7 +1763,7 @@ def cluster_roi_profile_subjectwise(
     profiles: list[np.ndarray] = []
     used_subjects: list[str] = []
     for subject in subjects:
-        ts_path = shared_root / f"sub-{subject}" / "surface" / smoothing / f"sub-{subject}_hemi-{hemi}_timeseries.npy"
+        ts_path = surface_root / f"sub-{subject}" / "surface" / smoothing / f"sub-{subject}_hemi-{hemi}_timeseries.npy"
         roi_path = shared_root / f"sub-{subject}" / "reference" / "kong2022" / "cortex_roi_parcel_timeseries.npy"
         roi_tsv = shared_root / f"sub-{subject}" / "reference" / "kong2022" / "cortex_roi_parcels.tsv"
         if not (ts_path.exists() and roi_path.exists() and roi_tsv.exists()):
@@ -1843,7 +1976,11 @@ def assignment_status_from_cluster_roi_topn(
 
 
 def method_uses_kong2022_topn_cluster_annotation(method: str, atlas: str) -> bool:
-    return str(atlas) == "kong2022" and str(method) in {"group-intrinsic-spectral", "group-network-spectral"}
+    return str(atlas) == "kong2022" and str(method) in {
+        "group-roi-sim-spectral",
+        "group-intrinsic-spectral",
+        "group-network-spectral",
+    }
 
 
 def network_mean_profile_from_kong2022_roi_profile(
@@ -1867,6 +2004,7 @@ def annotate_kong2022_clusters_topn(
     support_mask: np.ndarray,
     subjects: list[str],
     shared_root: Path,
+    surface_root: Path,
     smoothing: str,
     hemi: str,
     valid_masks_by_subject: dict[str, np.ndarray],
@@ -1879,6 +2017,7 @@ def annotate_kong2022_clusters_topn(
         support_mask=support_mask,
         subjects=subjects,
         shared_root=shared_root,
+        surface_root=surface_root,
         smoothing=smoothing,
         hemi=hemi,
         valid_masks_by_subject=valid_masks_by_subject,
@@ -2149,6 +2288,7 @@ def functional_atlas_from_vertices(
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run merged canonical group hippocampal atlas (v3 plan).")
     parser.add_argument("--shared-root", default=str(DEFAULT_SHARED_ROOT))
+    parser.add_argument("--surface-root", default=str(DEFAULT_SURFACE_ROOT))
     parser.add_argument("--out-root", default=str(DEFAULT_OUT_ROOT))
     parser.add_argument("--subjects-manifest", default=str(DEFAULT_SUBJECTS))
     parser.add_argument("--hippunfold-batch-root", default=str(DEFAULT_HIPPUNFOLD_BATCH_ROOT))
@@ -2201,14 +2341,14 @@ def main() -> int:
     parser.add_argument(
         "--group-average-surfaces-dir",
         default=str(DEFAULT_GROUP_AVG_SURFACES_DIR),
-        help="Directory containing group-average midthickness surf.gii files named "
-             "group-average_hemi-{L|R}_space-corobl_den-512_label-hipp_midthickness.surf.gii. "
-             "When present, these are used as the template geometry instead of subjects[0].",
+        help="Directory containing group-average template midthickness surfaces named "
+             "group-average_hemi-{L|R}_space-corobl_den-512_label-hipp_midthickness.surf.gii.",
     )
     args = parser.parse_args()
     suppress_known_runtime_warnings()
 
     shared_root = Path(args.shared_root).resolve()
+    surface_root = Path(args.surface_root).resolve()
     out_root = Path(args.out_root).resolve()
     hippunfold_batch_root = Path(args.hippunfold_batch_root).resolve()
     out_root.mkdir(parents=True, exist_ok=True)
@@ -2225,38 +2365,44 @@ def main() -> int:
     split_seeds = [int(x) for x in rng.randint(1, 2_000_000_000, size=int(args.instability_resamples))]
     null_seeds = [int(x) for x in rng.randint(1, 2_000_000_000, size=int(args.null_resamples))]
 
-    avg_surf_dir = Path(args.group_average_surfaces_dir).resolve()
-    allowed_roots = [(REPO_ROOT / "outputs_migration").resolve(), (REPO_ROOT / "outputs_experiments").resolve()]
-    if "present_group" in avg_surf_dir.parts:
-        raise ValueError(
-            f"Invalid --group-average-surfaces-dir={avg_surf_dir}: present_group paths are non-canonical. "
-            f"Use a canonical outputs_migration or outputs_experiments group-average surface directory."
-        )
-    if not any(avg_surf_dir.is_relative_to(root) for root in allowed_roots):
-        raise ValueError(
-            f"Invalid --group-average-surfaces-dir={avg_surf_dir}: expected a path under one of {allowed_roots}."
-        )
-    avg_surf_paths = {
-        hemi: avg_surf_dir / f"group-average_hemi-{hemi}_space-corobl_den-512_label-hipp_midthickness.surf.gii"
+    group_avg_dir = Path(args.group_average_surfaces_dir).resolve()
+    surfaces = {
+        hemi: group_avg_dir / f"group-average_hemi-{hemi}_space-corobl_den-512_label-hipp_midthickness.surf.gii"
         for hemi in args.hemis
     }
-    missing_avg = [str(p) for p in avg_surf_paths.values() if not p.exists()]
-    if missing_avg:
+    missing_template = [str(p) for p in surfaces.values() if not p.exists()]
+    if missing_template:
         raise FileNotFoundError(
-            "Missing required group-average surfaces. "
-            "Run from outputs_migration/hipp_group_merged_canonical_atlas/group_average_surfaces only.\n"
-            + "\n".join(missing_avg)
+            "Missing required group-average template surfaces. "
+            "Build template first (prepare_t1only_group_inputs.py --stage group-average) and point "
+            "--group-average-surfaces-dir to the shared template directory.\n"
+            + "\n".join(missing_template)
         )
     template_label = "group-average"
-    surfaces = {hemi: avg_surf_paths[hemi] for hemi in args.hemis}
-    topology_audit = verify_surface_topology_consistency(subjects, args.hemis, surfaces, hippunfold_batch_root)
+    template_source_mode = "group_average_template"
+    template_source_note = (
+        "Template-first mode: clustering topology/order is derived from shared group-average template surfaces; "
+        "manifest subjects are validated for topology compatibility."
+    )
+    template_render_subject = f"sub-{subjects[0]}"
+    template_spec_path = infer_spec_path(
+        subject=subjects[0],
+        surface_path=infer_surface_path(subjects[0], args.hemis[0], hippunfold_batch_root),
+    )
+    topology_audit = verify_subject_topology_against_template(
+        subjects,
+        list(args.hemis),
+        surfaces,
+        hippunfold_batch_root,
+    )
+    long_axis_order_by_hemi: dict[str, np.ndarray] = {
+        hemi: long_axis_order(surfaces[hemi]) for hemi in args.hemis
+    }
     surface_meta: dict[str, dict[str, object]] = {}
     adjacency_by_hemi: dict[str, sparse.csr_matrix] = {}
-    long_axis_order_by_hemi: dict[str, np.ndarray] = {}
     for hemi in args.hemis:
         coords, faces = load_surface(surfaces[hemi])
         adjacency_by_hemi[hemi] = build_surface_adjacency(faces, int(coords.shape[0]))
-        long_axis_order_by_hemi[hemi] = long_axis_order(surfaces[hemi])
         surface_meta[hemi] = {
             "surface_path": str(surfaces[hemi]),
             "n_vertices": int(coords.shape[0]),
@@ -2297,22 +2443,27 @@ def main() -> int:
             for smoothing in args.smoothings:
                 for hemi in args.hemis:
                     n_vertices = int(surface_meta[hemi]["n_vertices"])
-                    valid_masks = {s: subject_valid_mask(shared_root, s, hemi) for s in subjects}
+                    valid_masks = {s: subject_valid_mask(surface_root, shared_root, s, smoothing, hemi) for s in subjects}
                     coverage_count = np.sum(np.stack([valid_masks[s] for s in subjects], axis=0), axis=0).astype(np.int32)
                     coverage_fraction = np.mean(np.stack([valid_masks[s] for s in subjects], axis=0), axis=0).astype(np.float32)
 
                     feature_bank: dict[str, np.ndarray] = {}
                     actual_input_paths: dict[str, str] = {}
                     for s in subjects:
-                        if is_network_method(method) or method in {"group-network-top", "group-network-all"}:
+                        if method_uses_network_fc_input(method):
                             p = shared_root / f"sub-{s}" / "fc" / atlas / smoothing / f"hemi_{hemi}" / network_feature_filename(method)
                             actual_input_paths[s] = str(p)
                             raw_feature = subject_network_feature(shared_root, s, atlas, smoothing, hemi, method)
-                            feature_bank[s] = preprocess_subject_fc_matrix(
+                            pre_feature = preprocess_subject_fc_matrix(
                                 method=method,
                                 fc=raw_feature,
                                 top_fraction=float(args.subject_fc_top_fraction),
                                 binarize=bool(args.subject_fc_binarize),
+                            )
+                            feature_bank[s] = (
+                                roi_similarity_from_network_fc(pre_feature)
+                                if is_roi_similarity_method(method)
+                                else pre_feature
                             )
                         else:
                             p = resolve_intrinsic_feature_path(shared_root, s, smoothing, hemi)
@@ -2371,14 +2522,14 @@ def main() -> int:
                         bool(args.subject_fc_binarize),
                     )
                     valid_mask_paths = [
-                        shared_root / f"sub-{s}" / "surface" / "tsnr_gate" / f"sub-{s}_hemi-{hemi}_valid_mask.npy"
+                        surface_root / f"sub-{s}" / "surface" / "tsnr_gate" / f"sub-{s}_hemi-{hemi}_valid_mask.npy"
                         for s in subjects
                     ]
                     runwise_feature_paths: list[Path] = []
                     if not is_clusterless_method(method):
                         for rid in [1, 2, 3, 4]:
                             for s in subjects:
-                                if is_network_method(method):
+                                if method_uses_network_fc_input(method):
                                     p = (
                                         shared_root
                                         / f"sub-{s}"
@@ -2402,7 +2553,7 @@ def main() -> int:
                         for s in subjects
                     ]
                     surface_timeseries_paths = [
-                        shared_root / f"sub-{s}" / "surface" / smoothing / f"sub-{s}_hemi-{hemi}_timeseries.npy"
+                        surface_root / f"sub-{s}" / "surface" / smoothing / f"sub-{s}_hemi-{hemi}_timeseries.npy"
                         for s in subjects
                     ]
                     kong2022_roi_reference_paths: list[Path] = []
@@ -2634,11 +2785,11 @@ def main() -> int:
                                 "cluster_roi_registry": str((run_dir / "cluster_roi_registry.tsv").resolve()),
                                 "k_selection_summary_tsv": str((run_dir / "k_selection_summary.tsv").resolve()),
                                 "k_selection_summary_json": str((run_dir / "k_selection_summary.json").resolve()),
-                                "template_subject": template_label,
+                                "template_subject": template_render_subject,
+                                "template_source_mode": template_source_mode,
+                                "template_source_note": template_source_note,
                                 "template_left_or_right_surface": str(surfaces[hemi]),
-                                "template_spec_path": str(
-                                    infer_spec_path(subjects[0], infer_surface_path(subjects[0], hemi, hippunfold_batch_root))
-                                ),
+                                "template_spec_path": str(template_spec_path),
                                 "template_cluster_label": None,
                                 "template_functional_atlas_label": str(func_lbl_path.resolve()),
                             }
@@ -3010,6 +3161,7 @@ def main() -> int:
                                 support_mask=support,
                                 subjects=subjects,
                                 shared_root=shared_root,
+                                surface_root=surface_root,
                                 smoothing=smoothing,
                                 hemi=hemi,
                                 valid_masks_by_subject=valid_masks,
@@ -3023,6 +3175,7 @@ def main() -> int:
                                 support_mask=support,
                                 subjects=subjects,
                                 shared_root=shared_root,
+                                surface_root=surface_root,
                                 atlas=atlas,
                                 smoothing=smoothing,
                                 hemi=hemi,
@@ -3040,6 +3193,7 @@ def main() -> int:
                                 support_mask=support,
                                 subjects=subjects,
                                 shared_root=shared_root,
+                                surface_root=surface_root,
                                 smoothing=smoothing,
                                 hemi=hemi,
                                 valid_masks_by_subject=valid_masks,
@@ -3130,6 +3284,9 @@ def main() -> int:
                             "V_min_fraction": float(args.v_min_fraction),
                             "V_min_effective": int(v_min),
                             "feature_family": (
+                                "vertex_to_kong2022_400roi_fc_to_vertex_similarity_centered_cosine"
+                                if method == "group-roi-sim-spectral"
+                                else (
                                 "vertex_to_kong2022_400roi_fc_fisherz_colzscore"
                                 if method == "group-network-spectral" and atlas == "kong2022"
                                 else (
@@ -3145,11 +3302,15 @@ def main() -> int:
                                         )
                                     )
                                 )
+                                )
                             ),
                             "fc_mode": (
                                 "partial_networks_only_one_sided"
                                 if method in {"group-network-partial-spectral", "group-intrinsic-partial-spectral"}
                                 else (
+                                    "pearson_vertex_to_roi_then_centered_cosine_vertex_to_vertex"
+                                    if method == "group-roi-sim-spectral"
+                                    else (
                                     "pearson"
                                     if method == "group-network-spectral"
                                     else (
@@ -3157,6 +3318,7 @@ def main() -> int:
                                         if method == "group-intrinsic-spectral"
                                         else "intrinsic_vertex_to_vertex_partial_profile"
                                     )
+                                )
                                 )
                             ),
                             "partial_fc_definition": (
@@ -3201,7 +3363,7 @@ def main() -> int:
                             },
                             "surface_topology_audit": topology_audit[hemi],
                             "canonical_network_order_consistency_checked": True,
-                            "canonical_network_order_template_subject": f"sub-{subjects[0]}",
+                            "canonical_network_order_consensus_subject_count": int(len(subjects)),
                             "n_subjects": int(len(subjects)),
                             "subjects": [f"sub-{s}" for s in subjects],
                             "n_support_vertices": int(n_support),
@@ -3229,13 +3391,13 @@ def main() -> int:
                                 if roi_profile_subjects_used is not None
                                 else None
                             ),
-                            "template_subject": template_label,
+                            "template_subject": template_render_subject,
+                            "template_source_mode": template_source_mode,
+                            "template_source_note": template_source_note,
                             "cluster_label_ordering": "long_axis_head_to_tail",
                             "cluster_order_head_to_tail": fixed_cluster_order,
                             "template_left_or_right_surface": str(surfaces[hemi]),
-                            "template_spec_path": str(
-                                infer_spec_path(subjects[0], infer_surface_path(subjects[0], hemi, hippunfold_batch_root))
-                            ),
+                            "template_spec_path": str(template_spec_path),
                             "template_cluster_label": str(lbl_path.resolve()),
                             "template_functional_atlas_label": str(func_lbl_path.resolve()),
                         }

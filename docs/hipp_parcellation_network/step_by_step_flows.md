@@ -28,6 +28,13 @@ python scripts/hipp_parcellation_network/run_merged_canonical_group_atlas.py \
   --k-selection-mode redundancy-aware
 ```
 
+Opt-in experimental ROI-sim spectral run (`kong2022` only):
+
+```bash
+# Frozen in this round: do not run.
+# See docs/hipp_parcellation_network/group_roi_sim_spectral_frozen_plan.md
+```
+
 Canonical urgent T1only spectral rerun:
 
 ```bash
@@ -48,6 +55,12 @@ Spectral FC preprocessing defaults in this driver:
 - `--subject-fc-top-fraction 0.10` (keep largest raw-value Top 10% per subject FC map)
 - `--subject-fc-binarize` (default on; retained Top entries are set to `1`)
 - optional disable: `--no-subject-fc-binarize`
+
+Surface/topology rule for all cluster-based runs:
+
+- Group clustering uses shared group-average template surfaces (template-first mode).
+- The driver validates each manifest subject's surface topology against the shared template.
+- Any topology mismatch causes hard failure with subject list.
 
 ### 2.1 `group-intrinsic-spectral`
 
@@ -124,6 +137,13 @@ Spectral FC preprocessing defaults in this driver:
    - `group_labels_final.npy`
    - `cluster_assignment_status.json`
    - `group_functional_atlas_labels.npy`
+
+### 2.5 `group-roi-sim-spectral` (opt-in, experimental)
+
+1. Frozen in this round (`status=frozen`, `not implemented`).
+2. Not part of default runs or urgent rerun bundles.
+3. Design is preserved in:
+   - `docs/hipp_parcellation_network/group_roi_sim_spectral_frozen_plan.md`
 
 ## 3. Build Overviews
 

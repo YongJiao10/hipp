@@ -15,14 +15,15 @@ DEFAULT_SHARED_ROOT = (
     REPO_ROOT
     / "outputs_experiments"
     / "hippunfold_recommended_t1w_20260423"
-    / "kong2022_route_b"
-    / "hipp_group_inputs_shared"
+    / "kong2022"
+    / "shared_inputs"
+    / "surface_151"
 )
 DEFAULT_OUT_DIR = (
-    REPO_ROOT / "outputs_experiments" / "hippunfold_recommended_t1w_20260423" / "kong2022_route_b" / "qc"
+    REPO_ROOT / "outputs_experiments" / "hippunfold_recommended_t1w_20260423" / "kong2022" / "qc"
 )
 DEFAULT_MANIFEST_DIR = (
-    REPO_ROOT / "outputs_experiments" / "hippunfold_recommended_t1w_20260423" / "kong2022_route_b" / "manifests"
+    REPO_ROOT / "outputs_experiments" / "hippunfold_recommended_t1w_20260423" / "kong2022" / "manifests"
 )
 
 

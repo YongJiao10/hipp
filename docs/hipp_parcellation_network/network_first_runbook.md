@@ -56,8 +56,8 @@ Atlas-specific cortex reference arrays remain under `sub-*/reference/kong2022/`.
 
 Use the active default QC-passed T1only 151-subject cohort:
 
-- `outputs_experiments/hippunfold_recommended_t1w_20260423/kong2022_route_b/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_151.txt`
-- `outputs_experiments/hippunfold_recommended_t1w_20260423/kong2022_route_b/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt`
+- `outputs_experiments/hippunfold_recommended_t1w_20260423/kong2022/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_151.txt`
+- `outputs_experiments/hippunfold_recommended_t1w_20260423/kong2022/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt`
 
 Do not silently expand to 166 subjects.
 
@@ -111,7 +111,6 @@ Do not silently expand to 166 subjects.
 ```text
 outputs_migration/hipp_group_merged_canonical_atlas/
   <method>/<atlas>/<smoothing>/<coverage>/hemi_<L|R>/...
-  group_average_surfaces/
 
 present_group/
   kong2022_group-intrinsic-spectral_group_overview.png
@@ -127,6 +126,10 @@ present_group/
 - `present_group/` is a presentation/export surface, not the canonical runtime input source
 - K-selection panels use direct subject-split `group_ari_mean`; null references are reported in ARI space
 - spectral methods (`group-network-spectral`, `group-intrinsic-spectral`) can run `--k-selection-mode redundancy-aware`
+- subject surface topology/order now follows template-first mode using shared group-average surfaces (recommended shared path: `outputs_experiments/hippunfold_recommended_t1w_20260423/kong2022/templates/hipp_group_average_t1only_151/group_average_surfaces/`)
+- `group-roi-sim-spectral` is frozen in this round (not implemented in active defaults); see `docs/hipp_parcellation_network/group_roi_sim_spectral_frozen_plan.md`
+  - input path: per-subject `vertex x ROI` FC preprocessing (same knobs as `group-network-spectral`)
+  - then transform to per-subject `vertex x vertex` centered-cosine similarity before clustering
 - `run_merged_canonical_group_atlas.py --jobs N` now parallelizes candidate-`K` evaluation within each combo, capped at `min(N, #K, 10)`
 - the script suppresses scikit-learn's `"Graph is not fully connected"` spectral-embedding warning to keep logs readable during large `K` sweeps
 - redundancy-aware `K` selection uses:

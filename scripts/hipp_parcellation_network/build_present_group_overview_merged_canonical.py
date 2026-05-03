@@ -73,6 +73,22 @@ def read_tsv(path: Path) -> list[dict[str, str]]:
         return list(csv.DictReader(f, delimiter="\t"))
 
 
+def resolve_template_render_spec(manifest: dict) -> tuple[str | None, Path | None]:
+    raw_spec = manifest.get("template_spec_path")
+    if raw_spec is None:
+        return None, None
+    spec_text = str(raw_spec).strip()
+    if spec_text == "" or spec_text.lower() in {"none", "null"}:
+        return None, None
+    spec_path = Path(spec_text)
+    if not spec_path.exists():
+        return None, None
+    subject = str(manifest.get("template_subject", "")).replace("sub-", "").strip()
+    if subject == "" or subject.lower() == "subject-consensus":
+        return None, None
+    return subject, spec_path
+
+
 def style_imshow(ax, data: np.ndarray, title: str, *, vmin: float | None = None, vmax: float | None = None, cmap: str = "magma"):
     arr = np.asarray(data, dtype=np.float32)
     cm = plt.get_cmap(cmap).copy()
@@ -456,23 +472,32 @@ def render_combo(
             surf_r = Path(str(m_r["template_left_or_right_surface"]))
             left_label = Path(str(m_l.get("template_functional_atlas_label", m_l.get("template_cluster_label"))))
             right_label = Path(str(m_r.get("template_functional_atlas_label", m_r.get("template_cluster_label"))))
-            spec_path = Path(str(m_l["template_spec_path"]))
-            template_subject = str(m_l["template_subject"]).replace("sub-", "")
-            with tempfile.TemporaryDirectory(prefix="present_group_surface_render_") as tmp:
-                render = render_locked_grid(
-                    subject=template_subject,
-                    scene=scene,
-                    outdir=Path(tmp),
-                    name=f"merged_group_vertex_wta_{method}_{atlas}_{smoothing}",
-                    title=f"Group functional atlas {method} {atlas} {smoothing}",
-                    left_labels=left_label,
-                    right_labels=right_label,
-                    left_surface=surf_l,
-                    right_surface=surf_r,
-                    spec_path=spec_path,
+            template_subject, spec_path = resolve_template_render_spec(m_l)
+            if template_subject is None or spec_path is None:
+                ax_big.text(
+                    0.5,
+                    0.5,
+                    "Surface render skipped\n(template_spec_path unavailable in subject-consensus mode)",
+                    ha="center",
+                    va="center",
+                    fontsize=FS_MISSING,
                 )
-                big = Path(str(render["biglegend_png"]))
-                ax_big.imshow(plt.imread(big))
+            else:
+                with tempfile.TemporaryDirectory(prefix="present_group_surface_render_") as tmp:
+                    render = render_locked_grid(
+                        subject=template_subject,
+                        scene=scene,
+                        outdir=Path(tmp),
+                        name=f"merged_group_vertex_wta_{method}_{atlas}_{smoothing}",
+                        title=f"Group functional atlas {method} {atlas} {smoothing}",
+                        left_labels=left_label,
+                        right_labels=right_label,
+                        left_surface=surf_l,
+                        right_surface=surf_r,
+                        spec_path=spec_path,
+                    )
+                    big = Path(str(render["biglegend_png"]))
+                    ax_big.imshow(plt.imread(big))
             ax_big.set_title(f"{smoothing} | functional atlas surface", fontsize=FS_BIG_TITLE)
             ax_big.axis("off")
             rows_meta.append(
@@ -627,23 +652,32 @@ def render_combo(
         ax_big = fig.add_subplot(gs[ridx, 1])
         left_label = Path(str(m_l.get("template_functional_atlas_label", m_l["template_cluster_label"])))
         right_label = Path(str(m_r.get("template_functional_atlas_label", m_r["template_cluster_label"])))
-        spec_path = Path(str(m_l["template_spec_path"]))
-        template_subject = str(m_l["template_subject"]).replace("sub-", "")
-        with tempfile.TemporaryDirectory(prefix="present_group_surface_render_") as tmp:
-            render = render_locked_grid(
-                subject=template_subject,
-                scene=scene,
-                outdir=Path(tmp),
-                name=f"merged_group_cluster_wta_{method}_{atlas}_{smoothing}",
-                title=f"Group functional atlas {method} {atlas} {smoothing}",
-                left_labels=left_label,
-                right_labels=right_label,
-                left_surface=surf_l,
-                right_surface=surf_r,
-                spec_path=spec_path,
+        template_subject, spec_path = resolve_template_render_spec(m_l)
+        if template_subject is None or spec_path is None:
+            ax_big.text(
+                0.5,
+                0.5,
+                "Surface render skipped\n(template_spec_path unavailable in subject-consensus mode)",
+                ha="center",
+                va="center",
+                fontsize=FS_MISSING,
             )
-            big = Path(str(render["biglegend_png"]))
-            ax_big.imshow(plt.imread(big))
+        else:
+            with tempfile.TemporaryDirectory(prefix="present_group_surface_render_") as tmp:
+                render = render_locked_grid(
+                    subject=template_subject,
+                    scene=scene,
+                    outdir=Path(tmp),
+                    name=f"merged_group_cluster_wta_{method}_{atlas}_{smoothing}",
+                    title=f"Group functional atlas {method} {atlas} {smoothing}",
+                    left_labels=left_label,
+                    right_labels=right_label,
+                    left_surface=surf_l,
+                    right_surface=surf_r,
+                    spec_path=spec_path,
+                )
+                big = Path(str(render["biglegend_png"]))
+                ax_big.imshow(plt.imread(big))
         ax_big.set_title(f"{smoothing} | functional atlas surface", fontsize=FS_BIG_TITLE)
         ax_big.axis("off")
 
