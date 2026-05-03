@@ -13,6 +13,16 @@ Optional spectral branch (opt-in):
 - `group-network-spectral` (cluster-based)
 - `group-roi-sim-spectral` (design frozen in this round; not implemented/enabled)
 
+## Kong2019 Branch Convention (Fast-PFM T1only)
+
+Kong2019 does not use `routea/routeb` naming.
+
+- branch root: `outputs_experiments/hippunfold_recommended_t1w_20260423/kong2019_fast_pfm_t1only/`
+- shared inputs: `.../shared_inputs/pfm_151/`
+- atlas run: `kong2019_8net` only
+- mode split only: `allon` / `alloff`
+- presentation names use `kong2019_*_group_overview_{allon|alloff}.png`
+
 ## Shared Upstream
 
 1. Extract cortex Kong2022 ROI references:
@@ -24,6 +34,15 @@ Optional spectral branch (opt-in):
    - `scripts/hipp_parcellation_network/run_merged_canonical_group_atlas.py`
    - Surface topology and long-axis order are derived from the shared group-average template surfaces.
    - Manifest subjects are validated for topology compatibility against that shared template.
+
+Kong2019 fast-PFM T1only input relocation:
+
+1. move (`mv`) archive shared tree:
+   - `_archive/outputs_migration/hipp_group_inputs_shared`
+   - `-> outputs_experiments/hippunfold_recommended_t1w_20260423/kong2019_fast_pfm_t1only/shared_inputs/pfm_151`
+2. keep moved `sub-*/fc/kong2022/*` for redundancy-aware `K` selection support
+3. regenerate `kong2019_8net` in the new root via:
+   - `scripts/hipp_parcellation_network/materialize_kong7_kong8_pearson_partial_fc.py --atlases kong2019_8net`
 
 ## Branch-Specific Logic
 
@@ -65,6 +84,11 @@ Optional spectral branch (opt-in):
   - assignment uses raw TopN positive ROI majority (`N = min(20, n_positive_roi)`)
   - overview confidence labels, ambiguity text, and network naming use TopN count fields rather than canonical-network Fisher-z maxima
 - Uses the same optional redundancy-aware `K` selection and preprocessing knobs as intrinsic spectral.
+
+Kong2019 implementation note:
+
+- for `atlas=kong2019_8net` with `--k-selection-mode redundancy-aware`, the driver currently reads `fc/kong2022/*` as ROI-FC bank for redundancy/profile checks
+- therefore `fc/kong2022/*` must exist in the Kong2019 shared root
 
 ### `group-roi-sim-spectral` (opt-in, experimental)
 

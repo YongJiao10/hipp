@@ -34,6 +34,26 @@ Retired workflows are archived and are no longer public entrypoints:
 - MSHBM experiments
 - `group-network-partial-spectral` and `group-intrinsic-partial-spectral` methods (code preserved, not running)
 
+## 2026-05-03 Kong2019 Fast-PFM T1only Update
+
+This update adds a dedicated Kong2019 T1only root without `routea/routeb` naming:
+
+- root: `outputs_experiments/hippunfold_recommended_t1w_20260423/kong2019_fast_pfm_t1only/`
+- shared inputs: `outputs_experiments/hippunfold_recommended_t1w_20260423/kong2019_fast_pfm_t1only/shared_inputs/pfm_151/`
+- cohort manifest: `outputs_experiments/hippunfold_recommended_t1w_20260423/kong2019_fast_pfm_t1only/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_151.txt`
+
+Input migration policy for this branch:
+
+- use `mv` from `_archive/outputs_migration/hipp_group_inputs_shared` into `shared_inputs/pfm_151`
+- do not move active `kong2022/shared_inputs/*` trees
+- hippocampal `surface/*` and all `fc/kong2019*` under the old tree are not reused as final outputs
+- recompute `kong2019_8net` products under the new root from T1only hippocampal timeseries
+
+Redundancy-aware note:
+
+- `run_merged_canonical_group_atlas.py --k-selection-mode redundancy-aware` currently reads `fc/kong2022/*` as the ROI-profile bank for redundancy checks
+- keep `fc/kong2022/*` available under `shared_inputs/pfm_151/sub-*/fc/kong2022/`
+
 ## Canonical Input Roots
 
 ```text
@@ -106,6 +126,69 @@ Do not silently expand to 166 subjects.
   --out-root outputs_migration/hipp_group_merged_canonical_atlas
 ```
 
+Kong2019 T1only (speed mode on, no route tag):
+
+```bash
+/home/yojiao/.conda/envs/py314/bin/python scripts/hipp_parcellation_network/materialize_kong7_kong8_pearson_partial_fc.py \
+  --shared-root outputs_experiments/hippunfold_recommended_t1w_20260423/kong2019_fast_pfm_t1only/shared_inputs/pfm_151 \
+  --subjects-manifest outputs_experiments/hippunfold_recommended_t1w_20260423/kong2019_fast_pfm_t1only/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_151.txt \
+  --atlases kong2019_8net \
+  --smoothings 2mm 4mm \
+  --hemis L R \
+  --jobs 4
+
+/home/yojiao/.conda/envs/py314/bin/python scripts/hipp_parcellation_network/run_merged_canonical_group_atlas.py \
+  --shared-root outputs_experiments/hippunfold_recommended_t1w_20260423/kong2019_fast_pfm_t1only/shared_inputs/pfm_151 \
+  --surface-root outputs_experiments/hippunfold_recommended_t1w_20260423/kong2019_fast_pfm_t1only/shared_inputs/pfm_151 \
+  --out-root outputs_experiments/hippunfold_recommended_t1w_20260423/kong2019_fast_pfm_t1only/hipp_group_merged_canonical_atlas_kong2019_allon \
+  --subjects-manifest outputs_experiments/hippunfold_recommended_t1w_20260423/kong2019_fast_pfm_t1only/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_151.txt \
+  --atlases kong2019_8net \
+  --methods group-intrinsic-spectral group-network-spectral \
+  --smoothings 2mm 4mm \
+  --hemis L R \
+  --coverage-thresholds 0.80 \
+  --k-selection-mode redundancy-aware \
+  --redundancy-early-stop \
+  --jobs 4 \
+  --resume
+
+/home/yojiao/.conda/envs/py314/bin/python scripts/hipp_parcellation_network/run_merged_canonical_group_atlas.py \
+  --shared-root outputs_experiments/hippunfold_recommended_t1w_20260423/kong2019_fast_pfm_t1only/shared_inputs/pfm_151 \
+  --surface-root outputs_experiments/hippunfold_recommended_t1w_20260423/kong2019_fast_pfm_t1only/shared_inputs/pfm_151 \
+  --out-root outputs_experiments/hippunfold_recommended_t1w_20260423/kong2019_fast_pfm_t1only/hipp_group_merged_canonical_atlas_kong2019_alloff \
+  --subjects-manifest outputs_experiments/hippunfold_recommended_t1w_20260423/kong2019_fast_pfm_t1only/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_151.txt \
+  --atlases kong2019_8net \
+  --methods group-intrinsic-spectral group-network-spectral \
+  --smoothings 2mm 4mm \
+  --hemis L R \
+  --coverage-thresholds 0.80 \
+  --k-selection-mode redundancy-aware \
+  --redundancy-early-stop \
+  --jobs 4 \
+  --no-subject-fc-binarize \
+  --resume
+
+/home/yojiao/.conda/envs/py314/bin/python scripts/hipp_parcellation_network/build_present_group_overview_merged_canonical.py \
+  --group-root outputs_experiments/hippunfold_recommended_t1w_20260423/kong2019_fast_pfm_t1only/hipp_group_merged_canonical_atlas_kong2019_allon \
+  --present-dir present_group_t1only \
+  --methods group-intrinsic-spectral group-network-spectral \
+  --atlases kong2019_8net \
+  --coverage-threshold 0.80 \
+  --mode-tag allon \
+  --skip-readme \
+  --skip-manifest
+
+/home/yojiao/.conda/envs/py314/bin/python scripts/hipp_parcellation_network/build_present_group_overview_merged_canonical.py \
+  --group-root outputs_experiments/hippunfold_recommended_t1w_20260423/kong2019_fast_pfm_t1only/hipp_group_merged_canonical_atlas_kong2019_alloff \
+  --present-dir present_group_t1only \
+  --methods group-intrinsic-spectral group-network-spectral \
+  --atlases kong2019_8net \
+  --coverage-threshold 0.80 \
+  --mode-tag alloff \
+  --skip-readme \
+  --skip-manifest
+```
+
 ## Active Outputs
 
 ```text
@@ -117,6 +200,12 @@ present_group/
   kong2022_group-network-spectral_group_overview.png
   group_overview_manifest.json
   README.md
+
+present_group_t1only/
+  kong2019_group-intrinsic-spectral_group_overview_allon.png
+  kong2019_group-intrinsic-spectral_group_overview_alloff.png
+  kong2019_group-network-spectral_group_overview_allon.png
+  kong2019_group-network-spectral_group_overview_alloff.png
 ```
 
 ## Interpretation Rules

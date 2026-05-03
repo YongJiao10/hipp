@@ -62,6 +62,70 @@ Surface/topology rule for all cluster-based runs:
 - The driver validates each manifest subject's surface topology against the shared template.
 - Any topology mismatch causes hard failure with subject list.
 
+### Kong2019 Fast-PFM T1only (No Route, Speed On)
+
+Use a dedicated Kong2019 root:
+
+- `outputs_experiments/hippunfold_recommended_t1w_20260423/kong2019_fast_pfm_t1only/`
+- shared root: `.../shared_inputs/pfm_151/`
+- manifest: `.../manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_151.txt`
+
+Data lineage for this branch:
+
+1. move (`mv`) `_archive/outputs_migration/hipp_group_inputs_shared` to:
+   - `outputs_experiments/hippunfold_recommended_t1w_20260423/kong2019_fast_pfm_t1only/shared_inputs/pfm_151`
+2. keep the moved `fc/kong2022/*` tree because redundancy-aware `K` selection uses it as ROI-profile bank
+3. regenerate `kong2019_8net` under the new root:
+
+```bash
+python scripts/hipp_parcellation_network/materialize_kong7_kong8_pearson_partial_fc.py \
+  --shared-root outputs_experiments/hippunfold_recommended_t1w_20260423/kong2019_fast_pfm_t1only/shared_inputs/pfm_151 \
+  --subjects-manifest outputs_experiments/hippunfold_recommended_t1w_20260423/kong2019_fast_pfm_t1only/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_151.txt \
+  --atlases kong2019_8net \
+  --smoothings 2mm 4mm \
+  --hemis L R \
+  --jobs 4
+```
+
+Run allon (speed on):
+
+```bash
+python scripts/hipp_parcellation_network/run_merged_canonical_group_atlas.py \
+  --shared-root outputs_experiments/hippunfold_recommended_t1w_20260423/kong2019_fast_pfm_t1only/shared_inputs/pfm_151 \
+  --surface-root outputs_experiments/hippunfold_recommended_t1w_20260423/kong2019_fast_pfm_t1only/shared_inputs/pfm_151 \
+  --out-root outputs_experiments/hippunfold_recommended_t1w_20260423/kong2019_fast_pfm_t1only/hipp_group_merged_canonical_atlas_kong2019_allon \
+  --subjects-manifest outputs_experiments/hippunfold_recommended_t1w_20260423/kong2019_fast_pfm_t1only/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_151.txt \
+  --atlases kong2019_8net \
+  --methods group-intrinsic-spectral group-network-spectral \
+  --smoothings 2mm 4mm \
+  --hemis L R \
+  --coverage-thresholds 0.80 \
+  --k-selection-mode redundancy-aware \
+  --redundancy-early-stop \
+  --jobs 4 \
+  --resume
+```
+
+Run alloff (speed on + no binarize):
+
+```bash
+python scripts/hipp_parcellation_network/run_merged_canonical_group_atlas.py \
+  --shared-root outputs_experiments/hippunfold_recommended_t1w_20260423/kong2019_fast_pfm_t1only/shared_inputs/pfm_151 \
+  --surface-root outputs_experiments/hippunfold_recommended_t1w_20260423/kong2019_fast_pfm_t1only/shared_inputs/pfm_151 \
+  --out-root outputs_experiments/hippunfold_recommended_t1w_20260423/kong2019_fast_pfm_t1only/hipp_group_merged_canonical_atlas_kong2019_alloff \
+  --subjects-manifest outputs_experiments/hippunfold_recommended_t1w_20260423/kong2019_fast_pfm_t1only/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_151.txt \
+  --atlases kong2019_8net \
+  --methods group-intrinsic-spectral group-network-spectral \
+  --smoothings 2mm 4mm \
+  --hemis L R \
+  --coverage-thresholds 0.80 \
+  --k-selection-mode redundancy-aware \
+  --redundancy-early-stop \
+  --jobs 4 \
+  --no-subject-fc-binarize \
+  --resume
+```
+
 ### 2.1 `group-intrinsic-spectral`
 
 1. Build support mask from coverage threshold.
@@ -161,10 +225,20 @@ Surface/topology rule for all cluster-based runs:
    - clusterless methods render without cluster artifacts
    - for `group-network-top` / `group-network-all`, left pane shows only `vertex assignment counts`
    - clusterless group overview no longer includes left-pane global-top text/metadata blocks
+
 2. `build_cluster_roi_cortex_independent.py`
    - intrinsic: per-cluster cortex figures
    - clusterless: global-top figure uses cortex ROI + hippocampal surface vertex map (not long-axis strip) + right-side legend styled like intrinsic panels
    - this cortex overview remains the location for global-top visualization
+
+Kong2019 naming rule (no route tag):
+
+- generate with `--mode-tag allon` and `--mode-tag alloff` only
+- final maintained filenames in `present_group_t1only/` are:
+  - `kong2019_group-intrinsic-spectral_group_overview_allon.png`
+  - `kong2019_group-intrinsic-spectral_group_overview_alloff.png`
+  - `kong2019_group-network-spectral_group_overview_allon.png`
+  - `kong2019_group-network-spectral_group_overview_alloff.png`
 
 ## 4. Rule Reminder
 
