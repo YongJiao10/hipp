@@ -39,14 +39,13 @@ DEFAULT_SCENE = REPO_ROOT / "config" / "manual_wb_scenes" / "cortex_manual.scene
 DEFAULT_HIPP_SCENE = REPO_ROOT / "config" / "wb_locked_native_view_lateral_medial.scene"
 
 METHOD_CHOICES = [
-    "group-network-spectral",
+    "network-spectral",
     "group-network-partial-spectral",
-    "group-intrinsic-spectral",
+    "intrinsic-spectral",
     "group-intrinsic-partial-spectral",
-    "group-network-top",
-    "group-network-all",
+    "wta-top",
 ]
-METHODS_DEFAULT = ["group-intrinsic-spectral", "group-network-spectral"]
+METHODS_DEFAULT = ["intrinsic-spectral", "network-spectral", "wta-top"]
 SMOOTHINGS = ["2mm", "4mm"]
 HEMIS = ["L", "R"]
 VIEW_SPECS = [
@@ -55,7 +54,7 @@ VIEW_SPECS = [
     {"name": "dorsal", "axis": "x", "deg": 90.0},
     {"name": "ventral", "axis": "x", "deg": -90.0},
 ]
-CLUSTERLESS_METHODS = {"group-network-top", "group-network-all"}
+CLUSTERLESS_METHODS = {"wta-top"}
 
 
 @dataclass(frozen=True)
@@ -909,7 +908,6 @@ def render_cluster_figure(
     *,
     cluster_dir: Path,
     title: str,
-    subtitle: str,
     left_label: Path,
     right_label: Path,
     selected_items: list[dict[str, Any]],
@@ -964,29 +962,28 @@ def render_cluster_figure(
 
     out_png = cluster_dir / "cluster_cortex_toproi_4view.png"
     img = plt.imread(out_png_single)
-    fig = plt.figure(figsize=(15.0, 8.8), dpi=180, constrained_layout=True)
-    gs = fig.add_gridspec(1, 2, width_ratios=[3.5, 3.5], wspace=0.04)
+    fig = plt.figure(figsize=(16.4, 9.0), dpi=180, constrained_layout=True)
+    gs = fig.add_gridspec(1, 2, width_ratios=[4.9, 2.3], wspace=0.02)
     ax_img = fig.add_subplot(gs[0, 0])
     ax_img.imshow(img)
     ax_img.axis("off")
-    ax_img.set_title(title, fontsize=16, loc="left", pad=7.0)
+    ax_img.set_title(title, fontsize=18, loc="left", pad=6.0)
 
     ax_leg = fig.add_subplot(gs[0, 1])
     ax_leg.axis("off")
     total_selected = int(n_selected_positive) + int(n_selected_negative)
-    ax_leg.text(0.0, 1.00, subtitle, ha="left", va="top", fontsize=13, wrap=True)
     ax_leg.text(
         0.0,
-        0.90,
+        0.98,
         f"Selected ROI: total={total_selected}  (+{int(n_selected_positive)} / -{int(n_selected_negative)})",
         ha="left",
         va="top",
-        fontsize=15,
+        fontsize=22,
         fontweight="bold",
     )
-    ax_leg.text(0.0, 0.83, "Sign coding:", ha="left", va="top", fontsize=15, fontweight="bold")
-    ax_leg.text(0.0, 0.78, "+ : network color (saturated)", ha="left", va="top", fontsize=14)
-    ax_leg.text(0.0, 0.73, "- : pale tint of network color", ha="left", va="top", fontsize=14)
+    ax_leg.text(0.0, 0.90, "Sign coding:", ha="left", va="top", fontsize=22, fontweight="bold")
+    ax_leg.text(0.0, 0.84, "+ : network color (saturated)", ha="left", va="top", fontsize=21)
+    ax_leg.text(0.0, 0.78, "- : pale tint of network color", ha="left", va="top", fontsize=21)
 
     net_counts: dict[str, dict[str, int]] = {}
     for item in selected_items:
@@ -999,11 +996,11 @@ def render_cluster_figure(
             row["negative"] += 1
 
     if not net_counts:
-        ax_leg.text(0.0, 0.65, "No significant ROI selected.", ha="left", va="top", fontsize=15)
+        ax_leg.text(0.0, 0.68, "No significant ROI selected.", ha="left", va="top", fontsize=22)
     else:
-        ax_leg.text(0.0, 0.65, "Network legend:", ha="left", va="top", fontsize=15, fontweight="bold")
-        y = 0.61
-        step = 0.050
+        ax_leg.text(0.0, 0.68, "Network legend:", ha="left", va="top", fontsize=22, fontweight="bold")
+        y = 0.63
+        step = 0.064
         ordered_nets = sorted(net_counts.keys())
         for net in ordered_nets[:12]:
             base = network_colors.get(net, (128, 128, 128, 255))
@@ -1011,14 +1008,14 @@ def render_cluster_figure(
             c_pos = tuple(x / 255.0 for x in base[:3]) + (1.0,)
             c_neg = tuple(x / 255.0 for x in neg[:3]) + (1.0,)
             ax_leg.add_patch(plt.Rectangle(
-                (0.0, y - 0.018), 0.030, 0.026,
+                (0.0, y - 0.028), 0.052, 0.042,
                 transform=ax_leg.transAxes, facecolor=c_pos, edgecolor="none"))
             ax_leg.add_patch(plt.Rectangle(
-                (0.038, y - 0.018), 0.030, 0.026,
+                (0.060, y - 0.028), 0.052, 0.042,
                 transform=ax_leg.transAxes, facecolor=c_neg, edgecolor="none"))
             c = net_counts[net]
             label = f"{net} (+{int(c['positive'])}/-{int(c['negative'])})"
-            ax_leg.text(0.076, y, label, ha="left", va="center", fontsize=14, transform=ax_leg.transAxes)
+            ax_leg.text(0.124, y, label, ha="left", va="center", fontsize=21, transform=ax_leg.transAxes)
             y -= step
             if y < 0.02:
                 break
@@ -1099,6 +1096,7 @@ def compose_combo_overview(
     cluster_previews: list[dict[str, Any]],
     out_png: Path,
     title: str,
+    stats_note: str | None = None,
 ) -> None:
     if not cluster_previews:
         fig, ax = plt.subplots(1, 1, figsize=(8.0, 4.5), dpi=180)
@@ -1124,13 +1122,13 @@ def compose_combo_overview(
     # Preserve source aspect ratio to avoid vertical squeezing.
     ref_img = plt.imread(Path(str(cluster_previews[0]["panel_png"])))
     ref_aspect = float(ref_img.shape[1]) / float(ref_img.shape[0])  # w / h
-    cell_w = 7.0
+    cell_w = 8.5
     cell_h = cell_w / max(ref_aspect, 1e-6)
-    suptitle_h = 0.6
+    suptitle_h = 1.20
     fig_w = cols * cell_w
     fig_h = rows * cell_h + suptitle_h
-    fig = plt.figure(figsize=(fig_w, fig_h), dpi=180, constrained_layout=True)
-    gs = fig.add_gridspec(rows, cols, wspace=0.02, hspace=0.06)
+    fig = plt.figure(figsize=(fig_w, fig_h), dpi=180, constrained_layout=False)
+    gs = fig.add_gridspec(rows, cols, left=0.01, right=0.99, bottom=0.02, top=0.82, wspace=0.01, hspace=0.03)
 
     for idx, item in enumerate(cluster_previews):
         if idx >= rows * cols:
@@ -1146,10 +1144,21 @@ def compose_combo_overview(
         n_pos = int(item.get("n_selected_positive", 0))
         n_neg = int(item.get("n_selected_negative", 0))
         n_tot = int(n_pos + n_neg)
-        ax.set_title(f"{label} | n={n_tot} (+{n_pos}/-{n_neg})", fontsize=14)
+        ax.set_title(f"{label} | n={n_tot} (+{n_pos}/-{n_neg})", fontsize=15)
         ax.axis("off")
 
-    fig.suptitle(title, fontsize=18)
+    if not stats_note:
+        fig.suptitle(title, fontsize=20)
+    else:
+        fig.suptitle(title, fontsize=20, y=0.965)
+        fig.text(
+            0.5,
+            0.925,
+            f"({stats_note})",
+            ha="center",
+            va="top",
+            fontsize=18,
+        )
     out_png.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_png, dpi=300, bbox_inches="tight")
     plt.close(fig)
@@ -1334,6 +1343,7 @@ def main() -> int:
                     "n_selected_positive": n_pos,
                     "n_selected_negative": n_neg,
                     "panel_label": f"{combo.smoothing}-{combo.hemi}-GlobalTop",
+                    "n_subjects_used": int(len(subjects)),
                 }
             ]
             group_key = (combo.atlas, combo.method, "2mm+4mm")
@@ -1430,14 +1440,9 @@ def main() -> int:
                 f"cluster C{cluster_id:02d} | {combo.atlas} | {combo.method} | "
                 f"{combo.smoothing} | hemi-{combo.hemi}"
             )
-            subtitle = (
-                f"one-sided one-sample t-test + BH-FDR(q<{float(args.fdr_q):.2f}); "
-                f"sig-only; max {int(args.max_rois_per_sign)}/sign; N={len(used_subjects)}"
-            )
             figure_png = render_cluster_figure(
                 cluster_dir=cluster_dir,
                 title=title,
-                subtitle=subtitle,
                 left_label=left_label,
                 right_label=right_label,
                 selected_items=selected_items,
@@ -1493,6 +1498,7 @@ def main() -> int:
                     "runtime_png": str(figure_png),
                     "n_selected_positive": int(len(selected_pos)),
                     "n_selected_negative": int(len(selected_neg)),
+                    "n_subjects_used": int(len(used_subjects)),
                 }
             )
 
@@ -1581,10 +1587,25 @@ def main() -> int:
         else:
             overview_png = present_dir / f"cortex_{atlas}_{method}_{smoothing}_overview.png"
             title_txt = f"{atlas} | {method} | {smoothing} | L+R merged"
+        n_subjects_used_vals = sorted(
+            {
+                int(r.get("n_subjects_used", 0))
+                for r in merged_rows
+                if int(r.get("n_subjects_used", 0)) > 0
+            }
+        )
+        n_used = int(n_subjects_used_vals[0]) if len(n_subjects_used_vals) == 1 else (
+            int(max(n_subjects_used_vals)) if n_subjects_used_vals else 0
+        )
+        stats_note = (
+            f"one-sided one-sample t-test + BH-FDR(q<{float(args.fdr_q):.2f}); "
+            f"sig-only; max {int(args.max_rois_per_sign)}/sign; N={n_used}"
+        )
         compose_combo_overview(
             cluster_previews=previews_for_plot,
             out_png=overview_png,
             title=title_txt,
+            stats_note=stats_note,
         )
         grouped_overviews.append(
             {

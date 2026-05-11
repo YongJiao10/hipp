@@ -89,6 +89,23 @@ def load_font(size: int) -> ImageFont.FreeTypeFont:
     return ImageFont.load_default()
 
 
+def has_required_inputs(subject: str) -> bool:
+    for hemi in HEMIS:
+        bold = BOLD_DIR / subject / "surface" / "raw" / f"{subject}_hemi-{hemi}_space-corobl_den-512_label-hipp_bold.func.gii"
+        surf = BATCH_DIR / subject / "hippunfold" / subject / "surf" / f"{subject}_hemi-{hemi}_space-corobl_den-512_label-hipp_midthickness.surf.gii"
+        if not (bold.exists() and surf.exists()):
+            return False
+    return True
+
+
+ACTIVE_SUBJECTS = [sub for sub in SUBJECTS if has_required_inputs(sub)]
+if not ACTIVE_SUBJECTS:
+    raise RuntimeError("No subjects with complete BOLD+surface inputs were found.")
+MISSING_SUBJECTS = [sub for sub in SUBJECTS if sub not in ACTIVE_SUBJECTS]
+if MISSING_SUBJECTS:
+    print(f"[warn] skipping subjects with missing inputs: {', '.join(MISSING_SUBJECTS)}", flush=True)
+
+
 def tight_crop(rgba: np.ndarray, bg_thresh: int = 8, margin: int = 10) -> np.ndarray:
     mask = rgba[:, :, :3].max(axis=2) > bg_thresh
     rows = np.where(mask.any(axis=1))[0]
@@ -185,7 +202,7 @@ def inject_fixed_palette(root: ET.Element, vmin: float, vmax: float) -> None:
 
 # ── Preflight: verify all required input files exist ─────────────────────────
 missing = []
-for sub in SUBJECTS:
+for sub in ACTIVE_SUBJECTS:
     for hemi in HEMIS:
         bold = BOLD_DIR / sub / "surface" / "raw" / \
             f"{sub}_hemi-{hemi}_space-corobl_den-512_label-hipp_bold.func.gii"
@@ -208,7 +225,7 @@ print("Step 1: Computing tSNR and saving masked shape.gii …")
 tsnr_data: dict[tuple[str, str], np.ndarray] = {}
 pct_below: dict[tuple[str, str], float] = {}
 
-for sub in SUBJECTS:
+for sub in ACTIVE_SUBJECTS:
     for hemi in HEMIS:
         bold_path = BOLD_DIR / sub / "surface" / "raw" / \
             f"{sub}_hemi-{hemi}_space-corobl_den-512_label-hipp_bold.func.gii"
@@ -248,7 +265,7 @@ print("\nStep 3: Rendering via wb_command …")
 tmpdir = Path(tempfile.mkdtemp(prefix="tsnr_masked_"))
 render_pngs: dict[str, Path] = {}
 
-for sub in SUBJECTS:
+for sub in ACTIVE_SUBJECTS:
     root = ET.fromstring(ET.tostring(base_root, encoding="unicode"))
     for elem in root.iter():
         if elem.text and f"sub-{template_sub}" in elem.text:
@@ -271,7 +288,7 @@ for sub in SUBJECTS:
 # ── Step 4: Split renders into L/R panels ─────────────────────────────────────
 print("\nStep 4: Splitting L/R panels …")
 panels: dict[tuple[str, str], np.ndarray] = {}
-for sub in SUBJECTS:
+for sub in ACTIVE_SUBJECTS:
     img = np.asarray(Image.open(render_pngs[sub]).convert("RGBA"))
     mid = img.shape[1] // 2
     panels[(sub, "L")] = img[:, :mid, :]
@@ -283,7 +300,7 @@ cropped = {k: tight_crop(v) for k, v in panels.items()}
 cell_h = max(v.shape[0] for v in cropped.values())
 cell_w = max(v.shape[1] for v in cropped.values())
 
-n_rows, n_cols = 4, 2
+n_rows, n_cols = len(ACTIVE_SUBJECTS), 2
 canvas_w = MARGIN * 2 + n_cols * cell_w + (n_cols - 1) * GUTTER + GUTTER + BAR_W
 canvas_h = MARGIN * 2 + n_rows * (LABEL_H + cell_h) + (n_rows - 1) * GUTTER + 36
 canvas   = Image.new("RGBA", (canvas_w, canvas_h), BG_COLOR)
@@ -292,7 +309,7 @@ title_font = load_font(28)
 tick_font  = load_font(20)
 ann_font   = load_font(18)
 
-for row, sub in enumerate(SUBJECTS):
+for row, sub in enumerate(ACTIVE_SUBJECTS):
     for col, hemi in enumerate(HEMIS):
         panel = cropped[(sub, hemi)]
         ph, pw = panel.shape[:2]

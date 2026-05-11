@@ -16,16 +16,14 @@ Run:
 ```bash
 python scripts/hipp_parcellation_network/run_merged_canonical_group_atlas.py \
   --atlases kong2022 \
-  --methods group-intrinsic-spectral group-network-top group-network-all
+  --methods intrinsic-spectral network-spectral wta-top
 ```
 
-Opt-in spectral run (cluster-based pair):
+Optional non-default clusterless-all run:
 
 ```bash
 python scripts/hipp_parcellation_network/run_merged_canonical_group_atlas.py \
   --atlases kong2022 \
-  --methods group-network-spectral group-intrinsic-spectral \
-  --k-selection-mode redundancy-aware
 ```
 
 Opt-in experimental ROI-sim spectral run (`kong2022` only):
@@ -43,18 +41,17 @@ python scripts/hipp_parcellation_network/run_t1only_spectral_fast_rerun.py
 
 This launcher fixes the default urgent runtime policy to:
 
-- `group-intrinsic-spectral` first, then `group-network-spectral`
+- `intrinsic-spectral`, `network-spectral`, then `wta-top`
 - rebuild overview immediately after each method
 - parallelize across the four independent combos (`2mm/4mm x L/R`)
 - keep each combo's `K` loop sequential with `--redundancy-early-stop`
-- default subject FC preprocessing in the launcher is `--subject-fc-top-fraction 0.10 --subject-fc-binarize`
-- launcher override knobs are available: `--subject-fc-top-fraction <0..1>` and `--no-subject-fc-binarize`
+- default subject FC preprocessing in the launcher is `--subject-fc-mode full`
+- sparse mode override: `--subject-fc-mode top-percent --subject-fc-top-percent 10`
 
 Spectral FC preprocessing defaults in this driver:
 
-- `--subject-fc-top-fraction 0.10` (keep largest raw-value Top 10% per subject FC map)
-- `--subject-fc-binarize` (default on; retained Top entries are set to `1`)
-- optional disable: `--no-subject-fc-binarize`
+- `--subject-fc-mode full` (keep all values; no sparsification)
+- sparse binarized mode: `--subject-fc-mode top-percent --subject-fc-top-percent <int>`
 
 Surface/topology rule for all cluster-based runs:
 
@@ -87,51 +84,53 @@ python scripts/hipp_parcellation_network/materialize_kong7_kong8_pearson_partial
   --jobs 4
 ```
 
-Run allon (speed on):
+Run `10perc` (speed on):
 
 ```bash
 python scripts/hipp_parcellation_network/run_merged_canonical_group_atlas.py \
   --shared-root outputs_experiments/hippunfold_recommended_t1w_20260423/kong2019_fast_pfm_t1only/shared_inputs/pfm_151 \
   --surface-root outputs_experiments/hippunfold_recommended_t1w_20260423/kong2019_fast_pfm_t1only/shared_inputs/pfm_151 \
-  --out-root outputs_experiments/hippunfold_recommended_t1w_20260423/kong2019_fast_pfm_t1only/hipp_group_merged_canonical_atlas_kong2019_allon \
+  --out-root outputs_experiments/hippunfold_recommended_t1w_20260423/kong2019_fast_pfm_t1only/hipp_group_merged_canonical_atlas_kong2019_10perc \
   --subjects-manifest outputs_experiments/hippunfold_recommended_t1w_20260423/kong2019_fast_pfm_t1only/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_151.txt \
   --atlases kong2019_8net \
-  --methods group-intrinsic-spectral group-network-spectral \
+  --methods intrinsic-spectral network-spectral \
+  --smoothings 2mm 4mm \
+  --hemis L R \
+  --coverage-thresholds 0.80 \
+  --k-selection-mode redundancy-aware \
+  --subject-fc-mode top-percent \
+  --subject-fc-top-percent 10 \
+  --redundancy-early-stop \
+  --jobs 4 \
+  --resume
+```
+
+Run `full` (speed on):
+
+```bash
+python scripts/hipp_parcellation_network/run_merged_canonical_group_atlas.py \
+  --shared-root outputs_experiments/hippunfold_recommended_t1w_20260423/kong2019_fast_pfm_t1only/shared_inputs/pfm_151 \
+  --surface-root outputs_experiments/hippunfold_recommended_t1w_20260423/kong2019_fast_pfm_t1only/shared_inputs/pfm_151 \
+  --out-root outputs_experiments/hippunfold_recommended_t1w_20260423/kong2019_fast_pfm_t1only/hipp_group_merged_canonical_atlas_kong2019_full \
+  --subjects-manifest outputs_experiments/hippunfold_recommended_t1w_20260423/kong2019_fast_pfm_t1only/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_151.txt \
+  --atlases kong2019_8net \
+  --methods intrinsic-spectral network-spectral \
   --smoothings 2mm 4mm \
   --hemis L R \
   --coverage-thresholds 0.80 \
   --k-selection-mode redundancy-aware \
   --redundancy-early-stop \
   --jobs 4 \
+  --subject-fc-mode full \
   --resume
 ```
 
-Run alloff (speed on + no binarize):
-
-```bash
-python scripts/hipp_parcellation_network/run_merged_canonical_group_atlas.py \
-  --shared-root outputs_experiments/hippunfold_recommended_t1w_20260423/kong2019_fast_pfm_t1only/shared_inputs/pfm_151 \
-  --surface-root outputs_experiments/hippunfold_recommended_t1w_20260423/kong2019_fast_pfm_t1only/shared_inputs/pfm_151 \
-  --out-root outputs_experiments/hippunfold_recommended_t1w_20260423/kong2019_fast_pfm_t1only/hipp_group_merged_canonical_atlas_kong2019_alloff \
-  --subjects-manifest outputs_experiments/hippunfold_recommended_t1w_20260423/kong2019_fast_pfm_t1only/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_151.txt \
-  --atlases kong2019_8net \
-  --methods group-intrinsic-spectral group-network-spectral \
-  --smoothings 2mm 4mm \
-  --hemis L R \
-  --coverage-thresholds 0.80 \
-  --k-selection-mode redundancy-aware \
-  --redundancy-early-stop \
-  --jobs 4 \
-  --no-subject-fc-binarize \
-  --resume
-```
-
-### 2.1 `group-intrinsic-spectral`
+### 2.1 `intrinsic-spectral`
 
 1. Build support mask from coverage threshold.
 2. Per subject, preprocess intrinsic FC map (`512 x 512`) before any group averaging:
-   - keep largest raw-value Top `10%` finite entries, set other finite entries to `0`
-   - by default, binarize retained Top entries to `1`
+   - mode `full`: no sparsification
+   - mode `top-percent`: keep largest raw-value Top integer percent, zero others, and binarize retained entries to `1`
 3. Run intrinsic spectral clustering and select `K`.
    - in `redundancy-aware` mode, reject `K` if:
      - redundant (`max_profile_similarity > 0.80` or `redundant_pair_count > 0`)
@@ -142,6 +141,7 @@ python scripts/hipp_parcellation_network/run_merged_canonical_group_atlas.py \
      2. local-max preference: among within-1SE survivors, prefer ARI-curve local maxima
      3. parsimony tiebreak: smallest K when quality is genuinely tied
    - if the reduced eligible pool is non-empty, one final `K` is always selected from that pool
+   - fixed-K override: when `--k-min == --k-max`, that `K` is forced as `chosen_k_final` (display/production mode), and does not require survivor-pool pass
    - urgent heuristic mode `--redundancy-early-stop`:
      - evaluate `K` in ascending order
      - stop at the first redundant `K` and skip all larger `K`
@@ -158,7 +158,7 @@ python scripts/hipp_parcellation_network/run_merged_canonical_group_atlas.py \
    - `cluster_assignment_status.json`
    - `group_functional_atlas_labels.npy`
 
-### 2.2 `group-network-top`
+### 2.2 `wta-top`
 
 1. Skip clustering.
 2. Use vertex-to-ROI Fisher-z features directly.
@@ -172,7 +172,6 @@ python scripts/hipp_parcellation_network/run_merged_canonical_group_atlas.py \
    - `group_functional_atlas_labels.npy`
    - `global_top_connections.json`
 
-### 2.3 `group-network-all`
 
 1. Skip clustering.
 2. Use vertex-to-ROI Fisher-z features directly.
@@ -184,12 +183,12 @@ python scripts/hipp_parcellation_network/run_merged_canonical_group_atlas.py \
    - `group_functional_atlas_labels.npy`
    - `global_top_connections.json`
 
-### 2.4 `group-network-spectral` (opt-in)
+### 2.4 `network-spectral`
 
 1. Build support mask from coverage threshold.
 2. Per subject, preprocess network FC map (`512 x 400`) before any group averaging:
-   - keep largest raw-value Top `10%` finite entries, set other finite entries to `0`
-   - by default, binarize retained Top entries to `1`
+   - mode `full`: no sparsification
+   - mode `top-percent`: keep largest raw-value Top integer percent, zero others, and binarize retained entries to `1`
 3. Run spectral clustering on vertex-to-ROI Fisher-z features.
 4. Use the same optional `redundancy-aware` `K` selection logic as intrinsic spectral.
    - the same optional `--redundancy-early-stop` heuristic applies here
@@ -223,7 +222,6 @@ python scripts/hipp_parcellation_network/run_merged_canonical_group_atlas.py \
      - `max_profile_similarity` (threshold `0.80`)
      - selected K (`K*`) vertical dashed markers for L/R
    - clusterless methods render without cluster artifacts
-   - for `group-network-top` / `group-network-all`, left pane shows only `vertex assignment counts`
    - clusterless group overview no longer includes left-pane global-top text/metadata blocks
 
 2. `build_cluster_roi_cortex_independent.py`
@@ -233,13 +231,13 @@ python scripts/hipp_parcellation_network/run_merged_canonical_group_atlas.py \
 
 Kong2019 naming rule (no route tag):
 
-- generate with `--mode-tag allon` and `--mode-tag alloff` only
+- generate with `--mode-tag 10perc` and `--mode-tag full` only
 - final maintained filenames in `present_group_t1only/` are:
-  - `kong2019_group-intrinsic-spectral_group_overview_allon.png`
-  - `kong2019_group-intrinsic-spectral_group_overview_alloff.png`
-  - `kong2019_group-network-spectral_group_overview_allon.png`
-  - `kong2019_group-network-spectral_group_overview_alloff.png`
+  - `kong2019_intrinsic-spectral_group_overview_10perc.png`
+  - `kong2019_intrinsic-spectral_group_overview_full.png`
+  - `kong2019_network-spectral_group_overview_10perc.png`
+  - `kong2019_network-spectral_group_overview_full.png`
 
 ## 4. Rule Reminder
 
-For the three active methods in this flow, assignment logic does not consume cortex canonical `8 x T` timeseries arrays.
+For the maintained default methods in this flow (`intrinsic-spectral`, `network-spectral`, `wta-top`), assignment logic does not consume cortex canonical `8 x T` timeseries arrays.

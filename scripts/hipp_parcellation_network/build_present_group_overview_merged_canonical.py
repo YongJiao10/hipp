@@ -4,15 +4,18 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import re
 import tempfile
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 import nibabel as nib
 import numpy as np
+from matplotlib.lines import Line2D
 from matplotlib.patches import Rectangle
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
+from materialize_group_functional_atlas_labels import materialize_combo, network_color_map
 from surface_utils import long_axis_order, render_locked_grid
 
 
@@ -21,18 +24,17 @@ DEFAULT_GROUP_ROOT = REPO_ROOT / "outputs_migration" / "hipp_group_merged_canoni
 DEFAULT_PRESENT_DIR = REPO_ROOT / "present_group"
 DEFAULT_SCENE = REPO_ROOT / "config" / "wb_locked_native_view_lateral_medial.scene"
 METHOD_CHOICES = [
-    "group-network-spectral",
+    "network-spectral",
     "group-network-partial-spectral",
-    "group-intrinsic-spectral",
+    "intrinsic-spectral",
     "group-intrinsic-partial-spectral",
-    "group-network-top",
-    "group-network-all",
+    "wta-top",
 ]
 ROUTE_TAG_CHOICES = ["routea", "routeb"]
-MODE_TAG_CHOICES = ["allon", "alloff"]
 METHODS_DEFAULT = [
-    "group-intrinsic-spectral",
-    "group-network-spectral",
+    "intrinsic-spectral",
+    "network-spectral",
+    "wta-top",
 ]
 ATLASES = ["kong2019", "kong2019_8net", "kong2022"]
 SMOOTHINGS = ["2mm", "4mm"]
@@ -40,11 +42,12 @@ FS_TITLE = 11
 FS_LABEL = 10
 FS_TICK = 9
 FS_SMALL = 8.5
+FS_LEGEND_SMALL = FS_SMALL - 2.0
 FS_CELL = 6
 FS_MISSING = 13
 FS_BIG_TITLE = 13
 FS_SUPTITLE = 18
-CLUSTERLESS_METHODS = {"group-network-top", "group-network-all"}
+CLUSTERLESS_METHODS = {"wta-top"}
 DEFAULT_CROSS_ATLAS_MERGE = REPO_ROOT / "config" / "cross_atlas_network_merge.json"
 
 
@@ -62,10 +65,82 @@ def load_network_bar_colors() -> dict[str, str]:
 
 
 NETWORK_BAR_COLORS = load_network_bar_colors()
+MATERIALIZE_COLOR_MAP = network_color_map()
 
 
 def load_json(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _is_path_within(path: Path, root: Path) -> bool:
+    try:
+        path.resolve().relative_to(root.resolve())
+        return True
+    except ValueError:
+        return False
+
+
+def _load_label_vector(path: Path) -> np.ndarray:
+    img = nib.load(str(path))
+    return np.asarray(img.darrays[0].data).astype(np.int32, copy=False)
+
+
+def ensure_functional_label_consistency(manifest_path: Path, manifest: dict) -> dict:
+    run_dir = manifest_path.parent
+    expected_npy = run_dir / "group_functional_atlas_labels.npy"
+    raw_label = manifest.get("template_functional_atlas_label", None)
+    label_path = Path(str(raw_label)).resolve() if raw_label is not None else None
+
+    need_refresh = False
+    reasons: list[str] = []
+    if label_path is None:
+        need_refresh = True
+        reasons.append("missing_template_functional_atlas_label")
+    elif not label_path.exists():
+        need_refresh = True
+        reasons.append("missing_functional_label_gii")
+    elif not _is_path_within(label_path, run_dir):
+        need_refresh = True
+        reasons.append("functional_label_path_outside_run_dir")
+    if not expected_npy.exists():
+        need_refresh = True
+        reasons.append("missing_group_functional_atlas_labels_npy")
+
+    if not need_refresh and label_path is not None:
+        try:
+            arr_npy = np.load(expected_npy).astype(np.int32, copy=False)
+            arr_gii = _load_label_vector(label_path)
+            if arr_npy.shape != arr_gii.shape or not np.array_equal(arr_npy, arr_gii):
+                need_refresh = True
+                reasons.append("npy_gii_mismatch")
+        except Exception as exc:  # pragma: no cover
+            need_refresh = True
+            reasons.append(f"read_error:{type(exc).__name__}")
+
+    if not need_refresh:
+        return manifest
+
+    updated = materialize_combo(manifest_path, MATERIALIZE_COLOR_MAP)
+    if not updated:
+        raise RuntimeError(
+            f"Functional atlas label inconsistency detected but materialization was skipped: {manifest_path} reasons={','.join(reasons)}"
+        )
+    refreshed = load_json(manifest_path)
+    refreshed_label_raw = refreshed.get("template_functional_atlas_label", None)
+    if refreshed_label_raw is None:
+        raise RuntimeError(f"materialize_combo did not write template_functional_atlas_label: {manifest_path}")
+    refreshed_label = Path(str(refreshed_label_raw)).resolve()
+    if not refreshed_label.exists():
+        raise RuntimeError(f"materialize_combo wrote missing label file: {refreshed_label}")
+    if not _is_path_within(refreshed_label, run_dir):
+        raise RuntimeError(f"materialize_combo wrote label outside run dir: {refreshed_label} (run_dir={run_dir})")
+    if not expected_npy.exists():
+        raise RuntimeError(f"materialize_combo did not write expected npy: {expected_npy}")
+    arr_npy = np.load(expected_npy).astype(np.int32, copy=False)
+    arr_gii = _load_label_vector(refreshed_label)
+    if arr_npy.shape != arr_gii.shape or not np.array_equal(arr_npy, arr_gii):
+        raise RuntimeError(f"materialize_combo still produced mismatched npy/gii labels: {manifest_path}")
+    return refreshed
 
 
 def read_tsv(path: Path) -> list[dict[str, str]]:
@@ -393,16 +468,20 @@ def plot_k_gate_panel(
     ax.set_title(f"{smoothing} | redundancy gate", fontsize=FS_TITLE)
     ax.tick_params(labelsize=FS_TICK)
     ax.grid(axis="y", color="#dddddd", lw=0.5, alpha=0.7)
-    ax.text(
-        0.02,
-        0.02,
-        "blue=L, red=R\nmaxSim<=0.80 pass\nvertical dashed = selected K*",
-        transform=ax.transAxes,
-        ha="left",
-        va="bottom",
-        fontsize=FS_SMALL,
-        color="#333333",
-        bbox={"facecolor": "white", "alpha": 0.72, "edgecolor": "none", "pad": 1.5},
+    ax.legend(
+        handles=[
+            Line2D([0], [0], color="#1f77b4", lw=1.6, marker="o", label="Left hemisphere"),
+            Line2D([0], [0], color="#d62728", lw=1.6, marker="o", label="Right hemisphere"),
+            Line2D([0], [0], color="#b00020", lw=1.2, ls=":", label="Redundancy threshold"),
+            Line2D([0], [0], color="#555555", lw=1.2, ls="--", label="Selected K*"),
+        ],
+        loc="center",
+        fontsize=FS_LEGEND_SMALL,
+        framealpha=0.9,
+        edgecolor="#dddddd",
+        borderpad=0.3,
+        labelspacing=0.28,
+        handlelength=2.1,
     )
 
 
@@ -435,6 +514,7 @@ def render_combo(
     route_tag: str | None,
     mode_tag: str | None,
 ) -> dict[str, object]:
+    effective_mode_tag = (None if method in CLUSTERLESS_METHODS else mode_tag)
     fig = plt.figure(figsize=(15.4, 12.2), dpi=180, constrained_layout=True)
     gs = fig.add_gridspec(nrows=2, ncols=2, width_ratios=[1.40, 1.30], hspace=0.06, wspace=0.05)
     rows_meta: list[dict[str, object]] = []
@@ -458,6 +538,9 @@ def render_combo(
         m_r = load_json(right_manifest)
         d_l = left_manifest.parent
         d_r = right_manifest.parent
+        if method not in CLUSTERLESS_METHODS:
+            m_l = ensure_functional_label_consistency(left_manifest, m_l)
+            m_r = ensure_functional_label_consistency(right_manifest, m_r)
         if method in CLUSTERLESS_METHODS:
             status_l = load_json(d_l / "vertex_assignment_status.json") if (d_l / "vertex_assignment_status.json").exists() else {"items": []}
             status_r = load_json(d_r / "vertex_assignment_status.json") if (d_r / "vertex_assignment_status.json").exists() else {"items": []}
@@ -534,16 +617,19 @@ def render_combo(
             ax0.set_xlabel("K", fontsize=FS_LABEL)
             ax0.set_ylabel("Subject-split ARI", fontsize=FS_LABEL)
             ax0.tick_params(labelsize=FS_TICK)
-            ax0.text(
-                0.02,
-                0.98,
-                "blue=L, red=R",
-                transform=ax0.transAxes,
-                ha="left",
-                va="top",
-                fontsize=FS_SMALL,
-                color="#333333",
-                bbox={"facecolor": "white", "alpha": 0.72, "edgecolor": "none", "pad": 1.5},
+            ax0.legend(
+                handles=[
+                    Line2D([0], [0], color="#1f77b4", lw=1.6, marker="o", label="Left hemisphere"),
+                    Line2D([0], [0], color="#d62728", lw=1.6, marker="o", label="Right hemisphere"),
+                    Line2D([0], [0], color="#555555", lw=1.2, ls=":", label="Null baseline"),
+                ],
+                loc="center",
+                fontsize=FS_LEGEND_SMALL,
+                framealpha=0.9,
+                edgecolor="#dddddd",
+                borderpad=0.3,
+                labelspacing=0.28,
+                handlelength=2.1,
             )
             diag_lines: list[str] = []
             for hemi_lbl, k_raw, d_hemi, tsv_rows in [
@@ -605,16 +691,20 @@ def render_combo(
             ax0.plot(ks, null_ref, ls=":", lw=1.0, color=color, alpha=0.85)
         ax0.axvline(k_l, color="#1f77b4", ls="--", lw=1.0)
         ax0.axvline(k_r, color="#d62728", ls="--", lw=1.0)
-        ax0.text(
-            0.02,
-            0.02,
-            "L=blue, R=red\ndotted = strong-null ARI 5th pct\nvertical dashed = selected K*",
-            transform=ax0.transAxes,
-            ha="left",
-            va="bottom",
-            fontsize=FS_SMALL,
-            color="#333333",
-            bbox={"facecolor": "white", "alpha": 0.72, "edgecolor": "none", "pad": 1.5},
+        ax0.legend(
+            handles=[
+                Line2D([0], [0], color="#1f77b4", lw=1.6, marker="o", label="Left hemisphere"),
+                Line2D([0], [0], color="#d62728", lw=1.6, marker="o", label="Right hemisphere"),
+                Line2D([0], [0], color="#555555", lw=1.2, ls=":", label="Null baseline"),
+                Line2D([0], [0], color="#555555", lw=1.2, ls="--", label="Selected K*"),
+            ],
+            loc="center",
+            fontsize=FS_LEGEND_SMALL,
+            framealpha=0.9,
+            edgecolor="#dddddd",
+            borderpad=0.3,
+            labelspacing=0.28,
+            handlelength=2.1,
         )
         ax0.set_title(f"{smoothing} | K selection (ARI)", fontsize=FS_TITLE)
         ax0.set_xlabel("K", fontsize=FS_LABEL)
@@ -693,13 +783,13 @@ def render_combo(
     name_bits = [atlas, method, "group_overview"]
     if route_tag:
         name_bits.append(route_tag)
-    if mode_tag:
-        name_bits.append(mode_tag)
+    if effective_mode_tag:
+        name_bits.append(effective_mode_tag)
     out_png = present_dir / f"{'_'.join(name_bits)}.png"
     fig.suptitle(
         f"Group Overview | {atlas} | {method}"
         + (f" | {route_tag}" if route_tag else "")
-        + (f" | {mode_tag}" if mode_tag else ""),
+        + (f" | {effective_mode_tag}" if effective_mode_tag else ""),
         fontsize=FS_SUPTITLE,
     )
     out_png.parent.mkdir(parents=True, exist_ok=True)
@@ -769,7 +859,7 @@ def main() -> int:
     p.add_argument("--coverage-threshold", type=float, default=0.80)
     p.add_argument("--scene", default=str(DEFAULT_SCENE))
     p.add_argument("--route-tag", choices=ROUTE_TAG_CHOICES, default=None)
-    p.add_argument("--mode-tag", choices=MODE_TAG_CHOICES, default=None)
+    p.add_argument("--mode-tag", default=None)
     p.add_argument(
         "--manifest-name",
         default="group_overview_manifest.json",
@@ -792,6 +882,12 @@ def main() -> int:
         "Default is strict: require complete clustering outputs before rendering.",
     )
     args = p.parse_args()
+    if args.mode_tag is not None:
+        mode_tag = str(args.mode_tag)
+        if mode_tag != "full" and re.fullmatch(r"(?:[1-9][0-9]?|100)perc", mode_tag) is None:
+            raise ValueError(
+                f"--mode-tag must be 'full' or '<int>perc' where int is in [1,100], got {args.mode_tag}"
+            )
 
     group_root = Path(args.group_root).resolve()
     present_dir = Path(args.present_dir).resolve()
@@ -838,7 +934,7 @@ def main() -> int:
                     "smoothings": [r["smoothing"] for r in row_meta],
                     "metric_summary": metric,
                     "route_tag": args.route_tag,
-                    "mode_tag": args.mode_tag,
+                    "mode_tag": (None if method in CLUSTERLESS_METHODS else args.mode_tag),
                     "source_group_root": str(group_root),
                 }
             )

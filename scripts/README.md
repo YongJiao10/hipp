@@ -15,8 +15,14 @@ This directory is organized by responsibility.
   - `run_merged_canonical_group_atlas.py`
   - `build_present_group_overview_merged_canonical.py`
   - `build_present_group_t1only_matrix.py`
+  - `refresh_present_fixedk_modes.py`
   - `run_t1only_spectral_fast_rerun.py`
   - `materialize_group_functional_atlas_labels.py`
+
+Behavior guardrails:
+
+- `build_present_group_overview_merged_canonical.py` now enforces functional-atlas label consistency before any surface rendering.
+- If `group_functional_atlas_labels.npy` and `template_functional_atlas_label` disagree (or manifest paths are stale/out-of-root), it auto-materializes labels and re-validates; unresolved mismatches fail fast.
 
 Top-level `scripts/` still contains broader workflow helpers shared across the repository, such as HippUnfold wrappers and environment utilities.
 

@@ -53,26 +53,27 @@ DEFAULT_GROUP_AVG_SURFACES_DIR = (
 
 METHOD_CHOICES = [
     "group-roi-sim-spectral",
-    "group-network-spectral",
+    "network-spectral",
     "group-network-partial-spectral",
-    "group-intrinsic-spectral",
+    "intrinsic-spectral",
     "group-intrinsic-partial-spectral",
-    "group-network-top",
-    "group-network-all",
+    "wta-top",
 ]
 METHODS_DEFAULT = [
-    "group-intrinsic-spectral",
-    "group-network-spectral",
+    "intrinsic-spectral",
+    "network-spectral",
+    "wta-top",
 ]
 ATLASES = ["kong2019", "kong2019_8net", "kong2022"]
 SMOOTHINGS = ["2mm", "4mm"]
 HEMIS = ["L", "R"]
 K_RANGE = list(range(2, 11))
-KONG2022_ONLY_METHODS = {"group-roi-sim-spectral", "group-network-top", "group-network-all"}
-CLUSTERLESS_METHODS = {"group-network-top", "group-network-all"}
+KONG2022_ONLY_METHODS = {"group-roi-sim-spectral", "wta-top"}
+CLUSTERLESS_METHODS = {"wta-top"}
 PROFILE_REDUNDANCY_MAX_SIM = 0.80
-SUBJECT_FC_PREPROCESS_METHODS = {"group-roi-sim-spectral", "group-network-spectral", "group-intrinsic-spectral"}
+SUBJECT_FC_PREPROCESS_METHODS = {"group-roi-sim-spectral", "network-spectral", "intrinsic-spectral"}
 SUBJECT_FC_VALUE_RULE = "largest_raw_values"
+SUBJECT_FC_MODE_CHOICES = ["full", "top-percent"]
 MAX_K_EVAL_JOBS = 10
 RESUME_SIGNATURE_VERSION = 1
 
@@ -84,6 +85,15 @@ class Combo:
     smoothing: str
     hemi: str
     coverage_threshold: float
+
+
+@dataclass(frozen=True)
+class SubjectFCMode:
+    mode: str
+    mode_tag: str
+    top_percent: int | None
+    top_fraction: float
+    binarize: bool
 
 
 def save_json(path: Path, payload: dict[str, object]) -> None:
@@ -292,7 +302,7 @@ def parse_network_names(tsv: Path) -> list[str]:
 
 
 def is_network_method(method: str) -> bool:
-    return method in {"group-network-spectral", "group-network-partial-spectral"}
+    return method in {"network-spectral", "group-network-partial-spectral"}
 
 
 def is_roi_similarity_method(method: str) -> bool:
@@ -300,7 +310,7 @@ def is_roi_similarity_method(method: str) -> bool:
 
 
 def method_uses_network_fc_input(method: str) -> bool:
-    return is_network_method(method) or method in {"group-roi-sim-spectral", "group-network-top", "group-network-all"}
+    return is_network_method(method) or method in {"group-roi-sim-spectral", "wta-top"}
 
 
 def is_clusterless_method(method: str) -> bool:
@@ -311,11 +321,46 @@ def method_uses_subject_fc_preprocessing(method: str) -> bool:
     return method in SUBJECT_FC_PREPROCESS_METHODS
 
 
-def subject_fc_preprocessing_manifest_block(method: str, top_fraction: float, binarize: bool) -> dict[str, object]:
+def resolve_subject_fc_mode(subject_fc_mode: str, subject_fc_top_percent: int | None) -> SubjectFCMode:
+    mode = str(subject_fc_mode)
+    if mode not in SUBJECT_FC_MODE_CHOICES:
+        raise ValueError(f"--subject-fc-mode must be one of {SUBJECT_FC_MODE_CHOICES}, got {subject_fc_mode}")
+    if mode == "full":
+        if subject_fc_top_percent is not None:
+            raise ValueError("--subject-fc-top-percent is not allowed when --subject-fc-mode=full")
+        return SubjectFCMode(mode="full", mode_tag="full", top_percent=None, top_fraction=1.0, binarize=False)
+    if subject_fc_top_percent is None:
+        raise ValueError("--subject-fc-top-percent is required when --subject-fc-mode=top-percent")
+    pct = int(subject_fc_top_percent)
+    if pct <= 0 or pct > 100:
+        raise ValueError(f"--subject-fc-top-percent must be within (0, 100], got {pct}")
+    return SubjectFCMode(
+        mode="top-percent",
+        mode_tag=f"{pct}perc",
+        top_percent=pct,
+        top_fraction=float(pct) / 100.0,
+        binarize=True,
+    )
+
+
+def subject_fc_preprocessing_manifest_block(method: str, subject_fc_mode: SubjectFCMode) -> dict[str, object]:
+    enabled = bool(method_uses_subject_fc_preprocessing(method))
+    if not enabled:
+        return {
+            "enabled": False,
+            "mode": None,
+            "mode_tag": None,
+            "top_percent": None,
+            "applied_methods": sorted(SUBJECT_FC_PREPROCESS_METHODS),
+            "value_rule": SUBJECT_FC_VALUE_RULE,
+        }
     return {
-        "enabled": bool(method_uses_subject_fc_preprocessing(method)),
-        "top_fraction": float(top_fraction),
-        "binarize": bool(binarize),
+        "enabled": True,
+        "mode": str(subject_fc_mode.mode),
+        "mode_tag": str(subject_fc_mode.mode_tag),
+        "top_percent": (
+            None if subject_fc_mode.top_percent is None else int(subject_fc_mode.top_percent)
+        ),
         "applied_methods": sorted(SUBJECT_FC_PREPROCESS_METHODS),
         "value_rule": SUBJECT_FC_VALUE_RULE,
     }
@@ -397,14 +442,18 @@ def preprocess_intrinsic_fc_map(fc: np.ndarray, top_fraction: float, binarize: b
     return out.astype(np.float32)
 
 
-def preprocess_subject_fc_matrix(method: str, fc: np.ndarray, top_fraction: float, binarize: bool) -> np.ndarray:
+def preprocess_subject_fc_matrix(method: str, fc: np.ndarray, subject_fc_mode: SubjectFCMode) -> np.ndarray:
     arr = np.asarray(fc, dtype=np.float32)
     if not method_uses_subject_fc_preprocessing(method):
         return arr
-    if method in {"group-roi-sim-spectral", "group-network-spectral"}:
-        return preprocess_network_fc_map(arr, top_fraction, binarize)
-    if method == "group-intrinsic-spectral":
-        return preprocess_intrinsic_fc_map(arr, top_fraction, binarize)
+    if str(subject_fc_mode.mode) == "full":
+        return arr
+    if str(subject_fc_mode.mode) != "top-percent":
+        raise ValueError(f"Unsupported subject FC mode: {subject_fc_mode.mode}")
+    if method in {"group-roi-sim-spectral", "network-spectral"}:
+        return preprocess_network_fc_map(arr, subject_fc_mode.top_fraction, bool(subject_fc_mode.binarize))
+    if method == "intrinsic-spectral":
+        return preprocess_intrinsic_fc_map(arr, subject_fc_mode.top_fraction, bool(subject_fc_mode.binarize))
     return arr
 
 
@@ -421,17 +470,17 @@ def roi_similarity_from_network_fc(fc: np.ndarray) -> np.ndarray:
 
 
 def network_feature_filename(method: str) -> str:
-    if method in {"group-roi-sim-spectral", "group-network-spectral"}:
+    if method in {"group-roi-sim-spectral", "network-spectral"}:
         return "hipp_vertex_to_network_fc.npy"
     if method == "group-network-partial-spectral":
         return "hipp_vertex_to_network_partial_fc.npy"
-    if method in {"group-network-top", "group-network-all"}:
+    if method == "wta-top":
         return "hipp_vertex_to_network_fc.npy"
     raise ValueError(f"Not a network feature method: {method}")
 
 
 def runwise_network_feature_filename(method: str) -> str:
-    if method in {"group-roi-sim-spectral", "group-network-spectral"}:
+    if method in {"group-roi-sim-spectral", "network-spectral"}:
         return "hipp_vertex_to_network_fc_active.npy"
     if method == "group-network-partial-spectral":
         return "hipp_vertex_to_network_partial_fc_active.npy"
@@ -946,7 +995,7 @@ def group_feature_matrix(
         group[~np.isfinite(group)] = 0.0
         return zscore_cols(group)
 
-    if method in {"group-roi-sim-spectral", "group-intrinsic-spectral", "group-intrinsic-partial-spectral"}:
+    if method in {"group-roi-sim-spectral", "intrinsic-spectral", "group-intrinsic-partial-spectral"}:
         mats = []
         for s in subjects_subset:
             m = feature_bank[s][np.ix_(idx, idx)]
@@ -1297,8 +1346,7 @@ def runwise_feature_bank(
     smoothing: str,
     hemi: str,
     valid_masks: dict[str, np.ndarray],
-    subject_fc_top_fraction: float,
-    subject_fc_binarize: bool,
+    subject_fc_mode: SubjectFCMode,
 ) -> dict[int, dict[str, np.ndarray]]:
     run_ids = [1, 2, 3, 4]
     out: dict[int, dict[str, np.ndarray]] = {rid: {} for rid in run_ids}
@@ -1330,8 +1378,7 @@ def runwise_feature_bank(
                 run_feature = preprocess_subject_fc_matrix(
                     method=method,
                     fc=full,
-                    top_fraction=subject_fc_top_fraction,
-                    binarize=subject_fc_binarize,
+                    subject_fc_mode=subject_fc_mode,
                 )
                 out[rid][s] = (
                     roi_similarity_from_network_fc(run_feature)
@@ -1354,8 +1401,7 @@ def runwise_feature_bank(
                 out[rid][s] = preprocess_subject_fc_matrix(
                     method=method,
                     fc=full,
-                    top_fraction=subject_fc_top_fraction,
-                    binarize=subject_fc_binarize,
+                    subject_fc_mode=subject_fc_mode,
                 )
     return out
 
@@ -1978,8 +2024,8 @@ def assignment_status_from_cluster_roi_topn(
 def method_uses_kong2022_topn_cluster_annotation(method: str, atlas: str) -> bool:
     return str(atlas) == "kong2022" and str(method) in {
         "group-roi-sim-spectral",
-        "group-intrinsic-spectral",
-        "group-network-spectral",
+        "intrinsic-spectral",
+        "network-spectral",
     }
 
 
@@ -2299,6 +2345,12 @@ def main() -> int:
     parser.add_argument("--coverage-thresholds", nargs="+", type=float, default=[0.70, 0.80, 0.90])
     parser.add_argument("--k-min", type=int, default=2)
     parser.add_argument("--k-max", type=int, default=10)
+    parser.add_argument(
+        "--force-final-k",
+        type=int,
+        default=None,
+        help="Force chosen_k_final to this K after evaluating candidate K rows; keeps full K-curve metrics for display.",
+    )
     parser.add_argument("--instability-resamples", type=int, default=100)
     parser.add_argument("--null-resamples", type=int, default=100)
     parser.add_argument("--seed", type=int, default=20260420)
@@ -2306,24 +2358,17 @@ def main() -> int:
     parser.add_argument("--max-components-threshold", type=int, default=3)
     parser.add_argument("--min-profile-coherence", type=float, default=0.0)
     parser.add_argument(
-        "--subject-fc-top-fraction",
-        type=float,
-        default=0.10,
-        help="Per-subject FC sparsification fraction for spectral methods. Keep largest raw-value Top fraction, set others to zero.",
+        "--subject-fc-mode",
+        default="full",
+        choices=SUBJECT_FC_MODE_CHOICES,
+        help="Per-subject FC preprocessing mode for spectral methods: full (no sparsification) or top-percent (Top integer %% + retained entries binarized to 1).",
     )
     parser.add_argument(
-        "--subject-fc-binarize",
-        dest="subject_fc_binarize",
-        action="store_true",
-        help="After Top-fraction thresholding, set retained FC entries to 1 (spectral methods).",
+        "--subject-fc-top-percent",
+        type=int,
+        default=None,
+        help="Required only when --subject-fc-mode=top-percent. Integer percent in (0,100].",
     )
-    parser.add_argument(
-        "--no-subject-fc-binarize",
-        dest="subject_fc_binarize",
-        action="store_false",
-        help="After Top-fraction thresholding, keep retained FC entries as original Fisher-z values.",
-    )
-    parser.set_defaults(subject_fc_binarize=True)
     parser.add_argument("--resume", action="store_true", help="Skip combos that already have group_atlas_manifest.json.")
     parser.add_argument("--k-selection-mode", default="experimental", choices=["experimental", "redundancy-aware"])
     parser.add_argument(
@@ -2355,12 +2400,16 @@ def main() -> int:
 
     subjects_manifest_path = Path(args.subjects_manifest).resolve()
     subjects = load_subjects(subjects_manifest_path)
-    if not (0.0 <= float(args.subject_fc_top_fraction) <= 1.0):
-        raise ValueError(
-            f"--subject-fc-top-fraction must be within [0,1], got {args.subject_fc_top_fraction}"
-        )
+    subject_fc_mode = resolve_subject_fc_mode(args.subject_fc_mode, args.subject_fc_top_percent)
     coverage_thresholds = [float(x) for x in args.coverage_thresholds]
     k_values = list(range(int(args.k_min), int(args.k_max) + 1))
+    if not k_values:
+        raise ValueError(f"Empty K range: --k-min={args.k_min} --k-max={args.k_max}")
+    if args.force_final_k is not None and int(args.force_final_k) not in k_values:
+        raise ValueError(
+            f"--force-final-k must be within requested K range [{min(k_values)}, {max(k_values)}], "
+            f"got {args.force_final_k}"
+        )
     rng = np.random.RandomState(int(args.seed))
     split_seeds = [int(x) for x in rng.randint(1, 2_000_000_000, size=int(args.instability_resamples))]
     null_seeds = [int(x) for x in rng.randint(1, 2_000_000_000, size=int(args.null_resamples))]
@@ -2409,7 +2458,7 @@ def main() -> int:
             "n_faces": int(faces.shape[0]),
         }
 
-    if any(m in args.methods for m in ("group-intrinsic-spectral", "group-intrinsic-partial-spectral")):
+    if any(m in args.methods for m in ("intrinsic-spectral", "group-intrinsic-partial-spectral")):
         for smoothing in args.smoothings:
             for hemi in args.hemis:
                 print(f"[check] intrinsic atlas-invariance smoothing={smoothing} hemi={hemi}", flush=True)
@@ -2457,8 +2506,7 @@ def main() -> int:
                             pre_feature = preprocess_subject_fc_matrix(
                                 method=method,
                                 fc=raw_feature,
-                                top_fraction=float(args.subject_fc_top_fraction),
-                                binarize=bool(args.subject_fc_binarize),
+                                subject_fc_mode=subject_fc_mode,
                             )
                             feature_bank[s] = (
                                 roi_similarity_from_network_fc(pre_feature)
@@ -2472,8 +2520,7 @@ def main() -> int:
                             feature_bank[s] = preprocess_subject_fc_matrix(
                                 method=method,
                                 fc=raw_feature,
-                                top_fraction=float(args.subject_fc_top_fraction),
-                                binarize=bool(args.subject_fc_binarize),
+                                subject_fc_mode=subject_fc_mode,
                             )
 
                     run_feature_banks = (
@@ -2485,8 +2532,7 @@ def main() -> int:
                             smoothing=smoothing,
                             hemi=hemi,
                             valid_masks=valid_masks,
-                            subject_fc_top_fraction=float(args.subject_fc_top_fraction),
-                            subject_fc_binarize=bool(args.subject_fc_binarize),
+                            subject_fc_mode=subject_fc_mode,
                         )
                         if not is_clusterless_method(method)
                         else {}
@@ -2495,7 +2541,7 @@ def main() -> int:
                     if args.k_selection_mode == "redundancy-aware" and not is_clusterless_method(method):
                         roi_fc_bank_for_redundancy = {}
                         for s in subjects:
-                            if atlas == "kong2022" and method == "group-network-spectral":
+                            if atlas == "kong2022" and method == "network-spectral":
                                 roi_fc_bank_for_redundancy[s] = feature_bank[s]
                             else:
                                 roi_raw = subject_network_feature(
@@ -2504,22 +2550,20 @@ def main() -> int:
                                     "kong2022",
                                     smoothing,
                                     hemi,
-                                    "group-network-spectral",
+                                    "network-spectral",
                                 )
                                 if method_uses_subject_fc_preprocessing(method):
                                     roi_fc_bank_for_redundancy[s] = preprocess_subject_fc_matrix(
-                                        method="group-network-spectral",
+                                        method="network-spectral",
                                         fc=roi_raw,
-                                        top_fraction=float(args.subject_fc_top_fraction),
-                                        binarize=bool(args.subject_fc_binarize),
+                                        subject_fc_mode=subject_fc_mode,
                                     )
                                 else:
                                     roi_fc_bank_for_redundancy[s] = roi_raw
 
                     subject_fc_preprocessing_for_resume = subject_fc_preprocessing_manifest_block(
                         method,
-                        float(args.subject_fc_top_fraction),
-                        bool(args.subject_fc_binarize),
+                        subject_fc_mode,
                     )
                     valid_mask_paths = [
                         surface_root / f"sub-{s}" / "surface" / "tsnr_gate" / f"sub-{s}_hemi-{hemi}_valid_mask.npy"
@@ -2601,6 +2645,7 @@ def main() -> int:
                             "subjects_manifest": str(subjects_manifest_path),
                             "subjects": [f"sub-{s}" for s in subjects],
                             "k_selection_mode": str(args.k_selection_mode),
+                            "force_final_k": int(args.force_final_k) if args.force_final_k is not None else None,
                             "candidate_k_values": [int(k) for k in k_values],
                             "seed": int(args.seed),
                             "instability_resamples": int(args.instability_resamples),
@@ -2693,25 +2738,16 @@ def main() -> int:
                                 subjects=subjects,
                                 support_mask=support,
                             )
-                            if method == "group-network-top":
-                                vertex_status_rows = assignment_status_for_vertices_top(
-                                    profile_3d=vertex_profile_3d,
-                                    support_indices=support_indices,
-                                    roi_registry=roi_registry,
-                                    q_thresh=0.05,
-                                    top_n_cap=20,
-                                )
-                                confidence_metric = "topn_count"
-                            elif method == "group-network-all":
-                                vertex_status_rows = assignment_status_for_vertices_all(
-                                    profile_3d=vertex_profile_3d,
-                                    support_indices=support_indices,
-                                    roi_registry=roi_registry,
-                                    q_thresh=0.05,
-                                )
-                                confidence_metric = "network_mean_score"
-                            else:
+                            if method != "wta-top":
                                 raise ValueError(f"Unknown clusterless method: {method}")
+                            vertex_status_rows = assignment_status_for_vertices_top(
+                                profile_3d=vertex_profile_3d,
+                                support_indices=support_indices,
+                                roi_registry=roi_registry,
+                                q_thresh=0.05,
+                                top_n_cap=20,
+                            )
+                            confidence_metric = "topn_count"
 
                             global_top = build_global_top_connections(
                                 profile_3d=vertex_profile_3d,
@@ -2827,6 +2863,7 @@ def main() -> int:
                                 "smoothing": smoothing,
                                 "hemi": hemi,
                                 "k_selection_mode": str(args.k_selection_mode),
+                                "force_final_k": int(args.force_final_k) if args.force_final_k is not None else None,
                                 "coverage_threshold": float(tau),
                                 "V_min_fraction": float(args.v_min_fraction),
                                 "V_min_effective": int(v_min),
@@ -2986,7 +3023,32 @@ def main() -> int:
                             row["within_1se_survivor_pool"] = 0
                             row["survivor_pool_argmax_k"] = -1
                             row["k_final_decision_path"] = "none"
-                        if args.k_selection_mode == "redundancy-aware":
+                        forced_fixed_k_target = (
+                            int(args.force_final_k)
+                            if args.force_final_k is not None
+                            else (int(k_values[0]) if len(k_values) == 1 else None)
+                        )
+                        if forced_fixed_k_target is not None and not any(
+                            int(row["k"]) == int(forced_fixed_k_target) for row in rows
+                        ):
+                            raise RuntimeError(
+                                "Forced final K was not evaluated for this combo: "
+                                f"k={forced_fixed_k_target}, evaluated={[int(r['k']) for r in rows]}, combo={combo}"
+                            )
+                        forced_fixed_k = forced_fixed_k_target is not None
+                        if forced_fixed_k:
+                            k_forced = int(forced_fixed_k_target)
+                            for row in rows:
+                                is_target = int(row["k"]) == k_forced
+                                row["selected_final"] = int(is_target)
+                                row["within_1se_survivor_pool"] = int(is_target)
+                                row["survivor_pool_argmax_k"] = int(k_forced)
+                                row["k_final_decision_path"] = "forced_fixed_k"
+                                row["reject_nontrivial_fail"] = 0
+                                row["reject_redundant"] = 0
+                                row["reject_reason_primary"] = ""
+                            survivors = [row for row in rows if int(row["selected_final"]) == 1]
+                        elif args.k_selection_mode == "redundancy-aware":
                             for row in rows:
                                 row["nonredundant_ok"] = int(
                                     np.isfinite(float(row["max_profile_similarity"]))
@@ -3060,6 +3122,7 @@ def main() -> int:
                                 "smoothing": smoothing,
                                 "hemi": hemi,
                                 "k_selection_mode": str(args.k_selection_mode),
+                                "force_final_k": int(args.force_final_k) if args.force_final_k is not None else None,
                                 "coverage_threshold": float(tau),
                                 "V_min_fraction": float(args.v_min_fraction),
                                 "V_min_effective": int(v_min),
@@ -3280,6 +3343,7 @@ def main() -> int:
                                 else "top1_fisher_z"
                             ),
                             "k_selection_mode": str(args.k_selection_mode),
+                            "force_final_k": int(args.force_final_k) if args.force_final_k is not None else None,
                             "coverage_threshold": float(tau),
                             "V_min_fraction": float(args.v_min_fraction),
                             "V_min_effective": int(v_min),
@@ -3288,16 +3352,16 @@ def main() -> int:
                                 if method == "group-roi-sim-spectral"
                                 else (
                                 "vertex_to_kong2022_400roi_fc_fisherz_colzscore"
-                                if method == "group-network-spectral" and atlas == "kong2022"
+                                if method == "network-spectral" and atlas == "kong2022"
                                 else (
                                     "vertex_to_canonical_network_fc_fisherz_colzscore"
-                                    if method == "group-network-spectral"
+                                    if method == "network-spectral"
                                     else (
                                         "vertex_to_canonical_network_partial_fc_networks_only_one_sided_fisherz_colzscore"
                                         if method == "group-network-partial-spectral"
                                         else (
                                             "vertex_to_vertex_intrinsic_fc_fisherz_diag0"
-                                            if method == "group-intrinsic-spectral"
+                                            if method == "intrinsic-spectral"
                                             else "vertex_to_vertex_intrinsic_fc_fisherz_diag0_plus_partial_profile"
                                         )
                                     )
@@ -3312,10 +3376,10 @@ def main() -> int:
                                     if method == "group-roi-sim-spectral"
                                     else (
                                     "pearson"
-                                    if method == "group-network-spectral"
+                                    if method == "network-spectral"
                                     else (
                                         "intrinsic_vertex_to_vertex_pearson"
-                                        if method == "group-intrinsic-spectral"
+                                        if method == "intrinsic-spectral"
                                         else "intrinsic_vertex_to_vertex_partial_profile"
                                     )
                                 )

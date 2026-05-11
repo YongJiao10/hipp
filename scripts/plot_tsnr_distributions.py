@@ -21,15 +21,25 @@ _args = _p.parse_args()
 BATCH_DIR = Path(_args.batch_dir)
 OUT_FIG   = Path(_args.out)
 
-SUBJECTS = ["sub-100610", "sub-102311", "sub-102816", "sub-104416"]
+SUBJECTS = ["sub-100610", "sub-102311", "sub-104416", "sub-102816"]
 HEMIS    = ["L", "R"]
 
 COLORS = {
     "sub-100610": "#4C72B0",
     "sub-102311": "#DD8452",
-    "sub-102816": "#55A868",
     "sub-104416": "#C44E52",
+    "sub-102816": "#55A868",
 }
+
+
+def has_hipp_bold(subject: str, hemi: str) -> bool:
+    new_dir = (_REPO_ROOT / "outputs_migration" / "hipp_group_inputs_shared" / subject / "surface" / "raw")
+    new_gii = new_dir / f"{subject}_hemi-{hemi}_space-corobl_den-512_label-hipp_bold.func.gii"
+    if new_gii.exists():
+        return True
+    surface_dir = BATCH_DIR / subject / "post_dense_corobl" / "surface"
+    gii = surface_dir / f"{subject}_hemi-{hemi}_space-corobl_den-512_label-hipp_bold.func.gii"
+    return gii.exists()
 
 # ── Helper: load bold timeseries (.func.gii only) ────────────────────────────
 def load_bold(subject: str, hemi: str) -> np.ndarray:
@@ -74,7 +84,13 @@ def compute_tsnr(bold: np.ndarray) -> np.ndarray:
 # ── Collect data ─────────────────────────────────────────────────────────────
 print("Loading data and computing tSNR …")
 data = {}   # (subject, hemi) → tsnr array (512,)
-for sub in SUBJECTS:
+active_subjects = [s for s in SUBJECTS if all(has_hipp_bold(s, h) for h in HEMIS)]
+if not active_subjects:
+    raise RuntimeError("No subjects with complete L/R hippocampal BOLD inputs were found.")
+missing_subjects = [s for s in SUBJECTS if s not in active_subjects]
+if missing_subjects:
+    print(f"Skipping missing subjects: {', '.join(missing_subjects)}")
+for sub in active_subjects:
     for hemi in HEMIS:
         bold = load_bold(sub, hemi)
         data[(sub, hemi)] = compute_tsnr(bold)
@@ -83,7 +99,7 @@ for sub in SUBJECTS:
               f"std={np.nanstd(vals):.2f}  n_nan={np.isnan(vals).sum()}")
 
 # ── Plot ─────────────────────────────────────────────────────────────────────
-n_rows = len(SUBJECTS)
+n_rows = len(active_subjects)
 fig = plt.figure(figsize=(16, 3.5 * n_rows))
 fig.patch.set_facecolor("#F8F8F8")
 
@@ -100,7 +116,7 @@ HEMI_LABEL = {"L": "Left", "R": "Right"}
 
 rng = np.random.default_rng(42)
 
-for row, sub in enumerate(SUBJECTS):
+for row, sub in enumerate(active_subjects):
     for col, hemi in enumerate(HEMIS):
         ax = fig.add_subplot(gs[row, col])
 

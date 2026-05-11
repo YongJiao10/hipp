@@ -2,15 +2,14 @@
 
 ## Active Branches (Kong2022 Route B)
 
-- `group-intrinsic-spectral` (cluster-based)
-- `group-network-top` (clusterless, vertex-level)
-- `group-network-all` (clusterless, vertex-level)
+- `intrinsic-spectral` (cluster-based)
+- `network-spectral` (cluster-based)
+- `wta-top` (clusterless, vertex-level)
 
-`group-network-top` and `group-network-all` are `kong2022`-only in the current implementation.
+Maintained default method set is: `intrinsic-spectral`, `network-spectral`, `wta-top`.
 
-Optional spectral branch (opt-in):
+Optional experimental branch (opt-in):
 
-- `group-network-spectral` (cluster-based)
 - `group-roi-sim-spectral` (design frozen in this round; not implemented/enabled)
 
 ## Kong2019 Branch Convention (Fast-PFM T1only)
@@ -20,8 +19,8 @@ Kong2019 does not use `routea/routeb` naming.
 - branch root: `outputs_experiments/hippunfold_recommended_t1w_20260423/kong2019_fast_pfm_t1only/`
 - shared inputs: `.../shared_inputs/pfm_151/`
 - atlas run: `kong2019_8net` only
-- mode split only: `allon` / `alloff`
-- presentation names use `kong2019_*_group_overview_{allon|alloff}.png`
+- mode split only: `10perc` / `full`
+- presentation names use `kong2019_*_group_overview_{10perc|full}.png`
 
 ## Shared Upstream
 
@@ -46,12 +45,14 @@ Kong2019 fast-PFM T1only input relocation:
 
 ## Branch-Specific Logic
 
-### `group-intrinsic-spectral`
+### `intrinsic-spectral`
 
 - Per-subject FC preprocessing is applied before group averaging (default):
-  - keep largest raw-value Top `10%` entries in each subject `512 x 512` FC map, set other finite entries to `0`
-  - default binarization sets retained Top entries to `1` (`--no-subject-fc-binarize` disables this)
-  - fraction is configurable via `--subject-fc-top-fraction`
+  - mode `full`: keep all entries with original values (no sparsification)
+  - mode `top-percent`: keep largest raw-value Top integer percent, set other finite entries to `0`, and always binarize retained entries to `1`
+  - CLI contract:
+    - `--subject-fc-mode full`
+    - `--subject-fc-mode top-percent --subject-fc-top-percent <int>`
 - Input feature for clustering: hippocampal intrinsic vertex-to-vertex Fisher-z FC.
 - Select `K` by ARI-based constraints.
 - Assign cluster network by raw TopN positive ROI majority:
@@ -67,17 +68,20 @@ Kong2019 fast-PFM T1only input relocation:
       2. local-max preference: among within-1SE survivors, prefer ARI-curve local maxima
       3. parsimony tiebreak: smallest K wins when quality is genuinely tied
     - if any nonredundant, nontrivial candidate remains, the pipeline selects one final `K` from that reduced pool (it does not reject lower `K` in favor of later redundant candidates)
+    - fixed-K override: when `--k-min == --k-max`, that `K` is forced as `chosen_k_final` (no survivor-pool gating)
     - optional urgent speed heuristic: `--redundancy-early-stop`
       - evaluate `K` in ascending order
       - once the first redundant `K` is observed, skip all larger `K`
       - this disables within-combo `K` parallelism and is intended only for interim fast runs, not final paper results
 
-### `group-network-spectral` (opt-in)
+### `network-spectral`
 
 - Per-subject FC preprocessing is applied before group averaging (default):
-  - keep largest raw-value Top `10%` entries in each subject `512 x 400` FC map, set other finite entries to `0`
-  - default binarization sets retained Top entries to `1` (`--no-subject-fc-binarize` disables this)
-  - fraction is configurable via `--subject-fc-top-fraction`
+  - mode `full`: keep all entries with original values (no sparsification)
+  - mode `top-percent`: keep largest raw-value Top integer percent, set other finite entries to `0`, and always binarize retained entries to `1`
+  - CLI contract:
+    - `--subject-fc-mode full`
+    - `--subject-fc-mode top-percent --subject-fc-top-percent <int>`
 - Input feature for clustering: hippocampal vertex-to-Kong2022-ROI Fisher-z FC (400 ROI).
 - For `kong2022`, cluster network assignment now follows the same TopN-count rule as intrinsic spectral:
   - one-sided t-test + BH-FDR (`q<0.05`) over ROI is retained for stats fields only
@@ -96,7 +100,7 @@ Kong2019 implementation note:
 - Refer to `docs/hipp_parcellation_network/group_roi_sim_spectral_frozen_plan.md`.
 - Do not include this branch in default or urgent rerun method sets.
 
-### `group-network-top`
+### `wta-top`
 
 - No clustering (`K` not used).
 - Vertex-level network assignment by raw TopN positive ROI majority:
@@ -104,7 +108,6 @@ Kong2019 implementation note:
   - assignment uses `N = min(20, n_positive_roi)` from raw positive ROI (`mean_z > 0`)
   - `unassigned` is used only when no positive ROI exists (`unassigned_reason = no_positive_roi`)
 
-### `group-network-all`
 
 - No clustering (`K` not used).
 - Vertex-level network assignment by all-ROI network mean score:
@@ -124,7 +127,6 @@ Kong2019 implementation note:
 
 ## Group Overview Rule (Clusterless)
 
-- In `build_present_group_overview_merged_canonical.py` for `group-network-top` / `group-network-all`:
   - the left pane contains only `vertex assignment counts`
   - vertex confidence histogram, global-top text preview, and metadata text block are removed
   - global-top visualization remains in cortex overview outputs, not in the group overview text panel
@@ -140,4 +142,4 @@ Kong2019 implementation note:
 
 ## 8xT Timeseries Rule
 
-For the three active branches above, assignment logic must not consume cortex canonical `8 x T` timeseries arrays.
+For the maintained default methods (`intrinsic-spectral`, `network-spectral`, `wta-top`), assignment logic must not consume cortex canonical `8 x T` timeseries arrays.

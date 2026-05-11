@@ -9,6 +9,7 @@ from run_merged_canonical_group_atlas import (
     group_feature_matrix,
     method_uses_network_fc_input,
     method_uses_subject_fc_preprocessing,
+    resolve_subject_fc_mode,
     preprocess_intrinsic_fc_map,
     preprocess_network_fc_map,
     preprocess_subject_fc_matrix,
@@ -38,7 +39,7 @@ def test_network_top_fraction_binarize_preserves_nan() -> None:
     assert bool(np.isnan(out[0, 3])), out
 
 
-def test_network_top_fraction_without_binarize() -> None:
+def test_network_full_mode_is_passthrough() -> None:
     x = np.array(
         [
             [0.1, 0.9, -0.2, np.nan, 0.8],
@@ -46,15 +47,12 @@ def test_network_top_fraction_without_binarize() -> None:
         ],
         dtype=np.float32,
     )
-    out = preprocess_network_fc_map(x, top_fraction=0.34, binarize=False)
-    expected = np.array(
-        [
-            [0.0, 0.9, 0.0, np.nan, 0.8],
-            [0.0, 0.0, 0.5, 0.6, 0.0],
-        ],
-        dtype=np.float32,
+    out = preprocess_subject_fc_matrix(
+        "network-spectral",
+        x,
+        subject_fc_mode=resolve_subject_fc_mode("full", None),
     )
-    assert np.allclose(np.nan_to_num(out), np.nan_to_num(expected), atol=1e-6), out
+    assert np.allclose(np.nan_to_num(out), np.nan_to_num(x), atol=1e-6), out
     assert bool(np.isnan(out[0, 3])), out
 
 
@@ -83,7 +81,7 @@ def test_intrinsic_top_fraction_binarize_keeps_symmetry_and_diag0() -> None:
     assert np.allclose(np.diag(out), np.zeros((4,), dtype=np.float32)), out
 
 
-def test_intrinsic_top_fraction_without_binarize() -> None:
+def test_intrinsic_full_mode_is_passthrough() -> None:
     x = np.array(
         [
             [0.0, 0.1, 0.4, np.nan],
@@ -93,32 +91,59 @@ def test_intrinsic_top_fraction_without_binarize() -> None:
         ],
         dtype=np.float32,
     )
-    out = preprocess_intrinsic_fc_map(x, top_fraction=0.34, binarize=False)
-    expected = np.array(
-        [
-            [0.0, 0.0, 0.4, np.nan],
-            [0.0, 0.0, 0.9, np.nan],
-            [0.4, 0.9, 0.0, np.nan],
-            [np.nan, np.nan, np.nan, 0.0],
-        ],
-        dtype=np.float32,
+    out = preprocess_subject_fc_matrix(
+        "intrinsic-spectral",
+        x,
+        subject_fc_mode=resolve_subject_fc_mode("full", None),
     )
-    assert np.allclose(np.nan_to_num(out), np.nan_to_num(expected), atol=1e-6), out
+    assert np.allclose(np.nan_to_num(out), np.nan_to_num(x), atol=1e-6), out
     assert np.allclose(out, out.T, equal_nan=True), out
 
 
 def test_method_gate_covers_all_supported_spectral_preprocessing_methods() -> None:
     assert method_uses_subject_fc_preprocessing("group-roi-sim-spectral")
-    assert method_uses_subject_fc_preprocessing("group-network-spectral")
-    assert method_uses_subject_fc_preprocessing("group-intrinsic-spectral")
-    assert not method_uses_subject_fc_preprocessing("group-network-top")
-    assert not method_uses_subject_fc_preprocessing("group-network-all")
+    assert method_uses_subject_fc_preprocessing("network-spectral")
+    assert method_uses_subject_fc_preprocessing("intrinsic-spectral")
+    assert not method_uses_subject_fc_preprocessing("wta-top")
     assert not method_uses_subject_fc_preprocessing("group-network-partial-spectral")
     assert not method_uses_subject_fc_preprocessing("group-intrinsic-partial-spectral")
 
     x = np.array([[0.2, 0.1], [0.4, 0.3]], dtype=np.float32)
-    out = preprocess_subject_fc_matrix("group-network-top", x, top_fraction=0.10, binarize=True)
+    out = preprocess_subject_fc_matrix(
+        "wta-top",
+        x,
+        subject_fc_mode=resolve_subject_fc_mode("top-percent", 10),
+    )
     assert np.array_equal(out, x), out
+
+
+def test_subject_fc_mode_validation_and_tags() -> None:
+    full = resolve_subject_fc_mode("full", None)
+    assert full.mode == "full"
+    assert full.mode_tag == "full"
+    assert full.top_percent is None
+
+    sparse = resolve_subject_fc_mode("top-percent", 10)
+    assert sparse.mode == "top-percent"
+    assert sparse.mode_tag == "10perc"
+    assert sparse.top_percent == 10
+
+    try:
+        resolve_subject_fc_mode("full", 10)
+        raise AssertionError("expected full mode + top-percent to fail")
+    except ValueError:
+        pass
+    try:
+        resolve_subject_fc_mode("top-percent", None)
+        raise AssertionError("expected top-percent mode without percent to fail")
+    except ValueError:
+        pass
+    for bad in [0, -1, 101]:
+        try:
+            resolve_subject_fc_mode("top-percent", bad)
+            raise AssertionError(f"expected bad percent to fail: {bad}")
+        except ValueError:
+            pass
 
 
 def test_roi_similarity_from_network_fc_is_symmetric_and_finite_with_diag0() -> None:
@@ -152,10 +177,11 @@ def test_group_feature_matrix_matches_preprocessed_subject_average() -> None:
         ],
         dtype=np.float32,
     )
-    pre_a = preprocess_subject_fc_matrix("group-network-spectral", raw_a, top_fraction=0.50, binarize=True)
-    pre_b = preprocess_subject_fc_matrix("group-network-spectral", raw_b, top_fraction=0.50, binarize=True)
+    mode = resolve_subject_fc_mode("top-percent", 50)
+    pre_a = preprocess_subject_fc_matrix("network-spectral", raw_a, subject_fc_mode=mode)
+    pre_b = preprocess_subject_fc_matrix("network-spectral", raw_b, subject_fc_mode=mode)
     got = group_feature_matrix(
-        method="group-network-spectral",
+        method="network-spectral",
         feature_bank={"a": pre_a, "b": pre_b},
         subjects_subset=["a", "b"],
         support_mask=np.array([True, True], dtype=bool),
@@ -195,9 +221,9 @@ def test_group_feature_matrix_roi_similarity_method_uses_square_branch() -> None
 
 def test_network_input_gate_includes_roi_similarity_method() -> None:
     assert method_uses_network_fc_input("group-roi-sim-spectral") is True
-    assert method_uses_network_fc_input("group-network-spectral") is True
-    assert method_uses_network_fc_input("group-network-top") is True
-    assert method_uses_network_fc_input("group-intrinsic-spectral") is False
+    assert method_uses_network_fc_input("network-spectral") is True
+    assert method_uses_network_fc_input("wta-top") is True
+    assert method_uses_network_fc_input("intrinsic-spectral") is False
 
 
 def test_runwise_feature_bank_roi_similarity_uses_network_inputs() -> None:
@@ -233,8 +259,7 @@ def test_runwise_feature_bank_roi_similarity_uses_network_inputs() -> None:
             smoothing=smoothing,
             hemi=hemi,
             valid_masks=valid_masks,
-            subject_fc_top_fraction=1.0,
-            subject_fc_binarize=False,
+            subject_fc_mode=resolve_subject_fc_mode("full", None),
         )
         for rid in [1, 2, 3, 4]:
             got = out[rid][subject]
@@ -246,10 +271,11 @@ def test_runwise_feature_bank_roi_similarity_uses_network_inputs() -> None:
 
 def main() -> int:
     test_network_top_fraction_binarize_preserves_nan()
-    test_network_top_fraction_without_binarize()
+    test_network_full_mode_is_passthrough()
     test_intrinsic_top_fraction_binarize_keeps_symmetry_and_diag0()
-    test_intrinsic_top_fraction_without_binarize()
+    test_intrinsic_full_mode_is_passthrough()
     test_method_gate_covers_all_supported_spectral_preprocessing_methods()
+    test_subject_fc_mode_validation_and_tags()
     test_roi_similarity_from_network_fc_is_symmetric_and_finite_with_diag0()
     test_group_feature_matrix_matches_preprocessed_subject_average()
     test_group_feature_matrix_roi_similarity_method_uses_square_branch()

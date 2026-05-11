@@ -11,11 +11,11 @@ from run_merged_canonical_group_atlas import (
 
 def test_method_gate_covers_both_spectral_methods_only() -> None:
     assert method_uses_kong2022_topn_cluster_annotation("group-roi-sim-spectral", "kong2022") is True
-    assert method_uses_kong2022_topn_cluster_annotation("group-intrinsic-spectral", "kong2022") is True
-    assert method_uses_kong2022_topn_cluster_annotation("group-network-spectral", "kong2022") is True
-    assert method_uses_kong2022_topn_cluster_annotation("group-network-top", "kong2022") is False
+    assert method_uses_kong2022_topn_cluster_annotation("intrinsic-spectral", "kong2022") is True
+    assert method_uses_kong2022_topn_cluster_annotation("network-spectral", "kong2022") is True
+    assert method_uses_kong2022_topn_cluster_annotation("wta-top", "kong2022") is False
     assert method_uses_kong2022_topn_cluster_annotation("group-roi-sim-spectral", "kong2019") is False
-    assert method_uses_kong2022_topn_cluster_annotation("group-network-spectral", "kong2019") is False
+    assert method_uses_kong2022_topn_cluster_annotation("network-spectral", "kong2019") is False
 
 
 def test_network_mean_profile_from_kong2022_roi_profile_groups_by_canonical8() -> None:

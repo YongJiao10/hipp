@@ -8,15 +8,16 @@ The workflow builds merged-canonical hippocampal group atlases for the active T1
 
 ## Active Methods
 
-- `group-intrinsic-spectral`
-- `group-network-top`
-- `group-network-all`
+- `intrinsic-spectral`
+- `network-spectral`
+- `wta-top`
 
-Opt-in only (not in default run):
+Maintained default method set:
 
-- `group-network-spectral` (legacy spectral baseline; not in the default method set)
+- `intrinsic-spectral`
+- `network-spectral`
+- `wta-top`
 
-`group-network-top` and `group-network-all` are currently implemented for `kong2022` only.
 
 Retired (no longer run; code retained for reference):
 
@@ -86,14 +87,13 @@ The upstream merge file also defines other atlas mappings, but the active merged
 - analyze left and right hippocampus separately
 - keep `N_ref` distinct from hippocampal cluster count `K`
 - choose `K` data-driven on the group workflow, not from cortical network count
-- `group-network-top` and `group-network-all` are clusterless (no `K` selection / no cluster labels)
 - order final cluster IDs along hippocampal long axis (`head -> tail`)
 - record exact subject list, coverage threshold, and non-triviality settings in manifests
 - if a combo has no valid `K` (or no `K` survives constraints), write a `group_atlas_manifest.json` with `status=skipped_*` and continue other combos
 - use direct ARI-space reporting for K-selection summaries and null references
 - FC cache construction uses sample-standardized Pearson (`np.nanstd(..., ddof=1)` with `T-1` denominator)
 - FC features are **unconditionally** Fisher-z transformed at load (raw r ∈ [-1, 1] on disk); no conditional fallback
-- for the three active methods (`group-intrinsic-spectral`, `group-network-top`, `group-network-all`), assignment logic must not consume cortex `8 x T` canonical timeseries arrays
+- for the maintained defaults (`intrinsic-spectral`, `network-spectral`, `wta-top`), assignment logic must not consume cortex `8 x T` canonical timeseries arrays
 - cosine similarity is mapped to affinity via `max(cosine, 0)` — anti-correlations contribute zero weight, not a positive attraction
 - after Hadamard fusion with mesh adjacency, `W` has `diag=0` (no self-loops); symmetrized via `W.maximum(W.T)` for float safety
 
@@ -110,7 +110,7 @@ Each run emits group-atlas products including:
 - `group_functional_atlas_labels.npy`
 - `group_functional_atlas_label_map.json`
 
-Cluster-based (`group-intrinsic-spectral`) adds:
+Cluster-based (`intrinsic-spectral`) adds:
 
 - `group_labels_final.npy`
 - `cluster_network_profile.npy`
@@ -118,7 +118,6 @@ Cluster-based (`group-intrinsic-spectral`) adds:
 - `cluster_roi_profile.npy` (`K_final x 400` Fisher-z mean)
 - `cluster_roi_top20.json` (positive/negative Top20 ROI per cluster)
 
-Clusterless (`group-network-top`, `group-network-all`) adds:
 
 - `vertex_assignment_status.json`
 - `vertex_roi_profile.npy` (+ `vertex_support_indices.npy`)
@@ -131,7 +130,7 @@ Presentation companion:
 
 - `present_group/`
 - built by `build_present_group_overview_merged_canonical.py`
-- public figure set is restricted to the six active atlas+method overview PNGs
+- public figure set is generated from the maintained default methods plus any explicit opt-in methods passed to `--methods`
 
 ## Route A (Kong2022_ArealMSHBM) - Minimal Loop Implemented
 

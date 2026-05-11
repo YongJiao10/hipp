@@ -37,7 +37,7 @@ This document freezes the design intent for `group-roi-sim-spectral` so it can b
 
 ## Required Tests Before Unfreeze
 
-1. Subject preprocessing parity with `group-network-spectral` knobs.
+1. Subject preprocessing parity with `network-spectral` knobs.
 2. Similarity matrix invariants per subject:
    - symmetric
    - finite

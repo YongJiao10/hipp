@@ -94,7 +94,7 @@ For urgent T1only spectral reruns, the canonical default entrypoint is now:
 
 This launcher fixes the runtime policy so future agents do not need ad hoc instructions:
 
-- method order is fixed: `group-intrinsic-spectral` first, then `group-network-spectral`
+- method order is fixed: `intrinsic-spectral` first, then `network-spectral`
 - after each method finishes, it immediately rebuilds that method's overview PNG
 - each spectral method runs `2mm/4mm x L/R = 4` combos in parallel
 - each combo runs with `--jobs 1` internally, so `K` is evaluated sequentially within that combo
@@ -107,19 +107,18 @@ This launcher fixes the runtime policy so future agents do not need ad hoc instr
 - to disable speed mode and force full K evaluation, pass:
   - `--no-redundancy-early-stop`
 - subject FC preprocessing defaults to:
-  - `--subject-fc-top-fraction 0.10`
-  - `--subject-fc-binarize`
+  - `--subject-fc-mode full`
 - fast launcher exposes the same override knobs as group-atlas:
-  - `--subject-fc-top-fraction <0..1>`
-  - `--no-subject-fc-binarize`
+  - `--subject-fc-mode top-percent --subject-fc-top-percent <int>`
 - total concurrency stays at `4`, below the repository hard cap of `10`
 - output directory is always `present_group_t1only/` (no `present_group_t1only_*` sibling dirs)
-- overview PNG naming is route/mode explicit:
-  - `kong2022_group-intrinsic-spectral_group_overview_<routea|routeb>_<allon|alloff>.png`
-  - `kong2022_group-network-spectral_group_overview_<routea|routeb>_<allon|alloff>.png`
-- per-run manifests from fast rerun are method-scoped files (not the consolidated 8-way manifest)
+- overview PNG naming:
+  - `kong2022_intrinsic-spectral_group_overview_<routea|routeb>_<10perc|full>.png`
+  - `kong2022_network-spectral_group_overview_<routea|routeb>_<10perc|full>.png`
+  - `kong2022_wta-top_group_overview_<routea|routeb>.png` (no mode suffix)
+- per-run manifests from fast rerun are method-scoped files (not the consolidated matrix manifest)
 
-## Canonical 8-Way Export (Single Command)
+## Canonical Matrix Export (Single Command)
 
 Use this as the only maintained overview export entrypoint:
 
@@ -130,25 +129,28 @@ Use this as the only maintained overview export entrypoint:
 
 Behavior:
 
-- fixed matrix: `2 methods x 2 routes x allon/alloff = 8` overviews
+- materialized matrix:
+  - clustering methods (`intrinsic-spectral`, `network-spectral`): `2 methods x (routea: 10perc/full, routeb: 10perc) = 6`
+  - clusterless method (`wta-top`): `2 routes (routea, routeb) = 2` (no `10perc/full` split)
+  - total: `8` overviews
+- `routeb_full` is intentionally omitted until a canonical source root is materialized
 - source group roots are fixed to:
-  - `hipp_group_merged_canonical_atlas_routea_allon`
-  - `hipp_group_merged_canonical_atlas_routea_alloff`
-  - `hipp_group_merged_canonical_atlas_routeb_allon`
-  - `hipp_group_merged_canonical_atlas_routeb_alloff`
+  - `hipp_group_merged_canonical_atlas_routea_10perc`
+  - `hipp_group_merged_canonical_atlas_routea_full`
+  - `hipp_group_merged_canonical_atlas_routeb_10perc`
 - single consolidated manifest:
-  - `present_group_t1only/group_overview_manifest_t1only_8way.json`
+  - `present_group_t1only/group_overview_manifest_t1only_matrix.json`
 - single consolidated README:
   - `present_group_t1only/README.md`
 - strict precheck is preserved: missing clustering outputs causes hard failure
 
 This fast rerun launcher is the default for interim spectral refreshes. Do not use it as the final paper run command.
 
-## 2026-05-02 No-Speed Full Rerun + 8-Way Refresh
+## 2026-05-02 No-Speed Full Rerun + Matrix Refresh
 
 When routeA/routeB outputs look suspiciously similar, use the full no-speed rerun sequence below.
 
-Route A (allon):
+Route A (`10perc`):
 
 ```bash
 /home/yojiao/.conda/envs/py314/bin/python \
@@ -159,21 +161,22 @@ Route A (allon):
   --subjects-manifest outputs_experiments/hippunfold_recommended_t1w_20260423/kong2022/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_151.txt \
   --present-dir outputs_experiments/hippunfold_recommended_t1w_20260423/kong2022/rerun_20260502_routea_routeb_nospeed_full_v2/present_intermediate \
   --route-source routea \
-  --subject-fc-binarize \
+  --subject-fc-mode top-percent \
+  --subject-fc-top-percent 10 \
   --no-redundancy-early-stop \
   --combo-jobs 4
 ```
 
-Route A (alloff): same as above but replace `--subject-fc-binarize` with `--no-subject-fc-binarize`.
+Route A (`full`): same as above but use `--subject-fc-mode full`.
 
-Route B (allon): same command pattern with:
+Route B (`10perc`): same command pattern with:
 
 - `--shared-root .../shared_inputs/routeb_151`
 - `--surface-root .../shared_inputs/surface_151`
 - `--route-source routeb`
-- `--subject-fc-binarize`
+- `--subject-fc-mode top-percent --subject-fc-top-percent 10`
 
-Route B (alloff): same as routeB-allon but use `--no-subject-fc-binarize`.
+Route B (`full`): currently not materialized as a canonical root and intentionally excluded from the matrix export.
 
 RouteA compliance guard:
 
@@ -218,39 +221,60 @@ Expected:
 - exactly 8 overview PNG files + one consolidated manifest + README
 - all 8 PNG hashes should differ (any exact duplicate is a pipeline red flag)
 
+## Fixed-K Dual-Metric Overview (RouteA Network-Spectral)
+
+For ad hoc comparison exports (not replacing the canonical `present_group_t1only/` matrix set),
+the maintained compact output directory is:
+
+- `present_fixedk/`
+
+File naming contract:
+
+- `kong2022_network-spectral_group_overview_routea_<10perc|full>_k<2|3>_<count|fisherz>.png`
+
+Fast tuning/rebuild playbook:
+
+- `docs/hipp_parcellation_network/fixedk_overview_tuning.md`
+
+This playbook includes:
+
+- source-root lineage anchors
+- fixed-K enforcement matrix per route/mode/hemi/smoothing
+- full K-curve restoration rule for ARI/redundancy panels
+- count vs fisher-z relabeling path
+- final validation checklist
+
 ## Run Record (2026-05-02 UTC)
 
-Full no-speed rerun completed for all four route/mode combinations:
+Full no-speed rerun was historically completed for four route/mode combinations under legacy aliases, now mapped to (`10perc/full`):
 
-- `logs/spectral_fast_rerun_routea_allon_20260502T061751Z`
-- `logs/spectral_fast_rerun_routea_alloff_20260502T063703Z`
-- `logs/spectral_fast_rerun_routeb_allon_20260502T065622Z`
-- `logs/spectral_fast_rerun_routeb_alloff_20260502T072212Z`
+- `logs/spectral_fast_rerun_routea_10perc_20260502T061751Z`
+- `logs/spectral_fast_rerun_routea_full_20260502T063703Z`
+- `logs/spectral_fast_rerun_routeb_10perc_20260502T065622Z`
+- `logs/spectral_fast_rerun_routeb_full_20260502T072212Z`
 
 Each log set contains 8 combo logs and all combos ended with `status: ok`.
 
-Refreshed 8-way output directory:
+Refreshed matrix output directory:
 
 - `present_group_t1only/`
-- `present_group_t1only/group_overview_manifest_t1only_8way.json`
+- `present_group_t1only/group_overview_manifest_t1only_matrix.json`
 
 PNG hash snapshot (`sha256sum kong2022_*_group_overview_*.png | sort`):
 
 ```text
-3f040dac72787c4287762670e19f9dd18db0735526f5fd75a9d3b64201e0aacc  kong2022_group-intrinsic-spectral_group_overview_routea_allon.png
-90326c311abdb7c599303ec5d92a189041f9411c5d2ecbe7b37ead68dc188731  kong2022_group-network-spectral_group_overview_routeb_alloff.png
-9cff223249f2a74002e3fd9efaca2861167040b839c5f0b098c5e24aaac26d1d  kong2022_group-intrinsic-spectral_group_overview_routea_alloff.png
-9e73da1bbd89149c35ec2f32ff4b00d74ccf97723d59b991f024d2699b6a4216  kong2022_group-network-spectral_group_overview_routeb_allon.png
-a84d408af719a233624f9d4df5cf0c4cc113dfa6fae50aac2d610ef2452ba3b5  kong2022_group-network-spectral_group_overview_routea_allon.png
-aaf25df1950508392895248b75adf5c34b4fd010692b1bdf3256aebd20575283  kong2022_group-intrinsic-spectral_group_overview_routeb_allon.png
-c691b4d0159fc35898222cb9bd6b405408435b6988e911b258ef0b2ef0072f38  kong2022_group-network-spectral_group_overview_routea_alloff.png
-d430f56e75a181ac66d01d6b2ef60543708bce9a95e350dea305cd00a5af3485  kong2022_group-intrinsic-spectral_group_overview_routeb_alloff.png
+<sha256>  kong2022_intrinsic-spectral_group_overview_routea_10perc.png
+<sha256>  kong2022_intrinsic-spectral_group_overview_routea_full.png
+<sha256>  kong2022_intrinsic-spectral_group_overview_routeb_10perc.png
+<sha256>  kong2022_network-spectral_group_overview_routea_10perc.png
+<sha256>  kong2022_network-spectral_group_overview_routea_full.png
+<sha256>  kong2022_network-spectral_group_overview_routeb_10perc.png
 ```
 
 Result check:
 
-- all 8 PNG files are byte-distinct
-- no exact duplicate overview image remained in the maintained 8-way set
+- all matrix PNG files are byte-distinct
+- no exact duplicate overview image remained in the maintained set
 
 ## wb_command Thread Warning
 
@@ -287,6 +311,7 @@ Total expected CPU with `--jobs 4` and `OMP_NUM_THREADS=2`: ~4 × 200% = ~800%.
    - Checks Dice files under T1only HippUnfold `qc/`.
    - Samples `rsfmri_volume/<sid>/func_uncompressed.nii` onto T1only `space-corobl_den-512` hippocampal surfaces.
    - Builds hippocampal tSNR gates with `tSNR=10000/std`, threshold `25`.
+   - That `10000` comes from the HCP / FEAT intensity-normalization convention: HCP fMRI preprocessing scales the 4D mean to `10000`, then this branch uses `10000/std_t` as the tSNR proxy on hp2000-filtered data.
    - Writes `manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_<N>.txt` and `..._latest.txt`.
    - Builds T1only group-average midthickness surfaces from pass subjects only.
    - Generates `surface/2mm` and `surface/4mm` func.gii plus `*_timeseries.npy` via
@@ -311,8 +336,7 @@ Total expected CPU with `--jobs 4` and `OMP_NUM_THREADS=2`: ~4 × 200% = ~800%.
    - Materializes atlas-invariant hippocampal vertex-to-vertex intrinsic FC for `2mm` and `4mm`, both hemispheres.
 
 5. `group-atlas`
-   - Runs two spectral methods for atlas `kong2022` by default: `group-intrinsic-spectral`, `group-network-spectral`.
-   - `group-network-top` / `group-network-all` are legacy and retired from default runs.
+   - Runs three maintained methods for atlas `kong2022` by default: `intrinsic-spectral`, `network-spectral`, `wta-top`.
    - Uses coverage threshold `0.80` and the T1only group-average surfaces.
    - `run_merged_canonical_group_atlas.py --jobs` now parallelizes candidate-`K` evaluation within each combo, capped at `min(--jobs, #K, 10)`.
    - Pipeline forwards `--jobs` to group-atlas and caps K-eval parallelism at 4 by default (`group_atlas_jobs=4`).
@@ -336,12 +360,11 @@ Total expected CPU with `--jobs 4` and `OMP_NUM_THREADS=2`: ~4 × 200% = ~800%.
 
 6. `present`
    - Builds overview figures in `present_group_t1only/` only.
-   - Default present methods in this pipeline are `group-intrinsic-spectral`, `group-network-spectral`.
-   - Maintained default is the 8-way matrix export (single command above), not ad hoc per-route present dirs.
+   - Default present methods in this pipeline are `intrinsic-spectral`, `network-spectral`, `wta-top`.
+   - Maintained default is the matrix export (single command above), not ad hoc per-route present dirs.
    - For cluster methods, the previous `cluster_indicator` panel is replaced by a K-metric gate panel:
      - `max_profile_similarity` vs K with threshold `0.80`
      - selected K (`K*`) marked by vertical dashed lines
-   - `group-network-top` / `group-network-all` are not part of maintained default present output.
    - Do not create new `present_group_t1only_*` sibling output directories.
 
 7. `cluster-roi-cortex`
@@ -351,12 +374,16 @@ Total expected CPU with `--jobs 4` and `OMP_NUM_THREADS=2`: ~4 × 200% = ~800%.
    - Kept separate from overview canvas (no layout merge into `*_group_overview.png`).
    - Uses one-sided one-sample t-tests with BH-FDR (`q < 0.05`) on ROI edges.
    - Intrinsic cluster mode: `Sig-only`, capped at top 20 significant ROI per sign (positive/negative) per cluster.
-   - Maintained defaults are spectral modes only (`group-intrinsic-spectral`, `group-network-spectral`).
+   - Maintained defaults are `intrinsic-spectral`, `network-spectral`, `wta-top`.
    - `runtime/` stores per-cluster figures, combo manifests, and the quicklook index manifest.
    - Overview collage composes panels from cluster figures in `runtime/` (no auto-delete).
-   - Default method set for this stage is `group-intrinsic-spectral`, `group-network-spectral`.
+   - Default method set for this stage is `intrinsic-spectral`, `network-spectral`, `wta-top`.
    - Rendering uses only the first scene view (single 4-panel cortex layout), not multi-view expansion.
    - Each cluster figure includes network-color legend (not ROI-name legend) and explicit sign-coding note (`+` saturated network color, `-` light tint of same network color).
+   - Statistical caption placement for grouped overviews:
+     - `one-sided one-sample t-test + BH-FDR(q<0.05); sig-only; max 20/sign; N=<subjects>` is shown once in the merged overview title suffix (parentheses), not repeated per subplot.
+     - Per-subplot title keeps only panel identity and selected-count summary to maximize visual area.
+   - Grouped overview panel/legend layout is tuned to reduce blank space and enlarge effective information density.
    - Merged overview panels annotate per-panel ROI counts as `n=total (+pos/-neg)`.
    - Cortex template asset resolution supports public/shared fallback:
      - first tries legacy `outputs_migration/cortex_pfm/sub-<template>/assets/*_sulc.func.gii`
@@ -365,9 +392,8 @@ Total expected CPU with `--jobs 4` and `OMP_NUM_THREADS=2`: ~4 × 200% = ~800%.
 
 ## Assignment Rule Update
 
-- `group-intrinsic-spectral`: cluster network assignment default is raw TopN positive ROI majority (`N=min(20, n_positive_roi)` from `mean_z > 0`); one-sided t + BH-FDR outputs are retained for stats only; `unassigned` is used only for `no_positive_roi`.
-- `group-network-spectral`: cluster network assignment remains Kong2022 ROI-profile based for cluster annotation.
-- Maintained default methods do not depend on legacy `group-network-top` / `group-network-all` branches.
+- `intrinsic-spectral`: cluster network assignment default is raw TopN positive ROI majority (`N=min(20, n_positive_roi)` from `mean_z > 0`); one-sided t + BH-FDR outputs are retained for stats only; `unassigned` is used only for `no_positive_roi`.
+- `network-spectral`: cluster network assignment uses the same raw TopN positive-ROI majority rule as `intrinsic-spectral` (`N=min(20, n_positive_roi)` from `mean_z > 0`), while one-sided t + BH-FDR outputs are retained for stats.
    - Brain surface PNGs are cached: if the wb_view render already exists, only the matplotlib composite is regenerated.
 
 ## Traceability

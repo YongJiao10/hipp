@@ -24,6 +24,15 @@ def save_json(path: Path, payload: dict) -> None:
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
+def resolve_cluster_label_path(manifest: dict, run_dir: Path) -> Path:
+    raw = manifest.get("template_cluster_label")
+    if raw is None:
+        raise ValueError(f"Missing template_cluster_label in manifest: {run_dir / 'group_atlas_manifest.json'}")
+    raw_path = Path(str(raw))
+    local_candidate = run_dir / "template" / "workbench_assets" / raw_path.name
+    return local_candidate.resolve()
+
+
 def make_named_label_gifti(labels: np.ndarray, label_table_items: list[tuple[int, str, tuple[int, int, int, int]]]) -> GiftiImage:
     tab = GiftiLabelTable()
     for key, name, rgba in label_table_items:
@@ -106,11 +115,12 @@ def materialize_combo(manifest_path: Path, color_map: dict[str, tuple[int, int, 
     label_items.append((key_unassigned, "unassigned", (20, 20, 20, 255)))
     func_lbl = make_named_label_gifti(functional.astype(np.int32), label_items)
 
-    old_cluster = Path(str(manifest["template_cluster_label"]))
-    func_lbl_path = old_cluster.with_name(old_cluster.name.replace("label-group_cluster_", "label-group_functional_atlas_"))
+    cluster_lbl_path = resolve_cluster_label_path(manifest, run_dir)
+    func_lbl_path = cluster_lbl_path.with_name(cluster_lbl_path.name.replace("label-group_cluster_", "label-group_functional_atlas_"))
     func_lbl_path.parent.mkdir(parents=True, exist_ok=True)
     nib.save(func_lbl, str(func_lbl_path))
 
+    manifest["template_cluster_label"] = str(cluster_lbl_path)
     manifest["group_functional_atlas_labels"] = str((run_dir / "group_functional_atlas_labels.npy").resolve())
     manifest["group_functional_atlas_label_map"] = str((run_dir / "group_functional_atlas_label_map.json").resolve())
     manifest["template_functional_atlas_label"] = str(func_lbl_path.resolve())

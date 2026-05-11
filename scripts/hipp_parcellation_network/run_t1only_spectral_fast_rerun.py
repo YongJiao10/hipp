@@ -35,7 +35,8 @@ DEFAULT_GROUP_AVG = DEFAULT_ROUTE_ROOT / "templates" / "hipp_group_average_t1onl
 MAX_REPO_CONCURRENCY = 10
 DEFAULT_COMBO_JOBS = 4
 PRESENT_PYTHON = "/home/yojiao/.conda/envs/py314/bin/python"
-METHOD_ORDER = ["group-intrinsic-spectral", "group-network-spectral"]
+METHOD_ORDER = ["intrinsic-spectral", "network-spectral", "wta-top"]
+CLUSTERLESS_METHODS = {"wta-top"}
 SMOOTHINGS = ["2mm", "4mm"]
 HEMIS = ["L", "R"]
 THREAD_ENV_OVERRIDES = {
@@ -81,15 +82,7 @@ def detect_route_source(shared_root: Path, manifest: Path) -> str:
     return next(iter(tags))
 
 
-def with_tokens(path: Path, route_tag: str, mode_tag: str) -> Path:
-    name = path.name
-    for token in (route_tag, mode_tag):
-        if token not in name.lower():
-            name = f"{name}_{token}"
-    return path.with_name(name)
-
-
-def enforce_provenance_stamp(root: Path, *, route_tag: str, mode_tag: str, kind: str) -> None:
+def enforce_provenance_stamp(root: Path, *, route_tag: str, mode_tag: str | None, kind: str) -> None:
     root.mkdir(parents=True, exist_ok=True)
     stamp = root / "route_isolation_manifest.json"
     payload = {"kind": kind, "route_source": route_tag, "mode": mode_tag}
@@ -119,6 +112,22 @@ def enforce_routea_path_compliance(shared_root: Path, manifest: Path, group_root
         )
 
 
+def resolve_subject_fc_mode(subject_fc_mode: str, subject_fc_top_percent: int | None) -> tuple[str, int | None]:
+    mode = str(subject_fc_mode)
+    if mode == "full":
+        if subject_fc_top_percent is not None:
+            raise ValueError("--subject-fc-top-percent is not allowed when --subject-fc-mode=full")
+        return "full", None
+    if mode != "top-percent":
+        raise ValueError(f"Unsupported --subject-fc-mode={subject_fc_mode}")
+    if subject_fc_top_percent is None:
+        raise ValueError("--subject-fc-top-percent is required when --subject-fc-mode=top-percent")
+    pct = int(subject_fc_top_percent)
+    if pct <= 0 or pct > 100:
+        raise ValueError(f"--subject-fc-top-percent must be within (0, 100], got {pct}")
+    return f"{pct}perc", pct
+
+
 def build_group_atlas_cmd(
     *,
     python_exe: str,
@@ -130,11 +139,10 @@ def build_group_atlas_cmd(
     batch_root: Path,
     group_avg: Path,
     coverage_threshold: float,
-    subject_fc_top_fraction: float,
-    subject_fc_binarize: bool,
+    subject_fc_mode: str,
+    subject_fc_top_percent: int | None,
     redundancy_early_stop: bool,
 ) -> list[str]:
-    binarize_flag = "--subject-fc-binarize" if bool(subject_fc_binarize) else "--no-subject-fc-binarize"
     cmd = [
         python_exe,
         str(GROUP_ATLAS),
@@ -156,9 +164,8 @@ def build_group_atlas_cmd(
         f"{coverage_threshold:.2f}",
         "--k-selection-mode",
         "redundancy-aware",
-        "--subject-fc-top-fraction",
-        f"{float(subject_fc_top_fraction):.6g}",
-        binarize_flag,
+        "--subject-fc-mode",
+        str(subject_fc_mode),
         "--atlases",
         "kong2022",
         "--methods",
@@ -168,6 +175,8 @@ def build_group_atlas_cmd(
         "--hemis",
         combo.hemi,
     ]
+    if subject_fc_top_percent is not None:
+        cmd.extend(["--subject-fc-top-percent", str(int(subject_fc_top_percent))])
     if bool(redundancy_early_stop):
         cmd.append("--redundancy-early-stop")
     return cmd
@@ -181,10 +190,14 @@ def build_present_cmd(
     method: str,
     coverage_threshold: float,
     route_tag: str,
-    mode_tag: str,
+    mode_tag: str | None,
 ) -> list[str]:
-    manifest_name = f"group_overview_manifest_{route_tag}_{mode_tag}_{method}.json"
-    return [
+    manifest_bits = ["group_overview_manifest", route_tag]
+    if mode_tag:
+        manifest_bits.append(mode_tag)
+    manifest_bits.append(method)
+    manifest_name = f"{'_'.join(manifest_bits)}.json"
+    cmd = [
         PRESENT_PYTHON,
         str(PRESENT),
         "--group-root",
@@ -199,12 +212,13 @@ def build_present_cmd(
         f"{coverage_threshold:.2f}",
         "--route-tag",
         route_tag,
-        "--mode-tag",
-        mode_tag,
         "--manifest-name",
         manifest_name,
         "--skip-readme",
     ]
+    if mode_tag:
+        cmd.extend(["--mode-tag", mode_tag])
+    return cmd
 
 
 def run_method_combo_parallel(
@@ -220,12 +234,12 @@ def run_method_combo_parallel(
     present_dir: Path,
     combo_jobs: int,
     coverage_threshold: float,
-    subject_fc_top_fraction: float,
-    subject_fc_binarize: bool,
+    subject_fc_mode: str,
+    subject_fc_top_percent: int | None,
     redundancy_early_stop: bool,
     log_dir: Path,
     route_tag: str,
-    mode_tag: str,
+    mode_tag: str | None,
 ) -> None:
     combos = [Combo(method=method, smoothing=smoothing, hemi=hemi) for smoothing in SMOOTHINGS for hemi in HEMIS]
     child_env = os.environ.copy()
@@ -244,8 +258,8 @@ def run_method_combo_parallel(
             batch_root=batch_root,
             group_avg=group_avg,
             coverage_threshold=coverage_threshold,
-            subject_fc_top_fraction=subject_fc_top_fraction,
-            subject_fc_binarize=subject_fc_binarize,
+            subject_fc_mode=subject_fc_mode,
+            subject_fc_top_percent=subject_fc_top_percent,
             redundancy_early_stop=redundancy_early_stop,
         )
         with log_path.open("wb") as fout:
@@ -282,8 +296,8 @@ def run_method_combo_parallel(
                     batch_root=batch_root,
                     group_avg=group_avg,
                     coverage_threshold=coverage_threshold,
-                    subject_fc_top_fraction=subject_fc_top_fraction,
-                    subject_fc_binarize=subject_fc_binarize,
+                    subject_fc_mode=subject_fc_mode,
+                    subject_fc_top_percent=subject_fc_top_percent,
                     redundancy_early_stop=redundancy_early_stop,
                 )
                 with next_log.open("wb") as fout:
@@ -324,10 +338,8 @@ def main() -> int:
     parser.add_argument("--group-average-surfaces-dir", default=str(DEFAULT_GROUP_AVG))
     parser.add_argument("--present-dir", default=str(DEFAULT_PRESENT_DIR))
     parser.add_argument("--coverage-threshold", type=float, default=0.80)
-    parser.add_argument("--subject-fc-top-fraction", type=float, default=0.10)
-    parser.add_argument("--subject-fc-binarize", dest="subject_fc_binarize", action="store_true")
-    parser.add_argument("--no-subject-fc-binarize", dest="subject_fc_binarize", action="store_false")
-    parser.set_defaults(subject_fc_binarize=True)
+    parser.add_argument("--subject-fc-mode", choices=["full", "top-percent"], default="full")
+    parser.add_argument("--subject-fc-top-percent", type=int, default=None)
     parser.add_argument(
         "--redundancy-early-stop",
         dest="redundancy_early_stop",
@@ -351,10 +363,7 @@ def main() -> int:
     args = parser.parse_args()
 
     combo_jobs = max(1, min(int(args.combo_jobs), len(SMOOTHINGS) * len(HEMIS), MAX_REPO_CONCURRENCY))
-    if not (0.0 <= float(args.subject_fc_top_fraction) <= 1.0):
-        raise ValueError(
-            f"--subject-fc-top-fraction must be within [0,1], got {args.subject_fc_top_fraction}"
-        )
+    mode_tag, subject_fc_top_percent = resolve_subject_fc_mode(args.subject_fc_mode, args.subject_fc_top_percent)
     batch_root = Path(args.hippunfold_batch_root).resolve()
     shared_root = Path(args.shared_root).resolve()
     surface_root = Path(args.surface_root).resolve()
@@ -369,11 +378,8 @@ def main() -> int:
         )
     if route_tag == "routea":
         enforce_routea_path_compliance(shared_root, manifest, group_root_raw)
-    mode_tag = "allon" if bool(args.subject_fc_binarize) else "alloff"
-    group_root = with_tokens(group_root_raw, route_tag, mode_tag)
     present_dir = Path(args.present_dir).resolve()
     group_avg = Path(args.group_average_surfaces_dir).resolve()
-    enforce_provenance_stamp(group_root, route_tag=route_tag, mode_tag=mode_tag, kind="group_root")
     present_dir.mkdir(parents=True, exist_ok=True)
     route_root = manifest.parent.parent
     log_dir = route_root / "logs" / (
@@ -386,17 +392,35 @@ def main() -> int:
         f"combo_jobs={combo_jobs} "
         f"method_order={METHOD_ORDER} "
         f"coverage_threshold={float(args.coverage_threshold):.2f} "
-        f"subject_fc_top_fraction={float(args.subject_fc_top_fraction):.6g} "
-        f"subject_fc_binarize={bool(args.subject_fc_binarize)} "
+        f"subject_fc_mode={args.subject_fc_mode} "
+        f"subject_fc_top_percent={subject_fc_top_percent} "
+        f"subject_fc_mode_tag={mode_tag} "
         f"redundancy_early_stop={bool(args.redundancy_early_stop)} "
         f"route_source={route_tag} "
-        f"group_root={group_root} "
+        f"group_root_base={group_root_raw} "
         f"present_dir={present_dir} "
         f"thread_env={THREAD_ENV_OVERRIDES}",
         flush=True,
     )
     for method in METHOD_ORDER:
+        name = group_root_raw.name
+        if route_tag not in name.lower():
+            name = f"{name}_{route_tag}"
+        if method in CLUSTERLESS_METHODS:
+            method_mode_tag = None
+        else:
+            if mode_tag not in name.lower():
+                name = f"{name}_{mode_tag}"
+            method_mode_tag = str(mode_tag)
+        group_root = group_root_raw.with_name(name)
+        enforce_provenance_stamp(
+            group_root,
+            route_tag=route_tag,
+            mode_tag=method_mode_tag,
+            kind="group_root",
+        )
         print(f"[method-start] {method}", flush=True)
+        print(f"[method-config] method={method} group_root={group_root} mode_tag={method_mode_tag}", flush=True)
         run_method_combo_parallel(
             python_exe=sys.executable,
             method=method,
@@ -409,12 +433,12 @@ def main() -> int:
             present_dir=present_dir,
             combo_jobs=combo_jobs,
             coverage_threshold=float(args.coverage_threshold),
-            subject_fc_top_fraction=float(args.subject_fc_top_fraction),
-            subject_fc_binarize=bool(args.subject_fc_binarize),
+            subject_fc_mode=str(args.subject_fc_mode),
+            subject_fc_top_percent=subject_fc_top_percent,
             redundancy_early_stop=bool(args.redundancy_early_stop),
             log_dir=log_dir,
             route_tag=route_tag,
-            mode_tag=mode_tag,
+            mode_tag=method_mode_tag,
         )
         print(f"[method-done] {method}", flush=True)
     print(f"[done] logs={log_dir}", flush=True)

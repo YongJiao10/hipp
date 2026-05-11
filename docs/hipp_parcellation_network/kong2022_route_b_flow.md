@@ -11,7 +11,7 @@ Route B supports two cortex reference sources:
 No individualized cortex PFM is run in this route. Each subject still gets:
 
 - 400-ROI cortex timeseries (after cortex tSNR gate)
-- merged canonical-8 cortex timeseries derived from those ROI timeseries (kept for compatibility; not used by the three active assignment methods)
+- merged canonical-8 cortex timeseries derived from those ROI timeseries (kept for compatibility; not used by the maintained default assignment methods)
 
 Atlas slug is fixed to `kong2022`.
 
@@ -37,15 +37,19 @@ For T1only, Route B must compute its own cortex tSNR gate and run slicing from t
    - include `--atlases kong2022`
 4. Render present overview:
    - script: `scripts/hipp_parcellation_network/build_present_group_overview_merged_canonical.py`
-   - pipeline default methods: `group-intrinsic-spectral`, `group-network-spectral`
-   - naming must include route/mode suffix:
-     - `kong2022_{method}_group_overview_{route-tag}_{mode-tag}.png`
+   - pipeline default methods: `intrinsic-spectral`, `network-spectral`, `wta-top`
+   - naming:
+     - cluster methods: `kong2022_{method}_group_overview_{route-tag}_{mode-tag}.png`
+     - clusterless methods: `kong2022_{method}_group_overview_{route-tag}.png`
    - maintained export root is only: `present_group_t1only/`
-5. One-shot 8-way matrix export (maintained default):
+5. One-shot matrix export (maintained default):
    - script: `scripts/hipp_parcellation_network/build_present_group_t1only_matrix.py`
-   - fixed matrix: `2 methods x 2 routes x allon/alloff = 8`
-   - strict root naming: must use `..._routea_allon/alloff` and `..._routeb_allon/alloff` (no fallback aliases)
-   - fixed consolidated manifest: `present_group_t1only/group_overview_manifest_t1only_8way.json`
+   - materialized matrix:
+     - clustering methods (`intrinsic-spectral`, `network-spectral`): `2 x (routea: 10perc/full, routeb: 10perc) = 6`
+     - clusterless method (`wta-top`): `2` (routea + routeb, no `10perc/full`)
+     - total `8`
+   - strict root naming: must use `..._routea_10perc`, `..._routea_full`, `..._routeb_10perc`; `routeb_full` is intentionally absent
+   - fixed consolidated manifest: `present_group_t1only/group_overview_manifest_t1only_matrix.json`
    - fixed consolidated README: `present_group_t1only/README.md`
 6. Render standalone cluster-ROI cortex figures (independent from overview):
    - script: `scripts/hipp_parcellation_network/build_cluster_roi_cortex_independent.py`
@@ -100,9 +104,8 @@ For spectral methods, `run_merged_canonical_group_atlas.py` supports `--k-select
   2. local-max preference: among within-1SE survivors, prefer ARI-curve local maxima
   3. parsimony tiebreak: smallest K when quality is genuinely tied
 
-For `group-intrinsic-spectral`, cluster network assignment uses raw TopN positive ROI majority (`N=min(20, n_positive_roi)` from `mean_z > 0`), not canonical `8 x T` cortex timeseries. One-sided t-test + BH-FDR outputs are still computed for stats fields only. If no positive ROI exists, status is `unassigned` with reason `no_positive_roi`. If TopN ROI belong to only one network, `2nd` is recorded as `none` (not duplicated from `1st`).
+For `intrinsic-spectral`, cluster network assignment uses raw TopN positive ROI majority (`N=min(20, n_positive_roi)` from `mean_z > 0`), not canonical `8 x T` cortex timeseries. One-sided t-test + BH-FDR outputs are still computed for stats fields only. If no positive ROI exists, status is `unassigned` with reason `no_positive_roi`. If TopN ROI belong to only one network, `2nd` is recorded as `none` (not duplicated from `1st`).
 
-`group-network-top` and `group-network-all` are legacy branches and are retired from maintained default runs.
 
 ## Independent Cluster-ROI Cortex Figure Outputs
 
@@ -117,16 +120,16 @@ All outputs are co-located under `present_group_t1only/runtime/` for each `(meth
 - `combo_manifests/` per-combo index JSON
 - top-level `cluster_roi_cortex_manifest.json` (quicklook index)
 
-Top-level `present_group_t1only/` contains the maintained 8-way overview PNG set:
+Top-level `present_group_t1only/` contains the maintained matrix overview PNG set:
 
-- `kong2022_group-intrinsic-spectral_group_overview_routea_allon.png`
-- `kong2022_group-intrinsic-spectral_group_overview_routea_alloff.png`
-- `kong2022_group-intrinsic-spectral_group_overview_routeb_allon.png`
-- `kong2022_group-intrinsic-spectral_group_overview_routeb_alloff.png`
-- `kong2022_group-network-spectral_group_overview_routea_allon.png`
-- `kong2022_group-network-spectral_group_overview_routea_alloff.png`
-- `kong2022_group-network-spectral_group_overview_routeb_allon.png`
-- `kong2022_group-network-spectral_group_overview_routeb_alloff.png`
+- `kong2022_intrinsic-spectral_group_overview_routea_10perc.png`
+- `kong2022_intrinsic-spectral_group_overview_routea_full.png`
+- `kong2022_intrinsic-spectral_group_overview_routeb_10perc.png`
+- `kong2022_network-spectral_group_overview_routea_10perc.png`
+- `kong2022_network-spectral_group_overview_routea_full.png`
+- `kong2022_network-spectral_group_overview_routeb_10perc.png`
+- `kong2022_wta-top_group_overview_routea.png`
+- `kong2022_wta-top_group_overview_routeb.png`
 
 Historical `cortex_*` quicklook outputs are deprecated from the maintained top-level export set.
 
@@ -138,7 +141,7 @@ Statistical and selection policy:
 - clusterless mode: global top connections use TopN positive + TopN negative edges (total up to `2N`) with significance thresholding (`q < 0.05`)
 - network hue follows canonical8 color mapping; sign is encoded by shade (negative uses lighter tone)
 - cluster figure legend is network-color based (no per-ROI name legend)
-- default method set for this stage is `group-intrinsic-spectral`, `group-network-spectral`
+- default method set for this stage is `intrinsic-spectral`, `network-spectral`, `wta-top`
 - rendering uses first scene view only (single 4-panel cortex layout), no multi-view expansion
 - overview builder composes from runtime cluster panels and keeps those panel PNGs in runtime
 - per-cluster figure includes network legend with sign-coding note and selected ROI counts
@@ -148,13 +151,12 @@ Statistical and selection policy:
 
 Active default methods for Kong2022:
 
-- `group-intrinsic-spectral`
-- `group-network-spectral`
+- `intrinsic-spectral`
+- `network-spectral`
+- `wta-top`
 
 Legacy (retired from default runs):
 
-- `group-network-top`
-- `group-network-all`
 
 Output policy:
 
@@ -163,16 +165,18 @@ Output policy:
 
 ## No-Speed Consistency Check (2026-05-02)
 
-If routeA and routeB overviews appear identical, re-run all four route/mode combos with:
+If routeA and routeB overviews appear identical, re-run all materialized route/mode combos with:
 
 - `run_t1only_spectral_fast_rerun.py --no-redundancy-early-stop`
-- route/mode isolated roots (`..._routea_allon`, `..._routea_alloff`, `..._routeb_allon`, `..._routeb_alloff`)
+- route/mode isolated roots (`..._routea_10perc`, `..._routea_full`, `..._routeb_10perc`)
 - then rebuild overviews only via `build_present_group_t1only_matrix.py`
 
-Acceptance rule for the maintained 8-way set:
+Acceptance rule for the maintained matrix set:
 
-- files: `kong2022_{method}_group_overview_{routea|routeb}_{allon|alloff}.png`
-- count: exactly 8
+- files:
+  - cluster methods: `kong2022_{method}_group_overview_{routea|routeb}_{10perc|full}.png`
+  - clusterless methods: `kong2022_{method}_group_overview_{routea|routeb}.png`
+- count: exactly 8 with current materialization (`routeb_full` absent; no mode split for `wta-top`)
 - each file should be byte-distinct (`sha256sum` all different); exact duplicates are treated as workflow regression signals
 
 Partial methods are unsupported for Kong2022 in this route and are warning+skip in the group driver.
