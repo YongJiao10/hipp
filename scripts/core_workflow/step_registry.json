@@ -1,0 +1,199 @@
+{
+  "schema_version": "1.0",
+  "active_workflow": "hippocampal_core_t1w",
+  "branch_mainlines": [
+    "kong2019",
+    "kong2022_routea",
+    "kong2022_routeb"
+  ],
+  "steps": [
+    {
+      "step_id": "01_01_prepare_group_inputs",
+      "stage": "01_inputs",
+      "purpose": "Prepare shared surfaces, QC metadata, and group-average templates.",
+      "branches": [
+        "kong2019",
+        "kong2022_routea",
+        "kong2022_routeb"
+      ],
+      "entry_script": "scripts/core_workflow/01_01_prepare_group_inputs.py",
+      "target_script": "scripts/hipp_parcellation_network/prepare_t1only_group_inputs.py",
+      "recommended_manifest": "manifests/core_workflow/01_01_prepare_group_inputs.json"
+    },
+    {
+      "step_id": "01_02_build_qc_manifest",
+      "stage": "01_inputs",
+      "purpose": "Build QC-pass cohort manifest for downstream runs.",
+      "branches": [
+        "kong2019",
+        "kong2022_routea",
+        "kong2022_routeb"
+      ],
+      "entry_script": "scripts/core_workflow/01_02_build_qc_manifest.py",
+      "target_script": "scripts/hipp_parcellation_network/build_t1only_qc_manifest.py",
+      "recommended_manifest": "manifests/core_workflow/01_02_build_qc_manifest.json"
+    },
+    {
+      "step_id": "02_01_run_hippunfold_t1w_local",
+      "stage": "02_hippunfold",
+      "purpose": "Run HippUnfold for the active T1w workflow.",
+      "branches": [
+        "kong2019",
+        "kong2022_routea",
+        "kong2022_routeb"
+      ],
+      "entry_script": "scripts/core_workflow/02_01_run_hippunfold_t1w_local.py",
+      "target_script": "scripts/run_hippunfold_local_t1w_isolated_cache.sh",
+      "recommended_manifest": "manifests/core_workflow/02_01_run_hippunfold_t1w_local.json"
+    },
+    {
+      "step_id": "02_02_check_hippunfold_outputs",
+      "stage": "02_hippunfold",
+      "purpose": "Check HippUnfold output integrity prior to FC stages.",
+      "branches": [
+        "kong2019",
+        "kong2022_routea",
+        "kong2022_routeb"
+      ],
+      "entry_script": "scripts/core_workflow/02_02_check_hippunfold_outputs.py",
+      "target_script": "scripts/check_hippunfold_output_integrity.py",
+      "recommended_manifest": "manifests/core_workflow/02_02_check_hippunfold_outputs.json"
+    },
+    {
+      "step_id": "03_01_build_kong2022_reference",
+      "stage": "03_cortex_reference",
+      "purpose": "Build Kong2022 cortex references for shared processing.",
+      "branches": [
+        "kong2022_routea",
+        "kong2022_routeb"
+      ],
+      "entry_script": "scripts/core_workflow/03_01_build_kong2022_reference.py",
+      "target_script": "scripts/cortex/run_cortex_kong2022_reference_batch.py",
+      "recommended_manifest": "manifests/core_workflow/03_01_build_kong2022_reference.json"
+    },
+    {
+      "step_id": "03_02_build_kong2022_routea_reference",
+      "stage": "03_cortex_reference",
+      "purpose": "Build RouteA-specific cortex references.",
+      "branches": [
+        "kong2022_routea"
+      ],
+      "entry_script": "scripts/core_workflow/03_02_build_kong2022_routea_reference.py",
+      "target_script": "scripts/cortex/run_cortex_kong2022_route_a_reference_batch.py",
+      "recommended_manifest": "manifests/core_workflow/03_02_build_kong2022_routea_reference.json"
+    },
+    {
+      "step_id": "04_01_materialize_kong2022_roi_fc",
+      "stage": "04_hipp_fc",
+      "purpose": "Materialize hippocampal ROI FC caches for Kong2022.",
+      "branches": [
+        "kong2022_routea",
+        "kong2022_routeb"
+      ],
+      "entry_script": "scripts/core_workflow/04_01_materialize_kong2022_roi_fc.py",
+      "target_script": "scripts/hipp_parcellation_network/materialize_kong2022_vertex_to_roi_fc.py",
+      "recommended_manifest": "manifests/core_workflow/04_01_materialize_kong2022_roi_fc.json"
+    },
+    {
+      "step_id": "04_02_materialize_intrinsic_fc",
+      "stage": "04_hipp_fc",
+      "purpose": "Materialize intrinsic vertex-to-vertex FC caches.",
+      "branches": [
+        "kong2019",
+        "kong2022_routea",
+        "kong2022_routeb"
+      ],
+      "entry_script": "scripts/core_workflow/04_02_materialize_intrinsic_fc.py",
+      "target_script": "scripts/hipp_parcellation_network/materialize_intrinsic_vertex_to_vertex_fc.py",
+      "recommended_manifest": "manifests/core_workflow/04_02_materialize_intrinsic_fc.json"
+    },
+    {
+      "step_id": "04_03_materialize_kong2019_fc",
+      "stage": "04_hipp_fc",
+      "purpose": "Materialize Kong2019 branch FC banks.",
+      "branches": [
+        "kong2019"
+      ],
+      "entry_script": "scripts/core_workflow/04_03_materialize_kong2019_fc.py",
+      "target_script": "scripts/hipp_parcellation_network/materialize_kong7_kong8_pearson_partial_fc.py",
+      "recommended_manifest": "manifests/core_workflow/04_03_materialize_kong2019_fc.json"
+    },
+    {
+      "step_id": "05_01_run_group_atlas",
+      "stage": "05_group_atlas",
+      "purpose": "Build merged-canonical group atlas outputs.",
+      "branches": [
+        "kong2019",
+        "kong2022_routea",
+        "kong2022_routeb"
+      ],
+      "entry_script": "scripts/core_workflow/05_01_run_group_atlas.py",
+      "target_script": "scripts/hipp_parcellation_network/run_merged_canonical_group_atlas.py",
+      "recommended_manifest": "manifests/core_workflow/05_01_run_group_atlas.json"
+    },
+    {
+      "step_id": "05_02_run_spectral_fast_rerun",
+      "stage": "05_group_atlas",
+      "purpose": "Run urgent spectral rerun orchestration.",
+      "branches": [
+        "kong2022_routea",
+        "kong2022_routeb"
+      ],
+      "entry_script": "scripts/core_workflow/05_02_run_spectral_fast_rerun.py",
+      "target_script": "scripts/hipp_parcellation_network/run_t1only_spectral_fast_rerun.py",
+      "recommended_manifest": "manifests/core_workflow/05_02_run_spectral_fast_rerun.json"
+    },
+    {
+      "step_id": "06_01_build_group_overview",
+      "stage": "06_outputs",
+      "purpose": "Render merged-hemisphere group overview products.",
+      "branches": [
+        "kong2019",
+        "kong2022_routea",
+        "kong2022_routeb"
+      ],
+      "entry_script": "scripts/core_workflow/06_01_build_group_overview.py",
+      "target_script": "scripts/hipp_parcellation_network/build_present_group_overview_merged_canonical.py",
+      "recommended_manifest": "manifests/core_workflow/06_01_build_group_overview.json"
+    },
+    {
+      "step_id": "06_02_build_group_matrix",
+      "stage": "06_outputs",
+      "purpose": "Build the maintained matrix overview index.",
+      "branches": [
+        "kong2019",
+        "kong2022_routea",
+        "kong2022_routeb"
+      ],
+      "entry_script": "scripts/core_workflow/06_02_build_group_matrix.py",
+      "target_script": "scripts/hipp_parcellation_network/build_present_group_t1only_matrix.py",
+      "recommended_manifest": "manifests/core_workflow/06_02_build_group_matrix.json"
+    },
+    {
+      "step_id": "06_03_materialize_group_labels",
+      "stage": "06_outputs",
+      "purpose": "Materialize group functional-atlas label arrays.",
+      "branches": [
+        "kong2019",
+        "kong2022_routea",
+        "kong2022_routeb"
+      ],
+      "entry_script": "scripts/core_workflow/06_03_materialize_group_labels.py",
+      "target_script": "scripts/hipp_parcellation_network/materialize_group_functional_atlas_labels.py",
+      "recommended_manifest": "manifests/core_workflow/06_03_materialize_group_labels.json"
+    },
+    {
+      "step_id": "06_04_build_cluster_cortex_panels",
+      "stage": "06_outputs",
+      "purpose": "Generate cortex/hippocampal summary panels.",
+      "branches": [
+        "kong2019",
+        "kong2022_routea",
+        "kong2022_routeb"
+      ],
+      "entry_script": "scripts/core_workflow/06_04_build_cluster_cortex_panels.py",
+      "target_script": "scripts/hipp_parcellation_network/build_cluster_roi_cortex_independent.py",
+      "recommended_manifest": "manifests/core_workflow/06_04_build_cluster_cortex_panels.json"
+    }
+  ]
+}

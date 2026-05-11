@@ -1,33 +1,25 @@
 # Scripts Layout
 
-This directory is organized by responsibility.
+This directory is organized by layer.
 
-- `common/`
-  Shared numerical utilities and reusable helpers used across pipelines.
-- `cortex/`
-  Cortex PFM derivation, ROI-component extraction, and cortex-specific rendering.
-- `workbench/`
-  Workbench scene capture, legend composition, and native-surface rendering helpers.
-- `hipp_parcellation_network/`
-  Active hippocampal **group-analysis** package.
-  Public entry points:
-  - `materialize_kong7_kong8_pearson_partial_fc.py`
-  - `run_merged_canonical_group_atlas.py`
-  - `build_present_group_overview_merged_canonical.py`
-  - `build_present_group_t1only_matrix.py`
-  - `refresh_present_fixedk_modes.py`
-  - `run_t1only_spectral_fast_rerun.py`
-  - `materialize_group_functional_atlas_labels.py`
+- `core_workflow/`: canonical public entrypoints (`NN_MM_<semantic_name>.py`)
+- `hipp_parcellation_network/`: implementation layer for hippocampal analysis scripts
+- `cortex/`: cortex reference derivation and extraction
+- `common/`: shared numerical helpers
+- `workbench/`: rendering and figure assembly helpers
 
-Behavior guardrails:
+The active workflow should be launched from `scripts/core_workflow/` rather than directly from implementation scripts.
 
-- `build_present_group_overview_merged_canonical.py` now enforces functional-atlas label consistency before any surface rendering.
-- If `group_functional_atlas_labels.npy` and `template_functional_atlas_label` disagree (or manifest paths are stale/out-of-root), it auto-materializes labels and re-validates; unresolved mismatches fail fast.
+Traceability contract for `core_workflow` wrappers:
 
-Top-level `scripts/` still contains broader workflow helpers shared across the repository, such as HippUnfold wrappers and environment utilities.
+- supports `--workflow-branch` with `kong2019`, `kong2022_routea`, `kong2022_routeb`
+- supports repeatable `--upstream-step-id`, `--input-artifact`, `--output-artifact`
+- supports `--step-manifest-out` emitting standardized JSON containing:
+  - `step_id`
+  - `workflow_branch`
+  - `upstream_step_ids`
+  - explicit input/output artifacts
+  - command and git commit
 
-Legacy subject-level parcellation entrypoints and retired group-prior scripts were moved to:
-
-- `_archive/hipp_parcellation_network/legacy_subject_pipeline/`
-- `_archive/hipp_parcellation_network/legacy_group_prior/`
-- `_archive/hipp_parcellation_network/legacy_group_methods/`
+Step inventory is in `scripts/core_workflow/step_registry.json`.
+Legacy or retired surfaces are preserved under `_archive/`.

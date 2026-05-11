@@ -13,8 +13,22 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PYTHON_EXE = sys.executable or "python"
 EXTRACT_SCRIPT = REPO_ROOT / "scripts" / "cortex" / "extract_cortex_kong2022_roi_timeseries.py"
-DEFAULT_SHARED_ROOT = REPO_ROOT / "outputs_migration" / "hipp_group_inputs_shared"
-DEFAULT_MANIFEST = REPO_ROOT / "manifests" / "hcp_7t_hippocampus_fmri_qc_pass_153.txt"
+DEFAULT_SHARED_ROOT = (
+    REPO_ROOT
+    / "outputs_experiments"
+    / "hippunfold_recommended_t1w_20260423"
+    / "kong2022"
+    / "shared_inputs"
+    / "routeb_151"
+)
+DEFAULT_MANIFEST = (
+    REPO_ROOT
+    / "outputs_experiments"
+    / "hippunfold_recommended_t1w_20260423"
+    / "kong2022"
+    / "manifests"
+    / "hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt"
+)
 MAX_CONCURRENCY = 10
 
 

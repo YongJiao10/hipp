@@ -397,10 +397,9 @@ From scratch, a future agent should:
 10. Make sure `c3d`, `greedy`, `LN2_LAYERS`, and `N4BiasFieldCorrection` resolve from the conda env or explicit binary paths.
 11. `scripts/run_hippunfold_local.sh` cleans up `runtime/hippunfold_cache` on exit by design.
     This is safe for single-subject/single-process runs, but for parallel subject runs you must isolate cache roots per worker (or otherwise avoid a shared disposable cache root), or workers may delete each other's runtime artifacts.
-    For recommended parallel reruns in this repo, use:
-    `scripts/run_hippunfold_local_t2w_t1reg_isolated_cache.sh`
-    which keeps per-subject disposable runtime workdirs while reusing a persistent shared asset store at
-    `runtime/hippunfold_asset_store_shared`.
+    The active public launcher surface is now `scripts/core_workflow/02_01_run_hippunfold_t1w_local.py`.
+    The legacy T2-specific launcher `scripts/run_hippunfold_local_t2w_t1reg_isolated_cache.sh` was archived under
+    `_archive/deprecated_2026-05-11/scripts/`.
 12. Use `data/hippunfold_input` as the input root and `outputs_migration/dense_corobl_batch/sub-<id>/hippunfold` as the output root.
 
 ## Activation Path Guardrail

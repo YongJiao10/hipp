@@ -2,21 +2,20 @@
 
 Documentation is grouped by intent.
 
-- `official/`
-  Project-level context and cross-cutting summaries.
-- `hipp_parcellation_network/`
-  Active hippocampal **group-analysis** runbook and reference docs.
-- `cortex/`
-  Cortex ROI-component derivation and related reference notes.
-- `rendering/`
-  Workbench rendering conventions and screenshot generation notes.
-- `structural/`
-  Structural-only formalizations and related writeups.
+- `official/`: project-level context and cross-cutting summaries
+- `hipp_parcellation_network/`: canonical hippocampal workflow docs and branch references
+- `cortex/`: cortex derivation references
+- `rendering/`: Workbench rendering conventions
+- `structural/`: structural-only notes
 
-Active hippocampal group-analysis docs are intentionally reduced to:
+Canonical hippocampal workflow docs:
 
-- `hipp_parcellation_network/network_first_runbook.md`
-- `hipp_parcellation_network/merged_canonical_group_atlas_plan.md`
+- `hipp_parcellation_network/core_workflow_overview.md`
+- `hipp_parcellation_network/core_workflow_step_registry.md`
+- `hipp_parcellation_network/multi_branch_flow.md`
+- `hipp_parcellation_network/step_by_step_flows.md`
 - `hipp_parcellation_network/fmri_qc.md`
+- `hipp_parcellation_network/archive_index.md`
 
-Legacy hippocampal parcellation flow docs were moved to `_archive/hipp_parcellation_network/legacy_docs/`.
+The public script surface for this workflow is `scripts/core_workflow/`.
+Legacy branch-specific runbooks and retired surfaces are preserved under `_archive/`.
