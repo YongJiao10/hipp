@@ -86,3 +86,17 @@ CONDA_SAFETY_CHECKS=disabled conda install -y -n hippo2 -c khanlab -c conda-forg
 
 - Do not treat `bioconda::hippunfold` as sufficient evidence of native `512` support.
 - Avoid forbidden workflow version labels for this project: `1.5.2`, `1.5.2-pre.2`, `1.5.2rc2`.
+
+## Agent Runtime Environment Contract (Hard)
+
+- Do not use bare `python` for repository tasks.
+- Always use an explicit interpreter path based on task type:
+  - Core workflow scripts/tests/doc-contract checks: `/home/yojiao/.conda/envs/py314/bin/python`
+  - Direct HippUnfold CLI runs: `hippo2` gate above (`/opt/miniconda3/envs/hippo2/bin/hippunfold` after activation)
+- Before running any Python-based repo task, run and verify:
+  1. `/home/yojiao/.conda/envs/py314/bin/python -c "import sys,nibabel; print(sys.executable); print(nibabel.__version__)"`
+  2. `python -c "import sys; print(sys.executable)"` (informational only; do not use this interpreter for repo tasks unless it exactly matches py314)
+- If command examples in docs use `python`, agents must rewrite them to the explicit interpreter path at execution time.
+- If an agent accidentally runs with the wrong interpreter, stop and rerun with the correct one; do not continue mixed-environment execution.
+
+Reference runbook: `docs/environment/agent_runtime_contract.md`

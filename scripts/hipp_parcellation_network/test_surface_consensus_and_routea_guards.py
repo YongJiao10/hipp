@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import sys
+import importlib.util
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -9,12 +10,31 @@ import nibabel as nib
 import numpy as np
 from nibabel.gifti import GiftiDataArray, GiftiImage
 
-from run_merged_canonical_group_atlas import build_subject_surface_consensus
-from run_t1only_spectral_fast_rerun import enforce_routea_path_compliance
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(REPO_ROOT / "scripts" / "cortex"))
-from run_cortex_kong2022_route_a_reference_batch import validate_routea_path
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+def _load_numbered_module(script_name: str, alias: str):
+    module_path = REPO_ROOT / "scripts" / "core_workflow" / script_name
+    spec = importlib.util.spec_from_file_location(alias, module_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Failed to load module: {module_path}")
+    module = importlib.util.module_from_spec(spec)
+    core_dir = (REPO_ROOT / "scripts" / "core_workflow").resolve()
+    if str(core_dir) not in sys.path:
+        sys.path.insert(0, str(core_dir))
+    sys.modules[alias] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+atlas_mod = _load_numbered_module("05_01_run_group_atlas.py", "core_05_01_run_group_atlas")
+rerun_mod = _load_numbered_module("05_02_run_spectral_fast_rerun.py", "core_05_02_run_spectral_fast_rerun")
+routea_mod = _load_numbered_module("03_02_build_kong2022_routea_reference.py", "core_03_02_build_kong2022_routea_reference")
+
+build_subject_surface_consensus = atlas_mod.build_subject_surface_consensus
+enforce_routea_path_compliance = rerun_mod.enforce_routea_path_compliance
+validate_routea_path = routea_mod.validate_routea_path
 
 
 def _write_surface(path: Path, coords: np.ndarray, faces: np.ndarray) -> None:
@@ -35,8 +55,6 @@ def _write_surface(path: Path, coords: np.ndarray, faces: np.ndarray) -> None:
 
 
 def _with_fake_surface_map(mapping: dict[tuple[str, str], Path]):
-    import run_merged_canonical_group_atlas as atlas_mod
-
     original = atlas_mod.infer_surface_path
 
     def fake_infer_surface_path(subject: str, hemi: str, batch_root: Path | None = None) -> Path:

@@ -1,16 +1,38 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import sys
+import importlib.util
+from pathlib import Path
+
 import numpy as np
 
-from run_merged_canonical_group_atlas import (
-    PROFILE_REDUNDANCY_MAX_SIM,
-    profile_redundancy_metrics,
-    redundancy_early_stop_triggered,
-    resolve_k_eval_jobs,
-    select_k_final_after_redundancy_filter,
-    select_k_final_from_survivors,
-)
+REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+def _load_numbered_module(script_name: str, alias: str):
+    module_path = REPO_ROOT / "scripts" / "core_workflow" / script_name
+    spec = importlib.util.spec_from_file_location(alias, module_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Failed to load module: {module_path}")
+    module = importlib.util.module_from_spec(spec)
+    core_dir = (REPO_ROOT / "scripts" / "core_workflow").resolve()
+    if str(core_dir) not in sys.path:
+        sys.path.insert(0, str(core_dir))
+    sys.modules[alias] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+atlas_mod = _load_numbered_module("05_01_run_group_atlas.py", "core_05_01_run_group_atlas")
+
+PROFILE_REDUNDANCY_MAX_SIM = atlas_mod.PROFILE_REDUNDANCY_MAX_SIM
+profile_redundancy_metrics = atlas_mod.profile_redundancy_metrics
+redundancy_early_stop_triggered = atlas_mod.redundancy_early_stop_triggered
+resolve_k_eval_jobs = atlas_mod.resolve_k_eval_jobs
+select_k_final_after_redundancy_filter = atlas_mod.select_k_final_after_redundancy_filter
+select_k_final_from_survivors = atlas_mod.select_k_final_from_survivors
 
 
 def _redundancy_aware_selected(row: dict[str, int]) -> bool:

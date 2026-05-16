@@ -1,7 +1,9 @@
 # Core Workflow Step Registry and IO Matrix
 
 Canonical public entrypoints are under `scripts/core_workflow/`.
-This table maps each step ID to branch coverage, script entrypoint, and expected IO domain.
+Stage implementations are under `scripts/core_workflow/lib/`.
+The machine registry (`scripts/core_workflow/step_registry.json`) maps each `step_id` to both `entry_script` and `implementation_script`.
+This table maps each step ID to branch coverage, entrypoint, and expected IO domain.
 
 | Step ID | Purpose | Branches | Entrypoint | Primary Inputs | Primary Outputs | Manifest |
 |---|---|---|---|---|---|---|

@@ -1,12 +1,32 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import sys
+import importlib.util
 import numpy as np
+from pathlib import Path
 
-from run_merged_canonical_group_atlas import (
-    method_uses_kong2022_topn_cluster_annotation,
-    network_mean_profile_from_kong2022_roi_profile,
-)
+REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+def _load_numbered_module(script_name: str, alias: str):
+    module_path = REPO_ROOT / "scripts" / "core_workflow" / script_name
+    spec = importlib.util.spec_from_file_location(alias, module_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Failed to load module: {module_path}")
+    module = importlib.util.module_from_spec(spec)
+    core_dir = (REPO_ROOT / "scripts" / "core_workflow").resolve()
+    if str(core_dir) not in sys.path:
+        sys.path.insert(0, str(core_dir))
+    sys.modules[alias] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+atlas_mod = _load_numbered_module("05_01_run_group_atlas.py", "core_05_01_run_group_atlas")
+method_uses_kong2022_topn_cluster_annotation = atlas_mod.method_uses_kong2022_topn_cluster_annotation
+network_mean_profile_from_kong2022_roi_profile = atlas_mod.network_mean_profile_from_kong2022_roi_profile
 
 
 def test_method_gate_covers_both_spectral_methods_only() -> None:

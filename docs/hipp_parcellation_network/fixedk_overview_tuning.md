@@ -1,0 +1,157 @@
+# RouteA Fixed-K Overview Tuning (Quick Path)
+
+## Purpose
+
+This note is the shortest path to regenerate and tweak the **RouteA / network-spectral** fixed-K overview figures with full K curves and dual labeling metrics.
+
+Use this when a new agent needs to adjust overview content/layout quickly without rediscovering lineage.
+
+## Stable Deliverable Path
+
+Final curated outputs (8 PNGs) live in:
+
+- `present_fixedk/`
+
+Filename contract (do not change):
+
+- `kong2022_network-spectral_group_overview_routea_<10perc|full>_k<2|3>_<count|fisherz>.png`
+
+## Provenance Anchors
+
+Canonical source roots:
+
+- RouteA 10perc:
+  - `outputs_experiments/hippunfold_recommended_t1w_20260423/kong2022/hipp_group_merged_canonical_atlas_routea_10perc`
+- RouteA full:
+  - `outputs_experiments/hippunfold_recommended_t1w_20260423/kong2022/hipp_group_merged_canonical_atlas_routea_full`
+
+Metric semantics:
+
+- `count`: cluster network assignment by TopN ROI count majority (`topn_count_positive_roi`)
+- `fisherz`: cluster network assignment by `top1_fisher_z`
+
+K-curve rule:
+
+- Even when fixed K is enforced, `k_selection_summary.tsv/json` must be copied from canonical route roots so `K selection (ARI)` and redundancy panels remain full curves.
+- K-selection and redundancy panels use legends (not free text overlays) for hemisphere and line-style semantics to avoid covering curve segments.
+- Legend placement is centered (`loc='center'`) with compact text.
+- In panel wording, use short labels (`null baseline`, `redundancy threshold`) and avoid long parenthetical text.
+
+## Fast Rebuild Recipe
+
+All commands run from repo root: `/home/yojiao/hpchome/hipp`.
+
+### One-command default refresh (recommended)
+
+For a reproducible default triplet refresh (same legend style, full K curves, and fixed filename targets), run:
+
+```bash
+/home/yojiao/.conda/envs/py314/bin/python scripts/hipp_parcellation_network/refresh_present_fixedk_modes.py
+```
+
+This entrypoint performs, in order:
+
+- ensure all 8 fixed-K roots exist: `10perc/full x k2/k3 x count/fisherz`
+- force fixed K under `network-spectral` only (`k2` or `k3`) where a combo is not yet fixed
+- for fixed-K recompute speed, use `--instability-resamples 10 --null-resamples 10`
+- sync `k_selection_summary.tsv/json` from each mode's canonical root for all `2mm/4mm x L/R`
+- regenerate fisher-z cluster assignment status and functional atlas labels
+- render and overwrite all 8 PNGs under `present_fixedk/`
+
+### 1) Create short work roots
+
+```bash
+BASE=outputs_experiments/hippunfold_recommended_t1w_20260423/kong2022
+WORK=$BASE/fixedk_work
+mkdir -p "$WORK"
+
+cp -a "$BASE/hipp_group_merged_canonical_atlas_routea_full" "$WORK/ga_routea_full_k2_count"
+cp -a "$BASE/hipp_group_merged_canonical_atlas_routea_full" "$WORK/ga_routea_full_k3_count"
+cp -a "$BASE/hipp_group_merged_canonical_atlas_routea_10perc"  "$WORK/ga_routea_10perc_k2_count"
+cp -a "$BASE/hipp_group_merged_canonical_atlas_routea_10perc"  "$WORK/ga_routea_10perc_k3_count"
+```
+
+### 2) Force K (targeted recompute only)
+
+Use `run_merged_canonical_group_atlas.py` with `--methods network-spectral --atlases kong2022 --coverage-thresholds 0.80 --jobs 1`.
+For fixed-K display runs, keep full K curve evaluation (`--k-min 2 --k-max 10`) and pin final K via `--force-final-k <2|3>`.
+
+- full K=2: recompute `hemi=R` (`2mm,4mm`) with `--force-final-k 2 --subject-fc-mode full`
+- full K=3: recompute `hemi=L` (`2mm,4mm`) with `--force-final-k 3 --subject-fc-mode full`
+- 10perc K=2: recompute `hemi=R` (`2mm,4mm`) with `--force-final-k 2 --subject-fc-mode top-percent --subject-fc-top-percent 10`
+- 10perc K=3: recompute `hemi=L` (`2mm,4mm`) and additionally `2mm hemi=R` with `--force-final-k 3 --subject-fc-mode top-percent --subject-fc-top-percent 10`
+
+Shared arguments:
+
+- `--shared-root $BASE/shared_inputs/routea_151`
+- `--surface-root $BASE/shared_inputs/surface_151`
+- `--subjects-manifest $BASE/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_151.txt`
+- `--hippunfold-batch-root outputs_experiments/hippunfold_recommended_t1w_20260423/dense_corobl_batch`
+- `--group-average-surfaces-dir $BASE/templates/hipp_group_average_t1only_151/group_average_surfaces`
+- `--k-selection-mode redundancy-aware`
+
+### 3) Restore full K curves
+
+For each count root above, copy these files from canonical route root (`routea_10perc` or `routea_full`) for every `2mm/4mm x hemi_L/hemi_R`:
+
+- `k_selection_summary.tsv`
+- `k_selection_summary.json`
+
+### 4) Build fisher-z variants from count roots
+
+```bash
+cp -a "$WORK/ga_routea_full_k2_count" "$WORK/ga_routea_full_k2_fisherz"
+cp -a "$WORK/ga_routea_full_k3_count" "$WORK/ga_routea_full_k3_fisherz"
+cp -a "$WORK/ga_routea_10perc_k2_count"  "$WORK/ga_routea_10perc_k2_fisherz"
+cp -a "$WORK/ga_routea_10perc_k3_count"  "$WORK/ga_routea_10perc_k3_fisherz"
+```
+
+In each fisher-z root, rewrite `cluster_assignment_status.json` to `assignment_metric=top1_fisher_z` and regenerate:
+
+- `group_functional_atlas_labels.npy`
+- `group_functional_atlas_label_map.json`
+- `template_functional_atlas_label` (label.gii)
+- `group_atlas_manifest.json` fields:
+  - `cluster_assignment_metric=top1_fisher_z`
+  - `template_functional_atlas_label` path
+
+(Use the same helper logic as the 2026-05-03 execution record.)
+
+### 4.1) Mandatory consistency guard (must pass)
+
+Before rendering any fixed-K overview, ensure each run dir has:
+
+- `group_functional_atlas_labels.npy`
+- `template_functional_atlas_label` in `group_atlas_manifest.json`
+- bytewise-consistent label arrays between the `.npy` and `.label.gii` payload
+
+As of 2026-05-04, `build_present_group_overview_merged_canonical.py` enforces this guard automatically:
+
+- if inconsistent, it auto-runs functional label materialization for that run
+- then re-checks consistency
+- if still inconsistent, it hard-fails and stops rendering
+
+Do not bypass this check when generating `present_fixedk` deliverables.
+
+### 5) Render overviews
+
+Render each root with:
+
+- `scripts/hipp_parcellation_network/build_present_group_overview_merged_canonical.py`
+
+Use per-root `--present-dir` (temporary), then copy final PNGs into `present_fixedk/` and rename using the filename contract.
+
+### 6) Final checks
+
+- Every fixed root has intended `chosen_k_final` in all `2mm/4mm x L/R` manifests.
+- Every root has full `k_selection_summary.tsv` rows (header + K2..K10).
+- `fisherz` roots show `cluster_assignment_metric=top1_fisher_z`.
+- `template_functional_atlas_label` resolves inside the same fixed-K root (no stale cross-root absolute path).
+- `group_functional_atlas_labels.npy` and `template_functional_atlas_label` contain identical label arrays.
+- `present_fixedk/` contains exactly 8 fixed-K overview PNGs:
+  - `10perc/full x k2/k3 x count/fisherz`
+
+## Notes
+
+- `present_group_t1only/` remains the canonical maintained 8-way export for the main pipeline.
+- `present_fixedk/` is a curated analysis export for fixed-K dual-metric comparison across `10perc/full`.

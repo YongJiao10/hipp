@@ -26,12 +26,17 @@ Within `kong2022`, RouteA and RouteB are treated as equal mainlines.
 - `05_xx`: merged-canonical group atlas construction
 - `06_xx`: label materialization, overview rendering, presentation outputs
 
-Implementation scripts remain under `scripts/hipp_parcellation_network/` and `scripts/cortex/`.
-`scripts/core_workflow/` is the canonical public interface.
+`scripts/core_workflow/` is both:
+- canonical public interface (`NN_MM_*`)
+- active implementation home (`scripts/core_workflow/lib/*`)
+
+Active numbered steps no longer shell out to the legacy hippocampal/cortex runtime directories.
+The active runtime boundary allows external assets and the Workbench executable
+`software/workbench/bin_linux64/wb_command`, but not external helper code scripts.
 
 ## Traceability Contract
 
-Each wrapper can emit a standardized step manifest via `--step-manifest-out` with:
+Each entrypoint can emit a standardized step manifest via `--step-manifest-out` with:
 
 - `step_id`
 - `workflow_branch`

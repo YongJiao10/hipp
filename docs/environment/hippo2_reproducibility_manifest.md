@@ -4,6 +4,11 @@ This document records the exact environment stack that was used to run HippUnfol
 
 Snapshot date: `2026-04-13`
 
+Related hard runtime rules for agents are in:
+
+- `docs/environment/agent_runtime_contract.md`
+- `AGENTS.md` (`Agent Runtime Environment Contract (Hard)`)
+
 ## What Is Recorded
 
 This manifest captures the environment in layers:
@@ -152,7 +157,9 @@ wb_command         /home/yojiao/hpchome/hipp/software/workbench/bin_linux64/wb_c
 LN2_LAYERS         resolved through `scripts/LN2_LAYERS` wrapper
 ```
 
-There is no PATH-stable `wb_command` in this repo. Use the wrapper in `scripts/wb_command`.
+Core workflow code resolves Workbench directly from
+`software/workbench/bin_linux64/wb_command` via `scripts/core_workflow/lib/workbench.py`.
+Legacy scripts may still call the wrapper in `scripts/wb_command`.
 
 ### HippUnfold External Binary Bundle
 
@@ -208,9 +215,13 @@ If you already have an ITK-SNAP bundle or another vendor-supplied binary
 directory, you can keep using it by pointing `HIPPUNFOLD_EXTERNAL_BIN_DIR` at
 that directory instead.
 
-### Workbench Wrapper
+### Workbench Command Resolution
 
-[`scripts/wb_command`](/Users/jy/Documents/HippoMaps-network-first/scripts/wb_command) is a thin wrapper around the repo-local Workbench binary:
+Active `scripts/core_workflow` steps resolve and execute:
+
+- `software/workbench/bin_linux64/wb_command`
+
+Legacy helpers may still use [`scripts/wb_command`](/home/yojiao/hpchome/hipp/scripts/wb_command), which is a thin wrapper around the same binary:
 
 1. Fails fast if the app binary is missing
 2. Otherwise execs `software/workbench/bin_linux64/wb_command` directly
@@ -393,7 +404,7 @@ From scratch, a future agent should:
 6. Build or update the server environment from `environment/hippo2_server.yml` before first run.
 7. Use `scripts/bootstrap_hippo2_server.sh` if you want a one-shot verifier after install.
 8. Make sure `scripts/run_hippunfold_local.sh` is the only launcher used for local runs.
-9. Make sure the repo `scripts/` directory stays first on `PATH` so `wb_command` and `LN2_LAYERS` wrappers win.
+9. Make sure required wrappers/binaries are resolvable at runtime. `LN2_LAYERS` still depends on `scripts/` PATH precedence; core workflow Workbench calls do not.
 10. Make sure `c3d`, `greedy`, `LN2_LAYERS`, and `N4BiasFieldCorrection` resolve from the conda env or explicit binary paths.
 11. `scripts/run_hippunfold_local.sh` cleans up `runtime/hippunfold_cache` on exit by design.
     This is safe for single-subject/single-process runs, but for parallel subject runs you must isolate cache roots per worker (or otherwise avoid a shared disposable cache root), or workers may delete each other's runtime artifacts.

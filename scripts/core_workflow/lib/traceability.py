@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 from __future__ import annotations
 
 import argparse
@@ -9,19 +8,18 @@ import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Sequence
+from typing import Callable, Sequence
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_BRANCH = "kong2022_routeb"
-BRANCH_CHOICES = ("kong2019", "kong2022_routea", "kong2022_routeb")
+from .branch_config import BRANCH_CHOICES, DEFAULT_BRANCH
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 @dataclass(frozen=True)
-class StepSpec:
+class StageSpec:
     step_id: str
     purpose: str
-    target_relpath: str
-    target_type: str = "python"
+    stage_main: Callable[[], int | None]
     upstream_defaults: tuple[str, ...] = ()
 
 
@@ -42,19 +40,26 @@ def _get_git_commit() -> str:
     return proc.stdout.strip()
 
 
-def _build_command(spec: StepSpec, passthrough: Sequence[str]) -> list[str]:
-    target = REPO_ROOT / spec.target_relpath
-    if spec.target_type == "python":
-        return [sys.executable, str(target), *passthrough]
-    if spec.target_type == "shell":
-        return ["bash", str(target), *passthrough]
-    raise ValueError(f"Unsupported target_type: {spec.target_type}")
+def _normalize_passthrough(unknown: Sequence[str]) -> list[str]:
+    if unknown and unknown[0] == "--":
+        return list(unknown[1:])
+    return list(unknown)
+
+
+def _invoke_with_passthrough(stage_main: Callable[[], int | None], passthrough: Sequence[str]) -> int:
+    old_argv = sys.argv
+    sys.argv = [old_argv[0], *passthrough]
+    try:
+        rc = stage_main()
+    finally:
+        sys.argv = old_argv
+    return int(rc) if rc is not None else 0
 
 
 def _write_manifest(
     manifest_out: Path,
     *,
-    spec: StepSpec,
+    spec: StageSpec,
     workflow_branch: str,
     upstream_step_ids: Sequence[str],
     input_artifacts: Sequence[str],
@@ -73,7 +78,6 @@ def _write_manifest(
         "command": " ".join(shlex.quote(x) for x in command),
         "git_commit": _get_git_commit(),
         "timestamp_utc": _now_utc_iso(),
-        "target_script": spec.target_relpath,
         "status": "dry_run" if dry_run else ("ok" if returncode == 0 else "failed"),
         "returncode": returncode,
     }
@@ -81,11 +85,11 @@ def _write_manifest(
     manifest_out.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
-def run_step(spec: StepSpec) -> int:
+def run_stage(spec: StageSpec) -> int:
     parser = argparse.ArgumentParser(
         description=(
             f"{spec.step_id}: {spec.purpose}. "
-            "Pass target-script arguments directly to this wrapper (unknown args are forwarded)."
+            "Pass stage-specific arguments after -- (or as unknown flags) to forward them to stage implementation."
         )
     )
     parser.add_argument(
@@ -98,61 +102,54 @@ def run_step(spec: StepSpec) -> int:
         "--upstream-step-id",
         action="append",
         default=list(spec.upstream_defaults),
-        help="Repeatable upstream step ID. Defaults are prefilled by this wrapper.",
+        help="Repeatable upstream step ID. Defaults are prefilled by this entrypoint.",
     )
     parser.add_argument(
         "--input-artifact",
         action="append",
         default=[],
-        help="Repeatable input artifact path for traceability manifest.",
+        help="Repeatable explicit input artifact path/identifier.",
     )
     parser.add_argument(
         "--output-artifact",
         action="append",
         default=[],
-        help="Repeatable output artifact path for traceability manifest.",
+        help="Repeatable explicit output artifact path/identifier.",
     )
     parser.add_argument(
         "--step-manifest-out",
-        type=Path,
         default=None,
-        help="Optional output path for standardized step manifest JSON.",
+        help="Optional JSON path to write standardized traceability manifest.",
     )
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Print and record command without executing target.",
+        help="Do not execute stage implementation; only emit manifest metadata if requested.",
     )
-    args, passthrough = parser.parse_known_args()
+    args, unknown = parser.parse_known_args()
+    passthrough = _normalize_passthrough(unknown)
 
-    cmd = _build_command(spec, passthrough)
-    if args.dry_run:
-        print("DRY RUN:", " ".join(shlex.quote(x) for x in cmd))
-        if args.step_manifest_out is not None:
-            _write_manifest(
-                args.step_manifest_out,
-                spec=spec,
-                workflow_branch=args.workflow_branch,
-                upstream_step_ids=args.upstream_step_id,
-                input_artifacts=args.input_artifact,
-                output_artifacts=args.output_artifact,
-                command=cmd,
-                returncode=0,
-                dry_run=True,
-            )
-        return 0
+    command = [sys.executable, str(Path(sys.argv[0]).resolve()), *passthrough]
+    returncode: int | None = None
 
-    proc = subprocess.run(cmd, cwd=REPO_ROOT, check=False)
-    if args.step_manifest_out is not None:
+    if not args.dry_run:
+        returncode = _invoke_with_passthrough(spec.stage_main, passthrough)
+
+    if args.step_manifest_out:
         _write_manifest(
-            args.step_manifest_out,
+            Path(args.step_manifest_out).resolve(),
             spec=spec,
             workflow_branch=args.workflow_branch,
             upstream_step_ids=args.upstream_step_id,
             input_artifacts=args.input_artifact,
             output_artifacts=args.output_artifact,
-            command=cmd,
-            returncode=proc.returncode,
-            dry_run=False,
+            command=command,
+            returncode=returncode,
+            dry_run=bool(args.dry_run),
         )
-    return proc.returncode
+
+    if args.dry_run:
+        return 0
+    if returncode is None:
+        return 0
+    return int(returncode)

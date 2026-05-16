@@ -1,15 +1,16 @@
-# Core Workflow Entrypoints
+# Core Workflow Entrypoints and Implementation
 
-This directory is the canonical public script surface for active hippocampal workflow runs.
+This directory is the canonical active workflow surface.
+Both CLI entrypoints and stage implementation modules live under `scripts/core_workflow/`.
 
 - Naming scheme: `NN_MM_<semantic_name>.py`
 - Numbering reflects global pipeline order, not branch identity.
 - Active branches: `kong2019`, `kong2022_routea`, `kong2022_routeb`
 
-Each entrypoint wraps an implementation script and can emit a standardized traceability manifest:
+Each entrypoint executes local implementation code and can emit a standardized traceability manifest:
 
 ```bash
-python scripts/core_workflow/05_01_run_group_atlas.py \
+/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/05_01_run_group_atlas.py \
   --workflow-branch kong2022_routeb \
   --upstream-step-id 04_01_materialize_kong2022_roi_fc \
   --upstream-step-id 04_02_materialize_intrinsic_fc \
@@ -19,7 +20,13 @@ python scripts/core_workflow/05_01_run_group_atlas.py \
   -- --methods intrinsic-spectral network-spectral wta-top
 ```
 
-Wrapper arguments:
+Execution environment (hard requirement):
+
+- Do not run core workflow tasks with bare `python`.
+- Use `/home/yojiao/.conda/envs/py314/bin/python` for core workflow scripts/tests.
+- See `docs/environment/agent_runtime_contract.md` for preflight checks.
+
+Entrypoint arguments:
 
 - `--workflow-branch`: one of `kong2019`, `kong2022_routea`, `kong2022_routeb`
 - `--upstream-step-id` (repeatable)
@@ -28,8 +35,18 @@ Wrapper arguments:
 - `--step-manifest-out`
 - `--dry-run`
 
-Unknown arguments are forwarded to the wrapped implementation script.
+Unknown arguments are forwarded to the local stage implementation module.
+
+Runtime boundary:
+
+- allowed external assets/executables:
+  - configs/data/generated outputs
+  - `software/workbench/bin_linux64/wb_command`
+- forbidden for active steps:
+  - Python/Shell helper scripts outside `scripts/core_workflow/`
+  - direct runtime dependency on legacy helper trees (`common/*`, `workbench/*`) or the repo `wb_command` wrapper
 
 The step inventory and branch coverage matrix are defined in:
 
 - `scripts/core_workflow/step_registry.json`
+- `scripts/core_workflow/lib/`
