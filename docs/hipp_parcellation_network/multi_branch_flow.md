@@ -30,9 +30,19 @@ Use numbered public entrypoints in `scripts/core_workflow/`:
 - Kong2022 RouteA branch:
   - may include RouteA reference build (`03_02_build_kong2022_routea_reference`)
   - uses `04_01`, `04_02`, `05_01`, optional `05_02`
+  - may run `gradient-spectral` in `05_01` from group-averaged Kong2022 vertex-to-ROI FC
 - Kong2022 RouteB branch:
   - uses shared Kong2022 reference build (`03_01`) and standard FC stages
   - uses `05_01`, optional `05_02`
+  - may run `gradient-spectral` in `05_01` from group-averaged Kong2022 vertex-to-ROI FC
+
+## Gradient-Spectral Branch
+
+`gradient-spectral` is a Kong2022-only group atlas method. It consumes the same
+vertex-to-ROI FC caches as the Kong2022 network/WTA branches, averages those FC
+profiles across the active cohort at group level, computes diffusion gradients,
+and clusters selected gradient columns. The default selected set is `G1,G2,G3`;
+valid alternatives are `G1`, `G2`, `G3`, and `G1,G2`.
 
 ## Default Cohort Reminder
 

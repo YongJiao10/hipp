@@ -26,6 +26,13 @@ Within `kong2022`, RouteA and RouteB are treated as equal mainlines.
 - `05_xx`: merged-canonical group atlas construction
 - `06_xx`: label materialization, overview rendering, presentation outputs
 
+Group atlas method families include intrinsic FC, network/ROI FC, WTA, and
+`gradient-spectral`. The `gradient-spectral` branch is Kong2022-only: it
+averages vertex-to-ROI FC at group level, computes diffusion gradients from that
+group profile, and clusters the selected gradient columns. The default component
+set is `G1,G2,G3` (`--gradient-components 1,2,3`); single-gradient and
+two-gradient combinations are available through the same option.
+
 `scripts/core_workflow/` is both:
 - canonical public interface (`NN_MM_*`)
 - active implementation home (`scripts/core_workflow/lib/*`)

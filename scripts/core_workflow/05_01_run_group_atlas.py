@@ -15,6 +15,7 @@ import nibabel as nib
 import numpy as np
 from nibabel.gifti import GiftiDataArray, GiftiImage, GiftiLabel, GiftiLabelTable
 from scipy import sparse
+from scipy.sparse.linalg import eigsh
 from scipy import stats
 from scipy.optimize import linear_sum_assignment
 from sklearn.cluster import SpectralClustering
@@ -48,6 +49,7 @@ DEFAULT_GROUP_AVG_SURFACES_DIR = (
 METHOD_CHOICES = [
     "group-roi-sim-spectral",
     "network-spectral",
+    "gradient-spectral",
     "group-network-partial-spectral",
     "intrinsic-spectral",
     "group-intrinsic-partial-spectral",
@@ -62,12 +64,14 @@ ATLASES = ["kong2019", "kong2019_8net", "kong2022"]
 SMOOTHINGS = ["2mm", "4mm"]
 HEMIS = ["L", "R"]
 K_RANGE = list(range(2, 11))
-KONG2022_ONLY_METHODS = {"group-roi-sim-spectral", "wta-top"}
+KONG2022_ONLY_METHODS = {"group-roi-sim-spectral", "gradient-spectral", "wta-top"}
 CLUSTERLESS_METHODS = {"wta-top"}
 PROFILE_REDUNDANCY_MAX_SIM = 0.80
 SUBJECT_FC_PREPROCESS_METHODS = {"group-roi-sim-spectral", "network-spectral", "intrinsic-spectral"}
 SUBJECT_FC_VALUE_RULE = "largest_raw_values"
 SUBJECT_FC_MODE_CHOICES = ["full", "top-percent"]
+DEFAULT_GRADIENT_COMPONENTS = (1, 2, 3)
+GRADIENT_AFFINITY_SPARSITY = 0.10
 MAX_K_EVAL_JOBS = 10
 RESUME_SIGNATURE_VERSION = 1
 
@@ -299,12 +303,16 @@ def is_network_method(method: str) -> bool:
     return method in {"network-spectral", "group-network-partial-spectral"}
 
 
+def is_gradient_method(method: str) -> bool:
+    return method == "gradient-spectral"
+
+
 def is_roi_similarity_method(method: str) -> bool:
     return method == "group-roi-sim-spectral"
 
 
 def method_uses_network_fc_input(method: str) -> bool:
-    return is_network_method(method) or method in {"group-roi-sim-spectral", "wta-top"}
+    return is_network_method(method) or method in {"group-roi-sim-spectral", "gradient-spectral", "wta-top"}
 
 
 def is_clusterless_method(method: str) -> bool:
@@ -313,6 +321,37 @@ def is_clusterless_method(method: str) -> bool:
 
 def method_uses_subject_fc_preprocessing(method: str) -> bool:
     return method in SUBJECT_FC_PREPROCESS_METHODS
+
+
+def feature_family_for_method(method: str, atlas: str, gradient_components: tuple[int, ...]) -> str:
+    if method == "group-roi-sim-spectral":
+        return "vertex_to_kong2022_400roi_fc_to_vertex_similarity_centered_cosine"
+    if method == "gradient-spectral":
+        comp_tag = "".join(f"g{int(c)}" for c in gradient_components)
+        return f"group_vertex_to_kong2022_400roi_fc_diffusion_gradients_{comp_tag}"
+    if method == "network-spectral" and atlas == "kong2022":
+        return "vertex_to_kong2022_400roi_fc_fisherz_colzscore"
+    if method == "network-spectral":
+        return "vertex_to_canonical_network_fc_fisherz_colzscore"
+    if method == "group-network-partial-spectral":
+        return "vertex_to_canonical_network_partial_fc_networks_only_one_sided_fisherz_colzscore"
+    if method == "intrinsic-spectral":
+        return "vertex_to_vertex_intrinsic_fc_fisherz_diag0"
+    return "vertex_to_vertex_intrinsic_fc_fisherz_diag0_plus_partial_profile"
+
+
+def fc_mode_for_method(method: str) -> str:
+    if method in {"group-network-partial-spectral", "group-intrinsic-partial-spectral"}:
+        return "partial_networks_only_one_sided"
+    if method == "group-roi-sim-spectral":
+        return "pearson_vertex_to_roi_then_centered_cosine_vertex_to_vertex"
+    if method == "gradient-spectral":
+        return "pearson_vertex_to_roi_group_average_then_diffusion_gradients"
+    if method == "network-spectral":
+        return "pearson"
+    if method == "intrinsic-spectral":
+        return "intrinsic_vertex_to_vertex_pearson"
+    return "intrinsic_vertex_to_vertex_partial_profile"
 
 
 def resolve_subject_fc_mode(subject_fc_mode: str, subject_fc_top_percent: int | None) -> SubjectFCMode:
@@ -335,6 +374,26 @@ def resolve_subject_fc_mode(subject_fc_mode: str, subject_fc_top_percent: int | 
         top_fraction=float(pct) / 100.0,
         binarize=True,
     )
+
+
+def parse_gradient_components(raw: str | None) -> tuple[int, ...]:
+    if raw is None:
+        return DEFAULT_GRADIENT_COMPONENTS
+    text = str(raw).strip()
+    if not text:
+        raise ValueError("--gradient-components must not be empty")
+    parts = text.split(",")
+    try:
+        comps = tuple(int(p.strip()) for p in parts)
+    except ValueError as exc:
+        raise ValueError(f"--gradient-components must be comma-separated integers from 1..3, got {raw!r}") from exc
+    if any(c not in DEFAULT_GRADIENT_COMPONENTS for c in comps):
+        raise ValueError(f"--gradient-components must only contain 1, 2, and/or 3, got {raw!r}")
+    if len(set(comps)) != len(comps):
+        raise ValueError(f"--gradient-components must not contain duplicates, got {raw!r}")
+    if tuple(sorted(comps)) != comps:
+        raise ValueError(f"--gradient-components must be in ascending order, got {raw!r}")
+    return comps
 
 
 def subject_fc_preprocessing_manifest_block(method: str, subject_fc_mode: SubjectFCMode) -> dict[str, object]:
@@ -463,8 +522,86 @@ def roi_similarity_from_network_fc(fc: np.ndarray) -> np.ndarray:
     return sim.astype(np.float32)
 
 
+def build_sparse_gradient_affinity(features: np.ndarray, sparsity: float = GRADIENT_AFFINITY_SPARSITY) -> sparse.csr_matrix:
+    unit = np.asarray(features, dtype=np.float32)
+    if unit.ndim != 2:
+        raise ValueError(f"Expected 2D group FC feature matrix, got shape={unit.shape}")
+    norms = np.linalg.norm(unit, axis=1, keepdims=True)
+    unit = unit / np.clip(norms, 1e-12, None)
+    sim = unit @ unit.T
+    sim = np.clip(sim, -1.0, 1.0)
+    aff = (sim + 1.0) * 0.5
+    np.fill_diagonal(aff, 1.0)
+
+    n_vertices = int(aff.shape[0])
+    n_keep = max(10, int(round((n_vertices - 1) * float(sparsity))))
+    n_keep = min(n_vertices, n_keep + 1)
+    keep_idx = np.argpartition(aff, kth=n_vertices - n_keep, axis=1)[:, -n_keep:]
+    rows = np.repeat(np.arange(n_vertices), n_keep)
+    cols = keep_idx.reshape(-1)
+    vals = aff[rows, cols]
+
+    graph = sparse.csr_matrix((vals, (rows, cols)), shape=(n_vertices, n_vertices), dtype=np.float32)
+    graph = graph.maximum(graph.T)
+    graph.setdiag(1.0)
+    graph.eliminate_zeros()
+    return graph
+
+
+def diffusion_map_gradients(affinity: sparse.csr_matrix, n_components: int) -> tuple[np.ndarray, np.ndarray]:
+    degree = np.asarray(affinity.sum(axis=1)).ravel().astype(np.float32)
+    inv_sqrt = 1.0 / np.sqrt(np.clip(degree, 1e-12, None))
+    d_inv = sparse.diags(inv_sqrt)
+    sym = d_inv @ affinity @ d_inv
+
+    n_eigs = min(sym.shape[0] - 1, int(n_components) + 1)
+    if n_eigs < int(n_components) + 1:
+        raise RuntimeError(
+            f"Not enough supported vertices to compute G1..G{n_components}: "
+            f"n_vertices={sym.shape[0]}"
+        )
+    eigvals, eigvecs = eigsh(sym.astype(np.float32), k=n_eigs, which="LA")
+    order = np.argsort(eigvals)[::-1]
+    eigvals = eigvals[order]
+    eigvecs = eigvecs[:, order]
+    gradients = eigvecs[:, 1 : int(n_components) + 1] * eigvals[1 : int(n_components) + 1]
+    return gradients.astype(np.float32), eigvals.astype(np.float32)
+
+
+def build_group_gradient_features(
+    *,
+    feature_bank: dict[str, np.ndarray],
+    subjects_subset: list[str],
+    support_mask: np.ndarray,
+    gradient_components: tuple[int, ...] = DEFAULT_GRADIENT_COMPONENTS,
+) -> tuple[np.ndarray, dict[str, object]]:
+    idx = np.flatnonzero(support_mask)
+    if idx.size == 0:
+        raise RuntimeError("Support mask has zero vertices")
+    comps = parse_gradient_components(",".join(str(c) for c in gradient_components))
+    mats = []
+    for s in subjects_subset:
+        m = np.asarray(feature_bank[s], dtype=np.float32)[idx, :]
+        mats.append(m)
+    stack = np.stack(mats, axis=0).astype(np.float32)
+    group_fc = np.nanmean(stack, axis=0)
+    group_fc[~np.isfinite(group_fc)] = 0.0
+    affinity = build_sparse_gradient_affinity(group_fc, sparsity=GRADIENT_AFFINITY_SPARSITY)
+    gradients, eigvals = diffusion_map_gradients(affinity, n_components=max(comps))
+    selected = gradients[:, [int(c) - 1 for c in comps]]
+    selected[~np.isfinite(selected)] = 0.0
+    meta = {
+        "gradient_components": [int(c) for c in comps],
+        "gradient_component_labels": [f"G{int(c)}" for c in comps],
+        "gradient_affinity_sparsity": float(GRADIENT_AFFINITY_SPARSITY),
+        "group_vertex_to_roi_fc_shape": [int(v) for v in group_fc.shape],
+        "gradient_eigenvalues": [float(v) for v in eigvals],
+    }
+    return selected.astype(np.float32), meta
+
+
 def network_feature_filename(method: str) -> str:
-    if method in {"group-roi-sim-spectral", "network-spectral"}:
+    if method in {"group-roi-sim-spectral", "network-spectral", "gradient-spectral"}:
         return "hipp_vertex_to_network_fc.npy"
     if method == "group-network-partial-spectral":
         return "hipp_vertex_to_network_partial_fc.npy"
@@ -474,7 +611,7 @@ def network_feature_filename(method: str) -> str:
 
 
 def runwise_network_feature_filename(method: str) -> str:
-    if method in {"group-roi-sim-spectral", "network-spectral"}:
+    if method in {"group-roi-sim-spectral", "network-spectral", "gradient-spectral"}:
         return "hipp_vertex_to_network_fc_active.npy"
     if method == "group-network-partial-spectral":
         return "hipp_vertex_to_network_partial_fc_active.npy"
@@ -974,6 +1111,7 @@ def group_feature_matrix(
     feature_bank: dict[str, np.ndarray],
     subjects_subset: list[str],
     support_mask: np.ndarray,
+    gradient_components: tuple[int, ...] = DEFAULT_GRADIENT_COMPONENTS,
 ) -> np.ndarray:
     idx = np.flatnonzero(support_mask)
     if idx.size == 0:
@@ -988,6 +1126,15 @@ def group_feature_matrix(
         group = np.nanmean(stack, axis=0)
         group[~np.isfinite(group)] = 0.0
         return zscore_cols(group)
+
+    if is_gradient_method(method):
+        features, _meta = build_group_gradient_features(
+            feature_bank=feature_bank,
+            subjects_subset=subjects_subset,
+            support_mask=support_mask,
+            gradient_components=gradient_components,
+        )
+        return features
 
     if method in {"group-roi-sim-spectral", "intrinsic-spectral", "group-intrinsic-partial-spectral"}:
         mats = []
@@ -1012,12 +1159,14 @@ def cluster_for_subset(
     adjacency_full: sparse.csr_matrix,
     k: int,
     seed: int,
+    gradient_components: tuple[int, ...] = DEFAULT_GRADIENT_COMPONENTS,
 ) -> tuple[np.ndarray, np.ndarray]:
     features = group_feature_matrix(
         method=method,
         feature_bank=feature_bank,
         subjects_subset=subjects_subset,
         support_mask=support_mask,
+        gradient_components=gradient_components,
     )
     return cluster_from_precomputed_group_features(
         group_features=features,
@@ -1038,6 +1187,7 @@ def subject_split_ari(
     adjacency_full: sparse.csr_matrix,
     k: int,
     seeds: list[int],
+    gradient_components: tuple[int, ...] = DEFAULT_GRADIENT_COMPONENTS,
 ) -> dict[str, object]:
     vals: list[float] = []
     n_skipped_overlap = 0
@@ -1070,6 +1220,7 @@ def subject_split_ari(
             adjacency_full=adjacency_full,
             k=k,
             seed=seed + 1001,
+            gradient_components=gradient_components,
         )
         _, full_b = cluster_for_subset(
             method=method,
@@ -1079,6 +1230,7 @@ def subject_split_ari(
             adjacency_full=adjacency_full,
             k=k,
             seed=seed + 2001,
+            gradient_components=gradient_components,
         )
         ref = full_a[overlap]
         tgt = full_b[overlap]
@@ -1108,13 +1260,14 @@ def strong_null_ari(
     adjacency_full: sparse.csr_matrix,
     k: int,
     seeds: list[int],
+    gradient_components: tuple[int, ...] = DEFAULT_GRADIENT_COMPONENTS,
 ) -> dict[str, object]:
     null_bank: dict[str, np.ndarray] = {}
     for s in subjects:
         arr = feature_bank[s]
         rng = np.random.RandomState(int(seeds[0]) + int(abs(hash(s)) % 100000))
         perm = rng.permutation(arr.shape[0])
-        if is_network_method(method):
+        if method_uses_network_fc_input(method):
             null_bank[s] = arr[perm, :].astype(np.float32)
         else:
             null_bank[s] = arr[np.ix_(perm, perm)].astype(np.float32)
@@ -1127,6 +1280,7 @@ def strong_null_ari(
         adjacency_full=adjacency_full,
         k=k,
         seeds=seeds,
+        gradient_components=gradient_components,
     )
     out["permutation_scope"] = "subject_specific"
     return out
@@ -1203,6 +1357,7 @@ def evaluate_k_candidate(
     min_profile_coherence_threshold: float,
     k_selection_mode: str,
     roi_fc_bank_for_redundancy: dict[str, np.ndarray] | None,
+    gradient_components: tuple[int, ...] = DEFAULT_GRADIENT_COMPONENTS,
 ) -> tuple[int, np.ndarray, dict[str, object]]:
     labels_active, labels_full = cluster_from_precomputed_group_features(
         group_features=group_features_active,
@@ -1227,6 +1382,7 @@ def evaluate_k_candidate(
         adjacency_full=adjacency_full,
         k=int(k),
         seeds=split_seeds,
+        gradient_components=gradient_components,
     )
     ari_vals = list(ari_obj["values"])
     if not ari_vals:
@@ -1246,6 +1402,7 @@ def evaluate_k_candidate(
         adjacency_full=adjacency_full,
         k=int(k),
         seeds=null_seeds,
+        gradient_components=gradient_components,
     )
     strong = list(strong_obj["values"])
     strong_arr = np.asarray(strong, dtype=np.float64) if strong else np.array([0.0], dtype=np.float64)
@@ -1258,6 +1415,7 @@ def evaluate_k_candidate(
         adjacency_full=adjacency_full,
         k=int(k),
         seed_base=int(seed_base),
+        gradient_components=gradient_components,
     )
     run_vals = list(run_obj["values"])
     run_arr = np.asarray(run_vals, dtype=np.float64) if run_vals else np.array([np.nan], dtype=np.float64)
@@ -1409,6 +1567,7 @@ def run_aware_ari(
     adjacency_full: sparse.csr_matrix,
     k: int,
     seed_base: int,
+    gradient_components: tuple[int, ...] = DEFAULT_GRADIENT_COMPONENTS,
 ) -> dict[str, object]:
     runs = sorted(run_feature_banks.keys())
     labels_by_run: dict[int, np.ndarray] = {}
@@ -1421,6 +1580,7 @@ def run_aware_ari(
             adjacency_full=adjacency_full,
             k=int(k),
             seed=int(seed_base + rid * 1000 + k),
+            gradient_components=gradient_components,
         )
         labels_by_run[rid] = full[support_mask]
     vals: list[float] = []
@@ -2018,6 +2178,7 @@ def assignment_status_from_cluster_roi_topn(
 def method_uses_kong2022_topn_cluster_annotation(method: str, atlas: str) -> bool:
     return str(atlas) == "kong2022" and str(method) in {
         "group-roi-sim-spectral",
+        "gradient-spectral",
         "intrinsic-spectral",
         "network-spectral",
     }
@@ -2363,6 +2524,12 @@ def main() -> int:
         default=None,
         help="Required only when --subject-fc-mode=top-percent. Integer percent in (0,100].",
     )
+    parser.add_argument(
+        "--gradient-components",
+        default="1,2,3",
+        help="Comma-separated gradient components for gradient-spectral clustering. "
+             "Supported examples: 1, 2, 3, 1,2, 1,2,3. Default: 1,2,3.",
+    )
     parser.add_argument("--resume", action="store_true", help="Skip combos that already have group_atlas_manifest.json.")
     parser.add_argument("--k-selection-mode", default="experimental", choices=["experimental", "redundancy-aware"])
     parser.add_argument(
@@ -2395,6 +2562,7 @@ def main() -> int:
     subjects_manifest_path = Path(args.subjects_manifest).resolve()
     subjects = load_subjects(subjects_manifest_path)
     subject_fc_mode = resolve_subject_fc_mode(args.subject_fc_mode, args.subject_fc_top_percent)
+    gradient_components = parse_gradient_components(args.gradient_components)
     coverage_thresholds = [float(x) for x in args.coverage_thresholds]
     k_values = list(range(int(args.k_min), int(args.k_max) + 1))
     if not k_values:
@@ -2648,6 +2816,7 @@ def main() -> int:
                             "max_components_threshold": int(args.max_components_threshold),
                             "min_profile_coherence": float(args.min_profile_coherence),
                             "subject_fc_preprocessing": subject_fc_preprocessing_for_resume,
+                            "gradient_components": [int(c) for c in gradient_components],
                             "redundancy_early_stop": bool(args.redundancy_early_stop),
                             "input_category_hashes": resume_input_category_hashes,
                         }
@@ -2861,6 +3030,7 @@ def main() -> int:
                                 "coverage_threshold": float(tau),
                                 "V_min_fraction": float(args.v_min_fraction),
                                 "V_min_effective": int(v_min),
+                                "gradient_components": [int(c) for c in gradient_components] if is_gradient_method(method) else None,
                                 "candidate_k_range_requested": [int(min(k_values)), int(max(k_values))],
                                 "candidate_k_range_effective": [],
                                 "chosen_k_final": None,
@@ -2875,6 +3045,16 @@ def main() -> int:
                                 "resume_input_signature": resume_input_signature,
                                 "resume_input_signature_payload": resume_signature_payload,
                                 "subject_fc_preprocessing": subject_fc_preprocessing,
+                                "group_gradient_features_active": (
+                                    str((run_dir / "group_gradient_features_active.npy").resolve())
+                                    if is_gradient_method(method)
+                                    else None
+                                ),
+                                "group_gradient_feature_summary": (
+                                    str((run_dir / "group_gradient_feature_summary.json").resolve())
+                                    if is_gradient_method(method)
+                                    else None
+                                ),
                                 "nontriviality_thresholds": {
                                     "V_min_fraction": float(args.v_min_fraction),
                                     "max_components_threshold": int(args.max_components_threshold),
@@ -2904,12 +3084,24 @@ def main() -> int:
                         labels_by_k: dict[int, np.ndarray] = {}
                         support_idx = np.flatnonzero(support)
                         adjacency_support = adjacency_by_hemi[hemi][support_idx][:, support_idx]
-                        group_features_active = group_feature_matrix(
-                            method=method,
-                            feature_bank=feature_bank,
-                            subjects_subset=subjects,
-                            support_mask=support,
-                        )
+                        group_gradient_meta: dict[str, object] | None = None
+                        if is_gradient_method(method):
+                            group_features_active, group_gradient_meta = build_group_gradient_features(
+                                feature_bank=feature_bank,
+                                subjects_subset=subjects,
+                                support_mask=support,
+                                gradient_components=gradient_components,
+                            )
+                            np.save(run_dir / "group_gradient_features_active.npy", group_features_active.astype(np.float32))
+                            save_json(run_dir / "group_gradient_feature_summary.json", group_gradient_meta)
+                        else:
+                            group_features_active = group_feature_matrix(
+                                method=method,
+                                feature_bank=feature_bank,
+                                subjects_subset=subjects,
+                                support_mask=support,
+                                gradient_components=gradient_components,
+                            )
                         redundancy_early_stop_enabled = bool(
                             args.redundancy_early_stop and args.k_selection_mode == "redundancy-aware"
                         )
@@ -2944,6 +3136,7 @@ def main() -> int:
                                     min_profile_coherence_threshold=float(args.min_profile_coherence),
                                     k_selection_mode=str(args.k_selection_mode),
                                     roi_fc_bank_for_redundancy=roi_fc_bank_for_redundancy,
+                                    gradient_components=gradient_components,
                                 )
                                 print(f"  [k-done] {k_result}", flush=True)
                                 labels_by_k[int(k_result)] = labels_full
@@ -2988,6 +3181,7 @@ def main() -> int:
                                         min_profile_coherence_threshold=float(args.min_profile_coherence),
                                         k_selection_mode=str(args.k_selection_mode),
                                         roi_fc_bank_for_redundancy=roi_fc_bank_for_redundancy,
+                                        gradient_components=gradient_components,
                                     ): int(k)
                                     for k in k_eff
                                 }
@@ -3120,6 +3314,9 @@ def main() -> int:
                                 "coverage_threshold": float(tau),
                                 "V_min_fraction": float(args.v_min_fraction),
                                 "V_min_effective": int(v_min),
+                                "feature_family": feature_family_for_method(method, atlas, gradient_components),
+                                "fc_mode": fc_mode_for_method(method),
+                                "gradient_components": [int(c) for c in gradient_components] if is_gradient_method(method) else None,
                                 "candidate_k_range_requested": [int(min(k_values)), int(max(k_values))],
                                 "candidate_k_range_effective": [int(min(k_eff)), int(max(k_eff))],
                                 "candidate_k_values_evaluated": [int(r["k"]) for r in rows],
@@ -3136,6 +3333,16 @@ def main() -> int:
                                 "resume_input_signature": resume_input_signature,
                                 "resume_input_signature_payload": resume_signature_payload,
                                 "subject_fc_preprocessing": subject_fc_preprocessing,
+                                "group_gradient_features_active": (
+                                    str((run_dir / "group_gradient_features_active.npy").resolve())
+                                    if is_gradient_method(method)
+                                    else None
+                                ),
+                                "group_gradient_feature_summary": (
+                                    str((run_dir / "group_gradient_feature_summary.json").resolve())
+                                    if is_gradient_method(method)
+                                    else None
+                                ),
                                 "nontriviality_thresholds": {
                                     "V_min_fraction": float(args.v_min_fraction),
                                     "max_components_threshold": int(args.max_components_threshold),
@@ -3341,44 +3548,9 @@ def main() -> int:
                             "coverage_threshold": float(tau),
                             "V_min_fraction": float(args.v_min_fraction),
                             "V_min_effective": int(v_min),
-                            "feature_family": (
-                                "vertex_to_kong2022_400roi_fc_to_vertex_similarity_centered_cosine"
-                                if method == "group-roi-sim-spectral"
-                                else (
-                                "vertex_to_kong2022_400roi_fc_fisherz_colzscore"
-                                if method == "network-spectral" and atlas == "kong2022"
-                                else (
-                                    "vertex_to_canonical_network_fc_fisherz_colzscore"
-                                    if method == "network-spectral"
-                                    else (
-                                        "vertex_to_canonical_network_partial_fc_networks_only_one_sided_fisherz_colzscore"
-                                        if method == "group-network-partial-spectral"
-                                        else (
-                                            "vertex_to_vertex_intrinsic_fc_fisherz_diag0"
-                                            if method == "intrinsic-spectral"
-                                            else "vertex_to_vertex_intrinsic_fc_fisherz_diag0_plus_partial_profile"
-                                        )
-                                    )
-                                )
-                                )
-                            ),
-                            "fc_mode": (
-                                "partial_networks_only_one_sided"
-                                if method in {"group-network-partial-spectral", "group-intrinsic-partial-spectral"}
-                                else (
-                                    "pearson_vertex_to_roi_then_centered_cosine_vertex_to_vertex"
-                                    if method == "group-roi-sim-spectral"
-                                    else (
-                                    "pearson"
-                                    if method == "network-spectral"
-                                    else (
-                                        "intrinsic_vertex_to_vertex_pearson"
-                                        if method == "intrinsic-spectral"
-                                        else "intrinsic_vertex_to_vertex_partial_profile"
-                                    )
-                                )
-                                )
-                            ),
+                            "feature_family": feature_family_for_method(method, atlas, gradient_components),
+                            "fc_mode": fc_mode_for_method(method),
+                            "gradient_components": [int(c) for c in gradient_components] if is_gradient_method(method) else None,
                             "partial_fc_definition": (
                                 {
                                     "controls": "other_canonical_network_timeseries_only",
@@ -3394,6 +3566,16 @@ def main() -> int:
                             "resume_input_signature": resume_input_signature,
                             "resume_input_signature_payload": resume_signature_payload,
                             "subject_fc_preprocessing": subject_fc_preprocessing,
+                            "group_gradient_features_active": (
+                                str((run_dir / "group_gradient_features_active.npy").resolve())
+                                if is_gradient_method(method)
+                                else None
+                            ),
+                            "group_gradient_feature_summary": (
+                                str((run_dir / "group_gradient_feature_summary.json").resolve())
+                                if is_gradient_method(method)
+                                else None
+                            ),
                             "clustering_algorithm": "spectral_clustering_precomputed_affinity_relu_cosine_diag0_kmeans_n_init_50",
                             "affinity_description": "max(cosine_similarity,0)_hadamard_surface_adjacency_diag0",
                             "candidate_k_range_requested": [int(min(k_values)), int(max(k_values))],
@@ -3459,7 +3641,10 @@ def main() -> int:
                             "template_cluster_label": str(lbl_path.resolve()),
                             "template_functional_atlas_label": str(func_lbl_path.resolve()),
                         }
-                        save_json(run_dir / "group_feature_summary.json", {"network_names": network_names, "N_ref": int(len(network_names))})
+                        feature_summary: dict[str, object] = {"network_names": network_names, "N_ref": int(len(network_names))}
+                        if group_gradient_meta is not None:
+                            feature_summary["gradient"] = group_gradient_meta
+                        save_json(run_dir / "group_feature_summary.json", feature_summary)
                         save_json(manifest_path, manifest)
 
     print(json.dumps({"out_root": str(out_root), "status": "ok"}, indent=2))

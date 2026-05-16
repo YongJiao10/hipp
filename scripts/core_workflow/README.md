@@ -17,8 +17,13 @@ Each entrypoint executes local implementation code and can emit a standardized t
   --input-artifact outputs_experiments/.../shared_inputs/routeb_151 \
   --output-artifact outputs_experiments/.../hipp_group_merged_canonical_atlas_routeb \
   --step-manifest-out manifests/core_workflow/05_01_run_group_atlas.json \
-  -- --methods intrinsic-spectral network-spectral wta-top
+  -- --methods intrinsic-spectral network-spectral gradient-spectral wta-top
 ```
+
+For the Kong2022 `gradient-spectral` branch, `05_01_run_group_atlas.py`
+computes diffusion gradients from group-averaged vertex-to-ROI FC and clusters
+the selected gradient columns. The default gradient set is `G1,G2,G3`; valid
+overrides are `--gradient-components 1`, `2`, `3`, `1,2`, and `1,2,3`.
 
 Execution environment (hard requirement):
 

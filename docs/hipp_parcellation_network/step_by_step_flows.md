@@ -11,7 +11,7 @@ Run from `scripts/core_workflow/` entrypoints.
 Recommended manifest output pattern:
 
 ```bash
-python scripts/core_workflow/01_01_prepare_group_inputs.py \
+/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/01_01_prepare_group_inputs.py \
   --workflow-branch kong2022_routeb \
   --step-manifest-out manifests/core_workflow/01_01_prepare_group_inputs.json
 ```
@@ -36,6 +36,20 @@ python scripts/core_workflow/01_01_prepare_group_inputs.py \
 
 1. `05_01_run_group_atlas.py`
 2. `05_02_run_spectral_fast_rerun.py` (optional urgent rerun)
+
+Kong2022 group-gradient branch example:
+
+```bash
+/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/05_01_run_group_atlas.py \
+  --methods gradient-spectral \
+  --atlases kong2022 \
+  --gradient-components 1,2,3
+```
+
+`--gradient-components` accepts `1`, `2`, `3`, `1,2`, and `1,2,3`; `1,2,3` is
+the default. The branch computes diffusion gradients from group-averaged
+Kong2022 vertex-to-ROI FC and then uses the selected gradient columns as the
+spectral clustering feature matrix.
 
 Concurrency policy reminder: keep public batch launches at `<=10` jobs.
 

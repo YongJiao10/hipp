@@ -37,6 +37,7 @@ DEFAULT_HIPP_SCENE = REPO_ROOT / "config" / "wb_locked_native_view_lateral_media
 
 METHOD_CHOICES = [
     "network-spectral",
+    "gradient-spectral",
     "group-network-partial-spectral",
     "intrinsic-spectral",
     "group-intrinsic-partial-spectral",

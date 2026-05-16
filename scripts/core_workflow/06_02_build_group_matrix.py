@@ -14,7 +14,7 @@ DEFAULT_PYTHON = "/home/yojiao/.conda/envs/py314/bin/python"
 DEFAULT_ROUTE_ROOT = REPO_ROOT / "outputs_experiments" / "hippunfold_recommended_t1w_20260423" / "kong2022"
 DEFAULT_PRESENT_DIR = REPO_ROOT / "present_group_t1only"
 DEFAULT_MANIFEST_NAME = "group_overview_manifest_t1only_matrix.json"
-METHODS = ["intrinsic-spectral", "network-spectral", "wta-top"]
+METHODS = ["intrinsic-spectral", "network-spectral", "gradient-spectral", "wta-top"]
 ATLAS = "kong2022"
 CLUSTERLESS_METHODS = {"wta-top"}
 

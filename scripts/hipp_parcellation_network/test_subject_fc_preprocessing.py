@@ -26,9 +26,11 @@ def _load_numbered_module(script_name: str, alias: str):
 
 
 atlas_mod = _load_numbered_module("05_01_run_group_atlas.py", "core_05_01_run_group_atlas")
+build_group_gradient_features = atlas_mod.build_group_gradient_features
 group_feature_matrix = atlas_mod.group_feature_matrix
 method_uses_network_fc_input = atlas_mod.method_uses_network_fc_input
 method_uses_subject_fc_preprocessing = atlas_mod.method_uses_subject_fc_preprocessing
+parse_gradient_components = atlas_mod.parse_gradient_components
 resolve_subject_fc_mode = atlas_mod.resolve_subject_fc_mode
 preprocess_intrinsic_fc_map = atlas_mod.preprocess_intrinsic_fc_map
 preprocess_network_fc_map = atlas_mod.preprocess_network_fc_map
@@ -209,6 +211,61 @@ def test_group_feature_matrix_matches_preprocessed_subject_average() -> None:
     assert np.allclose(got, expected, atol=1e-6), (got, expected)
 
 
+def test_group_gradient_features_average_subject_roi_fc_then_select_components() -> None:
+    subj_a = np.array(
+        [
+            [1.0, 0.0, 0.0, 0.0],
+            [0.9, 0.1, 0.0, 0.0],
+            [0.0, 0.8, 0.2, 0.0],
+            [0.0, 0.0, 0.9, 0.1],
+            [0.0, 0.0, 0.1, 0.9],
+            [0.1, 0.0, 0.0, 0.9],
+        ],
+        dtype=np.float32,
+    )
+    subj_b = subj_a + np.float32(0.05)
+    support = np.array([True, True, True, True, True, False], dtype=bool)
+
+    features, meta = build_group_gradient_features(
+        feature_bank={"a": subj_a, "b": subj_b},
+        subjects_subset=["a", "b"],
+        support_mask=support,
+        gradient_components=parse_gradient_components("1,2"),
+    )
+
+    assert features.shape == (5, 2), features.shape
+    assert np.all(np.isfinite(features)), features
+    assert meta["gradient_components"] == [1, 2], meta
+    assert meta["group_vertex_to_roi_fc_shape"] == [5, 4], meta
+
+
+def test_group_feature_matrix_gradient_spectral_uses_selected_gradient_columns() -> None:
+    subj_a = np.array(
+        [
+            [1.0, 0.0, 0.0, 0.0],
+            [0.9, 0.1, 0.0, 0.0],
+            [0.0, 0.8, 0.2, 0.0],
+            [0.0, 0.0, 0.9, 0.1],
+            [0.0, 0.0, 0.1, 0.9],
+            [0.1, 0.0, 0.0, 0.9],
+        ],
+        dtype=np.float32,
+    )
+    subj_b = subj_a + np.float32(0.05)
+    support = np.array([True, True, True, True, True, False], dtype=bool)
+
+    got = group_feature_matrix(
+        method="gradient-spectral",
+        feature_bank={"a": subj_a, "b": subj_b},
+        subjects_subset=["a", "b"],
+        support_mask=support,
+        gradient_components=(1, 2, 3),
+    )
+
+    assert got.shape == (5, 3), got.shape
+    assert np.all(np.isfinite(got)), got
+
+
 def test_group_feature_matrix_roi_similarity_method_uses_square_branch() -> None:
     a = np.array(
         [
@@ -241,6 +298,7 @@ def test_group_feature_matrix_roi_similarity_method_uses_square_branch() -> None
 def test_network_input_gate_includes_roi_similarity_method() -> None:
     assert method_uses_network_fc_input("group-roi-sim-spectral") is True
     assert method_uses_network_fc_input("network-spectral") is True
+    assert method_uses_network_fc_input("gradient-spectral") is True
     assert method_uses_network_fc_input("wta-top") is True
     assert method_uses_network_fc_input("intrinsic-spectral") is False
 
@@ -297,6 +355,8 @@ def main() -> int:
     test_subject_fc_mode_validation_and_tags()
     test_roi_similarity_from_network_fc_is_symmetric_and_finite_with_diag0()
     test_group_feature_matrix_matches_preprocessed_subject_average()
+    test_group_gradient_features_average_subject_roi_fc_then_select_components()
+    test_group_feature_matrix_gradient_spectral_uses_selected_gradient_columns()
     test_group_feature_matrix_roi_similarity_method_uses_square_branch()
     test_network_input_gate_includes_roi_similarity_method()
     test_runwise_feature_bank_roi_similarity_uses_network_inputs()

@@ -25,6 +25,7 @@ DEFAULT_PRESENT_DIR = REPO_ROOT / "present_group"
 DEFAULT_SCENE = REPO_ROOT / "config" / "wb_locked_native_view_lateral_medial.scene"
 METHOD_CHOICES = [
     "network-spectral",
+    "gradient-spectral",
     "group-network-partial-spectral",
     "intrinsic-spectral",
     "group-intrinsic-partial-spectral",
