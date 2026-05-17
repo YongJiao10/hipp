@@ -49,7 +49,10 @@ Kong2022 group-gradient branch example:
 `--gradient-components` accepts `1`, `2`, `3`, `1,2`, and `1,2,3`; `1,2,3` is
 the default. The branch computes diffusion gradients from group-averaged
 Kong2022 vertex-to-ROI FC and then uses the selected gradient columns as the
-spectral clustering feature matrix.
+spectral clustering feature matrix. This branch should be interpreted as a
+full-continuous FC analysis: do not treat `top-percent` / `10perc` sparsified
+and binarized FC as the default gradient input or as a maintained overview-mode
+split.
 
 Concurrency policy reminder: keep public batch launches at `<=10` jobs.
 
@@ -59,6 +62,20 @@ Concurrency policy reminder: keep public batch launches at `<=10` jobs.
 2. `06_01_build_group_overview.py`
 3. `06_04_build_cluster_cortex_panels.py`
 4. `06_02_build_group_matrix.py`
+5. `06_05_render_group_gradient_heatmaps.py` (optional RouteA `gradient-spectral` G1-G3 heatmap figure)
+
+Maintained matrix note:
+
+- `network-spectral` and `intrinsic-spectral` keep the `10perc/full` mode split.
+- `gradient-spectral` exports route-level overviews from available `*_full`
+  group roots only and does not use a `10perc` branch.
+- Optional presentation artifact for RouteA full: a locked-scene 2x3 heatmap figure
+  (`2mm`/`4mm` rows, `G1`/`G2`/`G3` columns) written to
+  `present_group_t1only/kong2022_gradient-spectral_group_gradients_heatmap_routea_2mm4mm_g1g2g3.png`.
+  The renderer uses a `plasma` palette and annotates each cell as
+  `G# EV=xx.x%`, using the mean left/right share of that component's
+  non-trivial diffusion eigenvalue among the exported non-trivial eigenvalues
+  for that smoothing.
 
 ## Branch Smoke Targets
 

@@ -17,6 +17,7 @@ DEFAULT_MANIFEST_NAME = "group_overview_manifest_t1only_matrix.json"
 METHODS = ["intrinsic-spectral", "network-spectral", "gradient-spectral", "wta-top"]
 ATLAS = "kong2022"
 CLUSTERLESS_METHODS = {"wta-top"}
+GRADIENT_METHODS = {"gradient-spectral"}
 
 
 @dataclass(frozen=True)
@@ -34,12 +35,22 @@ def build_render_jobs(route_root: Path) -> list[RenderJob]:
         ("routea", "full", route_root / "hipp_group_merged_canonical_atlas_routea_full"),
         ("routeb", "10perc", route_root / "hipp_group_merged_canonical_atlas_routeb_10perc"),
     ]
+    gradient_roots = [
+        ("routea", None, route_root / "hipp_group_merged_canonical_atlas_routea_full"),
+        ("routeb", None, route_root / "hipp_group_merged_canonical_atlas_routeb_full"),
+    ]
     clusterless_roots = [
         ("routea", None, route_root / "hipp_group_merged_canonical_atlas_routea"),
         ("routeb", None, route_root / "hipp_group_merged_canonical_atlas_routeb"),
     ]
     for method in METHODS:
-        roots = clusterless_roots if method in CLUSTERLESS_METHODS else cluster_roots
+        if method in CLUSTERLESS_METHODS:
+            roots = clusterless_roots
+        elif method in GRADIENT_METHODS:
+            # Gradient overviews are route-level full-FC products, not 10perc/full mode splits.
+            roots = [root for root in gradient_roots if Path(root[2]).exists()]
+        else:
+            roots = cluster_roots
         for route_tag, mode_tag, group_root in roots:
             jobs.append(
                 RenderJob(
@@ -64,9 +75,10 @@ def write_readme(present_dir: Path, items: list[dict[str, str]]) -> None:
         "# present_group_t1only matrix overviews",
         "",
         "This directory is the single maintained export root.",
-        "Mode split (`10perc/full`) applies to clustering methods only.",
+        "Mode split (`10perc/full`) applies only to non-gradient clustering methods.",
+        "Gradient-spectral exports one route-level overview per available `*_full` root and does not use `10perc` mode splits.",
         "Clusterless methods (for example `wta-top`) export one overview per route (no mode suffix).",
-        "RouteB `full` is intentionally omitted because no materialized source root is currently available.",
+        "RouteB `full` is intentionally omitted wherever no materialized source root is currently available.",
         "",
         "| route | mode | method | overview | source_group_root |",
         "|---|---|---|---|---|",

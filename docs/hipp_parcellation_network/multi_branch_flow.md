@@ -42,7 +42,20 @@ Use numbered public entrypoints in `scripts/core_workflow/`:
 vertex-to-ROI FC caches as the Kong2022 network/WTA branches, averages those FC
 profiles across the active cohort at group level, computes diffusion gradients,
 and clusters selected gradient columns. The default selected set is `G1,G2,G3`;
-valid alternatives are `G1`, `G2`, `G3`, and `G1,G2`.
+valid alternatives are `G1`, `G2`, `G3`, and `G1,G2`. Because the embedding is
+derived from group-averaged continuous FC profiles, this branch is maintained as
+a full-FC route-level analysis. The `top-percent` / `10perc` sparsified and
+binarized FC mode used for some discrete clustering comparisons is not a
+maintained gradient branch.
+
+For RouteA full outputs, optional presentation rendering may export the locked
+2x3 continuous heatmap figure (`2mm`/`4mm` x `G1`/`G2`/`G3`) via
+`06_05_render_group_gradient_heatmaps.py`, producing:
+`present_group_t1only/kong2022_gradient-spectral_group_gradients_heatmap_routea_2mm4mm_g1g2g3.png`
+with companion manifest JSON. Each heatmap cell is rendered with a `plasma`
+palette and labeled `G# EV=xx.x%`; EV is the left/right-averaged share of that
+component's non-trivial diffusion eigenvalue among the exported non-trivial
+eigenvalues for the smoothing.
 
 ## Default Cohort Reminder
 

@@ -26,6 +26,7 @@ def _load_numbered_module(script_name: str, alias: str):
 cortex_mod = _load_numbered_module("06_04_build_cluster_cortex_panels.py", "core_06_04_build_cluster_cortex_panels")
 present_mod = _load_numbered_module("06_01_build_group_overview.py", "core_06_01_build_group_overview")
 atlas_mod = _load_numbered_module("05_01_run_group_atlas.py", "core_05_01_run_group_atlas")
+matrix_mod = _load_numbered_module("06_02_build_group_matrix.py", "core_06_02_build_group_matrix")
 
 CORTEX_CLUSTERLESS_METHODS = cortex_mod.CLUSTERLESS_METHODS
 CORTEX_DEFAULTS = cortex_mod.METHODS_DEFAULT
@@ -41,6 +42,7 @@ method_uses_network_fc_input = atlas_mod.method_uses_network_fc_input
 parse_gradient_components = atlas_mod.parse_gradient_components
 resolve_subject_fc_mode = atlas_mod.resolve_subject_fc_mode
 subject_fc_preprocessing_manifest_block = atlas_mod.subject_fc_preprocessing_manifest_block
+build_render_jobs = matrix_mod.build_render_jobs
 
 OLD_METHOD_NAMES = {"group-network-top", "group-network-spectral", "group-intrinsic-spectral"}
 NEW_METHOD_NAMES = {"wta-top", "network-spectral", "intrinsic-spectral"}
@@ -99,12 +101,33 @@ def test_wta_subject_fc_preprocessing_manifest_is_mode_neutral() -> None:
     assert canonical_json_sha256(network_full) != canonical_json_sha256(network_sparse)
 
 
+def test_gradient_subject_fc_preprocessing_manifest_is_mode_neutral() -> None:
+    full_mode = resolve_subject_fc_mode("full", None)
+    sparse_mode = resolve_subject_fc_mode("top-percent", 10)
+    gradient_full = subject_fc_preprocessing_manifest_block(GRADIENT_METHOD, full_mode)
+    gradient_sparse = subject_fc_preprocessing_manifest_block(GRADIENT_METHOD, sparse_mode)
+    assert canonical_json_sha256(gradient_full) == canonical_json_sha256(gradient_sparse)
+
+
+def test_gradient_matrix_jobs_are_route_only_and_full_rooted() -> None:
+    jobs = build_render_jobs(REPO_ROOT / "outputs_experiments" / "hippunfold_recommended_t1w_20260423" / "kong2022")
+    gradient_jobs = [job for job in jobs if job.method == GRADIENT_METHOD]
+    assert gradient_jobs
+    assert set(job.route_tag for job in gradient_jobs).issubset({"routea", "routeb"})
+    assert "routea" in {job.route_tag for job in gradient_jobs}
+    assert all(job.mode_tag is None for job in gradient_jobs)
+    assert all(job.group_root.name.endswith("_full") for job in gradient_jobs)
+    assert all("10perc" not in job.group_root.name for job in gradient_jobs)
+
+
 def main() -> int:
     test_main_pipeline_method_contract()
     test_downstream_builders_method_contract()
     test_gradient_component_parser_defaults_and_valid_combos()
     test_gradient_component_parser_rejects_bad_values()
     test_wta_subject_fc_preprocessing_manifest_is_mode_neutral()
+    test_gradient_subject_fc_preprocessing_manifest_is_mode_neutral()
+    test_gradient_matrix_jobs_are_route_only_and_full_rooted()
     print("ok: method naming contract checks passed")
     return 0
 

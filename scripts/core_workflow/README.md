@@ -24,6 +24,8 @@ For the Kong2022 `gradient-spectral` branch, `05_01_run_group_atlas.py`
 computes diffusion gradients from group-averaged vertex-to-ROI FC and clusters
 the selected gradient columns. The default gradient set is `G1,G2,G3`; valid
 overrides are `--gradient-components 1`, `2`, `3`, `1,2`, and `1,2,3`.
+Maintained overview exports treat `gradient-spectral` as a full-continuous FC
+route-level analysis, not as a `10perc/full` mode split.
 
 Execution environment (hard requirement):
 
