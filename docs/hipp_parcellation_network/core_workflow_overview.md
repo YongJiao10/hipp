@@ -29,11 +29,33 @@ Within `kong2022`, RouteA and RouteB are treated as equal mainlines.
 Group atlas method families include intrinsic FC, network/ROI FC, WTA, and
 `gradient-spectral`. The `gradient-spectral` branch is Kong2022-only: it
 averages vertex-to-ROI FC at group level, computes diffusion gradients from that
-group profile, and clusters the selected gradient columns. The default component
-set is `G1,G2,G3` (`--gradient-components 1,2,3`); single-gradient and
-two-gradient combinations are available through the same option. In maintained
-presentation outputs, `gradient-spectral` is treated as a full-continuous FC
-route-level analysis rather than a `10perc/full` mode-split branch.
+group profile using BrainSpace (`GradientMaps`, `approach="dm"`,
+`kernel="pearson"`), and clusters selected gradient columns. Embedding computes
+`G1-G5` (`n_components=5`) with BrainSpace `sparsity=0.9` (keep top 10% per row),
+while selected clustering defaults remain `G1,G2,G3`
+(`--gradient-components 1,2,3`); single-gradient and two-gradient combinations
+are available through the same option. In maintained presentation outputs,
+`gradient-spectral` is treated as a full-continuous FC route-level analysis
+rather than a `10perc/full` mode-split branch.
+
+The separate HippoMaps-style route is `05_03_compute_hippomaps_gradients.py`
+followed by `06_05_render_hippomaps_gradient_products.py`. It keeps the same
+upstream Fisher-z FC preprocessing but does not alter clustering. `05_03`
+imports official package code from `external/hippomaps`, calls
+`brainspace.gradient.GradientMaps(n_components=N, kernel="pearson")` on the
+column-wise z-scored group mean Fisher-z vertex-to-Kong2022 ROI FC matrix, and
+saves continuous full-surface gradients with NaNs outside the support mask, the
+full lambda vector, EV fractions, and the group mean FC. `06_05` uses
+`hippomaps.plotting.surfplot_canonical_foldunfold` with `cmap="plasma"`,
+`tighten_cwindow=True`, `share="row"`, and `color_bar="right"` for
+folded/unfolded hippocampal gradient figures, plus EV and top-25% minus
+bottom-25% gradient endpoint FC contrast plots. For `den=512`, `06_05` treats
+`512` as HippoMaps v2 in the current Python process and disables
+`unfoldAPrescale`; no AP surfarea rescale is used for 512-density figures.
+Manifests record `external/hippomaps` import path, commit, and plotter support
+settings.
+The renderer defaults to bilateral output but accepts `--hemis L` or `--hemis R`
+for single-hemisphere figures and writes hemisphere-specific output filenames.
 
 `scripts/core_workflow/` is both:
 - canonical public interface (`NN_MM_*`)

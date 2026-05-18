@@ -108,6 +108,15 @@
       "recommended_manifest": "manifests/core_workflow/05_02_run_spectral_fast_rerun.json"
     },
     {
+      "step_id": "05_03_compute_hippomaps_gradients",
+      "stage": "05_group_atlas",
+      "purpose": "Compute HippoMaps-style continuous gradients from column-wise z-scored group mean Fisher-z Kong2022 vertex-to-ROI FC.",
+      "branches": ["kong2022_routea", "kong2022_routeb"],
+      "entry_script": "scripts/core_workflow/05_03_compute_hippomaps_gradients.py",
+      "implementation_script": "scripts/core_workflow/05_03_compute_hippomaps_gradients.py",
+      "recommended_manifest": "manifests/core_workflow/05_03_compute_hippomaps_gradients.json"
+    },
+    {
       "step_id": "06_01_build_group_overview",
       "stage": "06_outputs",
       "purpose": "Render merged-hemisphere group overview products.",
@@ -142,6 +151,15 @@
       "entry_script": "scripts/core_workflow/06_04_build_cluster_cortex_panels.py",
       "implementation_script": "scripts/core_workflow/06_04_build_cluster_cortex_panels.py",
       "recommended_manifest": "manifests/core_workflow/06_04_build_cluster_cortex_panels.json"
+    },
+    {
+      "step_id": "06_05_render_hippomaps_gradient_products",
+      "stage": "06_outputs",
+      "purpose": "Render HippoMaps folded/unfolded continuous gradients, EV plots, and endpoint FC contrasts.",
+      "branches": ["kong2022_routea", "kong2022_routeb"],
+      "entry_script": "scripts/core_workflow/06_05_render_hippomaps_gradient_products.py",
+      "implementation_script": "scripts/core_workflow/06_05_render_hippomaps_gradient_products.py",
+      "recommended_manifest": "manifests/core_workflow/06_05_render_hippomaps_gradient_products.json"
     }
   ]
 }

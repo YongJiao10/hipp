@@ -22,14 +22,28 @@ Use exactly one of these based on task type.
 ## One-Shot Preflight (Run First)
 
 ```bash
-/home/yojiao/.conda/envs/py314/bin/python -c "import sys,nibabel; print(sys.executable); print(nibabel.__version__)"
+/home/yojiao/.conda/envs/py314/bin/python -c "import sys,nibabel,brainspace; print(sys.executable); print(nibabel.__version__); print(brainspace.__version__)"
 python -c "import sys; print(sys.executable)"
 ```
 
 Interpretation:
 
-- First line must print `/home/yojiao/.conda/envs/py314/bin/python` and a valid `nibabel` version.
+- First line must print `/home/yojiao/.conda/envs/py314/bin/python`, a valid `nibabel` version, and a valid `brainspace` version (`0.2.1` expected for current `gradient-spectral` workflow).
 - Second line is informational only. If it points elsewhere (for example `yazi-deps`), do not use it for repo tasks.
+
+HippoMaps-style continuous gradients additionally require official package code
+at `external/hippomaps` on `sys.path`. Current pinned source for this workspace:
+`external/hippomaps`, commit `eebd4fe82e69f32e793ac691b8346e71780a757a`.
+The `05_03`/`06_05` manifests record both the import path and commit. Do not
+copy HippoMaps plotting code into this repository. For `den=512`, `06_05`
+treats `512` as HippoMaps v2 in the current Python process and disables
+`unfoldAPrescale`; no AP surfarea rescale is used for 512-density figures. The
+py314 environment must also import HippoMaps' top-level package dependencies
+used during official plotting import: `pygeodesic`, `adjustText`,
+`eigenstrapping`, `wget`, `netneurotools`, `neuromaps`, `lapy`, `bctpy`, and
+`parspin`. Install these without downgrading the existing py314 `numpy`,
+`matplotlib`, `nilearn`,
+`brainspace`, or `nibabel` stack.
 
 ## Canonical Command Forms
 
@@ -40,6 +54,8 @@ Use these forms directly:
 /home/yojiao/.conda/envs/py314/bin/python -m py_compile scripts/core_workflow/*.py scripts/core_workflow/lib/*.py
 /home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/01_01_prepare_group_inputs.py --help
 /home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/06_04_build_cluster_cortex_panels.py --help
+/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/05_03_compute_hippomaps_gradients.py --help
+/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/06_05_render_hippomaps_gradient_products.py --help
 ```
 
 ## Recovery Rule
@@ -49,4 +65,3 @@ If the wrong interpreter was used:
 1. Stop immediately.
 2. Re-run the command with the explicit correct interpreter.
 3. Discard confidence in outputs from the wrong interpreter run.
-

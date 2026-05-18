@@ -27,6 +27,18 @@ overrides are `--gradient-components 1`, `2`, `3`, `1,2`, and `1,2,3`.
 Maintained overview exports treat `gradient-spectral` as a full-continuous FC
 route-level analysis, not as a `10perc/full` mode split.
 
+For HippoMaps-style continuous gradients, use
+`05_03_compute_hippomaps_gradients.py` and
+`06_05_render_hippomaps_gradient_products.py`. This route imports official
+package code from `external/hippomaps`, keeps Fisher-z before group averaging,
+applies column-wise feature z-score before `GradientMaps(kernel="pearson")`, and
+renders folded/unfolded gradients with `surfplot_canonical_foldunfold`. For
+`den=512`, the renderer treats `512` as HippoMaps v2 in the current Python
+process and disables `unfoldAPrescale`; no AP surfarea rescale is used for
+512-density figures. The renderer defaults to bilateral products; use `--hemis
+L` or `--hemis R` for single-hemisphere output files. It is a continuous
+upstream product route; it does not change the `05_01` clustering path.
+
 Execution environment (hard requirement):
 
 - Do not run core workflow tasks with bare `python`.
