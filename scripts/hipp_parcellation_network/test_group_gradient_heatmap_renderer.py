@@ -8,6 +8,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 import numpy as np
+from PIL import Image
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -54,12 +55,13 @@ def test_compute_component_scales_is_symmetric_per_component() -> None:
     assert scales["G2"][0] == -3.0 and scales["G2"][1] == 3.0, scales
 
 
-def test_component_ev_percentages_ignore_trivial_eigenvalue() -> None:
+def test_component_ev_percentages_use_full_exported_eigenvalue_sum() -> None:
     got = mod.component_ev_percentages(
-        {"gradient_eigenvalues": [1.0, 0.5, 0.25, 0.25]},
+        {"gradient_eigenvalues": [0.50, 0.25, 0.15, 0.07, 0.03]},
         ["G1", "G2", "G3"],
     )
-    assert got == {"G1": 50.0, "G2": 25.0, "G3": 25.0}, got
+    assert got == {"G1": 50.0, "G2": 25.0, "G3": 15.0}, got
+    assert float(sum(got.values())) == 90.0, got
 
 
 def test_panel_ev_percentages_average_hemispheres_by_cell() -> None:
@@ -79,15 +81,177 @@ def test_cell_label_includes_ev_percent() -> None:
     assert mod.format_cell_label("G3", 12.34) == "G3 EV=12.3%"
 
 
-def test_default_palette_uses_plasma() -> None:
+def test_default_palette_is_workbench_magma_and_no_colorbar_cmap_arg() -> None:
     old_argv = sys.argv[:]
     try:
         sys.argv = ["render"]
         args = mod.parse_args()
     finally:
         sys.argv = old_argv
-    assert args.palette == "plasma", args.palette
-    assert args.colorbar_cmap == "plasma", args.colorbar_cmap
+    assert args.palette == "magma", args.palette
+    assert not hasattr(args, "colorbar_cmap"), "renderer should not expose --colorbar-cmap"
+
+
+def test_resolve_workbench_palette_name_strict_token_validation() -> None:
+    assert mod.resolve_workbench_palette_name("magma") == "magma"
+    assert mod.resolve_workbench_palette_name("RedWhiteBlue") == "RedWhiteBlue"
+    try:
+        mod.resolve_workbench_palette_name("")
+        raise AssertionError("expected empty palette to fail")
+    except ValueError as exc:
+        assert "must not be empty" in str(exc)
+    try:
+        mod.resolve_workbench_palette_name("bad palette")
+        raise AssertionError("expected invalid token to fail")
+    except ValueError as exc:
+        assert "Invalid Workbench palette token" in str(exc)
+
+
+def test_verify_workbench_palette_supported_raises_without_fallback() -> None:
+    old_apply = mod.apply_metric_palette
+
+    def _fail(*args, **kwargs):
+        raise RuntimeError("wb_command palette fail")
+
+    mod.apply_metric_palette = _fail
+    try:
+        with TemporaryDirectory() as td:
+            try:
+                mod.verify_workbench_palette_supported("plasma", Path(td))
+                raise AssertionError("expected unsupported palette failure")
+            except ValueError as exc:
+                assert "Unsupported Workbench palette" in str(exc), exc
+    finally:
+        mod.apply_metric_palette = old_apply
+
+
+def test_target_colorbar_selector_enables_single_visible_metric_colorbar() -> None:
+    root = mod.ET.fromstring(
+        """
+        <Root>
+          <Object Type="class" Class="Overlay">
+            <Object Type="pathName" Name="selectedMapFileNameWithPath">/tmp/left.shape.gii</Object>
+            <Object Type="class" Class="Annotation" Name="m_colorBar">
+              <Object Type="boolean" Name="m_displayedFlag">false</Object>
+              <Object Type="boolean" Name="m_showTickMarksSelected">false</Object>
+              <Object Type="string" Name="m_width">0</Object>
+              <Object Type="string" Name="m_height">0</Object>
+              <Object Type="string" Name="m_fontPercentViewportHeight">0</Object>
+              <Object Type="string" Name="m_positionMode">MANUAL</Object>
+            </Object>
+          </Object>
+          <Object Type="class" Class="Overlay">
+            <Object Type="pathName" Name="selectedMapFileNameWithPath">/tmp/right.shape.gii</Object>
+            <Object Type="class" Class="Annotation" Name="m_colorBar">
+              <Object Type="boolean" Name="m_displayedFlag">false</Object>
+              <Object Type="boolean" Name="m_showTickMarksSelected">false</Object>
+              <Object Type="string" Name="m_width">0</Object>
+              <Object Type="string" Name="m_height">0</Object>
+              <Object Type="string" Name="m_fontPercentViewportHeight">0</Object>
+              <Object Type="string" Name="m_positionMode">MANUAL</Object>
+            </Object>
+          </Object>
+          <Object Type="class" Class="Overlay">
+            <Object Type="pathName" Name="selectedMapFileNameWithPath">/tmp/other.shape.gii</Object>
+            <Object Type="class" Class="Annotation" Name="m_colorBar">
+              <Object Type="boolean" Name="m_displayedFlag">true</Object>
+              <Object Type="boolean" Name="m_showTickMarksSelected">true</Object>
+              <Object Type="string" Name="m_width">25</Object>
+              <Object Type="string" Name="m_height">7</Object>
+              <Object Type="string" Name="m_fontPercentViewportHeight">3.33</Object>
+              <Object Type="string" Name="m_positionMode">AUTOMATIC</Object>
+            </Object>
+          </Object>
+        </Root>
+        """
+    )
+
+    old_capture = mod._capture_scene_root
+    old_diff = mod._diff_bbox
+
+    def _fake_capture(**kwargs):
+        out = kwargs["out_png"]
+        Image.new("RGB", (20, 20), (0, 0, 0)).save(out)
+
+    def _fake_diff(baseline_png, probe_png, **kwargs):
+        if str(probe_png).endswith("_00.png"):
+            return (1, 2, 11, 12)
+        return None
+
+    mod._capture_scene_root = _fake_capture
+    mod._diff_bbox = _fake_diff
+    try:
+        with TemporaryDirectory() as td:
+            metric, chosen, diff_box = mod._select_visible_colorbar_overlay(
+                root=root,
+                target_metric_paths={"/tmp/left.shape.gii", "/tmp/right.shape.gii"},
+                scratch_dir=Path(td),
+                width=200,
+                height=100,
+                renderer="OSMesa",
+            )
+            assert metric == "/tmp/left.shape.gii", metric
+            assert diff_box == (1, 2, 11, 12), diff_box
+            mod._set_single_visible_colorbar(root, chosen)
+            colorbars = mod._iter_colorbar_annotations(root)
+            visible = [mod._child_text(cbar, "m_displayedFlag") for cbar in colorbars]
+            assert visible.count("true") == 1, visible
+    finally:
+        mod._capture_scene_root = old_capture
+        mod._diff_bbox = old_diff
+
+
+def test_compose_figure_uses_external_workbench_colorbar_sources() -> None:
+    with TemporaryDirectory() as td:
+        root = Path(td)
+        panel_paths: dict[tuple[str, str], Path] = {}
+        panel_ev: dict[tuple[str, str], float] = {}
+        for smooth in ("2mm", "4mm"):
+            for comp in ("G1", "G2", "G3"):
+                path = root / f"{smooth}_{comp}.png"
+                img = Image.new("RGBA", (320, 220), (255, 255, 255, 255))
+                arr = np.asarray(img).copy()
+                arr[70:150, 95:225, 0:3] = 0
+                Image.fromarray(arr, mode="RGBA").save(path)
+                panel_paths[(smooth, comp)] = path
+                panel_ev[(smooth, comp)] = 10.0
+
+        colorbar_paths: dict[str, Path] = {}
+        colorbar_boxes: dict[str, tuple[int, int, int, int] | None] = {}
+        for comp, rgb in (("G1", (255, 0, 0)), ("G2", (0, 255, 0)), ("G3", (0, 0, 255))):
+            src = root / f"{comp}_source.png"
+            img = Image.new("RGBA", (500, 220), (255, 255, 255, 255))
+            arr = np.asarray(img).copy()
+            # Simulate a bad diff crop in the lower-left plus the real Workbench
+            # horizontal colorbar elsewhere in the source render.
+            arr[170:210, 15:120, 0:3] = 20
+            arr[120:142, 250:455, 0:3] = np.asarray(rgb, dtype=np.uint8)
+            arr[150:164, 250:455, 0:3] = 0
+            Image.fromarray(arr, mode="RGBA").save(src)
+            colorbar_paths[comp] = src
+            colorbar_boxes[comp] = (15, 170, 120, 210)
+
+        out_png = root / "out.png"
+        width, height = mod.compose_figure(
+            panel_paths=panel_paths,
+            colorbar_paths=colorbar_paths,
+            colorbar_crop_boxes=colorbar_boxes,
+            panel_ev_percentages=panel_ev,
+            smoothings=["2mm", "4mm"],
+            components=["G1", "G2", "G3"],
+            output_png=out_png,
+        )
+
+        assert (width, height) == Image.open(out_png).size
+        assert width <= 700, width
+        assert height <= 360, height
+
+        arr = np.asarray(Image.open(out_png).convert("RGB"))
+        lower = arr[int(height * 0.74) :, :, :]
+        nonwhite = np.any(lower < 245, axis=2)
+        assert int(nonwhite.sum()) > 100, "expected visible bottom colorbars from external sources"
+        colorful = (lower.max(axis=2).astype(int) - lower.min(axis=2).astype(int)) > 80
+        assert int(colorful.sum()) > 1000, "expected real colorbar color, not only tick labels"
 
 
 def test_validate_manifest_path_requires_group_root_and_rejects_archive() -> None:
@@ -127,10 +291,14 @@ def test_expected_output_name_contract() -> None:
 def main() -> int:
     test_reconstruct_full_components_fills_nans_for_non_support_vertices()
     test_compute_component_scales_is_symmetric_per_component()
-    test_component_ev_percentages_ignore_trivial_eigenvalue()
+    test_component_ev_percentages_use_full_exported_eigenvalue_sum()
     test_panel_ev_percentages_average_hemispheres_by_cell()
     test_cell_label_includes_ev_percent()
-    test_default_palette_uses_plasma()
+    test_default_palette_is_workbench_magma_and_no_colorbar_cmap_arg()
+    test_resolve_workbench_palette_name_strict_token_validation()
+    test_verify_workbench_palette_supported_raises_without_fallback()
+    test_target_colorbar_selector_enables_single_visible_metric_colorbar()
+    test_compose_figure_uses_external_workbench_colorbar_sources()
     test_validate_manifest_path_requires_group_root_and_rejects_archive()
     test_expected_output_name_contract()
     print("ok: group gradient heatmap renderer tests passed")

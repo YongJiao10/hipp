@@ -216,7 +216,7 @@ def compute_combo(
         "gradient_shape_active": [int(x) for x in gradients_active.shape],
         "gradient_shape_full": [int(x) for x in gradients_full.shape],
         "gradientmaps_kernel": "pearson",
-        "gradientmaps_call": "brainspace.gradient.GradientMaps(n_components=N, kernel='pearson').fit(group_mean_fisherz_fc)",
+        "gradientmaps_call": "brainspace.gradient.GradientMaps(n_components=N, kernel='pearson').fit(column_zscored_group_mean_fisherz_fc) with BrainSpace default sparsity=0.9",
         "n_components_computed": int(n_components),
         "selected_components": selected_labels,
         "lambdas": [float(x) for x in lambdas],
@@ -251,7 +251,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--group-average-surfaces-dir", default=str(DEFAULT_GROUP_AVG_SURFACES_DIR))
     parser.add_argument("--out-root", default=str(DEFAULT_OUT_ROOT))
     parser.add_argument("--hippomaps-root", default=str(DEFAULT_HIPPOMAPS_ROOT))
-    parser.add_argument("--n-components", type=int, default=10)
+    parser.add_argument("--n-components", type=int, default=5)
     parser.add_argument("--selected-components", default="1,2,3")
     parser.add_argument("--max-subjects", type=int, default=None, help="Optional smoke-test cap after loading the manifest.")
     parser.add_argument("--force", action="store_true")

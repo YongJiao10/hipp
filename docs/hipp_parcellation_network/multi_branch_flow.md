@@ -79,6 +79,9 @@ full-surface gradient arrays, selected `G1`-`G3` full arrays with NaNs outside
 support, the full returned lambda vector, EV fractions computed from that full
 vector, and a manifest recording source FC paths, subject count, vertex count,
 `external/hippomaps` import path, and HippoMaps commit.
+The default computes five components and retains BrainSpace default
+`sparsity=0.9`, consistent with the paper's within-method dimensionality
+reduction description; only G1-G3 are rendered.
 
 `06_05_render_hippomaps_gradient_products.py` renders this continuous route
 with official HippoMaps plotting code:

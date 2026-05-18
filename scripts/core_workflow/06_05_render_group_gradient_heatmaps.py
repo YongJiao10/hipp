@@ -14,7 +14,6 @@ from typing import Any
 import nibabel as nib
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
-from matplotlib import colormaps, colors
 from nibabel.gifti import GiftiDataArray, GiftiImage
 
 from lib.workbench import run_workbench
@@ -71,6 +70,15 @@ class ComboData:
     component_ev_percentages: dict[str, float]
 
 
+@dataclass(frozen=True)
+class RenderMeta:
+    panel_png: Path
+    left_shape: Path
+    right_shape: Path
+    selected_colorbar_metric: str | None
+    colorbar_crop_box: tuple[int, int, int, int] | None
+
+
 def expected_output_name() -> str:
     return "kong2022_gradient-spectral_group_gradients_heatmap_routea_2mm4mm_g1g2g3.png"
 
@@ -96,10 +104,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--renderer", default="OSMesa")
     parser.add_argument("--width", type=int, default=1600)
     parser.add_argument("--height", type=int, default=1024)
-    parser.add_argument("--palette", default="plasma")
-    parser.add_argument("--colorbar-cmap", default="plasma")
+    parser.add_argument("--palette", default="magma")
     parser.add_argument("--dry-run", action="store_true")
     return parser.parse_args()
+
+
+def resolve_workbench_palette_name(requested_palette: str) -> str:
+    req = str(requested_palette).strip()
+    if not req:
+        raise ValueError("Palette must not be empty")
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+", req):
+        raise ValueError(f"Invalid Workbench palette token: {req!r}")
+    return req
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -187,21 +203,18 @@ def component_ev_percentages(summary: dict[str, Any], component_names: list[str]
     if raw_eigvals is None:
         raise ValueError("Gradient summary is missing gradient_eigenvalues")
     eigvals = np.asarray(raw_eigvals, dtype=np.float64).reshape(-1)
-    if eigvals.size < 2:
-        raise ValueError(f"Expected at least trivial + one non-trivial eigenvalue, got {eigvals.size}")
-    nontrivial = eigvals[1:]
-    denom = float(np.sum(nontrivial))
+    if eigvals.size < 1:
+        raise ValueError(f"Expected at least one eigenvalue, got {eigvals.size}")
+    denom = float(np.sum(eigvals))
     if not np.isfinite(denom) or denom <= 0.0:
-        raise ValueError(f"Non-trivial eigenvalue sum must be positive, got {denom}")
+        raise ValueError(f"Eigenvalue sum must be positive, got {denom}")
 
     out: dict[str, float] = {}
     for comp_name in component_names:
         comp_idx = component_index_from_name(comp_name)
-        if comp_idx >= nontrivial.size:
-            raise ValueError(
-                f"Component {comp_name} out of bounds for {nontrivial.size} non-trivial eigenvalues"
-            )
-        out[comp_name] = float(nontrivial[comp_idx] / denom * 100.0)
+        if comp_idx >= eigvals.size:
+            raise ValueError(f"Component {comp_name} out of bounds for {eigvals.size} eigenvalues")
+        out[comp_name] = float(eigvals[comp_idx] / denom * 100.0)
     return out
 
 
@@ -271,6 +284,22 @@ def apply_metric_palette(metric_path: Path, palette_name: str, vmin: float, vmax
             "0",
         ]
     )
+
+
+def verify_workbench_palette_supported(palette_name: str, runtime_root: Path) -> None:
+    probe_metric = runtime_root / "palette_probe" / f"probe_{palette_name}.shape.gii"
+    save_shape_gii(np.asarray([-1.0, 0.0, 1.0], dtype=np.float32), probe_metric)
+    try:
+        apply_metric_palette(
+            metric_path=probe_metric,
+            palette_name=palette_name,
+            vmin=-1.0,
+            vmax=1.0,
+        )
+    except RuntimeError as exc:
+        raise ValueError(
+            f"Unsupported Workbench palette for wb_command -metric-palette: {palette_name!r}"
+        ) from exc
 
 
 def detect_template_subject(root: ET.Element) -> str:
@@ -375,6 +404,8 @@ def disable_label_overlays(root: ET.Element) -> None:
             continue
         for sib in list(parent):
             txt = (sib.text or "").strip()
+            if "group_gradient" in txt and txt.endswith(".label.gii"):
+                continue
             if ".label.gii" in txt or ".dlabel.nii" in txt:
                 obj.text = "false"
                 break
@@ -393,6 +424,98 @@ def inject_fixed_palette(root: ET.Element, vmin: float, vmax: float, palette_nam
             obj.text = str(vmax)
 
 
+def _iter_colorbar_annotations(root: ET.Element) -> list[ET.Element]:
+    out: list[ET.Element] = []
+    for obj in root.iter("Object"):
+        if obj.attrib.get("Type") != "class":
+            continue
+        if obj.attrib.get("Class") != "Annotation":
+            continue
+        if obj.attrib.get("Name") != "m_colorBar":
+            continue
+        out.append(obj)
+    return out
+
+
+def _iter_overlay_nodes(root: ET.Element) -> list[ET.Element]:
+    out: list[ET.Element] = []
+    for obj in root.iter("Object"):
+        if obj.attrib.get("Type") != "class":
+            continue
+        if obj.attrib.get("Class") != "Overlay":
+            continue
+        out.append(obj)
+    return out
+
+
+def _child_text(node: ET.Element, field_name: str) -> str | None:
+    for child in node:
+        if child.attrib.get("Name") == field_name:
+            return (child.text or "").strip()
+    return None
+
+
+def _child_object(node: ET.Element, field_name: str, class_name: str | None = None) -> ET.Element | None:
+    for child in node:
+        if child.attrib.get("Name") != field_name:
+            continue
+        if class_name is not None and child.attrib.get("Class") != class_name:
+            continue
+        return child
+    return None
+
+
+def _set_annotation_field(annotation: ET.Element, field_name: str, value: str) -> bool:
+    for child in annotation:
+        if child.attrib.get("Name") == field_name:
+            child.text = value
+            return True
+    return False
+
+
+def _set_colorbar_visible(annotation: ET.Element, visible: bool) -> None:
+    _set_annotation_field(annotation, "m_displayedFlag", "true" if visible else "false")
+    _set_annotation_field(annotation, "m_showTickMarksSelected", "true" if visible else "false")
+    if visible:
+        _set_annotation_field(annotation, "m_width", "25")
+        _set_annotation_field(annotation, "m_height", "7")
+        _set_annotation_field(annotation, "m_fontPercentViewportHeight", "3.33")
+        _set_annotation_field(annotation, "m_positionMode", "AUTOMATIC")
+
+
+def _set_single_visible_colorbar(root: ET.Element, chosen: ET.Element | None) -> int:
+    all_colorbars = _iter_colorbar_annotations(root)
+    for cbar in all_colorbars:
+        _set_colorbar_visible(cbar, cbar is chosen)
+    return len(all_colorbars)
+
+
+def _canonical_scene_path(text: str | None) -> str:
+    s = str(text or "").strip()
+    if not s:
+        return ""
+    try:
+        return str(Path(s).resolve())
+    except Exception:
+        return s
+
+
+def _target_colorbar_candidates(
+    root: ET.Element,
+    target_metric_paths: set[str],
+) -> list[tuple[str, ET.Element]]:
+    out: list[tuple[str, ET.Element]] = []
+    for overlay in _iter_overlay_nodes(root):
+        selected = _canonical_scene_path(_child_text(overlay, "selectedMapFileNameWithPath"))
+        if selected not in target_metric_paths:
+            continue
+        cbar = _child_object(overlay, "m_colorBar", class_name="Annotation")
+        if cbar is None:
+            continue
+        out.append((selected, cbar))
+    return out
+
+
 def validate_scene_paths(root: ET.Element) -> None:
     missing: list[str] = []
     for obj in root.iter("Object"):
@@ -409,43 +532,14 @@ def validate_scene_paths(root: ET.Element) -> None:
         raise RuntimeError(f"Scene has missing path references after substitution:\n{preview}")
 
 
-def render_panel(
+def _capture_scene_root(
     *,
-    scene_path: Path,
-    template_subject: str,
-    left_surface: Path,
-    right_surface: Path,
-    spec_path: Path,
-    left_shape: Path,
-    right_shape: Path,
-    vmin: float,
-    vmax: float,
-    palette_name: str,
+    root: ET.Element,
     out_png: Path,
     width: int,
     height: int,
     renderer: str,
 ) -> None:
-    dense_corobl_root = infer_dense_corobl_root_from_spec(spec_path)
-    root = ET.parse(scene_path).getroot()
-    absolutize_scene_paths(root, scene_path, dense_corobl_root=dense_corobl_root)
-    source_subject = detect_template_subject(root)
-    replace_subject_text(root, source_subject, template_subject)
-
-    surface_refs = find_corobl_surface_refs(root)
-    replace_exact_ref(root, surface_refs["L"], str(left_surface.resolve()))
-    replace_exact_ref(root, surface_refs["R"], str(right_surface.resolve()))
-
-    current_spec = find_first_ref(root, r"space-corobl_surfaces\.spec$")
-    replace_exact_ref(root, current_spec, str(spec_path.resolve()))
-
-    gyr_refs = find_gyrification_refs(root)
-    replace_exact_ref(root, gyr_refs["L"], str(left_shape.resolve()))
-    replace_exact_ref(root, gyr_refs["R"], str(right_shape.resolve()))
-
-    disable_label_overlays(root)
-    inject_fixed_palette(root, vmin=vmin, vmax=vmax, palette_name=palette_name)
-
     out_png.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile(
         mode="w",
@@ -474,12 +568,180 @@ def render_panel(
         temp_scene.unlink(missing_ok=True)
 
 
+def _diff_bbox(
+    baseline_png: Path,
+    probe_png: Path,
+    *,
+    pixel_delta: int = 6,
+    min_changed_pixels: int = 300,
+) -> tuple[int, int, int, int] | None:
+    a = np.asarray(Image.open(baseline_png).convert("RGB"), dtype=np.int16)
+    b = np.asarray(Image.open(probe_png).convert("RGB"), dtype=np.int16)
+    if a.shape != b.shape:
+        return None
+    changed = np.any(np.abs(a - b) >= int(pixel_delta), axis=2)
+    if int(np.count_nonzero(changed)) < int(min_changed_pixels):
+        return None
+    ys, xs = np.where(changed)
+    return (int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1)
+
+
+def _select_visible_colorbar_overlay(
+    *,
+    root: ET.Element,
+    target_metric_paths: set[str],
+    scratch_dir: Path,
+    width: int,
+    height: int,
+    renderer: str,
+) -> tuple[str, ET.Element, tuple[int, int, int, int]]:
+    candidates = _target_colorbar_candidates(root, target_metric_paths)
+    if not candidates:
+        raise RuntimeError("No target metric overlays with colorbar annotations found in scene")
+
+    _set_single_visible_colorbar(root, None)
+    baseline_png = scratch_dir / "colorbar_probe_baseline.png"
+    _capture_scene_root(root=root, out_png=baseline_png, width=width, height=height, renderer=renderer)
+
+    for idx, (selected_metric, cbar) in enumerate(candidates):
+        _set_single_visible_colorbar(root, cbar)
+        probe_png = scratch_dir / f"colorbar_probe_{idx:02d}.png"
+        _capture_scene_root(root=root, out_png=probe_png, width=width, height=height, renderer=renderer)
+        diff_box = _diff_bbox(baseline_png=baseline_png, probe_png=probe_png)
+        if diff_box is not None:
+            return selected_metric, cbar, diff_box
+
+    raise RuntimeError(
+        "Could not find any visible Workbench colorbar from target overlays after render validation"
+    )
+
+
 def infer_dense_corobl_root_from_spec(spec_path: Path) -> Path:
     parts = spec_path.resolve().parts
     if "dense_corobl_batch" not in parts:
         raise RuntimeError(f"Could not infer dense_corobl_batch root from spec path: {spec_path}")
     idx = parts.index("dense_corobl_batch")
     return Path(*parts[: idx + 1])
+
+
+def build_scene_root(
+    *,
+    scene_path: Path,
+    template_subject: str,
+    left_surface: Path,
+    right_surface: Path,
+    spec_path: Path,
+    left_shape: Path,
+    right_shape: Path,
+    vmin: float,
+    vmax: float,
+    palette_name: str,
+) -> ET.Element:
+    dense_corobl_root = infer_dense_corobl_root_from_spec(spec_path)
+    root = ET.parse(scene_path).getroot()
+    absolutize_scene_paths(root, scene_path, dense_corobl_root=dense_corobl_root)
+    source_subject = detect_template_subject(root)
+    replace_subject_text(root, source_subject, template_subject)
+
+    surface_refs = find_corobl_surface_refs(root)
+    replace_exact_ref(root, surface_refs["L"], str(left_surface.resolve()))
+    replace_exact_ref(root, surface_refs["R"], str(right_surface.resolve()))
+
+    current_spec = find_first_ref(root, r"space-corobl_surfaces\.spec$")
+    replace_exact_ref(root, current_spec, str(spec_path.resolve()))
+
+    gyr_refs = find_gyrification_refs(root)
+    replace_exact_ref(root, gyr_refs["L"], str(left_shape.resolve()))
+    replace_exact_ref(root, gyr_refs["R"], str(right_shape.resolve()))
+
+    disable_label_overlays(root)
+    inject_fixed_palette(root, vmin=vmin, vmax=vmax, palette_name=palette_name)
+    return root
+
+
+def render_panel(
+    *,
+    scene_path: Path,
+    template_subject: str,
+    left_surface: Path,
+    right_surface: Path,
+    spec_path: Path,
+    left_shape: Path,
+    right_shape: Path,
+    vmin: float,
+    vmax: float,
+    palette_name: str,
+    out_png: Path,
+    width: int,
+    height: int,
+    renderer: str,
+    enable_colorbar: bool,
+    selected_colorbar_metric_hint: str | None = None,
+) -> RenderMeta:
+    root = build_scene_root(
+        scene_path=scene_path,
+        template_subject=template_subject,
+        left_surface=left_surface,
+        right_surface=right_surface,
+        spec_path=spec_path,
+        left_shape=left_shape,
+        right_shape=right_shape,
+        vmin=vmin,
+        vmax=vmax,
+        palette_name=palette_name,
+    )
+
+    target_metric_paths = {
+        _canonical_scene_path(str(left_shape.resolve())),
+        _canonical_scene_path(str(right_shape.resolve())),
+    }
+    scratch_dir = out_png.parent / "_colorbar_probe"
+    scratch_dir.mkdir(parents=True, exist_ok=True)
+
+    selected_metric: str | None = None
+    crop_box: tuple[int, int, int, int] | None = None
+    if enable_colorbar:
+        if _set_single_visible_colorbar(root, None) <= 0:
+            raise RuntimeError("No Workbench colorbar annotations found in scene")
+
+        if selected_colorbar_metric_hint:
+            for metric_path, cbar in _target_colorbar_candidates(root, target_metric_paths):
+                if metric_path == selected_colorbar_metric_hint:
+                    selected_metric = metric_path
+                    _set_single_visible_colorbar(root, cbar)
+                    baseline_png = scratch_dir / "colorbar_probe_baseline_hint.png"
+                    probe_png = scratch_dir / "colorbar_probe_hint.png"
+                    _set_single_visible_colorbar(root, None)
+                    _capture_scene_root(root=root, out_png=baseline_png, width=width, height=height, renderer=renderer)
+                    _set_single_visible_colorbar(root, cbar)
+                    _capture_scene_root(root=root, out_png=probe_png, width=width, height=height, renderer=renderer)
+                    crop_box = _diff_bbox(baseline_png, probe_png)
+                    if crop_box is None:
+                        selected_metric = None
+                        _set_single_visible_colorbar(root, None)
+                    break
+
+        if selected_metric is None:
+            selected_metric, chosen_cbar, crop_box = _select_visible_colorbar_overlay(
+                root=root,
+                target_metric_paths=target_metric_paths,
+                scratch_dir=scratch_dir,
+                width=width,
+                height=height,
+                renderer=renderer,
+            )
+            _set_single_visible_colorbar(root, chosen_cbar)
+    else:
+        _set_single_visible_colorbar(root, None)
+
+    _capture_scene_root(root=root, out_png=out_png, width=width, height=height, renderer=renderer)
+    return RenderMeta(
+        panel_png=out_png.resolve(),
+        left_shape=left_shape.resolve(),
+        right_shape=right_shape.resolve(),
+        selected_colorbar_metric=selected_metric,
+        colorbar_crop_box=crop_box,
+    )
 
 
 def load_font(size: int) -> ImageFont.ImageFont:
@@ -497,167 +759,225 @@ def load_font(size: int) -> ImageFont.ImageFont:
     return ImageFont.load_default()
 
 
-def foreground_mask(image: Image.Image, threshold: int = 15) -> np.ndarray:
-    arr = np.asarray(image.convert("RGBA"))
-    return arr[..., :3].sum(axis=2) > threshold
-
-
-def find_runs(flags: np.ndarray) -> list[tuple[int, int]]:
-    runs: list[tuple[int, int]] = []
-    start: int | None = None
-    for idx, value in enumerate(flags.tolist()):
-        if value and start is None:
-            start = idx
-        elif not value and start is not None:
-            runs.append((start, idx))
-            start = None
-    if start is not None:
-        runs.append((start, len(flags)))
-    return runs
-
-
-def trim_black(img: Image.Image, threshold: int = 8) -> Image.Image:
-    arr = np.asarray(img.convert("RGB"))
-    mask = np.any(arr > threshold, axis=2)
+def crop_to_foreground(img: Image.Image, *, tolerance: int = 12, padding: int = 4) -> Image.Image:
+    arr = np.asarray(img.convert("RGB"), dtype=np.int16)
+    corners = np.asarray(
+        [
+            arr[0, 0],
+            arr[0, -1],
+            arr[-1, 0],
+            arr[-1, -1],
+        ],
+        dtype=np.int16,
+    )
+    background = np.median(corners, axis=0)
+    diff = np.max(np.abs(arr - background[None, None, :]), axis=2)
+    mask = diff > int(tolerance)
     if not np.any(mask):
         return img
     ys, xs = np.where(mask)
-    return img.crop((int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1))
+    l = max(0, int(xs.min()) - int(padding))
+    t = max(0, int(ys.min()) - int(padding))
+    r = min(img.width, int(xs.max()) + 1 + int(padding))
+    b = min(img.height, int(ys.max()) + 1 + int(padding))
+    return img.crop((l, t, r, b))
 
 
-def split_native_hemi_panels(image: Image.Image) -> dict[str, Image.Image]:
-    mask = foreground_mask(image)
-    col_runs = find_runs(mask.any(axis=0))
-    if len(col_runs) < 2:
-        raise RuntimeError("Could not detect bilateral foreground runs in native render")
-    selected_runs = sorted(col_runs, key=lambda item: item[1] - item[0], reverse=True)[:2]
-    selected_runs = sorted(selected_runs, key=lambda item: item[0])
-    panels: dict[str, Image.Image] = {}
-    for hemi, (x0, x1) in zip(["L", "R"], selected_runs, strict=True):
-        panels[hemi] = trim_black(image.crop((x0, 0, x1, image.height)))
-    return panels
+def trim_black(img: Image.Image, threshold: int = 8) -> Image.Image:
+    return crop_to_foreground(img, tolerance=threshold)
 
 
-def compact_locked_panel(image: Image.Image) -> Image.Image:
-    panels = split_native_hemi_panels(image.convert("RGBA"))
-    left = panels["L"]
-    right = panels["R"]
-    target_h = max(left.height, right.height)
-    if left.height != target_h:
-        scale = target_h / float(left.height)
-        left = left.resize((max(1, int(round(left.width * scale))), target_h), Image.Resampling.LANCZOS)
-    if right.height != target_h:
-        scale = target_h / float(right.height)
-        right = right.resize((max(1, int(round(right.width * scale))), target_h), Image.Resampling.LANCZOS)
-    gap = 0
-    canvas = Image.new("RGBA", (left.width + gap + right.width, target_h), (255, 255, 255, 255))
-    canvas.paste(left, (0, 0))
-    canvas.paste(right, (left.width + gap, 0))
-    return canvas
+def _find_horizontal_colorbar_box(src: Image.Image) -> tuple[int, int, int, int] | None:
+    arr = np.asarray(src.convert("RGB"), dtype=np.int16)
+    chroma = arr.max(axis=2) - arr.min(axis=2)
+    nonwhite = np.any(arr < 245, axis=2)
+    candidate = (chroma > 35) & nonwhite
+
+    h, w = candidate.shape
+    min_width = max(50, int(round(w * 0.10)))
+    min_height = 6
+    best: tuple[int, int, int, int, int] | None = None
+
+    for y in range(h):
+        xs = np.where(candidate[y])[0]
+        if xs.size == 0:
+            continue
+        runs: list[tuple[int, int]] = []
+        start = int(xs[0])
+        prev = int(xs[0])
+        for x in xs[1:]:
+            x_i = int(x)
+            if x_i == prev + 1:
+                prev = x_i
+                continue
+            runs.append((start, prev + 1))
+            start = x_i
+            prev = x_i
+        runs.append((start, prev + 1))
+
+        for l, r in runs:
+            if r - l < min_width:
+                continue
+            t = y
+            b = y + 1
+            while t > 0 and np.mean(candidate[t - 1, l:r]) > 0.35:
+                t -= 1
+            while b < h and np.mean(candidate[b, l:r]) > 0.35:
+                b += 1
+            if b - t < min_height:
+                continue
+            score = (r - l) * (b - t)
+            if best is None or score > best[4]:
+                best = (l, t, r, b, score)
+
+    if best is None:
+        return None
+
+    l, t, r, b, _ = best
+    pad_x = max(4, int(round((r - l) * 0.04)))
+    label_pad_y = max(18, int(round((b - t) * 2.2)))
+    return (
+        max(0, l - pad_x),
+        max(0, t - 4),
+        min(w, r + pad_x),
+        min(h, b + label_pad_y),
+    )
 
 
-def hex_to_rgb01(hex_color: str) -> tuple[float, float, float]:
-    h = hex_color.strip().lstrip("#")
-    if len(h) != 6:
-        raise ValueError(f"Invalid hex color: {hex_color}")
-    return tuple(int(h[i : i + 2], 16) / 255.0 for i in (0, 2, 4))
+def _has_horizontal_colorbar(img: Image.Image) -> bool:
+    arr = np.asarray(img.convert("RGB"), dtype=np.int16)
+    chroma = arr.max(axis=2) - arr.min(axis=2)
+    colorful = chroma > 35
+    min_run = max(40, int(round(arr.shape[1] * 0.30)))
+    for row in colorful:
+        xs = np.where(row)[0]
+        if xs.size < min_run:
+            continue
+        run = 1
+        prev = int(xs[0])
+        for x in xs[1:]:
+            x_i = int(x)
+            if x_i == prev + 1:
+                run += 1
+                if run >= min_run:
+                    return True
+            else:
+                run = 1
+            prev = x_i
+    return False
 
 
-def wb_palette_stops(palette_name: str) -> list[tuple[float, tuple[float, float, float]]]:
-    if palette_name == "ROY-BIG-BL":
-        # Workbench ROY-BIG-BL landmarks (value in [-1,1], converted to [0,1]).
-        raw = [
-            (-1.000, "#00ffff"),
-            (-0.990, "#00ffff"),
-            (-0.875, "#00ff00"),
-            (-0.750, "#00c800"),
-            (-0.625, "#4b7d00"),
-            (-0.500, "#7d00a0"),
-            (-0.375, "#4b007d"),
-            (-0.250, "#0000aa"),
-            (-0.125, "#000050"),
-            (0.000, "#000000"),
-            (0.125, "#3c0000"),
-            (0.250, "#640000"),
-            (0.375, "#960000"),
-            (0.500, "#c80000"),
-            (0.625, "#ff0000"),
-            (0.750, "#ff7800"),
-            (0.875, "#ffc800"),
-            (0.975, "#fff400"),
-            (1.000, "#ffff00"),
-        ]
-        return [((v + 1.0) * 0.5, hex_to_rgb01(c)) for v, c in raw]
-    if palette_name == "RedWhiteBlue":
-        # Simple non-rainbow diverging map (negative blue, zero white, positive red).
-        raw = [(-1.0, "#0000ff"), (0.0, "#ffffff"), (1.0, "#ff0000")]
-        return [((v + 1.0) * 0.5, hex_to_rgb01(c)) for v, c in raw]
-    return []
+def _refine_colorbar_box_from_crop(crop: Image.Image, outer_box: tuple[int, int, int, int]) -> tuple[int, int, int, int] | None:
+    inner = _find_horizontal_colorbar_box(crop)
+    if inner is None:
+        return None
+    outer_l, outer_t, outer_r, outer_b = outer_box
+    il, it, ir, ib = inner
+    bar_w = max(1, ir - il)
+    l = outer_l + max(0, il - int(round(bar_w * 0.42)))
+    t = outer_t
+    r = outer_l + min(crop.width, ir + int(round(bar_w * 0.06)))
+    b = outer_t + min(crop.height, ib)
+    return (
+        max(outer_l, l),
+        max(outer_t, t),
+        min(outer_r, r),
+        min(outer_b, b),
+    )
 
 
-def interpolate_palette(stops: list[tuple[float, tuple[float, float, float]]], xs: np.ndarray) -> np.ndarray:
-    loc = np.asarray([s[0] for s in stops], dtype=np.float32)
-    cols = np.asarray([s[1] for s in stops], dtype=np.float32)
-    r = np.interp(xs, loc, cols[:, 0])
-    g = np.interp(xs, loc, cols[:, 1])
-    b = np.interp(xs, loc, cols[:, 2])
-    out = np.stack([r, g, b], axis=1)
-    return np.clip(out, 0.0, 1.0)
+def crop_workbench_colorbar(
+    *,
+    source_png: Path,
+    crop_box: tuple[int, int, int, int] | None,
+    fallback_ratio: tuple[float, float, float, float] = (0.58, 0.74, 0.985, 0.98),
+) -> tuple[Image.Image, tuple[int, int, int, int]]:
+    src = Image.open(source_png).convert("RGBA")
+    if crop_box is not None:
+        l, t, r, b = crop_box
+        l = max(0, min(src.width - 1, int(l)))
+        t = max(0, min(src.height - 1, int(t)))
+        r = max(l + 1, min(src.width, int(r)))
+        b = max(t + 1, min(src.height, int(b)))
+        cropped = src.crop((l, t, r, b))
+        if _has_horizontal_colorbar(cropped):
+            refined = _refine_colorbar_box_from_crop(cropped, (l, t, r, b))
+            if refined is not None:
+                rl, rt, rr, rb = refined
+                return src.crop((rl, rt, rr, rb)), refined
+            return cropped, (l, t, r, b)
+
+    detected = _find_horizontal_colorbar_box(src)
+    if detected is not None:
+        l, t, r, b = detected
+        return src.crop((l, t, r, b)), (l, t, r, b)
+
+    l = int(round(src.width * fallback_ratio[0]))
+    t = int(round(src.height * fallback_ratio[1]))
+    r = int(round(src.width * fallback_ratio[2]))
+    b = int(round(src.height * fallback_ratio[3]))
+    l = max(0, min(src.width - 1, l))
+    t = max(0, min(src.height - 1, t))
+    r = max(l + 1, min(src.width, r))
+    b = max(t + 1, min(src.height, b))
+    return src.crop((l, t, r, b)), (l, t, r, b)
 
 
-def make_colorbar_strip(width: int, height: int, cmap_name: str, palette_name: str) -> Image.Image:
-    xs = np.linspace(0.0, 1.0, width, dtype=np.float32)
-    stops = wb_palette_stops(palette_name)
-    if stops:
-        rgb = interpolate_palette(stops, xs)
-        rgba = np.concatenate([rgb, np.ones((rgb.shape[0], 1), dtype=np.float32)], axis=1)
-    else:
-        cmap_name_mpl = {"spectral": "Spectral", "cool-warm": "coolwarm"}.get(cmap_name, cmap_name)
-        cmap = colormaps.get_cmap(cmap_name_mpl)
-        rgba = cmap(xs)
-    row = (rgba * 255.0).astype(np.uint8)[None, :, :]
-    arr = np.repeat(row, height, axis=0)
-    return Image.fromarray(arr, mode="RGBA")
+def fit_image(img: Image.Image, *, max_width: int, max_height: int) -> Image.Image:
+    scale = min(float(max_width) / float(img.width), float(max_height) / float(img.height), 1.0)
+    if scale >= 1.0:
+        return img
+    new_size = (
+        max(1, int(round(img.width * scale))),
+        max(1, int(round(img.height * scale))),
+    )
+    return img.resize(new_size, Image.Resampling.LANCZOS)
 
 
 def compose_figure(
     panel_paths: dict[tuple[str, str], Path],
-    scales: dict[str, tuple[float, float]],
+    colorbar_paths: dict[str, Path],
+    colorbar_crop_boxes: dict[str, tuple[int, int, int, int] | None],
     panel_ev_percentages: dict[tuple[str, str], float],
     smoothings: list[str],
     components: list[str],
     output_png: Path,
-    colorbar_cmap: str,
-    palette_name: str,
 ) -> tuple[int, int]:
     compact_panels: dict[tuple[str, str], Image.Image] = {}
     for key, path in panel_paths.items():
         raw = Image.open(path).convert("RGBA")
-        compact_panels[key] = compact_locked_panel(raw)
+        cropped = crop_to_foreground(raw, tolerance=12, padding=8)
+        compact_panels[key] = fit_image(cropped, max_width=520, max_height=470)
 
     first = compact_panels[(smoothings[0], components[0])]
     cell_w, cell_h = first.size
-    for key, path in panel_paths.items():
+    for key in panel_paths:
         im = compact_panels[key]
         cell_w = max(cell_w, im.size[0])
         cell_h = max(cell_h, im.size[1])
 
-    col_gap = 20
-    row_gap = 14
-    left_margin = 112
-    right_margin = 24
-    top_margin = 28
-    bottom_margin = 112
-    bar_h = 22
-    cell_label_h = 38
+    colorbar_imgs: dict[str, Image.Image] = {}
+    for comp in components:
+        cropped, _ = crop_workbench_colorbar(
+            source_png=colorbar_paths[comp],
+            crop_box=colorbar_crop_boxes.get(comp),
+        )
+        colorbar_imgs[comp] = cropped
 
-    out_w = left_margin + 3 * cell_w + 2 * col_gap + right_margin
-    out_h = top_margin + 2 * (cell_label_h + cell_h) + row_gap + bottom_margin
+    col_gap = 20
+    row_gap = 8
+    left_margin = 104
+    right_margin = 24
+    top_margin = 16
+    bottom_margin = 74
+    cell_label_h = 28
+
+    out_w = left_margin + len(components) * cell_w + (len(components) - 1) * col_gap + right_margin
+    out_h = top_margin + len(smoothings) * (cell_label_h + cell_h) + (len(smoothings) - 1) * row_gap + bottom_margin
     canvas = Image.new("RGBA", (out_w, out_h), (255, 255, 255, 255))
     draw = ImageDraw.Draw(canvas)
-    cell_label_font = load_font(28)
-    row_font = load_font(30)
-    tick_font = load_font(22)
+    cell_label_font = load_font(22)
+    row_font = load_font(28)
 
     x0 = left_margin
     y0 = top_margin
@@ -679,25 +999,17 @@ def compose_figure(
         ry = y0 + r * (cell_label_h + cell_h + row_gap) + cell_label_h + (cell_h - (rb[3] - rb[1])) // 2
         draw.text((28, ry), row_text, font=row_font, fill=(0, 0, 0, 255))
 
-    bar_y = y0 + 2 * (cell_label_h + cell_h) + row_gap + 34
+    bar_y = y0 + len(smoothings) * (cell_label_h + cell_h) + (len(smoothings) - 1) * row_gap + 12
     for c, comp in enumerate(components):
         px = x0 + c * (cell_w + col_gap)
-        vmin, vmax = scales[comp]
-        bar_w = int(cell_w * 0.74)
-        bx = px + (cell_w - bar_w) // 2
-        strip = make_colorbar_strip(bar_w, bar_h, colorbar_cmap, palette_name)
-        canvas.paste(strip, (bx, bar_y))
-        draw.rectangle([bx, bar_y, bx + bar_w, bar_y + bar_h], outline=(0, 0, 0, 255), width=1)
-        left_txt = f"{vmin:.3f}"
-        zero_txt = "0"
-        right_txt = f"{vmax:.3f}"
-        lb = draw.textbbox((0, 0), left_txt, font=tick_font)
-        zb = draw.textbbox((0, 0), zero_txt, font=tick_font)
-        rb = draw.textbbox((0, 0), right_txt, font=tick_font)
-        tick_y = bar_y + bar_h + 8
-        draw.text((bx - (lb[2] - lb[0]) // 2, tick_y), left_txt, font=tick_font, fill=(0, 0, 0, 255))
-        draw.text((bx + bar_w // 2 - (zb[2] - zb[0]) // 2, tick_y), zero_txt, font=tick_font, fill=(0, 0, 0, 255))
-        draw.text((bx + bar_w - (rb[2] - rb[0]) // 2, tick_y), right_txt, font=tick_font, fill=(0, 0, 0, 255))
+        src = colorbar_imgs[comp]
+        target_w = int(cell_w * 0.62)
+        if src.width <= 0 or src.height <= 0:
+            continue
+        target_h = min(52, max(16, int(round(target_w * (src.height / float(src.width))))))
+        resized = src.resize((target_w, target_h), Image.Resampling.BICUBIC)
+        bx = px + (cell_w - target_w) // 2
+        canvas.paste(resized, (bx, bar_y))
 
     output_png.parent.mkdir(parents=True, exist_ok=True)
     canvas.save(output_png)
@@ -780,11 +1092,14 @@ def main() -> int:
     smoothings = [str(s) for s in args.smoothings]
     hemis = [str(h) for h in args.hemis]
     component_names = [c.strip() for c in str(args.components).split(",") if c.strip()]
+    effective_palette = resolve_workbench_palette_name(str(args.palette))
 
     if not scene_path.exists():
         raise FileNotFoundError(f"Missing scene file: {scene_path}")
     if any(tok in str(group_root) for tok in ARCHIVE_TOKENS):
         raise RuntimeError(f"Archive path is forbidden for group root: {group_root}")
+
+    verify_workbench_palette_supported(effective_palette, runtime_root=runtime_root)
 
     combos = collect_combo_data(
         group_root=group_root,
@@ -822,7 +1137,7 @@ def main() -> int:
                 comp_vmin, comp_vmax = scales[comp]
                 apply_metric_palette(
                     metric_path=out_shape,
-                    palette_name=str(args.palette),
+                    palette_name=str(effective_palette),
                     vmin=float(comp_vmin),
                     vmax=float(comp_vmax),
                 )
@@ -830,7 +1145,10 @@ def main() -> int:
 
     panel_paths: dict[tuple[str, str], Path] = {}
     panel_meta: dict[str, dict[str, Any]] = {}
+    colorbar_sources: dict[str, dict[str, Any]] = {}
     if not args.dry_run:
+        selected_colorbar_metric_hint: str | None = None
+        ref_smoothing_for_colorbar = smoothings[0]
         for smoothing in smoothings:
             left_combo = combos[(smoothing, "L")]
             right_combo = combos[(smoothing, "R")]
@@ -847,7 +1165,7 @@ def main() -> int:
             for comp in component_names:
                 vmin, vmax = scales[comp]
                 panel_png = runtime_renders / smoothing / f"{comp}_wb_locked.png"
-                render_panel(
+                panel_render = render_panel(
                     scene_path=scene_path,
                     template_subject=left_combo.template_subject,
                     left_surface=left_combo.template_surface_path,
@@ -857,33 +1175,70 @@ def main() -> int:
                     right_shape=shape_paths[(smoothing, "R", comp)],
                     vmin=float(vmin),
                     vmax=float(vmax),
-                    palette_name=str(args.palette),
+                    palette_name=str(effective_palette),
                     out_png=panel_png,
                     width=int(args.width),
                     height=int(args.height),
                     renderer=str(args.renderer),
+                    enable_colorbar=False,
                 )
                 panel_paths[(smoothing, comp)] = panel_png.resolve()
                 panel_meta[f"{smoothing}_{comp}"] = {
-                    "panel_png": str(panel_png.resolve()),
-                    "left_shape": str(shape_paths[(smoothing, "L", comp)]),
-                    "right_shape": str(shape_paths[(smoothing, "R", comp)]),
+                    "panel_png": str(panel_render.panel_png),
+                    "left_shape": str(panel_render.left_shape),
+                    "right_shape": str(panel_render.right_shape),
                     "vmin": float(vmin),
                     "vmax": float(vmax),
                     "ev_percent": float(panel_ev_percentages[(smoothing, comp)]),
                 }
 
+                if smoothing == ref_smoothing_for_colorbar:
+                    colorbar_png = runtime_renders / "colorbars" / f"{comp}_wb_colorbar_source.png"
+                    colorbar_render = render_panel(
+                        scene_path=scene_path,
+                        template_subject=left_combo.template_subject,
+                        left_surface=left_combo.template_surface_path,
+                        right_surface=right_combo.template_surface_path,
+                        spec_path=left_combo.template_spec_path,
+                        left_shape=shape_paths[(smoothing, "L", comp)],
+                        right_shape=shape_paths[(smoothing, "R", comp)],
+                        vmin=float(vmin),
+                        vmax=float(vmax),
+                        palette_name=str(effective_palette),
+                        out_png=colorbar_png,
+                        width=int(args.width),
+                        height=int(args.height),
+                        renderer=str(args.renderer),
+                        enable_colorbar=True,
+                        selected_colorbar_metric_hint=selected_colorbar_metric_hint,
+                    )
+                    if selected_colorbar_metric_hint is None:
+                        selected_colorbar_metric_hint = colorbar_render.selected_colorbar_metric
+                    colorbar_sources[comp] = {
+                        "source_png": str(colorbar_render.panel_png),
+                        "selected_colorbar_metric": colorbar_render.selected_colorbar_metric,
+                        "crop_box": list(colorbar_render.colorbar_crop_box) if colorbar_render.colorbar_crop_box else None,
+                        "vmin": float(vmin),
+                        "vmax": float(vmax),
+                    }
+
     final_dims = None
     if not args.dry_run:
+        if set(colorbar_sources) != set(component_names):
+            raise RuntimeError(
+                f"Missing colorbar source renders. expected={component_names} got={sorted(colorbar_sources)}"
+            )
         final_dims = compose_figure(
             panel_paths=panel_paths,
-            scales=scales,
+            colorbar_paths={c: Path(str(colorbar_sources[c]["source_png"])) for c in component_names},
+            colorbar_crop_boxes={
+                c: tuple(colorbar_sources[c]["crop_box"]) if colorbar_sources[c]["crop_box"] else None
+                for c in component_names
+            },
             panel_ev_percentages=panel_ev_percentages,
             smoothings=smoothings,
             components=component_names,
             output_png=output_png,
-            colorbar_cmap=str(args.colorbar_cmap),
-            palette_name=str(args.palette),
         )
 
     manifest: dict[str, Any] = {
@@ -897,8 +1252,9 @@ def main() -> int:
         "hemis": hemis,
         "components": component_names,
         "coverage_tag": str(args.coverage_tag),
-        "palette": str(args.palette),
-        "colorbar_cmap": str(args.colorbar_cmap),
+        "palette_engine": "workbench",
+        "palette": str(effective_palette),
+        "colorbar_mode": "workbench-rendered-cropped",
         "runtime_root": str(runtime_root),
         "output_png": str(output_png),
         "output_manifest": str(output_manifest),
@@ -930,6 +1286,7 @@ def main() -> int:
             for (s, h, comp), path in shape_paths.items()
         },
         "panels": panel_meta,
+        "colorbar_sources": colorbar_sources,
     }
     if final_dims is not None:
         manifest["output_dimensions"] = {"width": int(final_dims[0]), "height": int(final_dims[1])}

@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import csv
 import hashlib
+import importlib.metadata
 import json
 import math
 import warnings
@@ -15,7 +16,6 @@ import nibabel as nib
 import numpy as np
 from nibabel.gifti import GiftiDataArray, GiftiImage, GiftiLabel, GiftiLabelTable
 from scipy import sparse
-from scipy.sparse.linalg import eigsh
 from scipy import stats
 from scipy.optimize import linear_sum_assignment
 from sklearn.cluster import SpectralClustering
@@ -71,7 +71,11 @@ SUBJECT_FC_PREPROCESS_METHODS = {"group-roi-sim-spectral", "network-spectral", "
 SUBJECT_FC_VALUE_RULE = "largest_raw_values"
 SUBJECT_FC_MODE_CHOICES = ["full", "top-percent"]
 DEFAULT_GRADIENT_COMPONENTS = (1, 2, 3)
-GRADIENT_AFFINITY_SPARSITY = 0.10
+GRADIENT_N_COMPONENTS_COMPUTED = 5
+GRADIENT_BRAINSPACE_KERNEL = "pearson"
+GRADIENT_BRAINSPACE_APPROACH = "dm"
+GRADIENT_BRAINSPACE_SPARSITY = 0.90
+GRADIENT_BRAINSPACE_RANDOM_STATE = 0
 MAX_K_EVAL_JOBS = 10
 RESUME_SIGNATURE_VERSION = 1
 
@@ -522,50 +526,86 @@ def roi_similarity_from_network_fc(fc: np.ndarray) -> np.ndarray:
     return sim.astype(np.float32)
 
 
-def build_sparse_gradient_affinity(features: np.ndarray, sparsity: float = GRADIENT_AFFINITY_SPARSITY) -> sparse.csr_matrix:
-    unit = np.asarray(features, dtype=np.float32)
-    if unit.ndim != 2:
-        raise ValueError(f"Expected 2D group FC feature matrix, got shape={unit.shape}")
-    norms = np.linalg.norm(unit, axis=1, keepdims=True)
-    unit = unit / np.clip(norms, 1e-12, None)
-    sim = unit @ unit.T
-    sim = np.clip(sim, -1.0, 1.0)
-    aff = (sim + 1.0) * 0.5
-    np.fill_diagonal(aff, 1.0)
-
-    n_vertices = int(aff.shape[0])
-    n_keep = max(10, int(round((n_vertices - 1) * float(sparsity))))
-    n_keep = min(n_vertices, n_keep + 1)
-    keep_idx = np.argpartition(aff, kth=n_vertices - n_keep, axis=1)[:, -n_keep:]
-    rows = np.repeat(np.arange(n_vertices), n_keep)
-    cols = keep_idx.reshape(-1)
-    vals = aff[rows, cols]
-
-    graph = sparse.csr_matrix((vals, (rows, cols)), shape=(n_vertices, n_vertices), dtype=np.float32)
-    graph = graph.maximum(graph.T)
-    graph.setdiag(1.0)
-    graph.eliminate_zeros()
-    return graph
+def brainspace_version() -> str:
+    try:
+        return str(importlib.metadata.version("brainspace"))
+    except importlib.metadata.PackageNotFoundError:
+        return "missing"
 
 
-def diffusion_map_gradients(affinity: sparse.csr_matrix, n_components: int) -> tuple[np.ndarray, np.ndarray]:
-    degree = np.asarray(affinity.sum(axis=1)).ravel().astype(np.float32)
-    inv_sqrt = 1.0 / np.sqrt(np.clip(degree, 1e-12, None))
-    d_inv = sparse.diags(inv_sqrt)
-    sym = d_inv @ affinity @ d_inv
-
-    n_eigs = min(sym.shape[0] - 1, int(n_components) + 1)
-    if n_eigs < int(n_components) + 1:
+def _extract_brainspace_array(model: object, primary_name: str, fallback_name: str, label: str) -> np.ndarray:
+    raw = getattr(model, primary_name, None)
+    if raw is None:
+        raw = getattr(model, fallback_name, None)
+    if raw is None:
         raise RuntimeError(
-            f"Not enough supported vertices to compute G1..G{n_components}: "
-            f"n_vertices={sym.shape[0]}"
+            f"BrainSpace fit output missing `{primary_name}`/`{fallback_name}` for {label}"
         )
-    eigvals, eigvecs = eigsh(sym.astype(np.float32), k=n_eigs, which="LA")
-    order = np.argsort(eigvals)[::-1]
-    eigvals = eigvals[order]
-    eigvecs = eigvecs[:, order]
-    gradients = eigvecs[:, 1 : int(n_components) + 1] * eigvals[1 : int(n_components) + 1]
-    return gradients.astype(np.float32), eigvals.astype(np.float32)
+    if isinstance(raw, list):
+        if len(raw) != 1:
+            raise RuntimeError(f"Expected a single dataset in BrainSpace {label}, got {len(raw)} entries")
+        raw = raw[0]
+    arr = np.asarray(raw, dtype=np.float32)
+    if arr.size == 0:
+        raise RuntimeError(f"BrainSpace {label} is empty")
+    return arr
+
+
+def brainspace_diffusion_gradients(
+    features: np.ndarray,
+    *,
+    n_components: int = GRADIENT_N_COMPONENTS_COMPUTED,
+    sparsity: float = GRADIENT_BRAINSPACE_SPARSITY,
+    random_state: int = GRADIENT_BRAINSPACE_RANDOM_STATE,
+    gradient_maps_cls: object | None = None,
+) -> tuple[np.ndarray, np.ndarray]:
+    group_fc = np.asarray(features, dtype=np.float32)
+    if group_fc.ndim != 2:
+        raise ValueError(f"Expected 2D group FC feature matrix, got shape={group_fc.shape}")
+    n_comp = int(n_components)
+    if n_comp <= 0:
+        raise ValueError(f"n_components must be positive, got {n_components}")
+    if int(group_fc.shape[0]) <= n_comp:
+        raise RuntimeError(
+            f"Not enough supported vertices to compute G1..G{n_comp}: n_vertices={group_fc.shape[0]}"
+        )
+
+    if gradient_maps_cls is None:
+        try:
+            from brainspace.gradient import GradientMaps as gradient_maps_cls_local
+        except Exception as exc:
+            raise RuntimeError(
+                "BrainSpace is required for gradient-spectral embedding. "
+                "Install it in py314 (expected: brainspace==0.2.1)."
+            ) from exc
+        gradient_maps_cls = gradient_maps_cls_local
+
+    model = gradient_maps_cls(
+        n_components=n_comp,
+        approach=GRADIENT_BRAINSPACE_APPROACH,
+        kernel=GRADIENT_BRAINSPACE_KERNEL,
+        random_state=int(random_state),
+    )
+    fitted = model.fit(group_fc, sparsity=float(sparsity))
+    model_out = fitted if fitted is not None else model
+
+    gradients = _extract_brainspace_array(model_out, "gradients_", "gradients", "gradients")
+    lambdas = _extract_brainspace_array(model_out, "lambdas_", "lambdas", "lambdas").reshape(-1)
+    if gradients.ndim != 2:
+        raise RuntimeError(f"Expected 2D BrainSpace gradients, got shape={gradients.shape}")
+    if gradients.shape[1] < n_comp:
+        raise RuntimeError(
+            f"BrainSpace returned {gradients.shape[1]} gradients, expected at least {n_comp}"
+        )
+    if lambdas.size < n_comp:
+        raise RuntimeError(f"BrainSpace returned {lambdas.size} lambdas, expected at least {n_comp}")
+
+    gradients = gradients[:, :n_comp]
+    gradients[~np.isfinite(gradients)] = 0.0
+    lambdas = lambdas[:n_comp]
+    if not np.all(np.isfinite(lambdas)):
+        raise RuntimeError(f"BrainSpace lambdas contain non-finite values: {lambdas.tolist()}")
+    return gradients.astype(np.float32), lambdas.astype(np.float32)
 
 
 def build_group_gradient_features(
@@ -586,16 +626,26 @@ def build_group_gradient_features(
     stack = np.stack(mats, axis=0).astype(np.float32)
     group_fc = np.nanmean(stack, axis=0)
     group_fc[~np.isfinite(group_fc)] = 0.0
-    affinity = build_sparse_gradient_affinity(group_fc, sparsity=GRADIENT_AFFINITY_SPARSITY)
-    gradients, eigvals = diffusion_map_gradients(affinity, n_components=max(comps))
+    gradients, lambdas = brainspace_diffusion_gradients(
+        group_fc,
+        n_components=GRADIENT_N_COMPONENTS_COMPUTED,
+        sparsity=GRADIENT_BRAINSPACE_SPARSITY,
+        random_state=GRADIENT_BRAINSPACE_RANDOM_STATE,
+    )
     selected = gradients[:, [int(c) - 1 for c in comps]]
     selected[~np.isfinite(selected)] = 0.0
     meta = {
         "gradient_components": [int(c) for c in comps],
         "gradient_component_labels": [f"G{int(c)}" for c in comps],
-        "gradient_affinity_sparsity": float(GRADIENT_AFFINITY_SPARSITY),
+        "gradient_embedding_engine": "brainspace",
+        "brainspace_version": brainspace_version(),
+        "kernel": GRADIENT_BRAINSPACE_KERNEL,
+        "approach": GRADIENT_BRAINSPACE_APPROACH,
+        "brainspace_sparsity": float(GRADIENT_BRAINSPACE_SPARSITY),
+        "n_components_computed": int(GRADIENT_N_COMPONENTS_COMPUTED),
+        "components_displayed": [int(c) for c in DEFAULT_GRADIENT_COMPONENTS],
         "group_vertex_to_roi_fc_shape": [int(v) for v in group_fc.shape],
-        "gradient_eigenvalues": [float(v) for v in eigvals],
+        "gradient_eigenvalues": [float(v) for v in lambdas],
     }
     return selected.astype(np.float32), meta
 
@@ -2528,7 +2578,8 @@ def main() -> int:
         "--gradient-components",
         default="1,2,3",
         help="Comma-separated gradient components for gradient-spectral clustering. "
-             "Supported examples: 1, 2, 3, 1,2, 1,2,3. Default: 1,2,3.",
+             "Supported examples: 1, 2, 3, 1,2, 1,2,3. Default: 1,2,3. "
+             "Embedding always computes G1-G5 via BrainSpace; this option selects clustering columns.",
     )
     parser.add_argument("--resume", action="store_true", help="Skip combos that already have group_atlas_manifest.json.")
     parser.add_argument("--k-selection-mode", default="experimental", choices=["experimental", "redundancy-aware"])

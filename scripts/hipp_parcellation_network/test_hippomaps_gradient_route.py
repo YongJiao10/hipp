@@ -6,6 +6,7 @@ import math
 import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 import numpy as np
 from PIL import Image
@@ -123,6 +124,12 @@ def test_gradientmaps_called_with_official_pearson_kernel_and_full_lambda_ev() -
     assert np.allclose(ev, [0.5, 0.3, 0.2])
 
 
+def test_compute_defaults_to_five_components_like_hippomaps_paper() -> None:
+    with patch.object(sys, "argv", ["05_03_compute_hippomaps_gradients.py"]):
+        args = compute_mod.parse_args()
+    assert int(args.n_components) == 5
+
+
 def test_full_surface_reconstruction_keeps_nan_outside_support() -> None:
     active = np.asarray([[1.0, 2.0], [3.0, 4.0]], dtype=np.float32)
     support = np.asarray([False, True, False, True], dtype=bool)
@@ -228,6 +235,7 @@ def test_annotate_gradient_image_adds_left_margin_and_ev_labels() -> None:
 def main() -> int:
     test_group_mean_fc_applies_fisher_z_before_averaging()
     test_gradientmaps_called_with_official_pearson_kernel_and_full_lambda_ev()
+    test_compute_defaults_to_five_components_like_hippomaps_paper()
     test_full_surface_reconstruction_keeps_nan_outside_support()
     test_endpoint_fc_contrast_uses_top_minus_bottom_gradient_quartiles()
     test_render_gradient_figure_calls_official_hippomaps_plotter_options()

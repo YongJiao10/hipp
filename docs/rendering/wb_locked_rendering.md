@@ -53,7 +53,10 @@ The maintained continuous gradient figure artifact is:
 
 This output is generated from active `gradient-spectral` RouteA full outputs only
 (`2mm` and `4mm`, `G1-G3`) and uses symmetric per-component min/max scaling across
-both smoothings and both hemispheres. The heatmap renderer uses a `plasma`
-palette and labels each smoothing/component cell as `G# EV=xx.x%`, where EV is
-the mean left/right share of that component's non-trivial diffusion eigenvalue
-among the exported non-trivial eigenvalues for that smoothing.
+both smoothings and both hemispheres. The renderer uses a single Workbench-native
+palette source (`palette_engine=workbench`) with default `palette=magma`.
+`plasma` is not a default and is not auto-mapped. Surface colors and bottom
+colorbars are both rendered by Workbench from the same metric palette settings;
+Pillow is used only for panel composition/cropping/text layout. Each cell is
+labeled `G# EV=xx.x%`, where EV is the mean left/right share of that component's
+eigenvalue among exported BrainSpace `G1-G5` eigenvalues for that smoothing.

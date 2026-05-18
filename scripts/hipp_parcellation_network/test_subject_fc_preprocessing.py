@@ -27,6 +27,7 @@ def _load_numbered_module(script_name: str, alias: str):
 
 atlas_mod = _load_numbered_module("05_01_run_group_atlas.py", "core_05_01_run_group_atlas")
 build_group_gradient_features = atlas_mod.build_group_gradient_features
+brainspace_diffusion_gradients = atlas_mod.brainspace_diffusion_gradients
 group_feature_matrix = atlas_mod.group_feature_matrix
 method_uses_network_fc_input = atlas_mod.method_uses_network_fc_input
 method_uses_subject_fc_preprocessing = atlas_mod.method_uses_subject_fc_preprocessing
@@ -212,57 +213,102 @@ def test_group_feature_matrix_matches_preprocessed_subject_average() -> None:
 
 
 def test_group_gradient_features_average_subject_roi_fc_then_select_components() -> None:
-    subj_a = np.array(
-        [
-            [1.0, 0.0, 0.0, 0.0],
-            [0.9, 0.1, 0.0, 0.0],
-            [0.0, 0.8, 0.2, 0.0],
-            [0.0, 0.0, 0.9, 0.1],
-            [0.0, 0.0, 0.1, 0.9],
-            [0.1, 0.0, 0.0, 0.9],
-        ],
-        dtype=np.float32,
-    )
+    rng = np.random.RandomState(2026)
+    subj_a = rng.randn(8, 12).astype(np.float32)
     subj_b = subj_a + np.float32(0.05)
-    support = np.array([True, True, True, True, True, False], dtype=bool)
+    support = np.array([True, True, True, True, True, True, True, True], dtype=bool)
 
-    features, meta = build_group_gradient_features(
-        feature_bank={"a": subj_a, "b": subj_b},
-        subjects_subset=["a", "b"],
-        support_mask=support,
-        gradient_components=parse_gradient_components("1,2"),
-    )
+    def fake_brainspace(group_fc: np.ndarray, **kwargs):
+        n = int(group_fc.shape[0])
+        grads = np.tile(np.asarray([[1.0, 2.0, 3.0, 4.0, 5.0]], dtype=np.float32), (n, 1))
+        lambdas = np.asarray([5.0, 4.0, 3.0, 2.0, 1.0], dtype=np.float32)
+        return grads, lambdas
 
-    assert features.shape == (5, 2), features.shape
+    old = atlas_mod.brainspace_diffusion_gradients
+    atlas_mod.brainspace_diffusion_gradients = fake_brainspace
+    try:
+        features, meta = build_group_gradient_features(
+            feature_bank={"a": subj_a, "b": subj_b},
+            subjects_subset=["a", "b"],
+            support_mask=support,
+            gradient_components=parse_gradient_components("1,2"),
+        )
+    finally:
+        atlas_mod.brainspace_diffusion_gradients = old
+
+    assert features.shape == (8, 2), features.shape
     assert np.all(np.isfinite(features)), features
     assert meta["gradient_components"] == [1, 2], meta
-    assert meta["group_vertex_to_roi_fc_shape"] == [5, 4], meta
+    assert meta["group_vertex_to_roi_fc_shape"] == [8, 12], meta
+    assert meta["gradient_embedding_engine"] == "brainspace", meta
+    assert meta["kernel"] == "pearson", meta
+    assert meta["approach"] == "dm", meta
+    assert float(meta["brainspace_sparsity"]) == 0.9, meta
+    assert int(meta["n_components_computed"]) == 5, meta
+    assert meta["components_displayed"] == [1, 2, 3], meta
+    assert len(meta["gradient_eigenvalues"]) == 5, meta
+
+
+def test_brainspace_adapter_uses_expected_parameters() -> None:
+    calls: dict[str, object] = {}
+
+    class FakeGradientMaps:
+        def __init__(self, n_components: int, approach: str, kernel: str, random_state: int):
+            calls["init"] = {
+                "n_components": int(n_components),
+                "approach": str(approach),
+                "kernel": str(kernel),
+                "random_state": int(random_state),
+            }
+            self.gradients_ = np.arange(30, dtype=np.float32).reshape(6, 5)
+            self.lambdas_ = np.array([5.0, 4.0, 3.0, 2.0, 1.0], dtype=np.float32)
+
+        def fit(self, x: np.ndarray, sparsity: float):
+            calls["fit"] = {
+                "shape": tuple(np.asarray(x).shape),
+                "sparsity": float(sparsity),
+            }
+            return self
+
+    x = np.arange(24, dtype=np.float32).reshape(6, 4)
+    grads, lambdas = brainspace_diffusion_gradients(x, gradient_maps_cls=FakeGradientMaps)
+    assert calls["init"] == {
+        "n_components": 5,
+        "approach": "dm",
+        "kernel": "pearson",
+        "random_state": 0,
+    }, calls
+    assert calls["fit"] == {"shape": (6, 4), "sparsity": 0.9}, calls
+    assert grads.shape == (6, 5), grads.shape
+    assert lambdas.shape == (5,), lambdas.shape
 
 
 def test_group_feature_matrix_gradient_spectral_uses_selected_gradient_columns() -> None:
-    subj_a = np.array(
-        [
-            [1.0, 0.0, 0.0, 0.0],
-            [0.9, 0.1, 0.0, 0.0],
-            [0.0, 0.8, 0.2, 0.0],
-            [0.0, 0.0, 0.9, 0.1],
-            [0.0, 0.0, 0.1, 0.9],
-            [0.1, 0.0, 0.0, 0.9],
-        ],
-        dtype=np.float32,
-    )
+    rng = np.random.RandomState(2027)
+    subj_a = rng.randn(8, 12).astype(np.float32)
     subj_b = subj_a + np.float32(0.05)
-    support = np.array([True, True, True, True, True, False], dtype=bool)
+    support = np.array([True, True, True, True, True, True, True, True], dtype=bool)
 
-    got = group_feature_matrix(
-        method="gradient-spectral",
-        feature_bank={"a": subj_a, "b": subj_b},
-        subjects_subset=["a", "b"],
-        support_mask=support,
-        gradient_components=(1, 2, 3),
-    )
+    def fake_brainspace(group_fc: np.ndarray, **kwargs):
+        n = int(group_fc.shape[0])
+        grads = np.tile(np.asarray([[2.0, 1.0, -1.0, 0.5, 0.25]], dtype=np.float32), (n, 1))
+        lambdas = np.asarray([5.0, 4.0, 3.0, 2.0, 1.0], dtype=np.float32)
+        return grads, lambdas
 
-    assert got.shape == (5, 3), got.shape
+    old = atlas_mod.brainspace_diffusion_gradients
+    atlas_mod.brainspace_diffusion_gradients = fake_brainspace
+    try:
+        got = group_feature_matrix(
+            method="gradient-spectral",
+            feature_bank={"a": subj_a, "b": subj_b},
+            subjects_subset=["a", "b"],
+            support_mask=support,
+            gradient_components=(1, 2, 3),
+        )
+    finally:
+        atlas_mod.brainspace_diffusion_gradients = old
+
+    assert got.shape == (8, 3), got.shape
     assert np.all(np.isfinite(got)), got
 
 
@@ -356,6 +402,7 @@ def main() -> int:
     test_roi_similarity_from_network_fc_is_symmetric_and_finite_with_diag0()
     test_group_feature_matrix_matches_preprocessed_subject_average()
     test_group_gradient_features_average_subject_roi_fc_then_select_components()
+    test_brainspace_adapter_uses_expected_parameters()
     test_group_feature_matrix_gradient_spectral_uses_selected_gradient_columns()
     test_group_feature_matrix_roi_similarity_method_uses_square_branch()
     test_network_input_gate_includes_roi_similarity_method()

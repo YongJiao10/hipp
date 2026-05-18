@@ -73,9 +73,10 @@ This route uses the same Fisher-z transform before group averaging, applies
 column-wise feature z-score across vertices, then calls
 `GradientMaps(n_components=N, kernel="pearson")` on the z-scored group mean
 Kong2022 vertex-to-ROI FC. It saves continuous full-surface gradients, full
-lambdas, EV fractions, and group mean FC. It is upstream of visualization only
-in this phase; `gradient-spectral` clustering behavior remains in `05_01`
-unchanged.
+lambdas, EV fractions, and group mean FC. The default computes five components,
+retains BrainSpace default `sparsity=0.9`, and renders G1-G3. It is upstream of
+visualization only in this phase; `gradient-spectral` clustering behavior
+remains in `05_01` unchanged.
 
 ## 6. Output Materialization and Presentation
 

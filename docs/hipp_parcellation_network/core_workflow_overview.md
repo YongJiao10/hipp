@@ -45,7 +45,10 @@ imports official package code from `external/hippomaps`, calls
 `brainspace.gradient.GradientMaps(n_components=N, kernel="pearson")` on the
 column-wise z-scored group mean Fisher-z vertex-to-Kong2022 ROI FC matrix, and
 saves continuous full-surface gradients with NaNs outside the support mask, the
-full lambda vector, EV fractions, and the group mean FC. `06_05` uses
+full lambda vector, EV fractions, and the group mean FC. The default computes
+five components, matching the HippoMaps paper's maximum component count, while
+presentation shows G1-G3. BrainSpace default sparsity is retained for this
+within-method rsfMRI-style reduction. `06_05` uses
 `hippomaps.plotting.surfplot_canonical_foldunfold` with `cmap="plasma"`,
 `tighten_cwindow=True`, `share="row"`, and `color_bar="right"` for
 folded/unfolded hippocampal gradient figures, plus EV and top-25% minus
