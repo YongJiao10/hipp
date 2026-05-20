@@ -34,49 +34,42 @@ Recommended manifest output pattern:
 
 ## 5. Group Atlas Construction
 
-1. `05_01_run_group_atlas.py`
-2. `05_02_run_spectral_fast_rerun.py` (optional urgent rerun)
-3. `05_03_compute_hippomaps_gradients.py` (optional continuous HippoMaps-style route)
+1. `05_03_compute_hippomaps_gradients.py` for Kong2022 gradient artifacts
+2. `05_01_run_group_atlas.py` for fixed-K group atlas outputs
+3. `05_02_run_spectral_fast_rerun.py` (legacy/optional urgent rerun)
 
-Kong2022 group-gradient branch example:
-
-```bash
-/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/05_01_run_group_atlas.py \
-  --methods gradient-spectral \
-  --atlases kong2022 \
-  --gradient-components 1,2,3
-```
-
-`--gradient-components` accepts `1`, `2`, `3`, `1,2`, and `1,2,3`; `1,2,3` is
-the default. The branch computes diffusion gradients from group-averaged
-Kong2022 vertex-to-ROI FC using BrainSpace (`GradientMaps`,
-`approach="dm"`, `kernel="pearson"`, `n_components=5`, `sparsity=0.9`) and
-then uses selected gradient columns as the spectral clustering feature matrix.
-BrainSpace `sparsity=0.9` here means the smallest 90% of row values are
-zeroed (top 10% retained). This branch should be interpreted as a
-full-continuous FC analysis: do not treat `top-percent` / `10perc` sparsified
-and binarized FC as the default gradient input or as a maintained overview-mode
-split.
-
-Concurrency policy reminder: keep public batch launches at `<=10` jobs.
-
-HippoMaps-style continuous gradient example:
+Kong2022 HippoMaps gradient artifact example:
 
 ```bash
 /home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/05_03_compute_hippomaps_gradients.py \
   --routes routea routeb \
   --smoothings 2mm 4mm \
-  --hemis L R
+  --hemis L R \
+  --n-components 5 \
+  --selected-components 1,2,3
 ```
 
-This route uses the same Fisher-z transform before group averaging, applies
-column-wise feature z-score across vertices, then calls
+Kong2022 group-gradient clustering example:
+
+```bash
+/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/05_01_run_group_atlas.py \
+  --methods intrinsic-spectral network-spectral gradient-spectral wta-top \
+  --atlases kong2022 \
+  --gradient-root outputs_core/hcp7t_hippocampus/runs/<run_id>/gradients \
+  --route-tag routea \
+  --k-min 3 --k-max 3 --force-final-k 3
+```
+
+`05_03` keeps the Fisher-z transform before group averaging, applies column-wise
+feature z-score across vertices, then calls
 `GradientMaps(n_components=N, kernel="pearson")` on the z-scored group mean
 Kong2022 vertex-to-ROI FC. It saves continuous full-surface gradients, full
-lambdas, EV fractions, and group mean FC. The default computes five components,
-retains BrainSpace default `sparsity=0.9`, and renders G1-G3. It is upstream of
-visualization only in this phase; `gradient-spectral` clustering behavior
-remains in `05_01` unchanged.
+lambdas, EV fractions, and group mean FC. `05_01` loads those artifacts for
+`gradient-spectral` and selects `G1,G2,G3` by default. The legacy auto-K logic
+remains in code behind `--auto-k`, but fixed final `K=3` is the maintained
+default. Public partial-correlation spectral methods are retired.
+
+Concurrency policy reminder: keep public batch launches at `<=10` jobs.
 
 ## 6. Output Materialization and Presentation
 
@@ -84,33 +77,26 @@ remains in `05_01` unchanged.
 2. `06_01_build_group_overview.py`
 3. `06_04_build_cluster_cortex_panels.py`
 4. `06_02_build_group_matrix.py`
-5. `06_05_render_hippomaps_gradient_products.py` (optional HippoMaps continuous gradient products)
-6. `06_05_render_group_gradient_heatmaps.py` (legacy/optional RouteA `gradient-spectral` locked Workbench G1-G3 heatmap figure)
+5. `06_05_render_hippomaps_gradient_products.py`
+6. `06_05_render_group_gradient_heatmaps.py` (legacy/optional locked Workbench heatmap)
 
-Maintained matrix note:
+Maintained output layout:
 
-- `network-spectral` and `intrinsic-spectral` keep the `10perc/full` mode split.
-- `gradient-spectral` exports route-level overviews from available `*_full`
-  group roots only and does not use a `10perc` branch.
-- Optional presentation artifact for RouteA full: a locked-scene 2x3 heatmap figure
-  (`2mm`/`4mm` rows, `G1`/`G2`/`G3` columns) written to
-  `present_group_t1only/kong2022_gradient-spectral_group_gradients_heatmap_routea_2mm4mm_g1g2g3.png`.
-  The renderer uses Workbench as the single color engine (`palette_engine=workbench`)
-  with default `palette=magma`; unsupported palette requests (for example `plasma`)
-  fail directly and are not auto-mapped. Surface colors and bottom colorbars are
-  both rendered by Workbench from identical metric palette ranges, and Pillow
-  only performs composition/cropping/text layout. Cells are annotated as
-  `G# EV=xx.x%`, using the mean left/right share of that component's eigenvalue
-  among exported BrainSpace `G1-G5` eigenvalues for that smoothing.
-- HippoMaps continuous-gradient presentation uses official
-  `surfplot_canonical_foldunfold` folded/unfolded surfaces with `plasma`,
-  `unfoldAPrescale=False` for `den=512`, `tighten_cwindow=True`, row-shared
-  scaling, right color bars, EV plots from the full lambda vector, and
-  top/bottom 25% endpoint FC contrast plots. For `den=512`, it treats `512` as
-  HippoMaps v2 in the current Python process; no AP surfarea rescale is used.
-  It reads `05_03` outputs and does not mutate clustering outputs. The default
-  render is bilateral; pass `--hemis L` or `--hemis R` to write
-  single-hemisphere products with hemisphere-tagged filenames.
+- Run root: `outputs_core/hcp7t_hippocampus/runs/<run_id>/`
+- Smoke setup: `00_01_prepare_smoke_run.py` writes `inputs/subjects_smoke5.txt`,
+  `manifests/smoke_command_manifest.json`, and `manifests/run_smoke_commands.sh`.
+- All method overview PNGs: `present/overviews/` under the run root.
+- Continuous HippoMaps gradient products: `present/gradients/`.
+- Cortex/hippocampus panels: `present/cortex_panels/`.
+- The maintained matrix uses fixed full-FC route roots only; no `10perc/full`
+  presentation split and no `present_fixedk` directory are canonical.
+
+HippoMaps continuous-gradient presentation uses official
+`surfplot_canonical_foldunfold` folded/unfolded surfaces with `plasma`,
+`unfoldAPrescale=False` for `den=512`, `tighten_cwindow=True`, row-shared
+scaling, right color bars, EV plots from the full lambda vector, and top/bottom
+25% endpoint FC contrast plots. For `den=512`, it treats `512` as HippoMaps v2
+in the current Python process; no AP surfarea rescale is used.
 
 ## Branch Smoke Targets
 

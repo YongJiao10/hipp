@@ -30,72 +30,55 @@ Use numbered public entrypoints in `scripts/core_workflow/`:
 - Kong2022 RouteA branch:
   - may include RouteA reference build (`03_02_build_kong2022_routea_reference`)
   - uses `04_01`, `04_02`, `05_01`, optional `05_02`
-  - may run `gradient-spectral` in `05_01` from group-averaged Kong2022 vertex-to-ROI FC
+  - may run `05_03` HippoMaps gradients followed by `gradient-spectral` in `05_01`
 - Kong2022 RouteB branch:
   - uses shared Kong2022 reference build (`03_01`) and standard FC stages
   - uses `05_01`, optional `05_02`
-  - may run `gradient-spectral` in `05_01` from group-averaged Kong2022 vertex-to-ROI FC
+  - may run `05_03` HippoMaps gradients followed by `gradient-spectral` in `05_01`
 
 ## Gradient-Spectral Branch
 
-`gradient-spectral` is a Kong2022-only group atlas method. It consumes the same
-vertex-to-ROI FC caches as the Kong2022 network/WTA branches, averages those FC
-profiles across the active cohort at group level, computes diffusion gradients
-with BrainSpace (`GradientMaps`, `approach="dm"`, `kernel="pearson"`), and
-clusters selected gradient columns. Embedding is computed as `G1-G5` with
-`sparsity=0.9` in BrainSpace semantics (zero-out the smallest 90% per row,
-keep top 10%). Clustering display defaults remain `G1,G2,G3`; valid selected
-sets are still `G1`, `G2`, `G3`, and `G1,G2`. Because the embedding is derived
-from group-averaged continuous FC profiles, this branch is maintained as a
-full-FC route-level analysis. The `top-percent` / `10perc` sparsified and
-binarized FC mode used for some discrete clustering comparisons is not a
-maintained gradient branch.
+`gradient-spectral` is a Kong2022-only group atlas method. `05_03` first
+computes HippoMaps/BrainSpace continuous gradients from the RouteA/RouteB
+Kong2022 vertex-to-ROI FC caches: Fisher-z per subject, group mean, column-wise
+feature z-score across vertices, then
+`GradientMaps(n_components=N, kernel="pearson")`. The default computes G1-G5
+and records lambdas/EV fractions.
 
-For RouteA full outputs, optional presentation rendering may export the locked
-2x3 continuous heatmap figure (`2mm`/`4mm` x `G1`/`G2`/`G3`) via
-`06_05_render_group_gradient_heatmaps.py`, producing:
-`present_group_t1only/kong2022_gradient-spectral_group_gradients_heatmap_routea_2mm4mm_g1g2g3.png`
-with companion manifest JSON. The renderer is Workbench-only for color mapping
-(`palette_engine=workbench`, default `palette=magma`), and does not auto-map
-unsupported palette names such as `plasma`. Surface and colorbar colors are
-both rendered by Workbench from the same metric palette metadata, while Pillow
-only handles final composition/cropping/text layout. Each heatmap cell is
-labeled `G# EV=xx.x%`; EV is the left/right-averaged share of that component's
-eigenvalue among exported BrainSpace `G1-G5` eigenvalues for the same
-smoothing.
+`05_01_run_group_atlas.py` then consumes those saved artifacts from
+`--gradient-root` for `gradient-spectral` and clusters selected gradient columns
+(`G1,G2,G3` by default). Fixed final `K=3` is the maintained default for all
+public presentation outputs. The legacy automatic K selector remains available
+through `--auto-k` but is no longer the default policy. The partial-correlation
+spectral branches are retired from public method choices.
+
+Because the embedding is derived from group-averaged continuous FC profiles,
+`gradient-spectral` is maintained as a full-FC route-level analysis. The
+`top-percent` / `10perc` sparsified and binarized FC mode is not a maintained
+presentation split.
 
 ## HippoMaps-Style Continuous Gradient Route
 
-`05_03_compute_hippomaps_gradients.py` is a separate Kong2022 RouteA/RouteB
-continuous-gradient route. It consumes the QC-passed 151-subject manifest, the
-existing RouteA/RouteB Kong2022 vertex-to-ROI FC caches from `04_01`, the
-existing surface support masks, and group-average hippocampal surfaces. It
-applies the same Fisher-z transform used by maintained FC preprocessing before
-subject averaging, applies column-wise feature z-score across vertices, then
-fits the official-style BrainSpace call
-`GradientMaps(n_components=N, kernel="pearson")` to the z-scored group mean
-vertex-to-ROI FC matrix. Outputs include group mean Fisher-z FC, active and
-full-surface gradient arrays, selected `G1`-`G3` full arrays with NaNs outside
-support, the full returned lambda vector, EV fractions computed from that full
-vector, and a manifest recording source FC paths, subject count, vertex count,
+`05_03_compute_hippomaps_gradients.py` consumes the QC-passed subject manifest,
+RouteA/RouteB Kong2022 vertex-to-ROI FC caches from `04_01`, surface support
+masks, and group-average hippocampal surfaces. Outputs include group mean
+Fisher-z FC, active and full-surface gradient arrays, selected `G1`-`G3` full
+arrays with NaNs outside support, the full returned lambda vector, EV fractions,
+and a manifest recording source FC paths, subject count, vertex count,
 `external/hippomaps` import path, and HippoMaps commit.
-The default computes five components and retains BrainSpace default
-`sparsity=0.9`, consistent with the paper's within-method dimensionality
-reduction description; only G1-G3 are rendered.
 
 `06_05_render_hippomaps_gradient_products.py` renders this continuous route
 with official HippoMaps plotting code:
 `hippomaps.plotting.surfplot_canonical_foldunfold(..., cmap="plasma",
 unfoldAPrescale=False for den=512, tighten_cwindow=True, share="row",
-color_bar="right")`. For `den=512`, the renderer treats `512` as HippoMaps v2
-in the current Python process; no AP surfarea rescale is used. It also writes EV
-plots and Kong2022 ROI FC contrast plots comparing vertices in the top 25% vs
-bottom 25% of each gradient. The default render is bilateral; `--hemis L` or
-`--hemis R` writes single-hemisphere gradient, EV, endpoint-contrast, and
-manifest files with hemisphere tags in the filenames. This route is upstream
-and continuous only. It does not change K selection, regularization, label
-assignment, or the downstream
-`gradient-spectral` clustering outputs in `05_01`.
+color_bar="right")`. It also writes EV plots and Kong2022 ROI FC contrast plots
+comparing vertices in the top 25% vs bottom 25% of each gradient.
+
+Canonical run outputs live under
+`outputs_core/hcp7t_hippocampus/runs/<run_id>/`: all maintained method overview
+PNGs in `present/overviews/`, continuous gradient products in
+`present/gradients/`, cortex panels in `present/cortex_panels/`, and manifests
+under `manifests/`.
 
 ## Default Cohort Reminder
 

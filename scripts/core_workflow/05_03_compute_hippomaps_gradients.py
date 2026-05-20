@@ -200,7 +200,7 @@ def compute_combo(
         "hemi": hemi,
         "method": "hippomaps-gradient",
         "product_role": "continuous_upstream_gradient",
-        "clustering_status": "not_changed_downstream_gradient_spectral_remains_separate",
+        "clustering_status": "consumed_by_05_01_gradient_spectral_when_gradient_root_points_here",
         "subjects_manifest": str(subjects_manifest.resolve()),
         "n_subjects": int(len(subjects)),
         "subjects": [f"sub-{s}" for s in subjects],

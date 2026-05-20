@@ -16,6 +16,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 from nibabel.gifti import GiftiDataArray, GiftiImage
 
+from lib.output_layout import DEFAULT_GRADIENTS_DIR
 from lib.workbench import run_workbench
 
 
@@ -28,17 +29,9 @@ DEFAULT_GROUP_ROOT = (
     / "hipp_group_merged_canonical_atlas_routea_full"
 )
 DEFAULT_SCENE = REPO_ROOT / "config" / "wb_locked_native_view_lateral_medial.scene"
-DEFAULT_OUT_PNG = (
-    REPO_ROOT
-    / "present_group_t1only"
-    / "kong2022_gradient-spectral_group_gradients_heatmap_routea_2mm4mm_g1g2g3.png"
-)
-DEFAULT_OUT_MANIFEST = (
-    REPO_ROOT
-    / "present_group_t1only"
-    / "kong2022_gradient-spectral_group_gradients_heatmap_routea_2mm4mm_g1g2g3_manifest.json"
-)
-DEFAULT_RUNTIME_ROOT = REPO_ROOT / "present_group_t1only" / "group_gradient_heatmaps" / "runtime" / "routea_full"
+DEFAULT_OUT_PNG = DEFAULT_GRADIENTS_DIR / "kong2022_gradient-spectral_group_gradients_heatmap_routea_2mm4mm_g1g2g3.png"
+DEFAULT_OUT_MANIFEST = DEFAULT_GRADIENTS_DIR / "kong2022_gradient-spectral_group_gradients_heatmap_routea_2mm4mm_g1g2g3_manifest.json"
+DEFAULT_RUNTIME_ROOT = DEFAULT_GRADIENTS_DIR / "group_gradient_heatmaps" / "runtime" / "routea_full"
 
 METHOD = "gradient-spectral"
 ATLAS = "kong2022"

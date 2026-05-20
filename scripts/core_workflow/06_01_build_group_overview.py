@@ -16,19 +16,18 @@ from matplotlib.patches import Rectangle
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from nibabel.gifti import GiftiDataArray, GiftiImage, GiftiLabel, GiftiLabelTable
 
+from lib.output_layout import DEFAULT_OVERVIEWS_DIR
 from lib.surface_utils import long_axis_order, render_locked_grid
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_GROUP_ROOT = REPO_ROOT / "outputs_migration" / "hipp_group_merged_canonical_atlas"
-DEFAULT_PRESENT_DIR = REPO_ROOT / "present_group"
+DEFAULT_PRESENT_DIR = DEFAULT_OVERVIEWS_DIR
 DEFAULT_SCENE = REPO_ROOT / "config" / "wb_locked_native_view_lateral_medial.scene"
 METHOD_CHOICES = [
     "network-spectral",
     "gradient-spectral",
-    "group-network-partial-spectral",
     "intrinsic-spectral",
-    "group-intrinsic-partial-spectral",
     "wta-top",
 ]
 ROUTE_TAG_CHOICES = ["routea", "routeb"]
@@ -911,7 +910,7 @@ def render_combo(
 
 def write_readme(present_dir: Path, items: list[dict[str, object]]) -> None:
     lines = [
-        "# present_group merged-canonical overview",
+        "# HCP 7T hippocampus group overviews",
         "",
         "| atlas | method | route | mode | overview | smoothings | key metrics |",
         "|---|---|---|---|---|---|---|",
@@ -962,7 +961,7 @@ def ensure_combo_ready(
 
 
 def main() -> int:
-    p = argparse.ArgumentParser(description="Build present_group overviews from merged-canonical group atlas outputs.")
+    p = argparse.ArgumentParser(description="Build canonical HCP 7T hippocampus group overviews from group atlas outputs.")
     p.add_argument("--group-root", default=str(DEFAULT_GROUP_ROOT))
     p.add_argument("--present-dir", default=str(DEFAULT_PRESENT_DIR))
     p.add_argument("--methods", nargs="+", default=METHODS_DEFAULT, choices=METHOD_CHOICES)

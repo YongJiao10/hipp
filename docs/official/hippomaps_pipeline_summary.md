@@ -9,7 +9,7 @@ Active workflow:
 - build merged-canonical hippocampal group atlases
 - export overview and matrix products from stage `06_xx`
 
-Retired: partial-FC branches (`group-network-partial-spectral`, `group-intrinsic-partial-spectral`) are no longer run; code is retained but inactive.
+Retired: partial-FC branches are no longer public method choices for the core workflow.
 
 Active references:
 

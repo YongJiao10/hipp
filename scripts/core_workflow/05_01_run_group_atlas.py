@@ -22,6 +22,13 @@ from sklearn.cluster import SpectralClustering
 from sklearn.metrics import adjusted_rand_score
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+from lib.hippomaps_adapter import (
+    DEFAULT_HIPPOMAPS_ROOT,
+    ensure_hippomaps_on_path,
+    fit_gradientmaps_pearson,
+    hippomaps_commit,
+    hippomaps_import_path,
+)
 from lib.surface_utils import infer_spec_path, long_axis_order
 from lib.kong2022_label_utils import load_kong2022_bundle
 
@@ -30,6 +37,7 @@ DEFAULT_T1ONLY_ROOT = REPO_ROOT / "outputs_experiments" / "hippunfold_recommende
 DEFAULT_SHARED_ROOT = DEFAULT_T1ONLY_ROOT / "shared_inputs" / "routeb_151"
 DEFAULT_SURFACE_ROOT = DEFAULT_T1ONLY_ROOT / "shared_inputs" / "surface_151"
 DEFAULT_OUT_ROOT = DEFAULT_T1ONLY_ROOT / "hipp_group_merged_canonical_atlas"
+DEFAULT_GRADIENT_ROOT = DEFAULT_T1ONLY_ROOT / "hippomaps_gradients"
 DEFAULT_SUBJECTS = DEFAULT_T1ONLY_ROOT / "manifests" / "hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt"
 DEFAULT_HIPPUNFOLD_BATCH_ROOT = (
     REPO_ROOT / "outputs_experiments" / "hippunfold_recommended_t1w_20260423" / "dense_corobl_batch"
@@ -50,9 +58,7 @@ METHOD_CHOICES = [
     "group-roi-sim-spectral",
     "network-spectral",
     "gradient-spectral",
-    "group-network-partial-spectral",
     "intrinsic-spectral",
-    "group-intrinsic-partial-spectral",
     "wta-top",
 ]
 METHODS_DEFAULT = [
@@ -73,9 +79,7 @@ SUBJECT_FC_MODE_CHOICES = ["full", "top-percent"]
 DEFAULT_GRADIENT_COMPONENTS = (1, 2, 3)
 GRADIENT_N_COMPONENTS_COMPUTED = 5
 GRADIENT_BRAINSPACE_KERNEL = "pearson"
-GRADIENT_BRAINSPACE_APPROACH = "dm"
-GRADIENT_BRAINSPACE_SPARSITY = 0.90
-GRADIENT_BRAINSPACE_RANDOM_STATE = 0
+ROUTE_TAG_CHOICES = ("routea", "routeb")
 MAX_K_EVAL_JOBS = 10
 RESUME_SIGNATURE_VERSION = 1
 
@@ -304,7 +308,7 @@ def parse_network_names(tsv: Path) -> list[str]:
 
 
 def is_network_method(method: str) -> bool:
-    return method in {"network-spectral", "group-network-partial-spectral"}
+    return method == "network-spectral"
 
 
 def is_gradient_method(method: str) -> bool:
@@ -337,16 +341,12 @@ def feature_family_for_method(method: str, atlas: str, gradient_components: tupl
         return "vertex_to_kong2022_400roi_fc_fisherz_colzscore"
     if method == "network-spectral":
         return "vertex_to_canonical_network_fc_fisherz_colzscore"
-    if method == "group-network-partial-spectral":
-        return "vertex_to_canonical_network_partial_fc_networks_only_one_sided_fisherz_colzscore"
     if method == "intrinsic-spectral":
         return "vertex_to_vertex_intrinsic_fc_fisherz_diag0"
     return "vertex_to_vertex_intrinsic_fc_fisherz_diag0_plus_partial_profile"
 
 
 def fc_mode_for_method(method: str) -> str:
-    if method in {"group-network-partial-spectral", "group-intrinsic-partial-spectral"}:
-        return "partial_networks_only_one_sided"
     if method == "group-roi-sim-spectral":
         return "pearson_vertex_to_roi_then_centered_cosine_vertex_to_vertex"
     if method == "gradient-spectral":
@@ -555,10 +555,9 @@ def brainspace_diffusion_gradients(
     features: np.ndarray,
     *,
     n_components: int = GRADIENT_N_COMPONENTS_COMPUTED,
-    sparsity: float = GRADIENT_BRAINSPACE_SPARSITY,
-    random_state: int = GRADIENT_BRAINSPACE_RANDOM_STATE,
-    gradient_maps_cls: object | None = None,
-) -> tuple[np.ndarray, np.ndarray]:
+    hippomaps_root: Path = DEFAULT_HIPPOMAPS_ROOT,
+    gradientmaps_fit_fn: object | None = None,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     group_fc = np.asarray(features, dtype=np.float32)
     if group_fc.ndim != 2:
         raise ValueError(f"Expected 2D group FC feature matrix, got shape={group_fc.shape}")
@@ -569,43 +568,31 @@ def brainspace_diffusion_gradients(
         raise RuntimeError(
             f"Not enough supported vertices to compute G1..G{n_comp}: n_vertices={group_fc.shape[0]}"
         )
-
-    if gradient_maps_cls is None:
-        try:
-            from brainspace.gradient import GradientMaps as gradient_maps_cls_local
-        except Exception as exc:
-            raise RuntimeError(
-                "BrainSpace is required for gradient-spectral embedding. "
-                "Install it in py314 (expected: brainspace==0.2.1)."
-            ) from exc
-        gradient_maps_cls = gradient_maps_cls_local
-
-    model = gradient_maps_cls(
-        n_components=n_comp,
-        approach=GRADIENT_BRAINSPACE_APPROACH,
-        kernel=GRADIENT_BRAINSPACE_KERNEL,
-        random_state=int(random_state),
-    )
-    fitted = model.fit(group_fc, sparsity=float(sparsity))
-    model_out = fitted if fitted is not None else model
-
-    gradients = _extract_brainspace_array(model_out, "gradients_", "gradients", "gradients")
-    lambdas = _extract_brainspace_array(model_out, "lambdas_", "lambdas", "lambdas").reshape(-1)
+    ensure_hippomaps_on_path(hippomaps_root)
+    fit_fn = fit_gradientmaps_pearson if gradientmaps_fit_fn is None else gradientmaps_fit_fn
+    gradients, lambdas, ev_fractions = fit_fn(group_fc, n_components=n_comp)
+    gradients = np.asarray(gradients, dtype=np.float32)
+    lambdas = np.asarray(lambdas, dtype=np.float64).reshape(-1)
+    ev_fractions = np.asarray(ev_fractions, dtype=np.float64).reshape(-1)
     if gradients.ndim != 2:
-        raise RuntimeError(f"Expected 2D BrainSpace gradients, got shape={gradients.shape}")
+        raise RuntimeError(f"Expected 2D GradientMaps gradients, got shape={gradients.shape}")
     if gradients.shape[1] < n_comp:
         raise RuntimeError(
-            f"BrainSpace returned {gradients.shape[1]} gradients, expected at least {n_comp}"
+            f"GradientMaps returned {gradients.shape[1]} gradients, expected at least {n_comp}"
         )
     if lambdas.size < n_comp:
-        raise RuntimeError(f"BrainSpace returned {lambdas.size} lambdas, expected at least {n_comp}")
-
+        raise RuntimeError(f"GradientMaps returned {lambdas.size} lambdas, expected at least {n_comp}")
+    if ev_fractions.size < n_comp:
+        raise RuntimeError(f"GradientMaps returned {ev_fractions.size} EV fractions, expected at least {n_comp}")
     gradients = gradients[:, :n_comp]
     gradients[~np.isfinite(gradients)] = 0.0
     lambdas = lambdas[:n_comp]
+    ev_fractions = ev_fractions[:n_comp]
     if not np.all(np.isfinite(lambdas)):
-        raise RuntimeError(f"BrainSpace lambdas contain non-finite values: {lambdas.tolist()}")
-    return gradients.astype(np.float32), lambdas.astype(np.float32)
+        raise RuntimeError(f"GradientMaps lambdas contain non-finite values: {lambdas.tolist()}")
+    if not np.all(np.isfinite(ev_fractions)):
+        raise RuntimeError(f"GradientMaps EV fractions contain non-finite values: {ev_fractions.tolist()}")
+    return gradients.astype(np.float32), lambdas.astype(np.float64), ev_fractions.astype(np.float64)
 
 
 def build_group_gradient_features(
@@ -614,6 +601,8 @@ def build_group_gradient_features(
     subjects_subset: list[str],
     support_mask: np.ndarray,
     gradient_components: tuple[int, ...] = DEFAULT_GRADIENT_COMPONENTS,
+    hippomaps_root: Path = DEFAULT_HIPPOMAPS_ROOT,
+    gradientmaps_fit_fn: object | None = None,
 ) -> tuple[np.ndarray, dict[str, object]]:
     idx = np.flatnonzero(support_mask)
     if idx.size == 0:
@@ -626,36 +615,107 @@ def build_group_gradient_features(
     stack = np.stack(mats, axis=0).astype(np.float32)
     group_fc = np.nanmean(stack, axis=0)
     group_fc[~np.isfinite(group_fc)] = 0.0
-    gradients, lambdas = brainspace_diffusion_gradients(
+    gradients, lambdas, ev_fractions = brainspace_diffusion_gradients(
         group_fc,
         n_components=GRADIENT_N_COMPONENTS_COMPUTED,
-        sparsity=GRADIENT_BRAINSPACE_SPARSITY,
-        random_state=GRADIENT_BRAINSPACE_RANDOM_STATE,
+        hippomaps_root=hippomaps_root,
+        gradientmaps_fit_fn=gradientmaps_fit_fn,
     )
     selected = gradients[:, [int(c) - 1 for c in comps]]
     selected[~np.isfinite(selected)] = 0.0
+    selected_labels = [f"G{int(c)}" for c in comps]
+    hippomaps_root_resolved = ensure_hippomaps_on_path(hippomaps_root)
     meta = {
         "gradient_components": [int(c) for c in comps],
-        "gradient_component_labels": [f"G{int(c)}" for c in comps],
-        "gradient_embedding_engine": "brainspace",
+        "gradient_component_labels": selected_labels,
+        "selected_components": selected_labels,
+        "gradient_embedding_engine": "brainspace_gradientmaps_via_hippomaps_adapter",
         "brainspace_version": brainspace_version(),
+        "gradientmaps_call": "brainspace.gradient.GradientMaps(n_components=N, kernel='pearson').fit(column_zscored_group_mean_fisherz_fc)",
+        "feature_zscore_pre_gradientmaps": "column-wise z-score across vertices after group Fisher-z averaging",
         "kernel": GRADIENT_BRAINSPACE_KERNEL,
-        "approach": GRADIENT_BRAINSPACE_APPROACH,
-        "brainspace_sparsity": float(GRADIENT_BRAINSPACE_SPARSITY),
+        "brainspace_sparsity": "default(0.9)",
         "n_components_computed": int(GRADIENT_N_COMPONENTS_COMPUTED),
         "components_displayed": [int(c) for c in DEFAULT_GRADIENT_COMPONENTS],
         "group_vertex_to_roi_fc_shape": [int(v) for v in group_fc.shape],
         "gradient_eigenvalues": [float(v) for v in lambdas],
+        "ev_fractions": [float(v) for v in ev_fractions],
+        "hippomaps_repo": str(Path(hippomaps_root_resolved).resolve()),
+        "hippomaps_import_path": hippomaps_import_path(hippomaps_root_resolved),
+        "hippomaps_commit": hippomaps_commit(hippomaps_root_resolved),
     }
     return selected.astype(np.float32), meta
 
 
+def load_hippomaps_gradient_features(
+    *,
+    gradient_root: Path,
+    route: str,
+    smoothing: str,
+    hemi: str,
+    support_mask: np.ndarray,
+    gradient_components: tuple[int, ...] = DEFAULT_GRADIENT_COMPONENTS,
+) -> tuple[np.ndarray, dict[str, object]]:
+    comps = parse_gradient_components(",".join(str(c) for c in gradient_components))
+    run_dir = Path(gradient_root).resolve() / route / smoothing / f"hemi_{hemi}"
+    manifest_path = run_dir / "hippomaps_gradient_manifest.json"
+    if not manifest_path.exists():
+        raise FileNotFoundError(
+            f"Missing HippoMaps gradient manifest for gradient-spectral clustering: {manifest_path}. "
+            "Run 05_03_compute_hippomaps_gradients.py before 05_01_run_group_atlas.py."
+        )
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if str(manifest.get("status", "ok")) != "ok":
+        raise RuntimeError(f"HippoMaps gradient manifest is not ok: {manifest_path} status={manifest.get('status')}")
+    local_gradients_path = run_dir / "hippomaps_gradients_full.npy"
+    outputs = manifest.get("outputs", {})
+    gradients_path_raw = outputs.get("hippomaps_gradients_full") if isinstance(outputs, dict) else None
+    manifest_gradients_path = Path(str(gradients_path_raw)).resolve() if gradients_path_raw else None
+    gradients_path = local_gradients_path if local_gradients_path.exists() else manifest_gradients_path
+    if gradients_path is None or not gradients_path.exists():
+        raise FileNotFoundError(
+            f"Missing HippoMaps full gradient array. Checked local={local_gradients_path} "
+            f"and manifest={manifest_gradients_path}"
+        )
+    gradients_full = np.load(gradients_path).astype(np.float32)
+    support = np.asarray(support_mask, dtype=bool)
+    if gradients_full.ndim != 2:
+        raise ValueError(f"Expected 2D HippoMaps gradient array: {gradients_path} shape={gradients_full.shape}")
+    if gradients_full.shape[0] != support.size:
+        raise ValueError(
+            f"Gradient/support vertex count mismatch: gradients={gradients_full.shape[0]} support={support.size} "
+            f"path={gradients_path}"
+        )
+    max_comp = max(comps)
+    if gradients_full.shape[1] < max_comp:
+        raise ValueError(
+            f"HippoMaps gradient array has {gradients_full.shape[1]} components; requested G{max_comp}: {gradients_path}"
+        )
+    selected = gradients_full[np.flatnonzero(support)][:, [int(c) - 1 for c in comps]].astype(np.float32)
+    selected[~np.isfinite(selected)] = 0.0
+    labels = [f"G{int(c)}" for c in comps]
+    meta = {
+        "gradient_source": "hippomaps_gradient_artifacts",
+        "hippomaps_gradient_manifest": str(manifest_path.resolve()),
+        "hippomaps_gradients_full": str(gradients_path.resolve()),
+        "route": route,
+        "smoothing": smoothing,
+        "hemi": hemi,
+        "gradient_components": [int(c) for c in comps],
+        "gradient_component_labels": labels,
+        "selected_components": labels,
+        "n_components_computed": int(manifest.get("n_components_computed", gradients_full.shape[1])),
+        "gradientmaps_call": manifest.get("gradientmaps_call"),
+        "gradient_shape_full": [int(x) for x in gradients_full.shape],
+    }
+    for key in ("ev_fractions", "lambdas", "hippomaps_repo", "hippomaps_import_path", "hippomaps_commit"):
+        if key in manifest:
+            meta[key] = manifest[key]
+    return selected, meta
+
+
 def network_feature_filename(method: str) -> str:
-    if method in {"group-roi-sim-spectral", "network-spectral", "gradient-spectral"}:
-        return "hipp_vertex_to_network_fc.npy"
-    if method == "group-network-partial-spectral":
-        return "hipp_vertex_to_network_partial_fc.npy"
-    if method == "wta-top":
+    if method in {"group-roi-sim-spectral", "network-spectral", "gradient-spectral", "wta-top"}:
         return "hipp_vertex_to_network_fc.npy"
     raise ValueError(f"Not a network feature method: {method}")
 
@@ -663,8 +723,6 @@ def network_feature_filename(method: str) -> str:
 def runwise_network_feature_filename(method: str) -> str:
     if method in {"group-roi-sim-spectral", "network-spectral", "gradient-spectral"}:
         return "hipp_vertex_to_network_fc_active.npy"
-    if method == "group-network-partial-spectral":
-        return "hipp_vertex_to_network_partial_fc_active.npy"
     raise ValueError(f"Not a network feature method: {method}")
 
 
@@ -1186,7 +1244,7 @@ def group_feature_matrix(
         )
         return features
 
-    if method in {"group-roi-sim-spectral", "intrinsic-spectral", "group-intrinsic-partial-spectral"}:
+    if method in {"group-roi-sim-spectral", "intrinsic-spectral"}:
         mats = []
         for s in subjects_subset:
             m = feature_bank[s][np.ix_(idx, idx)]
@@ -2536,11 +2594,13 @@ def functional_atlas_from_vertices(
     return out, meta, label_items
 
 
-def main() -> int:
+def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run merged canonical group hippocampal atlas (v3 plan).")
     parser.add_argument("--shared-root", default=str(DEFAULT_SHARED_ROOT))
     parser.add_argument("--surface-root", default=str(DEFAULT_SURFACE_ROOT))
     parser.add_argument("--out-root", default=str(DEFAULT_OUT_ROOT))
+    parser.add_argument("--gradient-root", default=str(DEFAULT_GRADIENT_ROOT))
+    parser.add_argument("--route-tag", choices=["auto", *ROUTE_TAG_CHOICES], default="auto")
     parser.add_argument("--subjects-manifest", default=str(DEFAULT_SUBJECTS))
     parser.add_argument("--hippunfold-batch-root", default=str(DEFAULT_HIPPUNFOLD_BATCH_ROOT))
     parser.add_argument("--methods", nargs="+", default=METHODS_DEFAULT, choices=METHOD_CHOICES)
@@ -2548,13 +2608,20 @@ def main() -> int:
     parser.add_argument("--smoothings", nargs="+", default=SMOOTHINGS)
     parser.add_argument("--hemis", nargs="+", default=HEMIS)
     parser.add_argument("--coverage-thresholds", nargs="+", type=float, default=[0.70, 0.80, 0.90])
-    parser.add_argument("--k-min", type=int, default=2)
-    parser.add_argument("--k-max", type=int, default=10)
+    parser.add_argument("--k-min", type=int, default=3)
+    parser.add_argument("--k-max", type=int, default=3)
     parser.add_argument(
         "--force-final-k",
         type=int,
-        default=None,
-        help="Force chosen_k_final to this K after evaluating candidate K rows; keeps full K-curve metrics for display.",
+        default=3,
+        help="Force chosen_k_final to this K after evaluating candidate K rows; default is the maintained fixed K=3 display policy.",
+    )
+    parser.add_argument(
+        "--auto-k",
+        dest="force_final_k",
+        action="store_const",
+        const=None,
+        help="Re-enable legacy automatic K selection; fixed K=3 remains the default.",
     )
     parser.add_argument("--instability-resamples", type=int, default=100)
     parser.add_argument("--null-resamples", type=int, default=100)
@@ -2579,10 +2646,10 @@ def main() -> int:
         default="1,2,3",
         help="Comma-separated gradient components for gradient-spectral clustering. "
              "Supported examples: 1, 2, 3, 1,2, 1,2,3. Default: 1,2,3. "
-             "Embedding always computes G1-G5 via BrainSpace; this option selects clustering columns.",
+             "05_03 computes G1-G5 via BrainSpace/HippoMaps; this option selects clustering columns.",
     )
     parser.add_argument("--resume", action="store_true", help="Skip combos that already have group_atlas_manifest.json.")
-    parser.add_argument("--k-selection-mode", default="experimental", choices=["experimental", "redundancy-aware"])
+    parser.add_argument("--k-selection-mode", default="redundancy-aware", choices=["experimental", "redundancy-aware"])
     parser.add_argument(
         "--redundancy-early-stop",
         action="store_true",
@@ -2601,12 +2668,33 @@ def main() -> int:
         help="Directory containing group-average template midthickness surfaces named "
              "group-average_hemi-{L|R}_space-corobl_den-512_label-hipp_midthickness.surf.gii.",
     )
+    return parser
+
+
+def infer_route_tag(shared_root: Path, explicit: str = "auto") -> str:
+    if explicit != "auto":
+        return explicit
+    parts = {p.lower() for p in Path(shared_root).parts}
+    name = Path(shared_root).name.lower()
+    if "routea" in name or "routea_151" in parts:
+        return "routea"
+    if "routeb" in name or "routeb_151" in parts:
+        return "routeb"
+    raise ValueError(
+        f"Could not infer --route-tag from --shared-root={shared_root}; pass --route-tag routea or routeb."
+    )
+
+
+def main() -> int:
+    parser = build_arg_parser()
     args = parser.parse_args()
     suppress_known_runtime_warnings()
 
     shared_root = Path(args.shared_root).resolve()
     surface_root = Path(args.surface_root).resolve()
     out_root = Path(args.out_root).resolve()
+    gradient_root = Path(args.gradient_root).resolve()
+    route_tag = infer_route_tag(shared_root, str(args.route_tag))
     hippunfold_batch_root = Path(args.hippunfold_batch_root).resolve()
     out_root.mkdir(parents=True, exist_ok=True)
 
@@ -2671,7 +2759,7 @@ def main() -> int:
             "n_faces": int(faces.shape[0]),
         }
 
-    if any(m in args.methods for m in ("intrinsic-spectral", "group-intrinsic-partial-spectral")):
+    if "intrinsic-spectral" in args.methods:
         for smoothing in args.smoothings:
             for hemi in args.hemis:
                 print(f"[check] intrinsic atlas-invariance smoothing={smoothing} hemi={hemi}", flush=True)
@@ -2691,13 +2779,6 @@ def main() -> int:
                 print(
                     f"[warn] skipping unsupported combo atlas={atlas} method={method} "
                     "(method is defined for kong2022 only)",
-                    flush=True,
-                )
-                continue
-            if atlas == "kong2022" and method in {"group-network-partial-spectral", "group-intrinsic-partial-spectral"}:
-                print(
-                    f"[warn] skipping unsupported combo atlas={atlas} method={method} "
-                    "(partial methods are not defined for Kong2022 Route B)",
                     flush=True,
                 )
                 continue
@@ -2868,6 +2949,8 @@ def main() -> int:
                             "min_profile_coherence": float(args.min_profile_coherence),
                             "subject_fc_preprocessing": subject_fc_preprocessing_for_resume,
                             "gradient_components": [int(c) for c in gradient_components],
+                            "gradient_root": str(gradient_root) if method == "gradient-spectral" else None,
+                            "route_tag": route_tag if method == "gradient-spectral" else None,
                             "redundancy_early_stop": bool(args.redundancy_early_stop),
                             "input_category_hashes": resume_input_category_hashes,
                         }
@@ -3137,9 +3220,11 @@ def main() -> int:
                         adjacency_support = adjacency_by_hemi[hemi][support_idx][:, support_idx]
                         group_gradient_meta: dict[str, object] | None = None
                         if is_gradient_method(method):
-                            group_features_active, group_gradient_meta = build_group_gradient_features(
-                                feature_bank=feature_bank,
-                                subjects_subset=subjects,
+                            group_features_active, group_gradient_meta = load_hippomaps_gradient_features(
+                                gradient_root=gradient_root,
+                                route=route_tag,
+                                smoothing=smoothing,
+                                hemi=hemi,
                                 support_mask=support,
                                 gradient_components=gradient_components,
                             )
@@ -3495,11 +3580,7 @@ def main() -> int:
                                 smoothing=smoothing,
                                 hemi=hemi,
                                 valid_masks_by_subject=valid_masks,
-                                profile_fc_mode=(
-                                    "partial_networks_only_one_sided"
-                                    if method in {"group-network-partial-spectral", "group-intrinsic-partial-spectral"}
-                                    else "pearson"
-                                ),
+                                profile_fc_mode="pearson",
                             )
                             status_rows, dominant = assignment_status_from_profile(profile, network_names)
                         if atlas == "kong2022" and roi_profile is None:
@@ -3602,16 +3683,6 @@ def main() -> int:
                             "feature_family": feature_family_for_method(method, atlas, gradient_components),
                             "fc_mode": fc_mode_for_method(method),
                             "gradient_components": [int(c) for c in gradient_components] if is_gradient_method(method) else None,
-                            "partial_fc_definition": (
-                                {
-                                    "controls": "other_canonical_network_timeseries_only",
-                                    "target_network_residualized": False,
-                                    "hippocampal_vertex_covariates": False,
-                                    "profile_annotation_uses_same_one_sided_partial_fc": True,
-                                }
-                                if method in {"group-network-partial-spectral", "group-intrinsic-partial-spectral"}
-                                else None
-                            ),
                             "actual_consumed_input_paths": actual_input_paths,
                             "resume_input_signature_version": int(RESUME_SIGNATURE_VERSION),
                             "resume_input_signature": resume_input_signature,

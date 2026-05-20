@@ -40,6 +40,30 @@ render_mod = _load_module(
     "scripts/core_workflow/06_05_render_hippomaps_gradient_products.py",
     "core_06_05_render_hippomaps_gradient_products",
 )
+atlas_mod = _load_module(
+    "scripts/core_workflow/05_01_run_group_atlas.py",
+    "core_05_01_run_group_atlas",
+)
+overview_mod = _load_module(
+    "scripts/core_workflow/06_01_build_group_overview.py",
+    "core_06_01_build_group_overview",
+)
+matrix_mod = _load_module(
+    "scripts/core_workflow/06_02_build_group_matrix.py",
+    "core_06_02_build_group_matrix",
+)
+cortex_mod = _load_module(
+    "scripts/core_workflow/06_04_build_cluster_cortex_panels.py",
+    "core_06_04_build_cluster_cortex_panels",
+)
+output_layout = _load_module(
+    "scripts/core_workflow/lib/output_layout.py",
+    "core_output_layout",
+)
+smoke_mod = _load_module(
+    "scripts/core_workflow/00_01_prepare_smoke_run.py",
+    "core_00_01_prepare_smoke_run",
+)
 
 
 def test_group_mean_fc_applies_fisher_z_before_averaging() -> None:
@@ -123,6 +147,162 @@ def test_gradientmaps_called_with_official_pearson_kernel_and_full_lambda_ev() -
     assert np.allclose(lambdas, [5.0, 3.0, 2.0])
     assert np.allclose(ev, [0.5, 0.3, 0.2])
 
+
+def test_group_atlas_public_methods_drop_partial_corr_branches() -> None:
+    assert "group-network-partial-spectral" not in atlas_mod.METHOD_CHOICES
+    assert "group-intrinsic-partial-spectral" not in atlas_mod.METHOD_CHOICES
+    assert not atlas_mod.is_network_method("group-network-partial-spectral")
+
+
+def test_group_atlas_parser_defaults_to_fixed_k3() -> None:
+    parser = atlas_mod.build_arg_parser()
+    args = parser.parse_args([])
+    assert int(args.k_min) == 3
+    assert int(args.k_max) == 3
+    assert int(args.force_final_k) == 3
+
+
+def test_group_atlas_gradient_spectral_loads_hippomaps_gradient_artifacts() -> None:
+    with TemporaryDirectory() as td:
+        root = Path(td)
+        run_dir = root / "routea" / "2mm" / "hemi_L"
+        run_dir.mkdir(parents=True)
+        gradients_full = np.asarray(
+            [
+                [np.nan, np.nan, np.nan, np.nan, np.nan],
+                [1.0, 2.0, 3.0, 4.0, 5.0],
+                [6.0, 7.0, 8.0, 9.0, 10.0],
+                [np.nan, np.nan, np.nan, np.nan, np.nan],
+                [11.0, 12.0, 13.0, 14.0, 15.0],
+            ],
+            dtype=np.float32,
+        )
+        np.save(run_dir / "hippomaps_gradients_full.npy", gradients_full)
+        manifest = {
+            "status": "ok",
+            "route": "routea",
+            "smoothing": "2mm",
+            "hemi": "L",
+            "n_components_computed": 5,
+            "gradientmaps_call": "brainspace.gradient.GradientMaps(n_components=N, kernel='pearson').fit(column_zscored_group_mean_fisherz_fc)",
+            "outputs": {
+                "hippomaps_gradients_full": str((run_dir / "hippomaps_gradients_full.npy").resolve()),
+            },
+        }
+        (run_dir / "hippomaps_gradient_manifest.json").write_text(
+            atlas_mod.json.dumps(manifest, indent=2),
+            encoding="utf-8",
+        )
+        support_mask = np.asarray([False, True, True, False, True], dtype=bool)
+
+        selected, meta = atlas_mod.load_hippomaps_gradient_features(
+            gradient_root=root,
+            route="routea",
+            smoothing="2mm",
+            hemi="L",
+            support_mask=support_mask,
+            gradient_components=(1, 3),
+        )
+
+    assert selected.shape == (3, 2), selected.shape
+    assert np.allclose(selected[:, 0], [1.0, 6.0, 11.0], atol=1e-6)
+    assert np.allclose(selected[:, 1], [3.0, 8.0, 13.0], atol=1e-6)
+    assert meta["gradient_source"] == "hippomaps_gradient_artifacts"
+    assert meta["gradient_component_labels"] == ["G1", "G3"]
+    assert meta["hippomaps_gradient_manifest"].endswith("hippomaps_gradient_manifest.json")
+
+
+
+
+def test_group_atlas_gradient_loader_prefers_local_artifact_after_relocation() -> None:
+    with TemporaryDirectory() as td:
+        root = Path(td)
+        run_dir = root / "routea" / "2mm" / "hemi_L"
+        run_dir.mkdir(parents=True)
+        np.save(run_dir / "hippomaps_gradients_full.npy", np.asarray([[1.0, 2.0, 3.0]], dtype=np.float32))
+        stale_path = root / "old_location" / "hippomaps_gradients_full.npy"
+        manifest = {
+            "status": "ok",
+            "n_components_computed": 3,
+            "outputs": {"hippomaps_gradients_full": str(stale_path.resolve())},
+        }
+        (run_dir / "hippomaps_gradient_manifest.json").write_text(atlas_mod.json.dumps(manifest), encoding="utf-8")
+        selected, meta = atlas_mod.load_hippomaps_gradient_features(
+            gradient_root=root,
+            route="routea",
+            smoothing="2mm",
+            hemi="L",
+            support_mask=np.asarray([True], dtype=bool),
+            gradient_components=(1, 3),
+        )
+    assert np.allclose(selected, [[1.0, 3.0]])
+    assert meta["hippomaps_gradients_full"].endswith("routea/2mm/hemi_L/hippomaps_gradients_full.npy")
+
+def test_canonical_public_surfaces_drop_partial_corr_branches() -> None:
+    for mod in (atlas_mod, overview_mod, cortex_mod):
+        assert "group-network-partial-spectral" not in mod.METHOD_CHOICES
+        assert "group-intrinsic-partial-spectral" not in mod.METHOD_CHOICES
+
+
+def test_canonical_present_defaults_use_outputs_core_layout() -> None:
+    expected_root = REPO_ROOT / "outputs_core" / "hcp7t_hippocampus" / "runs" / "manual" / "present"
+    assert overview_mod.DEFAULT_PRESENT_DIR == expected_root / "overviews"
+    assert matrix_mod.DEFAULT_PRESENT_DIR == expected_root / "overviews"
+    assert cortex_mod.DEFAULT_PRESENT_DIR == expected_root / "cortex_panels"
+    assert render_mod.DEFAULT_PRESENT_ROOT == expected_root / "gradients"
+    for path in (
+        overview_mod.DEFAULT_PRESENT_DIR,
+        matrix_mod.DEFAULT_PRESENT_DIR,
+        cortex_mod.DEFAULT_PRESENT_DIR,
+        render_mod.DEFAULT_PRESENT_ROOT,
+    ):
+        text = str(path)
+        assert "present_group" not in text
+        assert "present_fixedk" not in text
+        assert "t1only" not in text
+
+
+def test_run_layout_keeps_smoke_outputs_in_dedicated_run_tree() -> None:
+    layout = output_layout.run_layout("smoke5_test")
+    assert layout["run_root"] == REPO_ROOT / "outputs_core" / "hcp7t_hippocampus" / "runs" / "smoke5_test"
+    assert layout["overviews"] == layout["present"] / "overviews"
+    assert layout["gradient_products"] == layout["present"] / "gradients"
+    assert layout["cortex_panels"] == layout["present"] / "cortex_panels"
+
+
+def test_smoke_command_plan_uses_isolated_fixedk_full_layout() -> None:
+    base = REPO_ROOT / "outputs_core" / "hcp7t_hippocampus" / "runs" / "smoke5_test"
+    present = base / "present"
+    layout = {
+        "run_root": base,
+        "inputs": base / "inputs",
+        "logs": base / "logs",
+        "manifests": base / "manifests",
+        "hippunfold": base / "hippunfold",
+        "features": base / "features",
+        "group_atlas": base / "group_atlas",
+        "gradients": base / "gradients",
+        "present": present,
+        "overviews": present / "overviews",
+        "cortex_panels": present / "cortex_panels",
+        "gradient_products": present / "gradients",
+    }
+    records = smoke_mod.build_command_plan(
+        subjects=["100610", "102311", "104416", "105923", "108323"],
+        layout=layout,
+        python_exe="/home/yojiao/.conda/envs/py314/bin/python",
+        input_dir=REPO_ROOT / "data" / "hippunfold_input",
+        bold_root=REPO_ROOT / "bold",
+    )
+    joined = "\n".join(" ".join(row["command"]) for row in records)
+    assert "present_group" not in joined
+    assert "present_fixedk" not in joined
+    assert "10perc" not in joined
+    assert "--force-final-k 3" in joined
+    assert "--k-min 3 --k-max 3" in joined
+    assert str(layout["overviews"]) in joined
+    assert "group-network-partial-spectral" not in joined
+    assert "group-intrinsic-partial-spectral" not in joined
 
 def test_compute_defaults_to_five_components_like_hippomaps_paper() -> None:
     with patch.object(sys, "argv", ["05_03_compute_hippomaps_gradients.py"]):
@@ -235,6 +415,14 @@ def test_annotate_gradient_image_adds_left_margin_and_ev_labels() -> None:
 def main() -> int:
     test_group_mean_fc_applies_fisher_z_before_averaging()
     test_gradientmaps_called_with_official_pearson_kernel_and_full_lambda_ev()
+    test_group_atlas_public_methods_drop_partial_corr_branches()
+    test_group_atlas_parser_defaults_to_fixed_k3()
+    test_group_atlas_gradient_spectral_loads_hippomaps_gradient_artifacts()
+    test_group_atlas_gradient_loader_prefers_local_artifact_after_relocation()
+    test_canonical_public_surfaces_drop_partial_corr_branches()
+    test_canonical_present_defaults_use_outputs_core_layout()
+    test_run_layout_keeps_smoke_outputs_in_dedicated_run_tree()
+    test_smoke_command_plan_uses_isolated_fixedk_full_layout()
     test_compute_defaults_to_five_components_like_hippomaps_paper()
     test_full_surface_reconstruction_keeps_nan_outside_support()
     test_endpoint_fc_contrast_uses_top_minus_bottom_gradient_quartiles()

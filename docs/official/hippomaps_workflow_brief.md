@@ -6,7 +6,7 @@ Active roots:
 
 - shared inputs: `outputs_migration/hipp_group_inputs_shared/`
 - group outputs: `outputs_migration/hipp_group_merged_canonical_atlas/`
-- presentation exports: `present_group/`
+- presentation exports: `outputs_core/hcp7t_hippocampus/runs/<run_id>/present/overviews/`
 
 Active references:
 

@@ -9,11 +9,12 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+from lib.output_layout import DEFAULT_OVERVIEWS_DIR
 BUILD_PRESENT_SCRIPT = REPO_ROOT / "scripts" / "core_workflow" / "06_01_build_group_overview.py"
 DEFAULT_PYTHON = "/home/yojiao/.conda/envs/py314/bin/python"
 DEFAULT_ROUTE_ROOT = REPO_ROOT / "outputs_experiments" / "hippunfold_recommended_t1w_20260423" / "kong2022"
-DEFAULT_PRESENT_DIR = REPO_ROOT / "present_group_t1only"
-DEFAULT_MANIFEST_NAME = "group_overview_manifest_t1only_matrix.json"
+DEFAULT_PRESENT_DIR = DEFAULT_OVERVIEWS_DIR
+DEFAULT_MANIFEST_NAME = "group_overview_matrix_manifest.json"
 METHODS = ["intrinsic-spectral", "network-spectral", "gradient-spectral", "wta-top"]
 ATLAS = "kong2022"
 CLUSTERLESS_METHODS = {"wta-top"}
@@ -30,28 +31,12 @@ class RenderJob:
 
 def build_render_jobs(route_root: Path) -> list[RenderJob]:
     jobs: list[RenderJob] = []
-    cluster_roots = [
-        ("routea", "10perc", route_root / "hipp_group_merged_canonical_atlas_routea_10perc"),
-        ("routea", "full", route_root / "hipp_group_merged_canonical_atlas_routea_full"),
-        ("routeb", "10perc", route_root / "hipp_group_merged_canonical_atlas_routeb_10perc"),
-    ]
-    gradient_roots = [
+    route_roots = [
         ("routea", None, route_root / "hipp_group_merged_canonical_atlas_routea_full"),
         ("routeb", None, route_root / "hipp_group_merged_canonical_atlas_routeb_full"),
     ]
-    clusterless_roots = [
-        ("routea", None, route_root / "hipp_group_merged_canonical_atlas_routea"),
-        ("routeb", None, route_root / "hipp_group_merged_canonical_atlas_routeb"),
-    ]
     for method in METHODS:
-        if method in CLUSTERLESS_METHODS:
-            roots = clusterless_roots
-        elif method in GRADIENT_METHODS:
-            # Gradient overviews are route-level full-FC products, not 10perc/full mode splits.
-            roots = [root for root in gradient_roots if Path(root[2]).exists()]
-        else:
-            roots = cluster_roots
-        for route_tag, mode_tag, group_root in roots:
+        for route_tag, mode_tag, group_root in route_roots:
             jobs.append(
                 RenderJob(
                     method=method,
@@ -72,13 +57,12 @@ def expected_overview_path(present_dir: Path, *, method: str, route_tag: str, mo
 
 def write_readme(present_dir: Path, items: list[dict[str, str]]) -> None:
     lines = [
-        "# present_group_t1only matrix overviews",
+        "# HCP 7T hippocampus overview matrix",
         "",
-        "This directory is the single maintained export root.",
-        "Mode split (`10perc/full`) applies only to non-gradient clustering methods.",
-        "Gradient-spectral exports one route-level overview per available `*_full` root and does not use `10perc` mode splits.",
-        "Clusterless methods (for example `wta-top`) export one overview per route (no mode suffix).",
-        "RouteB `full` is intentionally omitted wherever no materialized source root is currently available.",
+        "This directory is the canonical maintained overview export root for all methods.",
+        "All methods are rendered from the fixed full-FC, fixed K=3 route roots by default.",
+        "No `10perc/full` or auto-K presentation split is maintained in this exporter.",
+        "Each method exports one overview per route into this directory.",
         "",
         "| route | mode | method | overview | source_group_root |",
         "|---|---|---|---|---|",
@@ -93,7 +77,7 @@ def write_readme(present_dir: Path, items: list[dict[str, str]]) -> None:
 
 
 def main() -> int:
-    p = argparse.ArgumentParser(description="One-shot exporter for the maintained present_group_t1only overview matrix.")
+    p = argparse.ArgumentParser(description="One-shot exporter for the maintained HCP 7T hippocampus overview matrix.")
     p.add_argument("--python-exe", default=DEFAULT_PYTHON)
     p.add_argument("--route-root", default=str(DEFAULT_ROUTE_ROOT))
     p.add_argument("--present-dir", default=str(DEFAULT_PRESENT_DIR))

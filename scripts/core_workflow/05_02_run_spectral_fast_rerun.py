@@ -15,13 +15,14 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 GROUP_ATLAS_SCRIPT = REPO_ROOT / "scripts" / "core_workflow" / "05_01_run_group_atlas.py"
 PRESENT_SCRIPT = REPO_ROOT / "scripts" / "core_workflow" / "06_01_build_group_overview.py"
+from lib.output_layout import DEFAULT_OVERVIEWS_DIR
 
 DEFAULT_BATCH_ROOT = REPO_ROOT / "outputs_experiments" / "hippunfold_recommended_t1w_20260423" / "dense_corobl_batch"
 DEFAULT_ROUTE_ROOT = REPO_ROOT / "outputs_experiments" / "hippunfold_recommended_t1w_20260423" / "kong2022"
 DEFAULT_SHARED_ROOT = DEFAULT_ROUTE_ROOT / "shared_inputs" / "routeb_151"
 DEFAULT_SURFACE_ROOT = DEFAULT_ROUTE_ROOT / "shared_inputs" / "surface_151"
 DEFAULT_GROUP_ROOT = DEFAULT_ROUTE_ROOT / "hipp_group_merged_canonical_atlas"
-DEFAULT_PRESENT_DIR = REPO_ROOT / "present_group_t1only"
+DEFAULT_PRESENT_DIR = DEFAULT_OVERVIEWS_DIR
 DEFAULT_MANIFEST = (
     REPO_ROOT
     / "outputs_experiments"

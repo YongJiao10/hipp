@@ -1,4 +1,7 @@
-# RouteA Fixed-K Overview Tuning (Quick Path)
+# Retired Fixed-K Overview Tuning Notes
+
+Status: retired. The maintained output layout is now `outputs_core/hcp7t_hippocampus/runs/<run_id>/present/overviews/`, with fixed final `K=3` as the default and no canonical `present_fixedk` or `10perc/full` presentation split. The historical notes below are retained only for provenance of earlier tuning runs.
+
 
 ## Purpose
 

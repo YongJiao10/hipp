@@ -6,7 +6,7 @@ Canonical active roots:
 
 - shared group inputs: `outputs_migration/hipp_group_inputs_shared/`
 - group atlas outputs: `outputs_migration/hipp_group_merged_canonical_atlas/`
-- public presentation exports: `present_group/`
+- public presentation exports: `outputs_core/hcp7t_hippocampus/runs/<run_id>/present/overviews/`
 
 Default cohort:
 

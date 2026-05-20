@@ -14,6 +14,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 from lib.hippomaps_adapter import DEFAULT_HIPPOMAPS_ROOT, ensure_hippomaps_on_path, hippomaps_commit
+from lib.output_layout import DEFAULT_GRADIENTS_DIR
 from lib.traceability import StageSpec, run_stage
 
 
@@ -25,7 +26,7 @@ DEFAULT_GRADIENT_ROOT = (
     / "kong2022"
     / "hippomaps_gradients"
 )
-DEFAULT_PRESENT_ROOT = REPO_ROOT / "present_group_t1only" / "hippomaps_gradients"
+DEFAULT_PRESENT_ROOT = DEFAULT_GRADIENTS_DIR
 ROUTES = ("routea", "routeb")
 SMOOTHINGS = ("2mm", "4mm")
 HEMIS = ("L", "R")

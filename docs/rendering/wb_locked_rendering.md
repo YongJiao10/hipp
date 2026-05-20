@@ -47,9 +47,9 @@ If the rendering needs to be rerun in the future, rerun `scripts/workbench/rende
 
 The maintained continuous gradient figure artifact is:
 
-- `present_group_t1only/kong2022_gradient-spectral_group_gradients_heatmap_routea_2mm4mm_g1g2g3.png`
-- manifest: `present_group_t1only/kong2022_gradient-spectral_group_gradients_heatmap_routea_2mm4mm_g1g2g3_manifest.json`
-- runtime scalar/render assets: `present_group_t1only/group_gradient_heatmaps/runtime/routea_full/`
+- `outputs_core/hcp7t_hippocampus/runs/<run_id>/present/gradients/kong2022_gradient-spectral_group_gradients_heatmap_routea_2mm4mm_g1g2g3.png`
+- manifest: `outputs_core/hcp7t_hippocampus/runs/<run_id>/present/gradients/kong2022_gradient-spectral_group_gradients_heatmap_routea_2mm4mm_g1g2g3_manifest.json`
+- runtime scalar/render assets: `outputs_core/hcp7t_hippocampus/runs/<run_id>/present/gradients/group_gradient_heatmaps/runtime/routea_full/`
 
 This output is generated from active `gradient-spectral` RouteA full outputs only
 (`2mm` and `4mm`, `G1-G3`) and uses symmetric per-component min/max scaling across
