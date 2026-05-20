@@ -21,6 +21,7 @@ DEFAULT_SHARED_ROOT = (
     / "shared_inputs"
     / "routeb_151"
 )
+DEFAULT_DATA_ROOT = REPO_ROOT / "data" / "hippunfold_input"
 DEFAULT_MANIFEST = (
     REPO_ROOT
     / "outputs_experiments"
@@ -99,6 +100,7 @@ def run_subject(
     *,
     subject: str,
     shared_root: Path,
+    data_root: Path,
     kong2022_dlabel: Path | None,
     cross_atlas_merge_json: Path | None,
 ) -> tuple[str, bool, str]:
@@ -110,6 +112,8 @@ def run_subject(
         str(subject),
         "--shared-root",
         str(shared_root),
+        "--dtseries",
+        str(data_root / f"sub-{subject}" / "func" / f"sub-{subject}_task-rest_run-concat.dtseries.nii"),
     ]
     if kong2022_dlabel is not None:
         cmd.extend(["--kong2022-dlabel", str(kong2022_dlabel)])
@@ -127,6 +131,7 @@ def main() -> int:
         description="Batch extract Kong2022 cortex ROI and canonical-8 timeseries into shared reference directories."
     )
     parser.add_argument("--shared-root", default=str(DEFAULT_SHARED_ROOT))
+    parser.add_argument("--data-root", default=str(DEFAULT_DATA_ROOT))
     parser.add_argument("--subjects-manifest", default=str(DEFAULT_MANIFEST))
     parser.add_argument("--subjects", nargs="*", default=None, help="Optional explicit subject IDs.")
     parser.add_argument("--jobs", type=int, default=4, help="Thread-pool concurrency (hard-capped at 10).")
@@ -136,6 +141,7 @@ def main() -> int:
     args = parser.parse_args()
 
     shared_root = Path(args.shared_root).resolve()
+    data_root = Path(args.data_root).resolve()
     subjects = (
         [str(s).replace("sub-", "") for s in args.subjects]
         if args.subjects
@@ -174,6 +180,7 @@ def main() -> int:
                 run_subject,
                 subject=s,
                 shared_root=shared_root,
+                data_root=data_root,
                 kong2022_dlabel=dlabel,
                 cross_atlas_merge_json=merge_json,
             ): s

@@ -10,7 +10,10 @@ from pathlib import Path
 import nibabel as nib
 import numpy as np
 
-from extract_cortex_merged_network_timeseries import extract_structure_data, load_required_mask
+try:
+    from .extract_cortex_merged_network_timeseries import extract_structure_data, load_required_mask
+except ImportError:  # pragma: no cover - supports direct script execution during local debugging.
+    from extract_cortex_merged_network_timeseries import extract_structure_data, load_required_mask
 from .kong2022_label_utils import (
     KONG2022_DLABEL_PATH,
     KONG2022_MERGE_CONFIG,

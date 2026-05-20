@@ -53,6 +53,8 @@ DEFAULT_GROUP_AVG_SURFACES_DIR = (
     / "hipp_group_average_t1only_151"
     / "group_average_surfaces"
 )
+KONG2022_DLABEL_OVERRIDE: Path | None = None
+HIPPOMAPS_ROOT_OVERRIDE: Path = DEFAULT_HIPPOMAPS_ROOT
 
 METHOD_CHOICES = [
     "group-roi-sim-spectral",
@@ -1241,6 +1243,7 @@ def group_feature_matrix(
             subjects_subset=subjects_subset,
             support_mask=support_mask,
             gradient_components=gradient_components,
+            hippomaps_root=HIPPOMAPS_ROOT_OVERRIDE,
         )
         return features
 
@@ -1899,7 +1902,7 @@ def cluster_network_profile(
 
 
 def load_kong2022_roi_registry() -> list[dict[str, object]]:
-    bundle = load_kong2022_bundle()
+    bundle = load_kong2022_bundle(dlabel_path=KONG2022_DLABEL_OVERRIDE)
     rows: list[dict[str, object]] = []
     for row in bundle["roi_registry"]:
         rows.append(
@@ -2600,9 +2603,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--surface-root", default=str(DEFAULT_SURFACE_ROOT))
     parser.add_argument("--out-root", default=str(DEFAULT_OUT_ROOT))
     parser.add_argument("--gradient-root", default=str(DEFAULT_GRADIENT_ROOT))
+    parser.add_argument("--hippomaps-root", default=str(DEFAULT_HIPPOMAPS_ROOT))
     parser.add_argument("--route-tag", choices=["auto", *ROUTE_TAG_CHOICES], default="auto")
     parser.add_argument("--subjects-manifest", default=str(DEFAULT_SUBJECTS))
     parser.add_argument("--hippunfold-batch-root", default=str(DEFAULT_HIPPUNFOLD_BATCH_ROOT))
+    parser.add_argument("--kong2022-dlabel", default=None)
     parser.add_argument("--methods", nargs="+", default=METHODS_DEFAULT, choices=METHOD_CHOICES)
     parser.add_argument("--atlases", nargs="+", default=ATLASES)
     parser.add_argument("--smoothings", nargs="+", default=SMOOTHINGS)
@@ -2689,6 +2694,10 @@ def main() -> int:
     parser = build_arg_parser()
     args = parser.parse_args()
     suppress_known_runtime_warnings()
+
+    global KONG2022_DLABEL_OVERRIDE, HIPPOMAPS_ROOT_OVERRIDE
+    KONG2022_DLABEL_OVERRIDE = Path(args.kong2022_dlabel).resolve() if args.kong2022_dlabel else None
+    HIPPOMAPS_ROOT_OVERRIDE = Path(args.hippomaps_root).resolve()
 
     shared_root = Path(args.shared_root).resolve()
     surface_root = Path(args.surface_root).resolve()

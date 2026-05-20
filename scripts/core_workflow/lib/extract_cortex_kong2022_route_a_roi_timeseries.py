@@ -10,8 +10,16 @@ from pathlib import Path
 import nibabel as nib
 import numpy as np
 
-from extract_cortex_merged_network_timeseries import extract_structure_data, load_required_mask
-from .kong2022_label_utils import KONG2022_MERGE_CONFIG, canonical_families_8_order, load_kong2022_bundle
+try:
+    from .extract_cortex_merged_network_timeseries import extract_structure_data, load_required_mask
+except ImportError:  # pragma: no cover - supports direct script execution during local debugging.
+    from extract_cortex_merged_network_timeseries import extract_structure_data, load_required_mask
+from .kong2022_label_utils import (
+    KONG2022_DLABEL_PATH,
+    KONG2022_MERGE_CONFIG,
+    canonical_families_8_order,
+    load_kong2022_bundle,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -227,6 +235,7 @@ def main() -> int:
     )
     parser.add_argument("--subject", required=True, help="Subject ID without sub- prefix.")
     parser.add_argument("--dtseries", default=None)
+    parser.add_argument("--kong2022-dlabel", default=str(KONG2022_DLABEL_PATH))
     parser.add_argument("--cross-atlas-merge-json", default=str(KONG2022_MERGE_CONFIG))
     parser.add_argument("--shared-root", default=str(DEFAULT_SHARED_ROOT))
     parser.add_argument("--route-a-root", default=str(DEFAULT_ROUTE_A_ROOT))
@@ -271,7 +280,10 @@ def main() -> int:
     lh_full = load_surface_label_vector(lh_labels_path)
     rh_full = load_surface_label_vector(rh_labels_path)
 
-    bundle = load_kong2022_bundle(config_path=Path(args.cross_atlas_merge_json).resolve())
+    bundle = load_kong2022_bundle(
+        dlabel_path=Path(args.kong2022_dlabel).resolve(),
+        config_path=Path(args.cross_atlas_merge_json).resolve(),
+    )
     roi_registry = list(bundle["roi_registry"])
     canonical8_order = list(bundle["canonical8_order"])
 

@@ -21,6 +21,7 @@ DEFAULT_SHARED_ROOT = (
     / "routea_151"
 )
 DEFAULT_ROUTE_A_ROOT = REPO_ROOT / "outputs_experiments" / "cortex_kong2022_areal_mshbm"
+DEFAULT_DATA_ROOT = REPO_ROOT / "data" / "hippunfold_input"
 DEFAULT_MANIFEST = (
     REPO_ROOT
     / "outputs_experiments"
@@ -72,6 +73,8 @@ def run_subject(
     subject: str,
     shared_root: Path,
     route_a_root: Path,
+    data_root: Path,
+    kong2022_dlabel: Path | None,
     overwrite: bool,
 ) -> tuple[str, bool, str]:
     cmd = [
@@ -84,7 +87,11 @@ def run_subject(
         str(shared_root),
         "--route-a-root",
         str(route_a_root),
+        "--dtseries",
+        str(data_root / f"sub-{subject}" / "func" / f"sub-{subject}_task-rest_run-concat.dtseries.nii"),
     ]
+    if kong2022_dlabel is not None:
+        cmd.extend(["--kong2022-dlabel", str(kong2022_dlabel)])
     if overwrite:
         cmd.append("--overwrite")
     proc = subprocess.run(cmd, capture_output=True, text=True)
@@ -100,6 +107,8 @@ def main() -> int:
     )
     parser.add_argument("--shared-root", default=str(DEFAULT_SHARED_ROOT))
     parser.add_argument("--route-a-root", default=str(DEFAULT_ROUTE_A_ROOT))
+    parser.add_argument("--data-root", default=str(DEFAULT_DATA_ROOT))
+    parser.add_argument("--kong2022-dlabel", default=None)
     parser.add_argument("--subjects-manifest", default=str(DEFAULT_MANIFEST))
     parser.add_argument("--subjects", nargs="*", default=None, help="Optional explicit subject IDs.")
     parser.add_argument("--jobs", type=int, default=4, help="Thread-pool concurrency (hard-capped at 10).")
@@ -109,6 +118,8 @@ def main() -> int:
 
     shared_root = Path(args.shared_root).resolve()
     route_a_root = Path(args.route_a_root).resolve()
+    data_root = Path(args.data_root).resolve()
+    kong2022_dlabel = Path(args.kong2022_dlabel).resolve() if args.kong2022_dlabel else None
     subjects_manifest = Path(args.subjects_manifest).resolve()
     validate_routea_path(shared_root, "--shared-root")
     validate_routea_path(subjects_manifest, "--subjects-manifest")
@@ -137,6 +148,8 @@ def main() -> int:
                 subject=s,
                 shared_root=shared_root,
                 route_a_root=route_a_root,
+                data_root=data_root,
+                kong2022_dlabel=kong2022_dlabel,
                 overwrite=bool(args.overwrite),
             ): s
             for s in todo

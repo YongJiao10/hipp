@@ -45,6 +45,20 @@ used during official plotting import: `pygeodesic`, `adjustText`,
 `matplotlib`, `nilearn`,
 `brainspace`, or `nibabel` stack.
 
+## Workbench Concurrency
+
+All core workflow Workbench calls must use
+`scripts/core_workflow/lib/workbench.py`. The wrapper defaults
+`CORE_WORKFLOW_WB_THREADS=1` and applies that value to the common native thread
+environment variables before invoking `wb_command`, including
+`OMP_NUM_THREADS`, `OPENBLAS_NUM_THREADS`, `MKL_NUM_THREADS`,
+`NUMEXPR_NUM_THREADS`, `VECLIB_MAXIMUM_THREADS`, and
+`ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS`.
+
+For `01_01_prepare_group_inputs.py`, subject-level Workbench stages are capped
+at two concurrent subjects even if `--jobs` is higher. Do not bypass this cap
+with direct Workbench subprocess calls.
+
 ## Canonical Command Forms
 
 Use these forms directly:

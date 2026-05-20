@@ -24,6 +24,8 @@ DEFAULT_SOURCE_SUBJECTS = (
 DEFAULT_FALLBACK_SMOKE_SUBJECTS = ("100610", "102311", "104416", "105923", "108323")
 DEFAULT_INPUT_DIR = REPO_ROOT / "data" / "hippunfold_input"
 DEFAULT_BOLD_ROOT = Path("/home/yojiao/LSS/jianglab/3_Data_Working/HCP_7T_Hippocampus/rsfmri_volume")
+DEFAULT_HIPPUNFOLD_ASSET_STORE_ROOT = REPO_ROOT / "runtime" / "hippunfold_asset_store_shared"
+DEFAULT_HIPPOMAPS_ROOT = REPO_ROOT / "external" / "hippomaps"
 
 
 def now_utc() -> str:
@@ -67,11 +69,11 @@ def cmd(*parts: object) -> list[str]:
     return [str(p) for p in parts]
 
 
-def command_record(stage: str, command: list[str], *, note: str = "") -> dict[str, Any]:
-    return {"stage": stage, "command": command, "note": note}
+def command_record(stage: str, command: list[str], *, note: str = "", env: dict[str, str] | None = None) -> dict[str, Any]:
+    return {"stage": stage, "command": command, "note": note, "env": {} if env is None else dict(env)}
 
 
-def build_command_plan(*, subjects: list[str], layout: dict[str, Path], python_exe: str, input_dir: Path, bold_root: Path) -> list[dict[str, Any]]:
+def build_command_plan(*, subjects: list[str], layout: dict[str, Path], python_exe: str, input_dir: Path, bold_root: Path, hippunfold_asset_store_root: Path | None = None, kong2022_dlabel: Path | None = None, hippomaps_root: Path | None = None) -> list[dict[str, Any]]:
     subject_manifest = layout["inputs"] / "subjects_smoke5.txt"
     shared_inputs = layout["features"] / "shared_inputs"
     surface_root = shared_inputs / "surface"
@@ -81,6 +83,22 @@ def build_command_plan(*, subjects: list[str], layout: dict[str, Path], python_e
     group_surfaces = template_root / "group_average_surfaces"
     group_root_base = layout["group_atlas"]
     gradient_root = layout["gradients"]
+
+    hippunfold_env = (
+        {"HIPPUNFOLD_ASSET_STORE_ROOT": str(Path(hippunfold_asset_store_root).resolve())}
+        if hippunfold_asset_store_root is not None
+        else {}
+    )
+    kong2022_dlabel_args = (
+        ["--kong2022-dlabel", str(Path(kong2022_dlabel).resolve())]
+        if kong2022_dlabel is not None
+        else []
+    )
+    hippomaps_root_args = (
+        ["--hippomaps-root", str(Path(hippomaps_root).resolve())]
+        if hippomaps_root is not None
+        else []
+    )
 
     records: list[dict[str, Any]] = [
         command_record(
@@ -104,6 +122,7 @@ def build_command_plan(*, subjects: list[str], layout: dict[str, Path], python_e
                     input_dir,
                     layout["hippunfold"] / f"sub-{subject}",
                 ),
+                env=hippunfold_env,
             )
         )
     jobs = str(min(5, max(1, len(subjects))))
@@ -141,6 +160,9 @@ def build_command_plan(*, subjects: list[str], layout: dict[str, Path], python_e
                     routeb_root,
                     "--subjects-manifest",
                     subject_manifest,
+                    "--data-root",
+                    input_dir,
+                    *kong2022_dlabel_args,
                     "--jobs",
                     jobs,
                 ),
@@ -154,6 +176,9 @@ def build_command_plan(*, subjects: list[str], layout: dict[str, Path], python_e
                     routea_root,
                     "--subjects-manifest",
                     subject_manifest,
+                    "--data-root",
+                    input_dir,
+                    *kong2022_dlabel_args,
                     "--jobs",
                     jobs,
                 ),
@@ -214,6 +239,7 @@ def build_command_plan(*, subjects: list[str], layout: dict[str, Path], python_e
                 group_surfaces,
                 "--out-root",
                 gradient_root,
+                *hippomaps_root_args,
                 "--n-components",
                 "5",
                 "--selected-components",
@@ -240,12 +266,14 @@ def build_command_plan(*, subjects: list[str], layout: dict[str, Path], python_e
                         group_root,
                         "--gradient-root",
                         gradient_root,
+                        *hippomaps_root_args,
                         "--route-tag",
                         route,
                         "--subjects-manifest",
                         subject_manifest,
                         "--hippunfold-batch-root",
                         layout["hippunfold"],
+                        *kong2022_dlabel_args,
                         "--group-average-surfaces-dir",
                         group_surfaces,
                         "--methods",
@@ -316,8 +344,11 @@ def write_command_script(path: Path, records: list[dict[str, Any]]) -> None:
     for record in records:
         stage = str(record["stage"])
         command = [str(x) for x in record["command"]]
+        env = {str(k): str(v) for k, v in dict(record.get("env", {})).items()}
         lines.append(f"echo '[stage] {stage}'")
-        lines.append(" ".join(json.dumps(part) for part in command))
+        prefix = " ".join(f"{k}={json.dumps(v)}" for k, v in sorted(env.items()))
+        rendered = " ".join(json.dumps(part) for part in command)
+        lines.append(f"{prefix} {rendered}".strip())
         lines.append("")
     path.write_text("\n".join(lines), encoding="utf-8")
 
@@ -331,6 +362,11 @@ def main() -> int:
     parser.add_argument("--python-exe", default=PYTHON_EXE)
     parser.add_argument("--input-dir", default=str(DEFAULT_INPUT_DIR))
     parser.add_argument("--bold-root", default=str(DEFAULT_BOLD_ROOT))
+    parser.add_argument(
+        "--hippunfold-asset-store-root",
+        default=str(DEFAULT_HIPPUNFOLD_ASSET_STORE_ROOT) if DEFAULT_HIPPUNFOLD_ASSET_STORE_ROOT.exists() else None,
+        help="Optional shared HippUnfold asset store containing hippunfold_assets/ and runtime_source_assets/ to avoid repeated model/template downloads.",
+    )
     args = parser.parse_args()
 
     if int(args.subject_count) < 1:
@@ -350,6 +386,9 @@ def main() -> int:
         python_exe=str(args.python_exe),
         input_dir=Path(args.input_dir).resolve(),
         bold_root=Path(args.bold_root).resolve(),
+        hippunfold_asset_store_root=(None if args.hippunfold_asset_store_root is None else Path(args.hippunfold_asset_store_root).resolve()),
+        kong2022_dlabel=(None if args.kong2022_dlabel is None else Path(args.kong2022_dlabel).resolve()),
+        hippomaps_root=(None if args.hippomaps_root is None else Path(args.hippomaps_root).resolve()),
     )
     commands_json = layout["manifests"] / "smoke_command_manifest.json"
     commands_sh = layout["manifests"] / "run_smoke_commands.sh"
@@ -371,6 +410,9 @@ def main() -> int:
             "auto_k_default": False,
             "presentation_split": "none",
             "overview_dir_contains_all_methods": str(layout["overviews"].resolve()),
+            "hippunfold_asset_store_root": None if args.hippunfold_asset_store_root is None else str(Path(args.hippunfold_asset_store_root).resolve()),
+            "kong2022_dlabel": None if args.kong2022_dlabel is None else str(Path(args.kong2022_dlabel).resolve()),
+            "hippomaps_root": None if args.hippomaps_root is None else str(Path(args.hippomaps_root).resolve()),
         },
         "commands": records,
     }

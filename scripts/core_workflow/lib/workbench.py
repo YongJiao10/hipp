@@ -9,6 +9,29 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_WB_COMMAND = REPO_ROOT / "software" / "workbench" / "bin_linux64" / "wb_command"
 ENV_WB_COMMAND = "CORE_WORKFLOW_WB_COMMAND"
+ENV_WB_THREADS = "CORE_WORKFLOW_WB_THREADS"
+WORKBENCH_THREAD_ENV_KEYS = (
+    "OMP_NUM_THREADS",
+    "OPENBLAS_NUM_THREADS",
+    "MKL_NUM_THREADS",
+    "NUMEXPR_NUM_THREADS",
+    "VECLIB_MAXIMUM_THREADS",
+    "ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS",
+)
+
+
+def workbench_env(extra: dict[str, str] | None = None) -> dict[str, str]:
+    env = dict(os.environ)
+    raw_threads = env.get(ENV_WB_THREADS, "1").strip() or "1"
+    try:
+        threads = max(1, int(raw_threads))
+    except ValueError as exc:
+        raise ValueError(f"Invalid ${ENV_WB_THREADS}={raw_threads!r}; expected integer >= 1") from exc
+    for key in WORKBENCH_THREAD_ENV_KEYS:
+        env[key] = str(threads)
+    if extra:
+        env.update({str(k): str(v) for k, v in extra.items()})
+    return env
 
 
 def resolve_wb_command(override: str | Path | None = None) -> Path:
@@ -39,7 +62,7 @@ def run_workbench(
     proc = subprocess.run(
         cmd,
         cwd=str(cwd) if cwd is not None else None,
-        env=env,
+        env=workbench_env(env),
         text=True,
         capture_output=True,
     )

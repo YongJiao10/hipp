@@ -53,9 +53,24 @@ Execution environment (hard requirement):
 
 - Do not run core workflow tasks with bare `python`.
 - Use `/home/yojiao/.conda/envs/py314/bin/python` for core workflow scripts/tests.
+- Workbench calls go through `scripts/core_workflow/lib/workbench.py`, which
+  defaults `CORE_WORKFLOW_WB_THREADS=1` and sets the common native thread
+  variables (`OMP_NUM_THREADS`, `OPENBLAS_NUM_THREADS`, `MKL_NUM_THREADS`,
+  `NUMEXPR_NUM_THREADS`, `VECLIB_MAXIMUM_THREADS`,
+  `ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS`) before every `wb_command` call.
+- `01_01_prepare_group_inputs.py` hard-caps subject-level Workbench stages at
+  two concurrent subjects even when `--jobs` is higher. This keeps Python
+  workers plus Workbench subprocesses below the repository concurrency limit.
 - See `docs/environment/agent_runtime_contract.md` for preflight checks.
 
 Entrypoint arguments:
+
+Kong2022 reference batch entrypoints (`03_01` and `03_02`) accept
+`--data-root`; `03_01`, `03_02`, and `05_01` also accept
+`--kong2022-dlabel`. The wrappers pass explicit per-subject dtseries paths and
+explicit atlas assets to extraction/annotation modules, so smoke runs can reuse
+validated trees outside the current worktree without creating symlinks. `05_03`
+and `05_01` accept `--hippomaps-root` for the same reason.
 
 - `--workflow-branch`: one of `kong2019`, `kong2022_routea`, `kong2022_routeb`
 - `--upstream-step-id` (repeatable)

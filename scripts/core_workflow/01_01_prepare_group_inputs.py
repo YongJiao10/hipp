@@ -27,6 +27,9 @@ DEFAULT_TEMPLATE_ROOT = DEFAULT_ROUTE_ROOT / "templates" / "hipp_group_average_t
 DEFAULT_BOLD_ROOT = Path("/home/yojiao/LSS/jianglab/3_Data_Working/HCP_7T_Hippocampus/rsfmri_volume")
 QC_SCRIPT = REPO_ROOT / "scripts" / "core_workflow" / "01_02_build_qc_manifest.py"
 MAX_CONCURRENCY = 10
+# Workbench stages spawn a Python worker plus a wb_command wrapper and the real wb_command process per subject.
+# Keep subject-level Workbench concurrency at 2 so total process count stays below the repository hard cap.
+MAX_WORKBENCH_SUBJECT_JOBS = 2
 HEMIS = ["L", "R"]
 SMOOTHINGS = ["2mm", "4mm"]
 
@@ -256,9 +259,8 @@ def run_smoothing(subject: str, batch_root: str, shared_root: str) -> dict[str, 
     shared = Path(shared_root)
     inputs: list[dict[str, object]] = []
     outputs: list[dict[str, object]] = []
-    # wb_command defaults to spawning one thread per CPU core; cap it to avoid
-    # saturating the host when multiple subjects run in parallel.
-    _wb_env = {**os.environ, "OMP_NUM_THREADS": "2"}
+    # Thread caps are enforced centrally by lib.workbench.run_workbench.
+    _wb_env = {}
     for smoothing in SMOOTHINGS:
         fwhm = float(smoothing.replace("mm", ""))
         out_dir = shared / f"sub-{subject}" / "surface" / smoothing
@@ -400,7 +402,7 @@ def main() -> int:
     parser.add_argument("--bold-root", default=str(DEFAULT_BOLD_ROOT))
     parser.add_argument("--subjects-manifest", default=None)
     parser.add_argument("--subjects", nargs="*", default=None)
-    parser.add_argument("--jobs", type=int, default=8)
+    parser.add_argument("--jobs", type=int, default=2)
     parser.add_argument("--resume", action="store_true", default=True)
     parser.add_argument("--stage", choices=["all", "raw", "tsnr", "qc", "smooth", "group-average"], default="all")
     parser.add_argument("--dice-threshold", type=float, default=0.70)
@@ -417,21 +419,27 @@ def main() -> int:
     max_concurrency = resolve_max_concurrency()
     requested_jobs = int(args.jobs)
     jobs = max(1, min(requested_jobs, max_concurrency))
+    workbench_jobs = max(1, min(jobs, MAX_WORKBENCH_SUBJECT_JOBS))
     if requested_jobs > max_concurrency:
         print(
             f"[warn] requested jobs={requested_jobs} exceeds max_concurrency={max_concurrency}; using jobs={jobs}",
+            flush=True,
+        )
+    if jobs != workbench_jobs:
+        print(
+            f"[warn] Workbench stages use jobs={workbench_jobs} to keep worker+wb_command processes below the hard cap",
             flush=True,
         )
 
     subjects_manifest = Path(args.subjects_manifest).resolve() if args.subjects_manifest else None
     subjects = load_subjects(batch_root, bold_root, subjects_manifest, args.subjects)
     dice_subjects = dice_pass_subjects(batch_root, subjects, args.dice_threshold)
-    print(f"[info] subjects={len(subjects)} dice_pass={len(dice_subjects)} jobs={jobs}", flush=True)
+    print(f"[info] subjects={len(subjects)} dice_pass={len(dice_subjects)} jobs={jobs} workbench_jobs={workbench_jobs}", flush=True)
 
     if args.stage in {"all", "raw"}:
         raw_todo = [s for s in dice_subjects if not (args.resume and raw_done(shared_root, s))]
         print(f"[info] raw sampling todo={len(raw_todo)}", flush=True)
-        run_parallel("raw", raw_todo, jobs, run_raw_sampling, str(batch_root), str(shared_root), str(bold_root), str(log_dir))
+        run_parallel("raw", raw_todo, workbench_jobs, run_raw_sampling, str(batch_root), str(shared_root), str(bold_root), str(log_dir))
     if args.stage in {"all", "tsnr"}:
         tsnr_todo = [s for s in dice_subjects if not (args.resume and tsnr_done(shared_root, s))]
         print(f"[info] tsnr gate todo={len(tsnr_todo)}", flush=True)
@@ -461,7 +469,7 @@ def main() -> int:
     if args.stage in {"all", "smooth"}:
         smooth_todo = [s for s in pass_subjects if not (args.resume and smoothing_done(shared_root, s))]
         print(f"[info] smoothing pass_subjects={len(pass_subjects)} todo={len(smooth_todo)}", flush=True)
-        run_parallel("smooth", smooth_todo, jobs, run_smoothing, str(batch_root), str(shared_root))
+        run_parallel("smooth", smooth_todo, workbench_jobs, run_smoothing, str(batch_root), str(shared_root))
     if args.stage in {"all", "group-average"}:
         print(f"[info] group-average subjects={len(pass_subjects)}", flush=True)
         build_group_average_surfaces(batch_root, template_root, pass_subjects)
