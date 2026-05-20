@@ -64,7 +64,7 @@ with direct Workbench subprocess calls.
 Use these forms directly:
 
 ```bash
-/home/yojiao/.conda/envs/py314/bin/python scripts/hipp_parcellation_network/test_core_workflow_traceability_contract.py
+/home/yojiao/.conda/envs/py314/bin/python tests/core_workflow/test_core_workflow_traceability_contract.py
 /home/yojiao/.conda/envs/py314/bin/python -m py_compile scripts/core_workflow/*.py scripts/core_workflow/lib/*.py
 /home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/01_01_prepare_group_inputs.py --help
 /home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/06_04_build_cluster_cortex_panels.py --help

@@ -148,6 +148,93 @@ def test_gradientmaps_called_with_official_pearson_kernel_and_full_lambda_ev() -
     assert np.allclose(ev, [0.5, 0.3, 0.2])
 
 
+def test_group_atlas_gradient_spectral_uses_hippomaps_adapter_and_records_provenance() -> None:
+    feature_bank = {
+        "a": np.asarray(
+            [
+                [0.1, 0.2, 0.3],
+                [0.4, 0.5, 0.6],
+                [0.7, 0.8, 0.9],
+                [1.0, 1.1, 1.2],
+                [1.3, 1.4, 1.5],
+                [1.6, 1.7, 1.8],
+                [1.9, 2.0, 2.1],
+            ],
+            dtype=np.float32,
+        ),
+        "b": np.asarray(
+            [
+                [0.2, 0.1, 0.0],
+                [0.6, 0.5, 0.4],
+                [1.0, 0.9, 0.8],
+                [1.4, 1.3, 1.2],
+                [1.8, 1.7, 1.6],
+                [2.2, 2.1, 2.0],
+                [2.6, 2.5, 2.4],
+            ],
+            dtype=np.float32,
+        ),
+    }
+    support_mask = np.asarray([True, True, False, True, True, True, True], dtype=bool)
+    calls: dict[str, np.ndarray | int] = {}
+
+    def fake_fit(group_fc: np.ndarray, *, n_components: int, gradient_maps_cls: object | None = None):
+        calls["group_fc"] = np.asarray(group_fc, dtype=np.float32).copy()
+        calls["n_components"] = int(n_components)
+        gradients = np.asarray(
+            [
+                [1.0, 2.0, 3.0, 4.0, 5.0],
+                [6.0, 7.0, 8.0, 9.0, 10.0],
+                [11.0, 12.0, 13.0, 14.0, 15.0],
+                [16.0, 17.0, 18.0, 19.0, 20.0],
+                [21.0, 22.0, 23.0, 24.0, 25.0],
+                [26.0, 27.0, 28.0, 29.0, 30.0],
+            ],
+            dtype=np.float32,
+        )
+        lambdas = np.asarray([5.0, 4.0, 3.0, 2.0, 1.0], dtype=np.float64)
+        ev = lambdas / np.sum(lambdas)
+        return gradients, lambdas, ev
+
+    expected_group_fc = np.nanmean(
+        np.stack([feature_bank["a"][support_mask], feature_bank["b"][support_mask]], axis=0),
+        axis=0,
+    ).astype(np.float32)
+
+    with (
+        patch.object(atlas_mod, "ensure_hippomaps_on_path", return_value=Path("/mock/hippomaps")),
+        patch.object(atlas_mod, "hippomaps_import_path", return_value="/mock/hippomaps/hippomaps"),
+        patch.object(atlas_mod, "hippomaps_commit", return_value="deadbeef"),
+    ):
+        selected, meta = atlas_mod.build_group_gradient_features(
+            feature_bank=feature_bank,
+            subjects_subset=["a", "b"],
+            support_mask=support_mask,
+            gradient_components=(1, 3),
+            hippomaps_root=Path("/mock/hippomaps"),
+            gradientmaps_fit_fn=fake_fit,
+        )
+
+    assert int(calls["n_components"]) == atlas_mod.GRADIENT_N_COMPONENTS_COMPUTED
+    assert np.allclose(calls["group_fc"], expected_group_fc, atol=1e-6)
+    assert selected.shape == (6, 2), selected.shape
+    assert np.allclose(selected[:, 0], [1.0, 6.0, 11.0, 16.0, 21.0, 26.0], atol=1e-6)
+    assert np.allclose(selected[:, 1], [3.0, 8.0, 13.0, 18.0, 23.0, 28.0], atol=1e-6)
+    assert meta["gradientmaps_call"] == (
+        "brainspace.gradient.GradientMaps(n_components=N, kernel='pearson').fit(column_zscored_group_mean_fisherz_fc)"
+    )
+    assert meta["feature_zscore_pre_gradientmaps"] == (
+        "column-wise z-score across vertices after group Fisher-z averaging"
+    )
+    assert meta["gradient_component_labels"] == ["G1", "G3"]
+    assert meta["selected_components"] == ["G1", "G3"]
+    assert meta["hippomaps_repo"] == "/mock/hippomaps"
+    assert meta["hippomaps_import_path"] == "/mock/hippomaps/hippomaps"
+    assert meta["hippomaps_commit"] == "deadbeef"
+    assert np.allclose(meta["gradient_eigenvalues"], [5.0, 4.0, 3.0, 2.0, 1.0], atol=1e-6)
+    assert np.allclose(meta["ev_fractions"], [1.0 / 3.0, 4.0 / 15.0, 1.0 / 5.0, 2.0 / 15.0, 1.0 / 15.0], atol=1e-6)
+
+
 def test_group_atlas_public_methods_drop_partial_corr_branches() -> None:
     assert "group-network-partial-spectral" not in atlas_mod.METHOD_CHOICES
     assert "group-intrinsic-partial-spectral" not in atlas_mod.METHOD_CHOICES
@@ -415,6 +502,7 @@ def test_annotate_gradient_image_adds_left_margin_and_ev_labels() -> None:
 def main() -> int:
     test_group_mean_fc_applies_fisher_z_before_averaging()
     test_gradientmaps_called_with_official_pearson_kernel_and_full_lambda_ev()
+    test_group_atlas_gradient_spectral_uses_hippomaps_adapter_and_records_provenance()
     test_group_atlas_public_methods_drop_partial_corr_branches()
     test_group_atlas_parser_defaults_to_fixed_k3()
     test_group_atlas_gradient_spectral_loads_hippomaps_gradient_artifacts()

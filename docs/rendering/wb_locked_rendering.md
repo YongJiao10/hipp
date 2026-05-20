@@ -11,9 +11,9 @@ For active core-workflow RouteA gradient presentation, use:
 ## Official Inputs
 
 - Scene template: `config/wb_locked_native_view.scene`
-- Batch renderer: `scripts/workbench/render_locked_wb_views.py`
-- Workbench scene capture: `scripts/workbench/render_wb_scene_batch.py`
-- Right-side legend compositor: `scripts/workbench/compose_wb_with_side_legend.py`
+- Batch renderer: `_archive/deprecated_2026-05-20/scripts_pre_core_workflow/workbench/render_locked_wb_views.py`
+- Workbench scene capture: `_archive/deprecated_2026-05-20/scripts_pre_core_workflow/workbench/render_wb_scene_batch.py`
+- Right-side legend compositor: `_archive/deprecated_2026-05-20/scripts_pre_core_workflow/workbench/compose_wb_with_side_legend.py`
 
 ## Locked Visual Rules
 
@@ -21,7 +21,7 @@ For active core-workflow RouteA gradient presentation, use:
 - Keep the left/right hippocampi in the mirrored symmetric layout produced by that scene.
 - Do not place text labels on the surface itself.
 - Place structural region names in a right-side legend panel.
-- Use the enlarged legend style defined in `scripts/workbench/compose_wb_with_side_legend.py`.
+- Use the enlarged legend style defined in `_archive/deprecated_2026-05-20/scripts_pre_core_workflow/workbench/compose_wb_with_side_legend.py`.
 
 ## Official Output Pattern
 
@@ -41,7 +41,7 @@ Older exploratory rendering code and exploratory rendering outputs are archived 
 - Legacy code archive: `archive/legacy_rendering_code/`
 - Legacy result archive: `outputs/dense_corobl_batch/_archive/legacy_rendering_results/`
 
-If the rendering needs to be rerun in the future, rerun `scripts/workbench/render_locked_wb_views.py` rather than reviving older exploratory scripts.
+If the rendering needs to be rerun in the future, rerun `_archive/deprecated_2026-05-20/scripts_pre_core_workflow/workbench/render_locked_wb_views.py` rather than reviving older exploratory scripts.
 
 ## RouteA Group Gradient Heatmap Output
 

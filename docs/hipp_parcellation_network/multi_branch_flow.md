@@ -71,8 +71,16 @@ and a manifest recording source FC paths, subject count, vertex count,
 with official HippoMaps plotting code:
 `hippomaps.plotting.surfplot_canonical_foldunfold(..., cmap="plasma",
 unfoldAPrescale=False for den=512, tighten_cwindow=True, share="row",
-color_bar="right")`. It also writes EV plots and Kong2022 ROI FC contrast plots
-comparing vertices in the top 25% vs bottom 25% of each gradient.
+color_bar="right")`. For `den=512`, the renderer treats `512` as HippoMaps v2
+in the current Python process; no AP surfarea rescale is used. It also writes EV
+plots and Kong2022 ROI FC contrast plots comparing vertices in the top 25% vs
+bottom 25% of each gradient. The default render is bilateral, but L/R gradients
+are fit independently, so `06_05` renders each hemisphere separately with its
+own colorbar and EV labels before stitching the two sides. `--hemis L` or
+`--hemis R` writes single-hemisphere gradient, EV, endpoint-contrast, and
+manifest files with hemisphere tags in the filenames. This route is upstream and
+continuous only. It does not change K selection, regularization, label
+assignment, or the downstream `gradient-spectral` clustering outputs in `05_01`.
 
 Canonical run outputs live under
 `outputs_core/hcp7t_hippocampus/runs/<run_id>/`: all maintained method overview

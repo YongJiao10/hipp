@@ -45,8 +45,11 @@ gradient artifacts with `hippomaps.plotting.surfplot_canonical_foldunfold`,
 `cmap="plasma"`, `tighten_cwindow=True`, `share="row"`, and
 `color_bar="right"`. For `den=512`, it treats `512` as HippoMaps v2 in the
 current Python process and disables `unfoldAPrescale`; no AP surfarea rescale is
-used for 512-density figures. The renderer defaults to bilateral output and
-accepts `--hemis L` or `--hemis R` for single-hemisphere files.
+used for 512-density figures. The renderer defaults to bilateral output and accepts `--hemis L` or
+`--hemis R` for single-hemisphere files. Because left and right hemispheres are
+fit independently, bilateral figures are assembled from separate L/R HippoMaps
+renders so each side keeps its own colorbar and EV labels. Manifests record the
+`external/hippomaps` import path, commit, and plotter support settings.
 
 Canonical run outputs live under
 `outputs_core/hcp7t_hippocampus/runs/<run_id>/`. All maintained method overview

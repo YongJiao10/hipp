@@ -60,6 +60,11 @@ Kong2022 group-gradient clustering example:
   --k-min 3 --k-max 3 --force-final-k 3
 ```
 
+`--gradient-components` accepts `1`, `2`, `3`, `1,2`, and `1,2,3`; `1,2,3` is
+the default. Interpret this branch as full-continuous FC: do not treat
+`top-percent` / `10perc` sparsified and binarized FC as the maintained gradient
+input or overview-mode split.
+
 `05_03` keeps the Fisher-z transform before group averaging, applies column-wise
 feature z-score across vertices, then calls
 `GradientMaps(n_components=N, kernel="pearson")` on the z-scored group mean
@@ -90,6 +95,9 @@ Maintained output layout:
 - Cortex/hippocampus panels: `present/cortex_panels/`.
 - The maintained matrix uses fixed full-FC route roots only; no `10perc/full`
   presentation split and no `present_fixedk` directory are canonical.
+- `06_05_render_group_gradient_heatmaps.py` is legacy/optional for locked-scene
+  RouteA G1-G3 heatmaps. It is not part of the canonical overview directory
+  layout.
 
 HippoMaps continuous-gradient presentation uses official
 `surfplot_canonical_foldunfold` folded/unfolded surfaces with `plasma`,

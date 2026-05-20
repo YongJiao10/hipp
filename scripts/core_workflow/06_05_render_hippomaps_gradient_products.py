@@ -55,6 +55,13 @@ def compute_row_ev_percentages(manifests: dict[str, dict[str, Any]], selected_co
     return out
 
 
+def compute_hemi_ev_percentages(manifest: dict[str, Any], selected_components: list[int]) -> list[float]:
+    ev = np.asarray(manifest["ev_fractions"], dtype=np.float64)
+    if ev.size < max(selected_components):
+        raise ValueError(f"Manifest has too few EV fractions: {ev.size}")
+    return [float(ev[int(comp) - 1]) * 100.0 for comp in selected_components]
+
+
 def normalize_hemis(hemis: list[str] | tuple[str, ...]) -> list[str]:
     out = [str(hemi).upper() for hemi in hemis]
     if not out:
@@ -74,6 +81,7 @@ def annotate_gradient_image(
     *,
     selected_components: list[int],
     ev_percentages: list[float],
+    title: str = "Gradient",
 ) -> Path:
     img = Image.open(image_path).convert("RGB")
     src_w, src_h = img.size
@@ -88,7 +96,7 @@ def annotate_gradient_image(
         font = ImageFont.load_default()
         small_font = font
 
-    draw.text((18, 14), "Gradient", fill=(0, 0, 0), font=font)
+    draw.text((18, 14), title, fill=(0, 0, 0), font=font)
     n_rows = max(1, len(selected_components))
     row_h = src_h / float(n_rows)
     for idx, comp in enumerate(selected_components):
@@ -99,6 +107,21 @@ def annotate_gradient_image(
         draw.text((18, y + 8), ev_text, fill=(0, 0, 0), font=small_font)
     out.save(image_path)
     return image_path
+
+
+def stitch_hemi_gradient_images(left_png: Path, right_png: Path, output_png: Path) -> Path:
+    left_img = Image.open(left_png).convert("RGB")
+    right_img = Image.open(right_png).convert("RGB")
+    out = Image.new(
+        "RGB",
+        (left_img.size[0] + right_img.size[0], max(left_img.size[1], right_img.size[1])),
+        (255, 255, 255),
+    )
+    out.paste(left_img, (0, 0))
+    out.paste(right_img, (left_img.size[0], 0))
+    output_png.parent.mkdir(parents=True, exist_ok=True)
+    out.save(output_png)
+    return output_png
 
 
 def enable_den512_plotting_v2(hippomaps_root: Path) -> bool:
@@ -183,6 +206,53 @@ def render_gradient_figure(
     else:
         raise TypeError(f"Unsupported HippoMaps plotter return type: {type(fig)!r}")
     return output_png
+
+
+def render_bilateral_gradient_figure(
+    *,
+    left: np.ndarray,
+    right: np.ndarray,
+    output_png: Path,
+    den: str = "512",
+    selected_components: list[int],
+    ev_by_hemi: dict[str, list[float]],
+    plotter: Callable[..., object] | None = None,
+) -> Path:
+    output_png.parent.mkdir(parents=True, exist_ok=True)
+    if plotter is None:
+        plotter = load_hippomaps_plotter()
+    side_paths = {
+        "L": output_png.with_name(f"{output_png.stem}_hemi-L{output_png.suffix}"),
+        "R": output_png.with_name(f"{output_png.stem}_hemi-R{output_png.suffix}"),
+    }
+    render_gradient_figure(
+        left=left,
+        output_png=side_paths["L"],
+        den=den,
+        hemis=["L"],
+        plotter=plotter,
+    )
+    annotate_gradient_image(
+        side_paths["L"],
+        selected_components=selected_components,
+        ev_percentages=ev_by_hemi["L"],
+        title="L Gradient",
+    )
+    render_gradient_figure(
+        left=np.empty((0, np.asarray(right).shape[1]), dtype=np.float32),
+        right=right,
+        output_png=side_paths["R"],
+        den=den,
+        hemis=["R"],
+        plotter=plotter,
+    )
+    annotate_gradient_image(
+        side_paths["R"],
+        selected_components=selected_components,
+        ev_percentages=ev_by_hemi["R"],
+        title="R Gradient",
+    )
+    return stitch_hemi_gradient_images(side_paths["L"], side_paths["R"], output_png)
 
 
 def endpoint_fc_contrast(
@@ -289,19 +359,39 @@ def render_combo(
     gradient_png = combo_root / f"hippomaps_gradients_{route}_{smoothing}_{out_tag}_g1g2g3.png"
     den512_plotting_v2_added = enable_den512_plotting_v2(hippomaps_root) if str(den) == "512" else False
     unfold_ap_rescale = str(den) != "512"
-    render_gradient_figure(
-        left=left,
-        right=right,
-        output_png=gradient_png,
-        den=den,
-        hemis=hemis,
-        plotter=load_hippomaps_plotter(hippomaps_root),
-    )
-    annotate_gradient_image(
-        gradient_png,
-        selected_components=selected_components,
-        ev_percentages=compute_row_ev_percentages(manifests, selected_components),
-    )
+    ev_by_hemi = {hemi: compute_hemi_ev_percentages(manifests[hemi], selected_components) for hemi in hemis}
+    plotter = load_hippomaps_plotter(hippomaps_root)
+    side_gradient_outputs: dict[str, str] = {}
+    if tuple(hemis) == HEMIS:
+        render_bilateral_gradient_figure(
+            left=left,
+            right=np.asarray(right, dtype=np.float32),
+            output_png=gradient_png,
+            den=den,
+            selected_components=selected_components,
+            ev_by_hemi=ev_by_hemi,
+            plotter=plotter,
+        )
+        side_gradient_outputs = {
+            "L": str(gradient_png.with_name(f"{gradient_png.stem}_hemi-L{gradient_png.suffix}").resolve()),
+            "R": str(gradient_png.with_name(f"{gradient_png.stem}_hemi-R{gradient_png.suffix}").resolve()),
+        }
+    else:
+        render_gradient_figure(
+            left=left,
+            right=right,
+            output_png=gradient_png,
+            den=den,
+            hemis=hemis,
+            plotter=plotter,
+        )
+        hemi = hemis[0]
+        annotate_gradient_image(
+            gradient_png,
+            selected_components=selected_components,
+            ev_percentages=ev_by_hemi[hemi],
+            title=f"{hemi} Gradient",
+        )
 
     ev_png = render_ev_plot(manifests, combo_root / f"hippomaps_ev_{route}_{smoothing}_{out_tag}.png")
     contrasts: dict[tuple[str, str], np.ndarray] = {}
@@ -337,6 +427,11 @@ def render_combo(
                 "den": den,
                 "unfoldAPrescale": unfold_ap_rescale,
                 "tighten_cwindow": True,
+            },
+            "bilateral_rendering": {
+                "hemi_specific_ev_labels": True,
+                "hemi_specific_colorbars": tuple(hemis) == HEMIS,
+                "side_gradient_figures": side_gradient_outputs,
             },
             "plotter_support_assets": {
                 "den512_plotting_v2_enabled": bool(str(den) == "512"),

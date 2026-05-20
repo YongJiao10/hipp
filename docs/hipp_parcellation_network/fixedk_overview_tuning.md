@@ -49,7 +49,7 @@ All commands run from repo root: `/home/yojiao/hpchome/hipp`.
 For a reproducible default triplet refresh (same legend style, full K curves, and fixed filename targets), run:
 
 ```bash
-/home/yojiao/.conda/envs/py314/bin/python scripts/hipp_parcellation_network/refresh_present_fixedk_modes.py
+Historical command, now archived: 
 ```
 
 This entrypoint performs, in order:
@@ -140,7 +140,7 @@ Do not bypass this check when generating `present_fixedk` deliverables.
 
 Render each root with:
 
-- `scripts/hipp_parcellation_network/build_present_group_overview_merged_canonical.py`
+- `_archive/deprecated_2026-05-20/scripts_pre_core_workflow/hipp_parcellation_network/__pycache__/build_present_group_overview_merged_canonical.cpython-314.pyc`
 
 Use per-root `--present-dir` (temporary), then copy final PNGs into `present_fixedk/` and rename using the filename contract.
 

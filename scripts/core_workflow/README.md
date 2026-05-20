@@ -37,8 +37,11 @@ applies column-wise feature z-score before `GradientMaps(kernel="pearson")`, and
 renders folded/unfolded gradients with `surfplot_canonical_foldunfold`. For
 `den=512`, the renderer treats `512` as HippoMaps v2 in the current Python
 process and disables `unfoldAPrescale`; no AP surfarea rescale is used for
-512-density figures. The renderer defaults to bilateral products; use `--hemis
-L` or `--hemis R` for single-hemisphere output files.
+512-density figures. The renderer defaults to bilateral products, but because
+left and right gradients are fit independently it renders each hemisphere with
+its own colorbar and EV labels before stitching the two sides. Use `--hemis L`
+or `--hemis R` for single-hemisphere output files. It is a continuous upstream
+product route and does not change the `05_01` clustering path.
 
 Canonical new outputs live under
 `outputs_core/hcp7t_hippocampus/runs/<run_id>/`. Use

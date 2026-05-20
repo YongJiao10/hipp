@@ -41,10 +41,10 @@
 
 ```text
 脚本                                  作用
-scripts/cortex/derive_cortex_roi_components.py       从 network map 派生 ROI/parcel 连通块
-scripts/cortex/render_cortex_roi_boundary_batch.py   批量渲染 ROI 边界叠加图
-scripts/cortex/run_cortex_pfm_subject.py             提供 cortex scene 渲染与 montage 逻辑
-scripts/cortex/render_cortex_pfm_scene.py            单视角 Workbench scene capture
+_archive/deprecated_2026-05-20/scripts_pre_core_workflow/cortex/derive_cortex_roi_components.py       从 network map 派生 ROI/parcel 连通块
+_archive/deprecated_2026-05-20/scripts_pre_core_workflow/cortex/render_cortex_roi_boundary_batch.py   批量渲染 ROI 边界叠加图
+_archive/deprecated_2026-05-20/scripts_pre_core_workflow/cortex/run_cortex_pfm_subject.py             提供 cortex scene 渲染与 montage 逻辑
+_archive/deprecated_2026-05-20/scripts_pre_core_workflow/cortex/render_cortex_pfm_scene.py            单视角 Workbench scene capture
 ```
 
 ## 4. 具体命令
@@ -53,7 +53,7 @@ scripts/cortex/render_cortex_pfm_scene.py            单视角 Workbench scene c
 
 ```bash
 source /opt/miniconda3/bin/activate py314
-python scripts/cortex/derive_cortex_roi_components.py \
+python _archive/deprecated_2026-05-20/scripts_pre_core_workflow/cortex/derive_cortex_roi_components.py \
   --subject 100610 \
   --method Lynch2024
 ```
@@ -62,7 +62,7 @@ python scripts/cortex/derive_cortex_roi_components.py \
 
 ```bash
 source /opt/miniconda3/bin/activate py314
-python scripts/cortex/render_cortex_roi_boundary_batch.py \
+python _archive/deprecated_2026-05-20/scripts_pre_core_workflow/cortex/render_cortex_roi_boundary_batch.py \
   --subjects 100610 102311 102816 \
   --methods Lynch2024 Hermosillo2024 Kong2019 \
   --scene config/manual_wb_scenes/cortex_manual.scene \

@@ -223,7 +223,7 @@
     {
       "step_id": "06_05_render_hippomaps_gradient_products",
       "stage": "06_outputs",
-      "purpose": "Render HippoMaps folded/unfolded continuous gradients, EV plots, and endpoint FC contrasts.",
+      "purpose": "Render HippoMaps folded/unfolded continuous gradients with hemisphere-specific EV labels and colorbars, EV plots, and endpoint FC contrasts.",
       "branches": [
         "kong2022_routea",
         "kong2022_routeb"

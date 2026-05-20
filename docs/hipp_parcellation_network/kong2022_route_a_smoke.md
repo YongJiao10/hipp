@@ -30,7 +30,7 @@ Two-subject smoke (`100610`, `102311`):
 
 ```bash
 /Users/yojiao/miniconda3/envs/py313/bin/python \
-  scripts/cortex/run_cortex_kong2022_mshbm_batch.py \
+  _archive/deprecated_2026-05-20/scripts_pre_core_workflow/cortex/run_cortex_kong2022_mshbm_batch.py \
   --subjects 100610 102311 \
   --jobs 2 \
   --model gMSHBM \
@@ -42,7 +42,7 @@ Preflight-only check:
 
 ```bash
 /Users/yojiao/miniconda3/envs/py313/bin/python \
-  scripts/cortex/run_cortex_kong2022_mshbm_batch.py \
+  _archive/deprecated_2026-05-20/scripts_pre_core_workflow/cortex/run_cortex_kong2022_mshbm_batch.py \
   --subjects 100610 102311 \
   --jobs 2 \
   --dry-run

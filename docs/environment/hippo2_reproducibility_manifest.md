@@ -32,7 +32,7 @@ Raw snapshots are stored in:
 Bootstrap sources for new servers:
 
 - `environment/hippo2_server.yml`
-- `scripts/bootstrap_hippo2_server.sh`
+- `_archive/deprecated_2026-05-20/scripts_pre_core_workflow/bootstrap_hippo2_server.sh`
 
 ## Host Layer
 
@@ -154,16 +154,16 @@ nnUNet_predict     /opt/miniconda3/envs/hippo2/bin/nnUNet_predict
 reg_aladin          /home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2/bin/reg_aladin
 bash               /opt/miniconda3/envs/hippo2/bin/bash
 wb_command         /home/yojiao/hpchome/hipp/software/workbench/bin_linux64/wb_command
-LN2_LAYERS         resolved through `scripts/LN2_LAYERS` wrapper
+LN2_LAYERS         resolved through `_archive/deprecated_2026-05-20/scripts_pre_core_workflow/LN2_LAYERS` wrapper
 ```
 
 Core workflow code resolves Workbench directly from
 `software/workbench/bin_linux64/wb_command` via `scripts/core_workflow/lib/workbench.py`.
-Legacy scripts may still call the wrapper in `scripts/wb_command`.
+Legacy scripts may still call the wrapper in `_archive/deprecated_2026-05-20/scripts_pre_core_workflow/wb_command`.
 
 ### HippUnfold External Binary Bundle
 
-`scripts/run_hippunfold_local.sh` prepends `HIPPUNFOLD_EXTERNAL_BIN_DIR` to `PATH`
+`_archive/deprecated_2026-05-20/scripts_pre_core_workflow/run_hippunfold_local.sh` prepends `HIPPUNFOLD_EXTERNAL_BIN_DIR` to `PATH`
 before calling `hippunfold`. The default on this Mac is:
 
 ```text
@@ -221,14 +221,14 @@ Active `scripts/core_workflow` steps resolve and execute:
 
 - `software/workbench/bin_linux64/wb_command`
 
-Legacy helpers may still use [`scripts/wb_command`](/home/yojiao/hpchome/hipp/scripts/wb_command), which is a thin wrapper around the same binary:
+Legacy helpers may still use [`_archive/deprecated_2026-05-20/scripts_pre_core_workflow/wb_command`](/home/yojiao/hpchome/hipp/_archive/deprecated_2026-05-20/scripts_pre_core_workflow/wb_command), which is a thin wrapper around the same binary:
 
 1. Fails fast if the app binary is missing
 2. Otherwise execs `software/workbench/bin_linux64/wb_command` directly
 
 ### LAYNII Wrapper
 
-[`scripts/LN2_LAYERS`](/Users/jy/Documents/HippoMaps-network-first/scripts/LN2_LAYERS) wraps the real `LN2_LAYERS` binary so `.nii.gz` rims are decompressed to `.nii` before execution and the expected outputs are recompressed afterward.
+[`_archive/deprecated_2026-05-20/scripts_pre_core_workflow/LN2_LAYERS`](/Users/jy/Documents/HippoMaps-network-first/_archive/deprecated_2026-05-20/scripts_pre_core_workflow/LN2_LAYERS) wraps the real `LN2_LAYERS` binary so `.nii.gz` rims are decompressed to `.nii` before execution and the expected outputs are recompressed afterward.
 
 ### LAYNII Binary Source
 
@@ -256,12 +256,12 @@ If the binary lives outside `hippo2`, point the launcher at it explicitly:
 export HIPPUNFOLD_LN2_LAYERS_BIN=/path/to/LAYNII/LN2_LAYERS
 ```
 
-The wrapper in `scripts/LN2_LAYERS` exits with code `127` when neither the
+The wrapper in `_archive/deprecated_2026-05-20/scripts_pre_core_workflow/LN2_LAYERS` exits with code `127` when neither the
 environment variable nor `PATH` yields a real binary.
 
 ## Runtime Layer
 
-The launcher [`scripts/run_hippunfold_local.sh`](/Users/jy/Documents/HippoMaps-network-first/scripts/run_hippunfold_local.sh) is part of the environment definition.
+The launcher [`_archive/deprecated_2026-05-20/scripts_pre_core_workflow/run_hippunfold_local.sh`](/Users/jy/Documents/HippoMaps-network-first/_archive/deprecated_2026-05-20/scripts_pre_core_workflow/run_hippunfold_local.sh) is part of the environment definition.
 
 It sets the following runtime layers before starting HippUnfold:
 
@@ -343,7 +343,7 @@ For persistent conda installs outside the launcher, `~/.condarc` is set to keep
 `pkgs_dirs` and `envs_dirs` under the repo-local `.cache/` tree so package
 downloads and future env creation stop consuming `/home/yojiao`.
 
-For interactive shells, use `source scripts/activate_hippo2.sh` to activate the
+For interactive shells, use `source _archive/deprecated_2026-05-20/scripts_pre_core_workflow/activate_hippo2.sh` to activate the
 repo-local `hippo2` clone directly.
 If the prefix has not been fully registered with conda metadata, the helper
 falls back to a PATH-based activation so the repo-local binaries still work.
@@ -402,14 +402,14 @@ From scratch, a future agent should:
 4. Verify `hippunfold --version` reports `2.0.0`.
 5. Ignore `importlib.metadata.version("hippunfold")` if it still reports `1.5.2rc2`.
 6. Build or update the server environment from `environment/hippo2_server.yml` before first run.
-7. Use `scripts/bootstrap_hippo2_server.sh` if you want a one-shot verifier after install.
-8. Make sure `scripts/run_hippunfold_local.sh` is the only launcher used for local runs.
+7. Use `_archive/deprecated_2026-05-20/scripts_pre_core_workflow/bootstrap_hippo2_server.sh` if you want a one-shot verifier after install.
+8. Make sure `_archive/deprecated_2026-05-20/scripts_pre_core_workflow/run_hippunfold_local.sh` is the only launcher used for local runs.
 9. Make sure required wrappers/binaries are resolvable at runtime. `LN2_LAYERS` still depends on `scripts/` PATH precedence; core workflow Workbench calls do not.
 10. Make sure `c3d`, `greedy`, `LN2_LAYERS`, and `N4BiasFieldCorrection` resolve from the conda env or explicit binary paths.
-11. `scripts/run_hippunfold_local.sh` cleans up `runtime/hippunfold_cache` on exit by design.
+11. `_archive/deprecated_2026-05-20/scripts_pre_core_workflow/run_hippunfold_local.sh` cleans up `runtime/hippunfold_cache` on exit by design.
     This is safe for single-subject/single-process runs, but for parallel subject runs you must isolate cache roots per worker (or otherwise avoid a shared disposable cache root), or workers may delete each other's runtime artifacts.
     The active public launcher surface is now `scripts/core_workflow/02_01_run_hippunfold_t1w_local.py`.
-    The legacy T2-specific launcher `scripts/run_hippunfold_local_t2w_t1reg_isolated_cache.sh` was archived under
+    The legacy T2-specific launcher `_archive/deprecated_2026-05-11/scripts/run_hippunfold_local_t2w_t1reg_isolated_cache.sh` was archived under
     `_archive/deprecated_2026-05-11/scripts/`.
 12. Use `data/hippunfold_input` as the input root and `outputs_migration/dense_corobl_batch/sub-<id>/hippunfold` as the output root.
 
@@ -452,11 +452,11 @@ conda run -n hippo2 bash -lc 'command -v c3d; command -v reg_aladin; command -v 
 For Workbench, use:
 
 ```bash
-scripts/wb_command -help
+_archive/deprecated_2026-05-20/scripts_pre_core_workflow/wb_command -help
 ```
 
 On this Mac, that wrapper will internally invoke:
 
 ```bash
-scripts/wb_command -help
+_archive/deprecated_2026-05-20/scripts_pre_core_workflow/wb_command -help
 ```

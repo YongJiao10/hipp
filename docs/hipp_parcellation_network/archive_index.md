@@ -10,7 +10,7 @@ Moved to archive to reduce active-surface ambiguity:
   - reason: superseded by canonical `core_workflow_*` docs and numbered entrypoints
 - `docs/hipp_parcellation_network/t1only_kong2022_route_b_runbook.md`
   - reason: superseded by canonical step registry and branch-neutral workflow overview
-- `scripts/run_hippunfold_local_t2w_t1reg_isolated_cache.sh`
+- `_archive/deprecated_2026-05-11/scripts/run_hippunfold_local_t2w_t1reg_isolated_cache.sh`
   - reason: retired T2-specific launcher, no longer part of active public workflow
 
 Archive destinations:

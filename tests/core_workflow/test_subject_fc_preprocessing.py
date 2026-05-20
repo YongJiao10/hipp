@@ -221,8 +221,9 @@ def test_group_gradient_features_average_subject_roi_fc_then_select_components()
     def fake_brainspace(group_fc: np.ndarray, **kwargs):
         n = int(group_fc.shape[0])
         grads = np.tile(np.asarray([[1.0, 2.0, 3.0, 4.0, 5.0]], dtype=np.float32), (n, 1))
-        lambdas = np.asarray([5.0, 4.0, 3.0, 2.0, 1.0], dtype=np.float32)
-        return grads, lambdas
+        lambdas = np.asarray([5.0, 4.0, 3.0, 2.0, 1.0], dtype=np.float64)
+        ev = lambdas / np.sum(lambdas)
+        return grads, lambdas, ev
 
     old = atlas_mod.brainspace_diffusion_gradients
     atlas_mod.brainspace_diffusion_gradients = fake_brainspace
@@ -240,47 +241,41 @@ def test_group_gradient_features_average_subject_roi_fc_then_select_components()
     assert np.all(np.isfinite(features)), features
     assert meta["gradient_components"] == [1, 2], meta
     assert meta["group_vertex_to_roi_fc_shape"] == [8, 12], meta
-    assert meta["gradient_embedding_engine"] == "brainspace", meta
+    assert meta["gradient_embedding_engine"] == "brainspace_gradientmaps_via_hippomaps_adapter", meta
     assert meta["kernel"] == "pearson", meta
-    assert meta["approach"] == "dm", meta
-    assert float(meta["brainspace_sparsity"]) == 0.9, meta
+    assert meta["brainspace_sparsity"] == "default(0.9)", meta
     assert int(meta["n_components_computed"]) == 5, meta
     assert meta["components_displayed"] == [1, 2, 3], meta
     assert len(meta["gradient_eigenvalues"]) == 5, meta
+    assert len(meta["ev_fractions"]) == 5, meta
 
 
 def test_brainspace_adapter_uses_expected_parameters() -> None:
     calls: dict[str, object] = {}
 
-    class FakeGradientMaps:
-        def __init__(self, n_components: int, approach: str, kernel: str, random_state: int):
-            calls["init"] = {
-                "n_components": int(n_components),
-                "approach": str(approach),
-                "kernel": str(kernel),
-                "random_state": int(random_state),
-            }
-            self.gradients_ = np.arange(30, dtype=np.float32).reshape(6, 5)
-            self.lambdas_ = np.array([5.0, 4.0, 3.0, 2.0, 1.0], dtype=np.float32)
+    def fake_fit(group_fc: np.ndarray, *, n_components: int, gradient_maps_cls: object | None = None):
+        calls["fit"] = {
+            "shape": tuple(np.asarray(group_fc).shape),
+            "n_components": int(n_components),
+            "gradient_maps_cls": gradient_maps_cls,
+        }
+        grads = np.arange(30, dtype=np.float32).reshape(6, 5)
+        lambdas = np.array([5.0, 4.0, 3.0, 2.0, 1.0], dtype=np.float64)
+        ev = lambdas / np.sum(lambdas)
+        return grads, lambdas, ev
 
-        def fit(self, x: np.ndarray, sparsity: float):
-            calls["fit"] = {
-                "shape": tuple(np.asarray(x).shape),
-                "sparsity": float(sparsity),
-            }
-            return self
+    old_ensure = atlas_mod.ensure_hippomaps_on_path
+    atlas_mod.ensure_hippomaps_on_path = lambda root: Path(root)
+    try:
+        x = np.arange(24, dtype=np.float32).reshape(6, 4)
+        grads, lambdas, ev = brainspace_diffusion_gradients(x, gradientmaps_fit_fn=fake_fit)
+    finally:
+        atlas_mod.ensure_hippomaps_on_path = old_ensure
 
-    x = np.arange(24, dtype=np.float32).reshape(6, 4)
-    grads, lambdas = brainspace_diffusion_gradients(x, gradient_maps_cls=FakeGradientMaps)
-    assert calls["init"] == {
-        "n_components": 5,
-        "approach": "dm",
-        "kernel": "pearson",
-        "random_state": 0,
-    }, calls
-    assert calls["fit"] == {"shape": (6, 4), "sparsity": 0.9}, calls
+    assert calls["fit"] == {"shape": (6, 4), "n_components": 5, "gradient_maps_cls": None}, calls
     assert grads.shape == (6, 5), grads.shape
     assert lambdas.shape == (5,), lambdas.shape
+    assert ev.shape == (5,), ev.shape
 
 
 def test_group_feature_matrix_gradient_spectral_uses_selected_gradient_columns() -> None:
@@ -292,8 +287,9 @@ def test_group_feature_matrix_gradient_spectral_uses_selected_gradient_columns()
     def fake_brainspace(group_fc: np.ndarray, **kwargs):
         n = int(group_fc.shape[0])
         grads = np.tile(np.asarray([[2.0, 1.0, -1.0, 0.5, 0.25]], dtype=np.float32), (n, 1))
-        lambdas = np.asarray([5.0, 4.0, 3.0, 2.0, 1.0], dtype=np.float32)
-        return grads, lambdas
+        lambdas = np.asarray([5.0, 4.0, 3.0, 2.0, 1.0], dtype=np.float64)
+        ev = lambdas / np.sum(lambdas)
+        return grads, lambdas, ev
 
     old = atlas_mod.brainspace_diffusion_gradients
     atlas_mod.brainspace_diffusion_gradients = fake_brainspace
