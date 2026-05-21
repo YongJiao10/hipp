@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from lib.output_layout import DEFAULT_OVERVIEWS_DIR, DEFAULT_ROUTEA_GROUP_ATLAS_ROOT
+from lib.workflow_utils import write_json
 from lib.surface_utils import long_axis_order
 from lib.traceability import StageSpec, run_stage
 
@@ -44,11 +45,6 @@ TSV_FIELDS = [
 
 def load_json(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
-
-
-def save_json(path: Path, payload: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, sort_keys=False) + "\n", encoding="utf-8")
 
 
 def write_tsv(path: Path, rows: list[dict[str, object]]) -> None:
@@ -326,7 +322,7 @@ def build_profiles(
         route_tag=route_tag,
         n_bins=int(n_bins),
     )
-    save_json(out_manifest, manifest)
+    write_json(out_manifest, manifest, trailing_newline=True)
     return {"manifest": str(out_manifest.resolve()), "count": len(runs)}
 
 

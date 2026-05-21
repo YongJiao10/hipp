@@ -25,6 +25,7 @@ from lib.output_layout import (
     DEFAULT_KONG2022_SURFACE_ROOT,
     DEFAULT_KONG2022_TEMPLATE_ROOT,
 )
+from lib.workflow_utils import write_json
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -37,11 +38,6 @@ DEFAULT_OUT_ROOT = DEFAULT_HIPPOMAPS_GRADIENT_ROOT
 ROUTE_TO_SHARED_DIR = {"routea": "routea_151", "routeb": "routeb_151"}
 SMOOTHINGS = ("2mm", "4mm")
 HEMIS = ("L", "R")
-
-
-def save_json(path: Path, payload: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
 def load_subjects(path: Path) -> list[str]:
@@ -236,7 +232,7 @@ def compute_combo(
             "hippomaps_ev_fractions": str((run_dir / "hippomaps_ev_fractions.npy").resolve()),
         },
     }
-    save_json(manifest_path, manifest)
+    write_json(manifest_path, manifest, sort_keys=True, trailing_newline=True)
     print(json.dumps({"status": "ok", "manifest": str(manifest_path), "n_subjects": len(subjects)}, indent=2), flush=True)
     return manifest_path
 

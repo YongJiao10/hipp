@@ -4,11 +4,9 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import subprocess
 import sys
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from datetime import datetime, timezone
 from pathlib import Path
 
 import nibabel as nib
@@ -23,6 +21,7 @@ from lib.output_layout import (
     DEFAULT_KONG2022_TEMPLATE_ROOT,
 )
 from lib.workbench import run_workbench
+from lib.workflow_utils import file_meta, git_commit, utc_now_iso, write_json
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -38,25 +37,6 @@ MAX_CONCURRENCY = 10
 MAX_WORKBENCH_SUBJECT_JOBS = 2
 HEMIS = ["L", "R"]
 SMOOTHINGS = ["2mm", "4mm"]
-
-
-def now_utc() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
-
-
-def git_commit() -> str | None:
-    proc = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=REPO_ROOT, text=True, capture_output=True)
-    return proc.stdout.strip() if proc.returncode == 0 else None
-
-
-def file_meta(path: Path) -> dict[str, object]:
-    st = path.stat()
-    return {"path": str(path.resolve()), "size": int(st.st_size), "mtime_ns": int(st.st_mtime_ns)}
-
-
-def save_json(path: Path, payload: dict[str, object]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
 def resolve_max_concurrency() -> int:
@@ -148,12 +128,12 @@ def run_raw_sampling(subject: str, batch_root: str, shared_root: str, bold_root:
         return {"subject": subject, "ok": False, "stage": "raw_sampling", "error": str(exc)[-4000:]}
     log_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
     (out_dir / "surface_sampling_summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
-    save_json(
+    write_json(
         out_dir / "stage_manifest.json",
         {
             "stage": "t1only_raw_surface_sampling",
             "status": "done",
-            "timestamp_utc": now_utc(),
+            "timestamp_utc": utc_now_iso(),
             "git_commit": git_commit(),
             "command": "lib.surface_sampling.sample_hipp_surface_timeseries",
             "inputs": [file_meta(bold)],
@@ -226,14 +206,14 @@ def run_tsnr_gate(subject: str, batch_root: str, shared_root: str) -> dict[str, 
             "n_vertices_invalid": int(invalid.sum()),
             "invalid_fraction": float(invalid.sum() / max(1, valid.size)),
         }
-        save_json(gate_dir / f"sub-{subject}_hemi-{hemi}_tsnr_gate_summary.json", summary)
+        write_json(gate_dir / f"sub-{subject}_hemi-{hemi}_tsnr_gate_summary.json", summary)
         hemi_dir = gate_dir / f"hemi-{hemi}"
-        save_json(
+        write_json(
             hemi_dir / "stage_manifest.json",
             {
                 "stage": "t1only_hipp_tsnr_gate",
                 "status": "done",
-                "timestamp_utc": now_utc(),
+                "timestamp_utc": utc_now_iso(),
                 "git_commit": git_commit(),
                 "params": {"subject": subject, "hemi": hemi, "threshold": 25.0, "tsnr_definition": "10000/std"},
                 "inputs": [file_meta(raw), file_meta(surf)],
@@ -294,12 +274,12 @@ def run_smoothing(subject: str, batch_root: str, shared_root: str) -> dict[str, 
             np.save(out_dir / f"sub-{subject}_hemi-{hemi}_timeseries.npy", arr.astype(np.float32))
             inputs.extend([file_meta(raw), file_meta(roi), file_meta(surf)])
             outputs.extend([file_meta(out_gii), file_meta(out_dir / f"sub-{subject}_hemi-{hemi}_timeseries.npy")])
-    save_json(
+    write_json(
         shared / f"sub-{subject}" / "surface" / "stage_manifest.json",
         {
             "stage": "t1only_surface_smoothing",
             "status": "done",
-            "timestamp_utc": now_utc(),
+            "timestamp_utc": utc_now_iso(),
             "git_commit": git_commit(),
             "params": {"subject": subject, "smoothings": SMOOTHINGS, "smoothing_roi_policy": "high_tsnr_vertices_only"},
             "inputs": inputs,
@@ -358,12 +338,12 @@ def build_group_average_surfaces(batch_root: Path, template_root: Path, subjects
         out = out_dir / f"group-average_hemi-{hemi}_space-corobl_den-512_label-hipp_midthickness.surf.gii"
         save_surface(out, avg, ref_faces)
         outputs.append(file_meta(out))
-    save_json(
+    write_json(
         out_dir / "stage_manifest.json",
         {
             "stage": "t1only_group_average_surfaces",
             "status": "done",
-            "timestamp_utc": now_utc(),
+            "timestamp_utc": utc_now_iso(),
             "git_commit": git_commit(),
             "n_subjects": int(len(subjects)),
             "subjects": [f"sub-{s}" for s in subjects],
@@ -480,12 +460,12 @@ def main() -> int:
         print(f"[info] group-average subjects={len(pass_subjects)}", flush=True)
         build_group_average_surfaces(batch_root, template_root, pass_subjects)
 
-    save_json(
+    write_json(
         route_root / "prepare_t1only_group_inputs_manifest.json",
         {
             "stage": "prepare_t1only_group_inputs",
             "status": "done",
-            "timestamp_utc": now_utc(),
+            "timestamp_utc": utc_now_iso(),
             "git_commit": git_commit(),
             "hippunfold_batch_root": str(batch_root),
             "shared_root": str(shared_root),

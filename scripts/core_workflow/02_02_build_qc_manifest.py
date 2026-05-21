@@ -4,8 +4,6 @@ from __future__ import annotations
 import argparse
 import csv
 import json
-import subprocess
-from datetime import datetime, timezone
 from pathlib import Path
 
 from lib.output_layout import (
@@ -14,6 +12,7 @@ from lib.output_layout import (
     DEFAULT_KONG2022_QC_ROOT,
     DEFAULT_KONG2022_SURFACE_ROOT,
 )
+from lib.workflow_utils import file_meta, git_commit, utc_now_iso, write_json
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -21,20 +20,6 @@ DEFAULT_BATCH_ROOT = DEFAULT_HIPPUNFOLD_BATCH_ROOT
 DEFAULT_SHARED_ROOT = DEFAULT_KONG2022_SURFACE_ROOT
 DEFAULT_OUT_DIR = DEFAULT_KONG2022_QC_ROOT
 DEFAULT_MANIFEST_DIR = DEFAULT_KONG2022_MANIFEST_ROOT
-
-
-def now_utc() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
-
-
-def git_commit() -> str | None:
-    proc = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=REPO_ROOT, text=True, capture_output=True)
-    return proc.stdout.strip() if proc.returncode == 0 else None
-
-
-def file_meta(path: Path) -> dict[str, object]:
-    st = path.stat()
-    return {"path": str(path.resolve()), "size": int(st.st_size), "mtime_ns": int(st.st_mtime_ns)}
 
 
 def load_subjects(batch_root: Path, explicit: list[str] | None) -> list[str]:
@@ -171,7 +156,7 @@ def main() -> int:
     payload = {
         "stage": "t1only_qc_manifest",
         "status": "done",
-        "timestamp_utc": now_utc(),
+        "timestamp_utc": utc_now_iso(),
         "git_commit": git_commit(),
         "hippunfold_batch_root": str(batch_root),
         "shared_root": str(shared_root),
@@ -186,7 +171,7 @@ def main() -> int:
         "inputs": inputs,
         "outputs": [str(qc_tsv), str(qc_json), str(manifest), str(latest_manifest)],
     }
-    qc_json.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    write_json(qc_json, payload)
     print(json.dumps({"n_total": len(subjects), "n_pass": len(pass_subjects), "manifest": str(manifest)}, indent=2))
     return 0
 

@@ -1,16 +1,14 @@
 from __future__ import annotations
 
 import argparse
-import json
 import shlex
-import subprocess
 import sys
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Sequence
 
 from .branch_config import BRANCH_CHOICES, DEFAULT_BRANCH
+from .workflow_utils import git_commit, utc_now_iso, write_json
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
@@ -21,23 +19,6 @@ class StageSpec:
     purpose: str
     stage_main: Callable[[], int | None]
     upstream_defaults: tuple[str, ...] = ()
-
-
-def _now_utc_iso() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-
-def _get_git_commit() -> str:
-    proc = subprocess.run(
-        ["git", "rev-parse", "HEAD"],
-        cwd=REPO_ROOT,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if proc.returncode != 0:
-        return "unknown"
-    return proc.stdout.strip()
 
 
 def _normalize_passthrough(unknown: Sequence[str]) -> list[str]:
@@ -76,13 +57,12 @@ def _write_manifest(
         "input_artifacts": list(input_artifacts),
         "output_artifacts": list(output_artifacts),
         "command": " ".join(shlex.quote(x) for x in command),
-        "git_commit": _get_git_commit(),
-        "timestamp_utc": _now_utc_iso(),
+        "git_commit": git_commit(short=False, repo_root=REPO_ROOT) or "unknown",
+        "timestamp_utc": utc_now_iso(zulu=True),
         "status": "dry_run" if dry_run else ("ok" if returncode == 0 else "failed"),
         "returncode": returncode,
     }
-    manifest_out.parent.mkdir(parents=True, exist_ok=True)
-    manifest_out.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    write_json(manifest_out, payload, indent=2, sort_keys=True, trailing_newline=True)
 
 
 def run_stage(spec: StageSpec) -> int:

@@ -4,7 +4,6 @@ from __future__ import annotations
 import argparse
 import csv
 import json
-from datetime import datetime, timezone
 from pathlib import Path
 
 import nibabel as nib
@@ -15,6 +14,7 @@ try:
 except ImportError:  # pragma: no cover - supports direct script execution during local debugging.
     from extract_cortex_merged_network_timeseries import extract_structure_data, load_required_mask
 from .output_layout import DEFAULT_CORTEX_ROUTEA_ROOT, DEFAULT_KONG2022_ROUTEA_ROOT
+from .workflow_utils import file_meta_unresolved as file_meta, utc_now_iso, write_json
 from .kong2022_label_utils import (
     KONG2022_DLABEL_PATH,
     KONG2022_MERGE_CONFIG,
@@ -35,25 +35,11 @@ HCP_MODE = 10000.0
 ROUTE_A_SOURCE_TAG = "route_a_kong2022_areal_mshbm"
 
 
-def now_utc_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
-
-
 def write_tsv(path: Path, rows: list[dict[str, object]], fieldnames: list[str]) -> None:
     with path.open("w", encoding="utf-8", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames, delimiter="\t")
         writer.writeheader()
         writer.writerows(rows)
-
-
-def file_meta(path: Path) -> dict[str, object]:
-    st = path.stat()
-    return {"path": str(path), "size": int(st.st_size), "mtime_ns": int(st.st_mtime_ns)}
-
-
-def save_json(path: Path, payload: dict[str, object]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
 def compute_cortex_tsnr_gate(
@@ -70,7 +56,7 @@ def compute_cortex_tsnr_gate(
     np.save(outdir / f"cortex_{hemi.lower()}_tsnr.npy", tsnr)
     mask_path = outdir / f"cortex_{hemi.lower()}_valid_mask.npy"
     np.save(mask_path, valid.astype(bool))
-    save_json(
+    write_json(
         outdir / f"cortex_{hemi.lower()}_tsnr_gate_summary.json",
         {
             "hemi": hemi,
@@ -413,7 +399,7 @@ def main() -> int:
                 {
                     "stage": "reference_run_slice",
                     "status": "done",
-                    "timestamp_utc": now_utc_iso(),
+                    "timestamp_utc": utc_now_iso(),
                     "params": {
                         "subject": subject,
                         "atlas_slug": ATLAS_SLUG,
@@ -484,7 +470,7 @@ def main() -> int:
     stage_manifest = {
         "stage": "reference",
         "status": "done",
-        "timestamp_utc": now_utc_iso(),
+        "timestamp_utc": utc_now_iso(),
         "params": {
             "subject": subject,
             "atlas_slug": ATLAS_SLUG,

@@ -8,7 +8,6 @@ import subprocess
 import sys
 import time
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from pathlib import Path
 
 
@@ -25,6 +24,7 @@ from lib.output_layout import (
     DEFAULT_KONG2022_TEMPLATE_ROOT,
     DEFAULT_OVERVIEWS_DIR,
 )
+from lib.workflow_utils import capped_jobs, utc_timestamp_compact_z, write_json
 
 DEFAULT_BATCH_ROOT = DEFAULT_HIPPUNFOLD_BATCH_ROOT
 DEFAULT_ROUTE_ROOT = DEFAULT_KONG2022_ROOT
@@ -95,7 +95,7 @@ def enforce_provenance_stamp(root: Path, *, route_tag: str, mode_tag: str | None
                 f"{kind} provenance mismatch at {root}: existing={old}, requested={payload}. "
                 "Refusing cross-route or cross-mode reuse."
             )
-    stamp.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    write_json(stamp, payload)
 
 
 def enforce_routea_path_compliance(shared_root: Path, manifest: Path, group_root_raw: Path) -> None:
@@ -364,7 +364,7 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    combo_jobs = max(1, min(int(args.combo_jobs), len(SMOOTHINGS) * len(HEMIS), MAX_REPO_CONCURRENCY))
+    combo_jobs = capped_jobs(args.combo_jobs, len(SMOOTHINGS) * len(HEMIS), limit=MAX_REPO_CONCURRENCY)
     mode_tag, subject_fc_top_percent = resolve_subject_fc_mode(args.subject_fc_mode, args.subject_fc_top_percent)
     batch_root = Path(args.hippunfold_batch_root).resolve()
     shared_root = Path(args.shared_root).resolve()
@@ -385,7 +385,7 @@ def main() -> int:
     present_dir.mkdir(parents=True, exist_ok=True)
     route_root = manifest.parent.parent
     log_dir = route_root / "logs" / (
-        f"spectral_fast_rerun_{route_tag}_{mode_tag}_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
+        f"spectral_fast_rerun_{route_tag}_{mode_tag}_{utc_timestamp_compact_z()}"
     )
     log_dir.mkdir(parents=True, exist_ok=True)
 

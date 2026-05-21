@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from pathlib import Path
+
+from .workflow_utils import utc_timestamp_for_filename
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -33,7 +34,7 @@ DEFAULT_CORTEX_PANELS_DIR = DEFAULT_PRESENT_ROOT / "cortex_panels"
 
 
 def timestamped_run_id(prefix: str = "smoke5") -> str:
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    stamp = utc_timestamp_for_filename()
     clean_prefix = str(prefix).strip().replace("/", "_") or "run"
     return f"{clean_prefix}_{stamp}"
 

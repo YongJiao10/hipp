@@ -9,6 +9,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
 from lib.output_layout import DEFAULT_KONG2019_ROOT
+from lib.workflow_utils import write_json
 
 import numpy as np
 
@@ -38,11 +39,6 @@ def load_subjects(path: Path) -> list[str]:
 
 def load_json(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
-
-
-def save_json(path: Path, payload: dict) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
 def read_tsv(path: Path) -> list[dict[str, str]]:
@@ -149,7 +145,7 @@ def materialize_reference(shared_root: Path, subject: str) -> None:
             shutil.copy2(src_file, dst / name)
     if (src / "tsnr_gate").exists() and not (dst / "tsnr_gate").exists():
         shutil.copytree(src / "tsnr_gate", dst / "tsnr_gate")
-    save_json(
+    write_json(
         dst / "reference_summary.json",
         {
             "subject": f"sub-{subject}",
@@ -161,7 +157,7 @@ def materialize_reference(shared_root: Path, subject: str) -> None:
             "n_parent_networks_per_canonical": {name: int(count) for name, count in zip(names, counts, strict=True)},
         },
     )
-    save_json(dst / "stage_manifest.json", {"stage": "materialize_kong2019_8net_reference", "inputs": [str(parent_tsv), str(parent_ts)]})
+    write_json(dst / "stage_manifest.json", {"stage": "materialize_kong2019_8net_reference", "inputs": [str(parent_tsv), str(parent_ts)]})
     offset = 0
     for rid in RUN_IDS:
         run_src = src / "runs" / f"run-{rid}"
@@ -173,7 +169,7 @@ def materialize_reference(shared_root: Path, subject: str) -> None:
         offset += run_len
         run_dst.mkdir(parents=True, exist_ok=True)
         np.save(run_dst / "cortex_canonical_network_timeseries.npy", run_ts.astype(np.float32))
-        save_json(
+        write_json(
             run_dst / "reference_summary.json",
             {
                 "subject": f"sub-{subject}",
@@ -184,7 +180,7 @@ def materialize_reference(shared_root: Path, subject: str) -> None:
                 "networks": names,
             },
         )
-        save_json(run_dst / "stage_manifest.json", {"stage": "materialize_kong2019_8net_run_reference", "run_id": int(rid)})
+        write_json(run_dst / "stage_manifest.json", {"stage": "materialize_kong2019_8net_run_reference", "run_id": int(rid)})
     if offset != int(ts.shape[1]):
         raise RuntimeError(f"Run lengths do not sum to full Kong8 time series for sub-{subject}: {offset} vs {ts.shape[1]}")
 
@@ -207,7 +203,7 @@ def materialize_fc(shared_root: Path, subject: str, atlas: str, smoothing: str, 
     partial_full[valid_mask, :] = partial_valid
     np.save(fc_dir / "hipp_vertex_to_network_partial_fc.npy", partial_full.astype(np.float32))
     np.save(fc_dir / "hipp_vertex_to_network_partial_fc_active.npy", compact_active_vertices(partial_full, valid_mask))
-    save_json(
+    write_json(
         fc_dir / "partial_fc_summary.json",
         {
             "subject": f"sub-{subject}",

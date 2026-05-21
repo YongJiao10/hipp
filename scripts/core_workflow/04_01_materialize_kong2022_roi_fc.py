@@ -5,10 +5,10 @@ import argparse
 import csv
 import json
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from datetime import datetime, timezone
 from pathlib import Path
 
 from lib.output_layout import DEFAULT_KONG2022_MANIFEST_ROOT, DEFAULT_KONG2022_ROOT
+from lib.workflow_utils import capped_jobs, utc_now_iso, write_json
 
 import numpy as np
 
@@ -23,10 +23,6 @@ ATLAS = "kong2022"
 SMOOTHINGS = ["2mm", "4mm"]
 HEMIS = ["L", "R"]
 RUN_IDS = [1, 2, 3, 4]
-
-
-def now_utc_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
 def load_subjects(path: Path) -> list[str]:
@@ -46,11 +42,6 @@ def read_roi_names(path: Path) -> list[str]:
     if not rows:
         raise RuntimeError(f"Empty ROI TSV: {path}")
     return [str(row["parcel_name"]) for row in rows]
-
-
-def save_json(path: Path, payload: dict[str, object]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
 def load_run_segments(subj_root: Path) -> list[dict[str, int]]:
@@ -156,7 +147,7 @@ def materialize_fc(shared_root: Path, surface_root: Path, subject: str, smoothin
             f"{total_run_len} vs {ts.shape[1]}"
         )
 
-    save_json(
+    write_json(
         fc_dir / "fc_summary.json",
         {
             "subject": subject,
@@ -176,12 +167,12 @@ def materialize_fc(shared_root: Path, surface_root: Path, subject: str, smoothin
             "fc_definition": "pearson_vertex_to_kong2022_roi_timeseries",
         },
     )
-    save_json(
+    write_json(
         fc_dir / "stage_manifest.json",
         {
             "stage": "shared_fc",
             "status": "done",
-            "timestamp_utc": now_utc_iso(),
+            "timestamp_utc": utc_now_iso(),
             "params": {
                 "subject": subject,
                 "atlas_slug": ATLAS,
@@ -236,7 +227,7 @@ def main() -> int:
     subjects = [s.replace("sub-", "") for s in args.subjects] if args.subjects else load_subjects(
         Path(args.subjects_manifest).resolve()
     )
-    jobs = max(1, min(int(args.jobs), 10, len(subjects)))
+    jobs = capped_jobs(args.jobs, len(subjects))
     n_fc = 0
     if jobs == 1:
         for subject in subjects:

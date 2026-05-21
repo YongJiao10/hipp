@@ -29,6 +29,7 @@ from lib.output_layout import (
     DEFAULT_ROUTEA_GROUP_ATLAS_ROOT,
 )
 from lib.surface_utils import render_locked_grid
+from lib.workflow_utils import write_json
 from lib.workbench import run_workbench
 
 
@@ -118,11 +119,6 @@ def parse_args() -> argparse.Namespace:
 
 def load_json(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
-
-
-def save_json(path: Path, payload: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
 def read_tsv_rows(path: Path) -> list[dict[str, str]]:
@@ -1369,9 +1365,9 @@ def main() -> int:
                 },
             }
             combo_manifest_path = combo_runtime_out / "cluster_roi_cortex_combo_manifest.json"
-            save_json(combo_manifest_path, combo_manifest)
+            write_json(combo_manifest_path, combo_manifest)
             combo_view_manifest_path = viewer_combo_manifest_dir / f"{combo_id}.json"
-            save_json(
+            write_json(
                 combo_view_manifest_path,
                 {
                     "atlas": combo.atlas,
@@ -1477,7 +1473,7 @@ def main() -> int:
                     "selected_sign",
                 ],
             )
-            save_json(
+            write_json(
                 stats_json,
                 {
                     "cluster_id": cluster_id,
@@ -1531,9 +1527,9 @@ def main() -> int:
             "clusters": cluster_items,
         }
         combo_manifest_path = combo_runtime_out / "cluster_roi_cortex_combo_manifest.json"
-        save_json(combo_manifest_path, combo_manifest)
+        write_json(combo_manifest_path, combo_manifest)
         combo_view_manifest_path = viewer_combo_manifest_dir / f"{combo_id}.json"
-        save_json(
+        write_json(
             combo_view_manifest_path,
             {
                 "atlas": combo.atlas,
@@ -1631,7 +1627,7 @@ def main() -> int:
         "grouped_overviews": grouped_overviews,
     }
     runtime_manifest_path = runtime_root / "cluster_roi_cortex_runtime_manifest.json"
-    save_json(runtime_manifest_path, runtime_manifest)
+    write_json(runtime_manifest_path, runtime_manifest)
 
     viewer_manifest = dict(runtime_manifest)
     viewer_manifest["runtime_manifest"] = str(runtime_manifest_path)
@@ -1640,9 +1636,9 @@ def main() -> int:
         "combo_manifest_dir": str(viewer_combo_manifest_dir),
     }
     viewer_manifest_path = viewer_root / "cluster_roi_cortex_manifest.json"
-    save_json(viewer_manifest_path, viewer_manifest)
+    write_json(viewer_manifest_path, viewer_manifest)
     present_overview_manifest_path = present_dir / "cluster_roi_cortex_overview_manifest.json"
-    save_json(
+    write_json(
         present_overview_manifest_path,
         {
             "stage": "cluster_roi_cortex_overview",

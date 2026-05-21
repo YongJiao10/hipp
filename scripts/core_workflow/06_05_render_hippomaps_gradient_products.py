@@ -18,6 +18,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 from lib.hippomaps_adapter import DEFAULT_HIPPOMAPS_ROOT, ensure_hippomaps_on_path, hippomaps_commit
 from lib.output_layout import DEFAULT_GRADIENTS_DIR, DEFAULT_HIPPOMAPS_GRADIENT_ROOT
+from lib.workflow_utils import write_json
 from lib.traceability import StageSpec, run_stage
 
 
@@ -51,11 +52,6 @@ def wait_for_stable_file(path: Path, *, checks: int = 3, interval: float = 0.15)
 
 def load_json(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
-
-
-def save_json(path: Path, payload: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
 def compute_row_ev_percentages(manifests: dict[str, dict[str, Any]], selected_components: list[int]) -> list[float]:
@@ -471,7 +467,7 @@ def render_combo(
             ev_by_hemi=ev_by_hemi,
         )
     manifest_out = combo_root / f"hippomaps_gradient_products_{route}_{smoothing}_{out_tag}_manifest.json"
-    save_json(
+    write_json(
         manifest_out,
         {
             "status": "ok",

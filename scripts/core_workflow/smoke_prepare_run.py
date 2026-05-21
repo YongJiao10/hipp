@@ -3,12 +3,11 @@ from __future__ import annotations
 
 import argparse
 import json
-import subprocess
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from lib.output_layout import DEFAULT_QC_ROOT, run_layout, timestamped_run_id
+from lib.workflow_utils import git_commit, utc_now_iso, write_json
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -19,15 +18,6 @@ DEFAULT_INPUT_DIR = REPO_ROOT / "data" / "hippunfold_input"
 DEFAULT_BOLD_ROOT = Path("/home/yojiao/LSS/jianglab/3_Data_Working/HCP_7T_Hippocampus/rsfmri_volume")
 DEFAULT_HIPPUNFOLD_ASSET_STORE_ROOT = REPO_ROOT / "runtime" / "hippunfold_asset_store_shared"
 DEFAULT_HIPPOMAPS_ROOT = REPO_ROOT / "external" / "hippomaps"
-
-
-def now_utc() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
-
-
-def git_commit() -> str | None:
-    proc = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=REPO_ROOT, text=True, capture_output=True)
-    return proc.stdout.strip() if proc.returncode == 0 else None
 
 
 def normalize_subject(subject: str) -> str:
@@ -389,7 +379,7 @@ def main() -> int:
         "schema_version": "1.0",
         "stage": "smoke_prepare_run",
         "status": "prepared",
-        "timestamp_utc": now_utc(),
+        "timestamp_utc": utc_now_iso(),
         "git_commit": git_commit(),
         "run_id": run_id,
         "subject_source": subject_source,

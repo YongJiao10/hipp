@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 from lib.output_layout import DEFAULT_ROUTEA_GROUP_ATLAS_ROOT
+from lib.workflow_utils import write_json
 
 import nibabel as nib
 import numpy as np
@@ -20,10 +21,6 @@ DEFAULT_CROSS_ATLAS_MERGE = REPO_ROOT / "config" / "cross_atlas_network_merge.js
 
 def load_json(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
-
-
-def save_json(path: Path, payload: dict) -> None:
-    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
 def resolve_cluster_label_path(manifest: dict, run_dir: Path) -> Path:
@@ -109,7 +106,7 @@ def materialize_combo(manifest_path: Path, color_map: dict[str, tuple[int, int, 
         "unassigned_label_key": int(key_unassigned),
         "cluster_to_functional_label_key": {str(k): int(v) for k, v in sorted(cluster_to_key.items())},
     }
-    save_json(run_dir / "group_functional_atlas_label_map.json", label_map)
+    write_json(run_dir / "group_functional_atlas_label_map.json", label_map)
 
     label_items: list[tuple[int, str, tuple[int, int, int, int]]] = [(0, "Null", (158, 158, 158, 255))]
     for i, n in enumerate(network_names, start=1):
@@ -126,7 +123,7 @@ def materialize_combo(manifest_path: Path, color_map: dict[str, tuple[int, int, 
     manifest["group_functional_atlas_labels"] = str((run_dir / "group_functional_atlas_labels.npy").resolve())
     manifest["group_functional_atlas_label_map"] = str((run_dir / "group_functional_atlas_label_map.json").resolve())
     manifest["template_functional_atlas_label"] = str(func_lbl_path.resolve())
-    save_json(manifest_path, manifest)
+    write_json(manifest_path, manifest)
     return True
 
 

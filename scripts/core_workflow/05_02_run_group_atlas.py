@@ -41,6 +41,7 @@ from lib.output_layout import (
     DEFAULT_KONG2022_SURFACE_ROOT,
     DEFAULT_KONG2022_TEMPLATE_ROOT,
 )
+from lib.workflow_utils import write_json
 
 
 DEFAULT_T1ONLY_ROOT = DEFAULT_KONG2022_ROOT
@@ -102,11 +103,6 @@ class SubjectFCMode:
     top_percent: int | None
     top_fraction: float
     binarize: bool
-
-
-def save_json(path: Path, payload: dict[str, object]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
 def write_tsv(path: Path, rows: list[dict[str, object]], fieldnames: list[str]) -> None:
@@ -3135,12 +3131,12 @@ def main() -> int:
                                 color_map=canonical_color_map,
                             )
                             np.save(run_dir / "group_functional_atlas_labels.npy", functional_labels.astype(np.int32))
-                            save_json(run_dir / "group_functional_atlas_label_map.json", functional_meta)
+                            write_json(run_dir / "group_functional_atlas_label_map.json", functional_meta)
                             np.save(run_dir / "vertex_roi_profile.npy", vertex_profile_mean.astype(np.float32))
                             np.save(run_dir / "vertex_support_indices.npy", support_indices.astype(np.int32))
-                            save_json(run_dir / "vertex_assignment_status.json", {"items": vertex_status_rows})
-                            save_json(run_dir / "global_top_connections.json", global_top)
-                            save_json(run_dir / "k_selection_summary.json", {"rows": [], "k_final": None, "mode": "clusterless"})
+                            write_json(run_dir / "vertex_assignment_status.json", {"items": vertex_status_rows})
+                            write_json(run_dir / "global_top_connections.json", global_top)
+                            write_json(run_dir / "k_selection_summary.json", {"rows": [], "k_final": None, "mode": "clusterless"})
                             write_tsv(run_dir / "k_selection_summary.tsv", [], k_selection_fields)
 
                             func_lbl = make_named_label_gifti(functional_labels.astype(np.int32), functional_label_items)
@@ -3206,8 +3202,8 @@ def main() -> int:
                                 roi_registry,
                                 ["roi_id", "roi_name", "hemi", "family17", "subregion", "rank", "canonical8"],
                             )
-                            save_json(run_dir / "group_feature_summary.json", {"network_names": network_names, "N_ref": int(len(network_names))})
-                            save_json(manifest_path, manifest)
+                            write_json(run_dir / "group_feature_summary.json", {"network_names": network_names, "N_ref": int(len(network_names))})
+                            write_json(manifest_path, manifest)
                             continue
 
                         if not k_eff:
@@ -3217,7 +3213,7 @@ def main() -> int:
                                 f"v_min={v_min} k_max_eff={k_max_eff}"
                             )
                             write_tsv(run_dir / "k_selection_summary.tsv", [], k_selection_fields)
-                            save_json(
+                            write_json(
                                 run_dir / "k_selection_summary.json",
                                 {
                                     "rows": [],
@@ -3285,7 +3281,7 @@ def main() -> int:
                                 "k_selection_summary_tsv": str((run_dir / "k_selection_summary.tsv").resolve()),
                                 "k_selection_summary_json": str((run_dir / "k_selection_summary.json").resolve()),
                             }
-                            save_json(manifest_path, manifest)
+                            write_json(manifest_path, manifest)
                             print(f"  [skip] {skip_detail}", flush=True)
                             continue
 
@@ -3304,7 +3300,7 @@ def main() -> int:
                                 gradient_components=gradient_components,
                             )
                             np.save(run_dir / "group_gradient_features_active.npy", group_features_active.astype(np.float32))
-                            save_json(run_dir / "group_gradient_feature_summary.json", group_gradient_meta)
+                            write_json(run_dir / "group_gradient_feature_summary.json", group_gradient_meta)
                         else:
                             group_features_active = group_feature_matrix(
                                 method=method,
@@ -3503,7 +3499,7 @@ def main() -> int:
                             skip_reason = "no_k_survived_selection_constraints"
                             skip_detail = f"No K survived selection constraints for combo={combo}"
                             write_tsv(run_dir / "k_selection_summary.tsv", rows, k_selection_fields)
-                            save_json(
+                            write_json(
                                 run_dir / "k_selection_summary.json",
                                 {
                                     "rows": rows,
@@ -3575,7 +3571,7 @@ def main() -> int:
                                 "k_selection_summary_tsv": str((run_dir / "k_selection_summary.tsv").resolve()),
                                 "k_selection_summary_json": str((run_dir / "k_selection_summary.json").resolve()),
                             }
-                            save_json(manifest_path, manifest)
+                            write_json(manifest_path, manifest)
                             print(f"  [skip] {skip_detail}", flush=True)
                             continue
                         if args.k_selection_mode != "redundancy-aware":
@@ -3703,17 +3699,17 @@ def main() -> int:
                                 "q_threshold": variant_spec["q_threshold"],
                                 "top_n_cap": variant_spec["top_n_cap"],
                             }
-                            save_json(run_dir / f"cluster_assignment_status_{variant_name}.json", payload)
+                            write_json(run_dir / f"cluster_assignment_status_{variant_name}.json", payload)
                             if variant_name == "fisherz":
-                                save_json(run_dir / "cluster_assignment_status.json", payload)
+                                write_json(run_dir / "cluster_assignment_status.json", payload)
                             if variant_name == "count":
-                                save_json(run_dir / "cluster_roi_topn_assignment_status.json", payload)
-                        save_json(
+                                write_json(run_dir / "cluster_roi_topn_assignment_status.json", payload)
+                        write_json(
                             run_dir / "cluster_dominant_network.json",
                             {"dominant": dominant, "network_names": network_names, "assignment_variant": "fisherz"},
                         )
                         if "count" in assignment_variant_specs:
-                            save_json(
+                            write_json(
                                 run_dir / "cluster_dominant_network_count.json",
                                 {
                                     "dominant": assignment_variant_specs["count"]["dominant"],
@@ -3724,7 +3720,7 @@ def main() -> int:
                         if atlas == "kong2022":
                             assert roi_profile is not None and roi_registry is not None and roi_top20 is not None
                             np.save(run_dir / "cluster_roi_profile.npy", roi_profile.astype(np.float32))
-                            save_json(run_dir / "cluster_roi_top20.json", roi_top20)
+                            write_json(run_dir / "cluster_roi_top20.json", roi_top20)
                             write_tsv(
                                 run_dir / "cluster_roi_registry.tsv",
                                 roi_registry,
@@ -3743,7 +3739,7 @@ def main() -> int:
                             )
                             labels_variant = labels_variant.astype(np.int32)
                             np.save(run_dir / f"group_functional_atlas_labels_{variant_name}.npy", labels_variant)
-                            save_json(run_dir / f"group_functional_atlas_label_map_{variant_name}.json", meta_variant)
+                            write_json(run_dir / f"group_functional_atlas_label_map_{variant_name}.json", meta_variant)
                             functional_variant_payloads[variant_name] = {
                                 "assignment_metric": str(variant_spec["assignment_metric"]),
                                 "cluster_assignment_status": str((run_dir / f"cluster_assignment_status_{variant_name}.json").resolve()),
@@ -3754,14 +3750,14 @@ def main() -> int:
                                 functional_labels = labels_variant
                                 functional_label_items = items_variant
                                 np.save(run_dir / "group_functional_atlas_labels.npy", labels_variant)
-                                save_json(run_dir / "group_functional_atlas_label_map.json", meta_variant)
+                                write_json(run_dir / "group_functional_atlas_label_map.json", meta_variant)
 
                         write_tsv(
                             run_dir / "k_selection_summary.tsv",
                             rows,
                             k_selection_fields,
                         )
-                        save_json(run_dir / "k_selection_summary.json", {"rows": rows, "k_final": int(k_final)})
+                        write_json(run_dir / "k_selection_summary.json", {"rows": rows, "k_final": int(k_final)})
 
                         # Template label for downstream overview rendering.
                         lbl = make_cluster_label_gifti(labels_final.astype(np.int32), int(k_final), colors)
@@ -3923,8 +3919,8 @@ def main() -> int:
                         feature_summary: dict[str, object] = {"network_names": network_names, "N_ref": int(len(network_names))}
                         if group_gradient_meta is not None:
                             feature_summary["gradient"] = group_gradient_meta
-                        save_json(run_dir / "group_feature_summary.json", feature_summary)
-                        save_json(manifest_path, manifest)
+                        write_json(run_dir / "group_feature_summary.json", feature_summary)
+                        write_json(manifest_path, manifest)
 
     print(json.dumps({"out_root": str(out_root), "status": "ok"}, indent=2))
     return 0

@@ -4,10 +4,10 @@ from __future__ import annotations
 import argparse
 import json
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from datetime import datetime, timezone
 from pathlib import Path
 
 from lib.output_layout import DEFAULT_KONG2022_MANIFEST_ROOT, DEFAULT_KONG2022_ROOT
+from lib.workflow_utils import capped_jobs, utc_now_iso, write_json
 
 import numpy as np
 
@@ -23,17 +23,8 @@ HEMIS = ["L", "R"]
 RUN_IDS = [1, 2, 3, 4]
 
 
-def now_utc() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
-
-
 def load_subjects(path: Path) -> list[str]:
     return [line.strip().replace("sub-", "") for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
-
-
-def save_json(path: Path, payload: dict[str, object]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
 def corrcoef_rows(a: np.ndarray) -> np.ndarray:
@@ -91,12 +82,12 @@ def materialize_subject(
                 offset += run_len
             if offset != ts.shape[1]:
                 raise RuntimeError(f"Run lengths do not sum to timeseries length for sub-{subject} {smoothing} hemi-{hemi}")
-            save_json(
+            write_json(
                 out_dir / "stage_manifest.json",
                 {
                     "stage": "t1only_intrinsic_vertex_to_vertex_fc",
                     "status": "done",
-                    "timestamp_utc": now_utc(),
+                    "timestamp_utc": utc_now_iso(),
                     "params": {"subject": subject, "smoothing": smoothing, "hemi": hemi},
                     "inputs": [str(ts_path.resolve()), str(mask_path.resolve())],
                     "outputs": [str((out_dir / "hipp_vertex_to_vertex_fc_active.npy").resolve())],
@@ -124,7 +115,7 @@ def main() -> int:
     shared_root = Path(args.shared_root).resolve()
     surface_root = Path(args.surface_root).resolve()
     subjects = [s.replace("sub-", "") for s in args.subjects] if args.subjects else load_subjects(Path(args.subjects_manifest))
-    jobs = max(1, min(int(args.jobs), 10, len(subjects)))
+    jobs = capped_jobs(args.jobs, len(subjects))
     n_combo = 0
     if jobs == 1:
         for subject in subjects:

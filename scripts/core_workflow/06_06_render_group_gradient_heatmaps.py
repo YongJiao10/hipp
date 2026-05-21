@@ -17,6 +17,7 @@ from PIL import Image, ImageDraw, ImageFont
 from nibabel.gifti import GiftiDataArray, GiftiImage
 
 from lib.output_layout import DEFAULT_GRADIENTS_DIR, DEFAULT_ROUTEA_GROUP_ATLAS_ROOT
+from lib.workflow_utils import write_json
 from lib.workbench import run_workbench
 
 
@@ -107,11 +108,6 @@ def resolve_workbench_palette_name(requested_palette: str) -> str:
 
 def load_json(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
-
-
-def save_json(path: Path, payload: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
 def validate_manifest_path(manifest_path: Path, group_root: Path) -> None:
@@ -1277,7 +1273,7 @@ def main() -> int:
     }
     if final_dims is not None:
         manifest["output_dimensions"] = {"width": int(final_dims[0]), "height": int(final_dims[1])}
-    save_json(output_manifest, manifest)
+    write_json(output_manifest, manifest)
 
     if args.dry_run:
         print(f"[dry-run] validated inputs, wrote manifest: {output_manifest}")
