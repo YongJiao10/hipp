@@ -7,12 +7,13 @@ import tempfile
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
+from lib.output_layout import DEFAULT_HIPPUNFOLD_BATCH_ROOT
 from lib.workbench import run_workbench
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 _OLD_BATCH = Path.home() / "Documents" / "HippoMaps" / "outputs" / "dense_corobl_batch"
-_NEW_BATCH = REPO_ROOT / "outputs_migration" / "dense_corobl_batch"
+_NEW_BATCH = DEFAULT_HIPPUNFOLD_BATCH_ROOT
 
 
 def detect_template_subject(root: ET.Element) -> str:

@@ -13,25 +13,27 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-GROUP_ATLAS_SCRIPT = REPO_ROOT / "scripts" / "core_workflow" / "05_01_run_group_atlas.py"
+GROUP_ATLAS_SCRIPT = REPO_ROOT / "scripts" / "core_workflow" / "05_02_run_group_atlas.py"
 PRESENT_SCRIPT = REPO_ROOT / "scripts" / "core_workflow" / "06_01_build_group_overview.py"
-from lib.output_layout import DEFAULT_OVERVIEWS_DIR
-
-DEFAULT_BATCH_ROOT = REPO_ROOT / "outputs_experiments" / "hippunfold_recommended_t1w_20260423" / "dense_corobl_batch"
-DEFAULT_ROUTE_ROOT = REPO_ROOT / "outputs_experiments" / "hippunfold_recommended_t1w_20260423" / "kong2022"
-DEFAULT_SHARED_ROOT = DEFAULT_ROUTE_ROOT / "shared_inputs" / "routeb_151"
-DEFAULT_SURFACE_ROOT = DEFAULT_ROUTE_ROOT / "shared_inputs" / "surface_151"
-DEFAULT_GROUP_ROOT = DEFAULT_ROUTE_ROOT / "hipp_group_merged_canonical_atlas"
-DEFAULT_PRESENT_DIR = DEFAULT_OVERVIEWS_DIR
-DEFAULT_MANIFEST = (
-    REPO_ROOT
-    / "outputs_experiments"
-    / "hippunfold_recommended_t1w_20260423"
-    / "kong2022"
-    / "manifests"
-    / "hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt"
+from lib.output_layout import (
+    DEFAULT_GROUP_ATLAS_ROOT,
+    DEFAULT_HIPPUNFOLD_BATCH_ROOT,
+    DEFAULT_KONG2022_MANIFEST_ROOT,
+    DEFAULT_KONG2022_ROOT,
+    DEFAULT_KONG2022_ROUTEB_ROOT,
+    DEFAULT_KONG2022_SURFACE_ROOT,
+    DEFAULT_KONG2022_TEMPLATE_ROOT,
+    DEFAULT_OVERVIEWS_DIR,
 )
-DEFAULT_GROUP_AVG = DEFAULT_ROUTE_ROOT / "templates" / "hipp_group_average_t1only_151" / "group_average_surfaces"
+
+DEFAULT_BATCH_ROOT = DEFAULT_HIPPUNFOLD_BATCH_ROOT
+DEFAULT_ROUTE_ROOT = DEFAULT_KONG2022_ROOT
+DEFAULT_SHARED_ROOT = DEFAULT_KONG2022_ROUTEB_ROOT
+DEFAULT_SURFACE_ROOT = DEFAULT_KONG2022_SURFACE_ROOT
+DEFAULT_GROUP_ROOT = DEFAULT_GROUP_ATLAS_ROOT / "spectral_fast_rerun"
+DEFAULT_PRESENT_DIR = DEFAULT_OVERVIEWS_DIR
+DEFAULT_MANIFEST = DEFAULT_KONG2022_MANIFEST_ROOT / "hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt"
+DEFAULT_GROUP_AVG = DEFAULT_KONG2022_TEMPLATE_ROOT / "group_average_surfaces"
 
 MAX_REPO_CONCURRENCY = 10
 DEFAULT_COMBO_JOBS = 4

@@ -5,11 +5,28 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-OUTPUTS_CORE_ROOT = REPO_ROOT / "outputs_core" / "hcp7t_hippocampus"
-RUNS_ROOT = OUTPUTS_CORE_ROOT / "runs"
-DEFAULT_MANUAL_RUN_ID = "manual"
-DEFAULT_MANUAL_RUN_ROOT = RUNS_ROOT / DEFAULT_MANUAL_RUN_ID
-DEFAULT_PRESENT_ROOT = DEFAULT_MANUAL_RUN_ROOT / "present"
+OUTPUTS_CORE_ROOT = REPO_ROOT / "outputs_core"
+DEFAULT_INPUTS_ROOT = OUTPUTS_CORE_ROOT / "inputs" / "hcp7t_hippocampus"
+DEFAULT_HIPPUNFOLD_BATCH_ROOT = DEFAULT_INPUTS_ROOT / "hippunfold" / "dense_corobl_batch"
+DEFAULT_QC_ROOT = DEFAULT_INPUTS_ROOT / "qc" / "vertex_qc_t1only"
+DEFAULT_KONG2022_ROOT = DEFAULT_INPUTS_ROOT / "kong2022"
+DEFAULT_KONG2022_SHARED_INPUTS_ROOT = DEFAULT_KONG2022_ROOT / "shared_inputs"
+DEFAULT_KONG2022_SURFACE_ROOT = DEFAULT_KONG2022_SHARED_INPUTS_ROOT / "surface_151"
+DEFAULT_KONG2022_ROUTEA_ROOT = DEFAULT_KONG2022_SHARED_INPUTS_ROOT / "routea_151"
+DEFAULT_KONG2022_ROUTEB_ROOT = DEFAULT_KONG2022_SHARED_INPUTS_ROOT / "routeb_151"
+DEFAULT_KONG2022_TEMPLATE_ROOT = DEFAULT_KONG2022_ROOT / "templates" / "hipp_group_average_t1only_151"
+DEFAULT_KONG2022_MANIFEST_ROOT = DEFAULT_KONG2022_ROOT / "manifests"
+DEFAULT_KONG2022_QC_ROOT = DEFAULT_KONG2022_ROOT / "qc"
+DEFAULT_CORTEX_ROUTEA_ROOT = DEFAULT_KONG2022_ROOT / "cortex_references" / "routea_areal_mshbm"
+DEFAULT_KONG2019_ROOT = DEFAULT_INPUTS_ROOT / "kong2019_fast_pfm_t1only"
+DEFAULT_WORK_ROOT = OUTPUTS_CORE_ROOT / "work"
+DEFAULT_GROUP_ATLAS_ROOT = DEFAULT_WORK_ROOT / "group_atlas"
+DEFAULT_ROUTEA_GROUP_ATLAS_ROOT = DEFAULT_GROUP_ATLAS_ROOT / "routea_full_k3_fisherz"
+DEFAULT_HIPPOMAPS_GRADIENT_ROOT = DEFAULT_WORK_ROOT / "hippomaps_gradients"
+DEFAULT_CORTEX_ASSETS_ROOT = DEFAULT_WORK_ROOT / "cortex_pfm"
+SMOKE_RUNS_ROOT = OUTPUTS_CORE_ROOT / "smoke_runs"
+RERUNS_ROOT = OUTPUTS_CORE_ROOT / "reruns"
+DEFAULT_PRESENT_ROOT = OUTPUTS_CORE_ROOT / "present"
 DEFAULT_OVERVIEWS_DIR = DEFAULT_PRESENT_ROOT / "overviews"
 DEFAULT_GRADIENTS_DIR = DEFAULT_PRESENT_ROOT / "gradients"
 DEFAULT_CORTEX_PANELS_DIR = DEFAULT_PRESENT_ROOT / "cortex_panels"
@@ -25,7 +42,7 @@ def run_root(run_id: str) -> Path:
     clean = str(run_id).strip()
     if not clean or "/" in clean or clean in {".", ".."}:
         raise ValueError(f"Invalid run_id: {run_id!r}")
-    return RUNS_ROOT / clean
+    return SMOKE_RUNS_ROOT / clean
 
 
 def run_layout(run_id: str) -> dict[str, Path]:

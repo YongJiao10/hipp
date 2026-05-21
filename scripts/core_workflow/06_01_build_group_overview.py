@@ -16,12 +16,12 @@ from matplotlib.patches import Rectangle
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from nibabel.gifti import GiftiDataArray, GiftiImage, GiftiLabel, GiftiLabelTable
 
-from lib.output_layout import DEFAULT_OVERVIEWS_DIR
+from lib.output_layout import DEFAULT_OVERVIEWS_DIR, DEFAULT_ROUTEA_GROUP_ATLAS_ROOT
 from lib.surface_utils import long_axis_order, render_locked_grid
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_GROUP_ROOT = REPO_ROOT / "outputs_migration" / "hipp_group_merged_canonical_atlas"
+DEFAULT_GROUP_ROOT = DEFAULT_ROUTEA_GROUP_ATLAS_ROOT
 DEFAULT_PRESENT_DIR = DEFAULT_OVERVIEWS_DIR
 DEFAULT_SCENE = REPO_ROOT / "config" / "wb_locked_native_view_lateral_medial.scene"
 METHOD_CHOICES = [
@@ -48,6 +48,7 @@ FS_MISSING = 13
 FS_BIG_TITLE = 13
 FS_SUPTITLE = 18
 CLUSTERLESS_METHODS = {"wta-top"}
+ASSIGNMENT_VARIANTS = ("fisherz", "count")
 DEFAULT_CROSS_ATLAS_MERGE = REPO_ROOT / "config" / "cross_atlas_network_merge.json"
 DEFAULT_NETWORK_STYLE = REPO_ROOT / "config" / "hipp_network_style.json"
 
@@ -177,6 +178,37 @@ def materialize_combo(manifest_path: Path, color_map: dict[str, tuple[int, int, 
 
 def load_json(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def resolve_assignment_variant_paths(
+    run_dir: Path,
+    manifest: dict,
+    variant: str,
+) -> tuple[Path, Path]:
+    if variant not in ASSIGNMENT_VARIANTS:
+        raise ValueError(f"Unknown assignment variant: {variant}")
+    variants = manifest.get("assignment_variants", {})
+    if isinstance(variants, dict) and variant in variants and isinstance(variants[variant], dict):
+        row = variants[variant]
+        status_raw = row.get("cluster_assignment_status")
+        label_raw = row.get("template_functional_atlas_label") or row.get("template_functional_atlas_label_variant")
+        if status_raw and label_raw:
+            return Path(str(status_raw)).resolve(), Path(str(label_raw)).resolve()
+    if variant == "fisherz":
+        status = run_dir / "cluster_assignment_status_fisherz.json"
+        if not status.exists():
+            status = run_dir / "cluster_assignment_status.json"
+        label_raw = manifest.get("template_functional_atlas_label")
+        label = Path(str(label_raw)).resolve() if label_raw else run_dir / "missing_fisherz_functional.label.gii"
+        return status, label
+    status = run_dir / "cluster_assignment_status_count.json"
+    if not status.exists():
+        status = run_dir / "cluster_roi_topn_assignment_status.json"
+    label = run_dir / "template" / "workbench_assets"
+    candidates = sorted(label.glob("*label-group_functional_atlas_*_count.label.gii"))
+    if candidates:
+        return status, candidates[0].resolve()
+    return status, run_dir / "missing_count_functional.label.gii"
 
 
 MATERIALIZE_COLOR_MAP = network_color_map()
@@ -623,8 +655,10 @@ def render_combo(
     scene: Path,
     route_tag: str | None,
     mode_tag: str | None,
+    assignment_variant: str = "fisherz",
 ) -> dict[str, object]:
     effective_mode_tag = (None if method in CLUSTERLESS_METHODS else mode_tag)
+    effective_assignment_variant = None if method in CLUSTERLESS_METHODS else str(assignment_variant)
     fig = plt.figure(figsize=(15.4, 12.2), dpi=180, constrained_layout=True)
     gs = fig.add_gridspec(nrows=2, ncols=2, width_ratios=[1.40, 1.30], hspace=0.06, wspace=0.05)
     rows_meta: list[dict[str, object]] = []
@@ -648,7 +682,7 @@ def render_combo(
         m_r = load_json(right_manifest)
         d_l = left_manifest.parent
         d_r = right_manifest.parent
-        if method not in CLUSTERLESS_METHODS:
+        if method not in CLUSTERLESS_METHODS and effective_assignment_variant == "fisherz":
             m_l = ensure_functional_label_consistency(left_manifest, m_l)
             m_r = ensure_functional_label_consistency(right_manifest, m_r)
         if method in CLUSTERLESS_METHODS:
@@ -682,7 +716,7 @@ def render_combo(
                         scene=scene,
                         outdir=Path(tmp),
                         name=f"merged_group_vertex_wta_{method}_{atlas}_{smoothing}",
-                        title=f"Group functional atlas {method} {atlas} {smoothing}",
+                        title=f"Group functional atlas {method} {atlas} {smoothing} {effective_assignment_variant}",
                         left_labels=left_label,
                         right_labels=right_label,
                         left_surface=surf_l,
@@ -773,8 +807,21 @@ def render_combo(
         prof_r = np.load(d_r / "cluster_network_profile.npy").astype(np.float32)
         lbl_l = np.load(d_l / "group_labels_final.npy").astype(np.int32)
         lbl_r = np.load(d_r / "group_labels_final.npy").astype(np.int32)
-        status_l = load_json(d_l / "cluster_assignment_status.json")
-        status_r = load_json(d_r / "cluster_assignment_status.json")
+        assert effective_assignment_variant is not None
+        status_l_path, left_label_variant = resolve_assignment_variant_paths(d_l, m_l, effective_assignment_variant)
+        status_r_path, right_label_variant = resolve_assignment_variant_paths(d_r, m_r, effective_assignment_variant)
+        if not status_l_path.exists() or not status_r_path.exists():
+            raise FileNotFoundError(
+                f"Missing assignment variant status for {method} {atlas} {smoothing} variant={effective_assignment_variant}: "
+                f"left={status_l_path} right={status_r_path}"
+            )
+        if not left_label_variant.exists() or not right_label_variant.exists():
+            raise FileNotFoundError(
+                f"Missing assignment variant functional labels for {method} {atlas} {smoothing} variant={effective_assignment_variant}: "
+                f"left={left_label_variant} right={right_label_variant}"
+            )
+        status_l = load_json(status_l_path)
+        status_r = load_json(status_r_path)
         surf_l = Path(str(m_l["template_left_or_right_surface"]))
         surf_r = Path(str(m_r["template_left_or_right_surface"]))
         order_l = long_axis_order(surf_l)
@@ -850,8 +897,8 @@ def render_combo(
         plot_confidence_panel(ax3, conf_rows, f"{smoothing} | cluster confidence / ambiguity")
 
         ax_big = fig.add_subplot(gs[ridx, 1])
-        left_label = Path(str(m_l.get("template_functional_atlas_label", m_l["template_cluster_label"])))
-        right_label = Path(str(m_r.get("template_functional_atlas_label", m_r["template_cluster_label"])))
+        left_label = left_label_variant
+        right_label = right_label_variant
         template_subject, spec_path = resolve_template_render_spec(m_l)
         if template_subject is None or spec_path is None:
             ax_big.text(
@@ -869,7 +916,7 @@ def render_combo(
                     scene=scene,
                     outdir=Path(tmp),
                     name=f"merged_group_cluster_wta_{method}_{atlas}_{smoothing}",
-                    title=f"Group functional atlas {method} {atlas} {smoothing}",
+                    title=f"Group functional atlas {method} {atlas} {smoothing} {effective_assignment_variant}",
                     left_labels=left_label,
                     right_labels=right_label,
                     left_surface=surf_l,
@@ -895,11 +942,14 @@ def render_combo(
         name_bits.append(route_tag)
     if effective_mode_tag:
         name_bits.append(effective_mode_tag)
+    if effective_assignment_variant:
+        name_bits.append(effective_assignment_variant)
     out_png = present_dir / f"{'_'.join(name_bits)}.png"
     fig.suptitle(
         f"Group Overview | {atlas} | {method}"
         + (f" | {route_tag}" if route_tag else "")
-        + (f" | {effective_mode_tag}" if effective_mode_tag else ""),
+        + (f" | {effective_mode_tag}" if effective_mode_tag else "")
+        + (f" | {effective_assignment_variant}" if effective_assignment_variant else ""),
         fontsize=FS_SUPTITLE,
     )
     out_png.parent.mkdir(parents=True, exist_ok=True)
@@ -912,8 +962,8 @@ def write_readme(present_dir: Path, items: list[dict[str, object]]) -> None:
     lines = [
         "# HCP 7T hippocampus group overviews",
         "",
-        "| atlas | method | route | mode | overview | smoothings | key metrics |",
-        "|---|---|---|---|---|---|---|",
+        "| atlas | method | route | mode | assignment | overview | smoothings | key metrics |",
+        "|---|---|---|---|---|---|---|---|",
     ]
     for item in sorted(items, key=lambda x: (str(x["atlas"]), str(x["method"]))):
         png = Path(str(item["overview_png"])).name
@@ -921,7 +971,8 @@ def write_readme(present_dir: Path, items: list[dict[str, object]]) -> None:
         metric = str(item.get("metric_summary", ""))
         route = str(item.get("route_tag", ""))
         mode = str(item.get("mode_tag", ""))
-        lines.append(f"| {item['atlas']} | {item['method']} | {route} | {mode} | [{png}]({png}) | {sm} | {metric} |")
+        assignment = str(item.get("assignment_variant", ""))
+        lines.append(f"| {item['atlas']} | {item['method']} | {route} | {mode} | {assignment} | [{png}]({png}) | {sm} | {metric} |")
     (present_dir / "README.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
@@ -970,6 +1021,7 @@ def main() -> int:
     p.add_argument("--scene", default=str(DEFAULT_SCENE))
     p.add_argument("--route-tag", choices=ROUTE_TAG_CHOICES, default=None)
     p.add_argument("--mode-tag", default=None)
+    p.add_argument("--assignment-variant", choices=ASSIGNMENT_VARIANTS, default="fisherz")
     p.add_argument(
         "--manifest-name",
         default="group_overview_manifest.json",
@@ -1023,6 +1075,7 @@ def main() -> int:
                 scene=Path(args.scene).resolve(),
                 route_tag=args.route_tag,
                 mode_tag=args.mode_tag,
+                assignment_variant=str(args.assignment_variant),
             )
             row_meta = meta["rows"]
             metric = (
@@ -1045,6 +1098,7 @@ def main() -> int:
                     "metric_summary": metric,
                     "route_tag": args.route_tag,
                     "mode_tag": (None if method in CLUSTERLESS_METHODS else args.mode_tag),
+                    "assignment_variant": (None if method in CLUSTERLESS_METHODS else str(args.assignment_variant)),
                     "source_group_root": str(group_root),
                 }
             )

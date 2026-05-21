@@ -16,18 +16,12 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 from nibabel.gifti import GiftiDataArray, GiftiImage
 
-from lib.output_layout import DEFAULT_GRADIENTS_DIR
+from lib.output_layout import DEFAULT_GRADIENTS_DIR, DEFAULT_ROUTEA_GROUP_ATLAS_ROOT
 from lib.workbench import run_workbench
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_GROUP_ROOT = (
-    REPO_ROOT
-    / "outputs_experiments"
-    / "hippunfold_recommended_t1w_20260423"
-    / "kong2022"
-    / "hipp_group_merged_canonical_atlas_routea_full"
-)
+DEFAULT_GROUP_ROOT = DEFAULT_ROUTEA_GROUP_ATLAS_ROOT
 DEFAULT_SCENE = REPO_ROOT / "config" / "wb_locked_native_view_lateral_medial.scene"
 DEFAULT_OUT_PNG = DEFAULT_GRADIENTS_DIR / "kong2022_gradient-spectral_group_gradients_heatmap_routea_2mm4mm_g1g2g3.png"
 DEFAULT_OUT_MANIFEST = DEFAULT_GRADIENTS_DIR / "kong2022_gradient-spectral_group_gradients_heatmap_routea_2mm4mm_g1g2g3_manifest.json"

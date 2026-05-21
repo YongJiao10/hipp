@@ -22,16 +22,21 @@ import matplotlib.pyplot as plt
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 from lib.kong2022_label_utils import KONG2022_DLABEL_PATH, load_kong2022_bundle
-from lib.output_layout import DEFAULT_CORTEX_PANELS_DIR
+from lib.output_layout import (
+    DEFAULT_CORTEX_ASSETS_ROOT as CORE_CORTEX_ASSETS_ROOT,
+    DEFAULT_CORTEX_PANELS_DIR,
+    DEFAULT_KONG2022_ROUTEA_ROOT,
+    DEFAULT_ROUTEA_GROUP_ATLAS_ROOT,
+)
 from lib.surface_utils import render_locked_grid
 from lib.workbench import run_workbench
 
 
-DEFAULT_GROUP_ROOT = REPO_ROOT / "outputs_migration" / "hipp_group_merged_canonical_atlas"
-DEFAULT_SHARED_ROOT = REPO_ROOT / "outputs_migration" / "hipp_group_inputs_shared"
+DEFAULT_GROUP_ROOT = DEFAULT_ROUTEA_GROUP_ATLAS_ROOT
+DEFAULT_SHARED_ROOT = DEFAULT_KONG2022_ROUTEA_ROOT
 DEFAULT_PRESENT_DIR = DEFAULT_CORTEX_PANELS_DIR
 DEFAULT_DATA_ROOT = REPO_ROOT / "data" / "hippunfold_input"
-DEFAULT_CORTEX_ASSETS_ROOT = REPO_ROOT / "outputs_migration" / "cortex_pfm"
+DEFAULT_CORTEX_ASSETS_ROOT = CORE_CORTEX_ASSETS_ROOT
 DEFAULT_PUBLIC_TEMPLATE_ROOT = REPO_ROOT / "external"
 DEFAULT_SCENE = REPO_ROOT / "config" / "manual_wb_scenes" / "cortex_manual.scene"
 DEFAULT_HIPP_SCENE = REPO_ROOT / "config" / "wb_locked_native_view_lateral_medial.scene"

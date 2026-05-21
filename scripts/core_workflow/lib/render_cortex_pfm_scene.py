@@ -3,10 +3,15 @@ from __future__ import annotations
 
 import argparse
 import math
+import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import numpy as np
+
+CORE_WORKFLOW_DIR = Path(__file__).resolve().parents[1]
+if str(CORE_WORKFLOW_DIR) not in sys.path:
+    sys.path.insert(0, str(CORE_WORKFLOW_DIR))
 
 from lib.workbench import run_workbench
 

@@ -25,7 +25,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--batch-root",
-        default=str(repo_root / "outputs_migration" / "dense_corobl_batch"),
+        default=str(repo_root / "outputs_core" / "inputs" / "hcp7t_hippocampus" / "hippunfold" / "dense_corobl_batch"),
         help="Batch output root containing sub-*/hippunfold.",
     )
     parser.add_argument(

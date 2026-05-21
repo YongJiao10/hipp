@@ -34,7 +34,7 @@ Interpretation:
 HippoMaps-style continuous gradients additionally require official package code
 at `external/hippomaps` on `sys.path`. Current pinned source for this workspace:
 `external/hippomaps`, commit `eebd4fe82e69f32e793ac691b8346e71780a757a`.
-The `05_03`/`06_05` manifests record both the import path and commit. Do not
+The `05_01`/`06_05` manifests record both the import path and commit. Do not
 copy HippoMaps plotting code into this repository. For `den=512`, `06_05`
 treats `512` as HippoMaps v2 in the current Python process and disables
 `unfoldAPrescale`; no AP surfarea rescale is used for 512-density figures. The
@@ -55,7 +55,7 @@ environment variables before invoking `wb_command`, including
 `NUMEXPR_NUM_THREADS`, `VECLIB_MAXIMUM_THREADS`, and
 `ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS`.
 
-For `01_01_prepare_group_inputs.py`, subject-level Workbench stages are capped
+For `02_01_prepare_group_inputs.py`, subject-level Workbench stages are capped
 at two concurrent subjects even if `--jobs` is higher. Do not bypass this cap
 with direct Workbench subprocess calls.
 
@@ -66,9 +66,9 @@ Use these forms directly:
 ```bash
 /home/yojiao/.conda/envs/py314/bin/python tests/core_workflow/test_core_workflow_traceability_contract.py
 /home/yojiao/.conda/envs/py314/bin/python -m py_compile scripts/core_workflow/*.py scripts/core_workflow/lib/*.py
-/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/01_01_prepare_group_inputs.py --help
+/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/02_01_prepare_group_inputs.py --help
 /home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/06_04_build_cluster_cortex_panels.py --help
-/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/05_03_compute_hippomaps_gradients.py --help
+/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/05_01_compute_hippomaps_gradients.py --help
 /home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/06_05_render_hippomaps_gradient_products.py --help
 ```
 

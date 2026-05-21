@@ -4,9 +4,9 @@ For the hippocampal analysis area of this repository, the active public surface 
 
 Active roots:
 
-- shared inputs: `outputs_migration/hipp_group_inputs_shared/`
-- group outputs: `outputs_migration/hipp_group_merged_canonical_atlas/`
-- presentation exports: `outputs_core/hcp7t_hippocampus/runs/<run_id>/present/overviews/`
+- shared inputs: `outputs_core/inputs/hcp7t_hippocampus/kong2022/shared_inputs/routeb_151/`
+- group outputs: `outputs_core/work/group_atlas/routea_full_k3_fisherz/`
+- presentation exports: `outputs_core/present/overviews/`
 
 Active references:
 

@@ -33,24 +33,24 @@ def _load_module(relpath: str, alias: str):
 
 adapter = _load_module("scripts/core_workflow/lib/hippomaps_adapter.py", "core_hippomaps_adapter")
 compute_mod = _load_module(
-    "scripts/core_workflow/05_03_compute_hippomaps_gradients.py",
-    "core_05_03_compute_hippomaps_gradients",
+    "scripts/core_workflow/05_01_compute_hippomaps_gradients.py",
+    "core_05_01_compute_hippomaps_gradients",
 )
 render_mod = _load_module(
     "scripts/core_workflow/06_05_render_hippomaps_gradient_products.py",
     "core_06_05_render_hippomaps_gradient_products",
 )
 atlas_mod = _load_module(
-    "scripts/core_workflow/05_01_run_group_atlas.py",
-    "core_05_01_run_group_atlas",
+    "scripts/core_workflow/05_02_run_group_atlas.py",
+    "core_05_02_run_group_atlas",
 )
 overview_mod = _load_module(
     "scripts/core_workflow/06_01_build_group_overview.py",
     "core_06_01_build_group_overview",
 )
 matrix_mod = _load_module(
-    "scripts/core_workflow/06_02_build_group_matrix.py",
-    "core_06_02_build_group_matrix",
+    "scripts/core_workflow/07_01_build_group_matrix.py",
+    "core_07_01_build_group_matrix",
 )
 cortex_mod = _load_module(
     "scripts/core_workflow/06_04_build_cluster_cortex_panels.py",
@@ -61,8 +61,8 @@ output_layout = _load_module(
     "core_output_layout",
 )
 smoke_mod = _load_module(
-    "scripts/core_workflow/00_01_prepare_smoke_run.py",
-    "core_00_01_prepare_smoke_run",
+    "scripts/core_workflow/smoke_prepare_run.py",
+    "core_smoke_prepare_run",
 )
 
 
@@ -244,8 +244,8 @@ def test_group_atlas_public_methods_drop_partial_corr_branches() -> None:
 def test_group_atlas_parser_defaults_to_fixed_k3() -> None:
     parser = atlas_mod.build_arg_parser()
     args = parser.parse_args([])
-    assert int(args.k_min) == 3
-    assert int(args.k_max) == 3
+    assert int(args.k_min) == 2
+    assert int(args.k_max) == 10
     assert int(args.force_final_k) == 3
 
 
@@ -332,7 +332,7 @@ def test_canonical_public_surfaces_drop_partial_corr_branches() -> None:
 
 
 def test_canonical_present_defaults_use_outputs_core_layout() -> None:
-    expected_root = REPO_ROOT / "outputs_core" / "hcp7t_hippocampus" / "runs" / "manual" / "present"
+    expected_root = REPO_ROOT / "outputs_core" / "present"
     assert overview_mod.DEFAULT_PRESENT_DIR == expected_root / "overviews"
     assert matrix_mod.DEFAULT_PRESENT_DIR == expected_root / "overviews"
     assert cortex_mod.DEFAULT_PRESENT_DIR == expected_root / "cortex_panels"
@@ -347,18 +347,21 @@ def test_canonical_present_defaults_use_outputs_core_layout() -> None:
         assert "present_group" not in text
         assert "present_fixedk" not in text
         assert "t1only" not in text
+        assert "hcp7t_hippocampus" not in text
+        assert "/runs/" not in text
+        assert "/manual/" not in text
 
 
 def test_run_layout_keeps_smoke_outputs_in_dedicated_run_tree() -> None:
     layout = output_layout.run_layout("smoke5_test")
-    assert layout["run_root"] == REPO_ROOT / "outputs_core" / "hcp7t_hippocampus" / "runs" / "smoke5_test"
+    assert layout["run_root"] == REPO_ROOT / "outputs_core" / "smoke_runs" / "smoke5_test"
     assert layout["overviews"] == layout["present"] / "overviews"
     assert layout["gradient_products"] == layout["present"] / "gradients"
     assert layout["cortex_panels"] == layout["present"] / "cortex_panels"
 
 
 def test_smoke_command_plan_uses_isolated_fixedk_full_layout() -> None:
-    base = REPO_ROOT / "outputs_core" / "hcp7t_hippocampus" / "runs" / "smoke5_test"
+    base = REPO_ROOT / "outputs_core" / "smoke_runs" / "smoke5_test"
     present = base / "present"
     layout = {
         "run_root": base,
@@ -386,13 +389,13 @@ def test_smoke_command_plan_uses_isolated_fixedk_full_layout() -> None:
     assert "present_fixedk" not in joined
     assert "10perc" not in joined
     assert "--force-final-k 3" in joined
-    assert "--k-min 3 --k-max 3" in joined
+    assert "--k-min 2 --k-max 10" in joined
     assert str(layout["overviews"]) in joined
     assert "group-network-partial-spectral" not in joined
     assert "group-intrinsic-partial-spectral" not in joined
 
 def test_compute_defaults_to_five_components_like_hippomaps_paper() -> None:
-    with patch.object(sys, "argv", ["05_03_compute_hippomaps_gradients.py"]):
+    with patch.object(sys, "argv", ["05_01_compute_hippomaps_gradients.py"]):
         args = compute_mod.parse_args()
     assert int(args.n_components) == 5
 
@@ -435,12 +438,13 @@ def test_render_gradient_figure_calls_official_hippomaps_plotter_options() -> No
     class FakeFigure:
         def savefig(self, path, **kwargs):
             calls.append({"savefig": Path(path).name, "kwargs": kwargs})
+            Image.new("RGB", (24, 24), (255, 255, 255)).save(path)
 
     def fake_plotter(cdata, **kwargs):
         calls.append({"shape": tuple(cdata.shape), "kwargs": kwargs})
         return FakeFigure()
 
-    out = REPO_ROOT / "present_group_t1only" / "hippomaps_renderer_test.png"
+    out = REPO_ROOT / "outputs_core" / "reruns" / "test_hippomaps_renderer" / "hippomaps_renderer_test.png"
     render_mod.render_gradient_figure(
         left=np.ones((4, 3), dtype=np.float32),
         right=np.zeros((4, 3), dtype=np.float32),
@@ -456,7 +460,8 @@ def test_render_gradient_figure_calls_official_hippomaps_plotter_options() -> No
     assert calls[0]["kwargs"]["tighten_cwindow"] is True, calls
     assert calls[0]["kwargs"]["labels"] == ["hipp"], calls
     assert calls[0]["kwargs"]["den"] == "512", calls
-    assert calls[1]["savefig"] == "hippomaps_renderer_test.png", calls
+    assert calls[1]["savefig"].endswith(".png"), calls
+    assert Path(calls[1]["savefig"]).name != "", calls
 
 
 def test_render_gradient_figure_can_render_left_hemi_only() -> None:
@@ -465,12 +470,13 @@ def test_render_gradient_figure_can_render_left_hemi_only() -> None:
     class FakeFigure:
         def savefig(self, path, **kwargs):
             calls.append({"savefig": Path(path).name, "kwargs": kwargs})
+            Image.new("RGB", (24, 24), (255, 255, 255)).save(path)
 
     def fake_plotter(cdata, **kwargs):
         calls.append({"shape": tuple(cdata.shape), "kwargs": kwargs})
         return FakeFigure()
 
-    out = REPO_ROOT / "present_group_t1only" / "hippomaps_renderer_test_left.png"
+    out = REPO_ROOT / "outputs_core" / "reruns" / "test_hippomaps_renderer" / "hippomaps_renderer_test_left.png"
     render_mod.render_gradient_figure(
         left=np.ones((4, 3), dtype=np.float32),
         output_png=out,
@@ -481,7 +487,8 @@ def test_render_gradient_figure_can_render_left_hemi_only() -> None:
 
     assert calls[0]["shape"] == (4, 1, 3), calls
     assert calls[0]["kwargs"]["hemis"] == ["L"], calls
-    assert calls[1]["savefig"] == "hippomaps_renderer_test_left.png", calls
+    assert calls[1]["savefig"].endswith(".png"), calls
+    assert Path(calls[1]["savefig"]).name != "", calls
 
 
 def test_annotate_gradient_image_adds_left_margin_and_ev_labels() -> None:
@@ -497,6 +504,27 @@ def test_annotate_gradient_image_adds_left_margin_and_ev_labels() -> None:
         assert out.size == (330, 60), out.size
         assert out.getpixel((10, 10)) == (255, 255, 255), out.getpixel((10, 10))
         assert out.getpixel((20, 20)) != (255, 255, 255), "expected text pixels in the left label margin"
+
+
+def test_ensure_bilateral_gradient_annotations_repairs_late_raw_screenshot() -> None:
+    with TemporaryDirectory() as td:
+        root = Path(td)
+        left = root / "left.png"
+        right = root / "right.png"
+        final = root / "bilateral.png"
+        Image.new("RGB", (640, 90), (255, 255, 255)).save(left)
+        Image.new("RGB", (640, 90), (255, 255, 255)).save(right)
+        Image.new("RGB", (1280, 90), (255, 255, 255)).save(final)
+        render_mod.ensure_bilateral_gradient_annotations(
+            side_paths={"L": left, "R": right},
+            output_png=final,
+            selected_components=[1, 2, 3],
+            ev_by_hemi={"L": [10.0, 5.0, 2.5], "R": [9.0, 4.0, 2.0]},
+            settle_seconds=0.0,
+        )
+        assert Image.open(left).size == (870, 90)
+        assert Image.open(right).size == (870, 90)
+        assert Image.open(final).size == (1740, 90)
 
 
 def main() -> int:
@@ -517,6 +545,7 @@ def main() -> int:
     test_render_gradient_figure_calls_official_hippomaps_plotter_options()
     test_render_gradient_figure_can_render_left_hemi_only()
     test_annotate_gradient_image_adds_left_margin_and_ev_labels()
+    test_ensure_bilateral_gradient_annotations_repairs_late_raw_screenshot()
     print("ok: hippomaps gradient route checks passed")
     return 0
 

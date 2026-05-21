@@ -8,23 +8,19 @@ import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
+from lib.output_layout import (
+    DEFAULT_HIPPUNFOLD_BATCH_ROOT,
+    DEFAULT_KONG2022_MANIFEST_ROOT,
+    DEFAULT_KONG2022_QC_ROOT,
+    DEFAULT_KONG2022_SURFACE_ROOT,
+)
+
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_BATCH_ROOT = REPO_ROOT / "outputs_experiments" / "hippunfold_recommended_t1w_20260423" / "dense_corobl_batch"
-DEFAULT_SHARED_ROOT = (
-    REPO_ROOT
-    / "outputs_experiments"
-    / "hippunfold_recommended_t1w_20260423"
-    / "kong2022"
-    / "shared_inputs"
-    / "surface_151"
-)
-DEFAULT_OUT_DIR = (
-    REPO_ROOT / "outputs_experiments" / "hippunfold_recommended_t1w_20260423" / "kong2022" / "qc"
-)
-DEFAULT_MANIFEST_DIR = (
-    REPO_ROOT / "outputs_experiments" / "hippunfold_recommended_t1w_20260423" / "kong2022" / "manifests"
-)
+DEFAULT_BATCH_ROOT = DEFAULT_HIPPUNFOLD_BATCH_ROOT
+DEFAULT_SHARED_ROOT = DEFAULT_KONG2022_SURFACE_ROOT
+DEFAULT_OUT_DIR = DEFAULT_KONG2022_QC_ROOT
+DEFAULT_MANIFEST_DIR = DEFAULT_KONG2022_MANIFEST_ROOT
 
 
 def now_utc() -> str:

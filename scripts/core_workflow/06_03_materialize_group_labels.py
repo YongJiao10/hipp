@@ -5,13 +5,15 @@ import argparse
 import json
 from pathlib import Path
 
+from lib.output_layout import DEFAULT_ROUTEA_GROUP_ATLAS_ROOT
+
 import nibabel as nib
 import numpy as np
 from nibabel.gifti import GiftiDataArray, GiftiImage, GiftiLabel, GiftiLabelTable
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_OUT_ROOT = REPO_ROOT / "outputs_migration" / "hipp_group_merged_canonical_atlas"
+DEFAULT_OUT_ROOT = DEFAULT_ROUTEA_GROUP_ATLAS_ROOT
 DEFAULT_NETWORK_STYLE = REPO_ROOT / "config" / "hipp_network_style.json"
 DEFAULT_CROSS_ATLAS_MERGE = REPO_ROOT / "config" / "cross_atlas_network_merge.json"
 

@@ -362,7 +362,7 @@ The local launcher was run with:
 ```text
 subject                     100610 / 102311 / 102816
 input_dir                   data/hippunfold_input
-output_dir                  outputs_migration/dense_corobl_batch/sub-<id>/hippunfold
+output_dir                  outputs_core/inputs/hcp7t_hippocampus/hippunfold/dense_corobl_batch/sub-<id>/hippunfold
 workflow-profile            none
 sdm                         env-modules
 output-density              512
@@ -372,9 +372,9 @@ autotop_labels              hipp dentate
 
 This manifest records the environment only. The actual subject outputs live under:
 
-- `outputs_migration/dense_corobl_batch/sub-100610/hippunfold`
-- `outputs_migration/dense_corobl_batch/sub-102311/hippunfold`
-- `outputs_migration/dense_corobl_batch/sub-102816/hippunfold`
+- `outputs_core/inputs/hcp7t_hippocampus/hippunfold/dense_corobl_batch/sub-100610/hippunfold`
+- `outputs_core/inputs/hcp7t_hippocampus/hippunfold/dense_corobl_batch/sub-102311/hippunfold`
+- `outputs_core/inputs/hcp7t_hippocampus/hippunfold/dense_corobl_batch/sub-102816/hippunfold`
 
 ## Known Footguns
 
@@ -408,10 +408,10 @@ From scratch, a future agent should:
 10. Make sure `c3d`, `greedy`, `LN2_LAYERS`, and `N4BiasFieldCorrection` resolve from the conda env or explicit binary paths.
 11. `_archive/deprecated_2026-05-20/scripts_pre_core_workflow/run_hippunfold_local.sh` cleans up `runtime/hippunfold_cache` on exit by design.
     This is safe for single-subject/single-process runs, but for parallel subject runs you must isolate cache roots per worker (or otherwise avoid a shared disposable cache root), or workers may delete each other's runtime artifacts.
-    The active public launcher surface is now `scripts/core_workflow/02_01_run_hippunfold_t1w_local.py`.
+    The active public launcher surface is now `scripts/core_workflow/01_01_run_hippunfold_t1w_local.py`.
     The legacy T2-specific launcher `_archive/deprecated_2026-05-11/scripts/run_hippunfold_local_t2w_t1reg_isolated_cache.sh` was archived under
     `_archive/deprecated_2026-05-11/scripts/`.
-12. Use `data/hippunfold_input` as the input root and `outputs_migration/dense_corobl_batch/sub-<id>/hippunfold` as the output root.
+12. Use `data/hippunfold_input` as the input root and `outputs_core/inputs/hcp7t_hippocampus/hippunfold/dense_corobl_batch/sub-<id>/hippunfold` as the output root.
 
 ## Activation Path Guardrail
 

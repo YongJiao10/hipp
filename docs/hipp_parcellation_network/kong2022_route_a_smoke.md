@@ -51,7 +51,7 @@ Preflight-only check:
 ## Output Layout
 Per subject outputs are written to:
 
-- `outputs_experiments/cortex_kong2022_areal_mshbm/sub-{sid}/kong2022_areal_mshbm/`
+- `outputs_core/inputs/hcp7t_hippocampus/kong2022/cortex_references/routea_areal_mshbm/sub-{sid}/kong2022_areal_mshbm/`
 
 Key files:
 
@@ -65,7 +65,7 @@ Key files:
 
 Batch logs:
 
-- `outputs_experiments/cortex_kong2022_areal_mshbm/_logs/sub-{sid}_kong2022_areal_mshbm.log`
+- `outputs_core/inputs/hcp7t_hippocampus/kong2022/cortex_references/routea_areal_mshbm/_logs/sub-{sid}_kong2022_areal_mshbm.log`
 
 ## Failure Diagnostics
 The driver is fail-fast and does not auto-download dependencies.

@@ -3,7 +3,7 @@ set -euo pipefail
 
 SUBJECT="${1:-100610}"
 INPUT_DIR="${2:-data/hippunfold_input}"
-OUT_DIR="${3:-outputs_migration/dense_corobl_batch/sub-${SUBJECT}/hippunfold}"
+OUT_DIR="${3:-outputs_core/inputs/hcp7t_hippocampus/hippunfold/dense_corobl_batch/sub-${SUBJECT}/hippunfold}"
 AUTOTOP_LABELS="${HIPPUNFOLD_AUTOTOP_LABELS:-hipp dentate}"
 BUNDLE_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 HIPPUNFOLD_ENV_NAME="${HIPPUNFOLD_ENV_NAME:-hippo2}"

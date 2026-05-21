@@ -18,20 +18,22 @@ from lib.hippomaps_adapter import (
     reconstruct_full_surface,
 )
 from lib.traceability import StageSpec, run_stage
+from lib.output_layout import (
+    DEFAULT_HIPPOMAPS_GRADIENT_ROOT,
+    DEFAULT_KONG2022_MANIFEST_ROOT,
+    DEFAULT_KONG2022_SHARED_INPUTS_ROOT,
+    DEFAULT_KONG2022_SURFACE_ROOT,
+    DEFAULT_KONG2022_TEMPLATE_ROOT,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_T1ONLY_ROOT = REPO_ROOT / "outputs_experiments" / "hippunfold_recommended_t1w_20260423" / "kong2022"
-DEFAULT_SHARED_INPUTS = DEFAULT_T1ONLY_ROOT / "shared_inputs"
-DEFAULT_SURFACE_ROOT = DEFAULT_SHARED_INPUTS / "surface_151"
-DEFAULT_SUBJECTS = DEFAULT_T1ONLY_ROOT / "manifests" / "hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt"
-DEFAULT_GROUP_AVG_SURFACES_DIR = (
-    DEFAULT_T1ONLY_ROOT
-    / "templates"
-    / "hipp_group_average_t1only_151"
-    / "group_average_surfaces"
-)
-DEFAULT_OUT_ROOT = DEFAULT_T1ONLY_ROOT / "hippomaps_gradients"
+DEFAULT_T1ONLY_ROOT = DEFAULT_KONG2022_SHARED_INPUTS_ROOT.parent
+DEFAULT_SHARED_INPUTS = DEFAULT_KONG2022_SHARED_INPUTS_ROOT
+DEFAULT_SURFACE_ROOT = DEFAULT_KONG2022_SURFACE_ROOT
+DEFAULT_SUBJECTS = DEFAULT_KONG2022_MANIFEST_ROOT / "hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt"
+DEFAULT_GROUP_AVG_SURFACES_DIR = DEFAULT_KONG2022_TEMPLATE_ROOT / "group_average_surfaces"
+DEFAULT_OUT_ROOT = DEFAULT_HIPPOMAPS_GRADIENT_ROOT
 ROUTE_TO_SHARED_DIR = {"routea": "routea_151", "routeb": "routeb_151"}
 SMOOTHINGS = ("2mm", "4mm")
 HEMIS = ("L", "R")
@@ -296,7 +298,7 @@ if __name__ == "__main__":
     raise SystemExit(
         run_stage(
             StageSpec(
-                step_id="05_03_compute_hippomaps_gradients",
+                step_id="05_01_compute_hippomaps_gradients",
                 purpose="Compute HippoMaps-style continuous gradients from group mean Fisher-z FC.",
                 stage_main=main,
                 upstream_defaults=("04_01_materialize_kong2022_roi_fc",),

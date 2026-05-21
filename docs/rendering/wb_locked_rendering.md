@@ -4,16 +4,17 @@ This project's official hippocampal figure workflow is now fixed to a structural
 
 For active core-workflow RouteA gradient presentation, use:
 
-- `scripts/core_workflow/06_05_render_group_gradient_heatmaps.py`
+- `scripts/core_workflow/06_06_render_group_gradient_heatmaps.py`
 - scene template: `config/wb_locked_native_view_lateral_medial.scene`
-- active input root: `outputs_experiments/hippunfold_recommended_t1w_20260423/kong2022/hipp_group_merged_canonical_atlas_routea_full`
+- active input root: `outputs_core/inputs/hcp7t_hippocampus/kong2022/hipp_group_merged_canonical_atlas_routea_full`
 
 ## Official Inputs
 
-- Scene template: `config/wb_locked_native_view.scene`
-- Batch renderer: `_archive/deprecated_2026-05-20/scripts_pre_core_workflow/workbench/render_locked_wb_views.py`
-- Workbench scene capture: `_archive/deprecated_2026-05-20/scripts_pre_core_workflow/workbench/render_wb_scene_batch.py`
-- Right-side legend compositor: `_archive/deprecated_2026-05-20/scripts_pre_core_workflow/workbench/compose_wb_with_side_legend.py`
+- Hippocampal overview renderer: `scripts/core_workflow/06_01_build_group_overview.py`
+- Cortex panel renderer: `scripts/core_workflow/06_04_build_cluster_cortex_panels.py`
+- Continuous HippoMaps gradient renderer: `scripts/core_workflow/06_05_render_hippomaps_gradient_products.py`
+- Scene templates: `config/wb_locked_native_view_lateral_medial.scene` and `config/manual_wb_scenes/cortex_manual.scene`
+- Workbench executable: `software/workbench/bin_linux64/wb_command` through `scripts/core_workflow/lib/workbench.py`
 
 ## Locked Visual Rules
 
@@ -41,15 +42,15 @@ Older exploratory rendering code and exploratory rendering outputs are archived 
 - Legacy code archive: `archive/legacy_rendering_code/`
 - Legacy result archive: `outputs/dense_corobl_batch/_archive/legacy_rendering_results/`
 
-If the rendering needs to be rerun in the future, rerun `_archive/deprecated_2026-05-20/scripts_pre_core_workflow/workbench/render_locked_wb_views.py` rather than reviving older exploratory scripts.
+If the rendering needs to be rerun in the future, rerun the active `scripts/core_workflow/06_*` render entrypoints and write into `outputs_core/present/`.
 
 ## RouteA Group Gradient Heatmap Output
 
 The maintained continuous gradient figure artifact is:
 
-- `outputs_core/hcp7t_hippocampus/runs/<run_id>/present/gradients/kong2022_gradient-spectral_group_gradients_heatmap_routea_2mm4mm_g1g2g3.png`
-- manifest: `outputs_core/hcp7t_hippocampus/runs/<run_id>/present/gradients/kong2022_gradient-spectral_group_gradients_heatmap_routea_2mm4mm_g1g2g3_manifest.json`
-- runtime scalar/render assets: `outputs_core/hcp7t_hippocampus/runs/<run_id>/present/gradients/group_gradient_heatmaps/runtime/routea_full/`
+- `outputs_core/present/gradients/kong2022_gradient-spectral_group_gradients_heatmap_routea_2mm4mm_g1g2g3.png`
+- manifest: `outputs_core/present/gradients/kong2022_gradient-spectral_group_gradients_heatmap_routea_2mm4mm_g1g2g3_manifest.json`
+- runtime scalar/render assets: `outputs_core/present/gradients/group_gradient_heatmaps/runtime/routea_full/`
 
 This output is generated from active `gradient-spectral` RouteA full outputs only
 (`2mm` and `4mm`, `G1-G3`) and uses symmetric per-component min/max scaling across

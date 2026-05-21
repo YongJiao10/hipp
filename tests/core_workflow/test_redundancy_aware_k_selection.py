@@ -25,7 +25,7 @@ def _load_numbered_module(script_name: str, alias: str):
     return module
 
 
-atlas_mod = _load_numbered_module("05_01_run_group_atlas.py", "core_05_01_run_group_atlas")
+atlas_mod = _load_numbered_module("05_02_run_group_atlas.py", "core_05_02_run_group_atlas")
 
 PROFILE_REDUNDANCY_MAX_SIM = atlas_mod.PROFILE_REDUNDANCY_MAX_SIM
 profile_redundancy_metrics = atlas_mod.profile_redundancy_metrics

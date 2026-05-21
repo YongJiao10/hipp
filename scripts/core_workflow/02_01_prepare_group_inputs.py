@@ -16,16 +16,22 @@ import numpy as np
 from nibabel.gifti import GiftiDataArray, GiftiImage
 
 from lib.surface_sampling import sample_hipp_surface_timeseries
+from lib.output_layout import (
+    DEFAULT_HIPPUNFOLD_BATCH_ROOT,
+    DEFAULT_KONG2022_ROOT,
+    DEFAULT_KONG2022_SURFACE_ROOT,
+    DEFAULT_KONG2022_TEMPLATE_ROOT,
+)
 from lib.workbench import run_workbench
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_BATCH_ROOT = REPO_ROOT / "outputs_experiments" / "hippunfold_recommended_t1w_20260423" / "dense_corobl_batch"
-DEFAULT_ROUTE_ROOT = REPO_ROOT / "outputs_experiments" / "hippunfold_recommended_t1w_20260423" / "kong2022"
-DEFAULT_SHARED_ROOT = DEFAULT_ROUTE_ROOT / "shared_inputs" / "surface_151"
-DEFAULT_TEMPLATE_ROOT = DEFAULT_ROUTE_ROOT / "templates" / "hipp_group_average_t1only_151"
+DEFAULT_BATCH_ROOT = DEFAULT_HIPPUNFOLD_BATCH_ROOT
+DEFAULT_ROUTE_ROOT = DEFAULT_KONG2022_ROOT
+DEFAULT_SHARED_ROOT = DEFAULT_KONG2022_SURFACE_ROOT
+DEFAULT_TEMPLATE_ROOT = DEFAULT_KONG2022_TEMPLATE_ROOT
 DEFAULT_BOLD_ROOT = Path("/home/yojiao/LSS/jianglab/3_Data_Working/HCP_7T_Hippocampus/rsfmri_volume")
-QC_SCRIPT = REPO_ROOT / "scripts" / "core_workflow" / "01_02_build_qc_manifest.py"
+QC_SCRIPT = REPO_ROOT / "scripts" / "core_workflow" / "02_02_build_qc_manifest.py"
 MAX_CONCURRENCY = 10
 # Workbench stages spawn a Python worker plus a wb_command wrapper and the real wb_command process per subject.
 # Keep subject-level Workbench concurrency at 2 so total process count stays below the repository hard cap.

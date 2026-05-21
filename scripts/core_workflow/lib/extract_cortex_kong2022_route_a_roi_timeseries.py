@@ -14,6 +14,7 @@ try:
     from .extract_cortex_merged_network_timeseries import extract_structure_data, load_required_mask
 except ImportError:  # pragma: no cover - supports direct script execution during local debugging.
     from extract_cortex_merged_network_timeseries import extract_structure_data, load_required_mask
+from .output_layout import DEFAULT_CORTEX_ROUTEA_ROOT, DEFAULT_KONG2022_ROUTEA_ROOT
 from .kong2022_label_utils import (
     KONG2022_DLABEL_PATH,
     KONG2022_MERGE_CONFIG,
@@ -24,15 +25,8 @@ from .kong2022_label_utils import (
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_DATA_ROOT = REPO_ROOT / "data" / "hippunfold_input"
-DEFAULT_SHARED_ROOT = (
-    REPO_ROOT
-    / "outputs_experiments"
-    / "hippunfold_recommended_t1w_20260423"
-    / "kong2022"
-    / "shared_inputs"
-    / "routea_151"
-)
-DEFAULT_ROUTE_A_ROOT = REPO_ROOT / "outputs_experiments" / "cortex_kong2022_areal_mshbm"
+DEFAULT_SHARED_ROOT = DEFAULT_KONG2022_ROUTEA_ROOT
+DEFAULT_ROUTE_A_ROOT = DEFAULT_CORTEX_ROUTEA_ROOT
 DEFAULT_RUN_IDS = [1, 2, 3, 4]
 ATLAS_SLUG = "kong2022"
 COMMON_REFERENCE_SLUG = "common"

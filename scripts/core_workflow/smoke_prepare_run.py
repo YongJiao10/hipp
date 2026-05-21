@@ -8,19 +8,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from lib.output_layout import run_layout, timestamped_run_id
+from lib.output_layout import DEFAULT_QC_ROOT, run_layout, timestamped_run_id
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PYTHON_EXE = "/home/yojiao/.conda/envs/py314/bin/python"
-DEFAULT_SOURCE_SUBJECTS = (
-    REPO_ROOT
-    / "outputs_experiments"
-    / "hippunfold_recommended_t1w_20260423"
-    / "vertex_qc_t1only"
-    / "manifests"
-    / "hcp_7t_hippocampus_fmri_qc_pass_t1only_151.txt"
-)
+DEFAULT_SOURCE_SUBJECTS = DEFAULT_QC_ROOT / "manifests" / "hcp_7t_hippocampus_fmri_qc_pass_t1only_151.txt"
 DEFAULT_FALLBACK_SMOKE_SUBJECTS = ("100610", "102311", "104416", "105923", "108323")
 DEFAULT_INPUT_DIR = REPO_ROOT / "data" / "hippunfold_input"
 DEFAULT_BOLD_ROOT = Path("/home/yojiao/LSS/jianglab/3_Data_Working/HCP_7T_Hippocampus/rsfmri_volume")
@@ -114,10 +107,10 @@ def build_command_plan(*, subjects: list[str], layout: dict[str, Path], python_e
     for subject in subjects:
         records.append(
             command_record(
-                f"02_01_run_hippunfold_t1w_local_sub-{subject}",
+                f"01_01_run_hippunfold_t1w_local_sub-{subject}",
                 cmd(
                     python_exe,
-                    REPO_ROOT / "scripts/core_workflow/02_01_run_hippunfold_t1w_local.py",
+                    REPO_ROOT / "scripts/core_workflow/01_01_run_hippunfold_t1w_local.py",
                     subject,
                     input_dir,
                     layout["hippunfold"] / f"sub-{subject}",
@@ -129,10 +122,10 @@ def build_command_plan(*, subjects: list[str], layout: dict[str, Path], python_e
     records.extend(
         [
             command_record(
-                "01_01_prepare_group_inputs",
+                "02_01_prepare_group_inputs",
                 cmd(
                     python_exe,
-                    REPO_ROOT / "scripts/core_workflow/01_01_prepare_group_inputs.py",
+                    REPO_ROOT / "scripts/core_workflow/02_01_prepare_group_inputs.py",
                     "--hippunfold-batch-root",
                     layout["hippunfold"],
                     "--route-root",
@@ -222,10 +215,10 @@ def build_command_plan(*, subjects: list[str], layout: dict[str, Path], python_e
         )
     records.append(
         command_record(
-            "05_03_compute_hippomaps_gradients",
+            "05_01_compute_hippomaps_gradients",
             cmd(
                 python_exe,
-                REPO_ROOT / "scripts/core_workflow/05_03_compute_hippomaps_gradients.py",
+                REPO_ROOT / "scripts/core_workflow/05_01_compute_hippomaps_gradients.py",
                 "--routes",
                 "routea",
                 "routeb",
@@ -254,10 +247,10 @@ def build_command_plan(*, subjects: list[str], layout: dict[str, Path], python_e
         records.extend(
             [
                 command_record(
-                    f"05_01_run_group_atlas_{route}_full_fixedk3",
+                    f"05_02_run_group_atlas_{route}_full_fixedk3",
                     cmd(
                         python_exe,
-                        REPO_ROOT / "scripts/core_workflow/05_01_run_group_atlas.py",
+                        REPO_ROOT / "scripts/core_workflow/05_02_run_group_atlas.py",
                         "--shared-root",
                         shared_root,
                         "--surface-root",
@@ -286,9 +279,9 @@ def build_command_plan(*, subjects: list[str], layout: dict[str, Path], python_e
                         "--coverage-thresholds",
                         "0.80",
                         "--k-min",
-                        "3",
+                        "2",
                         "--k-max",
-                        "3",
+                        "10",
                         "--force-final-k",
                         "3",
                         "--instability-resamples",
@@ -325,10 +318,10 @@ def build_command_plan(*, subjects: list[str], layout: dict[str, Path], python_e
         )
     records.append(
         command_record(
-            "06_02_build_group_matrix",
+            "07_01_build_group_matrix",
             cmd(
                 python_exe,
-                REPO_ROOT / "scripts/core_workflow/06_02_build_group_matrix.py",
+                REPO_ROOT / "scripts/core_workflow/07_01_build_group_matrix.py",
                 "--route-root",
                 group_root_base,
                 "--present-dir",
@@ -355,7 +348,7 @@ def write_command_script(path: Path, records: list[dict[str, Any]]) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Prepare an isolated 5-subject core-workflow smoke run directory and command manifest.")
-    parser.add_argument("--run-id", default=None, help="Run ID under outputs_core/hcp7t_hippocampus/runs/. Defaults to smoke5_<UTC timestamp>.")
+    parser.add_argument("--run-id", default=None, help="Run ID under outputs_core/smoke_runs/. Defaults to smoke5_<UTC timestamp>.")
     parser.add_argument("--source-subjects", default=str(DEFAULT_SOURCE_SUBJECTS))
     parser.add_argument("--subjects", nargs="*", default=None, help="Explicit smoke subject IDs. Overrides --source-subjects.")
     parser.add_argument("--subject-count", type=int, default=5)
@@ -394,7 +387,7 @@ def main() -> int:
     commands_sh = layout["manifests"] / "run_smoke_commands.sh"
     payload = {
         "schema_version": "1.0",
-        "stage": "00_01_prepare_smoke_run",
+        "stage": "smoke_prepare_run",
         "status": "prepared",
         "timestamp_utc": now_utc(),
         "git_commit": git_commit(),

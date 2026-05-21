@@ -25,7 +25,7 @@ def _load_numbered_module(script_name: str, alias: str):
     return module
 
 
-atlas_mod = _load_numbered_module("05_01_run_group_atlas.py", "core_05_01_run_group_atlas")
+atlas_mod = _load_numbered_module("05_02_run_group_atlas.py", "core_05_02_run_group_atlas")
 build_group_gradient_features = atlas_mod.build_group_gradient_features
 brainspace_diffusion_gradients = atlas_mod.brainspace_diffusion_gradients
 group_feature_matrix = atlas_mod.group_feature_matrix

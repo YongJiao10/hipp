@@ -9,27 +9,15 @@ import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
+from lib.output_layout import DEFAULT_KONG2022_MANIFEST_ROOT, DEFAULT_KONG2022_ROUTEB_ROOT
+
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PYTHON_EXE = sys.executable or "python"
 EXTRACT_MODULE = "scripts.core_workflow.lib.extract_cortex_kong2022_roi_timeseries"
-DEFAULT_SHARED_ROOT = (
-    REPO_ROOT
-    / "outputs_experiments"
-    / "hippunfold_recommended_t1w_20260423"
-    / "kong2022"
-    / "shared_inputs"
-    / "routeb_151"
-)
+DEFAULT_SHARED_ROOT = DEFAULT_KONG2022_ROUTEB_ROOT
 DEFAULT_DATA_ROOT = REPO_ROOT / "data" / "hippunfold_input"
-DEFAULT_MANIFEST = (
-    REPO_ROOT
-    / "outputs_experiments"
-    / "hippunfold_recommended_t1w_20260423"
-    / "kong2022"
-    / "manifests"
-    / "hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt"
-)
+DEFAULT_MANIFEST = DEFAULT_KONG2022_MANIFEST_ROOT / "hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt"
 MAX_CONCURRENCY = 10
 
 

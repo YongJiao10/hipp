@@ -31,28 +31,28 @@ from lib.hippomaps_adapter import (
 )
 from lib.surface_utils import infer_spec_path, long_axis_order
 from lib.kong2022_label_utils import load_kong2022_bundle
-
-
-DEFAULT_T1ONLY_ROOT = REPO_ROOT / "outputs_experiments" / "hippunfold_recommended_t1w_20260423" / "kong2022"
-DEFAULT_SHARED_ROOT = DEFAULT_T1ONLY_ROOT / "shared_inputs" / "routeb_151"
-DEFAULT_SURFACE_ROOT = DEFAULT_T1ONLY_ROOT / "shared_inputs" / "surface_151"
-DEFAULT_OUT_ROOT = DEFAULT_T1ONLY_ROOT / "hipp_group_merged_canonical_atlas"
-DEFAULT_GRADIENT_ROOT = DEFAULT_T1ONLY_ROOT / "hippomaps_gradients"
-DEFAULT_SUBJECTS = DEFAULT_T1ONLY_ROOT / "manifests" / "hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt"
-DEFAULT_HIPPUNFOLD_BATCH_ROOT = (
-    REPO_ROOT / "outputs_experiments" / "hippunfold_recommended_t1w_20260423" / "dense_corobl_batch"
+from lib.output_layout import (
+    DEFAULT_GROUP_ATLAS_ROOT,
+    DEFAULT_HIPPOMAPS_GRADIENT_ROOT,
+    DEFAULT_HIPPUNFOLD_BATCH_ROOT as CORE_HIPPUNFOLD_BATCH_ROOT,
+    DEFAULT_KONG2022_MANIFEST_ROOT,
+    DEFAULT_KONG2022_ROOT,
+    DEFAULT_KONG2022_ROUTEB_ROOT,
+    DEFAULT_KONG2022_SURFACE_ROOT,
+    DEFAULT_KONG2022_TEMPLATE_ROOT,
 )
+
+
+DEFAULT_T1ONLY_ROOT = DEFAULT_KONG2022_ROOT
+DEFAULT_SHARED_ROOT = DEFAULT_KONG2022_ROUTEB_ROOT
+DEFAULT_SURFACE_ROOT = DEFAULT_KONG2022_SURFACE_ROOT
+DEFAULT_OUT_ROOT = DEFAULT_GROUP_ATLAS_ROOT / "routeb_auto"
+DEFAULT_GRADIENT_ROOT = DEFAULT_HIPPOMAPS_GRADIENT_ROOT
+DEFAULT_SUBJECTS = DEFAULT_KONG2022_MANIFEST_ROOT / "hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt"
+DEFAULT_HIPPUNFOLD_BATCH_ROOT = CORE_HIPPUNFOLD_BATCH_ROOT
 DEFAULT_NETWORK_STYLE = REPO_ROOT / "config" / "hipp_network_style.json"
 DEFAULT_CROSS_ATLAS_MERGE = REPO_ROOT / "config" / "cross_atlas_network_merge.json"
-DEFAULT_GROUP_AVG_SURFACES_DIR = (
-    REPO_ROOT
-    / "outputs_experiments"
-    / "hippunfold_recommended_t1w_20260423"
-    / "kong2022"
-    / "templates"
-    / "hipp_group_average_t1only_151"
-    / "group_average_surfaces"
-)
+DEFAULT_GROUP_AVG_SURFACES_DIR = DEFAULT_KONG2022_TEMPLATE_ROOT / "group_average_surfaces"
 KONG2022_DLABEL_OVERRIDE: Path | None = None
 HIPPOMAPS_ROOT_OVERRIDE: Path = DEFAULT_HIPPOMAPS_ROOT
 
@@ -664,7 +664,7 @@ def load_hippomaps_gradient_features(
     if not manifest_path.exists():
         raise FileNotFoundError(
             f"Missing HippoMaps gradient manifest for gradient-spectral clustering: {manifest_path}. "
-            "Run 05_03_compute_hippomaps_gradients.py before 05_01_run_group_atlas.py."
+            "Run 05_01_compute_hippomaps_gradients.py before 05_02_run_group_atlas.py."
         )
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     if str(manifest.get("status", "ok")) != "ok":
@@ -2310,6 +2310,56 @@ def network_mean_profile_from_kong2022_roi_profile(
     return out
 
 
+def assignment_status_from_kong2022_roi_profile(
+    roi_profile: np.ndarray,
+    roi_registry: list[dict[str, object]],
+    network_names: list[str],
+) -> tuple[np.ndarray, list[dict[str, object]], list[str | None]]:
+    profile = network_mean_profile_from_kong2022_roi_profile(roi_profile, roi_registry, network_names)
+    status_rows, dominant = assignment_status_from_profile(profile, network_names)
+    return profile, status_rows, dominant
+
+
+def cluster_assignment_variants_from_kong2022_roi_profile(
+    *,
+    roi_profile: np.ndarray,
+    roi_profile_3d: np.ndarray,
+    roi_registry: list[dict[str, object]],
+    network_names: list[str],
+    q_thresh: float,
+    top_n_cap: int,
+) -> dict[str, dict[str, object]]:
+    profile, fisherz_rows, fisherz_dominant = assignment_status_from_kong2022_roi_profile(
+        roi_profile,
+        roi_registry,
+        network_names,
+    )
+    count_rows, count_dominant, _profile400_mean = assignment_status_from_cluster_roi_topn(
+        profile_3d=roi_profile_3d,
+        roi_registry=roi_registry,
+        q_thresh=float(q_thresh),
+        top_n_cap=int(top_n_cap),
+    )
+    return {
+        "fisherz": {
+            "profile": profile,
+            "status_rows": fisherz_rows,
+            "dominant": fisherz_dominant,
+            "assignment_metric": "top1_fisher_z",
+            "q_threshold": None,
+            "top_n_cap": None,
+        },
+        "count": {
+            "profile": profile,
+            "status_rows": count_rows,
+            "dominant": count_dominant,
+            "assignment_metric": "topn_count_positive_roi",
+            "q_threshold": float(q_thresh),
+            "top_n_cap": int(top_n_cap),
+        },
+    }
+
+
 def annotate_kong2022_clusters_topn(
     *,
     group_labels_final: np.ndarray,
@@ -2323,7 +2373,16 @@ def annotate_kong2022_clusters_topn(
     network_names: list[str],
     q_thresh: float,
     top_n_cap: int,
-) -> tuple[np.ndarray, list[dict[str, object]], list[str | None], np.ndarray, list[dict[str, object]], list[str], dict[str, object]]:
+) -> tuple[
+    np.ndarray,
+    list[dict[str, object]],
+    list[str | None],
+    np.ndarray,
+    list[dict[str, object]],
+    list[str],
+    dict[str, object],
+    list[dict[str, object]],
+]:
     roi_profile_3d, roi_profile, roi_registry, roi_profile_subjects_used = cluster_roi_profile_subjectwise(
         group_labels_final=group_labels_final,
         support_mask=support_mask,
@@ -2334,15 +2393,22 @@ def annotate_kong2022_clusters_topn(
         hemi=hemi,
         valid_masks_by_subject=valid_masks_by_subject,
     )
-    status_rows, dominant, _profile400_mean = assignment_status_from_cluster_roi_topn(
-        profile_3d=roi_profile_3d,
+    assignment_variants = cluster_assignment_variants_from_kong2022_roi_profile(
+        roi_profile=roi_profile,
+        roi_profile_3d=roi_profile_3d,
         roi_registry=roi_registry,
+        network_names=network_names,
         q_thresh=float(q_thresh),
         top_n_cap=int(top_n_cap),
     )
-    profile = network_mean_profile_from_kong2022_roi_profile(roi_profile, roi_registry, network_names)
+    fisherz_variant = assignment_variants["fisherz"]
+    count_variant = assignment_variants["count"]
+    profile = np.asarray(fisherz_variant["profile"], dtype=np.float32)
+    status_rows = [dict(x) for x in fisherz_variant["status_rows"]]
+    dominant = list(fisherz_variant["dominant"])
+    roi_topn_status_rows = [dict(x) for x in count_variant["status_rows"]]
     roi_top20 = cluster_roi_top_k(roi_profile, roi_registry, k_top=int(top_n_cap))
-    return profile, status_rows, dominant, roi_profile, roi_registry, roi_profile_subjects_used, roi_top20
+    return profile, status_rows, dominant, roi_profile, roi_registry, roi_profile_subjects_used, roi_top20, roi_topn_status_rows
 
 
 def vertex_roi_profile_subjectwise(
@@ -2613,8 +2679,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--smoothings", nargs="+", default=SMOOTHINGS)
     parser.add_argument("--hemis", nargs="+", default=HEMIS)
     parser.add_argument("--coverage-thresholds", nargs="+", type=float, default=[0.70, 0.80, 0.90])
-    parser.add_argument("--k-min", type=int, default=3)
-    parser.add_argument("--k-max", type=int, default=3)
+    parser.add_argument("--k-min", type=int, default=2)
+    parser.add_argument("--k-max", type=int, default=10)
     parser.add_argument(
         "--force-final-k",
         type=int,
@@ -3556,6 +3622,7 @@ def main() -> int:
                         roi_profile_subjects_used: list[str] | None = None
                         roi_registry: list[dict[str, object]] | None = None
                         roi_top20: dict[str, object] | None = None
+                        roi_topn_status_rows: list[dict[str, object]] | None = None
                         if method_uses_kong2022_topn_cluster_annotation(method, atlas):
                             (
                                 profile,
@@ -3565,6 +3632,7 @@ def main() -> int:
                                 roi_registry,
                                 roi_profile_subjects_used,
                                 roi_top20,
+                                roi_topn_status_rows,
                             ) = annotate_kong2022_clusters_topn(
                                 group_labels_final=labels_final,
                                 support_mask=support,
@@ -3609,24 +3677,50 @@ def main() -> int:
 
                         np.save(run_dir / "group_labels_final.npy", labels_final.astype(np.int32))
                         np.save(run_dir / "cluster_network_profile.npy", profile.astype(np.float32))
+
+                        assignment_variant_specs: dict[str, dict[str, object]] = {
+                            "fisherz": {
+                                "status_rows": status_rows,
+                                "dominant": dominant,
+                                "assignment_metric": "top1_fisher_z",
+                                "q_threshold": None,
+                                "top_n_cap": None,
+                            }
+                        }
+                        if roi_topn_status_rows is not None:
+                            assignment_variant_specs["count"] = {
+                                "status_rows": roi_topn_status_rows,
+                                "dominant": [str(row.get("top1_network", "unassigned")) for row in roi_topn_status_rows],
+                                "assignment_metric": "topn_count_positive_roi",
+                                "q_threshold": 0.05,
+                                "top_n_cap": 20,
+                            }
+
+                        for variant_name, variant_spec in assignment_variant_specs.items():
+                            payload = {
+                                "items": [dict(x) for x in variant_spec["status_rows"]],
+                                "assignment_metric": str(variant_spec["assignment_metric"]),
+                                "q_threshold": variant_spec["q_threshold"],
+                                "top_n_cap": variant_spec["top_n_cap"],
+                            }
+                            save_json(run_dir / f"cluster_assignment_status_{variant_name}.json", payload)
+                            if variant_name == "fisherz":
+                                save_json(run_dir / "cluster_assignment_status.json", payload)
+                            if variant_name == "count":
+                                save_json(run_dir / "cluster_roi_topn_assignment_status.json", payload)
                         save_json(
-                            run_dir / "cluster_assignment_status.json",
-                            {
-                                "items": status_rows,
-                                "assignment_metric": (
-                                    "topn_count_positive_roi"
-                                    if method_uses_kong2022_topn_cluster_annotation(method, atlas)
-                                    else "top1_fisher_z"
-                                ),
-                                "q_threshold": 0.05
-                                if method_uses_kong2022_topn_cluster_annotation(method, atlas)
-                                else None,
-                                "top_n_cap": 20
-                                if method_uses_kong2022_topn_cluster_annotation(method, atlas)
-                                else None,
-                            },
+                            run_dir / "cluster_dominant_network.json",
+                            {"dominant": dominant, "network_names": network_names, "assignment_variant": "fisherz"},
                         )
-                        save_json(run_dir / "cluster_dominant_network.json", {"dominant": dominant, "network_names": network_names})
+                        if "count" in assignment_variant_specs:
+                            save_json(
+                                run_dir / "cluster_dominant_network_count.json",
+                                {
+                                    "dominant": assignment_variant_specs["count"]["dominant"],
+                                    "network_names": network_names,
+                                    "assignment_variant": "count",
+                                },
+                            )
                         if atlas == "kong2022":
                             assert roi_profile is not None and roi_registry is not None and roi_top20 is not None
                             np.save(run_dir / "cluster_roi_profile.npy", roi_profile.astype(np.float32))
@@ -3636,14 +3730,31 @@ def main() -> int:
                                 roi_registry,
                                 ["roi_id", "roi_name", "hemi", "family17", "subregion", "rank", "canonical8"],
                             )
-                        functional_labels, functional_meta, functional_label_items = functional_atlas_from_clusters(
-                            group_labels_final=labels_final,
-                            status_rows=status_rows,
-                            network_names=network_names,
-                            color_map=canonical_color_map,
-                        )
-                        np.save(run_dir / "group_functional_atlas_labels.npy", functional_labels.astype(np.int32))
-                        save_json(run_dir / "group_functional_atlas_label_map.json", functional_meta)
+
+                        functional_variant_payloads: dict[str, dict[str, object]] = {}
+                        functional_labels = np.zeros_like(labels_final, dtype=np.int32)
+                        functional_label_items: list[tuple[int, str, tuple[int, int, int, int]]] = []
+                        for variant_name, variant_spec in assignment_variant_specs.items():
+                            labels_variant, meta_variant, items_variant = functional_atlas_from_clusters(
+                                group_labels_final=labels_final,
+                                status_rows=[dict(x) for x in variant_spec["status_rows"]],
+                                network_names=network_names,
+                                color_map=canonical_color_map,
+                            )
+                            labels_variant = labels_variant.astype(np.int32)
+                            np.save(run_dir / f"group_functional_atlas_labels_{variant_name}.npy", labels_variant)
+                            save_json(run_dir / f"group_functional_atlas_label_map_{variant_name}.json", meta_variant)
+                            functional_variant_payloads[variant_name] = {
+                                "assignment_metric": str(variant_spec["assignment_metric"]),
+                                "cluster_assignment_status": str((run_dir / f"cluster_assignment_status_{variant_name}.json").resolve()),
+                                "group_functional_atlas_labels": str((run_dir / f"group_functional_atlas_labels_{variant_name}.npy").resolve()),
+                                "group_functional_atlas_label_map": str((run_dir / f"group_functional_atlas_label_map_{variant_name}.json").resolve()),
+                            }
+                            if variant_name == "fisherz":
+                                functional_labels = labels_variant
+                                functional_label_items = items_variant
+                                np.save(run_dir / "group_functional_atlas_labels.npy", labels_variant)
+                                save_json(run_dir / "group_functional_atlas_label_map.json", meta_variant)
 
                         write_tsv(
                             run_dir / "k_selection_summary.tsv",
@@ -3662,7 +3773,6 @@ def main() -> int:
                         )
                         lbl_path.parent.mkdir(parents=True, exist_ok=True)
                         nib.save(lbl, str(lbl_path))
-                        func_lbl = make_named_label_gifti(functional_labels.astype(np.int32), functional_label_items)
                         func_lbl_path = (
                             run_dir
                             / "template"
@@ -3670,7 +3780,33 @@ def main() -> int:
                             / f"{template_label}_hemi-{hemi}_space-corobl_den-512_label-group_functional_atlas_{method}_{atlas}_{smoothing}_cov-{tau_tag}.label.gii"
                         )
                         func_lbl_path.parent.mkdir(parents=True, exist_ok=True)
-                        nib.save(func_lbl, str(func_lbl_path))
+                        for variant_name, variant_spec in assignment_variant_specs.items():
+                            labels_path = run_dir / f"group_functional_atlas_labels_{variant_name}.npy"
+                            map_path = run_dir / f"group_functional_atlas_label_map_{variant_name}.json"
+                            labels_variant = np.load(labels_path).astype(np.int32)
+                            _labels_tmp, _meta_tmp, items_variant = functional_atlas_from_clusters(
+                                group_labels_final=labels_final,
+                                status_rows=[dict(x) for x in variant_spec["status_rows"]],
+                                network_names=network_names,
+                                color_map=canonical_color_map,
+                            )
+                            func_lbl_variant = make_named_label_gifti(labels_variant, items_variant)
+                            if variant_name == "fisherz":
+                                variant_lbl_path = func_lbl_path
+                            else:
+                                variant_lbl_path = func_lbl_path.with_name(f"{func_lbl_path.stem}_{variant_name}{func_lbl_path.suffix}")
+                            nib.save(func_lbl_variant, str(variant_lbl_path))
+                            suffixed_lbl_path = func_lbl_path.with_name(f"{func_lbl_path.stem}_{variant_name}{func_lbl_path.suffix}")
+                            if suffixed_lbl_path != variant_lbl_path:
+                                nib.save(func_lbl_variant, str(suffixed_lbl_path))
+                            functional_variant_payloads[variant_name].update(
+                                {
+                                    "group_functional_atlas_labels": str(labels_path.resolve()),
+                                    "group_functional_atlas_label_map": str(map_path.resolve()),
+                                    "template_functional_atlas_label": str(variant_lbl_path.resolve()),
+                                    "template_functional_atlas_label_variant": str(suffixed_lbl_path.resolve()),
+                                }
+                            )
 
                         manifest = {
                             "status": "ok",
@@ -3679,10 +3815,11 @@ def main() -> int:
                             "smoothing": smoothing,
                             "hemi": hemi,
                             "assignment_mode": "cluster_level",
-                            "cluster_assignment_metric": (
-                                "topn_count_positive_roi"
-                                if method_uses_kong2022_topn_cluster_annotation(method, atlas)
-                                else "top1_fisher_z"
+                            "cluster_assignment_metric": "top1_fisher_z",
+                            "default_assignment_variant": "fisherz",
+                            "assignment_variants": functional_variant_payloads,
+                            "cluster_roi_topn_assignment_metric": (
+                                "topn_count_positive_roi" if "count" in assignment_variant_specs else None
                             ),
                             "k_selection_mode": str(args.k_selection_mode),
                             "force_final_k": int(args.force_final_k) if args.force_final_k is not None else None,
@@ -3747,6 +3884,17 @@ def main() -> int:
                             "cluster_network_profile": str((run_dir / "cluster_network_profile.npy").resolve()),
                             "cluster_dominant_network": str((run_dir / "cluster_dominant_network.json").resolve()),
                             "cluster_assignment_status": str((run_dir / "cluster_assignment_status.json").resolve()),
+                            "cluster_assignment_status_fisherz": str((run_dir / "cluster_assignment_status_fisherz.json").resolve()),
+                            "cluster_assignment_status_count": (
+                                str((run_dir / "cluster_assignment_status_count.json").resolve())
+                                if "count" in assignment_variant_specs
+                                else None
+                            ),
+                            "cluster_roi_topn_assignment_status": (
+                                str((run_dir / "cluster_roi_topn_assignment_status.json").resolve())
+                                if "count" in assignment_variant_specs
+                                else None
+                            ),
                             "group_functional_atlas_label_map": str((run_dir / "group_functional_atlas_label_map.json").resolve()),
                             "cluster_roi_profile": (
                                 str((run_dir / "cluster_roi_profile.npy").resolve()) if atlas == "kong2022" else None

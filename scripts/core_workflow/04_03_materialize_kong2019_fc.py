@@ -8,26 +8,14 @@ import shutil
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
+from lib.output_layout import DEFAULT_KONG2019_ROOT
+
 import numpy as np
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_SHARED_ROOT = (
-    REPO_ROOT
-    / "outputs_experiments"
-    / "hippunfold_recommended_t1w_20260423"
-    / "kong2019_fast_pfm_t1only"
-    / "shared_inputs"
-    / "pfm_151"
-)
-DEFAULT_SUBJECTS = (
-    REPO_ROOT
-    / "outputs_experiments"
-    / "hippunfold_recommended_t1w_20260423"
-    / "kong2019_fast_pfm_t1only"
-    / "manifests"
-    / "hcp_7t_hippocampus_fmri_qc_pass_t1only_151.txt"
-)
+DEFAULT_SHARED_ROOT = DEFAULT_KONG2019_ROOT / "shared_inputs" / "pfm_151"
+DEFAULT_SUBJECTS = DEFAULT_KONG2019_ROOT / "manifests" / "hcp_7t_hippocampus_fmri_qc_pass_t1only_151.txt"
 DEFAULT_CROSS_ATLAS_MERGE = REPO_ROOT / "config" / "cross_atlas_network_merge.json"
 
 SMOOTHINGS = ["2mm", "4mm"]

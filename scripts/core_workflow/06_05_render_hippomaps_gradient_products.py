@@ -3,6 +3,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import tempfile
+import time
 from pathlib import Path
 from typing import Any, Callable
 
@@ -14,23 +17,37 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 from lib.hippomaps_adapter import DEFAULT_HIPPOMAPS_ROOT, ensure_hippomaps_on_path, hippomaps_commit
-from lib.output_layout import DEFAULT_GRADIENTS_DIR
+from lib.output_layout import DEFAULT_GRADIENTS_DIR, DEFAULT_HIPPOMAPS_GRADIENT_ROOT
 from lib.traceability import StageSpec, run_stage
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_GRADIENT_ROOT = (
-    REPO_ROOT
-    / "outputs_experiments"
-    / "hippunfold_recommended_t1w_20260423"
-    / "kong2022"
-    / "hippomaps_gradients"
-)
+DEFAULT_GRADIENT_ROOT = DEFAULT_HIPPOMAPS_GRADIENT_ROOT
 DEFAULT_PRESENT_ROOT = DEFAULT_GRADIENTS_DIR
 ROUTES = ("routea", "routeb")
 SMOOTHINGS = ("2mm", "4mm")
 HEMIS = ("L", "R")
 
+
+
+
+def wait_for_stable_file(path: Path, *, checks: int = 3, interval: float = 0.15) -> None:
+    last: tuple[int, int] | None = None
+    stable = 0
+    for _ in range(max(1, checks * 10)):
+        if path.exists():
+            st = path.stat()
+            current = (int(st.st_size), int(st.st_mtime_ns))
+            if current == last and current[0] > 0:
+                stable += 1
+                if stable >= checks:
+                    return
+            else:
+                stable = 0
+                last = current
+        time.sleep(float(interval))
+    if not path.exists() or path.stat().st_size <= 0:
+        raise TypeError(f"Render target did not stabilize: {path}")
 
 def load_json(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
@@ -124,6 +141,37 @@ def stitch_hemi_gradient_images(left_png: Path, right_png: Path, output_png: Pat
     return output_png
 
 
+def ensure_bilateral_gradient_annotations(
+    *,
+    side_paths: dict[str, Path],
+    output_png: Path,
+    selected_components: list[int],
+    ev_by_hemi: dict[str, list[float]],
+    min_annotated_width: int = 800,
+    settle_seconds: float = 1.0,
+) -> Path:
+    # VTK can finish writing the screenshot after the plotter call returns. Do one
+    # final late pass so the maintained artifact keeps the EV label margin.
+    time.sleep(float(settle_seconds))
+    changed = False
+    for hemi, title in [("L", "L Gradient"), ("R", "R Gradient")]:
+        side = side_paths[hemi]
+        wait_for_stable_file(side)
+        width, _height = Image.open(side).size
+        if int(width) < int(min_annotated_width):
+            annotate_gradient_image(
+                side,
+                selected_components=selected_components,
+                ev_percentages=ev_by_hemi[hemi],
+                title=title,
+            )
+            changed = True
+    if changed or not output_png.exists():
+        stitch_hemi_gradient_images(side_paths["L"], side_paths["R"], output_png)
+    wait_for_stable_file(output_png)
+    return output_png
+
+
 def enable_den512_plotting_v2(hippomaps_root: Path) -> bool:
     ensure_hippomaps_on_path(hippomaps_root)
     import hippomaps.plotting as hm_plotting
@@ -169,6 +217,10 @@ def render_gradient_figure(
         plotter = load_hippomaps_plotter()
     unfold_ap_rescale = str(den) != "512"
     output_png.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(
+        prefix=f".{output_png.stem}.", suffix=output_png.suffix, dir=output_png.parent, delete=False
+    ) as tmp:
+        render_png = Path(tmp.name)
     fig = plotter(
         cdata,
         hemis=hemis,
@@ -183,28 +235,33 @@ def render_gradient_figure(
         transparent_bg=False,
         interactive=False,
         screenshot=True,
-        filename=str(output_png),
+        filename=str(render_png),
         suppress_warnings=True,
     )
+    final_render = render_png
     if fig is None:
-        if output_png.exists():
-            return output_png
-        raise TypeError("HippoMaps plotter returned None and did not create the requested screenshot")
-    if isinstance(fig, str):
+        if not render_png.exists() or render_png.stat().st_size <= 0:
+            raise TypeError("HippoMaps plotter returned None and did not create the requested screenshot")
+    elif isinstance(fig, str):
         got = Path(fig)
-        if output_png.exists() or got.exists():
-            return output_png
-        raise TypeError(f"HippoMaps plotter returned screenshot path but file is missing: {fig}")
-    if hasattr(fig, "savefig"):
-        fig.savefig(output_png, dpi=220, bbox_inches="tight")
+        if got.exists() and got.stat().st_size > 0:
+            final_render = got
+        elif not render_png.exists() or render_png.stat().st_size <= 0:
+            raise TypeError(f"HippoMaps plotter returned screenshot path but file is missing: {fig}")
+    elif hasattr(fig, "savefig"):
+        fig.savefig(render_png, dpi=220, bbox_inches="tight")
         try:
             plt.close(fig)
         except TypeError:
             pass
     elif hasattr(fig, "screenshot"):
-        fig.screenshot(str(output_png))
+        fig.screenshot(str(render_png))
     else:
         raise TypeError(f"Unsupported HippoMaps plotter return type: {type(fig)!r}")
+    if not final_render.exists() or final_render.stat().st_size <= 0:
+        raise TypeError(f"HippoMaps render target was not created: {final_render}")
+    os.replace(final_render, output_png)
+    wait_for_stable_file(output_png)
     return output_png
 
 
@@ -232,12 +289,6 @@ def render_bilateral_gradient_figure(
         hemis=["L"],
         plotter=plotter,
     )
-    annotate_gradient_image(
-        side_paths["L"],
-        selected_components=selected_components,
-        ev_percentages=ev_by_hemi["L"],
-        title="L Gradient",
-    )
     render_gradient_figure(
         left=np.empty((0, np.asarray(right).shape[1]), dtype=np.float32),
         right=right,
@@ -246,12 +297,14 @@ def render_bilateral_gradient_figure(
         hemis=["R"],
         plotter=plotter,
     )
-    annotate_gradient_image(
-        side_paths["R"],
-        selected_components=selected_components,
-        ev_percentages=ev_by_hemi["R"],
-        title="R Gradient",
-    )
+    for hemi, title in [("L", "L Gradient"), ("R", "R Gradient")]:
+        wait_for_stable_file(side_paths[hemi])
+        annotate_gradient_image(
+            side_paths[hemi],
+            selected_components=selected_components,
+            ev_percentages=ev_by_hemi[hemi],
+            title=title,
+        )
     return stitch_hemi_gradient_images(side_paths["L"], side_paths["R"], output_png)
 
 
@@ -407,6 +460,16 @@ def render_combo(
         contrasts,
         combo_root / f"hippomaps_endpoint_fc_contrast_{route}_{smoothing}_{out_tag}.png",
     )
+    if tuple(hemis) == HEMIS:
+        ensure_bilateral_gradient_annotations(
+            side_paths={
+                "L": gradient_png.with_name(f"{gradient_png.stem}_hemi-L{gradient_png.suffix}"),
+                "R": gradient_png.with_name(f"{gradient_png.stem}_hemi-R{gradient_png.suffix}"),
+            },
+            output_png=gradient_png,
+            selected_components=selected_components,
+            ev_by_hemi=ev_by_hemi,
+        )
     manifest_out = combo_root / f"hippomaps_gradient_products_{route}_{smoothing}_{out_tag}_manifest.json"
     save_json(
         manifest_out,
@@ -499,7 +562,7 @@ if __name__ == "__main__":
                 step_id="06_05_render_hippomaps_gradient_products",
                 purpose="Render HippoMaps folded/unfolded gradient figures, EV plots, and endpoint FC contrasts.",
                 stage_main=main,
-                upstream_defaults=("05_03_compute_hippomaps_gradients",),
+                upstream_defaults=("05_01_compute_hippomaps_gradients",),
             )
         )
     )

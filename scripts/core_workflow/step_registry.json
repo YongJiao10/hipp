@@ -9,68 +9,56 @@
   ],
   "steps": [
     {
-      "step_id": "00_01_prepare_smoke_run",
-      "stage": "00_smoke_test",
-      "purpose": "Prepare an isolated 5-subject smoke run directory, subject manifest, and command manifest under outputs_core/hcp7t_hippocampus/runs/<run_id>.",
-      "branches": [
-        "kong2022_routea",
-        "kong2022_routeb"
-      ],
-      "entry_script": "scripts/core_workflow/00_01_prepare_smoke_run.py",
-      "implementation_script": "scripts/core_workflow/00_01_prepare_smoke_run.py",
-      "recommended_manifest": "outputs_core/hcp7t_hippocampus/runs/<run_id>/manifests/smoke_command_manifest.json"
-    },
-    {
-      "step_id": "01_01_prepare_group_inputs",
-      "stage": "01_inputs",
-      "purpose": "Prepare shared surfaces, QC metadata, and group-average templates.",
-      "branches": [
-        "kong2019",
-        "kong2022_routea",
-        "kong2022_routeb"
-      ],
-      "entry_script": "scripts/core_workflow/01_01_prepare_group_inputs.py",
-      "implementation_script": "scripts/core_workflow/01_01_prepare_group_inputs.py",
-      "recommended_manifest": "manifests/core_workflow/01_01_prepare_group_inputs.json"
-    },
-    {
-      "step_id": "01_02_build_qc_manifest",
-      "stage": "01_inputs",
-      "purpose": "Build QC-pass cohort manifest for downstream runs.",
-      "branches": [
-        "kong2019",
-        "kong2022_routea",
-        "kong2022_routeb"
-      ],
-      "entry_script": "scripts/core_workflow/01_02_build_qc_manifest.py",
-      "implementation_script": "scripts/core_workflow/01_02_build_qc_manifest.py",
-      "recommended_manifest": "manifests/core_workflow/01_02_build_qc_manifest.json"
-    },
-    {
-      "step_id": "02_01_run_hippunfold_t1w_local",
-      "stage": "02_hippunfold",
+      "step_id": "01_01_run_hippunfold_t1w_local",
+      "stage": "01_hippunfold",
       "purpose": "Run HippUnfold for the active T1w workflow.",
       "branches": [
         "kong2019",
         "kong2022_routea",
         "kong2022_routeb"
       ],
-      "entry_script": "scripts/core_workflow/02_01_run_hippunfold_t1w_local.py",
-      "implementation_script": "scripts/core_workflow/02_01_run_hippunfold_t1w_local.py",
-      "recommended_manifest": "manifests/core_workflow/02_01_run_hippunfold_t1w_local.json"
+      "entry_script": "scripts/core_workflow/01_01_run_hippunfold_t1w_local.py",
+      "implementation_script": "scripts/core_workflow/01_01_run_hippunfold_t1w_local.py",
+      "recommended_manifest": "manifests/core_workflow/01_01_run_hippunfold_t1w_local.json"
     },
     {
-      "step_id": "02_02_check_hippunfold_outputs",
-      "stage": "02_hippunfold",
-      "purpose": "Check HippUnfold output integrity prior to FC stages.",
+      "step_id": "01_02_check_hippunfold_outputs",
+      "stage": "01_hippunfold",
+      "purpose": "Check HippUnfold output integrity before group input and QC stages.",
       "branches": [
         "kong2019",
         "kong2022_routea",
         "kong2022_routeb"
       ],
-      "entry_script": "scripts/core_workflow/02_02_check_hippunfold_outputs.py",
-      "implementation_script": "scripts/core_workflow/02_02_check_hippunfold_outputs.py",
-      "recommended_manifest": "manifests/core_workflow/02_02_check_hippunfold_outputs.json"
+      "entry_script": "scripts/core_workflow/01_02_check_hippunfold_outputs.py",
+      "implementation_script": "scripts/core_workflow/01_02_check_hippunfold_outputs.py",
+      "recommended_manifest": "manifests/core_workflow/01_02_check_hippunfold_outputs.json"
+    },
+    {
+      "step_id": "02_01_prepare_group_inputs",
+      "stage": "02_inputs_qc",
+      "purpose": "Prepare shared surfaces, tSNR metadata, and group-average templates from validated HippUnfold outputs.",
+      "branches": [
+        "kong2019",
+        "kong2022_routea",
+        "kong2022_routeb"
+      ],
+      "entry_script": "scripts/core_workflow/02_01_prepare_group_inputs.py",
+      "implementation_script": "scripts/core_workflow/02_01_prepare_group_inputs.py",
+      "recommended_manifest": "manifests/core_workflow/02_01_prepare_group_inputs.json"
+    },
+    {
+      "step_id": "02_02_build_qc_manifest",
+      "stage": "02_inputs_qc",
+      "purpose": "Build QC-pass cohort manifest from HippUnfold Dice and hippocampal tSNR gate summaries.",
+      "branches": [
+        "kong2019",
+        "kong2022_routea",
+        "kong2022_routeb"
+      ],
+      "entry_script": "scripts/core_workflow/02_02_build_qc_manifest.py",
+      "implementation_script": "scripts/core_workflow/02_02_build_qc_manifest.py",
+      "recommended_manifest": "manifests/core_workflow/02_02_build_qc_manifest.json"
     },
     {
       "step_id": "03_01_build_kong2022_reference",
@@ -132,46 +120,46 @@
       "recommended_manifest": "manifests/core_workflow/04_03_materialize_kong2019_fc.json"
     },
     {
-      "step_id": "05_01_run_group_atlas",
+      "step_id": "05_01_compute_hippomaps_gradients",
       "stage": "05_group_atlas",
-      "purpose": "Build merged-canonical group atlas outputs with fixed K=3 defaults; Kong2022 gradient-spectral consumes 05_03 HippoMaps gradient artifacts by default.",
+      "purpose": "Compute HippoMaps-style continuous gradients consumed by 05_02 gradient-spectral and rendered by 06_05.",
+      "branches": [
+        "kong2022_routea",
+        "kong2022_routeb"
+      ],
+      "entry_script": "scripts/core_workflow/05_01_compute_hippomaps_gradients.py",
+      "implementation_script": "scripts/core_workflow/05_01_compute_hippomaps_gradients.py",
+      "recommended_manifest": "manifests/core_workflow/05_01_compute_hippomaps_gradients.json"
+    },
+    {
+      "step_id": "05_02_run_group_atlas",
+      "stage": "05_group_atlas",
+      "purpose": "Build merged-canonical group atlas outputs; defaults evaluate K=2..10 while fixing maintained final presentation K=3. Kong2022 gradient-spectral consumes 05_01 HippoMaps gradient artifacts by default.",
       "branches": [
         "kong2019",
         "kong2022_routea",
         "kong2022_routeb"
       ],
-      "entry_script": "scripts/core_workflow/05_01_run_group_atlas.py",
-      "implementation_script": "scripts/core_workflow/05_01_run_group_atlas.py",
-      "recommended_manifest": "manifests/core_workflow/05_01_run_group_atlas.json"
+      "entry_script": "scripts/core_workflow/05_02_run_group_atlas.py",
+      "implementation_script": "scripts/core_workflow/05_02_run_group_atlas.py",
+      "recommended_manifest": "manifests/core_workflow/05_02_run_group_atlas.json"
     },
     {
-      "step_id": "05_02_run_spectral_fast_rerun",
+      "step_id": "05_03_run_spectral_fast_rerun",
       "stage": "05_group_atlas",
-      "purpose": "Run urgent spectral rerun orchestration.",
+      "purpose": "Run urgent spectral rerun orchestration after the primary group-atlas step.",
       "branches": [
         "kong2022_routea",
         "kong2022_routeb"
       ],
-      "entry_script": "scripts/core_workflow/05_02_run_spectral_fast_rerun.py",
-      "implementation_script": "scripts/core_workflow/05_02_run_spectral_fast_rerun.py",
-      "recommended_manifest": "manifests/core_workflow/05_02_run_spectral_fast_rerun.json"
-    },
-    {
-      "step_id": "05_03_compute_hippomaps_gradients",
-      "stage": "05_group_atlas",
-      "purpose": "Compute HippoMaps-style continuous gradients consumed by 05_01 gradient-spectral and rendered by 06_05.",
-      "branches": [
-        "kong2022_routea",
-        "kong2022_routeb"
-      ],
-      "entry_script": "scripts/core_workflow/05_03_compute_hippomaps_gradients.py",
-      "implementation_script": "scripts/core_workflow/05_03_compute_hippomaps_gradients.py",
-      "recommended_manifest": "manifests/core_workflow/05_03_compute_hippomaps_gradients.json"
+      "entry_script": "scripts/core_workflow/05_03_run_spectral_fast_rerun.py",
+      "implementation_script": "scripts/core_workflow/05_03_run_spectral_fast_rerun.py",
+      "recommended_manifest": "manifests/core_workflow/05_03_run_spectral_fast_rerun.json"
     },
     {
       "step_id": "06_01_build_group_overview",
-      "stage": "06_outputs",
-      "purpose": "Render canonical fixed-K=3 group overview products into outputs_core/hcp7t_hippocampus/runs/<run_id>/present/overviews.",
+      "stage": "06_presentation_products",
+      "purpose": "Render canonical fixed-K=3 group overview products into outputs_core/present/overviews.",
       "branches": [
         "kong2019",
         "kong2022_routea",
@@ -182,21 +170,19 @@
       "recommended_manifest": "manifests/core_workflow/06_01_build_group_overview.json"
     },
     {
-      "step_id": "06_02_build_group_matrix",
-      "stage": "06_outputs",
-      "purpose": "Build the maintained fixed full-FC overview index without 10perc/full presentation splits.",
+      "step_id": "06_02_build_wta_long_axis_profiles",
+      "stage": "06_presentation_products",
+      "purpose": "Generate WTA-top hippocampal long-axis network-composition profile TSV/PNG products under outputs_core/present/overviews.",
       "branches": [
-        "kong2019",
-        "kong2022_routea",
-        "kong2022_routeb"
+        "kong2022_routea"
       ],
-      "entry_script": "scripts/core_workflow/06_02_build_group_matrix.py",
-      "implementation_script": "scripts/core_workflow/06_02_build_group_matrix.py",
-      "recommended_manifest": "manifests/core_workflow/06_02_build_group_matrix.json"
+      "entry_script": "scripts/core_workflow/06_02_build_wta_long_axis_profiles.py",
+      "implementation_script": "scripts/core_workflow/06_02_build_wta_long_axis_profiles.py",
+      "recommended_manifest": "outputs_core/present/overviews/kong2022_wta-top_long_axis_network_profile_routea_bins20_manifest.json"
     },
     {
       "step_id": "06_03_materialize_group_labels",
-      "stage": "06_outputs",
+      "stage": "06_presentation_products",
       "purpose": "Materialize group functional-atlas label arrays.",
       "branches": [
         "kong2019",
@@ -209,7 +195,7 @@
     },
     {
       "step_id": "06_04_build_cluster_cortex_panels",
-      "stage": "06_outputs",
+      "stage": "06_presentation_products",
       "purpose": "Generate cortex/hippocampal summary panels.",
       "branches": [
         "kong2019",
@@ -222,7 +208,7 @@
     },
     {
       "step_id": "06_05_render_hippomaps_gradient_products",
-      "stage": "06_outputs",
+      "stage": "06_presentation_products",
       "purpose": "Render HippoMaps folded/unfolded continuous gradients with hemisphere-specific EV labels and colorbars, EV plots, and endpoint FC contrasts.",
       "branches": [
         "kong2022_routea",
@@ -231,6 +217,45 @@
       "entry_script": "scripts/core_workflow/06_05_render_hippomaps_gradient_products.py",
       "implementation_script": "scripts/core_workflow/06_05_render_hippomaps_gradient_products.py",
       "recommended_manifest": "manifests/core_workflow/06_05_render_hippomaps_gradient_products.json"
+    },
+    {
+      "step_id": "06_06_render_group_gradient_heatmaps",
+      "stage": "06_presentation_products",
+      "purpose": "Optional legacy locked-scene group-gradient heatmap renderer.",
+      "branches": [
+        "kong2022_routea",
+        "kong2022_routeb"
+      ],
+      "entry_script": "scripts/core_workflow/06_06_render_group_gradient_heatmaps.py",
+      "implementation_script": "scripts/core_workflow/06_06_render_group_gradient_heatmaps.py",
+      "recommended_manifest": "manifests/core_workflow/06_06_render_group_gradient_heatmaps.json"
+    },
+    {
+      "step_id": "07_01_build_group_matrix",
+      "stage": "07_presentation_index",
+      "purpose": "Build the maintained overview index after 06_01 and 06_02 outputs are refreshed.",
+      "branches": [
+        "kong2019",
+        "kong2022_routea",
+        "kong2022_routeb"
+      ],
+      "entry_script": "scripts/core_workflow/07_01_build_group_matrix.py",
+      "implementation_script": "scripts/core_workflow/07_01_build_group_matrix.py",
+      "recommended_manifest": "outputs_core/present/overviews/group_overview_matrix_manifest.json"
+    }
+  ],
+  "utilities": [
+    {
+      "step_id": "smoke_prepare_run",
+      "stage": "utility_smoke_test",
+      "purpose": "Prepare an isolated 5-subject smoke run directory, subject manifest, and command manifest under outputs_core/smoke_runs/<run_id>.",
+      "branches": [
+        "kong2022_routea",
+        "kong2022_routeb"
+      ],
+      "entry_script": "scripts/core_workflow/smoke_prepare_run.py",
+      "implementation_script": "scripts/core_workflow/smoke_prepare_run.py",
+      "recommended_manifest": "outputs_core/smoke_runs/<run_id>/manifests/smoke_command_manifest.json"
     }
   ]
 }
