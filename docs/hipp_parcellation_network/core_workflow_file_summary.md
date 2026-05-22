@@ -32,7 +32,7 @@
 | `scripts/core_workflow/06_03_materialize_group_labels.py` | assignment status JSON | 物化 functional atlas label 数组 | `group_functional_atlas_labels.npy` |
 | `scripts/core_workflow/06_04_build_cluster_cortex_panels.py` | group labels、FC 摘要、topology 资产 | 生成 cortex / hippocampus 汇总面板 | cluster 和 clusterless cortex panel 产品 |
 | `scripts/core_workflow/06_05_render_hippomaps_gradient_products.py` | `05_01` 产生的梯度 manifest 和数组 | 渲染 HippoMaps 连续梯度产品 | G1-G3 折叠/展开图、EV 图、端点 FC 对比图、manifest |
-| `scripts/core_workflow/06_06_render_group_gradient_heatmaps.py` | group-gradient 产品 | 渲染旧式 locked-scene 热图 | locked-scene heatmaps |
+| `scripts/core_workflow/06_06_render_group_gradient_heatmaps.py` | group-gradient 产品 | 已废弃（retired）；仅输出弃用提示并退出 | 无（deprecated） |
 | `scripts/core_workflow/07_01_build_group_matrix.py` | method overview PNG、WTA profile 产品 | 整理最终展示索引 | matrix manifest、README、刷新后的 overview 集合 |
 
 ## 共享库

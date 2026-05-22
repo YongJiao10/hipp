@@ -54,7 +54,7 @@ These are presentation products derived from group atlas and gradient work. They
 3. `06_03_materialize_group_labels.py`
 4. `06_04_build_cluster_cortex_panels.py`
 5. `06_05_render_hippomaps_gradient_products.py`
-6. `06_06_render_group_gradient_heatmaps.py` (optional legacy locked-scene heatmap)
+6. `06_06_render_group_gradient_heatmaps.py` (deprecated retired; exits with guidance to use `06_05` routea/routeb outputs)
 
 ## 7. Presentation Index
 

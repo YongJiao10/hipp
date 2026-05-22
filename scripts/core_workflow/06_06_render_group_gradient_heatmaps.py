@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 """
+DEPRECATED: Locked-scene composite heatmap output is retired.
+
 Process Step Description:
 Render group-level gradient heatmaps. Generates heatmap visualizations of functional gradients based on group-level data to intuitively display gradient patterns in a composite 2x3 grid image layout.
 
@@ -1022,6 +1024,14 @@ def collect_combo_data(
 
 
 def main() -> int:
+    print(json.dumps({
+        "status": "deprecated",
+        "step": "06_06_render_group_gradient_heatmaps",
+        "message": "This legacy locked-scene heatmap output is retired and must not be refreshed.",
+        "replacement": "Use scripts/core_workflow/06_05_render_hippomaps_gradient_products.py outputs under outputs_core/present/gradients/routea and outputs_core/present/gradients/routeb.",
+    }, indent=2), flush=True)
+    return 2
+
     args = parse_args()
     group_root = Path(args.group_root).resolve()
     scene_path = Path(args.scene).resolve()

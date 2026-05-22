@@ -221,7 +221,7 @@
     {
       "step_id": "06_06_render_group_gradient_heatmaps",
       "stage": "06_presentation_products",
-      "purpose": "Optional legacy locked-scene group-gradient heatmap renderer.",
+      "purpose": "Deprecated retired legacy locked-scene heatmap entrypoint; preserved only to emit deprecation guidance.",
       "branches": [
         "kong2022_routea",
         "kong2022_routeb"
