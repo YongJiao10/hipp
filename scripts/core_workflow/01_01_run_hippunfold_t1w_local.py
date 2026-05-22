@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+"""
+Process Step Description:
+Run local HippUnfold T1w pipeline. This is the initial step of the workflow to perform hippocampal unfolding and surface mesh generation for a single subject.
+"""
 import argparse
 import subprocess
 import sys

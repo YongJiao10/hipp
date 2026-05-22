@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+"""
+Process Step Description:
+Build cortical projection panels for clusters. Generates visualization panel data projecting hippocampal clustered networks onto the cerebral cortex surface to show hippocampal-cortical connectivity patterns.
+"""
 import argparse
-import csv
 import json
 import math
 import subprocess
@@ -14,7 +17,7 @@ from typing import Any
 import matplotlib
 import nibabel as nib
 import numpy as np
-from nibabel.gifti import GiftiDataArray, GiftiImage, GiftiLabel, GiftiLabelTable
+from nibabel.gifti import GiftiImage
 from scipy import stats
 
 matplotlib.use("Agg")
@@ -28,6 +31,9 @@ from lib.output_layout import (
     DEFAULT_KONG2022_ROUTEA_ROOT,
     DEFAULT_ROUTEA_GROUP_ATLAS_ROOT,
 )
+from lib.fc_math import corrcoef_rows
+from lib.gifti_labels import make_named_label_gifti
+from lib.io_utils import load_json, read_tsv_rows, write_tsv
 from lib.surface_utils import render_locked_grid
 from lib.workflow_utils import write_json
 from lib.workbench import run_workbench
@@ -88,6 +94,19 @@ class ROIStat:
     selected_sign: str
 
 
+@dataclass(frozen=True)
+class PanelComboInputs:
+    combo: Combo
+    combo_id: str
+    run_dir: Path
+    manifest: dict[str, Any]
+    subjects: list[str]
+    labels_path: Path
+    support_path: Path
+    registry_path: Path
+    global_top_path: Path
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
@@ -115,24 +134,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--cortex-assets-root", default=str(DEFAULT_CORTEX_ASSETS_ROOT))
     parser.add_argument("--scene", default=str(DEFAULT_SCENE))
     return parser.parse_args()
-
-
-def load_json(path: Path) -> dict[str, Any]:
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
-def read_tsv_rows(path: Path) -> list[dict[str, str]]:
-    with path.open("r", encoding="utf-8", newline="") as f:
-        return list(csv.DictReader(f, delimiter="\t"))
-
-
-def write_tsv(path: Path, rows: list[dict[str, Any]], fieldnames: list[str]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames, delimiter="\t", extrasaction="ignore")
-        writer.writeheader()
-        for row in rows:
-            writer.writerow(row)
 
 
 def run_cmd(cmd: list[str]) -> None:
@@ -207,23 +208,6 @@ def display_color_for_sign(base: tuple[int, int, int, int], sign: str) -> tuple[
     return base
 
 
-def corrcoef_rows(a: np.ndarray, b: np.ndarray) -> np.ndarray:
-    x = np.asarray(a, dtype=np.float32)
-    y = np.asarray(b, dtype=np.float32)
-    x_mu = np.nanmean(x, axis=1, keepdims=True)
-    y_mu = np.nanmean(y, axis=1, keepdims=True)
-    x_sd = np.nanstd(x, axis=1, keepdims=True, ddof=1)
-    y_sd = np.nanstd(y, axis=1, keepdims=True, ddof=1)
-    xz = (x - x_mu) / np.clip(x_sd, 1e-12, None)
-    yz = (y - y_mu) / np.clip(y_sd, 1e-12, None)
-    xz[~np.isfinite(xz)] = 0.0
-    yz[~np.isfinite(yz)] = 0.0
-    corr = (xz @ yz.T) / float(max(1, x.shape[1] - 1))
-    corr = np.clip(corr, -0.999999, 0.999999)
-    corr[~np.isfinite(corr)] = 0.0
-    return corr.astype(np.float32)
-
-
 def bh_fdr(p_values: np.ndarray) -> np.ndarray:
     p = np.asarray(p_values, dtype=np.float64)
     q = np.full_like(p, np.nan, dtype=np.float64)
@@ -264,22 +248,6 @@ def one_sample_one_sided_stats(x: np.ndarray) -> tuple[float, float, float, floa
     p_pos = float(stats.t.sf(t_stat, df=n - 1))
     p_neg = float(stats.t.cdf(t_stat, df=n - 1))
     return mean, float(t_stat), p_pos, p_neg, n
-
-
-def make_label_gifti(labels: np.ndarray, label_items: list[tuple[int, str, tuple[int, int, int, int]]]) -> GiftiImage:
-    table = GiftiLabelTable()
-    for key, name, rgba in label_items:
-        g = GiftiLabel(
-            key=int(key),
-            red=float(rgba[0]) / 255.0,
-            green=float(rgba[1]) / 255.0,
-            blue=float(rgba[2]) / 255.0,
-            alpha=float(rgba[3]) / 255.0,
-        )
-        g.label = str(name)
-        table.labels.append(g)
-    da = GiftiDataArray(data=labels.astype(np.int32), intent="NIFTI_INTENT_LABEL", datatype="NIFTI_TYPE_INT32")
-    return GiftiImage(darrays=[da], labeltable=table)
 
 
 def resolve_cortex_assets(subject: str, data_root: Path, assets_root: Path, scene: Path) -> dict[str, Path]:
@@ -576,7 +544,7 @@ def build_cluster_label_files(
             selected_ids = np.asarray(sorted(by_roi_id), dtype=np.int32)
             keep = np.isin(parcel_ids.astype(np.int32), selected_ids)
             values[vertex_idx[keep].astype(np.int32)] = parcel_ids[keep].astype(np.int32)
-        img = make_label_gifti(values, label_items)
+        img = make_named_label_gifti(values, label_items)
         suffix = "L" if hemi == "L" else "R"
         out_path = wb_dir / f"cluster_selected_rois.{suffix}.label.gii"
         nib.save(img, str(out_path))
@@ -718,8 +686,8 @@ def build_global_top_hippomaps_label_files(
     wb_dir.mkdir(parents=True, exist_ok=True)
     out_left = wb_dir / "global_top_vertices.L.label.gii"
     out_right = wb_dir / "global_top_vertices.R.label.gii"
-    nib.save(make_label_gifti(labels_left, label_items), str(out_left))
-    nib.save(make_label_gifti(labels_right, label_items), str(out_right))
+    nib.save(make_named_label_gifti(labels_left, label_items), str(out_left))
+    nib.save(make_named_label_gifti(labels_right, label_items), str(out_right))
 
     return out_left, out_right, {"positive": int(selected_pos), "negative": int(selected_neg)}
 
@@ -1160,6 +1128,404 @@ def compose_combo_overview(
     plt.close(fig)
 
 
+def collect_panel_combo_inputs(
+    *,
+    combo: Combo,
+    group_root: Path,
+    tau_tag: str,
+    skipped: list[dict[str, Any]],
+) -> PanelComboInputs | None:
+    run_dir = group_root / combo.method / combo.atlas / combo.smoothing / tau_tag / f"hemi_{combo.hemi}"
+    manifest_path = run_dir / "group_atlas_manifest.json"
+    labels_path = run_dir / "group_labels_final.npy"
+    support_path = run_dir / "group_support_mask.npy"
+    registry_path = run_dir / "cluster_roi_registry.tsv"
+    vertex_status_path = run_dir / "vertex_assignment_status.json"
+    global_top_path = run_dir / "global_top_connections.json"
+    combo_id = combo_tag(combo)
+    clusterless = combo.method in CLUSTERLESS_METHODS
+
+    if not manifest_path.exists():
+        skipped.append(
+            {
+                "atlas": combo.atlas,
+                "method": combo.method,
+                "smoothing": combo.smoothing,
+                "hemi": combo.hemi,
+                "reason": "missing_group_manifest",
+                "run_dir": str(run_dir),
+            }
+        )
+        return None
+
+    manifest = load_json(manifest_path)
+    group_status = str(manifest.get("status", "ok"))
+    if group_status != "ok":
+        skipped.append(
+            {
+                "atlas": combo.atlas,
+                "method": combo.method,
+                "smoothing": combo.smoothing,
+                "hemi": combo.hemi,
+                "reason": "group_combo_not_ok",
+                "group_status": group_status,
+                "group_skip_reason": manifest.get("skip_reason"),
+                "run_dir": str(run_dir),
+            }
+        )
+        return None
+
+    required_ok = (
+        (support_path.exists() and registry_path.exists() and vertex_status_path.exists() and global_top_path.exists())
+        if clusterless
+        else (labels_path.exists() and support_path.exists() and registry_path.exists())
+    )
+    if not required_ok:
+        skipped.append(
+            {
+                "atlas": combo.atlas,
+                "method": combo.method,
+                "smoothing": combo.smoothing,
+                "hemi": combo.hemi,
+                "reason": "missing_required_group_atlas_artifacts",
+                "run_dir": str(run_dir),
+            }
+        )
+        return None
+
+    subjects = [str(s).replace("sub-", "") for s in manifest.get("subjects", [])]
+    if not subjects:
+        skipped.append(
+            {
+                "atlas": combo.atlas,
+                "method": combo.method,
+                "smoothing": combo.smoothing,
+                "hemi": combo.hemi,
+                "reason": "empty_subjects_in_manifest",
+                "run_dir": str(run_dir),
+            }
+        )
+        return None
+
+    return PanelComboInputs(
+        combo=combo,
+        combo_id=combo_id,
+        run_dir=run_dir,
+        manifest=manifest,
+        subjects=subjects,
+        labels_path=labels_path,
+        support_path=support_path,
+        registry_path=registry_path,
+        global_top_path=global_top_path,
+    )
+
+
+def write_cortex_panel_manifests(
+    *,
+    combo: Combo,
+    combo_id: str,
+    combo_runtime_out: Path,
+    viewer_combo_manifest_dir: Path,
+    combo_manifest: dict[str, Any],
+    cluster_previews: list[dict[str, Any]],
+    n_subjects_used: int,
+) -> dict[str, Any]:
+    combo_manifest_path = combo_runtime_out / "cluster_roi_cortex_combo_manifest.json"
+    write_json(combo_manifest_path, combo_manifest)
+    combo_view_manifest_path = viewer_combo_manifest_dir / f"{combo_id}.json"
+    write_json(
+        combo_view_manifest_path,
+        {
+            "atlas": combo.atlas,
+            "method": combo.method,
+            "smoothing": combo.smoothing,
+            "hemi": combo.hemi,
+            "combo_id": combo_id,
+            "runtime_combo_manifest": str(combo_manifest_path),
+            "clusters": cluster_previews,
+        },
+    )
+    return {
+        "atlas": combo.atlas,
+        "method": combo.method,
+        "smoothing": combo.smoothing,
+        "hemi": combo.hemi,
+        "combo_manifest_runtime": str(combo_manifest_path),
+        "combo_manifest_viewer": str(combo_view_manifest_path),
+        "cluster_count": int(combo_manifest.get("cluster_count", 0)),
+        "n_subjects_used": int(n_subjects_used),
+    }
+
+
+def render_clusterless_combo_panels(
+    *,
+    panel_inputs: PanelComboInputs,
+    args: argparse.Namespace,
+    group_root: Path,
+    runtime_root: Path,
+    tau_tag: str,
+    cortex_assets: dict[str, Path],
+    vertex_arrays: dict[str, tuple[np.ndarray, np.ndarray]],
+    network_colors: dict[str, tuple[int, int, int, int]],
+    skipped: list[dict[str, Any]],
+    viewer_combo_manifest_dir: Path,
+) -> tuple[dict[str, Any], list[dict[str, Any]], tuple[str, str, str]] | None:
+    combo = panel_inputs.combo
+    run_dir = panel_inputs.run_dir
+    support = np.load(panel_inputs.support_path).astype(bool)
+    if support.ndim != 1:
+        raise RuntimeError(f"Invalid support shape in {run_dir}: {support.shape}")
+    roi_registry = parse_roi_registry(panel_inputs.registry_path)
+    global_top = load_json(panel_inputs.global_top_path)
+    selected_items = dedupe_selected_items_from_global_top(global_top)
+    combo_runtime_out = runtime_root / combo.atlas / combo.method / combo.smoothing / tau_tag / f"hemi_{combo.hemi}"
+    combo_runtime_out.mkdir(parents=True, exist_ok=True)
+    panel_dir = combo_runtime_out / "global_top"
+    other_hemi = "R" if combo.hemi == "L" else "L"
+    other_manifest_path = group_root / combo.method / combo.atlas / combo.smoothing / tau_tag / f"hemi_{other_hemi}" / "group_atlas_manifest.json"
+    if not other_manifest_path.exists():
+        raise FileNotFoundError(
+            f"Missing opposite-hemi manifest required for hippomaps rendering: {other_manifest_path}"
+        )
+    other_manifest = load_json(other_manifest_path)
+    template_spec_raw = panel_inputs.manifest.get("template_spec_path")
+    if template_spec_raw is None or str(template_spec_raw).strip().lower() in {"", "none", "null"}:
+        skipped.append(
+            {
+                "atlas": combo.atlas,
+                "method": combo.method,
+                "smoothing": combo.smoothing,
+                "hemi": combo.hemi,
+                "reason": "missing_template_spec_path_subject_consensus",
+                "run_dir": str(run_dir),
+            }
+        )
+        return None
+    this_surface = Path(str(panel_inputs.manifest["template_left_or_right_surface"]))
+    other_surface = Path(str(other_manifest["template_left_or_right_surface"]))
+    left_surface = this_surface if combo.hemi == "L" else other_surface
+    right_surface = this_surface if combo.hemi == "R" else other_surface
+    left_label, right_label, _legend_items = build_cluster_label_files(
+        selected_items=selected_items,
+        cluster_dir=panel_dir,
+        vertex_arrays=vertex_arrays,
+        network_colors=network_colors,
+    )
+    figure_png = render_clusterless_global_figure(
+        cluster_dir=panel_dir,
+        title=f"{combo.atlas} | {combo.method} | {combo.smoothing} | hemi-{combo.hemi}",
+        left_label=left_label,
+        right_label=right_label,
+        cortex_assets=cortex_assets,
+        network_colors=network_colors,
+        global_top=global_top,
+        support_mask=support,
+        combo_hemi=combo.hemi,
+        template_subject=str(panel_inputs.manifest.get("template_subject", "")).replace("sub-", ""),
+        template_spec_path=Path(str(template_spec_raw)),
+        left_surface=left_surface,
+        right_surface=right_surface,
+    )
+    n_pos = int(len(global_top.get("top_positive", [])))
+    n_neg = int(len(global_top.get("top_negative", [])))
+    cluster_previews = [
+        {
+            "atlas": combo.atlas,
+            "method": combo.method,
+            "smoothing": combo.smoothing,
+            "hemi": combo.hemi,
+            "cluster_id": 0,
+            "runtime_png": str(figure_png),
+            "n_selected_positive": n_pos,
+            "n_selected_negative": n_neg,
+            "panel_label": f"{combo.smoothing}-{combo.hemi}-GlobalTop",
+            "n_subjects_used": int(len(panel_inputs.subjects)),
+        }
+    ]
+    combo_manifest = {
+        "atlas": combo.atlas,
+        "method": combo.method,
+        "smoothing": combo.smoothing,
+        "hemi": combo.hemi,
+        "coverage_threshold": float(args.coverage_threshold),
+        "selection_policy": "global_top_connections_2N",
+        "top_n_cap_per_sign": int(global_top.get("top_n_cap", 20)),
+        "q_threshold": float(global_top.get("q_threshold", 0.05)),
+        "n_subjects_used": int(len(panel_inputs.subjects)),
+        "subjects_used": [f"sub-{s}" for s in panel_inputs.subjects],
+        "panel_count": 1,
+        "cluster_count": 0,
+        "global_top": {
+            "n_positive": n_pos,
+            "n_negative": n_neg,
+            "figure_png": str(figure_png),
+            "source_json": str(panel_inputs.global_top_path),
+        },
+    }
+    item = write_cortex_panel_manifests(
+        combo=combo,
+        combo_id=panel_inputs.combo_id,
+        combo_runtime_out=combo_runtime_out,
+        viewer_combo_manifest_dir=viewer_combo_manifest_dir,
+        combo_manifest=combo_manifest,
+        cluster_previews=cluster_previews,
+        n_subjects_used=len(panel_inputs.subjects),
+    )
+    return item, cluster_previews, (combo.atlas, combo.method, "2mm+4mm")
+
+
+def render_clustered_combo_panels(
+    *,
+    panel_inputs: PanelComboInputs,
+    args: argparse.Namespace,
+    shared_root: Path,
+    runtime_root: Path,
+    tau_tag: str,
+    cortex_assets: dict[str, Path],
+    vertex_arrays: dict[str, tuple[np.ndarray, np.ndarray]],
+    network_colors: dict[str, tuple[int, int, int, int]],
+    viewer_combo_manifest_dir: Path,
+) -> tuple[dict[str, Any], list[dict[str, Any]], tuple[str, str, str]]:
+    combo = panel_inputs.combo
+    labels = np.load(panel_inputs.labels_path).astype(np.int32)
+    support = np.load(panel_inputs.support_path).astype(bool)
+    if labels.ndim != 1 or support.ndim != 1 or int(labels.size) != int(support.size):
+        raise RuntimeError(f"Invalid labels/support shape in {panel_inputs.run_dir}")
+
+    roi_registry = parse_roi_registry(panel_inputs.registry_path)
+    profile_3d, used_subjects = compute_subject_cluster_roi_profiles(
+        subjects=panel_inputs.subjects,
+        shared_root=shared_root,
+        smoothing=combo.smoothing,
+        hemi=combo.hemi,
+        group_labels=labels,
+        support_mask=support,
+        roi_registry=roi_registry,
+    )
+
+    k_final = int(np.max(labels))
+    combo_runtime_out = runtime_root / combo.atlas / combo.method / combo.smoothing / tau_tag / f"hemi_{combo.hemi}"
+    combo_runtime_out.mkdir(parents=True, exist_ok=True)
+
+    cluster_items: list[dict[str, Any]] = []
+    cluster_previews: list[dict[str, Any]] = []
+    for cluster_id in range(1, k_final + 1):
+        cluster_dir = combo_runtime_out / f"cluster_C{cluster_id:02d}"
+        cluster_vals = profile_3d[:, cluster_id - 1, :]
+        stats_rows, selected_pos, selected_neg = analyze_cluster(
+            cluster_values=cluster_vals,
+            roi_registry=roi_registry,
+            fdr_q=float(args.fdr_q),
+            max_rois_per_sign=int(args.max_rois_per_sign),
+        )
+        selected_items = selected_pos + selected_neg
+        left_label, right_label, _legend_items = build_cluster_label_files(
+            selected_items=selected_items,
+            cluster_dir=cluster_dir,
+            vertex_arrays=vertex_arrays,
+            network_colors=network_colors,
+        )
+
+        title = f"cluster C{cluster_id:02d} | {combo.atlas} | {combo.method} | {combo.smoothing} | hemi-{combo.hemi}"
+        figure_png = render_cluster_figure(
+            cluster_dir=cluster_dir,
+            title=title,
+            left_label=left_label,
+            right_label=right_label,
+            selected_items=selected_items,
+            network_colors=network_colors,
+            n_selected_positive=int(len(selected_pos)),
+            n_selected_negative=int(len(selected_neg)),
+            cortex_assets=cortex_assets,
+        )
+
+        rows_dict = roi_stats_to_rows(stats_rows)
+        stats_tsv = cluster_dir / "cluster_roi_stats.tsv"
+        stats_json = cluster_dir / "cluster_roi_stats.json"
+        write_tsv(
+            stats_tsv,
+            rows_dict,
+            [
+                "roi_id",
+                "roi_name",
+                "hemi",
+                "family17",
+                "canonical8",
+                "mean_z",
+                "t_stat",
+                "p_positive",
+                "p_negative",
+                "q_positive",
+                "q_negative",
+                "n_subjects",
+                "is_sig_positive",
+                "is_sig_negative",
+                "is_selected",
+                "selected_sign",
+            ],
+        )
+        write_json(
+            stats_json,
+            {
+                "cluster_id": cluster_id,
+                "selected_positive": selected_pos,
+                "selected_negative": selected_neg,
+                "n_selected_total": int(len(selected_items)),
+                "rows": rows_dict,
+            },
+        )
+
+        cluster_previews.append(
+            {
+                "atlas": combo.atlas,
+                "method": combo.method,
+                "smoothing": combo.smoothing,
+                "hemi": combo.hemi,
+                "cluster_id": int(cluster_id),
+                "runtime_png": str(figure_png),
+                "n_selected_positive": int(len(selected_pos)),
+                "n_selected_negative": int(len(selected_neg)),
+                "n_subjects_used": int(len(used_subjects)),
+            }
+        )
+
+        cluster_items.append(
+            {
+                "cluster_id": cluster_id,
+                "figure_png": str(figure_png),
+                "stats_tsv": str(stats_tsv),
+                "stats_json": str(stats_json),
+                "n_selected_positive": int(len(selected_pos)),
+                "n_selected_negative": int(len(selected_neg)),
+            }
+        )
+
+    combo_manifest = {
+        "atlas": combo.atlas,
+        "method": combo.method,
+        "smoothing": combo.smoothing,
+        "hemi": combo.hemi,
+        "coverage_threshold": float(args.coverage_threshold),
+        "fdr_q": float(args.fdr_q),
+        "selection_policy": "sig_only_topN_per_sign",
+        "max_rois_per_sign": int(args.max_rois_per_sign),
+        "n_subjects_used": int(len(used_subjects)),
+        "subjects_used": [f"sub-{s}" for s in used_subjects],
+        "cluster_count": int(k_final),
+        "clusters": cluster_items,
+    }
+    item = write_cortex_panel_manifests(
+        combo=combo,
+        combo_id=panel_inputs.combo_id,
+        combo_runtime_out=combo_runtime_out,
+        viewer_combo_manifest_dir=viewer_combo_manifest_dir,
+        combo_manifest=combo_manifest,
+        cluster_previews=cluster_previews,
+        n_subjects_used=len(used_subjects),
+    )
+    return item, cluster_previews, (combo.atlas, combo.method, combo.smoothing)
+
+
 def main() -> int:
     args = parse_args()
 
@@ -1197,363 +1563,45 @@ def main() -> int:
     grouped_previews: dict[tuple[str, str, str], list[dict[str, Any]]] = {}
 
     for combo in combos:
-        run_dir = group_root / combo.method / combo.atlas / combo.smoothing / tau_tag / f"hemi_{combo.hemi}"
-        manifest_path = run_dir / "group_atlas_manifest.json"
-        labels_path = run_dir / "group_labels_final.npy"
-        support_path = run_dir / "group_support_mask.npy"
-        registry_path = run_dir / "cluster_roi_registry.tsv"
-        vertex_status_path = run_dir / "vertex_assignment_status.json"
-        global_top_path = run_dir / "global_top_connections.json"
-        combo_id = combo_tag(combo)
-        clusterless = combo.method in CLUSTERLESS_METHODS
-
-        if not manifest_path.exists():
-            skipped.append(
-                {
-                    "atlas": combo.atlas,
-                    "method": combo.method,
-                    "smoothing": combo.smoothing,
-                    "hemi": combo.hemi,
-                    "reason": "missing_group_manifest",
-                    "run_dir": str(run_dir),
-                }
-            )
-            continue
-
-        manifest = load_json(manifest_path)
-        group_status = str(manifest.get("status", "ok"))
-        if group_status != "ok":
-            skipped.append(
-                {
-                    "atlas": combo.atlas,
-                    "method": combo.method,
-                    "smoothing": combo.smoothing,
-                    "hemi": combo.hemi,
-                    "reason": "group_combo_not_ok",
-                    "group_status": group_status,
-                    "group_skip_reason": manifest.get("skip_reason"),
-                    "run_dir": str(run_dir),
-                }
-            )
-            continue
-
-        required_ok = (
-            (support_path.exists() and registry_path.exists() and vertex_status_path.exists() and global_top_path.exists())
-            if clusterless
-            else (labels_path.exists() and support_path.exists() and registry_path.exists())
+        panel_inputs = collect_panel_combo_inputs(
+            combo=combo,
+            group_root=group_root,
+            tau_tag=tau_tag,
+            skipped=skipped,
         )
-        if not required_ok:
-            skipped.append(
-                {
-                    "atlas": combo.atlas,
-                    "method": combo.method,
-                    "smoothing": combo.smoothing,
-                    "hemi": combo.hemi,
-                    "reason": "missing_required_group_atlas_artifacts",
-                    "run_dir": str(run_dir),
-                }
-            )
+        if panel_inputs is None:
             continue
 
-        subjects = [str(s).replace("sub-", "") for s in manifest.get("subjects", [])]
-        if not subjects:
-            skipped.append(
-                {
-                    "atlas": combo.atlas,
-                    "method": combo.method,
-                    "smoothing": combo.smoothing,
-                    "hemi": combo.hemi,
-                    "reason": "empty_subjects_in_manifest",
-                    "run_dir": str(run_dir),
-                }
+        if combo.method in CLUSTERLESS_METHODS:
+            rendered = render_clusterless_combo_panels(
+                panel_inputs=panel_inputs,
+                args=args,
+                group_root=group_root,
+                runtime_root=runtime_root,
+                tau_tag=tau_tag,
+                cortex_assets=cortex_assets,
+                vertex_arrays=vertex_arrays,
+                network_colors=network_colors,
+                skipped=skipped,
+                viewer_combo_manifest_dir=viewer_combo_manifest_dir,
             )
-            continue
-
-        if clusterless:
-            support = np.load(support_path).astype(bool)
-            if support.ndim != 1:
-                raise RuntimeError(f"Invalid support shape in {run_dir}: {support.shape}")
-            roi_registry = parse_roi_registry(registry_path)
-            global_top = load_json(global_top_path)
-            selected_items = dedupe_selected_items_from_global_top(global_top)
-            combo_runtime_out = runtime_root / combo.atlas / combo.method / combo.smoothing / tau_tag / f"hemi_{combo.hemi}"
-            combo_runtime_out.mkdir(parents=True, exist_ok=True)
-            panel_dir = combo_runtime_out / "global_top"
-            other_hemi = "R" if combo.hemi == "L" else "L"
-            other_manifest_path = (
-                group_root / combo.method / combo.atlas / combo.smoothing / tau_tag / f"hemi_{other_hemi}" / "group_atlas_manifest.json"
-            )
-            if not other_manifest_path.exists():
-                raise FileNotFoundError(
-                    f"Missing opposite-hemi manifest required for hippomaps rendering: {other_manifest_path}"
-                )
-            other_manifest = load_json(other_manifest_path)
-            template_spec_raw = manifest.get("template_spec_path")
-            if template_spec_raw is None or str(template_spec_raw).strip().lower() in {"", "none", "null"}:
-                skipped.append(
-                    {
-                        "atlas": combo.atlas,
-                        "method": combo.method,
-                        "smoothing": combo.smoothing,
-                        "hemi": combo.hemi,
-                        "reason": "missing_template_spec_path_subject_consensus",
-                        "run_dir": str(run_dir),
-                    }
-                )
+            if rendered is None:
                 continue
-            this_surface = Path(str(manifest["template_left_or_right_surface"]))
-            other_surface = Path(str(other_manifest["template_left_or_right_surface"]))
-            left_surface = this_surface if combo.hemi == "L" else other_surface
-            right_surface = this_surface if combo.hemi == "R" else other_surface
-            left_label, right_label, _legend_items = build_cluster_label_files(
-                selected_items=selected_items,
-                cluster_dir=panel_dir,
+        else:
+            rendered = render_clustered_combo_panels(
+                panel_inputs=panel_inputs,
+                args=args,
+                shared_root=shared_root,
+                runtime_root=runtime_root,
+                tau_tag=tau_tag,
+                cortex_assets=cortex_assets,
                 vertex_arrays=vertex_arrays,
                 network_colors=network_colors,
+                viewer_combo_manifest_dir=viewer_combo_manifest_dir,
             )
-            figure_png = render_clusterless_global_figure(
-                cluster_dir=panel_dir,
-                title=f"{combo.atlas} | {combo.method} | {combo.smoothing} | hemi-{combo.hemi}",
-                left_label=left_label,
-                right_label=right_label,
-                cortex_assets=cortex_assets,
-                network_colors=network_colors,
-                global_top=global_top,
-                support_mask=support,
-                combo_hemi=combo.hemi,
-                template_subject=str(manifest.get("template_subject", "")).replace("sub-", ""),
-                template_spec_path=Path(str(template_spec_raw)),
-                left_surface=left_surface,
-                right_surface=right_surface,
-            )
-            n_pos = int(len(global_top.get("top_positive", [])))
-            n_neg = int(len(global_top.get("top_negative", [])))
-            cluster_previews = [
-                {
-                    "atlas": combo.atlas,
-                    "method": combo.method,
-                    "smoothing": combo.smoothing,
-                    "hemi": combo.hemi,
-                    "cluster_id": 0,
-                    "runtime_png": str(figure_png),
-                    "n_selected_positive": n_pos,
-                    "n_selected_negative": n_neg,
-                    "panel_label": f"{combo.smoothing}-{combo.hemi}-GlobalTop",
-                    "n_subjects_used": int(len(subjects)),
-                }
-            ]
-            group_key = (combo.atlas, combo.method, "2mm+4mm")
-            grouped_previews.setdefault(group_key, []).extend(cluster_previews)
-
-            combo_manifest = {
-                "atlas": combo.atlas,
-                "method": combo.method,
-                "smoothing": combo.smoothing,
-                "hemi": combo.hemi,
-                "coverage_threshold": float(args.coverage_threshold),
-                "selection_policy": "global_top_connections_2N",
-                "top_n_cap_per_sign": int(global_top.get("top_n_cap", 20)),
-                "q_threshold": float(global_top.get("q_threshold", 0.05)),
-                "n_subjects_used": int(len(subjects)),
-                "subjects_used": [f"sub-{s}" for s in subjects],
-                "panel_count": 1,
-                "global_top": {
-                    "n_positive": n_pos,
-                    "n_negative": n_neg,
-                    "figure_png": str(figure_png),
-                    "source_json": str(global_top_path),
-                },
-            }
-            combo_manifest_path = combo_runtime_out / "cluster_roi_cortex_combo_manifest.json"
-            write_json(combo_manifest_path, combo_manifest)
-            combo_view_manifest_path = viewer_combo_manifest_dir / f"{combo_id}.json"
-            write_json(
-                combo_view_manifest_path,
-                {
-                    "atlas": combo.atlas,
-                    "method": combo.method,
-                    "smoothing": combo.smoothing,
-                    "hemi": combo.hemi,
-                    "combo_id": combo_id,
-                    "runtime_combo_manifest": str(combo_manifest_path),
-                    "clusters": cluster_previews,
-                },
-            )
-            items.append(
-                {
-                    "atlas": combo.atlas,
-                    "method": combo.method,
-                    "smoothing": combo.smoothing,
-                    "hemi": combo.hemi,
-                    "combo_manifest_runtime": str(combo_manifest_path),
-                    "combo_manifest_viewer": str(combo_view_manifest_path),
-                    "cluster_count": 0,
-                    "n_subjects_used": int(len(subjects)),
-                }
-            )
-            continue
-
-        labels = np.load(labels_path).astype(np.int32)
-        support = np.load(support_path).astype(bool)
-        if labels.ndim != 1 or support.ndim != 1 or int(labels.size) != int(support.size):
-            raise RuntimeError(f"Invalid labels/support shape in {run_dir}")
-
-        roi_registry = parse_roi_registry(registry_path)
-        profile_3d, used_subjects = compute_subject_cluster_roi_profiles(
-            subjects=subjects,
-            shared_root=shared_root,
-            smoothing=combo.smoothing,
-            hemi=combo.hemi,
-            group_labels=labels,
-            support_mask=support,
-            roi_registry=roi_registry,
-        )
-
-        k_final = int(np.max(labels))
-        combo_runtime_out = runtime_root / combo.atlas / combo.method / combo.smoothing / tau_tag / f"hemi_{combo.hemi}"
-        combo_runtime_out.mkdir(parents=True, exist_ok=True)
-
-        cluster_items: list[dict[str, Any]] = []
-        cluster_previews: list[dict[str, Any]] = []
-        for cluster_id in range(1, k_final + 1):
-            cluster_dir = combo_runtime_out / f"cluster_C{cluster_id:02d}"
-            cluster_vals = profile_3d[:, cluster_id - 1, :]
-            stats_rows, selected_pos, selected_neg = analyze_cluster(
-                cluster_values=cluster_vals,
-                roi_registry=roi_registry,
-                fdr_q=float(args.fdr_q),
-                max_rois_per_sign=int(args.max_rois_per_sign),
-            )
-            selected_items = selected_pos + selected_neg
-            left_label, right_label, _legend_items = build_cluster_label_files(
-                selected_items=selected_items,
-                cluster_dir=cluster_dir,
-                vertex_arrays=vertex_arrays,
-                network_colors=network_colors,
-            )
-
-            title = (
-                f"cluster C{cluster_id:02d} | {combo.atlas} | {combo.method} | "
-                f"{combo.smoothing} | hemi-{combo.hemi}"
-            )
-            figure_png = render_cluster_figure(
-                cluster_dir=cluster_dir,
-                title=title,
-                left_label=left_label,
-                right_label=right_label,
-                selected_items=selected_items,
-                network_colors=network_colors,
-                n_selected_positive=int(len(selected_pos)),
-                n_selected_negative=int(len(selected_neg)),
-                cortex_assets=cortex_assets,
-            )
-
-            rows_dict = roi_stats_to_rows(stats_rows)
-            stats_tsv = cluster_dir / "cluster_roi_stats.tsv"
-            stats_json = cluster_dir / "cluster_roi_stats.json"
-            write_tsv(
-                stats_tsv,
-                rows_dict,
-                [
-                    "roi_id",
-                    "roi_name",
-                    "hemi",
-                    "family17",
-                    "canonical8",
-                    "mean_z",
-                    "t_stat",
-                    "p_positive",
-                    "p_negative",
-                    "q_positive",
-                    "q_negative",
-                    "n_subjects",
-                    "is_sig_positive",
-                    "is_sig_negative",
-                    "is_selected",
-                    "selected_sign",
-                ],
-            )
-            write_json(
-                stats_json,
-                {
-                    "cluster_id": cluster_id,
-                    "selected_positive": selected_pos,
-                    "selected_negative": selected_neg,
-                    "n_selected_total": int(len(selected_items)),
-                    "rows": rows_dict,
-                    },
-                )
-
-            cluster_previews.append(
-                {
-                    "atlas": combo.atlas,
-                    "method": combo.method,
-                    "smoothing": combo.smoothing,
-                    "hemi": combo.hemi,
-                    "cluster_id": int(cluster_id),
-                    "runtime_png": str(figure_png),
-                    "n_selected_positive": int(len(selected_pos)),
-                    "n_selected_negative": int(len(selected_neg)),
-                    "n_subjects_used": int(len(used_subjects)),
-                }
-            )
-
-            cluster_items.append(
-                {
-                    "cluster_id": cluster_id,
-                    "figure_png": str(figure_png),
-                    "stats_tsv": str(stats_tsv),
-                    "stats_json": str(stats_json),
-                    "n_selected_positive": int(len(selected_pos)),
-                    "n_selected_negative": int(len(selected_neg)),
-                }
-            )
-
-        group_key = (combo.atlas, combo.method, combo.smoothing)
+        item, cluster_previews, group_key = rendered
+        items.append(item)
         grouped_previews.setdefault(group_key, []).extend(cluster_previews)
-
-        combo_manifest = {
-            "atlas": combo.atlas,
-            "method": combo.method,
-            "smoothing": combo.smoothing,
-            "hemi": combo.hemi,
-            "coverage_threshold": float(args.coverage_threshold),
-            "fdr_q": float(args.fdr_q),
-            "selection_policy": "sig_only_topN_per_sign",
-            "max_rois_per_sign": int(args.max_rois_per_sign),
-            "n_subjects_used": int(len(used_subjects)),
-            "subjects_used": [f"sub-{s}" for s in used_subjects],
-            "cluster_count": int(k_final),
-            "clusters": cluster_items,
-        }
-        combo_manifest_path = combo_runtime_out / "cluster_roi_cortex_combo_manifest.json"
-        write_json(combo_manifest_path, combo_manifest)
-        combo_view_manifest_path = viewer_combo_manifest_dir / f"{combo_id}.json"
-        write_json(
-            combo_view_manifest_path,
-            {
-                "atlas": combo.atlas,
-                "method": combo.method,
-                "smoothing": combo.smoothing,
-                "hemi": combo.hemi,
-                "combo_id": combo_id,
-                "runtime_combo_manifest": str(combo_manifest_path),
-                "clusters": cluster_previews,
-            },
-        )
-
-        items.append(
-            {
-                "atlas": combo.atlas,
-                "method": combo.method,
-                "smoothing": combo.smoothing,
-                "hemi": combo.hemi,
-                "combo_manifest_runtime": str(combo_manifest_path),
-                "combo_manifest_viewer": str(combo_view_manifest_path),
-                "cluster_count": int(k_final),
-                "n_subjects_used": int(len(used_subjects)),
-            }
-        )
 
     grouped_overviews: list[dict[str, Any]] = []
     smoothing_rank = {"2mm": 0, "4mm": 1, "2mm+4mm": 2}

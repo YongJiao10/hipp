@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+"""
+Process Step Description:
+Materialize intrinsic functional connectivity. Computes the intrinsic functional connectivity matrix between vertices within the hippocampus itself.
+"""
 import argparse
 import json
 from concurrent.futures import ProcessPoolExecutor, as_completed

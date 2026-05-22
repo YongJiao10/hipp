@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Validate per-subject HippUnfold outputs against the Snakemake rule all targets."""
+"""
+Process Step Description:
+Check HippUnfold outputs. Used to verify that the output files generated in the previous step are complete and meet the expected quality and format requirements.
+"""
 
 from __future__ import annotations
 

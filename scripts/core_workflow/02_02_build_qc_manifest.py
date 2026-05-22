@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+"""
+Process Step Description:
+Build quality control (QC) manifest. Generates a manifest file containing information on all passed/failed subjects so that subsequent steps only include QC-passed data.
+"""
 import argparse
 import csv
 import json

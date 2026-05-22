@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+"""
+Process Step Description:
+Build group matrix summary. Integrates method results from different branches to construct the final group-level comparison and matrix summary file.
+"""
 import argparse
 import json
 import subprocess

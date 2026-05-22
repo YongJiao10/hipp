@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+"""
+Process Step Description:
+Render group-level gradient heatmaps. Generates heatmap visualizations of functional gradients based on group-level data to intuitively display gradient patterns.
+"""
 import argparse
 import json
 import math

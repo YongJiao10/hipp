@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+"""
+Process Step Description:
+Run group-level atlas clustering and network mapping. Performs clustering analysis on group-averaged functional connectivity or gradients to generate hippocampal functional parcellation atlases and maps them to known cortical networks.
+"""
 import argparse
 import csv
 import hashlib
@@ -14,7 +18,7 @@ from pathlib import Path
 
 import nibabel as nib
 import numpy as np
-from nibabel.gifti import GiftiDataArray, GiftiImage, GiftiLabel, GiftiLabelTable
+from nibabel.gifti import GiftiImage
 from scipy import sparse
 from scipy import stats
 from scipy.optimize import linear_sum_assignment
@@ -41,6 +45,9 @@ from lib.output_layout import (
     DEFAULT_KONG2022_SURFACE_ROOT,
     DEFAULT_KONG2022_TEMPLATE_ROOT,
 )
+from lib.fc_math import corrcoef_rows, fisher_z_transform_fc
+from lib.gifti_labels import make_cluster_label_gifti, make_named_label_gifti
+from lib.io_utils import load_subject_ids, write_tsv
 from lib.workflow_utils import write_json
 
 
@@ -105,13 +112,37 @@ class SubjectFCMode:
     binarize: bool
 
 
-def write_tsv(path: Path, rows: list[dict[str, object]], fieldnames: list[str]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=fieldnames, delimiter="\t", extrasaction="ignore")
-        w.writeheader()
-        for row in rows:
-            w.writerow(row)
+@dataclass(frozen=True)
+class GroupAtlasConfig:
+    args: argparse.Namespace
+    shared_root: Path
+    surface_root: Path
+    out_root: Path
+    gradient_root: Path
+    route_tag: str
+    hippunfold_batch_root: Path
+    subjects_manifest_path: Path
+    subjects: list[str]
+    subject_fc_mode: SubjectFCMode
+    gradient_components: tuple[int, ...]
+    coverage_thresholds: list[float]
+    k_values: list[int]
+    split_seeds: list[int]
+    null_seeds: list[int]
+
+
+@dataclass(frozen=True)
+class PreparedComboInputs:
+    n_vertices: int
+    valid_masks: dict[str, np.ndarray]
+    coverage_count: np.ndarray
+    coverage_fraction: np.ndarray
+    feature_bank: dict[str, np.ndarray]
+    actual_input_paths: dict[str, str]
+    run_feature_banks: dict[str, object]
+    roi_fc_bank_for_redundancy: dict[str, np.ndarray] | None
+    subject_fc_preprocessing_for_resume: dict[str, object]
+    resume_input_category_hashes: dict[str, str]
 
 
 def canonical_json_sha256(payload: object) -> str:
@@ -152,18 +183,6 @@ def resume_manifest_matches(manifest_path: Path, expected_signature: str) -> tup
     if got != expected_signature:
         return False, "upstream_signature_changed"
     return True, "signature_match"
-
-
-def fisher_z_transform_fc(x: np.ndarray) -> np.ndarray:
-    """Unconditional Fisher-z transform for FC caches (raw r in [-1, 1] on disk).
-
-    NaN is preserved for invalid vertices so downstream `np.nanmean` can skip them.
-    """
-    arr = np.asarray(x, dtype=np.float32)
-    clipped = np.clip(arr, -0.999999, 0.999999)
-    out = np.arctanh(clipped).astype(np.float32)
-    out[~np.isfinite(arr)] = np.nan
-    return out
 
 
 def zscore_cols(x: np.ndarray) -> np.ndarray:
@@ -277,18 +296,6 @@ def spectral_cluster_from_affinity(aff: np.ndarray, k: int, seed: int) -> np.nda
     )
     labels0 = model.fit_predict(aff)
     return reorder_labels_by_size(labels0)
-
-
-def load_subjects(path: Path) -> list[str]:
-    out: list[str] = []
-    for line in path.read_text(encoding="utf-8").splitlines():
-        s = line.strip()
-        if not s:
-            continue
-        out.append(s.replace("sub-", ""))
-    if not out:
-        raise RuntimeError(f"No subjects in manifest: {path}")
-    return out
 
 
 def parse_network_names(tsv: Path) -> list[str]:
@@ -1037,42 +1044,6 @@ def load_canonical_network_color_map() -> dict[str, tuple[int, int, int, int]]:
     return out
 
 
-def make_cluster_label_gifti(labels: np.ndarray, k: int, colors: list[tuple[int, int, int, int]]) -> GiftiImage:
-    tab = GiftiLabelTable()
-    null = GiftiLabel(key=0, red=0.62, green=0.62, blue=0.62, alpha=1.0)
-    null.label = "Null"
-    tab.labels.append(null)
-    for idx in range(1, int(k) + 1):
-        rgba = colors[idx % len(colors)]
-        g = GiftiLabel(
-            key=int(idx),
-            red=float(rgba[0]) / 255.0,
-            green=float(rgba[1]) / 255.0,
-            blue=float(rgba[2]) / 255.0,
-            alpha=float(rgba[3]) / 255.0,
-        )
-        g.label = f"Cluster{idx}"
-        tab.labels.append(g)
-    da = GiftiDataArray(data=labels.astype(np.int32), intent="NIFTI_INTENT_LABEL", datatype="NIFTI_TYPE_INT32")
-    return GiftiImage(darrays=[da], labeltable=tab)
-
-
-def make_named_label_gifti(labels: np.ndarray, label_table_items: list[tuple[int, str, tuple[int, int, int, int]]]) -> GiftiImage:
-    tab = GiftiLabelTable()
-    for key, name, rgba in label_table_items:
-        g = GiftiLabel(
-            key=int(key),
-            red=float(rgba[0]) / 255.0,
-            green=float(rgba[1]) / 255.0,
-            blue=float(rgba[2]) / 255.0,
-            alpha=float(rgba[3]) / 255.0,
-        )
-        g.label = str(name)
-        tab.labels.append(g)
-    da = GiftiDataArray(data=labels.astype(np.int32), intent="NIFTI_INTENT_LABEL", datatype="NIFTI_TYPE_INT32")
-    return GiftiImage(darrays=[da], labeltable=tab)
-
-
 def infer_surface_path(subject: str, hemi: str, batch_root: Path | None = None) -> Path:
     root = Path(batch_root).resolve() if batch_root is not None else DEFAULT_HIPPUNFOLD_BATCH_ROOT.resolve()
     p = (
@@ -1801,23 +1772,6 @@ def verify_subject_topology_against_template(
             "topology_consistent_subjects": int(len(subjects)),
         }
     return out
-
-
-def corrcoef_rows(a: np.ndarray, b: np.ndarray) -> np.ndarray:
-    x = np.asarray(a, dtype=np.float32)
-    y = np.asarray(b, dtype=np.float32)
-    x_mu = np.nanmean(x, axis=1, keepdims=True)
-    y_mu = np.nanmean(y, axis=1, keepdims=True)
-    x_sd = np.nanstd(x, axis=1, keepdims=True, ddof=1)
-    y_sd = np.nanstd(y, axis=1, keepdims=True, ddof=1)
-    x_z = (x - x_mu) / np.clip(x_sd, 1e-12, None)
-    y_z = (y - y_mu) / np.clip(y_sd, 1e-12, None)
-    x_z[~np.isfinite(x_z)] = 0.0
-    y_z[~np.isfinite(y_z)] = 0.0
-    corr = (x_z @ y_z.T) / float(max(1, x.shape[1] - 1))
-    corr = np.clip(corr, -0.999999, 0.999999)
-    corr[~np.isfinite(corr)] = 0.0
-    return corr.astype(np.float32)
 
 
 def one_sided_network_partial_corr_rows(rows: np.ndarray, network_ts: np.ndarray) -> np.ndarray:
@@ -2659,6 +2613,158 @@ def functional_atlas_from_vertices(
     return out, meta, label_items
 
 
+
+def prepare_combo_inputs(
+    *,
+    method: str,
+    atlas: str,
+    smoothing: str,
+    hemi: str,
+    shared_root: Path,
+    surface_root: Path,
+    surfaces: dict[str, Path],
+    subjects: list[str],
+    subject_fc_mode: SubjectFCMode,
+    k_selection_mode: str,
+) -> PreparedComboInputs:
+    valid_masks = {s: subject_valid_mask(surface_root, shared_root, s, smoothing, hemi) for s in subjects}
+    n_vertices = int(next(iter(valid_masks.values())).size)
+    coverage_count = np.sum(np.stack([valid_masks[s] for s in subjects], axis=0), axis=0).astype(np.int32)
+    coverage_fraction = np.mean(np.stack([valid_masks[s] for s in subjects], axis=0), axis=0).astype(np.float32)
+
+    feature_bank: dict[str, np.ndarray] = {}
+    actual_input_paths: dict[str, str] = {}
+    for s in subjects:
+        if method_uses_network_fc_input(method):
+            p = shared_root / f"sub-{s}" / "fc" / atlas / smoothing / f"hemi_{hemi}" / network_feature_filename(method)
+            actual_input_paths[s] = str(p)
+            raw_feature = subject_network_feature(shared_root, s, atlas, smoothing, hemi, method)
+            pre_feature = preprocess_subject_fc_matrix(
+                method=method,
+                fc=raw_feature,
+                subject_fc_mode=subject_fc_mode,
+            )
+            feature_bank[s] = roi_similarity_from_network_fc(pre_feature) if is_roi_similarity_method(method) else pre_feature
+        else:
+            p = resolve_intrinsic_feature_path(shared_root, s, smoothing, hemi)
+            actual_input_paths[s] = str(p)
+            raw_feature = subject_intrinsic_feature(shared_root, s, atlas, smoothing, hemi, valid_masks[s])
+            feature_bank[s] = preprocess_subject_fc_matrix(
+                method=method,
+                fc=raw_feature,
+                subject_fc_mode=subject_fc_mode,
+            )
+
+    run_feature_banks = (
+        runwise_feature_bank(
+            method=method,
+            shared_root=shared_root,
+            subjects=subjects,
+            atlas=atlas,
+            smoothing=smoothing,
+            hemi=hemi,
+            valid_masks=valid_masks,
+            subject_fc_mode=subject_fc_mode,
+        )
+        if not is_clusterless_method(method)
+        else {}
+    )
+    roi_fc_bank_for_redundancy: dict[str, np.ndarray] | None = None
+    if k_selection_mode == "redundancy-aware" and not is_clusterless_method(method):
+        roi_fc_bank_for_redundancy = {}
+        for s in subjects:
+            if atlas == "kong2022" and method == "network-spectral":
+                roi_fc_bank_for_redundancy[s] = feature_bank[s]
+            else:
+                roi_raw = subject_network_feature(
+                    shared_root,
+                    s,
+                    "kong2022",
+                    smoothing,
+                    hemi,
+                    "network-spectral",
+                )
+                if method_uses_subject_fc_preprocessing(method):
+                    roi_fc_bank_for_redundancy[s] = preprocess_subject_fc_matrix(
+                        method="network-spectral",
+                        fc=roi_raw,
+                        subject_fc_mode=subject_fc_mode,
+                    )
+                else:
+                    roi_fc_bank_for_redundancy[s] = roi_raw
+
+    subject_fc_preprocessing_for_resume = subject_fc_preprocessing_manifest_block(method, subject_fc_mode)
+    valid_mask_paths = [
+        surface_root / f"sub-{s}" / "surface" / "tsnr_gate" / f"sub-{s}_hemi-{hemi}_valid_mask.npy"
+        for s in subjects
+    ]
+    runwise_feature_paths: list[Path] = []
+    if not is_clusterless_method(method):
+        for rid in [1, 2, 3, 4]:
+            for s in subjects:
+                if method_uses_network_fc_input(method):
+                    p = (
+                        shared_root
+                        / f"sub-{s}"
+                        / "fc"
+                        / atlas
+                        / smoothing
+                        / f"hemi_{hemi}"
+                        / "runs"
+                        / f"run-{rid}"
+                        / runwise_network_feature_filename(method)
+                    )
+                else:
+                    p = resolve_intrinsic_feature_path(shared_root, s, smoothing, hemi, rid)
+                runwise_feature_paths.append(p)
+    reference_network_order_paths = [
+        shared_root / f"sub-{s}" / "reference" / atlas / "cortex_canonical_networks.tsv"
+        for s in subjects
+    ]
+    reference_network_ts_paths = [
+        shared_root / f"sub-{s}" / "reference" / atlas / "cortex_canonical_network_timeseries.npy"
+        for s in subjects
+    ]
+    surface_timeseries_paths = [
+        surface_root / f"sub-{s}" / "surface" / smoothing / f"sub-{s}_hemi-{hemi}_timeseries.npy"
+        for s in subjects
+    ]
+    kong2022_roi_reference_paths: list[Path] = []
+    if atlas == "kong2022":
+        for s in subjects:
+            kong2022_roi_reference_paths.extend(
+                [
+                    shared_root / f"sub-{s}" / "reference" / "kong2022" / "cortex_roi_parcel_timeseries.npy",
+                    shared_root / f"sub-{s}" / "reference" / "kong2022" / "cortex_roi_parcels.tsv",
+                ]
+            )
+    resume_file_state_payload = {
+        "primary_feature_inputs": file_state_list([Path(p) for p in actual_input_paths.values()]),
+        "valid_masks": file_state_list(valid_mask_paths),
+        "runwise_feature_inputs": file_state_list(runwise_feature_paths),
+        "reference_network_order_tsv": file_state_list(reference_network_order_paths),
+        "reference_network_timeseries": file_state_list(reference_network_ts_paths),
+        "surface_timeseries": file_state_list(surface_timeseries_paths),
+        "kong2022_roi_reference_inputs": file_state_list(kong2022_roi_reference_paths),
+        "template_surface": file_state_list([surfaces[hemi]]),
+    }
+    resume_input_category_hashes = {
+        k: canonical_json_sha256(v) for k, v in resume_file_state_payload.items()
+    }
+    return PreparedComboInputs(
+        n_vertices=n_vertices,
+        valid_masks=valid_masks,
+        coverage_count=coverage_count,
+        coverage_fraction=coverage_fraction,
+        feature_bank=feature_bank,
+        actual_input_paths=actual_input_paths,
+        run_feature_banks=run_feature_banks,
+        roi_fc_bank_for_redundancy=roi_fc_bank_for_redundancy,
+        subject_fc_preprocessing_for_resume=subject_fc_preprocessing_for_resume,
+        resume_input_category_hashes=resume_input_category_hashes,
+    )
+
+
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run merged canonical group hippocampal atlas (v3 plan).")
     parser.add_argument("--shared-root", default=str(DEFAULT_SHARED_ROOT))
@@ -2770,7 +2876,7 @@ def main() -> int:
     out_root.mkdir(parents=True, exist_ok=True)
 
     subjects_manifest_path = Path(args.subjects_manifest).resolve()
-    subjects = load_subjects(subjects_manifest_path)
+    subjects = load_subject_ids(subjects_manifest_path)
     subject_fc_mode = resolve_subject_fc_mode(args.subject_fc_mode, args.subject_fc_top_percent)
     gradient_components = parse_gradient_components(args.gradient_components)
     coverage_thresholds = [float(x) for x in args.coverage_thresholds]
@@ -2785,6 +2891,23 @@ def main() -> int:
     rng = np.random.RandomState(int(args.seed))
     split_seeds = [int(x) for x in rng.randint(1, 2_000_000_000, size=int(args.instability_resamples))]
     null_seeds = [int(x) for x in rng.randint(1, 2_000_000_000, size=int(args.null_resamples))]
+    config = GroupAtlasConfig(
+        args=args,
+        shared_root=shared_root,
+        surface_root=surface_root,
+        out_root=out_root,
+        gradient_root=gradient_root,
+        route_tag=route_tag,
+        hippunfold_batch_root=hippunfold_batch_root,
+        subjects_manifest_path=subjects_manifest_path,
+        subjects=subjects,
+        subject_fc_mode=subject_fc_mode,
+        gradient_components=gradient_components,
+        coverage_thresholds=coverage_thresholds,
+        k_values=k_values,
+        split_seeds=split_seeds,
+        null_seeds=null_seeds,
+    )
 
     group_avg_dir = Path(args.group_average_surfaces_dir).resolve()
     surfaces = {
@@ -2821,7 +2944,7 @@ def main() -> int:
     }
     surface_meta: dict[str, dict[str, object]] = {}
     adjacency_by_hemi: dict[str, sparse.csr_matrix] = {}
-    for hemi in args.hemis:
+    for hemi in config.args.hemis:
         coords, faces = load_surface(surfaces[hemi])
         adjacency_by_hemi[hemi] = build_surface_adjacency(faces, int(coords.shape[0]))
         surface_meta[hemi] = {
@@ -2831,8 +2954,8 @@ def main() -> int:
         }
 
     if "intrinsic-spectral" in args.methods:
-        for smoothing in args.smoothings:
-            for hemi in args.hemis:
+        for smoothing in config.args.smoothings:
+            for hemi in config.args.hemis:
                 print(f"[check] intrinsic atlas-invariance smoothing={smoothing} hemi={hemi}", flush=True)
                 verify_intrinsic_atlas_invariance(shared_root, subjects, smoothing, hemi, list(args.atlases))
 
@@ -2840,12 +2963,12 @@ def main() -> int:
     canonical_color_map = load_canonical_network_color_map()
     canonical_network_order_by_atlas: dict[str, list[str]] = {}
 
-    for atlas in args.atlases:
+    for atlas in config.args.atlases:
         print(f"[check] canonical-network ordering atlas={atlas}", flush=True)
         canonical_network_order_by_atlas[atlas] = verify_canonical_network_order_consistency(shared_root, subjects, atlas)
 
-    for method in args.methods:
-        for atlas in args.atlases:
+    for method in config.args.methods:
+        for atlas in config.args.atlases:
             if method in KONG2022_ONLY_METHODS and atlas != "kong2022":
                 print(
                     f"[warn] skipping unsupported combo atlas={atlas} method={method} "
@@ -2854,141 +2977,32 @@ def main() -> int:
                 )
                 continue
             network_names = canonical_network_order_by_atlas[atlas]
-            for smoothing in args.smoothings:
-                for hemi in args.hemis:
-                    n_vertices = int(surface_meta[hemi]["n_vertices"])
-                    valid_masks = {s: subject_valid_mask(surface_root, shared_root, s, smoothing, hemi) for s in subjects}
-                    coverage_count = np.sum(np.stack([valid_masks[s] for s in subjects], axis=0), axis=0).astype(np.int32)
-                    coverage_fraction = np.mean(np.stack([valid_masks[s] for s in subjects], axis=0), axis=0).astype(np.float32)
-
-                    feature_bank: dict[str, np.ndarray] = {}
-                    actual_input_paths: dict[str, str] = {}
-                    for s in subjects:
-                        if method_uses_network_fc_input(method):
-                            p = shared_root / f"sub-{s}" / "fc" / atlas / smoothing / f"hemi_{hemi}" / network_feature_filename(method)
-                            actual_input_paths[s] = str(p)
-                            raw_feature = subject_network_feature(shared_root, s, atlas, smoothing, hemi, method)
-                            pre_feature = preprocess_subject_fc_matrix(
-                                method=method,
-                                fc=raw_feature,
-                                subject_fc_mode=subject_fc_mode,
-                            )
-                            feature_bank[s] = (
-                                roi_similarity_from_network_fc(pre_feature)
-                                if is_roi_similarity_method(method)
-                                else pre_feature
-                            )
-                        else:
-                            p = resolve_intrinsic_feature_path(shared_root, s, smoothing, hemi)
-                            actual_input_paths[s] = str(p)
-                            raw_feature = subject_intrinsic_feature(shared_root, s, atlas, smoothing, hemi, valid_masks[s])
-                            feature_bank[s] = preprocess_subject_fc_matrix(
-                                method=method,
-                                fc=raw_feature,
-                                subject_fc_mode=subject_fc_mode,
-                            )
-
-                    run_feature_banks = (
-                        runwise_feature_bank(
-                            method=method,
-                            shared_root=shared_root,
-                            subjects=subjects,
-                            atlas=atlas,
-                            smoothing=smoothing,
-                            hemi=hemi,
-                            valid_masks=valid_masks,
-                            subject_fc_mode=subject_fc_mode,
-                        )
-                        if not is_clusterless_method(method)
-                        else {}
+            for smoothing in config.args.smoothings:
+                for hemi in config.args.hemis:
+                    prepared = prepare_combo_inputs(
+                        method=method,
+                        atlas=atlas,
+                        smoothing=smoothing,
+                        hemi=hemi,
+                        shared_root=shared_root,
+                        surface_root=surface_root,
+                        surfaces=surfaces,
+                        subjects=subjects,
+                        subject_fc_mode=subject_fc_mode,
+                        k_selection_mode=str(args.k_selection_mode),
                     )
-                    roi_fc_bank_for_redundancy: dict[str, np.ndarray] | None = None
-                    if args.k_selection_mode == "redundancy-aware" and not is_clusterless_method(method):
-                        roi_fc_bank_for_redundancy = {}
-                        for s in subjects:
-                            if atlas == "kong2022" and method == "network-spectral":
-                                roi_fc_bank_for_redundancy[s] = feature_bank[s]
-                            else:
-                                roi_raw = subject_network_feature(
-                                    shared_root,
-                                    s,
-                                    "kong2022",
-                                    smoothing,
-                                    hemi,
-                                    "network-spectral",
-                                )
-                                if method_uses_subject_fc_preprocessing(method):
-                                    roi_fc_bank_for_redundancy[s] = preprocess_subject_fc_matrix(
-                                        method="network-spectral",
-                                        fc=roi_raw,
-                                        subject_fc_mode=subject_fc_mode,
-                                    )
-                                else:
-                                    roi_fc_bank_for_redundancy[s] = roi_raw
+                    n_vertices = int(prepared.n_vertices)
+                    valid_masks = prepared.valid_masks
+                    coverage_count = prepared.coverage_count
+                    coverage_fraction = prepared.coverage_fraction
+                    feature_bank = prepared.feature_bank
+                    actual_input_paths = prepared.actual_input_paths
+                    run_feature_banks = prepared.run_feature_banks
+                    roi_fc_bank_for_redundancy = prepared.roi_fc_bank_for_redundancy
+                    subject_fc_preprocessing_for_resume = prepared.subject_fc_preprocessing_for_resume
+                    resume_input_category_hashes = prepared.resume_input_category_hashes
 
-                    subject_fc_preprocessing_for_resume = subject_fc_preprocessing_manifest_block(
-                        method,
-                        subject_fc_mode,
-                    )
-                    valid_mask_paths = [
-                        surface_root / f"sub-{s}" / "surface" / "tsnr_gate" / f"sub-{s}_hemi-{hemi}_valid_mask.npy"
-                        for s in subjects
-                    ]
-                    runwise_feature_paths: list[Path] = []
-                    if not is_clusterless_method(method):
-                        for rid in [1, 2, 3, 4]:
-                            for s in subjects:
-                                if method_uses_network_fc_input(method):
-                                    p = (
-                                        shared_root
-                                        / f"sub-{s}"
-                                        / "fc"
-                                        / atlas
-                                        / smoothing
-                                        / f"hemi_{hemi}"
-                                        / "runs"
-                                        / f"run-{rid}"
-                                        / runwise_network_feature_filename(method)
-                                    )
-                                else:
-                                    p = resolve_intrinsic_feature_path(shared_root, s, smoothing, hemi, rid)
-                                runwise_feature_paths.append(p)
-                    reference_network_order_paths = [
-                        shared_root / f"sub-{s}" / "reference" / atlas / "cortex_canonical_networks.tsv"
-                        for s in subjects
-                    ]
-                    reference_network_ts_paths = [
-                        shared_root / f"sub-{s}" / "reference" / atlas / "cortex_canonical_network_timeseries.npy"
-                        for s in subjects
-                    ]
-                    surface_timeseries_paths = [
-                        surface_root / f"sub-{s}" / "surface" / smoothing / f"sub-{s}_hemi-{hemi}_timeseries.npy"
-                        for s in subjects
-                    ]
-                    kong2022_roi_reference_paths: list[Path] = []
-                    if atlas == "kong2022":
-                        for s in subjects:
-                            kong2022_roi_reference_paths.extend(
-                                [
-                                    shared_root / f"sub-{s}" / "reference" / "kong2022" / "cortex_roi_parcel_timeseries.npy",
-                                    shared_root / f"sub-{s}" / "reference" / "kong2022" / "cortex_roi_parcels.tsv",
-                                ]
-                            )
-                    resume_file_state_payload = {
-                        "primary_feature_inputs": file_state_list([Path(p) for p in actual_input_paths.values()]),
-                        "valid_masks": file_state_list(valid_mask_paths),
-                        "runwise_feature_inputs": file_state_list(runwise_feature_paths),
-                        "reference_network_order_tsv": file_state_list(reference_network_order_paths),
-                        "reference_network_timeseries": file_state_list(reference_network_ts_paths),
-                        "surface_timeseries": file_state_list(surface_timeseries_paths),
-                        "kong2022_roi_reference_inputs": file_state_list(kong2022_roi_reference_paths),
-                        "template_surface": file_state_list([surfaces[hemi]]),
-                    }
-                    resume_input_category_hashes = {
-                        k: canonical_json_sha256(v) for k, v in resume_file_state_payload.items()
-                    }
-
-                    for tau in coverage_thresholds:
+                    for tau in config.coverage_thresholds:
                         combo = Combo(method=method, atlas=atlas, smoothing=smoothing, hemi=hemi, coverage_threshold=float(tau))
                         print(
                             f"[combo] method={method} atlas={atlas} smoothing={smoothing} hemi={hemi} tau={tau:.2f}",

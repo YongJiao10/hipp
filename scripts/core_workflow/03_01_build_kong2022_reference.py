@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+"""
+Process Step Description:
+Build Kong2022 reference data. Generates Kong2022 parcellation reference files for cortical network mapping, providing a standard template for establishing hippocampal-cortical connectivity.
+"""
 import argparse
 import hashlib
 import os

@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+"""
+Process Step Description:
+Build Kong2022 RouteA reference data. RouteA-specific step to generate reference template data for Kong2022 cortical networks.
+"""
 import argparse
 import json
 import subprocess

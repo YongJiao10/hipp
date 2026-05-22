@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+"""
+Process Step Description:
+Render HippoMaps gradient products. Renders computed continuous functional gradient data into standard visualization products (including unfolded/folded surface renderings).
+"""
 import argparse
 import json
 import os

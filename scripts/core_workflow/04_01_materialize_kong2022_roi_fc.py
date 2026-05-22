@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+"""
+Process Step Description:
+Materialize Kong2022 ROI-level functional connectivity (FC). Computes the functional connectivity matrix between hippocampal surface vertices and Kong2022 cortical network regions of interest (ROIs).
+"""
 import argparse
 import csv
 import json

@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+"""
+Process Step Description:
+Materialize Kong2019 functional connectivity (FC). Computes functional connectivity data between the hippocampus and Kong2019 cortical networks.
+"""
 import argparse
 import csv
 import json

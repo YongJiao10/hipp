@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+"""
+Process Step Description:
+Compute HippoMaps gradients. Calculates continuous functional gradients of the hippocampus based on functional connectivity data to reflect macroscale functional transition patterns.
+"""
 import argparse
 import json
 from pathlib import Path

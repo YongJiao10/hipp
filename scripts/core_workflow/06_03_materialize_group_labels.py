@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+"""
+Process Step Description:
+Materialize group-level labels. Converts group-level clustering results into standard label files (e.g., GIFTI format) for visualization and downstream analysis.
+"""
 import argparse
 import json
 from pathlib import Path

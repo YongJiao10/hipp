@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+"""
+Process Step Description:
+Prepare group inputs. Preprocess and organize individual-level data to meet the requirements for downstream group-level analysis.
+"""
 import argparse
 import json
 import os

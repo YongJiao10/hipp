@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+"""
+Process Step Description:
+Fast rerun for spectral clustering. Provides an efficient way to re-execute the spectral clustering algorithm (e.g., when adjusting parameter K) without recomputing the full distance matrix.
+"""
 import argparse
 import json
 import os

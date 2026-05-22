@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+"""
+Process Step Description:
+Build group-level results overview. Summarizes clustering and functional network mapping results to generate comprehensive overview charts or files for visualization.
+"""
 import argparse
 import csv
 import json

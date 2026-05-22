@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+"""
+Process Step Description:
+Build winner-takes-all (WTA) long-axis network profiles. Computes and summarizes the WTA distribution proportion of each functional network along the hippocampal long axis (anterior to posterior).
+"""
 import argparse
 import csv
 import json
