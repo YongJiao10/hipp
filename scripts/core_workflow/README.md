@@ -124,4 +124,13 @@ The step inventory and branch coverage matrix are defined in:
 - `scripts/core_workflow/step_registry.json`
 - `scripts/core_workflow/lib/`
 
+Implementation structure contract:
+
+- Numbered step scripts (`NN_MM_*.py`) should focus on flow orchestration and stage-specific domain logic.
+- Shared I/O helpers belong in `scripts/core_workflow/lib/io_utils.py`.
+- Shared FC numeric helpers belong in `scripts/core_workflow/lib/fc_math.py`.
+- Shared GIFTI label builders belong in `scripts/core_workflow/lib/gifti_labels.py`.
+- Runtime metadata helpers (timestamps, JSON writer, git/file metadata) remain in `scripts/core_workflow/lib/workflow_utils.py`.
+- New utility-style helpers should be added to `lib/` modules rather than redefined in numbered step files.
+
 The overview export also generates WTA-top long-axis network-profile products (`kong2022_wta-top_long_axis_network_profile_routea_*`) under `outputs_core/present/overviews/`; these summarize the percent of long-axis bin vertices assigned to each canonical network.
