@@ -56,6 +56,16 @@ from nibabel.gifti import GiftiDataArray, GiftiImage
 from lib.output_layout import DEFAULT_GRADIENTS_DIR, DEFAULT_ROUTEA_GROUP_ATLAS_ROOT
 from lib.workflow_utils import write_json
 from lib.workbench import run_workbench
+from lib.io_utils import load_json
+from lib.surface_utils import read_surface_vertex_count
+from lib.workbench_grid import load_font, trim_black
+from lib.workbench_scene_batch import (
+    detect_template_subject,
+    replace_exact_ref,
+    replace_subject_text,
+    validate_scene_paths,
+    absolutize_scene_paths,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -143,10 +153,6 @@ def resolve_workbench_palette_name(requested_palette: str) -> str:
     return req
 
 
-def load_json(path: Path) -> dict[str, Any]:
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
 def validate_manifest_path(manifest_path: Path, group_root: Path) -> None:
     manifest_resolved = manifest_path.resolve()
     group_root_resolved = group_root.resolve()
@@ -169,14 +175,6 @@ def component_index_from_name(name: str) -> int:
     if idx < 1:
         raise ValueError(f"Component index must be >=1: {name}")
     return idx - 1
-
-
-def read_surface_vertex_count(surface_path: Path) -> int:
-    img = nib.load(str(surface_path))
-    for da in img.darrays:
-        if da.intent == "NIFTI_INTENT_POINTSET":
-            return int(np.asarray(da.data).shape[0])
-    return int(np.asarray(img.darrays[0].data).shape[0])
 
 
 def reconstruct_full_components(active: np.ndarray, support_mask: np.ndarray, vertex_count: int) -> tuple[np.ndarray, int]:
@@ -322,54 +320,7 @@ def verify_workbench_palette_supported(palette_name: str, runtime_root: Path) ->
         ) from exc
 
 
-def detect_template_subject(root: ET.Element) -> str:
-    pat = re.compile(r"sub-(\d+)")
-    for elem in root.iter():
-        if elem.text:
-            m = pat.search(elem.text)
-            if m:
-                return m.group(1)
-    raise RuntimeError("Could not detect template subject in scene file")
 
-
-def replace_subject_text(root: ET.Element, template_subject: str, target_subject: str) -> None:
-    old = f"sub-{template_subject}"
-    new = f"sub-{target_subject}"
-    for elem in root.iter():
-        if elem.text and old in elem.text:
-            elem.text = elem.text.replace(old, new)
-
-
-def absolutize_scene_paths(root: ET.Element, scene_path: Path, dense_corobl_root: Path | None = None) -> None:
-    base = scene_path.parent
-    for obj in root.iter("Object"):
-        if obj.attrib.get("Type") != "pathName" or not obj.text:
-            continue
-        text = obj.text.strip()
-        if not text:
-            continue
-        candidate = Path(text)
-        resolved = (base / candidate).resolve() if not candidate.is_absolute() else candidate.resolve()
-        if dense_corobl_root is not None:
-            m = re.search(r"dense_corobl_batch(/.*)", str(resolved))
-            if m:
-                resolved = (dense_corobl_root / m.group(1).lstrip("/")).resolve()
-        obj.text = str(resolved)
-
-
-def replace_exact_ref(root: ET.Element, current_ref: str, target_ref: str) -> None:
-    current_name = Path(current_ref).name
-    target_name = Path(target_ref).name
-    for elem in root.iter():
-        name_attr = elem.attrib.get("Name")
-        if name_attr and current_name in name_attr:
-            elem.attrib["Name"] = name_attr.replace(current_name, target_name)
-        if not elem.text:
-            continue
-        if current_ref in elem.text:
-            elem.text = elem.text.replace(current_ref, target_ref)
-        if current_name in elem.text:
-            elem.text = elem.text.replace(current_name, target_name)
 
 
 def find_first_ref(root: ET.Element, pattern: str) -> str:
@@ -535,21 +486,6 @@ def _target_colorbar_candidates(
         out.append((selected, cbar))
     return out
 
-
-def validate_scene_paths(root: ET.Element) -> None:
-    missing: list[str] = []
-    for obj in root.iter("Object"):
-        if obj.attrib.get("Type") != "pathName" or not obj.text:
-            continue
-        p = Path(obj.text.strip())
-        if p.exists():
-            continue
-        if p.suffix in {".palette", ".scene", ".png", ".jpg", ".jpeg"}:
-            continue
-        missing.append(str(p))
-    if missing:
-        preview = "\n".join(missing[:10])
-        raise RuntimeError(f"Scene has missing path references after substitution:\n{preview}")
 
 
 def _capture_scene_root(
@@ -764,20 +700,6 @@ def render_panel(
     )
 
 
-def load_font(size: int) -> ImageFont.ImageFont:
-    for candidate in (
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-        "/System/Library/Fonts/Supplemental/Arial.ttf",
-        "/System/Library/Fonts/Supplemental/Helvetica.ttc",
-    ):
-        p = Path(candidate)
-        if p.exists():
-            try:
-                return ImageFont.truetype(str(p), size=size)
-            except Exception:
-                continue
-    return ImageFont.load_default()
-
 
 def crop_to_foreground(img: Image.Image, *, tolerance: int = 12, padding: int = 4) -> Image.Image:
     arr = np.asarray(img.convert("RGB"), dtype=np.int16)
@@ -802,9 +724,6 @@ def crop_to_foreground(img: Image.Image, *, tolerance: int = 12, padding: int = 
     b = min(img.height, int(ys.max()) + 1 + int(padding))
     return img.crop((l, t, r, b))
 
-
-def trim_black(img: Image.Image, threshold: int = 8) -> Image.Image:
-    return crop_to_foreground(img, tolerance=threshold)
 
 
 def _find_horizontal_colorbar_box(src: Image.Image) -> tuple[int, int, int, int] | None:

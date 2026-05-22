@@ -38,6 +38,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from lib.output_layout import DEFAULT_KONG2022_MANIFEST_ROOT, DEFAULT_KONG2022_ROUTEB_ROOT
+from lib.io_utils import load_subject_ids
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -48,17 +49,6 @@ DEFAULT_DATA_ROOT = REPO_ROOT / "data" / "hippunfold_input"
 DEFAULT_MANIFEST = DEFAULT_KONG2022_MANIFEST_ROOT / "hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt"
 MAX_CONCURRENCY = 10
 
-
-def load_subjects_from_manifest(path: Path) -> list[str]:
-    out: list[str] = []
-    for line in path.read_text(encoding="utf-8").splitlines():
-        s = line.strip()
-        if not s:
-            continue
-        out.append(s.replace("sub-", ""))
-    if not out:
-        raise RuntimeError(f"No subjects found in manifest: {path}")
-    return out
 
 
 def file_sha256(path: Path) -> str:
@@ -161,7 +151,7 @@ def main() -> int:
     subjects = (
         [str(s).replace("sub-", "") for s in args.subjects]
         if args.subjects
-        else load_subjects_from_manifest(Path(args.subjects_manifest).resolve())
+        else load_subject_ids(Path(args.subjects_manifest).resolve())
     )
     migration_moved = 0
     migration_deduped = 0

@@ -36,3 +36,24 @@ def compact_active_vertices(values: np.ndarray, support_mask: np.ndarray) -> np.
     if arr.ndim < 1 or int(arr.shape[0]) != int(mask.size):
         raise ValueError(f"Leading dimension mismatch: values={arr.shape}, support_mask={mask.shape}")
     return arr[mask]
+
+
+def bh_fdr(p_values: np.ndarray) -> np.ndarray:
+    p = np.asarray(p_values, dtype=np.float64)
+    q = np.full_like(p, np.nan, dtype=np.float64)
+    finite = np.isfinite(p)
+    m = int(np.sum(finite))
+    if m == 0:
+        return q
+    p_f = p[finite]
+    order = np.argsort(p_f)
+    sorted_p = p_f[order]
+    ranks = np.arange(1, m + 1, dtype=np.float64)
+    adjusted = sorted_p * float(m) / ranks
+    adjusted = np.minimum.accumulate(adjusted[::-1])[::-1]
+    adjusted = np.clip(adjusted, 0.0, 1.0)
+    q_f = np.empty_like(sorted_p)
+    q_f[order] = adjusted
+    q[finite] = q_f
+    return q
+

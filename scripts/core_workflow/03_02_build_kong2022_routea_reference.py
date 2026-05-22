@@ -38,6 +38,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from lib.output_layout import DEFAULT_CORTEX_ROUTEA_ROOT, DEFAULT_KONG2022_MANIFEST_ROOT, DEFAULT_KONG2022_ROUTEA_ROOT
+from lib.io_utils import load_subject_ids
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -60,16 +61,7 @@ def validate_routea_path(path: Path, arg_name: str) -> None:
         )
 
 
-def load_subjects_from_manifest(path: Path) -> list[str]:
-    out: list[str] = []
-    for line in path.read_text(encoding="utf-8").splitlines():
-        s = line.strip()
-        if not s:
-            continue
-        out.append(s.replace("sub-", ""))
-    if not out:
-        raise RuntimeError(f"No subjects found in manifest: {path}")
-    return out
+
 
 
 def subject_is_done(shared_root: Path, subject: str) -> bool:
@@ -143,7 +135,7 @@ def main() -> int:
     subjects = (
         [str(s).replace("sub-", "") for s in args.subjects]
         if args.subjects
-        else load_subjects_from_manifest(subjects_manifest)
+        else load_subject_ids(subjects_manifest)
     )
 
     if args.resume:

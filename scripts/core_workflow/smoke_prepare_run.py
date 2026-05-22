@@ -37,6 +37,7 @@ from typing import Any
 
 from lib.output_layout import DEFAULT_QC_ROOT, run_layout, timestamped_run_id
 from lib.workflow_utils import git_commit, utc_now_iso, write_json
+from lib.io_utils import normalize_subject_id, load_subject_ids
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -49,25 +50,18 @@ DEFAULT_HIPPUNFOLD_ASSET_STORE_ROOT = REPO_ROOT / "runtime" / "hippunfold_asset_
 DEFAULT_HIPPOMAPS_ROOT = REPO_ROOT / "external" / "hippomaps"
 
 
-def normalize_subject(subject: str) -> str:
-    out = str(subject).strip().replace("sub-", "")
-    if not out:
-        raise ValueError("Empty subject ID")
-    return out
-
-
 def load_subjects(path: Path, count: int, explicit: list[str] | None = None) -> tuple[list[str], str]:
     if explicit:
         subjects = []
         seen = set()
         for raw in explicit:
-            subject = normalize_subject(raw)
-            if subject not in seen:
+            subject = normalize_subject_id(raw)
+            if subject and subject not in seen:
                 subjects.append(subject)
                 seen.add(subject)
         return subjects[:count], "explicit"
     if path.exists():
-        subjects = [normalize_subject(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+        subjects = load_subject_ids(path)
         if len(subjects) < count:
             raise RuntimeError(f"Requested {count} subjects but only found {len(subjects)} in {path}")
         return subjects[:count], str(path.resolve())

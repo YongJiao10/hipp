@@ -41,6 +41,7 @@ from lib.output_layout import (
     DEFAULT_KONG2022_SURFACE_ROOT,
 )
 from lib.workflow_utils import file_meta, git_commit, utc_now_iso, write_json
+from lib.io_utils import write_tsv
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -86,24 +87,6 @@ def read_tsnr_fraction(shared_root: Path, subject: str, hemi: str) -> tuple[floa
         return None, path
     return float(bad / total), path
 
-
-def write_tsv(path: Path, rows: list[dict[str, object]]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fields = [
-        "subject",
-        "dice_L",
-        "dice_R",
-        "hipp_tsnr_invalid_fraction_L",
-        "hipp_tsnr_invalid_fraction_R",
-        "pass_dice",
-        "pass_tsnr",
-        "pass_all",
-        "exclude_reason",
-    ]
-    with path.open("w", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=fields, delimiter="\t")
-        writer.writeheader()
-        writer.writerows(rows)
 
 
 def main() -> int:
@@ -178,7 +161,18 @@ def main() -> int:
     manifest = manifest_dir / f"hcp_7t_hippocampus_fmri_qc_pass_t1only_{len(pass_subjects)}.txt"
     latest_manifest = manifest_dir / "hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt"
 
-    write_tsv(qc_tsv, rows)
+    fields = [
+        "subject",
+        "dice_L",
+        "dice_R",
+        "hipp_tsnr_invalid_fraction_L",
+        "hipp_tsnr_invalid_fraction_R",
+        "pass_dice",
+        "pass_tsnr",
+        "pass_all",
+        "exclude_reason",
+    ]
+    write_tsv(qc_tsv, rows, fields)
     manifest.write_text("\n".join(pass_subjects) + ("\n" if pass_subjects else ""), encoding="utf-8")
     latest_manifest.write_text(manifest.read_text(encoding="utf-8"), encoding="utf-8")
     payload = {

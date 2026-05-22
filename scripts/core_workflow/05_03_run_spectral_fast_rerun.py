@@ -55,6 +55,7 @@ from lib.output_layout import (
     DEFAULT_OVERVIEWS_DIR,
 )
 from lib.workflow_utils import capped_jobs, utc_timestamp_compact_z, write_json
+from lib.io_utils import load_subject_ids
 
 DEFAULT_BATCH_ROOT = DEFAULT_HIPPUNFOLD_BATCH_ROOT
 DEFAULT_ROUTE_ROOT = DEFAULT_KONG2022_ROOT
@@ -87,20 +88,10 @@ class Combo:
     hemi: str
 
 
-def load_subjects(path: Path) -> list[str]:
-    out: list[str] = []
-    for line in path.read_text(encoding="utf-8").splitlines():
-        s = line.strip()
-        if not s:
-            continue
-        out.append(s.replace("sub-", ""))
-    if not out:
-        raise RuntimeError(f"No subjects found in manifest: {path}")
-    return out
 
 
 def detect_route_source(shared_root: Path, manifest: Path) -> str:
-    subjects = load_subjects(manifest)
+    subjects = load_subject_ids(manifest)
     tags: set[str] = set()
     for sid in subjects:
         ref = shared_root / f"sub-{sid}" / "reference" / "kong2022" / "reference_summary.json"

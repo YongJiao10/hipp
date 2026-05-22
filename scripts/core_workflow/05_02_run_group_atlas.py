@@ -109,7 +109,7 @@ from lib.output_layout import (
     DEFAULT_KONG2022_SURFACE_ROOT,
     DEFAULT_KONG2022_TEMPLATE_ROOT,
 )
-from lib.fc_math import corrcoef_rows, fisher_z_transform_fc
+from lib.fc_math import corrcoef_rows, fisher_z_transform_fc, bh_fdr
 from lib.gifti_labels import make_cluster_label_gifti, make_named_label_gifti
 from lib.io_utils import load_subject_ids, write_tsv
 from lib.workflow_utils import write_json
@@ -800,24 +800,6 @@ def runwise_network_feature_filename(method: str) -> str:
     raise ValueError(f"Not a network feature method: {method}")
 
 
-def bh_fdr(p_values: np.ndarray) -> np.ndarray:
-    p = np.asarray(p_values, dtype=np.float64)
-    q = np.full_like(p, np.nan, dtype=np.float64)
-    finite = np.isfinite(p)
-    m = int(np.sum(finite))
-    if m == 0:
-        return q
-    p_f = p[finite]
-    order = np.argsort(p_f)
-    sorted_p = p_f[order]
-    ranks = np.arange(1, m + 1, dtype=np.float64)
-    adjusted = sorted_p * float(m) / ranks
-    adjusted = np.minimum.accumulate(adjusted[::-1])[::-1]
-    adjusted = np.clip(adjusted, 0.0, 1.0)
-    q_f = np.empty_like(sorted_p)
-    q_f[order] = adjusted
-    q[finite] = q_f
-    return q
 
 
 def one_sample_one_sided_vector(values: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:

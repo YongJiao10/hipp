@@ -34,6 +34,8 @@ from pathlib import Path
 
 from lib.output_layout import DEFAULT_KONG2022_MANIFEST_ROOT, DEFAULT_KONG2022_ROOT
 from lib.workflow_utils import capped_jobs, utc_now_iso, write_json
+from lib.io_utils import load_subject_ids
+from lib.fc_math import corrcoef_rows
 
 import numpy as np
 
@@ -48,22 +50,6 @@ SMOOTHINGS = ["2mm", "4mm"]
 HEMIS = ["L", "R"]
 RUN_IDS = [1, 2, 3, 4]
 
-
-def load_subjects(path: Path) -> list[str]:
-    return [line.strip().replace("sub-", "") for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
-
-
-def corrcoef_rows(a: np.ndarray) -> np.ndarray:
-    x = np.asarray(a, dtype=np.float32)
-    mu = np.nanmean(x, axis=1, keepdims=True)
-    sd = np.nanstd(x, axis=1, keepdims=True, ddof=1)
-    z = (x - mu) / np.clip(sd, 1e-12, None)
-    z[~np.isfinite(z)] = 0.0
-    corr = (z @ z.T) / float(max(1, x.shape[1] - 1))
-    corr = np.clip(corr, -0.999999, 0.999999)
-    corr[~np.isfinite(corr)] = 0.0
-    np.fill_diagonal(corr, 1.0)
-    return corr.astype(np.float32)
 
 
 def load_run_lengths(shared_root: Path, subject: str) -> list[int]:
@@ -93,7 +79,8 @@ def materialize_subject(
             ts = np.load(ts_path).astype(np.float32)
             valid = np.load(mask_path).astype(bool)
             active = ts[valid, :]
-            fc = corrcoef_rows(active)
+            fc = corrcoef_rows(active, active)
+            np.fill_diagonal(fc, 1.0)
             out_dir = subj / "fc" / "intrinsic" / smoothing / f"hemi_{hemi}"
             out_dir.mkdir(parents=True, exist_ok=True)
             np.save(out_dir / "hipp_vertex_to_vertex_fc_active.npy", fc)
@@ -104,7 +91,9 @@ def materialize_subject(
                     raise RuntimeError(f"Run slice mismatch sub-{subject} {smoothing} hemi-{hemi} run-{rid}")
                 run_dir = out_dir / "runs" / f"run-{rid}"
                 run_dir.mkdir(parents=True, exist_ok=True)
-                np.save(run_dir / "hipp_vertex_to_vertex_fc_active.npy", corrcoef_rows(run_ts))
+                run_fc = corrcoef_rows(run_ts, run_ts)
+                np.fill_diagonal(run_fc, 1.0)
+                np.save(run_dir / "hipp_vertex_to_vertex_fc_active.npy", run_fc)
                 offset += run_len
             if offset != ts.shape[1]:
                 raise RuntimeError(f"Run lengths do not sum to timeseries length for sub-{subject} {smoothing} hemi-{hemi}")
@@ -140,7 +129,7 @@ def main() -> int:
 
     shared_root = Path(args.shared_root).resolve()
     surface_root = Path(args.surface_root).resolve()
-    subjects = [s.replace("sub-", "") for s in args.subjects] if args.subjects else load_subjects(Path(args.subjects_manifest))
+    subjects = [s.replace("sub-", "") for s in args.subjects] if args.subjects else load_subject_ids(Path(args.subjects_manifest))
     jobs = capped_jobs(args.jobs, len(subjects))
     n_combo = 0
     if jobs == 1:

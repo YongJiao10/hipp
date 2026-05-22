@@ -38,6 +38,8 @@ from pathlib import Path
 
 from lib.output_layout import DEFAULT_KONG2019_ROOT
 from lib.workflow_utils import write_json
+from lib.io_utils import load_subject_ids, load_json, read_tsv_rows
+from lib.fc_math import corrcoef_rows, compact_active_vertices
 
 import numpy as np
 
@@ -54,26 +56,6 @@ KONG7 = "kong2019"
 KONG8 = "kong2019_8net"
 
 
-def load_subjects(path: Path) -> list[str]:
-    subjects: list[str] = []
-    for line in path.read_text(encoding="utf-8").splitlines():
-        s = line.strip()
-        if s:
-            subjects.append(s.replace("sub-", ""))
-    if not subjects:
-        raise RuntimeError(f"No subjects found in {path}")
-    return subjects
-
-
-def load_json(path: Path) -> dict:
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
-def read_tsv(path: Path) -> list[dict[str, str]]:
-    with path.open("r", encoding="utf-8", newline="") as f:
-        return list(csv.DictReader(f, delimiter="\t"))
-
-
 def write_networks_tsv(path: Path, names: list[str], counts: list[int]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8", newline="") as f:
@@ -81,23 +63,6 @@ def write_networks_tsv(path: Path, names: list[str], counts: list[int]) -> None:
         writer.writeheader()
         for i, (name, count) in enumerate(zip(names, counts, strict=True), start=1):
             writer.writerow({"index": i, "canonical_network": name, "n_parent_networks": int(count)})
-
-
-def corrcoef_rows(a: np.ndarray, b: np.ndarray) -> np.ndarray:
-    x = np.asarray(a, dtype=np.float32)
-    y = np.asarray(b, dtype=np.float32)
-    x_mu = np.nanmean(x, axis=1, keepdims=True)
-    y_mu = np.nanmean(y, axis=1, keepdims=True)
-    x_sd = np.nanstd(x, axis=1, keepdims=True, ddof=1)
-    y_sd = np.nanstd(y, axis=1, keepdims=True, ddof=1)
-    x_z = (x - x_mu) / np.clip(x_sd, 1e-12, None)
-    y_z = (y - y_mu) / np.clip(y_sd, 1e-12, None)
-    x_z[~np.isfinite(x_z)] = 0.0
-    y_z[~np.isfinite(y_z)] = 0.0
-    corr = (x_z @ y_z.T) / float(max(1, x.shape[1] - 1))
-    corr = np.clip(corr, -0.999999, 0.999999)
-    corr[~np.isfinite(corr)] = 0.0
-    return corr.astype(np.float32)
 
 
 def one_sided_network_partial_corr_rows(rows: np.ndarray, network_ts: np.ndarray) -> np.ndarray:
@@ -122,10 +87,6 @@ def one_sided_network_partial_corr_rows(rows: np.ndarray, network_ts: np.ndarray
     return out.astype(np.float32)
 
 
-def compact_active_vertices(full: np.ndarray, valid_mask: np.ndarray) -> np.ndarray:
-    return np.asarray(full[valid_mask, :], dtype=np.float32)
-
-
 def canonical_spec(atlas: str) -> tuple[list[str], dict[str, str]]:
     payload = load_json(DEFAULT_CROSS_ATLAS_MERGE)
     mapping = {str(k): str(v) for k, v in payload["atlases"][atlas]["mapping"].items()}
@@ -136,7 +97,7 @@ def canonical_spec(atlas: str) -> tuple[list[str], dict[str, str]]:
 
 def build_canonical_from_parent(parent_tsv: Path, parent_ts: Path, atlas: str) -> tuple[list[str], np.ndarray, list[int]]:
     names, mapping = canonical_spec(atlas)
-    rows = read_tsv(parent_tsv)
+    rows = read_tsv_rows(parent_tsv)
     ts = np.load(parent_ts).astype(np.float32)
     if ts.shape[0] != len(rows):
         raise RuntimeError(f"Parent network row mismatch: {parent_tsv} rows={len(rows)} ts={ts.shape}")
@@ -307,7 +268,7 @@ def main() -> int:
     args = parser.parse_args()
 
     shared_root = Path(args.shared_root).resolve()
-    subjects = [s.replace("sub-", "") for s in args.subjects] if args.subjects else load_subjects(Path(args.subjects_manifest).resolve())
+    subjects = [s.replace("sub-", "") for s in args.subjects] if args.subjects else load_subject_ids(Path(args.subjects_manifest).resolve())
     jobs = max(1, min(int(args.jobs), 10, len(subjects)))
     n_fc = 0
     if jobs == 1:

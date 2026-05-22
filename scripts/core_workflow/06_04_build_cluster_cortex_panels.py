@@ -70,10 +70,10 @@ from lib.output_layout import (
     DEFAULT_KONG2022_ROUTEA_ROOT,
     DEFAULT_ROUTEA_GROUP_ATLAS_ROOT,
 )
-from lib.fc_math import corrcoef_rows
+from lib.fc_math import corrcoef_rows, bh_fdr
 from lib.gifti_labels import make_named_label_gifti
 from lib.io_utils import load_json, read_tsv_rows, write_tsv
-from lib.surface_utils import render_locked_grid
+from lib.surface_utils import render_locked_grid, read_surface_vertex_count
 from lib.workflow_utils import write_json
 from lib.workbench import run_workbench
 
@@ -246,25 +246,6 @@ def display_color_for_sign(base: tuple[int, int, int, int], sign: str) -> tuple[
         return neg_color_rgba(base)
     return base
 
-
-def bh_fdr(p_values: np.ndarray) -> np.ndarray:
-    p = np.asarray(p_values, dtype=np.float64)
-    q = np.full_like(p, np.nan, dtype=np.float64)
-    finite = np.isfinite(p)
-    m = int(np.sum(finite))
-    if m == 0:
-        return q
-    p_f = p[finite]
-    order = np.argsort(p_f)
-    sorted_p = p_f[order]
-    ranks = np.arange(1, m + 1, dtype=np.float64)
-    adjusted = sorted_p * float(m) / ranks
-    adjusted = np.minimum.accumulate(adjusted[::-1])[::-1]
-    adjusted = np.clip(adjusted, 0.0, 1.0)
-    q_f = np.empty_like(sorted_p)
-    q_f[order] = adjusted
-    q[finite] = q_f
-    return q
 
 
 def one_sample_one_sided_stats(x: np.ndarray) -> tuple[float, float, float, float, int]:
@@ -661,11 +642,6 @@ def dedupe_selected_items_from_global_top(global_top: dict[str, Any]) -> list[di
     return [best_by_roi[k] for k in sorted(best_by_roi)]
 
 
-def surface_vertex_count(path: Path) -> int:
-    img = nib.load(str(path))
-    coords = np.asarray(img.agg_data("pointset"), dtype=np.float32)
-    return int(coords.shape[0])
-
 
 def build_global_top_hippomaps_label_files(
     *,
@@ -676,8 +652,8 @@ def build_global_top_hippomaps_label_files(
     left_surface: Path,
     right_surface: Path,
 ) -> tuple[Path, Path, dict[str, int]]:
-    n_left = surface_vertex_count(left_surface)
-    n_right = surface_vertex_count(right_surface)
+    n_left = read_surface_vertex_count(left_surface)
+    n_right = read_surface_vertex_count(right_surface)
     labels_left = np.zeros((n_left,), dtype=np.int32)
     labels_right = np.zeros((n_right,), dtype=np.int32)
 

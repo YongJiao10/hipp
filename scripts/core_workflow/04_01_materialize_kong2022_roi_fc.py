@@ -38,6 +38,8 @@ from pathlib import Path
 
 from lib.output_layout import DEFAULT_KONG2022_MANIFEST_ROOT, DEFAULT_KONG2022_ROOT
 from lib.workflow_utils import capped_jobs, utc_now_iso, write_json
+from lib.io_utils import load_subject_ids
+from lib.fc_math import corrcoef_rows, compact_active_vertices
 
 import numpy as np
 
@@ -53,16 +55,6 @@ SMOOTHINGS = ["2mm", "4mm"]
 HEMIS = ["L", "R"]
 RUN_IDS = [1, 2, 3, 4]
 
-
-def load_subjects(path: Path) -> list[str]:
-    subjects: list[str] = []
-    for line in path.read_text(encoding="utf-8").splitlines():
-        s = line.strip()
-        if s:
-            subjects.append(s.replace("sub-", ""))
-    if not subjects:
-        raise RuntimeError(f"No subjects found in {path}")
-    return subjects
 
 
 def read_roi_names(path: Path) -> list[str]:
@@ -88,26 +80,6 @@ def load_run_segments(subj_root: Path) -> list[dict[str, int]]:
         )
     return segs
 
-
-def corrcoef_rows(a: np.ndarray, b: np.ndarray) -> np.ndarray:
-    x = np.asarray(a, dtype=np.float32)
-    y = np.asarray(b, dtype=np.float32)
-    x_mu = np.nanmean(x, axis=1, keepdims=True)
-    y_mu = np.nanmean(y, axis=1, keepdims=True)
-    x_sd = np.nanstd(x, axis=1, keepdims=True, ddof=1)
-    y_sd = np.nanstd(y, axis=1, keepdims=True, ddof=1)
-    x_z = (x - x_mu) / np.clip(x_sd, 1e-12, None)
-    y_z = (y - y_mu) / np.clip(y_sd, 1e-12, None)
-    x_z[~np.isfinite(x_z)] = 0.0
-    y_z[~np.isfinite(y_z)] = 0.0
-    corr = (x_z @ y_z.T) / float(max(1, x.shape[1] - 1))
-    corr = np.clip(corr, -0.999999, 0.999999)
-    corr[~np.isfinite(corr)] = 0.0
-    return corr.astype(np.float32)
-
-
-def compact_active_vertices(full: np.ndarray, valid_mask: np.ndarray) -> np.ndarray:
-    return np.asarray(full[valid_mask, :], dtype=np.float32)
 
 
 def materialize_fc(shared_root: Path, surface_root: Path, subject: str, smoothing: str, hemi: str) -> None:
@@ -253,7 +225,7 @@ def main() -> int:
 
     shared_root = Path(args.shared_root).resolve()
     surface_root = Path(args.surface_root).resolve()
-    subjects = [s.replace("sub-", "") for s in args.subjects] if args.subjects else load_subjects(
+    subjects = [s.replace("sub-", "") for s in args.subjects] if args.subjects else load_subject_ids(
         Path(args.subjects_manifest).resolve()
     )
     jobs = capped_jobs(args.jobs, len(subjects))

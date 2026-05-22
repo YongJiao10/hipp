@@ -26,7 +26,7 @@ def detect_template_subject(root: ET.Element) -> str:
     raise RuntimeError("Could not detect template subject in scene file")
 
 
-def absolutize_scene_paths(root: ET.Element, scene_path: Path) -> None:
+def absolutize_scene_paths(root: ET.Element, scene_path: Path, dense_corobl_root: Path | None = None) -> None:
     base = scene_path.parent
     for obj in root.iter("Object"):
         if obj.attrib.get("Type") != "pathName" or not obj.text:
@@ -36,11 +36,16 @@ def absolutize_scene_paths(root: ET.Element, scene_path: Path) -> None:
             continue
         candidate = Path(text)
         resolved = (base / candidate).resolve() if not candidate.is_absolute() else candidate.resolve()
-        try:
-            rel = resolved.relative_to(_OLD_BATCH)
-            resolved = (_NEW_BATCH / rel).resolve()
-        except ValueError:
-            pass
+        if dense_corobl_root is not None:
+            m = re.search(r"dense_corobl_batch(/.*)", str(resolved))
+            if m:
+                resolved = (dense_corobl_root / m.group(1).lstrip("/")).resolve()
+        else:
+            try:
+                rel = resolved.relative_to(_OLD_BATCH)
+                resolved = (_NEW_BATCH / rel).resolve()
+            except ValueError:
+                pass
         obj.text = str(resolved)
 
 

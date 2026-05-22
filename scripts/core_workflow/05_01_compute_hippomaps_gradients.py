@@ -64,6 +64,9 @@ from lib.output_layout import (
     DEFAULT_KONG2022_TEMPLATE_ROOT,
 )
 from lib.workflow_utils import write_json
+from lib.io_utils import load_subject_ids
+from lib.fc_math import fisher_z_transform_fc
+from lib.surface_utils import read_surface_vertex_count
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -205,21 +208,6 @@ def align_gradient_components_to_reference(
     return aligned_active, aligned_full, aligned_lambdas, aligned_ev, meta
 
 
-def load_subjects(path: Path) -> list[str]:
-    subjects = [line.strip().replace("sub-", "") for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
-    if not subjects:
-        raise RuntimeError(f"No subjects in manifest: {path}")
-    return subjects
-
-
-def fisher_z_transform_fc(x: np.ndarray) -> np.ndarray:
-    arr = np.asarray(x, dtype=np.float32)
-    clipped = np.clip(arr, -0.999999, 0.999999)
-    out = np.arctanh(clipped).astype(np.float32)
-    out[~np.isfinite(arr)] = np.nan
-    return out
-
-
 def group_mean_fisherz_fc(
     *,
     feature_bank: dict[str, np.ndarray],
@@ -236,13 +224,6 @@ def group_mean_fisherz_fc(
     group_fc[~np.isfinite(group_fc)] = 0.0
     return group_fc.astype(np.float32)
 
-
-def read_surface_vertex_count(surface_path: Path) -> int:
-    img = nib.load(str(surface_path))
-    for da in img.darrays:
-        if da.intent == "NIFTI_INTENT_POINTSET":
-            return int(np.asarray(da.data).shape[0])
-    return int(np.asarray(img.darrays[0].data).shape[0])
 
 
 def subject_valid_mask(surface_root: Path, subject: str, hemi: str) -> np.ndarray:
@@ -509,7 +490,7 @@ def main() -> int:
     args = parse_args()
     hippomaps_root = ensure_hippomaps_on_path(Path(args.hippomaps_root))
     subjects_manifest = Path(args.subjects_manifest).resolve()
-    subjects = load_subjects(subjects_manifest)
+    subjects = load_subject_ids(subjects_manifest)
     if args.max_subjects is not None:
         subjects = subjects[: int(args.max_subjects)]
     selected_components = parse_components(args.selected_components)

@@ -136,3 +136,34 @@ def render_locked_grid(
     )
     return {"native_scene_png": str(native_png), "biglegend_png": str(final_png)}
 
+
+def read_surface_vertex_count(surface_path: Path) -> int:
+    img = nib.load(str(surface_path))
+    for da in img.darrays:
+        if da.intent == "NIFTI_INTENT_POINTSET":
+            return int(np.asarray(da.data).shape[0])
+    return int(np.asarray(img.darrays[0].data).shape[0])
+
+
+def network_color_map(
+    style_path: Path = NETWORK_STYLE_JSON,
+    merge_path: Path = REPO_ROOT / "config" / "cross_atlas_network_merge.json",
+) -> dict[str, tuple[int, int, int, int]]:
+    out: dict[str, tuple[int, int, int, int]] = {}
+    if merge_path.exists():
+        payload = json.loads(merge_path.read_text(encoding="utf-8"))
+        for name, rgba in payload.get("shared_colors_rgba", {}).items():
+            if not isinstance(rgba, list) or len(rgba) != 4:
+                continue
+            out[str(name)] = tuple(int(v) for v in rgba)
+    if style_path.exists():
+        payload = json.loads(style_path.read_text(encoding="utf-8"))
+        for row in payload.values():
+            name = row.get("name")
+            rgba = row.get("rgba", [])
+            if not name or not isinstance(rgba, list) or len(rgba) != 4:
+                continue
+            out.setdefault(str(name), tuple(int(v) for v in rgba))
+    return out
+
+

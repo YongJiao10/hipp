@@ -30,7 +30,6 @@ Outputs:
   - Run output manifest JSON: `{present_dir}/{atlas}_wta-top_long_axis_network_profile_{route_tag}_bins{n_bins}_manifest.json`.
 """
 import argparse
-import csv
 import json
 from pathlib import Path
 from typing import Any
@@ -43,6 +42,7 @@ import numpy as np
 
 from lib.output_layout import DEFAULT_OVERVIEWS_DIR, DEFAULT_ROUTEA_GROUP_ATLAS_ROOT
 from lib.workflow_utils import write_json
+from lib.io_utils import load_json, write_tsv
 from lib.surface_utils import long_axis_order
 from lib.traceability import StageSpec, run_stage
 
@@ -70,18 +70,6 @@ TSV_FIELDS = [
     "percent_of_bin_vertices",
 ]
 
-
-def load_json(path: Path) -> dict[str, Any]:
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
-def write_tsv(path: Path, rows: list[dict[str, object]]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=TSV_FIELDS, delimiter="\t")
-        writer.writeheader()
-        for row in rows:
-            writer.writerow({field: row.get(field, "") for field in TSV_FIELDS})
 
 
 def coverage_tag(threshold: float) -> str:
@@ -306,7 +294,7 @@ def build_profiles(
             smoothing=smoothing,
             n_bins=int(n_bins),
         )
-        write_tsv(paths["tsv"], rows)
+        write_tsv(paths["tsv"], rows, TSV_FIELDS)
         plot_profile_rows(
             rows=rows,
             network_names=network_names,
