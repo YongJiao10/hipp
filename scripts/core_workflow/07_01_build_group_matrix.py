@@ -3,7 +3,34 @@ from __future__ import annotations
 
 """
 Process Step Description:
-Build group matrix summary. Integrates method results from different branches to construct the final group-level comparison and matrix summary file.
+Build group matrix summary. Integrates method results from different branches by executing downstream presentation scripts (06_01_build_group_overview.py and 06_02_build_wta_long_axis_profiles.py) to construct the final group-level comparison matrix, summary index markdown, and overview manifests.
+
+Main Flow Path:
+- 10th (final) step in the numbered mainline pipeline sequence:
+  01_01_run_hippunfold_t1w_local.py -> 01_02_check_hippunfold_outputs.py -> 02_01_prepare_group_inputs.py -> 02_02_build_qc_manifest.py -> 03_01/03_02 reference building -> 04_01/04_02/04_03 FC materialization -> 05_01 gradient computation -> 05_02 group atlas parcellation -> 06_01 through 06_06 presentation generation -> 07_01_build_group_matrix.py (this step).
+
+Inputs:
+- Command-line arguments:
+  - --python-exe: Explicit python interpreter path used to execute child scripts (default: `/home/yojiao/.conda/envs/py314/bin/python`).
+  - --route-root: Root directory containing RouteA/RouteB reference inputs (default: `outputs_core/work/kong2022_reference`).
+  - --present-dir: Output directory for final matrix presentation figures and manifest (default: `outputs_core/present/overviews`).
+  - --routes: Routes/branches to process (choices: "routea", "routeb", default: ["routea"]).
+  - --coverage-threshold: Coverage threshold used to filter outputs (default: 0.80).
+  - --manifest-name: Filename for the generated overview matrix manifest JSON (default: "group_overview_matrix_manifest.json").
+  - --scene: Connectome Workbench template scene file override path.
+- Physical inputs:
+  - Reference directories: `{route_root}/hipp_group_merged_canonical_atlas_routea_full` or RouteB equivalents.
+  - Group atlas directory: `outputs_core/work/group_atlas/routea_full_k3_fisherz` or RouteB equivalents.
+  - Scripts to execute:
+    - `scripts/core_workflow/06_01_build_group_overview.py`
+    - `scripts/core_workflow/06_02_build_wta_long_axis_profiles.py`
+
+Outputs:
+- File outputs:
+  - Overview panel PNG figures for each method and route combination under `{present_dir}/`.
+  - WTA long axis profile PNG figures and TSV data under `{present_dir}/`.
+  - Group overview matrix manifest JSON file: `{present_dir}/{manifest_name}`.
+  - Matrix comparison index file: `{present_dir}/README.md`.
 """
 import argparse
 import json

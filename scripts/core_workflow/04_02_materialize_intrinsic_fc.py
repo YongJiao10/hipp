@@ -4,6 +4,28 @@ from __future__ import annotations
 """
 Process Step Description:
 Materialize intrinsic functional connectivity. Computes the intrinsic functional connectivity matrix between vertices within the hippocampus itself.
+
+Main Flow Path:
+- 6th step in the numbered pipeline sequence (intrinsic functional connectivity materialization):
+  01_01_run_hippunfold_t1w_local.py -> 01_02_check_hippunfold_outputs.py -> 02_01_prepare_group_inputs.py -> 02_02_build_qc_manifest.py -> 03_01/03_02 reference building -> 04_02_materialize_intrinsic_fc.py (this step) -> 05_01 gradient computation -> 05_02 group atlas parcellation -> 06_xx presentation rendering -> 07_01 group matrix overview.
+
+Inputs:
+- Command-line arguments:
+  - --shared-root: Path to shared outputs root (default: `outputs_core/inputs/hcp7t_hippocampus/kong2022/shared_inputs/routeb_151`).
+  - --surface-root: Path to shared BOLD surfaces (default: `outputs_core/inputs/hcp7t_hippocampus/kong2022/shared_inputs/surface_151`).
+  - --subjects-manifest: Path to QC-passed subject list manifest (default: `outputs_core/inputs/hcp7t_hippocampus/kong2022/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt`).
+  - --subjects: Space-separated list of explicit subject IDs.
+  - --smoothings: Smoothing levels to process: "2mm", "4mm".
+  - --hemis: Hemispheres to process: "L", "R".
+  - --jobs: Subject-level process concurrency cap (default: 1).
+- Physical inputs:
+  - Resampled BOLD timeseries: `{surface_root}/sub-<subject>/surface/{smoothing}/sub-<subject>_hemi-{hemi}_timeseries.npy`.
+  - BOLD active mask: `{surface_root}/sub-<subject>/surface/tsnr_gate/sub-<subject>_hemi-{hemi}_valid_mask.npy`.
+
+Outputs:
+- Command-line output / file outputs:
+  - Active-only vertex-to-vertex hippocampal functional connectivity matrix: `{shared_root}/sub-<subject>/fc/intrinsic/{smoothing}/hemi_{hemi}/hipp_vertex_to_vertex_fc_active.npy`.
+  - Intrinsic FC step manifest: `{shared_root}/sub-<subject>/fc/intrinsic/{smoothing}/hemi_{hemi}/stage_manifest.json`.
 """
 import argparse
 import json

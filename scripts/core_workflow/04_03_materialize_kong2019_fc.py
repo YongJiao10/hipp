@@ -4,6 +4,30 @@ from __future__ import annotations
 """
 Process Step Description:
 Materialize Kong2019 functional connectivity (FC). Computes functional connectivity data between the hippocampus and Kong2019 cortical networks.
+
+Main Flow Path:
+- 6th step in the numbered pipeline sequence (Kong2019 branch only):
+  01_01_run_hippunfold_t1w_local.py -> 01_02_check_hippunfold_outputs.py -> 02_01_prepare_group_inputs.py -> 02_02_build_qc_manifest.py -> 04_03_materialize_kong2019_fc.py (this step) -> 05_02 group atlas parcellation -> 06_xx presentation rendering -> 07_01 group matrix overview.
+
+Inputs:
+- Command-line arguments:
+  - --shared-root: Path to shared outputs root (default: `outputs_core/inputs/hcp7t_hippocampus/kong2019/shared_inputs/pfm_151`).
+  - --subjects-manifest: Path to QC-passed subject list manifest (default: `outputs_core/inputs/hcp7t_hippocampus/kong2019/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_151.txt`).
+  - --subjects: Space-separated list of explicit subject IDs.
+  - --atlases: Atlases to process: "kong2019" (17net) and "kong2019_8net".
+  - --smoothings: Smoothing levels to process: "2mm", "4mm".
+  - --hemis: Hemispheres to process: "L", "R".
+  - --jobs: Subject-level process concurrency cap (default: 1, hard-capped at 10).
+- Physical inputs:
+  - Resampled BOLD timeseries: `{shared_root}/sub-<subject>/surface/{smoothing}/sub-<subject>_hemi-{hemi}_timeseries.npy`.
+  - BOLD active mask: `{shared_root}/sub-<subject>/surface/tsnr_gate/sub-<subject>_hemi-{hemi}_valid_mask.npy`.
+  - Run duration manifest: `{shared_root}/sub-<subject>/surface/raw/surface_sampling_summary.json`.
+
+Outputs:
+- Command-line output / file outputs:
+  - Full vertex-to-network functional connectivity matrix: `{shared_root}/sub-<subject>/fc/{atlas}/{smoothing}/hemi_{hemi}/hipp_vertex_to_network_fc.npy`.
+  - Active-only vertex-to-network functional connectivity matrix: `{shared_root}/sub-<subject>/fc/{atlas}/{smoothing}/hemi_{hemi}/hipp_vertex_to_network_fc_active.npy`.
+  - Run manifest: `{shared_root}/sub-<subject>/fc/{atlas}/{smoothing}/hemi_{hemi}/fc_summary.json`.
 """
 import argparse
 import csv

@@ -4,6 +4,31 @@ from __future__ import annotations
 """
 Process Step Description:
 Build Kong2022 RouteA reference data. RouteA-specific step to generate reference template data for Kong2022 cortical networks.
+
+Main Flow Path:
+- 5th step in the numbered pipeline sequence (RouteA reference building for kong2022_routea):
+  01_01_run_hippunfold_t1w_local.py -> 01_02_check_hippunfold_outputs.py -> 02_01_prepare_group_inputs.py -> 02_02_build_qc_manifest.py -> 03_02_build_kong2022_routea_reference.py (this step) -> 04_01/04_02 FC materialization -> 05_01 gradient computation -> 05_02 group atlas parcellation -> 06_xx presentation rendering -> 07_01 group matrix overview.
+
+Inputs:
+- Command-line arguments:
+  - --shared-root: Path to output shared processed files (default: `outputs_core/inputs/hcp7t_hippocampus/kong2022/shared_inputs/routea_151`).
+  - --route-a-root: RouteA specific reference outputs root (default: `outputs_core/inputs/hcp7t_hippocampus/kong2022/shared_inputs/reference_151`).
+  - --data-root: Root directory containing raw structural BIDS folders (default: `data/hippunfold_input`).
+  - --kong2022-dlabel: Path to standard Kong2022 dlabel.nii cortical atlas file.
+  - --subjects-manifest: Path to QC-passed subject list manifest (default: `outputs_core/inputs/hcp7t_hippocampus/kong2022/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt`).
+  - --subjects: Space-separated list of explicit subject IDs.
+  - --jobs: Thread-pool concurrency cap (default: 4, hard-capped at 10).
+  - --resume: Skip already completed subjects (default: True).
+  - --overwrite: Overwrite existing files (default: False).
+- Physical inputs:
+  - Concat fMRI dtseries file: `{data_root}/sub-<subject>/func/sub-<subject>_task-rest_run-concat.dtseries.nii`.
+  - Kong2022 standard cortical dlabel atlas.
+
+Outputs:
+- Command-line output / file outputs:
+  - RouteA cortical network reference parcel timeseries: `{shared_root}/sub-<subject>/reference/kong2022/cortex_roi_parcel_timeseries.npy`.
+  - RouteA cortical network parcels description table: `{shared_root}/sub-<subject>/reference/kong2022/cortex_roi_parcels.tsv`.
+  - Reference generation run manifest: `{shared_root}/sub-<subject>/reference/kong2022/runs/run-<run_id>/reference_summary.json`.
 """
 import argparse
 import json

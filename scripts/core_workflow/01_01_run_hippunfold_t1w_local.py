@@ -4,6 +4,22 @@ from __future__ import annotations
 """
 Process Step Description:
 Run local HippUnfold T1w pipeline. This is the initial step of the workflow to perform hippocampal unfolding and surface mesh generation for a single subject.
+
+Main Flow Path:
+- 1st step in the numbered pipeline sequence:
+  01_01_run_hippunfold_t1w_local.py (this step) -> 01_02_check_hippunfold_outputs.py -> 02_01_prepare_group_inputs.py -> 02_02_build_qc_manifest.py -> 03_01/03_02 reference building -> 04_01/04_02/04_03 FC materialization -> 05_01 gradient computation -> 05_02 group atlas parcellation -> 06_xx presentation rendering -> 07_01 group matrix overview.
+
+Inputs:
+- Command-line arguments:
+  - subject: Subject ID without the "sub-" prefix (required).
+  - input_dir (optional, default: "data/hippunfold_input"): Root directory containing raw structural BIDS folders.
+  - out_dir: Subject-specific output directory where HippUnfold results will be written (required).
+- Physical inputs:
+  - Raw T1w anatomical MRI files under `{input_dir}/sub-<subject>/anat/`.
+
+Outputs:
+- Command-line output / file outputs:
+  - Subject-level HippUnfold output directory: `{out_dir}/sub-<subject>/hippunfold/` containing reconstructed surface GIFTI files and volumetric segmentations.
 """
 import argparse
 import subprocess

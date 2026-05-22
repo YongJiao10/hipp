@@ -4,6 +4,35 @@ from __future__ import annotations
 """
 Process Step Description:
 Build group-level results overview. Summarizes clustering and functional network mapping results to generate comprehensive overview charts or files for visualization.
+
+Main Flow Path:
+- 9th step in the numbered pipeline sequence (first stage of presentation output generation):
+  01_01_run_hippunfold_t1w_local.py -> 01_02_check_hippunfold_outputs.py -> 02_01_prepare_group_inputs.py -> 02_02_build_qc_manifest.py -> 03_01/03_02 reference building -> 04_01/04_02/04_03 FC materialization -> 05_01 gradient computation -> 05_02 group atlas parcellation -> 06_01_build_group_overview.py (this step) -> 07_01 group matrix overview.
+
+Inputs:
+- Command-line arguments:
+  - --group-root: Directory where group-atlas intermediate files are saved (default: `outputs_core/work/group_atlas/routea_full_k3_fisherz`).
+  - --present-dir: Directory where final presentation figures will be saved (default: `outputs_core/present/overviews`).
+  - --methods: Parcellation methods to process: "intrinsic-spectral", "network-spectral", "gradient-spectral", "wta-top".
+  - --atlases: Cortical atlases to process (default: ["kong2022"]).
+  - --coverage-threshold: Selected coverage threshold for overview outputs (default: 0.80).
+  - --scene: Path to standard wb scene template file.
+  - --route-tag: Custom workflow branch tag to override automatic detection.
+  - --mode-tag: Custom sparsification mode tag to override automatic detection.
+  - --assignment-variant: Network mapping variant: "fisherz", "count" (default: "fisherz").
+  - --manifest-name: Name of generated presentation manifest JSON (default: "group_overview_manifest.json").
+  - --skip-readme: Skip writing the README.md summary in presentation directory.
+  - --skip-manifest: Skip writing the overview manifest JSON file.
+  - --allow-missing-combos: Allow running even when some methods/hemispheres are missing.
+- Physical inputs:
+  - Group parcellation label arrays: `{group_root}/{method}/smooth-{smoothing}_hemi-{hemi}_cov-{threshold}/group_functional_atlas_labels.npy`.
+  - Group mapping status files: `{group_root}/{method}/smooth-{smoothing}_hemi-{hemi}_cov-{threshold}/cluster_assignment_status.json`.
+
+Outputs:
+- Command-line output / file outputs:
+  - Overview panel PNG figures for each combination: `{present_dir}/{atlas}_{method}_overview_{route_tag}_{smoothing}_cov{threshold_tag}.png`.
+  - Group overview manifest JSON file: `{present_dir}/{manifest_name}`.
+  - Summary README file: `{present_dir}/README.md`.
 """
 import argparse
 import csv

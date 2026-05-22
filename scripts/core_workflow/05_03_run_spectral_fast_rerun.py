@@ -3,7 +3,33 @@ from __future__ import annotations
 
 """
 Process Step Description:
-Fast rerun for spectral clustering. Provides an efficient way to re-execute the spectral clustering algorithm (e.g., when adjusting parameter K) without recomputing the full distance matrix.
+Fast rerun for spectral clustering. Provides an efficient way to re-execute the spectral clustering algorithm (e.g., when adjusting parameters) without recomputing the full distance matrix.
+
+Main Flow Path:
+- None (This is a rerun orchestration utility script, not part of the main pipeline flow. It is used to quickly refresh spectral clustering and presentation overviews from cached intermediate data).
+
+Inputs:
+- Command-line arguments:
+  - --hippunfold-batch-root: Batch output root containing sub-*/hippunfold outputs (default: `outputs_core/inputs/hcp7t_hippocampus/hippunfold/dense_corobl_batch`).
+  - --shared-root: Path to shared processed files (default: `outputs_core/inputs/hcp7t_hippocampus/kong2022/shared_inputs/routea_151`).
+  - --surface-root: Path to BOLD surfaces root directory (default: `outputs_core/inputs/hcp7t_hippocampus/kong2022/shared_inputs/surface_151`).
+  - --group-root: Directory where group-atlas intermediate files are saved (default: `outputs_core/work/group_atlas/routea_full_k3_fisherz`).
+  - --subjects-manifest: Path to QC-passed subject list manifest.
+  - --group-average-surfaces-dir: Directory containing group-average template surfaces.
+  - --present-dir: Directory where final presentation figures will be saved (default: `outputs_core/present/overviews`).
+  - --coverage-threshold: Minimum coverage fraction to evaluate (default: 0.80).
+  - --subject-fc-mode: FC preprocessing sparsification mode: "full", "top-percent".
+  - --subject-fc-top-percent: Sparsification top percentage integer.
+  - --redundancy-early-stop / --no-redundancy-early-stop: Speed heuristic for K evaluation (default: True).
+  - --combo-jobs: Number of parallel combinations to execute concurrently (default: 4).
+  - --route-source: Expected upstream source ("auto", "routea", "routeb").
+- Physical inputs:
+  - Subject functional connectivity caches under `{shared_root}/sub-<subject>/fc/`.
+  - Group average template surfaces.
+
+Outputs:
+- Command-line output / file outputs:
+  - Refreshed group-atlas output label arrays, status files, and presentation overviews under `{group_root}/` and `{present_dir}/`.
 """
 import argparse
 import json

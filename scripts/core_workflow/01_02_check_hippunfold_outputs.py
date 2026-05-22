@@ -2,6 +2,27 @@
 """
 Process Step Description:
 Check HippUnfold outputs. Used to verify that the output files generated in the previous step are complete and meet the expected quality and format requirements.
+
+Main Flow Path:
+- 2nd step in the numbered pipeline sequence:
+  01_01_run_hippunfold_t1w_local.py -> 01_02_check_hippunfold_outputs.py (this step) -> 02_01_prepare_group_inputs.py -> 02_02_build_qc_manifest.py -> 03_01/03_02 reference building -> 04_01/04_02/04_03 FC materialization -> 05_01 gradient computation -> 05_02 group atlas parcellation -> 06_xx presentation rendering -> 07_01 group matrix overview.
+
+Inputs:
+- Command-line arguments:
+  - --input-root: Input root containing structural raw sub-* directories (default: `data/hippunfold_input`).
+  - --batch-root: Batch output root containing sub-*/hippunfold outputs (default: `outputs_core/inputs/hcp7t_hippocampus/hippunfold/dense_corobl_batch`).
+  - --subject: Subject ID without "sub-" prefix. Can be specified multiple times.
+  - --manifest-cache: Path to manifest cache JSON file (default: `<batch-root>/_batch_logs/output_integrity_manifest.json`).
+  - --json-out: Path for full validation JSON report.
+  - --quiet: Suppress stdout logging.
+  - --fail-on-missing: Fail with non-zero exit code if any checked subject is missing outputs.
+- Physical inputs:
+  - Subject-level HippUnfold output directory structures: `{batch_root}/sub-<subject>/hippunfold/`.
+
+Outputs:
+- Command-line output / file outputs:
+  - Manifest cache file: `{manifest_cache}` or `{batch_root}/_batch_logs/output_integrity_manifest.json` containing validation logs and file integrity status.
+  - Optional JSON report at `{json_out}`.
 """
 
 from __future__ import annotations

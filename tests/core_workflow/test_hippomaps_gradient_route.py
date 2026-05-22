@@ -23,6 +23,8 @@ def _load_module(relpath: str, alias: str):
     if spec is None or spec.loader is None:
         raise RuntimeError(f"Failed to load module: {module_path}")
     module = importlib.util.module_from_spec(spec)
+    if "lib/" in relpath:
+        module.__package__ = "lib"
     core_dir = (REPO_ROOT / "scripts" / "core_workflow").resolve()
     if str(core_dir) not in sys.path:
         sys.path.insert(0, str(core_dir))
@@ -512,9 +514,9 @@ def test_ensure_bilateral_gradient_annotations_repairs_late_raw_screenshot() -> 
         left = root / "left.png"
         right = root / "right.png"
         final = root / "bilateral.png"
-        Image.new("RGB", (640, 90), (255, 255, 255)).save(left)
-        Image.new("RGB", (640, 90), (255, 255, 255)).save(right)
-        Image.new("RGB", (1280, 90), (255, 255, 255)).save(final)
+        Image.new("RGB", (510, 90), (255, 255, 255)).save(left)
+        Image.new("RGB", (510, 90), (255, 255, 255)).save(right)
+        Image.new("RGB", (1020, 90), (255, 255, 255)).save(final)
         render_mod.ensure_bilateral_gradient_annotations(
             side_paths={"L": left, "R": right},
             output_png=final,
@@ -522,9 +524,9 @@ def test_ensure_bilateral_gradient_annotations_repairs_late_raw_screenshot() -> 
             ev_by_hemi={"L": [10.0, 5.0, 2.5], "R": [9.0, 4.0, 2.0]},
             settle_seconds=0.0,
         )
-        assert Image.open(left).size == (870, 90)
-        assert Image.open(right).size == (870, 90)
-        assert Image.open(final).size == (1740, 90)
+        assert Image.open(left).size == (740, 90)
+        assert Image.open(right).size == (740, 90)
+        assert Image.open(final).size == (1480, 90)
 
 
 def main() -> int:

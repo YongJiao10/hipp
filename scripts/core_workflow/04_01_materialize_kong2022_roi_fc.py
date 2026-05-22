@@ -4,6 +4,31 @@ from __future__ import annotations
 """
 Process Step Description:
 Materialize Kong2022 ROI-level functional connectivity (FC). Computes the functional connectivity matrix between hippocampal surface vertices and Kong2022 cortical network regions of interest (ROIs).
+
+Main Flow Path:
+- 6th step in the numbered pipeline sequence (ROI functional connectivity materialization for kong2022):
+  01_01_run_hippunfold_t1w_local.py -> 01_02_check_hippunfold_outputs.py -> 02_01_prepare_group_inputs.py -> 02_02_build_qc_manifest.py -> 03_01/03_02 reference building -> 04_01_materialize_kong2022_roi_fc.py (this step) -> 05_01 gradient computation -> 05_02 group atlas parcellation -> 06_xx presentation rendering -> 07_01 group matrix overview.
+
+Inputs:
+- Command-line arguments:
+  - --shared-root: Path to shared reference outputs (default: `outputs_core/inputs/hcp7t_hippocampus/kong2022/shared_inputs/routeb_151`).
+  - --surface-root: Path to shared BOLD surfaces (default: `outputs_core/inputs/hcp7t_hippocampus/kong2022/shared_inputs/surface_151`).
+  - --subjects-manifest: Path to QC-passed subject list manifest (default: `outputs_core/inputs/hcp7t_hippocampus/kong2022/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt`).
+  - --subjects: Space-separated list of explicit subject IDs.
+  - --smoothings: Smoothing levels to process: "2mm", "4mm".
+  - --hemis: Hemispheres to process: "L", "R".
+  - --jobs: Subject-level process concurrency cap (default: 1, hard-capped at 10).
+- Physical inputs:
+  - Resampled BOLD timeseries: `{surface_root}/sub-<subject>/surface/{smoothing}/sub-<subject>_hemi-{hemi}_timeseries.npy`.
+  - BOLD active mask: `{surface_root}/sub-<subject>/surface/tsnr_gate/sub-<subject>_hemi-{hemi}_valid_mask.npy`.
+  - Reference timeseries: `{shared_root}/sub-<subject>/reference/kong2022/cortex_roi_parcel_timeseries.npy`.
+  - Reference parcels TSV: `{shared_root}/sub-<subject>/reference/kong2022/cortex_roi_parcels.tsv`.
+
+Outputs:
+- Command-line output / file outputs:
+  - Complete vertex-to-ROI functional connectivity matrix: `{shared_root}/sub-<subject>/fc/kong2022/{smoothing}/hemi_{hemi}/hipp_vertex_to_network_fc.npy`.
+  - Active-only vertex-to-ROI functional connectivity matrix: `{shared_root}/sub-<subject>/fc/kong2022/{smoothing}/hemi_{hemi}/hipp_vertex_to_network_fc_active.npy`.
+  - Run manifest: `{shared_root}/sub-<subject>/fc/kong2022/{smoothing}/hemi_{hemi}/fc_summary.json`.
 """
 import argparse
 import csv

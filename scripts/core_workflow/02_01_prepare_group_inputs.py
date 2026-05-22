@@ -4,6 +4,34 @@ from __future__ import annotations
 """
 Process Step Description:
 Prepare group inputs. Preprocess and organize individual-level data to meet the requirements for downstream group-level analysis.
+
+Main Flow Path:
+- 3rd step in the numbered pipeline sequence:
+  01_01_run_hippunfold_t1w_local.py -> 01_02_check_hippunfold_outputs.py -> 02_01_prepare_group_inputs.py (this step) -> 02_02_build_qc_manifest.py -> 03_01/03_02 reference building -> 04_01/04_02/04_03 FC materialization -> 05_01 gradient computation -> 05_02 group atlas parcellation -> 06_xx presentation rendering -> 07_01 group matrix overview.
+
+Inputs:
+- Command-line arguments:
+  - --hippunfold-batch-root: Batch output root containing sub-*/hippunfold outputs (default: `outputs_core/inputs/hcp7t_hippocampus/hippunfold/dense_corobl_batch`).
+  - --route-root: Route-specific processing directory (default: `outputs_core/inputs/hcp7t_hippocampus/kong2022`).
+  - --shared-root: Path to output shared processed surface files (default: `outputs_core/inputs/hcp7t_hippocampus/kong2022/shared_inputs/surface_151`).
+  - --template-root: Path to template root directory (default: `outputs_core/inputs/hcp7t_hippocampus/kong2022/shared_inputs/template`).
+  - --bold-root: Root path containing raw fMRI volume timeseries (default: `/home/yojiao/LSS/jianglab/3_Data_Working/HCP_7T_Hippocampus/rsfmri_volume`).
+  - --subjects-manifest: Path to subject manifest list (txt file, one ID per line).
+  - --subjects: Space-separated list of explicit subject IDs.
+  - --jobs: Worker threads for parallel execution (default: 2).
+  - --resume: Skip already completed subjects (default: True).
+  - --stage: Steps to run: "all", "raw", "tsnr", "qc", "smooth", "group-average" (default: "all").
+  - --dice-threshold: Dice overlap QC threshold (default: 0.70).
+- Physical inputs:
+  - HippUnfold subject outputs (`*_hemi-{L|R}_desc-unetf3d_dice.tsv`, midthickness gifti surfaces, etc.) under `{hippunfold_batch_root}/`.
+  - Raw fMRI timeseries: `{bold_root}/sub-<subject>/func/sub-<subject>_task-rest_run-concat.dtseries.nii` (RouteA/B depending on dtseries layout).
+
+Outputs:
+- Command-line output / file outputs:
+  - Resampled hippocampal BOLD surface timeseries: `{shared_root}/sub-<subject>/surface/{smoothing}/sub-<subject>_hemi-{hemi}_timeseries.npy`.
+  - tSNR summaries: `{shared_root}/sub-<subject>/surface/tsnr_gate/sub-<subject>_hemi-{hemi}_tsnr_gate_summary.json` and `valid_mask.npy`.
+  - Group average template surfaces under `{template_root}/`.
+  - Run preparation manifest: `{route_root}/prepare_t1only_group_inputs_manifest.json`.
 """
 import argparse
 import json

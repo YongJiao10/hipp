@@ -4,6 +4,45 @@ from __future__ import annotations
 """
 Process Step Description:
 Build cortical projection panels for clusters. Generates visualization panel data projecting hippocampal clustered networks onto the cerebral cortex surface to show hippocampal-cortical connectivity patterns.
+
+Main Flow Path:
+- 9th step in the numbered pipeline sequence (first stage of presentation output generation, run in parallel with 06_01, 06_02, 06_03, 06_05, 06_06):
+  01_01_run_hippunfold_t1w_local.py -> 01_02_check_hippunfold_outputs.py -> 02_01_prepare_group_inputs.py -> 02_02_build_qc_manifest.py -> 03_01/03_02 reference building -> 04_01/04_02/04_03 FC materialization -> 05_01 gradient computation -> 05_02 group atlas parcellation -> 06_04_build_cluster_cortex_panels.py (this step) -> 07_01 group matrix overview.
+
+Inputs:
+- Command-line arguments:
+  - --group-root: Root directory containing group atlas results (default: `outputs_core/work/group_atlas`).
+  - --shared-root: Root directory containing shared atlas reference files (default: `outputs_core/work/kong2022_reference_routea`).
+  - --present-dir: Output directory for final presentation figures (default: `outputs_core/present/cortex_panels`).
+  - --runtime-root: Root for intermediate files and index layout (default: `<present-dir>/runtime`).
+  - --atlas: Cortical atlas choice (default: "kong2022").
+  - --methods: Methods to process (default: ["intrinsic-spectral", "network-spectral", "wta-top"]).
+  - --smoothings: Smoothing kernel values to process (default: ["2mm", "4mm"]).
+  - --hemis: Hemispheres to process (default: ["L", "R"]).
+  - --coverage-threshold: Coverage threshold to process (default: 0.80).
+  - --fdr-q: FDR q-threshold for one-sample t-test (default: 0.05).
+  - --max-rois-per-sign: Maximum cortical ROIs to display per positive/negative sign (default: 20).
+  - --cortex-template-subject: Subject ID used as cortical template (default: "100610").
+  - --data-root: Directory for core data, containing subject lists/manifests (default: `data/hippunfold_input`).
+  - --cortex-assets-root: Directory for template cortex surfaces (default: `data/cortex_assets`).
+  - --scene: Cortical workbench manual scene template (default: `config/manual_wb_scenes/cortex_manual.scene`).
+- Physical inputs:
+  - Shared network colors: `config/cross_atlas_network_merge.json` or `config/hipp_network_style.json`
+  - Group-level clusters: `group_labels_final.npy` under `{group_root}/{method}/smooth-{smoothing}_hemi-{hemi}_cov-{threshold}/`.
+  - Subject-level cluster-to-cortex functional connectivity matrices.
+  - Cortex surface files (`*.surf.gii`) and ROI maps under `--cortex-assets-root`.
+
+Outputs:
+- File outputs:
+  - Standalone cortical projection panel figures: `{runtime_root}/combos/{combo_id}/cluster_{cluster_id:02d}_panel.png`
+  - ROI statistical outputs: `{runtime_root}/combos/{combo_id}/cluster_{cluster_id:02d}_stats.tsv` and `.json`
+  - Combination-level manifest: `{runtime_root}/combos/{combo_id}/cortex_panel_combo_manifest.json`
+  - Merged overview panel figures: `{present_dir}/cortex_{atlas}_{method}_overview.png` or `{present_dir}/cortex_{atlas}_{method}_{smoothing}_overview.png`
+  - Manifests:
+    - Runtime manifest: `{runtime_root}/cluster_roi_cortex_runtime_manifest.json`
+    - Viewer manifest: `{runtime_root}/cluster_roi_cortex_manifest.json`
+    - Presentation manifest: `{present_dir}/cluster_roi_cortex_overview_manifest.json`
+  - Index README: `{runtime_root}/README.md` and `{present_dir}/README.md`
 """
 import argparse
 import json

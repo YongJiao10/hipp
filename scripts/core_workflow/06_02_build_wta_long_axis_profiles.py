@@ -4,6 +4,30 @@ from __future__ import annotations
 """
 Process Step Description:
 Build winner-takes-all (WTA) long-axis network profiles. Computes and summarizes the WTA distribution proportion of each functional network along the hippocampal long axis (anterior to posterior).
+
+Main Flow Path:
+- 9th step in the numbered pipeline sequence (second stage of presentation output generation, specific to WTA-top method):
+  01_01_run_hippunfold_t1w_local.py -> 01_02_check_hippunfold_outputs.py -> 02_01_prepare_group_inputs.py -> 02_02_build_qc_manifest.py -> 03_01/03_02 reference building -> 04_01/04_02/04_03 FC materialization -> 05_01 gradient computation -> 05_02 group atlas parcellation -> 06_02_build_wta_long_axis_profiles.py (this step) -> 07_01 group matrix overview.
+
+Inputs:
+- Command-line arguments:
+  - --group-root: Directory where group-atlas intermediate files are saved (default: `outputs_core/work/group_atlas/routea_full_k3_fisherz`).
+  - --present-dir: Directory where final presentation figures will be saved (default: `outputs_core/present/overviews`).
+  - --atlas: Cortical atlas to process (default: "kong2022").
+  - --route-tag: Workflow branch tag to process (default: "routea").
+  - --smoothings: Smoothing levels to process: "2mm", "4mm".
+  - --hemis: Hemispheres to process: "L", "R".
+  - --bins: Long-axis bins count values to compute (default: [20]).
+  - --coverage-threshold: Selected coverage threshold for overview outputs (default: 0.80).
+- Physical inputs:
+  - Group WTA-top label arrays: `{group_root}/wta-top/smooth-{smoothing}_hemi-{hemi}_cov-{threshold}/group_functional_atlas_labels.npy`.
+  - Long axis AP coordinates of hippocampal template.
+
+Outputs:
+- Command-line output / file outputs:
+  - Long axis network proportion profile line plots (PNG): `{present_dir}/{atlas}_wta-top_long_axis_network_profile_{route_tag}_{smoothing}_bins{n_bins}_cov{threshold_tag}.png`.
+  - Detailed bins network proportions summary table (TSV): `{present_dir}/{atlas}_wta-top_long_axis_network_profile_{route_tag}_{smoothing}_bins{n_bins}_cov{threshold_tag}.tsv`.
+  - Run output manifest JSON: `{present_dir}/{atlas}_wta-top_long_axis_network_profile_{route_tag}_bins{n_bins}_manifest.json`.
 """
 import argparse
 import csv

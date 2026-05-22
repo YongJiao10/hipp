@@ -3,7 +3,40 @@ from __future__ import annotations
 
 """
 Process Step Description:
-Render group-level gradient heatmaps. Generates heatmap visualizations of functional gradients based on group-level data to intuitively display gradient patterns.
+Render group-level gradient heatmaps. Generates heatmap visualizations of functional gradients based on group-level data to intuitively display gradient patterns in a composite 2x3 grid image layout.
+
+Main Flow Path:
+- 9th step in the numbered pipeline sequence (first stage of presentation output generation, run in parallel with 06_01, 06_02, 06_03, 06_04, 06_05):
+  01_01_run_hippunfold_t1w_local.py -> 01_02_check_hippunfold_outputs.py -> 02_01_prepare_group_inputs.py -> 02_02_build_qc_manifest.py -> 03_01/03_02 reference building -> 04_01/04_02/04_03 FC materialization -> 05_01 gradient computation -> 05_02 group atlas parcellation -> 06_06_render_group_gradient_heatmaps.py (this step) -> 07_01 group matrix overview.
+
+Inputs:
+- Command-line arguments:
+  - --group-root: Root directory containing group atlas results (default: `outputs_core/work/group_atlas`).
+  - --scene: Connectome Workbench template scene file (default: `config/wb_locked_native_view_lateral_medial.scene`).
+  - --output-png: Output path for the composite 2x3 heatmap figure (default: `outputs_core/present/gradients/kong2022_gradient-spectral_group_gradients_heatmap_routea_2mm4mm_g1g2g3.png`).
+  - --output-manifest: Output path for the manifest JSON (default: `outputs_core/present/gradients/kong2022_gradient-spectral_group_gradients_heatmap_routea_2mm4mm_g1g2g3_manifest.json`).
+  - --runtime-root: Root for intermediate files and temporary scene directories (default: `outputs_core/present/gradients/group_gradient_heatmaps/runtime/routea_full`).
+  - --method: Parcellation method tag (default: "gradient-spectral").
+  - --atlas: Cortical atlas name (default: "kong2022").
+  - --smoothings: Smoothing values to process (default: ["2mm", "4mm"]).
+  - --hemis: Hemispheres to process (default: ["L", "R"]).
+  - --components: Comma-separated list of gradient components to plot (default: "G1,G2,G3").
+  - --coverage-tag: Coverage threshold directory name tag (default: "cov_0p80").
+  - --renderer: Workbench window renderer choice (default: "OSMesa").
+  - --width: Rendered window width (default: 1600).
+  - --height: Rendered window height (default: 1024).
+  - --palette: Color palette for gradients (default: "magma").
+  - --dry-run: Enable dry run to skip actual Workbench command invocation.
+- Physical inputs:
+  - Group atlas run subdirectories: `{group_root}/{method}/smooth-{smoothing}_hemi-{hemi}_cov-{threshold}/`
+  - Group manifest: `group_atlas_manifest.json` under each run directory
+  - Gradient data files (`*.npy` or `*.gii`) referenced in the manifest files.
+
+Outputs:
+- File outputs:
+  - A composite 2x3 heatmap grid image showing gradient columns and smoothing rows: `{output_png}`
+  - Manifest file capturing run configuration and output details: `{output_manifest}`
+  - Intermediate single-hemisphere/single-component PNG renderings under `{runtime_root}/`.
 """
 import argparse
 import json

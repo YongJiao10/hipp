@@ -3,7 +3,32 @@ from __future__ import annotations
 
 """
 Process Step Description:
-Render HippoMaps gradient products. Renders computed continuous functional gradient data into standard visualization products (including unfolded/folded surface renderings).
+Render HippoMaps gradient products. Renders computed continuous functional gradient data into standard visualization products (including unfolded/folded surface renderings, explained variance plots, and endpoint functional connectivity contrasts).
+
+Main Flow Path:
+- 9th step in the numbered pipeline sequence (first stage of presentation output generation, run in parallel with 06_01, 06_02, 06_03, 06_04, 06_06):
+  01_01_run_hippunfold_t1w_local.py -> 01_02_check_hippunfold_outputs.py -> 02_01_prepare_group_inputs.py -> 02_02_build_qc_manifest.py -> 03_01/03_02 reference building -> 04_01/04_02/04_03 FC materialization -> 05_01 gradient computation -> 05_02 group atlas parcellation -> 06_05_render_hippomaps_gradient_products.py (this step) -> 07_01 group matrix overview.
+
+Inputs:
+- Command-line arguments:
+  - --gradient-root: Root directory containing gradient data outputs (default: `outputs_core/work/hippomaps_gradients`).
+  - --present-root: Root directory for saving presentation figures (default: `outputs_core/present/gradients`).
+  - --hippomaps-root: Root directory for the HippoMaps repository package (default: `external/HippoMaps`).
+  - --routes: Routes to process (choices: "routea", "routeb", default: ["routea", "routeb"]).
+  - --smoothings: Smoothing kernel values to process (default: ["2mm", "4mm"]).
+  - --den: Output density resolution (default: "512").
+  - --components: Comma-separated list of gradient components to plot (default: "1,2,3").
+  - --hemis: Hemispheres to process (default: ["L", "R"]).
+- Physical inputs:
+  - Gradient output arrays and manifests: `{gradient_root}/{route}/{smoothing}/hemi_{hemi}/hippomaps_gradient_manifest.json` and matching `*.npy`/`*.gii` files.
+  - Group-level FC matrix: `{routes_root}/intrinsic_group_fc_smooth-{smoothing}_hemi-{hemi}.npy` or matching path.
+
+Outputs:
+- File outputs:
+  - Folded/Unfolded gradient surface rendering PNG: `{present_root}/combos/{route}_{smoothing}_{out_tag}/hippomaps_gradients_{route}_{smoothing}_{out_tag}.png`
+  - Explained variance fraction plot PNG: `{present_root}/combos/{route}_{smoothing}_{out_tag}/hippomaps_ev_plot_{route}_{smoothing}_{out_tag}.png`
+  - Endpoint FC contrast plot PNG: `{present_root}/combos/{route}_{smoothing}_{out_tag}/hippomaps_endpoint_fc_contrast_{route}_{smoothing}_{out_tag}.png`
+  - Manifest JSON: `{present_root}/combos/{route}_{smoothing}_{out_tag}/hippomaps_gradient_products_{route}_{smoothing}_{out_tag}_manifest.json`
 """
 import argparse
 import json
@@ -147,7 +172,7 @@ def ensure_bilateral_gradient_annotations(
     output_png: Path,
     selected_components: list[int],
     ev_by_hemi: dict[str, list[float]],
-    min_annotated_width: int = 800,
+    min_annotated_width: int = 550,
     settle_seconds: float = 1.0,
 ) -> Path:
     # VTK can finish writing the screenshot after the plotter call returns. Do one
@@ -237,6 +262,11 @@ def render_gradient_figure(
         screenshot=True,
         filename=str(render_png),
         suppress_warnings=True,
+        size=[450, 300],
+        cb__width=0.95,
+        cb__position=[0.02, 0.25],
+        cb__barRatio=0.18,
+        cb__labelTextProperty={"fontSize": 13},
     )
     final_render = render_png
     if fig is None:

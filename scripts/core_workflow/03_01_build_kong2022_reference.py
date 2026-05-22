@@ -4,6 +4,30 @@ from __future__ import annotations
 """
 Process Step Description:
 Build Kong2022 reference data. Generates Kong2022 parcellation reference files for cortical network mapping, providing a standard template for establishing hippocampal-cortical connectivity.
+
+Main Flow Path:
+- 5th step in the numbered pipeline sequence (shared reference building for kong2022):
+  01_01_run_hippunfold_t1w_local.py -> 01_02_check_hippunfold_outputs.py -> 02_01_prepare_group_inputs.py -> 02_02_build_qc_manifest.py -> 03_01_build_kong2022_reference.py (this step, or 03_02 for RouteA specific reference) -> 04_01/04_02/04_03 FC materialization -> 05_01 gradient computation -> 05_02 group atlas parcellation -> 06_xx presentation rendering -> 07_01 group matrix overview.
+
+Inputs:
+- Command-line arguments:
+  - --shared-root: Path to output shared processed files (default: `outputs_core/inputs/hcp7t_hippocampus/kong2022/shared_inputs/routeb_151`).
+  - --data-root: Root directory containing raw structural BIDS folders (default: `data/hippunfold_input`).
+  - --subjects-manifest: Path to QC-passed subject list manifest (default: `outputs_core/inputs/hcp7t_hippocampus/kong2022/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt`).
+  - --subjects: Space-separated list of explicit subject IDs.
+  - --jobs: Thread-pool concurrency cap (default: 4, hard-capped at 10).
+  - --resume: Skip already completed subjects (default: True).
+  - --kong2022-dlabel: Path to standard Kong2022 dlabel.nii cortical atlas file.
+  - --cross-atlas-merge-json: Path to JSON mapping networks across atlases.
+- Physical inputs:
+  - Concat fMRI dtseries file: `{data_root}/sub-<subject>/func/sub-<subject>_task-rest_run-concat.dtseries.nii`.
+  - Kong2022 standard cortical dlabel atlas.
+
+Outputs:
+- Command-line output / file outputs:
+  - Cortical network reference parcel timeseries: `{shared_root}/sub-<subject>/reference/kong2022/cortex_roi_parcel_timeseries.npy`.
+  - Cortical network parcels description table: `{shared_root}/sub-<subject>/reference/kong2022/cortex_roi_parcels.tsv`.
+  - Reference generation run manifest: `{shared_root}/sub-<subject>/reference/kong2022/runs/run-<run_id>/reference_summary.json`.
 """
 import argparse
 import hashlib

@@ -4,6 +4,38 @@ from __future__ import annotations
 """
 Process Step Description:
 Compute HippoMaps gradients. Calculates continuous functional gradients of the hippocampus based on functional connectivity data to reflect macroscale functional transition patterns.
+
+Main Flow Path:
+- 7th step in the numbered pipeline sequence (gradient computation step for gradient-spectral atlas):
+  01_01_run_hippunfold_t1w_local.py -> 01_02_check_hippunfold_outputs.py -> 02_01_prepare_group_inputs.py -> 02_02_build_qc_manifest.py -> 03_01/03_02 reference building -> 04_01/04_02/04_03 FC materialization -> 05_01_compute_hippomaps_gradients.py (this step) -> 05_02 group atlas parcellation -> 06_xx presentation rendering -> 07_01 group matrix overview.
+
+Inputs:
+- Command-line arguments:
+  - --routes: Workflow branches to process (choices: "routea", "routeb", default: both).
+  - --shared-inputs-root: Directory containing route-specific shared reference inputs (default: `outputs_core/inputs/hcp7t_hippocampus/kong2022/shared_inputs`).
+  - --surface-root: Path to BOLD surfaces root directory (default: `outputs_core/inputs/hcp7t_hippocampus/kong2022/shared_inputs/surface_151`).
+  - --subjects-manifest: Path to QC-passed subject list manifest (default: `outputs_core/inputs/hcp7t_hippocampus/kong2022/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt`).
+  - --smoothings: Smoothing levels to process: "2mm", "4mm".
+  - --hemis: Hemispheres to process: "L", "R".
+  - --coverage-threshold: Minimum coverage fraction to include vertices (default: 0.80).
+  - --group-average-surfaces-dir: Path to template midthickness surfaces (default: `outputs_core/inputs/hcp7t_hippocampus/kong2022/shared_inputs/template`).
+  - --out-root: Directory where computed gradients will be saved (default: `outputs_core/work/hippomaps_gradients`).
+  - --hippomaps-root: Root path to external HippoMaps codebase (default: `external/hippomaps`).
+  - --n-components: Number of gradient components to fit in BrainSpace (default: 5).
+  - --selected-components: Comma-separated components to save in output GIFTI (default: "1,2,3").
+  - --max-subjects: Max subjects to process (useful for smoke tests).
+  - --force: Force recompute even if outputs exist.
+- Physical inputs:
+  - Subject active vertex-to-ROI FC matrices: `{shared_inputs_root}/{route_dir}/sub-<subject>/fc/kong2022/{smoothing}/hemi_{hemi}/hipp_vertex_to_network_fc_active.npy`.
+  - Subject active masks: `{surface_root}/sub-<subject>/surface/tsnr_gate/sub-<subject>_hemi-{hemi}_valid_mask.npy`.
+  - Group template midthickness surfaces: `{group_average_surfaces_dir}/group-average_hemi-{hemi}_space-corobl_den-512_label-hipp_midthickness.surf.gii`.
+
+Outputs:
+- Command-line output / file outputs:
+  - Gradient GIFTI file: `{out_root}/{route}/smooth-{smoothing}_hemi-{hemi}/group_gradients.func.gii` (containing selected gradient maps).
+  - Gradient eigenvalues fractions JSON: `{out_root}/{route}/smooth-{smoothing}_hemi-{hemi}/group_gradients_eigenvalues.json`.
+  - Group mean Fisher-z FC matrix: `{out_root}/{route}/smooth-{smoothing}_hemi-{hemi}/group_mean_fisherz_fc_active.npy`.
+  - Gradient stage manifest: `{out_root}/{route}/smooth-{smoothing}_hemi-{hemi}/group_gradients_manifest.json`.
 """
 import argparse
 import json

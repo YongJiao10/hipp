@@ -4,6 +4,30 @@ from __future__ import annotations
 """
 Process Step Description:
 Build quality control (QC) manifest. Generates a manifest file containing information on all passed/failed subjects so that subsequent steps only include QC-passed data.
+
+Main Flow Path:
+- 4th step in the numbered pipeline sequence:
+  01_01_run_hippunfold_t1w_local.py -> 01_02_check_hippunfold_outputs.py -> 02_01_prepare_group_inputs.py -> 02_02_build_qc_manifest.py (this step) -> 03_01/03_02 reference building -> 04_01/04_02/04_03 FC materialization -> 05_01 gradient computation -> 05_02 group atlas parcellation -> 06_xx presentation rendering -> 07_01 group matrix overview.
+
+Inputs:
+- Command-line arguments:
+  - --hippunfold-batch-root: Batch output root containing sub-*/hippunfold outputs (default: `outputs_core/inputs/hcp7t_hippocampus/hippunfold/dense_corobl_batch`).
+  - --shared-root: Path to output shared processed surface files (default: `outputs_core/inputs/hcp7t_hippocampus/kong2022/shared_inputs/surface_151`).
+  - --out-dir: Output directory for the QC report TSV (default: `outputs_core/inputs/hcp7t_hippocampus/kong2022/qc`).
+  - --manifest-dir: Output directory for the generated subjects manifest (default: `outputs_core/inputs/hcp7t_hippocampus/kong2022/manifests`).
+  - --subjects: Space-separated list of explicit subject IDs.
+  - --dice-threshold: Dice overlap QC threshold (default: 0.70).
+  - --tsnr-invalid-threshold: Maximum allowed fraction of invalid (low tSNR/sd) vertices (default: 0.20).
+- Physical inputs:
+  - Subject Dice TSV files: `{hippunfold_batch_root}/sub-<subject>/hippunfold/sub-<subject>/qc/sub-<subject>_hemi-{L|R}_desc-unetf3d_dice.tsv`.
+  - Subject tSNR gate summaries: `{shared_root}/sub-<subject>/surface/tsnr_gate/sub-<subject>_hemi-{L|R}_tsnr_gate_summary.json`.
+
+Outputs:
+- Command-line output / file outputs:
+  - QC summary TSV file: `{out_dir}/hcp_7t_hippocampus_fmri_qc_summary_t1only.tsv` detailing Dice scores and invalid tSNR fractions per subject.
+  - QC-passed subjects list manifest: `{manifest_dir}/hcp_7t_hippocampus_fmri_qc_pass_t1only_151.txt` (the default 151 subjects cohort list).
+  - Rolling pointer symlink/manifest: `{manifest_dir}/hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt` (pointing to the 151 subjects list).
+  - QC run traceability manifest: `{manifest_dir}/build_qc_manifest_run_manifest.json`.
 """
 import argparse
 import csv

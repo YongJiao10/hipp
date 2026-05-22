@@ -4,6 +4,57 @@ from __future__ import annotations
 """
 Process Step Description:
 Run group-level atlas clustering and network mapping. Performs clustering analysis on group-averaged functional connectivity or gradients to generate hippocampal functional parcellation atlases and maps them to known cortical networks.
+
+Main Flow Path:
+- 8th step in the numbered pipeline sequence (the core clustering and mapping execution step):
+  01_01_run_hippunfold_t1w_local.py -> 01_02_check_hippunfold_outputs.py -> 02_01_prepare_group_inputs.py -> 02_02_build_qc_manifest.py -> 03_01/03_02 reference building -> 04_01/04_02/04_03 FC materialization -> 05_01 gradient computation -> 05_02_run_group_atlas.py (this step) -> 06_xx presentation rendering -> 07_01 group matrix overview.
+
+Inputs:
+- Command-line arguments:
+  - --shared-root: Path to shared processed files (default: `outputs_core/inputs/hcp7t_hippocampus/kong2022/shared_inputs/routeb_151`).
+  - --surface-root: Path to BOLD surfaces root directory (default: `outputs_core/inputs/hcp7t_hippocampus/kong2022/shared_inputs/surface_151`).
+  - --out-root: Directory where group-atlas intermediate files will be saved (default: `outputs_core/work/group_atlas`).
+  - --gradient-root: Directory containing computed continuous gradients (default: `outputs_core/work/hippomaps_gradients`).
+  - --hippomaps-root: Root path to external HippoMaps codebase (default: `external/hippomaps`).
+  - --route-tag: Expected workflow branch tag, e.g., "routea", "routeb", "auto".
+  - --subjects-manifest: Path to QC-passed subject list manifest.
+  - --hippunfold-batch-root: Batch output root containing sub-*/hippunfold outputs.
+  - --kong2022-dlabel: Path to standard Kong2022 dlabel.nii cortical atlas file.
+  - --methods: Parcellation methods to evaluate: "intrinsic-spectral", "network-spectral", "gradient-spectral", "wta-top".
+  - --atlases: Cortical atlases to map: "kong2022", "kong2019", etc.
+  - --smoothings: Smoothing levels to process: "2mm", "4mm".
+  - --hemis: Hemispheres to process: "L", "R".
+  - --coverage-thresholds: Minimum coverage fraction values to evaluate (default: [0.70, 0.80, 0.90]).
+  - --k-min: Minimum number of clusters to evaluate (default: 2).
+  - --k-max: Maximum number of clusters to evaluate (default: 10).
+  - --force-final-k: Fixed K value for final presentation labels (default: 3).
+  - --instability-resamples: Number of split-half resamples for cluster instability (default: 100).
+  - --null-resamples: Number of random spin tests for cortical mapping null distribution (default: 100).
+  - --seed: Random seed for repeatability (default: 20260420).
+  - --v-min-fraction: Minimum cluster vertex size fraction (default: 0.03).
+  - --max-components-threshold: Max components for gradient selection.
+  - --min-profile-coherence: Minimum profile coherence score threshold.
+  - --subject-fc-mode: FC preprocessing sparsification mode: "full", "top-percent".
+  - --subject-fc-top-percent: Sparsification top percentage integer.
+  - --gradient-components: Selected gradient components for gradient-spectral (default: "1,2,3").
+  - --resume: Resume from existing runs.
+  - --k-selection-mode: K selection model: "redundancy-aware", "experimental".
+  - --redundancy-early-stop: Stop evaluation of larger K values once first redundant K is found (default: False).
+  - --overview-threshold: Selected coverage threshold for overview outputs (default: 0.80).
+  - --jobs: Parallel worker pool size (default: 1).
+  - --group-average-surfaces-dir: Directory containing group average template surfaces.
+- Physical inputs:
+  - Subject functional connectivity caches: e.g. `{shared_root}/sub-<subject>/fc/.../hipp_vertex_to_network_fc_active.npy`.
+  - Group average template surfaces: e.g. `{group_average_surfaces_dir}/group-average_hemi-{L|R}_space-corobl_den-512_label-hipp_midthickness.surf.gii`.
+  - Pre-computed continuous gradients under `{gradient_root}/` (for gradient-spectral method).
+
+Outputs:
+- Command-line output / file outputs:
+  - Detailed group-atlas results directories under `{out_root}/{route_tag}/{method}/smooth-{smoothing}_hemi-{hemi}_cov-{threshold}/`:
+    - `group_atlas_manifest.json`: Step-level execution trace and results.
+    - `group_functional_atlas_labels.npy`: Parcellation label array for chosen final K.
+    - `cluster_assignment_status.json`: Network mapping diagnostic summary.
+    - Suffixed label / profile files (`*_fisherz.npy`, `*_count.npy`, etc.).
 """
 import argparse
 import csv
