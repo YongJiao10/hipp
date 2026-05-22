@@ -43,7 +43,7 @@ Kong2022 group-gradient clustering example:
 /home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/05_02_run_group_atlas.py   --methods intrinsic-spectral network-spectral gradient-spectral wta-top   --atlases kong2022   --gradient-root outputs_core/work/hippomaps_gradients   --route-tag routea   --k-min 2 --k-max 10 --force-final-k 3
 ```
 
-`05_01` computes G1-G5 from the column-wise z-scored group mean Fisher-z vertex-to-Kong2022 ROI FC matrix using `GradientMaps(n_components=N, kernel="pearson")`. `05_02` loads those artifacts for `gradient-spectral` and selects `G1,G2,G3` by default. The legacy auto-K logic remains behind `--auto-k`, but the maintained default is full K-curve evaluation (`K=2..10`) with fixed final `K=3`.
+`05_01` computes raw G1-G5 from the column-wise z-scored group mean Fisher-z vertex-to-Kong2022 ROI FC matrix using `GradientMaps(n_components=N, kernel="pearson")`, aligns component order and sign within each route to `4mm/hemi_L` when present, and writes only aligned artifacts. `05_02` loads those aligned artifacts for `gradient-spectral` and selects `G1,G2,G3` by default. The legacy auto-K logic remains behind `--auto-k`, but the maintained default is full K-curve evaluation (`K=2..10`) with fixed final `K=3`.
 
 ## 6. Presentation Products
 

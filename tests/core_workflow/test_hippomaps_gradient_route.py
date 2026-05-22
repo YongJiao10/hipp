@@ -274,6 +274,13 @@ def test_group_atlas_gradient_spectral_loads_hippomaps_gradient_artifacts() -> N
             "hemi": "L",
             "n_components_computed": 5,
             "gradientmaps_call": "brainspace.gradient.GradientMaps(n_components=N, kernel='pearson').fit(column_zscored_group_mean_fisherz_fc)",
+            "gradient_alignment": {
+                "enabled": True,
+                "anchor_route": "routea",
+                "anchor_smoothing": "4mm",
+                "anchor_hemi": "L",
+                "raw_arrays_saved": False,
+            },
             "outputs": {
                 "hippomaps_gradients_full": str((run_dir / "hippomaps_gradients_full.npy").resolve()),
             },
@@ -298,6 +305,8 @@ def test_group_atlas_gradient_spectral_loads_hippomaps_gradient_artifacts() -> N
     assert np.allclose(selected[:, 1], [3.0, 8.0, 13.0], atol=1e-6)
     assert meta["gradient_source"] == "hippomaps_gradient_artifacts"
     assert meta["gradient_component_labels"] == ["G1", "G3"]
+    assert meta["gradient_alignment"]["enabled"] is True
+    assert meta["gradient_alignment"]["raw_arrays_saved"] is False
     assert meta["hippomaps_gradient_manifest"].endswith("hippomaps_gradient_manifest.json")
 
 
@@ -410,6 +419,63 @@ def test_full_surface_reconstruction_keeps_nan_outside_support() -> None:
     assert math.isnan(float(full[0, 0])), full
     assert math.isnan(float(full[2, 1])), full
     assert np.allclose(full[support], active)
+
+
+def test_gradient_alignment_reorders_components_and_flips_sign_to_anchor() -> None:
+    anchor_full = np.asarray(
+        [
+            [-1.0, 0.0],
+            [0.0, 1.0],
+            [1.0, 0.0],
+            [0.0, -1.0],
+        ],
+        dtype=np.float32,
+    )
+    candidate_full = np.column_stack([-anchor_full[:, 1], anchor_full[:, 0]]).astype(np.float32)
+    aligned_active, aligned_full, aligned_lambdas, aligned_ev, meta = compute_mod.align_gradient_components_to_reference(
+        active=candidate_full.copy(),
+        full=candidate_full.copy(),
+        lambdas=np.asarray([20.0, 10.0], dtype=np.float64),
+        ev_fractions=np.asarray([2.0 / 3.0, 1.0 / 3.0], dtype=np.float64),
+        reference_full=anchor_full,
+        component_labels=["G1", "G2"],
+    )
+
+    assert np.allclose(aligned_active, anchor_full, atol=1e-6), aligned_active
+    assert np.allclose(aligned_full, anchor_full, atol=1e-6), aligned_full
+    assert np.allclose(aligned_lambdas, [10.0, 20.0], atol=1e-6), aligned_lambdas
+    assert np.allclose(aligned_ev, [1.0 / 3.0, 2.0 / 3.0], atol=1e-6), aligned_ev
+    assert meta["component_mapping"] == {"G1": "G2", "G2": "G1"}, meta
+    assert meta["sign_flip_applied"] == {"G1": False, "G2": True}, meta
+    assert meta["raw_arrays_saved"] is False, meta
+
+
+def test_gradient_alignment_anchor_combo_is_identity_without_raw_outputs() -> None:
+    anchor_full = np.asarray(
+        [
+            [1.0, -2.0, 0.0],
+            [2.0, -1.0, 1.0],
+            [3.0, 0.0, 2.0],
+            [4.0, 1.0, 3.0],
+        ],
+        dtype=np.float32,
+    )
+    aligned_active, aligned_full, aligned_lambdas, aligned_ev, meta = compute_mod.align_gradient_components_to_reference(
+        active=anchor_full.copy(),
+        full=anchor_full.copy(),
+        lambdas=np.asarray([5.0, 4.0, 3.0], dtype=np.float64),
+        ev_fractions=np.asarray([5.0 / 12.0, 4.0 / 12.0, 3.0 / 12.0], dtype=np.float64),
+        reference_full=anchor_full,
+        component_labels=["G1", "G2", "G3"],
+    )
+
+    assert np.allclose(aligned_active, anchor_full, atol=1e-6), aligned_active
+    assert np.allclose(aligned_full, anchor_full, atol=1e-6), aligned_full
+    assert np.allclose(aligned_lambdas, [5.0, 4.0, 3.0], atol=1e-6), aligned_lambdas
+    assert np.allclose(aligned_ev, [5.0 / 12.0, 4.0 / 12.0, 3.0 / 12.0], atol=1e-6), aligned_ev
+    assert meta["component_mapping"] == {"G1": "G1", "G2": "G2", "G3": "G3"}, meta
+    assert meta["sign_flip_applied"] == {"G1": False, "G2": False, "G3": False}, meta
+    assert meta["raw_arrays_saved"] is False, meta
 
 
 def test_endpoint_fc_contrast_uses_top_minus_bottom_gradient_quartiles() -> None:
@@ -553,6 +619,8 @@ def main() -> int:
     test_smoke_command_plan_uses_isolated_fixedk_full_layout()
     test_compute_defaults_to_five_components_like_hippomaps_paper()
     test_full_surface_reconstruction_keeps_nan_outside_support()
+    test_gradient_alignment_reorders_components_and_flips_sign_to_anchor()
+    test_gradient_alignment_anchor_combo_is_identity_without_raw_outputs()
     test_endpoint_fc_contrast_uses_top_minus_bottom_gradient_quartiles()
     test_render_gradient_figure_calls_official_hippomaps_plotter_options()
     test_render_gradient_figure_can_render_left_hemi_only()

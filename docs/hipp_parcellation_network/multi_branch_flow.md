@@ -42,10 +42,12 @@ Use numbered public entrypoints in `scripts/core_workflow/`:
 computes HippoMaps/BrainSpace continuous gradients from the RouteA/RouteB
 Kong2022 vertex-to-ROI FC caches: Fisher-z per subject, group mean, column-wise
 feature z-score across vertices, then
-`GradientMaps(n_components=N, kernel="pearson")`. The default computes G1-G5
-and records lambdas/EV fractions.
+`GradientMaps(n_components=N, kernel="pearson")`. The default computes raw G1-G5,
+aligns component order and sign within each route to `4mm/hemi_L` when that combo
+is present, writes only aligned gradient arrays, and records lambdas/EV fractions
+in aligned component order.
 
-`05_02_run_group_atlas.py` then consumes those saved artifacts from
+`05_02_run_group_atlas.py` then consumes those aligned saved artifacts from
 `--gradient-root` for `gradient-spectral` and clusters selected gradient columns
 (`G1,G2,G3` by default). The maintained default evaluates the full `K=2..10` diagnostic curve for clustering methods while fixing final presentation labels at `K=3`. The legacy automatic K selector remains available through `--auto-k` but is no longer the default policy. The partial-correlation
 spectral branches are retired from public method choices.
@@ -60,10 +62,11 @@ presentation split.
 `05_01_compute_hippomaps_gradients.py` consumes the QC-passed subject manifest,
 RouteA/RouteB Kong2022 vertex-to-ROI FC caches from `04_01`, surface support
 masks, and group-average hippocampal surfaces. Outputs include group mean
-Fisher-z FC, active and full-surface gradient arrays, selected `G1`-`G3` full
-arrays with NaNs outside support, the full returned lambda vector, EV fractions,
-and a manifest recording source FC paths, subject count, vertex count,
-`external/hippomaps` import path, and HippoMaps commit.
+Fisher-z FC, aligned active and full-surface gradient arrays, selected `G1`-`G3`
+full arrays with NaNs outside support, the full lambda vector reordered to
+aligned component order, EV fractions, and a manifest recording source FC paths,
+subject count, vertex count, alignment provenance, `external/hippomaps` import
+path, and HippoMaps commit.
 
 `06_05_render_hippomaps_gradient_products.py` renders this continuous route
 with official HippoMaps plotting code:
@@ -72,13 +75,14 @@ unfoldAPrescale=False for den=512, tighten_cwindow=True, share="row",
 color_bar="right")`. For `den=512`, the renderer treats `512` as HippoMaps v2
 in the current Python process; no AP surfarea rescale is used. It also writes EV
 plots and Kong2022 ROI FC contrast plots comparing vertices in the top 25% vs
-bottom 25% of each gradient. The default render is bilateral, but L/R gradients
-are fit independently, so `06_05` renders each hemisphere separately with its
-own colorbar and EV labels before stitching the two sides. `--hemis L` or
+bottom 25% of each aligned gradient. The default render is bilateral; `06_05`
+renders each already-aligned hemisphere separately with its own colorbar and EV
+labels before stitching the two sides. `--hemis L` or
 `--hemis R` writes single-hemisphere gradient, EV, endpoint-contrast, and
 manifest files with hemisphere tags in the filenames. This route is upstream and
-continuous only. It does not change K selection, regularization, label
-assignment, or the downstream `gradient-spectral` clustering outputs in `05_01`.
+continuous only. Alignment changes the gradient feature values consumed by
+`gradient-spectral`, but does not change K selection, regularization, or label
+assignment rules.
 
 Canonical presentation outputs live under `outputs_core/present/`: maintained
 method overview PNGs in `overviews/`, continuous gradient products in

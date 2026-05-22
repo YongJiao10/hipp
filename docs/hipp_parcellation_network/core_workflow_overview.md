@@ -32,12 +32,14 @@ Group atlas method families include intrinsic FC, network/ROI FC, WTA, and
 `--auto-k` for diagnostics but is no longer the default display policy. Partial
 correlation spectral branches are retired from public method choices.
 
-`gradient-spectral` is Kong2022-only. It consumes HippoMaps/BrainSpace gradient
-artifacts written by `05_01_compute_hippomaps_gradients.py` under
-`--gradient-root`, then clusters selected columns. `05_01` computes G1-G5 from
-the column-wise z-scored group mean Fisher-z vertex-to-Kong2022 ROI FC matrix
-using `GradientMaps(n_components=N, kernel="pearson")`; `05_02` selects G1-G3
-by default (`--gradient-components 1,2,3`).
+`gradient-spectral` is Kong2022-only. It consumes aligned HippoMaps/BrainSpace
+gradient artifacts written by `05_01_compute_hippomaps_gradients.py` under
+`--gradient-root`, then clusters selected columns. `05_01` computes raw G1-G5
+from the column-wise z-scored group mean Fisher-z vertex-to-Kong2022 ROI FC
+matrix using `GradientMaps(n_components=N, kernel="pearson")`, aligns component
+order and sign within each route to the `4mm/hemi_L` anchor when available, and
+writes only the aligned arrays. `05_02` selects aligned G1-G3 by default
+(`--gradient-components 1,2,3`).
 
 `06_05_render_hippomaps_gradient_products.py` renders the same continuous
 gradient artifacts with `hippomaps.plotting.surfplot_canonical_foldunfold`,
@@ -45,10 +47,12 @@ gradient artifacts with `hippomaps.plotting.surfplot_canonical_foldunfold`,
 `color_bar="right"`. For `den=512`, it treats `512` as HippoMaps v2 in the
 current Python process and disables `unfoldAPrescale`; no AP surfarea rescale is
 used for 512-density figures. The renderer defaults to bilateral output and accepts `--hemis L` or
-`--hemis R` for single-hemisphere files. Because left and right hemispheres are
-fit independently, bilateral figures are assembled from separate L/R HippoMaps
-renders so each side keeps its own colorbar and EV labels. Manifests record the
-`external/hippomaps` import path, commit, and plotter support settings.
+`--hemis R` for single-hemisphere files. Although left and right hemispheres are
+fit independently upstream, `05_01` writes aligned arrays before `06_05` renders
+them. Bilateral figures are still assembled from separate L/R HippoMaps renders
+so each side keeps its own colorbar and EV labels. Manifests record the
+`external/hippomaps` import path, commit, plotter support settings, and gradient
+alignment provenance.
 
 Canonical presentation outputs live under `outputs_core/present/`. All maintained
 method overview PNGs are written to `outputs_core/present/overviews/`.

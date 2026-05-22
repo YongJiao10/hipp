@@ -533,6 +533,12 @@ def render_combo(
                 "den512_plotting_v2_added_this_run": bool(den512_plotting_v2_added),
             },
             "selected_components": [f"G{c}" for c in selected_components],
+            "gradient_array_semantics": {
+                hemi: manifests[hemi].get("gradient_array_semantics", "legacy_unaligned_or_unspecified") for hemi in hemis
+            },
+            "gradient_alignment": {
+                hemi: manifests[hemi].get("gradient_alignment", {"enabled": False}) for hemi in hemis
+            },
             "endpoint_contrast": "top_25pct_minus_bottom_25pct_gradient_vertices_by_kong2022_roi",
             "outputs": {
                 "gradient_figure": str(gradient_png.resolve()),

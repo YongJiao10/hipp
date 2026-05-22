@@ -41,7 +41,7 @@ treats `512` as HippoMaps v2 in the current Python process and disables
 py314 environment must also import HippoMaps' top-level package dependencies
 used during official plotting import: `pygeodesic`, `adjustText`,
 `eigenstrapping`, `wget`, `netneurotools`, `neuromaps`, `lapy`, `bctpy`, and
-`parspin`. Install these without downgrading the existing py314 `numpy`,
+`parspin`. The py314 environment also includes `pytest 9.0.3` for core workflow tests. Install these without downgrading the existing py314 `numpy`,
 `matplotlib`, `nilearn`,
 `brainspace`, or `nibabel` stack.
 

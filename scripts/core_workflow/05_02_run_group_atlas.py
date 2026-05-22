@@ -763,10 +763,15 @@ def load_hippomaps_gradient_features(
         "n_components_computed": int(manifest.get("n_components_computed", gradients_full.shape[1])),
         "gradientmaps_call": manifest.get("gradientmaps_call"),
         "gradient_shape_full": [int(x) for x in gradients_full.shape],
+        "gradient_array_semantics": manifest.get("gradient_array_semantics", "legacy_unaligned_or_unspecified"),
     }
+    if "gradient_alignment" in manifest:
+        meta["gradient_alignment"] = manifest["gradient_alignment"]
     for key in ("ev_fractions", "lambdas", "hippomaps_repo", "hippomaps_import_path", "hippomaps_commit"):
         if key in manifest:
             meta[key] = manifest[key]
+    if "lambdas" in meta and "gradient_eigenvalues" not in meta:
+        meta["gradient_eigenvalues"] = [float(v) for v in np.asarray(meta["lambdas"], dtype=np.float64).reshape(-1)]
     return selected, meta
 
 
@@ -2870,7 +2875,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default="1,2,3",
         help="Comma-separated gradient components for gradient-spectral clustering. "
              "Supported examples: 1, 2, 3, 1,2, 1,2,3. Default: 1,2,3. "
-             "05_03 computes G1-G5 via BrainSpace/HippoMaps; this option selects clustering columns.",
+             "05_01 writes aligned G1-G5 via BrainSpace/HippoMaps; this option selects clustering columns.",
     )
     parser.add_argument("--resume", action="store_true", help="Skip combos that already have group_atlas_manifest.json.")
     parser.add_argument("--k-selection-mode", default="redundancy-aware", choices=["experimental", "redundancy-aware"])

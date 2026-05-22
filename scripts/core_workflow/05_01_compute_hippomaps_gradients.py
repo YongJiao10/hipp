@@ -39,6 +39,8 @@ Outputs:
 """
 import argparse
 import json
+from dataclasses import dataclass
+from itertools import permutations
 from pathlib import Path
 from typing import Any
 
@@ -74,6 +76,133 @@ DEFAULT_OUT_ROOT = DEFAULT_HIPPOMAPS_GRADIENT_ROOT
 ROUTE_TO_SHARED_DIR = {"routea": "routea_151", "routeb": "routeb_151"}
 SMOOTHINGS = ("2mm", "4mm")
 HEMIS = ("L", "R")
+
+
+@dataclass
+class GradientComboResult:
+    route: str
+    smoothing: str
+    hemi: str
+    subjects: list[str]
+    subjects_manifest: Path
+    coverage_threshold: float
+    surface_path: Path
+    vertex_count: int
+    support_mask: np.ndarray
+    coverage_count: np.ndarray
+    coverage_fraction: np.ndarray
+    fc_paths: dict[str, str]
+    group_fc_active: np.ndarray
+    group_fc_full: np.ndarray
+    gradients_active: np.ndarray
+    gradients_full: np.ndarray
+    lambdas: np.ndarray
+    ev_fractions: np.ndarray
+    run_dir: Path
+    hippomaps_root: Path
+    n_components: int
+
+
+def finite_pearson_corr(a: np.ndarray, b: np.ndarray) -> float:
+    av = np.asarray(a, dtype=np.float64).reshape(-1)
+    bv = np.asarray(b, dtype=np.float64).reshape(-1)
+    mask = np.isfinite(av) & np.isfinite(bv)
+    if int(np.sum(mask)) < 2:
+        return 0.0
+    x = av[mask] - float(np.mean(av[mask]))
+    y = bv[mask] - float(np.mean(bv[mask]))
+    denom = float(np.linalg.norm(x) * np.linalg.norm(y))
+    if not np.isfinite(denom) or denom <= 0.0:
+        return 0.0
+    corr = float(np.dot(x, y) / denom)
+    if not np.isfinite(corr):
+        return 0.0
+    return float(np.clip(corr, -1.0, 1.0))
+
+
+def best_abs_correlation_assignment(corr: np.ndarray) -> list[int]:
+    mat = np.asarray(corr, dtype=np.float64)
+    if mat.ndim != 2 or mat.shape[0] != mat.shape[1]:
+        raise ValueError(f"Expected square correlation matrix, got shape={mat.shape}")
+    n_comp = int(mat.shape[0])
+    best_perm: tuple[int, ...] | None = None
+    best_score = -np.inf
+    best_identity_hits = -1
+    for perm in permutations(range(n_comp)):
+        score = float(sum(abs(mat[target_idx, source_idx]) for target_idx, source_idx in enumerate(perm)))
+        identity_hits = sum(1 for idx, source_idx in enumerate(perm) if idx == source_idx)
+        if score > best_score + 1e-12 or (abs(score - best_score) <= 1e-12 and identity_hits > best_identity_hits):
+            best_score = score
+            best_identity_hits = int(identity_hits)
+            best_perm = tuple(int(x) for x in perm)
+    if best_perm is None:
+        raise RuntimeError("Could not compute component assignment")
+    return list(best_perm)
+
+
+def align_gradient_components_to_reference(
+    *,
+    active: np.ndarray,
+    full: np.ndarray,
+    lambdas: np.ndarray,
+    ev_fractions: np.ndarray,
+    reference_full: np.ndarray,
+    component_labels: list[str],
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, dict[str, Any]]:
+    active_arr = np.asarray(active, dtype=np.float32)
+    full_arr = np.asarray(full, dtype=np.float32)
+    ref_arr = np.asarray(reference_full, dtype=np.float32)
+    lambda_arr = np.asarray(lambdas, dtype=np.float64).reshape(-1)
+    ev_arr = np.asarray(ev_fractions, dtype=np.float64).reshape(-1)
+    labels = [str(x) for x in component_labels]
+    if active_arr.ndim != 2 or full_arr.ndim != 2 or ref_arr.ndim != 2:
+        raise ValueError(
+            f"Expected 2D active/full/reference arrays, got active={active_arr.shape} full={full_arr.shape} ref={ref_arr.shape}"
+        )
+    n_comp = len(labels)
+    if n_comp == 0:
+        raise ValueError("component_labels must not be empty")
+    if active_arr.shape[1] < n_comp or full_arr.shape[1] < n_comp or ref_arr.shape[1] < n_comp:
+        raise ValueError(
+            f"Component count mismatch: active={active_arr.shape} full={full_arr.shape} ref={ref_arr.shape} labels={n_comp}"
+        )
+    if lambda_arr.size < n_comp or ev_arr.size < n_comp:
+        raise ValueError(f"Lambda/EV vectors must contain at least {n_comp} values")
+
+    corr = np.zeros((n_comp, n_comp), dtype=np.float64)
+    for target_idx in range(n_comp):
+        for source_idx in range(n_comp):
+            corr[target_idx, source_idx] = finite_pearson_corr(ref_arr[:, target_idx], full_arr[:, source_idx])
+    source_for_target = best_abs_correlation_assignment(corr)
+
+    aligned_active = np.zeros((active_arr.shape[0], n_comp), dtype=np.float32)
+    aligned_full = np.zeros((full_arr.shape[0], n_comp), dtype=np.float32)
+    aligned_lambdas = np.zeros((n_comp,), dtype=np.float64)
+    aligned_ev = np.zeros((n_comp,), dtype=np.float64)
+    mapping: dict[str, str] = {}
+    corr_by_label: dict[str, float] = {}
+    flips: dict[str, bool] = {}
+    for target_idx, source_idx in enumerate(source_for_target):
+        label = labels[target_idx]
+        source_label = labels[source_idx]
+        raw_corr = float(corr[target_idx, source_idx])
+        sign = -1.0 if raw_corr < 0.0 else 1.0
+        aligned_active[:, target_idx] = (active_arr[:, source_idx] * sign).astype(np.float32)
+        aligned_full[:, target_idx] = (full_arr[:, source_idx] * sign).astype(np.float32)
+        aligned_lambdas[target_idx] = float(lambda_arr[source_idx])
+        aligned_ev[target_idx] = float(ev_arr[source_idx])
+        mapping[label] = source_label
+        corr_by_label[label] = raw_corr
+        flips[label] = bool(sign < 0.0)
+
+    meta = {
+        "matching_objective": "maximize_abs_pearson_correlation_to_anchor",
+        "component_mapping": mapping,
+        "correlation_before_flip": corr_by_label,
+        "sign_flip_applied": flips,
+        "raw_arrays_saved": False,
+    }
+    return aligned_active, aligned_full, aligned_lambdas, aligned_ev, meta
 
 
 def load_subjects(path: Path) -> list[str]:
@@ -169,7 +298,7 @@ def compute_combo(
     n_components: int,
     selected_components: list[int],
     force: bool,
-) -> Path:
+) -> GradientComboResult:
     surface_path = (
         group_average_surfaces_dir
         / f"group-average_hemi-{hemi}_space-corobl_den-512_label-hipp_midthickness.surf.gii"
@@ -208,13 +337,60 @@ def compute_combo(
     manifest_path = run_dir / "hippomaps_gradient_manifest.json"
     if manifest_path.exists() and not force:
         raise FileExistsError(f"Output manifest exists; pass --force to overwrite: {manifest_path}")
+
+    return GradientComboResult(
+        route=route,
+        smoothing=smoothing,
+        hemi=hemi,
+        subjects=list(subjects),
+        subjects_manifest=subjects_manifest,
+        coverage_threshold=float(coverage_threshold),
+        surface_path=surface_path.resolve(),
+        vertex_count=int(vertex_count),
+        support_mask=support_mask.astype(bool),
+        coverage_count=coverage_count.astype(np.int32),
+        coverage_fraction=coverage_fraction.astype(np.float32),
+        fc_paths=fc_paths,
+        group_fc_active=group_fc_active.astype(np.float32),
+        group_fc_full=group_fc_full.astype(np.float32),
+        gradients_active=gradients_active.astype(np.float32),
+        gradients_full=gradients_full.astype(np.float32),
+        lambdas=lambdas.astype(np.float64),
+        ev_fractions=ev_fractions.astype(np.float64),
+        run_dir=run_dir,
+        hippomaps_root=hippomaps_root,
+        n_components=int(n_components),
+    )
+
+
+def select_alignment_anchor(results: list[GradientComboResult]) -> tuple[GradientComboResult, str]:
+    if not results:
+        raise ValueError("No gradient combinations were computed for alignment")
+    for result in results:
+        if result.smoothing == "4mm" and result.hemi == "L":
+            return result, "preferred_4mm_hemi_L"
+    return results[0], "fallback_first_requested_combo"
+
+
+def write_aligned_combo_outputs(
+    *,
+    result: GradientComboResult,
+    gradients_active: np.ndarray,
+    gradients_full: np.ndarray,
+    lambdas: np.ndarray,
+    ev_fractions: np.ndarray,
+    selected_components: list[int],
+    alignment_meta: dict[str, Any],
+) -> Path:
+    run_dir = result.run_dir
+    manifest_path = run_dir / "hippomaps_gradient_manifest.json"
     run_dir.mkdir(parents=True, exist_ok=True)
 
-    np.save(run_dir / "group_support_mask.npy", support_mask.astype(np.uint8))
-    np.save(run_dir / "subject_coverage_count.npy", coverage_count.astype(np.int32))
-    np.save(run_dir / "subject_coverage_fraction.npy", coverage_fraction.astype(np.float32))
-    np.save(run_dir / "group_mean_fisherz_fc_active.npy", group_fc_active.astype(np.float32))
-    np.save(run_dir / "group_mean_fisherz_fc_full.npy", group_fc_full.astype(np.float32))
+    np.save(run_dir / "group_support_mask.npy", result.support_mask.astype(np.uint8))
+    np.save(run_dir / "subject_coverage_count.npy", result.coverage_count.astype(np.int32))
+    np.save(run_dir / "subject_coverage_fraction.npy", result.coverage_fraction.astype(np.float32))
+    np.save(run_dir / "group_mean_fisherz_fc_active.npy", result.group_fc_active.astype(np.float32))
+    np.save(run_dir / "group_mean_fisherz_fc_full.npy", result.group_fc_full.astype(np.float32))
     np.save(run_dir / "hippomaps_gradients_active.npy", gradients_active.astype(np.float32))
     np.save(run_dir / "hippomaps_gradients_full.npy", gradients_full.astype(np.float32))
     np.save(run_dir / "hippomaps_lambdas.npy", lambdas.astype(np.float64))
@@ -228,36 +404,38 @@ def compute_combo(
     selected_labels = [f"G{c}" for c in selected_components]
     manifest = {
         "status": "ok",
-        "route": route,
+        "route": result.route,
         "atlas": "kong2022",
-        "smoothing": smoothing,
-        "hemi": hemi,
+        "smoothing": result.smoothing,
+        "hemi": result.hemi,
         "method": "hippomaps-gradient",
         "product_role": "continuous_upstream_gradient",
-        "clustering_status": "consumed_by_05_01_gradient_spectral_when_gradient_root_points_here",
-        "subjects_manifest": str(subjects_manifest.resolve()),
-        "n_subjects": int(len(subjects)),
-        "subjects": [f"sub-{s}" for s in subjects],
-        "coverage_threshold": float(coverage_threshold),
-        "n_vertices": int(vertex_count),
-        "n_support_vertices": int(np.sum(support_mask)),
-        "n_excluded_vertices": int(vertex_count - np.sum(support_mask)),
-        "surface_path": str(surface_path.resolve()),
-        "source_fc_paths": fc_paths,
+        "gradient_array_semantics": "component_and_sign_aligned_to_route_anchor",
+        "clustering_status": "consumed_by_05_02_gradient_spectral_when_gradient_root_points_here",
+        "subjects_manifest": str(result.subjects_manifest.resolve()),
+        "n_subjects": int(len(result.subjects)),
+        "subjects": [f"sub-{s}" for s in result.subjects],
+        "coverage_threshold": float(result.coverage_threshold),
+        "n_vertices": int(result.vertex_count),
+        "n_support_vertices": int(np.sum(result.support_mask)),
+        "n_excluded_vertices": int(result.vertex_count - np.sum(result.support_mask)),
+        "surface_path": str(result.surface_path.resolve()),
+        "source_fc_paths": result.fc_paths,
         "fisher_z_preprocessing": "arctanh clipped to +/-0.999999 before subject averaging",
         "feature_zscore_pre_gradientmaps": "column-wise z-score across vertices after group Fisher-z averaging, matching HippoMaps tutorial feature scaling semantics",
-        "group_fc_shape": [int(x) for x in group_fc_active.shape],
+        "group_fc_shape": [int(x) for x in result.group_fc_active.shape],
         "gradient_shape_active": [int(x) for x in gradients_active.shape],
         "gradient_shape_full": [int(x) for x in gradients_full.shape],
         "gradientmaps_kernel": "pearson",
         "gradientmaps_call": "brainspace.gradient.GradientMaps(n_components=N, kernel='pearson').fit(column_zscored_group_mean_fisherz_fc) with BrainSpace default sparsity=0.9",
-        "n_components_computed": int(n_components),
+        "n_components_computed": int(result.n_components),
         "selected_components": selected_labels,
         "lambdas": [float(x) for x in lambdas],
         "ev_fractions": [float(x) for x in ev_fractions],
-        "hippomaps_repo": str(Path(hippomaps_root).resolve()),
-        "hippomaps_import_path": hippomaps_import_path(hippomaps_root),
-        "hippomaps_commit": hippomaps_commit(hippomaps_root),
+        "gradient_alignment": alignment_meta,
+        "hippomaps_repo": str(Path(result.hippomaps_root).resolve()),
+        "hippomaps_import_path": hippomaps_import_path(result.hippomaps_root),
+        "hippomaps_commit": hippomaps_commit(result.hippomaps_root),
         "outputs": {
             "group_support_mask": str((run_dir / "group_support_mask.npy").resolve()),
             "group_mean_fisherz_fc_active": str((run_dir / "group_mean_fisherz_fc_active.npy").resolve()),
@@ -269,8 +447,43 @@ def compute_combo(
         },
     }
     write_json(manifest_path, manifest, sort_keys=True, trailing_newline=True)
-    print(json.dumps({"status": "ok", "manifest": str(manifest_path), "n_subjects": len(subjects)}, indent=2), flush=True)
+    print(json.dumps({"status": "ok", "manifest": str(manifest_path), "n_subjects": len(result.subjects)}, indent=2), flush=True)
     return manifest_path
+
+
+def align_and_write_route_results(*, results: list[GradientComboResult], selected_components: list[int]) -> list[Path]:
+    anchor, anchor_selection = select_alignment_anchor(results)
+    component_labels = [f"G{i + 1}" for i in range(int(anchor.gradients_full.shape[1]))]
+    written: list[Path] = []
+    for result in results:
+        aligned_active, aligned_full, aligned_lambdas, aligned_ev, combo_alignment = align_gradient_components_to_reference(
+            active=result.gradients_active,
+            full=result.gradients_full,
+            lambdas=result.lambdas,
+            ev_fractions=result.ev_fractions,
+            reference_full=anchor.gradients_full,
+            component_labels=component_labels,
+        )
+        alignment_meta = {
+            "enabled": True,
+            "anchor_route": anchor.route,
+            "anchor_smoothing": anchor.smoothing,
+            "anchor_hemi": anchor.hemi,
+            "anchor_selection": anchor_selection,
+            **combo_alignment,
+        }
+        written.append(
+            write_aligned_combo_outputs(
+                result=result,
+                gradients_active=aligned_active,
+                gradients_full=aligned_full,
+                lambdas=aligned_lambdas,
+                ev_fractions=aligned_ev,
+                selected_components=selected_components,
+                alignment_meta=alignment_meta,
+            )
+        )
+    return written
 
 
 def parse_args() -> argparse.Namespace:
@@ -305,24 +518,28 @@ def main() -> int:
             raise ValueError(f"Selected G{comp} exceeds --n-components={args.n_components}")
     for route in args.routes:
         shared_root = Path(args.shared_inputs_root).resolve() / ROUTE_TO_SHARED_DIR[route]
+        route_results: list[GradientComboResult] = []
         for smoothing in args.smoothings:
             for hemi in args.hemis:
-                compute_combo(
-                    route=route,
-                    shared_root=shared_root,
-                    surface_root=Path(args.surface_root).resolve(),
-                    subjects=subjects,
-                    subjects_manifest=subjects_manifest,
-                    smoothing=smoothing,
-                    hemi=hemi,
-                    coverage_threshold=float(args.coverage_threshold),
-                    group_average_surfaces_dir=Path(args.group_average_surfaces_dir).resolve(),
-                    out_root=Path(args.out_root).resolve(),
-                    hippomaps_root=hippomaps_root,
-                    n_components=int(args.n_components),
-                    selected_components=selected_components,
-                    force=bool(args.force),
+                route_results.append(
+                    compute_combo(
+                        route=route,
+                        shared_root=shared_root,
+                        surface_root=Path(args.surface_root).resolve(),
+                        subjects=subjects,
+                        subjects_manifest=subjects_manifest,
+                        smoothing=smoothing,
+                        hemi=hemi,
+                        coverage_threshold=float(args.coverage_threshold),
+                        group_average_surfaces_dir=Path(args.group_average_surfaces_dir).resolve(),
+                        out_root=Path(args.out_root).resolve(),
+                        hippomaps_root=hippomaps_root,
+                        n_components=int(args.n_components),
+                        selected_components=selected_components,
+                        force=bool(args.force),
+                    )
                 )
+        align_and_write_route_results(results=route_results, selected_components=selected_components)
     return 0
 
 

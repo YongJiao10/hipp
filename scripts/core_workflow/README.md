@@ -22,25 +22,30 @@ Each entrypoint executes local implementation code and can emit a standardized t
 ```
 
 For the Kong2022 `gradient-spectral` branch, run
-`05_01_compute_hippomaps_gradients.py` first. `05_02_run_group_atlas.py` now
-loads those HippoMaps/BrainSpace gradient artifacts from `--gradient-root` and
-clusters the selected columns. The default gradient set is `G1,G2,G3`; valid
-overrides are `--gradient-components 1`, `2`, `3`, `1,2`, and `1,2,3`. The
-maintained default evaluates the full diagnostic curve `K=2..10` while fixing the final presentation atlas at `K=3` (`--k-min 2 --k-max 10 --force-final-k 3`); `--auto-k` remains available only as legacy diagnostics.
+`05_01_compute_hippomaps_gradients.py` first. `05_01` writes aligned
+HippoMaps/BrainSpace gradient artifacts: raw G1-G5 are matched and sign-flipped
+within each route to the `4mm/hemi_L` anchor when available, and only aligned
+arrays are saved. `05_02_run_group_atlas.py` loads those aligned artifacts from
+`--gradient-root` and clusters the selected columns. The default gradient set is
+`G1,G2,G3`; valid overrides are `--gradient-components 1`, `2`, `3`, `1,2`, and
+`1,2,3`. The maintained default evaluates the full diagnostic curve `K=2..10`
+while fixing the final presentation atlas at `K=3` (`--k-min 2 --k-max 10
+--force-final-k 3`); `--auto-k` remains available only as legacy diagnostics.
 
 HippoMaps-style continuous gradients are computed by
 `05_01_compute_hippomaps_gradients.py` and rendered by
 `06_05_render_hippomaps_gradient_products.py`. This route imports official
 package code from `external/hippomaps`, keeps Fisher-z before group averaging,
-applies column-wise feature z-score before `GradientMaps(kernel="pearson")`, and
-renders folded/unfolded gradients with `surfplot_canonical_foldunfold`. For
-`den=512`, the renderer treats `512` as HippoMaps v2 in the current Python
-process and disables `unfoldAPrescale`; no AP surfarea rescale is used for
-512-density figures. The renderer defaults to bilateral products, but because
-left and right gradients are fit independently it renders each hemisphere with
-its own colorbar and EV labels before stitching the two sides. Use `--hemis L`
-or `--hemis R` for single-hemisphere output files. It is a continuous upstream
-product route and does not change the `05_02` clustering path.
+applies column-wise feature z-score before `GradientMaps(kernel="pearson")`,
+then aligns component order and sign before writing the maintained gradient
+arrays. For `den=512`, the renderer treats `512` as HippoMaps v2 in the current
+Python process and disables `unfoldAPrescale`; no AP surfarea rescale is used
+for 512-density figures. The renderer defaults to bilateral products and renders
+each already-aligned hemisphere with its own colorbar and EV labels before
+stitching the two sides. Use `--hemis L` or `--hemis R` for single-hemisphere
+output files. Endpoint FC contrast and `gradient-spectral` clustering consume
+the aligned gradient orientation.
+
 
 Canonical presentation outputs live under `outputs_core/present/`. Method
 overview PNGs share `outputs_core/present/overviews/`. Supplementary
