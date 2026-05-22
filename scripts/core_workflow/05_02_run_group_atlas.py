@@ -62,10 +62,23 @@ import hashlib
 import importlib.metadata
 import json
 import math
+import os
 import warnings
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
+
+# Hard guardrail: prevent hidden BLAS/OMP oversubscription from violating repo concurrency cap.
+NATIVE_THREAD_ENV_VARS = (
+    "OMP_NUM_THREADS",
+    "OPENBLAS_NUM_THREADS",
+    "MKL_NUM_THREADS",
+    "NUMEXPR_NUM_THREADS",
+    "VECLIB_MAXIMUM_THREADS",
+)
+NATIVE_THREAD_CAP_DEFAULT = 1
+for _env_name in NATIVE_THREAD_ENV_VARS:
+    os.environ[_env_name] = str(NATIVE_THREAD_CAP_DEFAULT)
 
 import nibabel as nib
 import numpy as np
@@ -2918,6 +2931,11 @@ def main() -> int:
     parser = build_arg_parser()
     args = parser.parse_args()
     suppress_known_runtime_warnings()
+    print(
+        "[thread-cap] "
+        + " ".join(f"{name}={os.environ.get(name, "")}" for name in NATIVE_THREAD_ENV_VARS),
+        flush=True,
+    )
 
     global KONG2022_DLABEL_OVERRIDE, HIPPOMAPS_ROOT_OVERRIDE
     KONG2022_DLABEL_OVERRIDE = Path(args.kong2022_dlabel).resolve() if args.kong2022_dlabel else None

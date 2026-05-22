@@ -80,7 +80,6 @@ def fit_gradientmaps_pearson(
     group_fc: np.ndarray,
     *,
     n_components: int,
-    gradient_maps_cls: object | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     matrix = np.asarray(group_fc, dtype=np.float32)
     if matrix.ndim != 2:
@@ -92,11 +91,10 @@ def fit_gradientmaps_pearson(
         raise RuntimeError(
             f"Not enough supported vertices for GradientMaps: n_vertices={matrix.shape[0]} n_components={n_comp}"
         )
-    if gradient_maps_cls is None:
-        from brainspace.gradient import GradientMaps as gradient_maps_cls
+    from brainspace.gradient import GradientMaps
 
     matrix_z = feature_zscore_columns(matrix)
-    model = gradient_maps_cls(n_components=n_comp, kernel="pearson")
+    model = GradientMaps(n_components=n_comp, kernel="pearson")
     fitted = model.fit(matrix_z)
     model_out = fitted if fitted is not None else model
     gradients = _extract_gradientmaps_array(model_out, "gradients_", "gradients", "gradients")

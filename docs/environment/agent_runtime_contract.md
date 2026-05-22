@@ -59,6 +59,13 @@ For `02_01_prepare_group_inputs.py`, subject-level Workbench stages are capped
 at two concurrent subjects even if `--jobs` is higher. Do not bypass this cap
 with direct Workbench subprocess calls.
 
+For `05_02_run_group_atlas.py`, native math/BLAS thread counts are now hard-capped
+in script code at 1 before NumPy/SciPy imports. The script force-sets
+`OMP_NUM_THREADS`, `OPENBLAS_NUM_THREADS`, `MKL_NUM_THREADS`,
+`NUMEXPR_NUM_THREADS`, and `VECLIB_MAXIMUM_THREADS` to `1` and prints a
+`[thread-cap]` line at startup for auditability. Do not rely on ad-hoc shell
+exports for this step.
+
 ## Canonical Command Forms
 
 Use these forms directly:

@@ -253,11 +253,10 @@ def test_group_gradient_features_average_subject_roi_fc_then_select_components()
 def test_brainspace_adapter_uses_expected_parameters() -> None:
     calls: dict[str, object] = {}
 
-    def fake_fit(group_fc: np.ndarray, *, n_components: int, gradient_maps_cls: object | None = None):
+    def fake_fit(group_fc: np.ndarray, *, n_components: int):
         calls["fit"] = {
             "shape": tuple(np.asarray(group_fc).shape),
             "n_components": int(n_components),
-            "gradient_maps_cls": gradient_maps_cls,
         }
         grads = np.arange(30, dtype=np.float32).reshape(6, 5)
         lambdas = np.array([5.0, 4.0, 3.0, 2.0, 1.0], dtype=np.float64)
@@ -272,7 +271,7 @@ def test_brainspace_adapter_uses_expected_parameters() -> None:
     finally:
         atlas_mod.ensure_hippomaps_on_path = old_ensure
 
-    assert calls["fit"] == {"shape": (6, 4), "n_components": 5, "gradient_maps_cls": None}, calls
+    assert calls["fit"] == {"shape": (6, 4), "n_components": 5}, calls
     assert grads.shape == (6, 5), grads.shape
     assert lambdas.shape == (5,), lambdas.shape
     assert ev.shape == (5,), ev.shape

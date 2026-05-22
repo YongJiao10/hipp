@@ -71,3 +71,12 @@ CONDA_SAFETY_CHECKS=disabled conda install -y -n hippo2 -c khanlab -c conda-forg
 
 - Do not treat `bioconda::hippunfold` as sufficient evidence of native `512` support.
 - Avoid forbidden workflow version labels for this project: `1.5.2`, `1.5.2-pre.2`, `1.5.2rc2`.
+
+## Planning Mode Folder Creation Guardrail
+
+- In planning mode (`plan mode`), if any new folder/directory needs to be created, the agent MUST explicitly ask the user for confirmation and clarify:
+  1. The folder name.
+  2. The folder contents/purpose.
+  3. The directory path (disk location) where the folder will be created.
+- Do not create any directory in planning mode without this explicit user confirmation.
+

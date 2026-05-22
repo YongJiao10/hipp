@@ -135,11 +135,11 @@ def test_gradientmaps_called_with_official_pearson_kernel_and_full_lambda_ev() -
         ],
         dtype=np.float32,
     )
-    gradients, lambdas, ev = adapter.fit_gradientmaps_pearson(
-        raw,
-        n_components=3,
-        gradient_maps_cls=FakeGradientMaps,
-    )
+    with patch("brainspace.gradient.GradientMaps", FakeGradientMaps):
+        gradients, lambdas, ev = adapter.fit_gradientmaps_pearson(
+            raw,
+            n_components=3,
+        )
     assert calls[0]["init"] == {"n_components": 3, "kernel": "pearson"}, calls
     assert calls[1]["fit_shape"] == (4, 4), calls
     expected = adapter.feature_zscore_columns(raw)
@@ -180,7 +180,7 @@ def test_group_atlas_gradient_spectral_uses_hippomaps_adapter_and_records_proven
     support_mask = np.asarray([True, True, False, True, True, True, True], dtype=bool)
     calls: dict[str, np.ndarray | int] = {}
 
-    def fake_fit(group_fc: np.ndarray, *, n_components: int, gradient_maps_cls: object | None = None):
+    def fake_fit(group_fc: np.ndarray, *, n_components: int):
         calls["group_fc"] = np.asarray(group_fc, dtype=np.float32).copy()
         calls["n_components"] = int(n_components)
         gradients = np.asarray(

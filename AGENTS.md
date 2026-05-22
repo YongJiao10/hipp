@@ -100,3 +100,11 @@ CONDA_SAFETY_CHECKS=disabled conda install -y -n hippo2 -c khanlab -c conda-forg
 - If an agent accidentally runs with the wrong interpreter, stop and rerun with the correct one; do not continue mixed-environment execution.
 
 Reference runbook: `docs/environment/agent_runtime_contract.md`
+
+## Planning Mode Folder Creation Guardrail
+
+- In planning mode (`plan mode`), if any new folder/directory needs to be created, the agent MUST explicitly ask the user for confirmation and clarify:
+  1. The folder name.
+  2. The folder contents/purpose.
+  3. The directory path (disk location) where the folder will be created.
+- Do not create any directory in planning mode without this explicit user confirmation.
