@@ -128,8 +128,9 @@ def annotate_gradient_image(
     img = Image.open(image_path).convert("RGB")
     src_w, src_h = img.size
     margin_w = 230
-    out = Image.new("RGB", (src_w + margin_w, src_h), (255, 255, 255))
-    out.paste(img, (margin_w, 0))
+    padding_h = 30
+    out = Image.new("RGB", (src_w + margin_w, src_h + 2 * padding_h), (255, 255, 255))
+    out.paste(img, (margin_w, padding_h))
     draw = ImageDraw.Draw(out)
     try:
         font = ImageFont.truetype("DejaVuSans.ttf", 22)
@@ -138,11 +139,11 @@ def annotate_gradient_image(
         font = ImageFont.load_default()
         small_font = font
 
-    draw.text((18, 14), title, fill=(0, 0, 0), font=font)
+    draw.text((18, 14 + padding_h), title, fill=(0, 0, 0), font=font)
     n_rows = max(1, len(selected_components))
     row_h = src_h / float(n_rows)
     for idx, comp in enumerate(selected_components):
-        y = int(round((idx + 0.5) * row_h))
+        y = int(round((idx + 0.5) * row_h)) + padding_h
         label = f"G{int(comp)}"
         ev_text = f"EV={float(ev_percentages[idx]):.1f}%"
         draw.text((18, y - 18), label, fill=(0, 0, 0), font=font)
@@ -267,6 +268,7 @@ def render_gradient_figure(
         cb__position=[0.02, 0.25],
         cb__barRatio=0.18,
         cb__labelTextProperty={"fontSize": 13},
+        zoom=1.45,
     )
     final_render = render_png
     if fig is None:

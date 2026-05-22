@@ -503,9 +503,19 @@ def test_annotate_gradient_image_adds_left_margin_and_ev_labels() -> None:
             ev_percentages=[41.2, 8.4, 4.0],
         )
         out = Image.open(img_path).convert("RGB")
-        assert out.size == (330, 60), out.size
-        assert out.getpixel((10, 10)) == (255, 255, 255), out.getpixel((10, 10))
-        assert out.getpixel((20, 20)) != (255, 255, 255), "expected text pixels in the left label margin"
+        assert out.size == (330, 120), out.size
+        # Check that the pasted base image is placed on the right (at margin_w=230)
+        assert out.getpixel((240, 40)) == (255, 255, 255), out.getpixel((240, 40))
+        # Search the left margin for any non-white text pixels
+        found_non_white = False
+        for x in range(230):
+            for y_px in range(out.size[1]):
+                if out.getpixel((x, y_px)) != (255, 255, 255):
+                    found_non_white = True
+                    break
+            if found_non_white:
+                break
+        assert found_non_white, "expected text pixels in the left label margin"
 
 
 def test_ensure_bilateral_gradient_annotations_repairs_late_raw_screenshot() -> None:
@@ -524,9 +534,9 @@ def test_ensure_bilateral_gradient_annotations_repairs_late_raw_screenshot() -> 
             ev_by_hemi={"L": [10.0, 5.0, 2.5], "R": [9.0, 4.0, 2.0]},
             settle_seconds=0.0,
         )
-        assert Image.open(left).size == (740, 90)
-        assert Image.open(right).size == (740, 90)
-        assert Image.open(final).size == (1480, 90)
+        assert Image.open(left).size == (740, 150)
+        assert Image.open(right).size == (740, 150)
+        assert Image.open(final).size == (1480, 150)
 
 
 def main() -> int:
