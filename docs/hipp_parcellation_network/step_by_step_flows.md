@@ -30,6 +30,7 @@ This is the execution-ordered flow for active workflows. The first numeric field
 1. `05_01_compute_hippomaps_gradients.py` for Kong2022 gradient artifacts
 2. `05_02_run_group_atlas.py` for group atlas outputs and K=2..10 diagnostics with fixed final K=3
 3. `05_03_run_spectral_fast_rerun.py` for optional rerun orchestration after the primary atlas step
+4. `05_04_compute_confidence_maps.py` for vertex-level silhouette confidence maps in G1/G2/G3 feature space
 
 Kong2022 HippoMaps gradient artifact example:
 
@@ -55,6 +56,7 @@ These are presentation products derived from group atlas and gradient work. They
 4. `06_04_build_cluster_cortex_panels.py`
 5. `06_05_render_hippomaps_gradient_products.py`
 6. `06_06_render_group_gradient_heatmaps.py` (deprecated retired; exits with guidance to use `06_05` routea/routeb outputs)
+7. `06_07_render_confidence_maps.py` for silhouette confidence map rendering on folded/unfolded surfaces
 
 ## 7. Presentation Index
 

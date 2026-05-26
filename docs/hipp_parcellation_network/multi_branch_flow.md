@@ -62,6 +62,21 @@ Because the embedding is derived from group-averaged continuous FC profiles,
 `top-percent` / `10perc` sparsified and binarized FC mode is not a maintained
 presentation split.
 
+## Gradient-Spectral Confidence Maps
+
+`05_04_compute_confidence_maps.py` computes per-vertex silhouette scores for
+`gradient-spectral` parcellations in the G1/G2/G3 feature space — the same
+space used by spectral clustering. The silhouette metric is `cosine` distance,
+following Yeo et al. 2011. Outputs include full-surface silhouette arrays
+(NaN outside support), per-cluster and global summary statistics, and a
+manifest recording the source features and metric.
+
+`06_07_render_confidence_maps.py` renders these silhouette maps on folded and
+unfolded hippocampal surfaces via HippoMaps plotting. Raw silhouette values
+remain signed; rendered figures use a Yeo/Buckner-style nonnegative display
+window from 0 to the maximum positive silhouette. Output PNGs are bilateral
+and live under `outputs_core/present/gradients/routea/{smoothing}/`.
+
 ## HippoMaps-Style Continuous Gradient Route
 
 `05_01_compute_hippomaps_gradients.py` consumes the QC-passed subject manifest,
