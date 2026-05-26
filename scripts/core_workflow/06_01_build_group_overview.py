@@ -87,6 +87,44 @@ CLUSTERLESS_METHODS = {"wta-top"}
 ASSIGNMENT_VARIANTS = ("fisherz", "count")
 DEFAULT_CROSS_ATLAS_MERGE = REPO_ROOT / "config" / "cross_atlas_network_merge.json"
 DEFAULT_NETWORK_STYLE = REPO_ROOT / "config" / "hipp_network_style.json"
+GRADIENT_METHOD = "gradient-spectral"
+
+
+def _is_gradient_method(method: str) -> bool:
+    return method == GRADIENT_METHOD
+
+
+def _discover_gradient_comp_tags(
+    group_root: Path,
+    method: str,
+    atlas: str,
+    smoothing: str,
+    coverage_tag: str,
+) -> list[str]:
+    """Discover gradient component subdirectories under the coverage directory."""
+    if not _is_gradient_method(method):
+        return [""]
+    base = group_root / method / atlas / smoothing / coverage_tag
+    if not base.exists():
+        return [""]
+    tags = sorted(d.name for d in base.iterdir() if d.is_dir() and d.name.startswith("g"))
+    return tags if tags else [""]
+
+
+def _build_run_dir(
+    group_root: Path,
+    method: str,
+    atlas: str,
+    smoothing: str,
+    coverage_tag: str,
+    hemi: str,
+    *,
+    gradient_comp_tag: str = "",
+) -> Path:
+    """Build the run directory path, including gradient component subdir for gradient-spectral."""
+    if _is_gradient_method(method) and gradient_comp_tag:
+        return group_root / method / atlas / smoothing / coverage_tag / gradient_comp_tag / f"hemi_{hemi}"
+    return group_root / method / atlas / smoothing / coverage_tag / f"hemi_{hemi}"
 
 
 def load_network_bar_colors() -> dict[str, str]:
@@ -583,6 +621,7 @@ def render_combo(
     route_tag: str | None,
     mode_tag: str | None,
     assignment_variant: str = "fisherz",
+    gradient_comp_tag: str = "",
 ) -> dict[str, object]:
     effective_mode_tag = (None if method in CLUSTERLESS_METHODS else mode_tag)
     effective_assignment_variant = None if method in CLUSTERLESS_METHODS else str(assignment_variant)
@@ -591,8 +630,8 @@ def render_combo(
     rows_meta: list[dict[str, object]] = []
 
     for ridx, smoothing in enumerate(SMOOTHINGS):
-        left_manifest = group_root / method / atlas / smoothing / coverage_tag / "hemi_L" / "group_atlas_manifest.json"
-        right_manifest = group_root / method / atlas / smoothing / coverage_tag / "hemi_R" / "group_atlas_manifest.json"
+        left_manifest = _build_run_dir(group_root, method, atlas, smoothing, coverage_tag, "L", gradient_comp_tag=gradient_comp_tag) / "group_atlas_manifest.json"
+        right_manifest = _build_run_dir(group_root, method, atlas, smoothing, coverage_tag, "R", gradient_comp_tag=gradient_comp_tag) / "group_atlas_manifest.json"
         if not (left_manifest.exists() and right_manifest.exists()):
             sub = gs[ridx, 0].subgridspec(2, 2, wspace=0.08, hspace=0.035)
             for rr in range(2):
@@ -865,6 +904,8 @@ def render_combo(
         )
 
     name_bits = [atlas, method, "group_overview"]
+    if gradient_comp_tag:
+        name_bits.append(gradient_comp_tag)
     if route_tag:
         name_bits.append(route_tag)
     if effective_mode_tag:
@@ -916,21 +957,23 @@ def ensure_combo_ready(
     hs = hemis or ["L", "R"]
     problems: list[str] = []
     for smoothing in sm:
-        for hemi in hs:
-            run_dir = group_root / method / atlas / smoothing / coverage_tag / f"hemi_{hemi}"
-            manifest_path = run_dir / "group_atlas_manifest.json"
-            if not manifest_path.exists():
-                problems.append(f"missing_manifest: {manifest_path}")
-                continue
-            m = load_json(manifest_path)
-            if str(m.get("status", "")) != "ok":
-                problems.append(f"manifest_not_ok: {manifest_path} status={m.get('status')}")
-                continue
-            # For cluster-based methods, group labels must exist.
-            if method not in CLUSTERLESS_METHODS:
-                labels = run_dir / "group_labels_final.npy"
-                if not labels.exists():
-                    problems.append(f"missing_group_labels: {labels}")
+        comp_tags = _discover_gradient_comp_tags(group_root, method, atlas, smoothing, coverage_tag)
+        for comp_tag in comp_tags:
+            for hemi in hs:
+                run_dir = _build_run_dir(group_root, method, atlas, smoothing, coverage_tag, hemi, gradient_comp_tag=comp_tag)
+                manifest_path = run_dir / "group_atlas_manifest.json"
+                if not manifest_path.exists():
+                    problems.append(f"missing_manifest: {manifest_path}")
+                    continue
+                m = load_json(manifest_path)
+                if str(m.get("status", "")) != "ok":
+                    problems.append(f"manifest_not_ok: {manifest_path} status={m.get('status')}")
+                    continue
+                # For cluster-based methods, group labels must exist.
+                if method not in CLUSTERLESS_METHODS:
+                    labels = run_dir / "group_labels_final.npy"
+                    if not labels.exists():
+                        problems.append(f"missing_group_labels: {labels}")
     if problems:
         raise RuntimeError(
             "Cluster outputs are not ready. Do not skip clustering before present rendering.\n"
@@ -993,42 +1036,48 @@ def main() -> int:
                     atlas=atlas,
                     coverage_tag=tau_tag,
                 )
-            meta = render_combo(
-                group_root=group_root,
-                present_dir=present_dir,
-                method=method,
-                atlas=atlas,
-                coverage_tag=tau_tag,
-                scene=Path(args.scene).resolve(),
-                route_tag=args.route_tag,
-                mode_tag=args.mode_tag,
-                assignment_variant=str(args.assignment_variant),
+            comp_tags = _discover_gradient_comp_tags(
+                group_root, method, atlas, SMOOTHINGS[0], tau_tag,
             )
-            row_meta = meta["rows"]
-            metric = (
-                "; ".join(
-                    [
-                        f"{r['smoothing']}: K(L/R)={('-' if r['k_final_L'] is None else r['k_final_L'])}/"
-                        f"{('-' if r['k_final_R'] is None else r['k_final_R'])} N={r['n_subjects']}"
-                        for r in row_meta
-                    ]
+            for comp_tag in comp_tags:
+                meta = render_combo(
+                    group_root=group_root,
+                    present_dir=present_dir,
+                    method=method,
+                    atlas=atlas,
+                    coverage_tag=tau_tag,
+                    scene=Path(args.scene).resolve(),
+                    route_tag=args.route_tag,
+                    mode_tag=args.mode_tag,
+                    assignment_variant=str(args.assignment_variant),
+                    gradient_comp_tag=comp_tag,
                 )
-                if row_meta
-                else "missing"
-            )
-            items.append(
-                {
-                    "atlas": atlas,
-                    "method": method,
-                    "overview_png": meta["overview_png"],
-                    "smoothings": [r["smoothing"] for r in row_meta],
-                    "metric_summary": metric,
-                    "route_tag": args.route_tag,
-                    "mode_tag": (None if method in CLUSTERLESS_METHODS else args.mode_tag),
-                    "assignment_variant": (None if method in CLUSTERLESS_METHODS else str(args.assignment_variant)),
-                    "source_group_root": str(group_root),
-                }
-            )
+                row_meta = meta["rows"]
+                metric = (
+                    "; ".join(
+                        [
+                            f"{r['smoothing']}: K(L/R)={('-' if r['k_final_L'] is None else r['k_final_L'])}/"
+                            f"{('-' if r['k_final_R'] is None else r['k_final_R'])} N={r['n_subjects']}"
+                            for r in row_meta
+                        ]
+                    )
+                    if row_meta
+                    else "missing"
+                )
+                items.append(
+                    {
+                        "atlas": atlas,
+                        "method": method,
+                        "gradient_comp_tag": comp_tag or None,
+                        "overview_png": meta["overview_png"],
+                        "smoothings": [r["smoothing"] for r in row_meta],
+                        "metric_summary": metric,
+                        "route_tag": args.route_tag,
+                        "mode_tag": (None if method in CLUSTERLESS_METHODS else args.mode_tag),
+                        "assignment_variant": (None if method in CLUSTERLESS_METHODS else str(args.assignment_variant)),
+                        "source_group_root": str(group_root),
+                    }
+                )
 
     manifest = {"present_dir": str(present_dir), "count": len(items), "items": items}
     if not bool(args.skip_manifest):

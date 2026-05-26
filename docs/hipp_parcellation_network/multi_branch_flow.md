@@ -49,7 +49,12 @@ in aligned component order.
 
 `05_02_run_group_atlas.py` then consumes those aligned saved artifacts from
 `--gradient-root` for `gradient-spectral` and clusters selected gradient columns
-(`G1,G2,G3` by default). The maintained default evaluates the full `K=2..10` diagnostic curve for clustering methods while fixing final presentation labels at `K=3`. The legacy automatic K selector remains available through `--auto-k` but is no longer the default policy. The partial-correlation
+(`G1,G2,G3` by default). The `--gradient-components` argument accepts any ordered
+non-empty subset of `{1,2,3}` (e.g. `1`, `2`, `3`, `1,2`, `1,3`, `2,3`).
+Output paths encode the selected components as a `g{components}` subdirectory
+under the coverage threshold (e.g. `gradient-spectral/kong2022/2mm/cov_0p80/g1/hemi_L/`)
+so that separate experiments with different gradient component selections do not
+overwrite each other. The maintained default evaluates the full `K=2..10` diagnostic curve for clustering methods while fixing final presentation labels at `K=3`. The legacy automatic K selector remains available through `--auto-k` but is no longer the default policy. The partial-correlation
 spectral branches are retired from public method choices.
 
 Because the embedding is derived from group-averaged continuous FC profiles,

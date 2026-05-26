@@ -469,6 +469,11 @@ def parse_gradient_components(raw: str | None) -> tuple[int, ...]:
     return comps
 
 
+def gradient_comp_tag(gradient_components: tuple[int, ...]) -> str:
+    """Build a directory-safe tag from gradient component indices, e.g. (1,2,3) -> 'g1g2g3'."""
+    return "".join(f"g{int(c)}" for c in gradient_components)
+
+
 def subject_fc_preprocessing_manifest_block(method: str, subject_fc_mode: SubjectFCMode) -> dict[str, object]:
     enabled = bool(method_uses_subject_fc_preprocessing(method))
     if not enabled:
@@ -3065,7 +3070,11 @@ def main() -> int:
                             flush=True,
                         )
                         tau_tag = str(f"{tau:.2f}").replace(".", "p")
-                        run_dir = out_root / method / atlas / smoothing / f"cov_{tau_tag}" / f"hemi_{hemi}"
+                        if is_gradient_method(method):
+                            comp_tag = gradient_comp_tag(gradient_components)
+                            run_dir = out_root / method / atlas / smoothing / f"cov_{tau_tag}" / comp_tag / f"hemi_{hemi}"
+                        else:
+                            run_dir = out_root / method / atlas / smoothing / f"cov_{tau_tag}" / f"hemi_{hemi}"
                         run_dir.mkdir(parents=True, exist_ok=True)
                         manifest_path = run_dir / "group_atlas_manifest.json"
                         resume_signature_payload = {

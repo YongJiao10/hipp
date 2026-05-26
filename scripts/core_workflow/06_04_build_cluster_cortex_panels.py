@@ -111,6 +111,42 @@ class Combo:
     method: str
     smoothing: str
     hemi: str
+    gradient_comp_tag: str = ""
+
+
+GRADIENT_METHOD = "gradient-spectral"
+
+
+def _is_gradient_method(method: str) -> bool:
+    return method == GRADIENT_METHOD
+
+
+def _discover_gradient_comp_tags(
+    group_root: Path,
+    method: str,
+    atlas: str,
+    smoothing: str,
+    tau_tag: str,
+) -> list[str]:
+    """Discover gradient component subdirectories under the coverage directory."""
+    if not _is_gradient_method(method):
+        return [""]
+    base = group_root / method / atlas / smoothing / tau_tag
+    if not base.exists():
+        return [""]
+    tags = sorted(d.name for d in base.iterdir() if d.is_dir() and d.name.startswith("g"))
+    return tags if tags else [""]
+
+
+def _build_run_dir(
+    group_root: Path,
+    combo: Combo,
+    tau_tag: str,
+) -> Path:
+    """Build the run directory path, including gradient component subdir for gradient-spectral."""
+    if _is_gradient_method(combo.method) and combo.gradient_comp_tag:
+        return group_root / combo.method / combo.atlas / combo.smoothing / tau_tag / combo.gradient_comp_tag / f"hemi_{combo.hemi}"
+    return group_root / combo.method / combo.atlas / combo.smoothing / tau_tag / f"hemi_{combo.hemi}"
 
 
 @dataclass(frozen=True)
@@ -1036,7 +1072,10 @@ def coverage_tag(tau: float) -> str:
 
 
 def combo_tag(combo: Combo) -> str:
-    return f"{combo.atlas}__{combo.method}__{combo.smoothing}__hemi-{combo.hemi}"
+    base = f"{combo.atlas}__{combo.method}__{combo.smoothing}__hemi-{combo.hemi}"
+    if combo.gradient_comp_tag:
+        base = f"{base}__{combo.gradient_comp_tag}"
+    return base
 
 
 def write_viewer_readme(
@@ -1150,7 +1189,7 @@ def collect_panel_combo_inputs(
     tau_tag: str,
     skipped: list[dict[str, Any]],
 ) -> PanelComboInputs | None:
-    run_dir = group_root / combo.method / combo.atlas / combo.smoothing / tau_tag / f"hemi_{combo.hemi}"
+    run_dir = _build_run_dir(group_root, combo, tau_tag)
     manifest_path = run_dir / "group_atlas_manifest.json"
     labels_path = run_dir / "group_labels_final.npy"
     support_path = run_dir / "group_support_mask.npy"
@@ -1297,7 +1336,8 @@ def render_clusterless_combo_panels(
     combo_runtime_out.mkdir(parents=True, exist_ok=True)
     panel_dir = combo_runtime_out / "global_top"
     other_hemi = "R" if combo.hemi == "L" else "L"
-    other_manifest_path = group_root / combo.method / combo.atlas / combo.smoothing / tau_tag / f"hemi_{other_hemi}" / "group_atlas_manifest.json"
+    other_combo = Combo(atlas=combo.atlas, method=combo.method, smoothing=combo.smoothing, hemi=other_hemi, gradient_comp_tag=combo.gradient_comp_tag)
+    other_manifest_path = _build_run_dir(group_root, other_combo, tau_tag) / "group_atlas_manifest.json"
     if not other_manifest_path.exists():
         raise FileNotFoundError(
             f"Missing opposite-hemi manifest required for hippomaps rendering: {other_manifest_path}"
@@ -1570,8 +1610,10 @@ def main() -> int:
     combos: list[Combo] = []
     for method in args.methods:
         for smoothing in args.smoothings:
-            for hemi in args.hemis:
-                combos.append(Combo(atlas=str(args.atlas), method=str(method), smoothing=str(smoothing), hemi=str(hemi)))
+            comp_tags = _discover_gradient_comp_tags(group_root, method, str(args.atlas), smoothing, tau_tag)
+            for comp_tag in comp_tags:
+                for hemi in args.hemis:
+                    combos.append(Combo(atlas=str(args.atlas), method=str(method), smoothing=str(smoothing), hemi=str(hemi), gradient_comp_tag=comp_tag))
 
     items: list[dict[str, Any]] = []
     skipped: list[dict[str, Any]] = []
