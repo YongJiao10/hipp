@@ -162,6 +162,28 @@ def test_gradient_component_parser_rejects_bad_values() -> None:
             pass
 
 
+def test_gradient_overview_readiness_checks_each_component_hemi(tmp_path: Path) -> None:
+    base = tmp_path / GRADIENT_METHOD / "kong2022" / "2mm" / "cov_0p80" / "g1"
+    (base / "hemi_L").mkdir(parents=True, exist_ok=True)
+    run_dir = base / "hemi_R"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    (run_dir / "group_atlas_manifest.json").write_text('{"status": "ok"}\n', encoding="utf-8")
+    (run_dir / "group_labels_final.npy").write_bytes(b"placeholder")
+
+    try:
+        present_mod.ensure_combo_ready(
+            group_root=tmp_path,
+            method=GRADIENT_METHOD,
+            atlas="kong2022",
+            coverage_tag="cov_0p80",
+            smoothings=["2mm"],
+            hemis=["L", "R"],
+        )
+        raise AssertionError("expected missing hemi_L manifest to fail readiness")
+    except RuntimeError as exc:
+        assert "g1/hemi_L/group_atlas_manifest.json" in str(exc)
+
+
 def test_wta_subject_fc_preprocessing_manifest_is_mode_neutral() -> None:
     full_mode = resolve_subject_fc_mode("full", None)
     sparse_mode = resolve_subject_fc_mode("top-percent", 10)
@@ -206,6 +228,7 @@ def main() -> int:
     test_cortex_scene_renderer_help_works_when_executed_by_path()
     test_gradient_component_parser_defaults_and_valid_combos()
     test_gradient_component_parser_rejects_bad_values()
+    test_gradient_overview_readiness_checks_each_component_hemi(Path("/tmp/core_workflow_gradient_overview_ready"))
     test_wta_subject_fc_preprocessing_manifest_is_mode_neutral()
     test_gradient_subject_fc_preprocessing_manifest_is_mode_neutral()
     test_gradient_matrix_jobs_are_route_only_and_core_rooted_for_routea()

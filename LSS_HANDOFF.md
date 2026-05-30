@@ -1,7 +1,23 @@
-# Handoff: LSS esTT — HippUnfold 重跑 + Cortex PFM + Cluster FC
+# Handoff: LSS esTT — HippUnfold 重跑 + Cortex PFM + Cluster FC + Individual (Spectral, Gradient, WTA-top)
 
-**更新时间：** 2026-04-24 ~02:34 UTC  
-**当前状态：** ✅ HippUnfold 25/25 完成（36P）；✅ 24P Step B/C 完成；⏳ 24P Step D 运行中（PID 1667288）
+**更新时间：** 2026-05-28 ~21:10 UTC  
+**当前状态：** 
+- ✅ 36P & 24P Group-level 核心流程均已 100% 完成
+  - ✅ 36P/24P HippUnfold 重跑 (T1w only) 25/25 完成
+  - ✅ 36P/24P Step B (海马 surface 采样) 25/25 完成
+  - ✅ 36P/24P Step C (Cortex PFM) 25/25 完成
+  - ✅ 36P/24P Step D (Cluster FC) 25/25 × 6 combos 完成
+- ✅ 36P Individual-level Hippocampal **Network-Spectral** Parcellation 已 100% 完成并通过验证
+  - ✅ 23名 QC-pass 受试者 × 2侧 (L, R) × 2平滑度 (2mm, 4mm) = 92个 combos 均 100% 完成，无缺失文件，无特征形状错误，且未分配脑区比例为 0.0%
+- ✅ 36P Individual-level Hippocampal **Gradient-Spectral** Parcellation 已 100% 完成并通过验证
+  - ✅ 23名 QC-pass 受试者 × 2侧 (L, R) × 2平滑度 (2mm, 4mm) = 92个 combos 均 100% 完成，0 缺失文件，0 形状错误，1/276 cluster 无正 ROI 连接 (sub-625, 4mm, hemi-L, cluster 1)
+  - ✅ 算法：BrainSpace `GradientMaps(n_components=5, kernel="pearson")` → G1,G2,G3 扩散嵌入特征 → Cosine 亲和度 ⊙ 海马空间邻接 → `SpectralClustering` K=3 固定
+  - ✅ 脚本：`scripts/run_individual_kong2022_gradient_spectral.py` + `scripts/run_estt_individual_gradient_spectral_batch.py`
+- ✅ 36P Individual-level Hippocampal **WTA-top (Winner-Take-All)** Network Assignment 已 100% 完成并通过验证
+  - ✅ 23名 QC-pass 受试者 × 2侧 (L, R) × 2平滑度 (2mm, 4mm) = 92个 combos 均 100% 完成，0 缺失文件，0 形状错误，未分配顶点比例仅为 0.08% (40/47104 vertices)
+  - ✅ 算法：直连皮层网络投票（Winner-Take-All Top-20）
+  - ✅ 脚本：`scripts/run_individual_kong2022_wta_top.py` + `scripts/run_estt_individual_wta_top_batch.py`
+
 
 ---
 
@@ -10,296 +26,115 @@
 | 变量 | 路径 |
 |------|------|
 | LSS 根 | `/home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_esTT/` |
-| LSS 工作目录 | `{LSS根}/DataOrg_PFM_36P/hipp_outputs/` |
+| 36P 工作目录 | `{LSS根}/DataOrg_PFM_36P/hipp_outputs/` |
+| 24P 工作目录 | `{LSS根}/DataOrg_PFM_24P/hipp_outputs/` |
 | 本地脚本 | `{LSS根}/src/hipp/` |
 | hipp repo | `/home/yojiao/hpchome/hipp/`（脚本/资产来源，不写入结果） |
+| 个体化谱聚类目录 | `{36P工作目录}/estt_kong2022_areal_individual_spectral/`（隔离的个体级别工作目录） |
+| 个体化 Network-Spectral 结果 | `{个体化谱聚类目录}/outputs/sub-<ID>/group-network-spectral/` |
+| 个体化 Gradient-Spectral 结果 | `{个体化谱聚类目录}/outputs/sub-<ID>/group-gradient-spectral/` |
+| 个体化 WTA-top 结果 | `{个体化谱聚类目录}/outputs/sub-<ID>/wta-top/` |
 
 ---
 
-## 当前运行进程
+## 核心流程状态与输出审计
 
-| PID | 角色 | 状态 | 日志 |
-|-----|------|------|------|
-| 1049857 | 原始批次管理进程（24/25完成后退出） | ✅ 已完成 | `DataOrg_PFM_36P/hipp_outputs/logs/hippunfold_batch_t1only.log` |
-| 380641 | sub-846 第3次手动重启 | ✅ 已完成（363/363 steps） | `DataOrg_PFM_36P/hipp_outputs/logs/hippunfold_846_restart3.log` |
-| — | 24P Step B 海马 surface 采样 | ✅ 已完成（25/25） | `DataOrg_PFM_24P/hipp_outputs/logs/sampling_24p_batch.log` |
-| — | 24P Step C Cortex PFM + 网络时序 | ✅ 已完成（25/25） | `DataOrg_PFM_24P/hipp_outputs/logs/cortex_pfm_24p.log` |
-| 1667288 | 24P Step D Cluster FC | 🔄 运行中（25×4 combos=100个任务） | `DataOrg_PFM_24P/hipp_outputs/logs/cluster_fc_24p.log` |
+### 1. Group-level 流程状态
+*   **HippUnfold 表面重建 (T1w only)**：✅ 25/25人全部完成。包括最后一个之前卡住的受试者 `sub-846` 已完成（363/363 steps done）。
+*   **Step A：QC 质控评估**：✅ 已完成重新评估并更新了 QC 报告（[QC报告](file:///home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_esTT/DataOrg_PFM_36P/hipp_outputs/qc/hippunfold_qc_lss_esTT_25subjects.md)）。
+    *   **结论**：QC 通过 23 人，排除 2 人（`sub-677` Dice-L = 0.108 失败，`sub-778` Dice-R = 0.625 失败且 24P null-fMRI 超过阈值）。
+    *   **名单 (23人)**：`369 372 376 404 405 409 413 416 418 423 430 483 532 585 610 625 634 672 720 728 756 760 846`
+*   **Step B：海马 surface 功能时序采样**：✅ 36P 和 24P 均已 100%（25/25）完成。
+*   **Step C：Cortex PFM + 网络时序提取**：✅ 36P 和 24P 均已 100%（25/25）完成。
+*   **Step D：Cluster FC 矩阵计算**：✅ 36P 和 24P 均已 100%（25/25）完成，输出 6 个 atlas combos 的全部相关性 FC 矩阵。
 
-```bash
-# 完成数
-ls /home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_esTT/DataOrg_PFM_36P/hipp_outputs/dense_corobl_batch_t1only/sub-*/hippunfold/sub-*/surf/*hemi-L*space-corobl*den-512*label-hipp_midthickness.surf.gii 2>/dev/null | wc -l
-# 期望最终: 25
+### 2. Individual-level 流程状态 (eSTT Kong2022-Areal Individual Spectral)
+该目录包含了隔离的、单受试者级别的海马网络谱聚类管道及输出。
+*   **当前状态**：**已对 23 名 QC-pass 受试者完成全部 92 个 combos 的计算并验证通过**。
+    *   验证指标：`n_missing_files` = 0, `n_shape_errors` = 0, `unassigned_ratio` = 0.0。
+*   **主要脚本**：
+    *   `scripts/extract_cortex_kong2022_areal_mshbm_roi_timeseries.py`
+    *   `scripts/materialize_vertex_to_roi_fisherz.py`
+    *   `scripts/run_individual_kong2022_network_spectral.py` (单受试者谱聚类核心脚本)
+    *   `scripts/run_estt_individual_spectral_batch.py` (批处理与验证脚本)
+*   **算法原理**：
+    1.  **个体化时序桥接**：提取个体化皮层网络分区 (MSHBM) 对应的 ROI 时序。
+    2.  **FC 矩阵生成**：计算海马顶点到皮层个体化脑区的 Fisher-z 转换相关系数（512 × 400）。
+    3.  **海马谱聚类**：将顶点间 FC 矩阵的余弦相似度作为特征，结合海马表面的空间邻接矩阵（Spatial Adjacency Matrix）约束，进行谱聚类。
+    4.  **K 选择与重排**：在单受试者水平利用无冗余约束算法选择最优 K 值（K=2..10），并利用海马长轴三维坐标点集的特征向量，对聚类后的 Clusters 进行长轴重排。
+    5.  **皮层网络映射**：在个体水平对每个海马 Cluster 进行 Top20 ROI 网络投影（多数投票）并输出映射结果。
+*   **单受试者输出目录契约**：
+    *   路径：`outputs/sub-<ID>/group-network-spectral/kong2022/<2mm|4mm>/hemi_<L|R>/`
+    *   预期文件：
+        *   `vertex_to_roi_fisherz.npy` / `subject_feature_after_top10.npy` (FC 特征)
+        *   `cluster_labels.npy` / `cluster_label.gii` (分类标签)
+        *   `k_selection_summary.json` / `k_selection_summary.tsv` (K 选择总结)
+        *   `cluster_assignment_status.json` / `cluster_roi_profile.npy` / `cluster_network_profile.npy` (脑区与网络映射剖面)
+        *   `manifest.json` (完整性及元数据描述)
 
-# sub-846 进度
-ps -p 380641
-tail -20 /home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_esTT/DataOrg_PFM_36P/hipp_outputs/logs/hippunfold_846_restart3.log
-```
+### 3. Individual-level 流程状态 (eSTT Kong2022-Areal Individual Gradient-Spectral)
+该目录包含了隔离的、单受试者级别的海马**梯度**谱聚类管道及输出，采用与本地 `gradient-spectral` 相同的 BrainSpace 扩散嵌入方法。
+*   **当前状态**：**已对 23 名 QC-pass 受试者完成全部 92 个 combos 的计算并验证通过**。
+    *   验证指标：`n_missing_files` = 0, `n_shape_errors` = 0, `unassigned_ratio` = 0.0036 (1/276 cluster, sub-625 4mm hemi-L cluster 1)。
+*   **主要脚本**：
+    *   `scripts/gradient_adapter.py` (BrainSpace GradientMaps 适配器，从 hipp repo 提取)
+    *   `scripts/run_individual_kong2022_gradient_spectral.py` (单受试者梯度谱聚类核心脚本)
+    *   `scripts/run_estt_individual_gradient_spectral_batch.py` (批处理与验证脚本)
+*   **算法原理**：
+    1.  **输入复用**：直接使用已生成的 `vertex_to_roi_fisherz.npy` (512 × 400)，无需重新提取时序。
+    2.  **Column z-score 标准化**：对每列 (ROI) 在顶点间做 z-score 标准化。
+    3.  **BrainSpace 扩散嵌入**：`GradientMaps(n_components=5, kernel="pearson")` → 连续功能梯度 (G1..G5)。
+    4.  **特征选择**：取 G1, G2, G3 作为聚类特征 (3 维梯度特征)。
+    5.  **谱聚类**：梯度特征 Cosine 亲和度 ⊙ 海马表面邻接矩阵 (Hadamard 积) → `SpectralClustering`，**K=3 固定** (与本地 group-level gradient-spectral 一致)。
+    6.  **长轴重排**：利用海马长轴 (SVD) 对聚类标签排序。
+    7.  **皮层网络映射**：对每个海马 Cluster 进行 Top-20 ROI 网络投影（多数投票）。
+*   **单受试者输出目录契约**：
+    *   路径：`outputs/sub-<ID>/group-gradient-spectral/kong2022/<2mm|4mm>/hemi_<L|R>/`
+    *   预期文件：
+        *   `vertex_to_roi_fisherz.npy` (512, 400) — 原始 Fisher-z FC
+        *   `hippomaps_gradients_full.npy` (512, 5) — 所有 5 个梯度分量
+        *   `hippomaps_lambdas.npy` (5,) — 扩散嵌入特征值
+        *   `hippomaps_ev_fractions.npy` (5,) — 解释方差比例
+        *   `cluster_labels.npy` / `cluster_label.gii` (分类标签, K=3)
+        *   `k_selection_summary.json` / `k_selection_summary.tsv` (K 选择总结, mode=force_final_k)
+        *   `cluster_assignment_status.json` / `cluster_roi_profile.npy` / `cluster_network_profile.npy` (脑区与网络映射剖面)
+        *   `manifest.json` (完整性及元数据描述)
 
-### sub-846 历史与当前状态
-
-sub-846 是最后一个（第25个）subject，经历了3次重启：
-
-| 次数 | 失败原因 | 处理 |
-|------|----------|------|
-| 原始批次 | `template_shape_reg` greedy 卡住4.5h，随后 `laynii_layers_equidist` subprocess 挂死 | kill PID 404950 |
-| 第1次重启 | 用错脚本（`run_hippunfold_local.sh` 而非 isolated_cache），asset store 未命中，重新下载 | kill PID 723484 |
-| 第2次重启 | hemi-R `nnunet_dsegsplit` 已存在但 `nnunet_dseg.nii.gz`（temp）被清理，snakemake 无法重建 | 删除 dsegsplit，第3次重启 |
-| **第3次重启** | **使用正确脚本+asset store，从 nnUNet hemi-R 重跑** | **PID 380641，进行中** |
-
-### 如果 sub-846 再次失败需重启
-
-```bash
-LSS_ROOT="/home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_esTT"
-LSS_HIPP_OUT="$LSS_ROOT/DataOrg_PFM_36P/hipp_outputs"
-
-# 1. unlock
-HIPPUNFOLD_EXTRA_ARGS="--unlock" \
-HIPPUNFOLD_ASSET_STORE_ROOT="/home/yojiao/hpchome/hipp/runtime/hippunfold_asset_store_shared" \
-  bash /home/yojiao/hpchome/hipp/scripts/run_hippunfold_local_t1w_isolated_cache.sh \
-    846 "$LSS_HIPP_OUT/staging_input" \
-    "$LSS_HIPP_OUT/dense_corobl_batch_t1only/sub-846/hippunfold"
-
-# 2. restart
-nohup env \
-  HIPPUNFOLD_EXTRA_ARGS="--rerun-incomplete" \
-  HIPPUNFOLD_ASSET_STORE_ROOT="/home/yojiao/hpchome/hipp/runtime/hippunfold_asset_store_shared" \
-  bash /home/yojiao/hpchome/hipp/scripts/run_hippunfold_local_t1w_isolated_cache.sh \
-    846 "$LSS_HIPP_OUT/staging_input" \
-    "$LSS_HIPP_OUT/dense_corobl_batch_t1only/sub-846/hippunfold" \
-  >> "$LSS_HIPP_OUT/logs/hippunfold_846_restartN.log" 2>&1 &
-echo "PID: $!"
-```
-
-> ⚠️ **关键**：必须用 `run_hippunfold_local_t1w_isolated_cache.sh`（不是 `run_hippunfold_local.sh`），且必须设置 `HIPPUNFOLD_ASSET_STORE_ROOT`，否则会从 Zenodo 重新下载模板。
-
-### 如果整批需重启（25人）
-
-```bash
-cd /home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_esTT
-nohup /home/yojiao/.conda/envs/py314/bin/python src/hipp/run_lss_hippunfold_batch.py \
-  --concurrency 1 \
-  >> DataOrg_PFM_36P/hipp_outputs/logs/hippunfold_batch_t1only.log 2>&1 &
-echo "PID: $!"
-```
-
----
-
-## HippUnfold 重跑历史与当前方案
-
-### 版本历史
-
-| 目录 | modality | t1-reg-template | 状态 |
-|------|----------|-----------------|------|
-| `dense_corobl_batch_legacy/` | T2w | 无 | 旧结果，保留 |
-| `dense_corobl_batch_t2t1_incomplete/` | T2w | 有 | 中途停止（5/25完成），保留 |
-| `dense_corobl_batch_t1only/` | **T1w** | 无 | **当前运行** |
-
-### 为什么改成 T1w only
-
-T2w+t1-reg-template 方案中途停止，改用 T1w only 重新开始。Task101（T1w）nnUNet 模型已下载（2.3G tar，在 asset store 中），首次运行时 snakemake 会自动解压。
-
-### 关键参数
-
-| 参数 | 值 |
-|------|-----|
-| modality | `T1w` |
-| t1-reg-template | 无 |
-| output-density | `512` |
-| output-spaces | `corobl` |
-| input_dir | `hipp_outputs/staging_input/`（仅含 T1w/T2w 的干净目录） |
-| output_dir | `hipp_outputs/dense_corobl_batch_t1only/sub-{ID}/hippunfold/` |
-| cache base | `hipp_outputs/runtime/hippunfold_lss_t1only/` |
-| nnUNet 模型 | `hipp/runtime/hippunfold_asset_store_shared/hippunfold_assets/model/trained_model.3d_fullres.Task101_hcp1200_T1w.nnUNetTrainerV2.model_best.tar` |
-| concurrency | 1（串行，约 44 分钟/人） |
-| shell 脚本 | `hipp/scripts/run_hippunfold_local_t1w_isolated_cache.sh` |
-
-### 路径
-
-```
-hipp_outputs/
-  dense_corobl_batch_legacy/          ← 旧结果（T2w only, no t1-reg-template）
-  dense_corobl_batch_t2t1_incomplete/ ← 中途停止（T2w + t1-reg-template，5/25）
-  dense_corobl_batch_t1only/          ← 当前结果（正在写入）
-  staging_input/sub-{ID}/anat/        ← T1w + T2w 入口（symlink）
-  runtime/hippunfold_lss_t1only/      ← 每人临时 workdir（运行完自动清理）
-  logs/hippunfold_{ID}.log            ← 每人详细日志
-  logs/hippunfold_batch_t1only.log    ← 批处理汇总日志
-```
+### 4. Individual-level 流程状态 (eSTT Kong2022-Areal Individual WTA-top)
+该目录包含了隔离的、单受试者级别的海马**Winner-Take-All (WTA)**网络分配管道及输出，采用与本地组级 `wta-top` 相同的皮层 Top-20 ROI 多数投票算法。
+*   **当前状态**：**已对 23 名 QC-pass 受试者完成全部 92 个 combos 的计算并验证通过**。
+    *   验证指标：`n_missing_files` = 0, `n_shape_errors` = 0, 未分配顶点比例仅为 0.08%（92个 combos 中共计 47104 个顶点中仅 40 个未分配）。
+*   **主要脚本**：
+    *   `scripts/run_individual_kong2022_wta_top.py` (单受试者 WTA 多数投票核心脚本)
+    *   `scripts/run_estt_individual_wta_top_batch.py` (批处理与验证脚本)
+*   **算法原理**：
+    1.  **输入复用**：直接使用已生成的 `vertex_to_roi_fisherz.npy` (512 × 400)。
+    2.  **正相关筛选**：对每个海马顶点，保留其到皮层 400 个 ROI 中具有有限且 strictly positive (`> 0`) 的 Fisher-z FC 值。若无正相关连接，则标记为 unassigned (标签 9)。
+    3.  **Top-20 排序**：按 Fisher-z 相关系数大小对正相关 ROIs 进行降序排列，筛选出 Top-20。
+    4.  **皮层网络多数投票**：获取 Top-20 ROIs 所属的 canonical 8 大网络分类，以网络出现次数（频数）决定该顶点所属的网络分类。如果出现频数相同，则通过 Fisher-z 关联强度的总和（Sum Score）打破平局。
+    5.  **空间与颜色映射**：将优胜的网络类别赋予该顶点，并根据 `cross_atlas_network_merge.json` 约定的 8 个 canonical 经典网络进行颜色映射输出。
+*   **单受试者输出目录契约**：
+    *   路径：`outputs/sub-<ID>/wta-top/kong2022/<2mm|4mm>/hemi_<L|R>/`
+    *   预期文件：
+        *   `vertex_to_roi_fisherz.npy` (512, 400) — 原始 Fisher-z FC
+        *   `cluster_labels.npy` / `cluster_label.gii` (Winner-Take-All 顶点级分类标签与 dlabel GIFTI，标签 1-8 为网络，9 为 unassigned)
+        *   `k_selection_summary.json` / `k_selection_summary.tsv` (K 选择总结，mode=clusterless)
+        *   `cluster_assignment_status.json` (顶点投票明细、频数与分数 margin 信息)
+        *   `manifest.json` (完整性及元数据描述)
 
 ---
 
-## HippUnfold 完成后的下游任务
 
-### Step A：QC（重新评估）
-
-旧 QC 结论（基于 legacy 结果）：23/25 pass（sub-677 Dice-L=0.234，sub-778 Dice-R=0.583 失败）。  
-新跑完成后**必须重新跑 QC**，标准与 HCP 项目相同：
-
-1. HippUnfold Dice ≥ 0.70（两侧）— 看 `sub-{ID}_desc-unetf3d_dice.tsv`
-2. fMRI null vertex % < 20%（sd == 0，PSC 单位）
-
-QC 报告位置：`hipp_outputs/qc/hippunfold_qc_lss_esTT_25subjects.md`（需更新）
-
-### Step B：海马 surface 功能时序采样
-
-旧采样结果在 `hipp_outputs/hipp_functional_parcellation_network/shared/sub-{ID}/surface/raw/`，基于 legacy HippUnfold surface。新 HippUnfold 完成后需重新采样。
-
-参照 `run_one_subject.py` / `run_all_subjects_serial.sh`。
-
-### Step C：Cortex PFM + 网络时序提取（已完成，无需重跑）
-
-25 人已完成，结果在：
-- `cortex_pfm/sub-{ID}/kong2019/pfm_summary.json` ✅
-- `shared/sub-{ID}/reference/cortex_canonical_network_timeseries.npy`（shape: 8×593）✅
-- 使用 `extract_cortex_merged_network_timeseries.py`（直接 vertex 级别 merge，非 ROI 中间步骤）
-- 皮层 valid-vertex 掩码：sd > 0（PSC 单位）
-
-### Step D：Cluster FC 矩阵（需在 Step B 完成后重跑）
-
-脚本：`src/hipp/compute_lss_cluster_fc.py`  
-当前状态：23 人 QC-pass 集已跑完，但依赖旧 surface → **Step B 重采样后需重跑**
-
-```bash
-cd /home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_esTT
-/home/yojiao/.conda/envs/py314/bin/python src/hipp/compute_lss_cluster_fc.py \
-  --manifest DataOrg_PFM_36P/hipp_outputs/manifests/lss_esTT_23subjects_qcpass.txt
-```
-
-4 个 atlas combo × 23 人 × 2 hemi = 184 个输出文件  
-输出：`hipp_outputs/cluster_fc/{combo}/sub-{ID}/hemi-{L,R}_cluster_network_fc.npy`
-
----
-
-## HippUnfold 环境信息
+## 环境信息与下游 Python 配置
 
 | 项目 | 值 |
 |------|-----|
-| 环境 | `hippo2`（hippo2 repo clone at `hipp/.cache/conda_envs/hippo2/`） |
-| hippunfold 版本 | 2.0.0（CLI 实测）|
-| nnUNet T1w 模型 | `hipp/runtime/hippunfold_asset_store_shared/hippunfold_assets/model/trained_model.3d_fullres.Task101_hcp1200_T1w.nnUNetTrainerV2.model_best.tar`（2.3G，已下载） |
-| nnUNet T2w 模型 | `hipp/runtime/hippunfold_asset_store_shared/hippunfold_assets/model/trained_model.3d_fullres.Task102_hcp1200_T2w.nnUNetTrainerV2.model_best`（已解压） |
-| greedy/c3d/c3d_affine_tool | 均在 hippo2 conda env，无需外部 binary dir |
-| Python env（下游） | `/home/yojiao/.conda/envs/py314/bin/python` |
+| HippUnfold 环境 | `hippo2`（CLI 2.0.0）|
+| Downstream Python env | `/home/yojiao/.conda/envs/py314/bin/python` |
+| 依赖包校验 | `nibabel`, `numpy`, `scipy`, `scikit-learn` 均已安装且测试通过 |
 
 ---
 
----
-
-## 24P 下游分析规划
-
-### 背景
-
-`DataOrg_PFM_24P/` 目录已存在，包含 25 人的 24P 去噪 bold/dtseries，anat 与 36P 完全相同。HippUnfold 输出（anatomy-based）**不需要重跑**，直接复用 36P 的 `dense_corobl_batch_t1only/`。
-
-### 资源复用 vs 重新生成
-
-| 资源 | 来源 |
-|------|------|
-| HippUnfold surfaces | 复用 `DataOrg_PFM_36P/hipp_outputs/dense_corobl_batch_t1only/` |
-| Group atlases | 复用 `DataOrg_PFM_36P/hipp_outputs/group_atlases/` |
-| HippUnfold Dice QC | 复用 36P 结论（anatomy 相同）|
-| fMRI null vertex QC | **需重检**（24P 去噪不同，sd==0 vertex 可能不同）|
-| 海马 surface 时序 | **重新采样**（用 24P bold）→ `DataOrg_PFM_24P/hipp_outputs/...` |
-| Cortex PFM + 网络时序 | **重新跑**（用 24P dtseries）→ `DataOrg_PFM_24P/hipp_outputs/...` |
-| Cluster FC 矩阵 | **重新跑**（用 24P 采样结果）→ `DataOrg_PFM_24P/hipp_outputs/...` |
-
-### Step B：24P 海马 surface 采样
-
-直接调采样脚本（跳过 `run_one_subject.py`，避免重跑 HippUnfold）：
-
-```bash
-PYTHON=/home/yojiao/.conda/envs/py314/bin/python
-SRC=/home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_esTT/src/hipp
-ROOT36=/home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_esTT/DataOrg_PFM_36P
-ROOT24=/home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_esTT/DataOrg_PFM_24P
-HIPP_OUT24="$ROOT24/hipp_outputs"
-
-for SID in $(cat "$ROOT36/hipp_outputs/manifests/lss_esTT_25subjects.txt"); do
-  $PYTHON "$SRC/common/sample_hipp_surface_timeseries.py" \
-    --bold "$ROOT24/sub-${SID}/func/sub-${SID}_task-rest_run-concat_desc-denoised_bold.nii.gz" \
-    --hippunfold-dir "$ROOT36/hipp_outputs/dense_corobl_batch_t1only/sub-${SID}/hippunfold" \
-    --subject "$SID" --density 512 --space corobl \
-    --mapping-method trilinear --smooth-iters 0 \
-    --smooth-fwhm-mm 2.0 4.0 \
-    --outdir "$HIPP_OUT24/hipp_functional_parcellation_network/shared/sub-${SID}/surface/raw" \
-    >> "$HIPP_OUT24/logs/sampling_24p_${SID}.log" 2>&1 \
-    && echo "done $SID" || echo "FAIL $SID"
-done
-```
-
-### Step C：24P Cortex PFM
-
-`run_lss_cortex_pfm_batch.py` 的 `sub_dir` 硬编码到 36P，**需要加 `--data-root` 参数**（小改动）。改动后：
-
-```bash
-$PYTHON $SRC/run_lss_cortex_pfm_batch.py \
-  --data-root $ROOT24 \
-  --manifest $ROOT36/hipp_outputs/manifests/lss_esTT_25subjects.txt \
-  --out-root $ROOT24/hipp_outputs/cortex_pfm \
-  --shared-root $ROOT24/hipp_outputs/shared \
-  --concurrency 4
-```
-
-> ⚠️ `run_lss_cortex_pfm_batch.py` 需要先加 `--data-root` CLI 参数，修改 `sub_dir = Path(args.data_root) / f"sub-{subject}"`
-
-### Step D：24P Cluster FC
-
-脚本已完全可配置，无需修改：
-
-```bash
-$PYTHON $SRC/compute_lss_cluster_fc.py \
-  --manifest $ROOT36/hipp_outputs/manifests/lss_esTT_25subjects.txt \
-  --atlas-root $ROOT36/hipp_outputs/group_atlases \
-  --hipp-shared $ROOT24/hipp_outputs/hipp_functional_parcellation_network/shared \
-  --cortex-shared $ROOT24/hipp_outputs/shared \
-  --out-root $ROOT24/hipp_outputs/cluster_fc
-```
-
-### 当前状态
-
-- [ ] fMRI null vertex QC（24P）
-- [x] `run_lss_cortex_pfm_batch.py` 加 `--data-root` 参数（已完成）
-- [x] Step B：25 人海马 surface 采样（24P bold）— 25/25 ✅
-- [x] Step C：Cortex PFM（24P dtseries）— 25/25 ✅
-- [ ] Step D：Cluster FC（24P）— 运行中 PID 1667288，100个任务
-
-Step D 完成后检查：
-```bash
-tail -5 /home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_esTT/DataOrg_PFM_24P/hipp_outputs/logs/cluster_fc_24p.log
-```
-
-Step D 重启命令（如果进程不在）：
-```bash
-ROOT36="/home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_esTT/DataOrg_PFM_36P"
-ROOT24="/home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_esTT/DataOrg_PFM_24P"
-nohup /home/yojiao/.conda/envs/py314/bin/python \
-  /home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_esTT/src/hipp/compute_lss_cluster_fc.py \
-  --manifest "$ROOT36/hipp_outputs/manifests/lss_esTT_25subjects.txt" \
-  --atlas-root "$ROOT36/hipp_outputs/group_atlases" \
-  --hipp-shared "$ROOT24/hipp_outputs/hipp_functional_parcellation_network/shared" \
-  --cortex-shared "$ROOT24/hipp_outputs/shared" \
-  --out-root "$ROOT24/hipp_outputs/cluster_fc" \
-  >> "$ROOT24/hipp_outputs/logs/cluster_fc_24p.log" 2>&1 &
-echo "PID: $!"
-```
-
----
-
-## 24P 启动时踩到的坑（2026-04-24）
-
-### 坑1：`run_lss_cortex_pfm_batch.py` 漏传 `--cross-atlas-merge-json`
-- **原因**：`extract_cortex_merged_network_timeseries.py` 在 Apr 22 16:41 将该参数从可选（有 default）改为 `required=True`；36P 跑于 Apr 22 14:14（当时是可选），批处理脚本沿用旧调用方式未同步。
-- **修复**：`run_lss_cortex_pfm_batch.py` extract_cmd 中补加 `--cross-atlas-merge-json`，指向 `HIPP_REPO/config/cross_atlas_network_merge.json`。
-
-### 坑2：`extract_cortex_merged_network_timeseries.py` 严格检查 Language/Limbic
-- **原因**：Apr 22 版本新增了"所有 canonical_network_order 中的网络必须存在"的检查，但 `canonical_network_order` 包含10个网络（含 Language/Limbic），而 kong2019 只有8个（无 Language/Limbic）。
-- **修复**：`extract_cortex_merged_network_timeseries.py` 中将 `canonical_names` 改为只取 atlas mapping 实际覆盖的网络（`set(mapping.values()) - exclude_labels`），不覆盖的网络不检查也不输出。
-
----
-
-## 旧 Cortex PFM 方法论说明（已修正）
-
-旧流程错误：通过 ROI component 中间层（等权平均）→ 系统性低估顶点数多的子网络贡献。  
-新流程：raw FASTANS label.gii → 直接按 vertex 累加到 8 个 canonical 网络 → 算术平均（`extract_cortex_merged_network_timeseries.py`）。  
-此修正已生效，cortex 网络时序已重新提取。
+## 后续分析建议
+1.  **受试者过滤**：在后续分析中，应排除 `sub-677` 和 `sub-778`。个体化聚类目录下的 `outputs/` 已经移除了这两名受试者，仅保留了 23 个 QC-pass 受试者的数据。
+2.  **个体聚类与组聚类的联合分析**：可将组水平谱聚类模板 `group-intrinsic-spectral` 的海马划分结果，与本目录生成的个体化谱聚类 `cluster_label.gii` 结果进行重叠度对比，以分析海马功能分区在个体水平上的异质性和特异性。
