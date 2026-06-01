@@ -13,10 +13,10 @@ Inputs:
 - Command-line arguments:
   - --shared-root: Path to shared processed files (default: `outputs_core/inputs/hcp7t_hippocampus/kong2022/shared_inputs/routeb_151`).
   - --surface-root: Path to BOLD surfaces root directory (default: `outputs_core/inputs/hcp7t_hippocampus/kong2022/shared_inputs/surface_151`).
-  - --out-root: Directory where group-atlas intermediate files will be saved (default: `outputs_core/work/group_atlas`).
+  - --out-root: Directory where group-atlas intermediate files will be saved (default: `outputs_core/work/group_atlas/routeb_full_k3_fisherz`).
   - --gradient-root: Directory containing computed continuous gradients (default: `outputs_core/work/hippomaps_gradients`).
   - --hippomaps-root: Root path to external HippoMaps codebase (default: `external/hippomaps`).
-  - --route-tag: Expected workflow branch tag, e.g., "routea", "routeb", "auto".
+  - --route-tag: Expected workflow branch tag, e.g., "routea", "routea_ctxreg", "routea_ctxdrop", or "routeb".
   - --subjects-manifest: Path to QC-passed subject list manifest.
   - --hippunfold-batch-root: Batch output root containing sub-*/hippunfold outputs.
   - --kong2022-dlabel: Path to standard Kong2022 dlabel.nii cortical atlas file.
@@ -24,7 +24,7 @@ Inputs:
   - --atlases: Cortical atlases to map: "kong2022", "kong2019", etc.
   - --smoothings: Smoothing levels to process: "2mm", "4mm".
   - --hemis: Hemispheres to process: "L", "R".
-  - --coverage-thresholds: Minimum coverage fraction values to evaluate (default: [0.70, 0.80, 0.90]).
+  - --coverage-thresholds: Minimum coverage fraction values to evaluate (default: [0.80]).
   - --k-min: Minimum number of clusters to evaluate (default: 2).
   - --k-max: Maximum number of clusters to evaluate (default: 10).
   - --force-final-k: Fixed K value for final presentation labels (default: 3).
@@ -108,6 +108,7 @@ from lib.output_layout import (
     DEFAULT_KONG2022_ROUTEB_ROOT,
     DEFAULT_KONG2022_SURFACE_ROOT,
     DEFAULT_KONG2022_TEMPLATE_ROOT,
+    DEFAULT_ROUTEB_GROUP_ATLAS_ROOT,
 )
 from lib.fc_math import corrcoef_rows, fisher_z_transform_fc, bh_fdr
 from lib.gifti_labels import make_cluster_label_gifti, make_named_label_gifti
@@ -118,7 +119,7 @@ from lib.workflow_utils import write_json
 DEFAULT_T1ONLY_ROOT = DEFAULT_KONG2022_ROOT
 DEFAULT_SHARED_ROOT = DEFAULT_KONG2022_ROUTEB_ROOT
 DEFAULT_SURFACE_ROOT = DEFAULT_KONG2022_SURFACE_ROOT
-DEFAULT_OUT_ROOT = DEFAULT_GROUP_ATLAS_ROOT / "routeb_auto"
+DEFAULT_OUT_ROOT = DEFAULT_ROUTEB_GROUP_ATLAS_ROOT
 DEFAULT_GRADIENT_ROOT = DEFAULT_HIPPOMAPS_GRADIENT_ROOT
 DEFAULT_SUBJECTS = DEFAULT_KONG2022_MANIFEST_ROOT / "hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt"
 DEFAULT_HIPPUNFOLD_BATCH_ROOT = CORE_HIPPUNFOLD_BATCH_ROOT
@@ -153,7 +154,7 @@ SUBJECT_FC_MODE_CHOICES = ["full", "top-percent"]
 DEFAULT_GRADIENT_COMPONENTS = (1, 2, 3)
 GRADIENT_N_COMPONENTS_COMPUTED = 5
 GRADIENT_BRAINSPACE_KERNEL = "pearson"
-ROUTE_TAG_CHOICES = ("routea", "routeb")
+ROUTE_TAG_CHOICES = ("routea", "routea_ctxreg", "routea_ctxdrop", "routeb")
 MAX_K_EVAL_JOBS = 10
 RESUME_SIGNATURE_VERSION = 1
 
@@ -182,6 +183,7 @@ class GroupAtlasConfig:
     shared_root: Path
     surface_root: Path
     out_root: Path
+    reference_root: Path
     gradient_root: Path
     route_tag: str
     hippunfold_batch_root: Path
@@ -360,6 +362,11 @@ def spectral_cluster_from_affinity(aff: np.ndarray, k: int, seed: int) -> np.nda
     )
     labels0 = model.fit_predict(aff)
     return reorder_labels_by_size(labels0)
+
+
+
+def reference_path(reference_root: Path, subject: str, atlas: str, filename: str) -> Path:
+    return Path(reference_root) / f"sub-{subject}" / "reference" / atlas / str(filename)
 
 
 def parse_network_names(tsv: Path) -> list[str]:
@@ -887,13 +894,13 @@ def top_two_from_scores(score_by_network: dict[str, float]) -> tuple[str, float,
     return str(top1[1]), float(top1[2]), str(top2[1]), float(top2[2])
 
 
-def verify_canonical_network_order_consistency(shared_root: Path, subjects: list[str], atlas: str) -> list[str]:
+def verify_canonical_network_order_consistency(reference_root: Path, subjects: list[str], atlas: str) -> list[str]:
     ref_subject = subjects[0]
-    ref_path = shared_root / f"sub-{ref_subject}" / "reference" / atlas / "cortex_canonical_networks.tsv"
+    ref_path = reference_path(reference_root, ref_subject, atlas, "cortex_canonical_networks.tsv")
     ref_names = parse_network_names(ref_path)
     mismatched: list[str] = []
     for subject in subjects[1:]:
-        path = shared_root / f"sub-{subject}" / "reference" / atlas / "cortex_canonical_networks.tsv"
+        path = reference_path(reference_root, subject, atlas, "cortex_canonical_networks.tsv")
         names = parse_network_names(path)
         if names != ref_names:
             mismatched.append(f"sub-{subject}")
@@ -1863,6 +1870,7 @@ def cluster_network_profile(
     subjects: list[str],
     shared_root: Path,
     surface_root: Path,
+    reference_root: Path,
     atlas: str,
     smoothing: str,
     hemi: str,
@@ -1873,7 +1881,7 @@ def cluster_network_profile(
     profiles: list[np.ndarray] = []
     for subject in subjects:
         ts_path = surface_root / f"sub-{subject}" / "surface" / smoothing / f"sub-{subject}_hemi-{hemi}_timeseries.npy"
-        net_path = shared_root / f"sub-{subject}" / "reference" / atlas / "cortex_canonical_network_timeseries.npy"
+        net_path = reference_path(reference_root, subject, atlas, "cortex_canonical_network_timeseries.npy")
         if not (ts_path.exists() and net_path.exists()):
             continue
         ts = np.load(ts_path).astype(np.float32)
@@ -1992,6 +2000,7 @@ def cluster_roi_profile(
     subjects: list[str],
     shared_root: Path,
     surface_root: Path,
+    reference_root: Path,
     smoothing: str,
     hemi: str,
     valid_masks_by_subject: dict[str, np.ndarray],
@@ -2004,8 +2013,8 @@ def cluster_roi_profile(
     profiles: list[np.ndarray] = []
     for subject in subjects:
         ts_path = surface_root / f"sub-{subject}" / "surface" / smoothing / f"sub-{subject}_hemi-{hemi}_timeseries.npy"
-        roi_path = shared_root / f"sub-{subject}" / "reference" / "kong2022" / "cortex_roi_parcel_timeseries.npy"
-        roi_tsv = shared_root / f"sub-{subject}" / "reference" / "kong2022" / "cortex_roi_parcels.tsv"
+        roi_path = reference_path(reference_root, subject, "kong2022", "cortex_roi_parcel_timeseries.npy")
+        roi_tsv = reference_path(reference_root, subject, "kong2022", "cortex_roi_parcels.tsv")
         if not (ts_path.exists() and roi_path.exists() and roi_tsv.exists()):
             continue
         ts = np.load(ts_path).astype(np.float32)
@@ -2068,6 +2077,7 @@ def cluster_roi_profile_subjectwise(
     subjects: list[str],
     shared_root: Path,
     surface_root: Path,
+    reference_root: Path,
     smoothing: str,
     hemi: str,
     valid_masks_by_subject: dict[str, np.ndarray],
@@ -2081,8 +2091,8 @@ def cluster_roi_profile_subjectwise(
     used_subjects: list[str] = []
     for subject in subjects:
         ts_path = surface_root / f"sub-{subject}" / "surface" / smoothing / f"sub-{subject}_hemi-{hemi}_timeseries.npy"
-        roi_path = shared_root / f"sub-{subject}" / "reference" / "kong2022" / "cortex_roi_parcel_timeseries.npy"
-        roi_tsv = shared_root / f"sub-{subject}" / "reference" / "kong2022" / "cortex_roi_parcels.tsv"
+        roi_path = reference_path(reference_root, subject, "kong2022", "cortex_roi_parcel_timeseries.npy")
+        roi_tsv = reference_path(reference_root, subject, "kong2022", "cortex_roi_parcels.tsv")
         if not (ts_path.exists() and roi_path.exists() and roi_tsv.exists()):
             continue
         ts = np.load(ts_path).astype(np.float32)
@@ -2373,6 +2383,7 @@ def annotate_kong2022_clusters_topn(
     subjects: list[str],
     shared_root: Path,
     surface_root: Path,
+    reference_root: Path,
     smoothing: str,
     hemi: str,
     valid_masks_by_subject: dict[str, np.ndarray],
@@ -2395,6 +2406,7 @@ def annotate_kong2022_clusters_topn(
         subjects=subjects,
         shared_root=shared_root,
         surface_root=surface_root,
+        reference_root=reference_root,
         smoothing=smoothing,
         hemi=hemi,
         valid_masks_by_subject=valid_masks_by_subject,
@@ -2678,6 +2690,7 @@ def prepare_combo_inputs(
     hemi: str,
     shared_root: Path,
     surface_root: Path,
+    reference_root: Path,
     surfaces: dict[str, Path],
     subjects: list[str],
     subject_fc_mode: SubjectFCMode,
@@ -2774,11 +2787,11 @@ def prepare_combo_inputs(
                     p = resolve_intrinsic_feature_path(shared_root, s, smoothing, hemi, rid)
                 runwise_feature_paths.append(p)
     reference_network_order_paths = [
-        shared_root / f"sub-{s}" / "reference" / atlas / "cortex_canonical_networks.tsv"
+        reference_path(reference_root, s, atlas, "cortex_canonical_networks.tsv")
         for s in subjects
     ]
     reference_network_ts_paths = [
-        shared_root / f"sub-{s}" / "reference" / atlas / "cortex_canonical_network_timeseries.npy"
+        reference_path(reference_root, s, atlas, "cortex_canonical_network_timeseries.npy")
         for s in subjects
     ]
     surface_timeseries_paths = [
@@ -2790,8 +2803,8 @@ def prepare_combo_inputs(
         for s in subjects:
             kong2022_roi_reference_paths.extend(
                 [
-                    shared_root / f"sub-{s}" / "reference" / "kong2022" / "cortex_roi_parcel_timeseries.npy",
-                    shared_root / f"sub-{s}" / "reference" / "kong2022" / "cortex_roi_parcels.tsv",
+                    reference_path(reference_root, s, "kong2022", "cortex_roi_parcel_timeseries.npy"),
+                    reference_path(reference_root, s, "kong2022", "cortex_roi_parcels.tsv"),
                 ]
             )
     resume_file_state_payload = {
@@ -2826,6 +2839,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--shared-root", default=str(DEFAULT_SHARED_ROOT))
     parser.add_argument("--surface-root", default=str(DEFAULT_SURFACE_ROOT))
     parser.add_argument("--out-root", default=str(DEFAULT_OUT_ROOT))
+    parser.add_argument("--reference-root", default=None, help="Read cortex reference metadata/time series from this root; defaults to --shared-root.")
     parser.add_argument("--gradient-root", default=str(DEFAULT_GRADIENT_ROOT))
     parser.add_argument("--hippomaps-root", default=str(DEFAULT_HIPPOMAPS_ROOT))
     parser.add_argument("--route-tag", choices=["auto", *ROUTE_TAG_CHOICES], default="auto")
@@ -2836,7 +2850,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--atlases", nargs="+", default=ATLASES)
     parser.add_argument("--smoothings", nargs="+", default=SMOOTHINGS)
     parser.add_argument("--hemis", nargs="+", default=HEMIS)
-    parser.add_argument("--coverage-thresholds", nargs="+", type=float, default=[0.70, 0.80, 0.90])
+    parser.add_argument("--coverage-thresholds", nargs="+", type=float, default=[0.80])
     parser.add_argument("--k-min", type=int, default=2)
     parser.add_argument("--k-max", type=int, default=10)
     parser.add_argument(
@@ -2905,12 +2919,16 @@ def infer_route_tag(shared_root: Path, explicit: str = "auto") -> str:
         return explicit
     parts = {p.lower() for p in Path(shared_root).parts}
     name = Path(shared_root).name.lower()
+    if "routea_ctxreg" in name or "routea_ctxreg_151" in parts:
+        return "routea_ctxreg"
+    if "routea_ctxdrop" in name or "routea_ctxdrop_151" in parts:
+        return "routea_ctxdrop"
     if "routea" in name or "routea_151" in parts:
         return "routea"
     if "routeb" in name or "routeb_151" in parts:
         return "routeb"
     raise ValueError(
-        f"Could not infer --route-tag from --shared-root={shared_root}; pass --route-tag routea or routeb."
+        f"Could not infer --route-tag from --shared-root={shared_root}; pass --route-tag routea, routea_ctxreg, routea_ctxdrop, or routeb."
     )
 
 
@@ -2931,6 +2949,7 @@ def main() -> int:
     shared_root = Path(args.shared_root).resolve()
     surface_root = Path(args.surface_root).resolve()
     out_root = Path(args.out_root).resolve()
+    reference_root = Path(args.reference_root).resolve() if args.reference_root else shared_root
     gradient_root = Path(args.gradient_root).resolve()
     route_tag = infer_route_tag(shared_root, str(args.route_tag))
     hippunfold_batch_root = Path(args.hippunfold_batch_root).resolve()
@@ -2957,6 +2976,7 @@ def main() -> int:
         shared_root=shared_root,
         surface_root=surface_root,
         out_root=out_root,
+        reference_root=reference_root,
         gradient_root=gradient_root,
         route_tag=route_tag,
         hippunfold_batch_root=hippunfold_batch_root,
@@ -3026,7 +3046,7 @@ def main() -> int:
 
     for atlas in config.args.atlases:
         print(f"[check] canonical-network ordering atlas={atlas}", flush=True)
-        canonical_network_order_by_atlas[atlas] = verify_canonical_network_order_consistency(shared_root, subjects, atlas)
+        canonical_network_order_by_atlas[atlas] = verify_canonical_network_order_consistency(reference_root, subjects, atlas)
 
     for method in config.args.methods:
         for atlas in config.args.atlases:
@@ -3047,6 +3067,7 @@ def main() -> int:
                         hemi=hemi,
                         shared_root=shared_root,
                         surface_root=surface_root,
+                        reference_root=reference_root,
                         surfaces=surfaces,
                         subjects=subjects,
                         subject_fc_mode=subject_fc_mode,
@@ -3714,6 +3735,7 @@ def main() -> int:
                                 subjects=subjects,
                                 shared_root=shared_root,
                                 surface_root=surface_root,
+                                reference_root=reference_root,
                                 smoothing=smoothing,
                                 hemi=hemi,
                                 valid_masks_by_subject=valid_masks,
@@ -3728,6 +3750,7 @@ def main() -> int:
                                 subjects=subjects,
                                 shared_root=shared_root,
                                 surface_root=surface_root,
+                                reference_root=reference_root,
                                 atlas=atlas,
                                 smoothing=smoothing,
                                 hemi=hemi,
@@ -3742,6 +3765,7 @@ def main() -> int:
                                 subjects=subjects,
                                 shared_root=shared_root,
                                 surface_root=surface_root,
+                                reference_root=reference_root,
                                 smoothing=smoothing,
                                 hemi=hemi,
                                 valid_masks_by_subject=valid_masks,

@@ -279,6 +279,7 @@ def _product_file(run_dir: Path, product: ConfidenceProduct, *, summary: bool) -
 def render_product(
     *,
     product: ConfidenceProduct,
+    route_tag: str,
     smoothing: str,
     out_root: Path,
     output_dir: Path,
@@ -310,7 +311,7 @@ def render_product(
         summary = load_json(sum_file)
         means[hemi] = float(summary["global_mean"])
 
-    output_png = output_dir / f"confidence_silhouette_{product.name}_routea_{smoothing}_bilateral.png"
+    output_png = output_dir / f"confidence_silhouette_{product.name}_{route_tag}_{smoothing}_bilateral.png"
     render_bilateral_confidence_figure(
         left=arrays["L"],
         right=arrays["R"],
@@ -328,6 +329,7 @@ def render_product(
 def render_combo(
     *,
     smoothing: str,
+    route_tag: str,
     out_root: Path,
     present_root: Path,
     hippomaps_root: Path,
@@ -337,12 +339,13 @@ def render_combo(
     display_vmax: float | None,
 ) -> None:
     print(f"Rendering confidence map for smoothing={smoothing}")
-    output_dir = present_root / "routea" / smoothing
+    output_dir = present_root / route_tag / smoothing
     output_dir.mkdir(parents=True, exist_ok=True)
     plotter = load_hippomaps_plotter(hippomaps_root)
     for product in CONFIDENCE_PRODUCTS:
         render_product(
             product=product,
+            route_tag=route_tag,
             smoothing=smoothing,
             out_root=out_root,
             output_dir=output_dir,
@@ -367,6 +370,7 @@ def main(args: argparse.Namespace) -> int:
             try:
                 render_combo(
                     smoothing=smoothing,
+                    route_tag=str(args.route_tag),
                     out_root=out_root,
                     present_root=present_root,
                     hippomaps_root=hippomaps_root,
@@ -386,6 +390,7 @@ def main(args: argparse.Namespace) -> int:
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Render functional parcellation confidence maps.")
     parser.add_argument("--out-root", default=str(DEFAULT_ROUTEA_GROUP_ATLAS_ROOT))
+    parser.add_argument("--route-tag", default="routea", choices=["routea", "routea_ctxreg", "routea_ctxdrop", "routeb"])
     parser.add_argument("--present-root", default=str(DEFAULT_GRADIENTS_DIR))
     parser.add_argument("--hippomaps-root", default=str(DEFAULT_HIPPOMAPS_ROOT))
     parser.add_argument("--smoothings", nargs="+", default=list(SMOOTHINGS))

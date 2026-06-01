@@ -66,6 +66,10 @@ Directory names intentionally do not encode `t1only`, `present_fixedk`, or a
 - canonical public interface (`NN_MM_*`)
 - active implementation home (`scripts/core_workflow/lib/*`)
 
+The `kong2022_routea_ctxreg` branch is an isolated RouteA derivative: `04_00_materialize_cortex_regressed_surface_timeseries.py` writes `shared_inputs/routea_ctxreg_151` with run-wise local cortex residualization before `04_01` and `04_02` materialize FC. It does not overwrite uncontrolled RouteA roots.
+
+The `kong2022_routea_ctxdrop` branch is the matched RouteA local-cortex exclusion control. `04_01_materialize_kong2022_roi_fc.py --ctxdrop` keeps hippocampal time series unchanged, excludes valid cortex vertices within 20 mm separately for each hippocampal vertex before ROI averaging, and writes isolated FC caches plus smoothing-independent local cortex-neighbor diagnostics under `shared_inputs/routea_ctxdrop_151/sub-*/surface/local_cortex_neighbors/hemi_*/`. Its maintained downstream scope is `gradient-spectral` and `wta-top`, with group outputs in `outputs_core/work/group_atlas/routea_ctxdrop_full_k3_fisherz/`. The shared local-cortex-neighbor count surface overlay for ctxreg/ctxdrop is rendered by `06_08_render_ctxdrop_neighbor_counts.py` under `outputs_core/present/local_cortex_neighbors/`.
+
 Active numbered steps no longer shell out to the legacy hippocampal/cortex runtime directories.
 The active runtime boundary allows external assets and the Workbench executable
 `software/workbench/bin_linux64/wb_command`, but not external helper code scripts.

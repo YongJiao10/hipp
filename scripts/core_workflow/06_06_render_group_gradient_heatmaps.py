@@ -42,6 +42,7 @@ Outputs:
 """
 import argparse
 import json
+import sys
 import math
 import re
 import tempfile
@@ -1024,6 +1025,9 @@ def collect_combo_data(
 
 
 def main() -> int:
+    if any(arg in {"-h", "--help"} for arg in sys.argv[1:]):
+        parse_args()
+        return 0
     print(json.dumps({
         "status": "deprecated",
         "step": "06_06_render_group_gradient_heatmaps",

@@ -34,13 +34,18 @@ import argparse
 import json
 from pathlib import Path
 from typing import Any
+import sys
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+CORE_WORKFLOW_DIR = REPO_ROOT / "scripts" / "core_workflow"
+if str(CORE_WORKFLOW_DIR) not in sys.path:
+    sys.path.insert(0, str(CORE_WORKFLOW_DIR))
 
 from lib.output_layout import DEFAULT_QC_ROOT, run_layout, timestamped_run_id
 from lib.workflow_utils import git_commit, utc_now_iso, write_json
 from lib.io_utils import normalize_subject_id, load_subject_ids
 
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
 PYTHON_EXE = "/home/yojiao/.conda/envs/py314/bin/python"
 DEFAULT_SOURCE_SUBJECTS = DEFAULT_QC_ROOT / "manifests" / "hcp_7t_hippocampus_fmri_qc_pass_t1only_151.txt"
 DEFAULT_FALLBACK_SMOKE_SUBJECTS = ("100610", "102311", "104416", "105923", "108323")
@@ -256,7 +261,7 @@ def build_command_plan(*, subjects: list[str], layout: dict[str, Path], python_e
         )
     )
     for route, shared_root in (("routea", routea_root), ("routeb", routeb_root)):
-        group_root = group_root_base / f"hipp_group_merged_canonical_atlas_{route}_full"
+        group_root = group_root_base / f"{route}_full_k3_fisherz"
         records.extend(
             [
                 command_record(
@@ -335,7 +340,7 @@ def build_command_plan(*, subjects: list[str], layout: dict[str, Path], python_e
             cmd(
                 python_exe,
                 REPO_ROOT / "scripts/core_workflow/07_01_build_group_matrix.py",
-                "--route-root",
+                "--group-atlas-root",
                 group_root_base,
                 "--present-dir",
                 layout["overviews"],

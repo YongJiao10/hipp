@@ -182,6 +182,11 @@ class PanelComboInputs:
     global_top_path: Path
 
 
+
+def subject_reference_path(reference_root: Path, subject: str, atlas: str, filename: str) -> Path:
+    return Path(reference_root) / f"sub-{subject}" / "reference" / atlas / str(filename)
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
@@ -191,6 +196,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--group-root", default=str(DEFAULT_GROUP_ROOT))
     parser.add_argument("--shared-root", default=str(DEFAULT_SHARED_ROOT))
+    parser.add_argument("--reference-root", default=None, help="Read cortex reference files from this root; defaults to --shared-root.")
+    parser.add_argument("--mask-root", default=None, help="Read hippocampal valid masks from this root; defaults to --shared-root.")
     parser.add_argument("--present-dir", default=str(DEFAULT_PRESENT_DIR))
     parser.add_argument(
         "--runtime-root",
@@ -198,6 +205,7 @@ def parse_args() -> argparse.Namespace:
         help="Root for all outputs (cluster figures, manifests, quicklook index). Defaults to <present-dir>/runtime.",
     )
     parser.add_argument("--atlas", default="kong2022", choices=["kong2022"])
+    parser.add_argument("--route-tag", default="routea", choices=["routea", "routea_ctxreg", "routea_ctxdrop", "routeb"])
     parser.add_argument("--methods", nargs="+", default=METHODS_DEFAULT, choices=METHOD_CHOICES)
     parser.add_argument("--smoothings", nargs="+", default=SMOOTHINGS)
     parser.add_argument("--hemis", nargs="+", default=HEMIS)
@@ -403,6 +411,8 @@ def compute_subject_cluster_roi_profiles(
     *,
     subjects: list[str],
     shared_root: Path,
+    reference_root: Path | None = None,
+    mask_root: Path | None = None,
     smoothing: str,
     hemi: str,
     group_labels: np.ndarray,
@@ -413,13 +423,15 @@ def compute_subject_cluster_roi_profiles(
     col_by_roi_id = {int(row["roi_id"]): idx for idx, row in enumerate(roi_registry)}
     reg_by_id = {int(row["roi_id"]): row for row in roi_registry}
 
+    reference_root = reference_root or shared_root
+    mask_root = mask_root or shared_root
     all_profiles: list[np.ndarray] = []
     used_subjects: list[str] = []
     for subject in subjects:
         ts_path = shared_root / f"sub-{subject}" / "surface" / smoothing / f"sub-{subject}_hemi-{hemi}_timeseries.npy"
-        roi_path = shared_root / f"sub-{subject}" / "reference" / "kong2022" / "cortex_roi_parcel_timeseries.npy"
-        roi_tsv = shared_root / f"sub-{subject}" / "reference" / "kong2022" / "cortex_roi_parcels.tsv"
-        valid_path = shared_root / f"sub-{subject}" / "surface" / "tsnr_gate" / f"sub-{subject}_hemi-{hemi}_valid_mask.npy"
+        roi_path = subject_reference_path(reference_root, subject, "kong2022", "cortex_roi_parcel_timeseries.npy")
+        roi_tsv = subject_reference_path(reference_root, subject, "kong2022", "cortex_roi_parcels.tsv")
+        valid_path = mask_root / f"sub-{subject}" / "surface" / "tsnr_gate" / f"sub-{subject}_hemi-{hemi}_valid_mask.npy"
         if not (ts_path.exists() and roi_path.exists() and roi_tsv.exists() and valid_path.exists()):
             continue
 
@@ -1434,6 +1446,8 @@ def render_clustered_combo_panels(
     panel_inputs: PanelComboInputs,
     args: argparse.Namespace,
     shared_root: Path,
+    reference_root: Path,
+    mask_root: Path,
     runtime_root: Path,
     tau_tag: str,
     cortex_assets: dict[str, Path],
@@ -1451,6 +1465,8 @@ def render_clustered_combo_panels(
     profile_3d, used_subjects = compute_subject_cluster_roi_profiles(
         subjects=panel_inputs.subjects,
         shared_root=shared_root,
+        reference_root=reference_root,
+        mask_root=mask_root,
         smoothing=combo.smoothing,
         hemi=combo.hemi,
         group_labels=labels,
@@ -1586,9 +1602,11 @@ def main() -> int:
 
     group_root = Path(args.group_root).resolve()
     shared_root = Path(args.shared_root).resolve()
+    reference_root = Path(args.reference_root).resolve() if args.reference_root else shared_root
+    mask_root = Path(args.mask_root).resolve() if args.mask_root else shared_root
     present_dir = Path(args.present_dir).resolve()
     present_dir.mkdir(parents=True, exist_ok=True)
-    runtime_root = Path(args.runtime_root).resolve() if args.runtime_root else (present_dir / "runtime")
+    runtime_root = Path(args.runtime_root).resolve() if args.runtime_root else ((present_dir / "runtime") if str(args.route_tag) == "routea" else (present_dir / str(args.route_tag) / "runtime"))
     viewer_root = runtime_root
     runtime_root.mkdir(parents=True, exist_ok=True)
     viewer_combo_manifest_dir = runtime_root / "combo_manifests"
@@ -1649,6 +1667,8 @@ def main() -> int:
                 panel_inputs=panel_inputs,
                 args=args,
                 shared_root=shared_root,
+                reference_root=reference_root,
+                mask_root=mask_root,
                 runtime_root=runtime_root,
                 tau_tag=tau_tag,
                 cortex_assets=cortex_assets,
@@ -1682,12 +1702,13 @@ def main() -> int:
                     "n_selected_negative": int(r.get("n_selected_negative", 0)),
                 }
             )
+        route_suffix = "" if str(args.route_tag) == "routea" else f"_{str(args.route_tag)}"
         if str(smoothing) == "2mm+4mm":
-            overview_png = present_dir / f"cortex_{atlas}_{method}_overview.png"
-            title_txt = f"{atlas} | {method} | 2mm+4mm merged | L+R merged"
+            overview_png = present_dir / f"cortex_{atlas}_{method}{route_suffix}_overview.png"
+            title_txt = f"{atlas} | {method} | {args.route_tag} | 2mm+4mm merged | L+R merged"
         else:
-            overview_png = present_dir / f"cortex_{atlas}_{method}_{smoothing}_overview.png"
-            title_txt = f"{atlas} | {method} | {smoothing} | L+R merged"
+            overview_png = present_dir / f"cortex_{atlas}_{method}{route_suffix}_{smoothing}_overview.png"
+            title_txt = f"{atlas} | {method} | {args.route_tag} | {smoothing} | L+R merged"
         n_subjects_used_vals = sorted(
             {
                 int(r.get("n_subjects_used", 0))
@@ -1720,6 +1741,7 @@ def main() -> int:
 
     runtime_manifest = {
         "stage": "cluster_roi_cortex_independent",
+        "route_tag": str(args.route_tag),
         "atlas": str(args.atlas),
         "coverage_threshold": float(args.coverage_threshold),
         "fdr_q": float(args.fdr_q),

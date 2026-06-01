@@ -91,10 +91,48 @@ def test_overview_matrix_uses_core_work_fixed_k3_fisherz_root_for_all_routea_met
         assert "hipp_group_merged_canonical_atlas_routea_full" not in root_text
 
 
+def test_routeb_group_atlas_root_is_core_work_fixed_k3_fisherz() -> None:
+    jobs = build_render_jobs(
+        REPO_ROOT / "outputs_core" / "work" / "group_atlas",
+        routes=("routeb",),
+    )
+    assert {job.route_tag for job in jobs} == {"routeb"}
+    for job in jobs:
+        root_text = str(job.group_root)
+        assert "outputs_core/work/group_atlas/routeb_full_k3_fisherz" in root_text
+        assert "outputs_core/inputs" not in root_text
+        assert "hipp_group_merged_canonical_atlas_routeb_full" not in root_text
+        assert "routeb_auto" not in root_text
+
+
+def test_group_atlas_default_out_root_matches_routeb_fixed_k3_contract() -> None:
+    root_text = str(atlas_mod.DEFAULT_OUT_ROOT)
+    assert root_text.endswith("outputs_core/work/group_atlas/routeb_full_k3_fisherz")
+    assert "routeb_auto" not in root_text
+
+
+def test_overview_matrix_custom_group_atlas_root_uses_canonical_branch_children() -> None:
+    custom_root = Path("/tmp/custom_group_atlas")
+    jobs = build_render_jobs(custom_root, routes=("routea", "routeb"), methods=("wta-top",))
+    by_route = {job.route_tag: job for job in jobs}
+    assert by_route["routea"].group_root == (custom_root / "routea_full_k3_fisherz").resolve()
+    assert by_route["routeb"].group_root == (custom_root / "routeb_full_k3_fisherz").resolve()
+
+
 def test_overview_matrix_defaults_to_routea_only() -> None:
     jobs = build_render_jobs(REPO_ROOT / "outputs_core" / "inputs" / "hcp7t_hippocampus" / "kong2022")
     assert {job.route_tag for job in jobs} == {"routea"}
     assert len(jobs) == 7
+
+
+def test_overview_matrix_can_filter_methods_for_gradient_and_wta_only() -> None:
+    jobs = build_render_jobs(
+        REPO_ROOT / "outputs_core" / "inputs" / "hcp7t_hippocampus" / "kong2022",
+        methods=("gradient-spectral", "wta-top"),
+    )
+    assert {job.route_tag for job in jobs} == {"routea"}
+    assert {job.method for job in jobs} == {"gradient-spectral", "wta-top"}
+    assert len(jobs) == 3
 
 
 def test_overview_matrix_keeps_count_and_fisherz_assignment_variants() -> None:
@@ -113,6 +151,16 @@ def test_overview_matrix_keeps_count_and_fisherz_assignment_variants() -> None:
         assignment_variant="count",
     )
     assert out.name == "kong2022_network-spectral_group_overview_routea_count.png"
+
+
+    grad_out = expected_overview_path(
+        Path("/tmp/present"),
+        method="gradient-spectral",
+        route_tag="routea_ctxreg",
+        mode_tag=None,
+        assignment_variant="fisherz",
+    )
+    assert grad_out.name == "kong2022_gradient-spectral_group_overview_g1g2g3_routea_ctxreg_fisherz.png"
 
 
 def test_overview_matrix_generates_wta_long_axis_profiles_from_core_workflow() -> None:

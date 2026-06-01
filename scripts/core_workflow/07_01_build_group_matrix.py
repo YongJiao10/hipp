@@ -12,15 +12,15 @@ Main Flow Path:
 Inputs:
 - Command-line arguments:
   - --python-exe: Explicit python interpreter path used to execute child scripts (default: `/home/yojiao/.conda/envs/py314/bin/python`).
-  - --route-root: Root directory containing RouteA/RouteB reference inputs (default: `outputs_core/work/kong2022_reference`).
+  - --group-atlas-root: Base directory containing branch-level group-atlas outputs (default: `outputs_core/work/group_atlas`).
   - --present-dir: Output directory for final matrix presentation figures and manifest (default: `outputs_core/present/overviews`).
-  - --routes: Routes/branches to process (choices: "routea", "routeb", default: ["routea"]).
+  - --routes: Routes/branches to process (choices: "routea", "routea_ctxreg", "routea_ctxdrop", "routeb", default: ["routea"]).
+  - --methods: Methods to export (default: all supported methods).
   - --coverage-threshold: Coverage threshold used to filter outputs (default: 0.80).
   - --manifest-name: Filename for the generated overview matrix manifest JSON (default: "group_overview_matrix_manifest.json").
   - --scene: Connectome Workbench template scene file override path.
 - Physical inputs:
-  - Reference directories: `{route_root}/hipp_group_merged_canonical_atlas_routea_full` or RouteB equivalents.
-  - Group atlas directory: `outputs_core/work/group_atlas/routea_full_k3_fisherz` or RouteB equivalents.
+  - Group atlas directories: `{group_atlas_root}/{route}_full_k3_fisherz` for RouteA, RouteB, and RouteA cortex-control branches.
   - Scripts to execute:
     - `scripts/core_workflow/06_01_build_group_overview.py`
     - `scripts/core_workflow/06_02_build_wta_long_axis_profiles.py`
@@ -40,19 +40,29 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-from lib.output_layout import DEFAULT_GROUP_ATLAS_ROOT, DEFAULT_KONG2022_ROOT, DEFAULT_OVERVIEWS_DIR
+from lib.output_layout import (
+    DEFAULT_GROUP_ATLAS_ROOT,
+    DEFAULT_KONG2022_ROOT,
+    DEFAULT_OVERVIEWS_DIR,
+    DEFAULT_ROUTEA_CTXDROP_GROUP_ATLAS_ROOT,
+    DEFAULT_ROUTEA_CTXREG_GROUP_ATLAS_ROOT,
+    DEFAULT_ROUTEA_GROUP_ATLAS_ROOT,
+    DEFAULT_ROUTEB_GROUP_ATLAS_ROOT,
+)
 BUILD_PRESENT_SCRIPT = REPO_ROOT / "scripts" / "core_workflow" / "06_01_build_group_overview.py"
 WTA_PROFILE_SCRIPT = REPO_ROOT / "scripts" / "core_workflow" / "06_02_build_wta_long_axis_profiles.py"
 DEFAULT_PYTHON = "/home/yojiao/.conda/envs/py314/bin/python"
-DEFAULT_ROUTE_ROOT = DEFAULT_KONG2022_ROOT
+DEFAULT_GROUP_ATLAS_BASE_ROOT = DEFAULT_GROUP_ATLAS_ROOT
 DEFAULT_CORE_GROUP_ATLAS_ROOT = DEFAULT_GROUP_ATLAS_ROOT
 DEFAULT_PRESENT_DIR = DEFAULT_OVERVIEWS_DIR
 DEFAULT_MANIFEST_NAME = "group_overview_matrix_manifest.json"
 DEFAULT_ROUTES = ("routea",)
+ROUTE_CHOICES = ("routea", "routea_ctxreg", "routea_ctxdrop", "routeb")
 METHODS = ["intrinsic-spectral", "network-spectral", "gradient-spectral", "wta-top"]
 ATLAS = "kong2022"
 CLUSTERLESS_METHODS = {"wta-top"}
 GRADIENT_METHODS = {"gradient-spectral"}
+DEFAULT_GRADIENT_COMPONENT_TAG = "g1g2g3"
 ASSIGNMENT_VARIANTS = ("fisherz", "count")
 WTA_PROFILE_BINS = (20, 25)
 
@@ -66,29 +76,60 @@ class RenderJob:
     assignment_variant: str | None = None
 
 
-def build_render_jobs(route_root: Path, routes: tuple[str, ...] = DEFAULT_ROUTES) -> list[RenderJob]:
+def resolve_group_atlas_base_root(group_atlas_root: Path) -> Path:
+    base = Path(group_atlas_root).resolve()
+    if base == DEFAULT_KONG2022_ROOT.resolve():
+        return DEFAULT_CORE_GROUP_ATLAS_ROOT.resolve()
+    return base
+
+
+def canonical_group_roots(group_atlas_root: Path) -> dict[str, Path]:
+    base = resolve_group_atlas_base_root(group_atlas_root)
+    default_base = DEFAULT_CORE_GROUP_ATLAS_ROOT.resolve()
+    if base == default_base:
+        return {
+            "routea": DEFAULT_ROUTEA_GROUP_ATLAS_ROOT.resolve(),
+            "routea_ctxreg": DEFAULT_ROUTEA_CTXREG_GROUP_ATLAS_ROOT.resolve(),
+            "routea_ctxdrop": DEFAULT_ROUTEA_CTXDROP_GROUP_ATLAS_ROOT.resolve(),
+            "routeb": DEFAULT_ROUTEB_GROUP_ATLAS_ROOT.resolve(),
+        }
+    return {
+        "routea": (base / "routea_full_k3_fisherz").resolve(),
+        "routea_ctxreg": (base / "routea_ctxreg_full_k3_fisherz").resolve(),
+        "routea_ctxdrop": (base / "routea_ctxdrop_full_k3_fisherz").resolve(),
+        "routeb": (base / "routeb_full_k3_fisherz").resolve(),
+    }
+
+
+def build_render_jobs(
+    group_atlas_root: Path = DEFAULT_GROUP_ATLAS_BASE_ROOT,
+    routes: tuple[str, ...] = DEFAULT_ROUTES,
+    methods: tuple[str, ...] = tuple(METHODS),
+) -> list[RenderJob]:
     requested_routes = tuple(str(route) for route in routes)
-    unknown_routes = sorted(set(requested_routes).difference({"routea", "routeb"}))
+    unknown_routes = sorted(set(requested_routes).difference(set(ROUTE_CHOICES)))
     if unknown_routes:
         raise ValueError(f"Unknown routes: {unknown_routes}")
+    requested_methods = tuple(str(method) for method in methods)
+    unknown_methods = sorted(set(requested_methods).difference(set(METHODS)))
+    if unknown_methods:
+        raise ValueError(f"Unknown methods: {unknown_methods}")
     jobs: list[RenderJob] = []
-    routea_full = route_root / "hipp_group_merged_canonical_atlas_routea_full"
-    routeb_full = route_root / "hipp_group_merged_canonical_atlas_routeb_full"
-    routea_fixed_k3_fisherz = DEFAULT_CORE_GROUP_ATLAS_ROOT / "routea_full_k3_fisherz"
+    route_roots = canonical_group_roots(Path(group_atlas_root))
     route_roots_by_method = {
-        "intrinsic-spectral": [("routea", None, routea_fixed_k3_fisherz), ("routeb", None, routeb_full)],
-        "network-spectral": [("routea", None, routea_fixed_k3_fisherz), ("routeb", None, routeb_full)],
-        "gradient-spectral": [("routea", None, routea_fixed_k3_fisherz), ("routeb", None, routeb_full)],
-        "wta-top": [("routea", None, routea_fixed_k3_fisherz), ("routeb", None, routeb_full)],
+        "intrinsic-spectral": [("routea", None, route_roots["routea"]), ("routea_ctxreg", None, route_roots["routea_ctxreg"]), ("routea_ctxdrop", None, route_roots["routea_ctxdrop"]), ("routeb", None, route_roots["routeb"])],
+        "network-spectral": [("routea", None, route_roots["routea"]), ("routea_ctxreg", None, route_roots["routea_ctxreg"]), ("routea_ctxdrop", None, route_roots["routea_ctxdrop"]), ("routeb", None, route_roots["routeb"])],
+        "gradient-spectral": [("routea", None, route_roots["routea"]), ("routea_ctxreg", None, route_roots["routea_ctxreg"]), ("routea_ctxdrop", None, route_roots["routea_ctxdrop"]), ("routeb", None, route_roots["routeb"])],
+        "wta-top": [("routea", None, route_roots["routea"]), ("routea_ctxreg", None, route_roots["routea_ctxreg"]), ("routea_ctxdrop", None, route_roots["routea_ctxdrop"]), ("routeb", None, route_roots["routeb"])],
     }
-    for method in METHODS:
+    for method in requested_methods:
         for route_tag, mode_tag, group_root in route_roots_by_method[method]:
             if str(route_tag) not in requested_routes:
                 continue
             variants: tuple[str | None, ...]
             if method in CLUSTERLESS_METHODS:
                 variants = (None,)
-            elif str(route_tag) == "routea":
+            elif str(route_tag) in {"routea", "routea_ctxreg", "routea_ctxdrop"}:
                 variants = ASSIGNMENT_VARIANTS
             else:
                 variants = ("fisherz",)
@@ -113,7 +154,10 @@ def expected_overview_path(
     mode_tag: str | None,
     assignment_variant: str | None = None,
 ) -> Path:
-    bits = [ATLAS, method, "group_overview", route_tag]
+    bits = [ATLAS, method, "group_overview"]
+    if method in GRADIENT_METHODS:
+        bits.append(DEFAULT_GRADIENT_COMPONENT_TAG)
+    bits.append(route_tag)
     if mode_tag:
         bits.append(mode_tag)
     if assignment_variant:
@@ -166,7 +210,7 @@ def write_readme(present_dir: Path, items: list[dict[str, str]]) -> None:
             f"[{png_name}]({png_name}) | `{item['source_group_root']}` |"
         )
 
-    wta_profiles = sorted(present_dir.glob("kong2022_wta-top_long_axis_network_profile_routea_*.png"))
+    wta_profiles = sorted(present_dir.glob("kong2022_wta-top_long_axis_network_profile_*_*.png"))
     if wta_profiles:
         lines.extend(
             [
@@ -191,20 +235,21 @@ def write_readme(present_dir: Path, items: list[dict[str, str]]) -> None:
 def main() -> int:
     p = argparse.ArgumentParser(description="One-shot exporter for the maintained HCP 7T hippocampus overview matrix.")
     p.add_argument("--python-exe", default=DEFAULT_PYTHON)
-    p.add_argument("--route-root", default=str(DEFAULT_ROUTE_ROOT))
+    p.add_argument("--group-atlas-root", "--route-root", dest="group_atlas_root", default=str(DEFAULT_GROUP_ATLAS_BASE_ROOT), help="Base root containing canonical branch group-atlas directories; --route-root is a legacy alias.")
     p.add_argument("--present-dir", default=str(DEFAULT_PRESENT_DIR))
-    p.add_argument("--routes", nargs="+", choices=["routea", "routeb"], default=list(DEFAULT_ROUTES))
+    p.add_argument("--routes", nargs="+", choices=list(ROUTE_CHOICES), default=list(DEFAULT_ROUTES))
+    p.add_argument("--methods", nargs="+", choices=METHODS, default=list(METHODS))
     p.add_argument("--coverage-threshold", type=float, default=0.80)
     p.add_argument("--manifest-name", default=DEFAULT_MANIFEST_NAME)
     p.add_argument("--scene", default=None, help="Optional override for wb scene path.")
     args = p.parse_args()
 
-    route_root = Path(args.route_root).resolve()
+    group_atlas_root = resolve_group_atlas_base_root(Path(args.group_atlas_root))
     present_dir = Path(args.present_dir).resolve()
     present_dir.mkdir(parents=True, exist_ok=True)
 
     records: list[dict[str, str]] = []
-    jobs = build_render_jobs(route_root, routes=tuple(args.routes))
+    jobs = build_render_jobs(group_atlas_root, routes=tuple(args.routes), methods=tuple(args.methods))
     for job in jobs:
         group_root = Path(job.group_root).resolve()
         if not group_root.exists():
@@ -254,18 +299,20 @@ def main() -> int:
             }
         )
 
-    if "routea" in {str(route) for route in args.routes}:
-        subprocess.run(
-            wta_profile_command(
-                python_exe=str(args.python_exe),
-                group_root=DEFAULT_CORE_GROUP_ATLAS_ROOT / "routea_full_k3_fisherz",
-                present_dir=present_dir,
-                route_tag="routea",
-                coverage_threshold=float(args.coverage_threshold),
-            ),
-            check=True,
-            cwd=str(REPO_ROOT),
-        )
+    if "wta-top" in {str(method) for method in args.methods}:
+        route_roots = canonical_group_roots(group_atlas_root)
+        for wta_route in [r for r in ("routea", "routea_ctxreg", "routea_ctxdrop") if r in {str(route) for route in args.routes}]:
+            subprocess.run(
+                wta_profile_command(
+                    python_exe=str(args.python_exe),
+                    group_root=route_roots[wta_route],
+                    present_dir=present_dir,
+                    route_tag=wta_route,
+                    coverage_threshold=float(args.coverage_threshold),
+                ),
+                check=True,
+                cwd=str(REPO_ROOT),
+            )
 
     expected = len(jobs)
     if len(records) != expected:

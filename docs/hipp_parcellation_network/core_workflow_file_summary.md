@@ -9,7 +9,7 @@
 |---|---|---|---|
 | `scripts/core_workflow/README.md` | 无 | 说明 core_workflow 的入口约定、运行边界和目录规范 | 工作流说明文档 |
 | `scripts/core_workflow/step_registry.json` | 各编号步骤的元数据定义 | 记录步骤 ID、分支、输入和输出的机器可读注册表 | 供脚本和文档读取的步骤注册信息 |
-| `scripts/core_workflow/smoke_prepare_run.py` | 烟雾测试参数、分支信息、目标运行配置 | 生成独立的 smoke run 计划 | `outputs_core/smoke_runs/<run_id>/` 下的运行计划 |
+| `tests/core_workflow/smoke_prepare_run.py` | 烟雾测试参数、分支信息、目标运行配置 | 生成独立的 smoke run 计划 | `outputs_core/smoke_runs/<run_id>/` 下的运行计划 |
 
 ## 主流程脚本
 
@@ -21,6 +21,9 @@
 | `scripts/core_workflow/02_02_build_qc_manifest.py` | HippUnfold Dice 表和 tSNR gate 结果 | 汇总 QC 通过和剔除名单 | QC 通过/剔除清单和 QC 表 |
 | `scripts/core_workflow/03_01_build_kong2022_reference.py` | QC 通过的被试列表、cortex 资产 | 生成 Kong2022 共用 cortex reference | 每个被试的 Kong2022 reference 数组 |
 | `scripts/core_workflow/03_02_build_kong2022_routea_reference.py` | RouteA 资产、QC 通过的被试列表 | 生成 RouteA 专用 cortex reference | RouteA 兼容的 reference 数组 |
+| `scripts/core_workflow/04_00_materialize_cortex_regressed_surface_timeseries.py` | RouteA references, `surface_151`, subject cortex dtseries/surfaces | Builds the isolated RouteA cortex-control time-series root by run-wise local cortex regression | `shared_inputs/routea_ctxreg_151` controlled time series and diagnostics |
+| `scripts/core_workflow/04_01_materialize_kong2022_roi_fc.py --ctxdrop` | RouteA references, `surface_151`, subject cortex dtseries/surfaces, RouteA individualized labels | Builds the isolated RouteA cortex-drop FC root by excluding local cortex vertices before ROI averaging | `shared_inputs/routea_ctxdrop_151` FC caches and ctxdrop diagnostics |
+| `scripts/core_workflow/06_08_render_ctxdrop_neighbor_counts.py` | `routea_ctxdrop_151` or `routea_ctxreg_151` `surface/local_cortex_neighbors/hemi_*/neighbor_counts.npy` | Renders group-average 20 mm local cortex-neighbor counts shared by ctxreg and ctxdrop | `outputs_core/present/local_cortex_neighbors/` arrays, TSV, hippocampal surface-overlay PNG, manifest |
 | `scripts/core_workflow/04_01_materialize_kong2022_roi_fc.py` | 平滑后的 hippocampal timeseries、cortex reference | 物化 Kong2022 的 vertex-to-ROI FC | ROI FC 缓存 |
 | `scripts/core_workflow/04_02_materialize_intrinsic_fc.py` | 平滑后的 hippocampal timeseries | 物化 intrinsic FC | intrinsic FC 缓存 |
 | `scripts/core_workflow/04_03_materialize_kong2019_fc.py` | Kong2019 共享输入、被试清单 | 物化 Kong2019 FC bank | Kong2019 / Kong2019_8net FC 缓存 |

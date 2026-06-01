@@ -67,15 +67,19 @@ def materialize_subject(
     subject: str,
     smoothings: list[str],
     hemis: list[str],
+    reference_root: Path | None = None,
+    mask_root: Path | None = None,
 ) -> dict[str, object]:
-    run_lengths = load_run_lengths(shared_root, subject)
+    reference_root = reference_root or shared_root
+    mask_root = mask_root or surface_root
+    run_lengths = load_run_lengths(reference_root, subject)
     n_combo = 0
     for smoothing in smoothings:
         for hemi in hemis:
             subj = shared_root / f"sub-{subject}"
             surf_subj = surface_root / f"sub-{subject}"
             ts_path = surf_subj / "surface" / smoothing / f"sub-{subject}_hemi-{hemi}_timeseries.npy"
-            mask_path = surf_subj / "surface" / "tsnr_gate" / f"sub-{subject}_hemi-{hemi}_valid_mask.npy"
+            mask_path = mask_root / f"sub-{subject}" / "surface" / "tsnr_gate" / f"sub-{subject}_hemi-{hemi}_valid_mask.npy"
             ts = np.load(ts_path).astype(np.float32)
             valid = np.load(mask_path).astype(bool)
             active = ts[valid, :]
@@ -120,6 +124,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Materialize T1only intrinsic hippocampal vertex-to-vertex FC caches.")
     parser.add_argument("--shared-root", default=str(DEFAULT_SHARED_ROOT))
     parser.add_argument("--surface-root", default=str(DEFAULT_SURFACE_ROOT))
+    parser.add_argument("--reference-root", default=None, help="Read run metadata from this root; defaults to --shared-root.")
+    parser.add_argument("--mask-root", default=None, help="Read hippocampal valid masks from this root; defaults to --surface-root.")
     parser.add_argument("--subjects-manifest", default=str(DEFAULT_SUBJECTS))
     parser.add_argument("--subjects", nargs="*", default=None)
     parser.add_argument("--smoothings", nargs="+", default=SMOOTHINGS, choices=SMOOTHINGS)
@@ -129,18 +135,20 @@ def main() -> int:
 
     shared_root = Path(args.shared_root).resolve()
     surface_root = Path(args.surface_root).resolve()
+    reference_root = Path(args.reference_root).resolve() if args.reference_root else shared_root
+    mask_root = Path(args.mask_root).resolve() if args.mask_root else surface_root
     subjects = [s.replace("sub-", "") for s in args.subjects] if args.subjects else load_subject_ids(Path(args.subjects_manifest))
     jobs = capped_jobs(args.jobs, len(subjects))
     n_combo = 0
     if jobs == 1:
         for subject in subjects:
-            obj = materialize_subject(shared_root, surface_root, subject, list(args.smoothings), list(args.hemis))
+            obj = materialize_subject(shared_root, surface_root, subject, list(args.smoothings), list(args.hemis), reference_root=reference_root, mask_root=mask_root)
             n_combo += int(obj["combos"])
             print(f"[done] {obj['subject']}", flush=True)
     else:
         with ProcessPoolExecutor(max_workers=jobs) as ex:
             futs = [
-                ex.submit(materialize_subject, shared_root, surface_root, s, list(args.smoothings), list(args.hemis))
+                ex.submit(materialize_subject, shared_root, surface_root, s, list(args.smoothings), list(args.hemis), reference_root, mask_root)
                 for s in subjects
             ]
             for fut in as_completed(futs):

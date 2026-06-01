@@ -63,7 +63,7 @@ output_layout = _load_module(
     "core_output_layout",
 )
 smoke_mod = _load_module(
-    "scripts/core_workflow/smoke_prepare_run.py",
+    "tests/core_workflow/smoke_prepare_run.py",
     "core_smoke_prepare_run",
 )
 

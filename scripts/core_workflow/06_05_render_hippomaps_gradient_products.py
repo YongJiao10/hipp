@@ -55,7 +55,7 @@ from lib.traceability import StageSpec, run_stage
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_GRADIENT_ROOT = DEFAULT_HIPPOMAPS_GRADIENT_ROOT
 DEFAULT_PRESENT_ROOT = DEFAULT_GRADIENTS_DIR
-ROUTES = ("routea", "routeb")
+ROUTES = ("routea", "routea_ctxreg", "routea_ctxdrop", "routeb")
 SMOOTHINGS = ("2mm", "4mm")
 HEMIS = ("L", "R")
 

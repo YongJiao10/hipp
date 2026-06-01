@@ -66,7 +66,7 @@ METHOD_CHOICES = [
     "intrinsic-spectral",
     "wta-top",
 ]
-ROUTE_TAG_CHOICES = ["routea", "routeb"]
+ROUTE_TAG_CHOICES = ["routea", "routea_ctxreg", "routea_ctxdrop", "routeb"]
 METHODS_DEFAULT = [
     "intrinsic-spectral",
     "network-spectral",
