@@ -23,7 +23,7 @@ Each entrypoint executes local implementation code and can emit a standardized t
 
 For the RouteA cortex-control branch, run `04_00_materialize_cortex_regressed_surface_timeseries.py` first. It writes only controlled hippocampal time series and diagnostics under `outputs_core/inputs/hcp7t_hippocampus/kong2022/shared_inputs/routea_ctxreg_151/`; RouteA references and `surface_151` masks remain in their upstream roots and are passed to downstream steps via `--reference-root` and `--mask-root`. `04_01` and `04_02` should write FC into the controlled root while reading references from `routea_151` and masks from `surface_151`; uncontrolled RouteA roots are not overwritten.
 
-For the RouteA cortex-drop branch, run `04_01_materialize_kong2022_roi_fc.py --ctxdrop` with `--shared-root outputs_core/inputs/hcp7t_hippocampus/kong2022/shared_inputs/routea_ctxdrop_151`, `--surface-root outputs_core/inputs/hcp7t_hippocampus/kong2022/shared_inputs/surface_151`, `--reference-root outputs_core/inputs/hcp7t_hippocampus/kong2022/shared_inputs/routea_151`, and `--mask-root outputs_core/inputs/hcp7t_hippocampus/kong2022/shared_inputs/surface_151`. This branch keeps hippocampal time series unchanged, excludes valid cortex vertices within 20 mm before ROI averaging, stores smoothing-independent local cortex-neighbor diagnostics under `sub-*/surface/local_cortex_neighbors/hemi_*/`, and is maintained for `gradient-spectral` and `wta-top` outputs. Use `06_08_render_ctxdrop_neighbor_counts.py --source-branch routea_ctxdrop` to render the group-average local neighbor-count hippocampal surface overlay under `outputs_core/present/local_cortex_neighbors/`; the same renderer supports `--source-branch routea_ctxreg` from the ctxreg diagnostics.
+For the RouteA cortex-drop branch, run `04_01_materialize_kong2022_roi_fc.py --ctxdrop` with `--shared-root outputs_core/inputs/hcp7t_hippocampus/kong2022/shared_inputs/routea_ctxdrop_151`, `--surface-root outputs_core/inputs/hcp7t_hippocampus/kong2022/shared_inputs/surface_151`, `--reference-root outputs_core/inputs/hcp7t_hippocampus/kong2022/shared_inputs/routea_151`, and `--mask-root outputs_core/inputs/hcp7t_hippocampus/kong2022/shared_inputs/surface_151`. This branch keeps hippocampal time series unchanged, excludes valid cortex vertices within 20 mm before ROI averaging, stores smoothing-independent local cortex-neighbor diagnostics under `sub-*/surface/local_cortex_neighbors/hemi_*/`, and is maintained for `gradient-spectral` and `wta-top` outputs. Use `06_07_render_ctxdrop_neighbor_counts.py --source-branch routea_ctxdrop` to render the group-average local neighbor-count hippocampal surface overlay under `outputs_core/present/local_cortex_neighbors/`; the same renderer supports `--source-branch routea_ctxreg` from the ctxreg diagnostics.
 
 For the Kong2022 `gradient-spectral` branch, run
 `05_01_compute_hippomaps_gradients.py` first. `05_01` writes aligned
@@ -38,7 +38,7 @@ while fixing the final presentation atlas at `K=3` (`--k-min 2 --k-max 10
 
 HippoMaps-style continuous gradients are computed by
 `05_01_compute_hippomaps_gradients.py` and rendered by
-`06_05_render_hippomaps_gradient_products.py`. This route imports official
+`06_04_render_hippomaps_gradient_products.py`. This route imports official
 package code from `external/hippomaps`, keeps Fisher-z before group averaging,
 applies column-wise feature z-score before `GradientMaps(kernel="pearson")`,
 then aligns component order and sign before writing the maintained gradient
@@ -73,7 +73,7 @@ the `fisherz` variant; suffixed `_fisherz` and `_count` files preserve both
 results for rendering and comparison.
 
 Render-only reruns may point `06_01_build_group_overview.py` and
-`06_04_build_cluster_cortex_panels.py` at validated group-atlas intermediates
+`06_03_build_cluster_cortex_panels.py` at validated group-atlas intermediates
 with `--group-root`. `07_01_build_group_matrix.py` defaults to `--routes routea`
 and reads branch group-atlas outputs from `outputs_core/work/group_atlas/{route}_full_k3_fisherz/`, including `routeb_full_k3_fisherz` when RouteB is requested. It renders both
 `fisherz` and `count` overviews for cluster-based methods and one WTA overview;
@@ -143,4 +143,4 @@ Implementation structure contract:
 - Runtime metadata helpers (timestamps, JSON writer, git/file metadata) remain in `scripts/core_workflow/lib/workflow_utils.py`.
 - New utility-style helpers should be added to `lib/` modules rather than redefined in numbered step files.
 
-The overview export also generates WTA-top long-axis network-profile products (`kong2022_wta-top_long_axis_network_profile_routea_*`) under `outputs_core/present/overviews/`; these summarize the percent of long-axis bin vertices assigned to each canonical network.
+The WTA-top overview embeds a fixed 20-bin long-axis network profile as its middle column, with percent-of-bin vertices on the horizontal axis and long-axis bins on the vertical axis. Standalone `06_02_build_wta_long_axis_profiles.py` code and `kong2022_wta-top_long_axis_network_profile_*` PNG/TSV products have been removed from the maintained workflow.

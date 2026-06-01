@@ -11,7 +11,7 @@ NUMBERED_STEPS = sorted(CORE.glob("[0-9][0-9]_*_*.py"))
 MAX_FN_LINES = 250
 LENGTH_WHITELIST = {
     "05_02_run_group_atlas.py::main",
-    "06_04_build_cluster_cortex_panels.py::main",
+    "06_03_build_cluster_cortex_panels.py::main",
     "06_01_build_group_overview.py::render_combo",
 }
 

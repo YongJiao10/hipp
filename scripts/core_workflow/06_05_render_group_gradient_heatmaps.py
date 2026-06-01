@@ -8,8 +8,8 @@ Process Step Description:
 Render group-level gradient heatmaps. Generates heatmap visualizations of functional gradients based on group-level data to intuitively display gradient patterns in a composite 2x3 grid image layout.
 
 Main Flow Path:
-- 9th step in the numbered pipeline sequence (first stage of presentation output generation, run in parallel with 06_01, 06_02, 06_03, 06_04, 06_05):
-  01_01_run_hippunfold_t1w_local.py -> 01_02_check_hippunfold_outputs.py -> 02_01_prepare_group_inputs.py -> 02_02_build_qc_manifest.py -> 03_01/03_02 reference building -> 04_01/04_02/04_03 FC materialization -> 05_01 gradient computation -> 05_02 group atlas parcellation -> 06_06_render_group_gradient_heatmaps.py (this step) -> 07_01 group matrix overview.
+- 9th step in the numbered pipeline sequence (first stage of presentation output generation, run in parallel with 06_01, 06_02, 06_03, 06_04, 06_06, 06_07):
+  01_01_run_hippunfold_t1w_local.py -> 01_02_check_hippunfold_outputs.py -> 02_01_prepare_group_inputs.py -> 02_02_build_qc_manifest.py -> 03_01/03_02 reference building -> 04_01/04_02/04_03 FC materialization -> 05_01 gradient computation -> 05_02 group atlas parcellation -> 06_05_render_group_gradient_heatmaps.py (this step) -> 07_01 group matrix overview.
 
 Inputs:
 - Command-line arguments:
@@ -1030,9 +1030,9 @@ def main() -> int:
         return 0
     print(json.dumps({
         "status": "deprecated",
-        "step": "06_06_render_group_gradient_heatmaps",
+        "step": "06_05_render_group_gradient_heatmaps",
         "message": "This legacy locked-scene heatmap output is retired and must not be refreshed.",
-        "replacement": "Use scripts/core_workflow/06_05_render_hippomaps_gradient_products.py outputs under outputs_core/present/gradients/routea and outputs_core/present/gradients/routeb.",
+        "replacement": "Use scripts/core_workflow/06_04_render_hippomaps_gradient_products.py outputs under outputs_core/present/gradients/routea and outputs_core/present/gradients/routeb.",
     }, indent=2), flush=True)
     return 2
 

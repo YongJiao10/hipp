@@ -23,7 +23,6 @@
 | `scripts/core_workflow/03_02_build_kong2022_routea_reference.py` | RouteA 资产、QC 通过的被试列表 | 生成 RouteA 专用 cortex reference | RouteA 兼容的 reference 数组 |
 | `scripts/core_workflow/04_00_materialize_cortex_regressed_surface_timeseries.py` | RouteA references, `surface_151`, subject cortex dtseries/surfaces | Builds the isolated RouteA cortex-control time-series root by run-wise local cortex regression | `shared_inputs/routea_ctxreg_151` controlled time series and diagnostics |
 | `scripts/core_workflow/04_01_materialize_kong2022_roi_fc.py --ctxdrop` | RouteA references, `surface_151`, subject cortex dtseries/surfaces, RouteA individualized labels | Builds the isolated RouteA cortex-drop FC root by excluding local cortex vertices before ROI averaging | `shared_inputs/routea_ctxdrop_151` FC caches and ctxdrop diagnostics |
-| `scripts/core_workflow/06_08_render_ctxdrop_neighbor_counts.py` | `routea_ctxdrop_151` or `routea_ctxreg_151` `surface/local_cortex_neighbors/hemi_*/neighbor_counts.npy` | Renders group-average 20 mm local cortex-neighbor counts shared by ctxreg and ctxdrop | `outputs_core/present/local_cortex_neighbors/` arrays, TSV, hippocampal surface-overlay PNG, manifest |
 | `scripts/core_workflow/04_01_materialize_kong2022_roi_fc.py` | 平滑后的 hippocampal timeseries、cortex reference | 物化 Kong2022 的 vertex-to-ROI FC | ROI FC 缓存 |
 | `scripts/core_workflow/04_02_materialize_intrinsic_fc.py` | 平滑后的 hippocampal timeseries | 物化 intrinsic FC | intrinsic FC 缓存 |
 | `scripts/core_workflow/04_03_materialize_kong2019_fc.py` | Kong2019 共享输入、被试清单 | 物化 Kong2019 FC bank | Kong2019 / Kong2019_8net FC 缓存 |
@@ -31,12 +30,13 @@
 | `scripts/core_workflow/05_02_run_group_atlas.py` | FC 缓存、group template、分支控制、可选 gradient 根目录 | 构建 merged-canonical group atlas，并做 K=2..10 诊断，最终固定 K=3 | group labels、K 汇总、assignment 状态、functional atlas labels |
 | `scripts/core_workflow/05_03_run_spectral_fast_rerun.py` | 现有分支根目录、manifest、template | 在主 group atlas 之后做可选重跑编排 | 刷新的 spectral 输出和可继续用于展示的 group root |
 | `scripts/core_workflow/06_01_build_group_overview.py` | `05_02` 的 group-atlas 运行产物 | 生成每种方法的 overview 图 | method overview PNG 和摘要 |
-| `scripts/core_workflow/06_02_build_wta_long_axis_profiles.py` | WTA-top functional labels、long-axis surfaces | 生成 WTA-top 长轴网络轮廓产品 | WTA profile PNG / TSV 和 manifest |
-| `scripts/core_workflow/06_03_materialize_group_labels.py` | assignment status JSON | 物化 functional atlas label 数组 | `group_functional_atlas_labels.npy` |
-| `scripts/core_workflow/06_04_build_cluster_cortex_panels.py` | group labels、FC 摘要、topology 资产 | 生成 cortex / hippocampus 汇总面板 | cluster 和 clusterless cortex panel 产品 |
-| `scripts/core_workflow/06_05_render_hippomaps_gradient_products.py` | `05_01` 产生的梯度 manifest 和数组 | 渲染 HippoMaps 连续梯度产品 | G1-G3 折叠/展开图、EV 图、端点 FC 对比图、manifest |
-| `scripts/core_workflow/06_06_render_group_gradient_heatmaps.py` | group-gradient 产品 | 已废弃（retired）；仅输出弃用提示并退出 | 无（deprecated） |
-| `scripts/core_workflow/07_01_build_group_matrix.py` | method overview PNG、WTA profile 产品 | 整理最终展示索引 | matrix manifest、README、刷新后的 overview 集合 |
+| `scripts/core_workflow/06_02_materialize_group_labels.py` | assignment status JSON | 物化 functional atlas label 数组 | `group_functional_atlas_labels.npy` |
+| `scripts/core_workflow/06_03_build_cluster_cortex_panels.py` | group labels、FC 摘要、topology 资产 | 生成 cortex / hippocampus 汇总面板 | cluster 和 clusterless cortex panel 产品 |
+| `scripts/core_workflow/06_04_render_hippomaps_gradient_products.py` | `05_01` 产生的梯度 manifest 和数组 | 渲染 HippoMaps 连续梯度产品，并默认以 `routea` 做跨分支展示符号对齐和共享色标 | 跨分支可比的 G1-G3 折叠/展开图、EV 图、端点 FC 对比图、manifest |
+| `scripts/core_workflow/06_05_render_group_gradient_heatmaps.py` | group-gradient 产品 | 已废弃（retired）；仅输出弃用提示并退出 | 无（deprecated） |
+| `scripts/core_workflow/06_06_render_confidence_maps.py` | `05_04` confidence arrays | 渲染 gradient-spectral silhouette confidence maps | folded/unfolded confidence PNGs |
+| `scripts/core_workflow/06_07_render_ctxdrop_neighbor_counts.py` | `routea_ctxdrop_151` or `routea_ctxreg_151` `surface/local_cortex_neighbors/hemi_*/neighbor_counts.npy` | Renders group-average 20 mm local cortex-neighbor counts shared by ctxreg and ctxdrop | `outputs_core/present/local_cortex_neighbors/` arrays, TSV, hippocampal surface-overlay PNG, manifest |
+| `scripts/core_workflow/07_01_build_group_matrix.py` | method overview PNG | 整理最终展示索引 | matrix manifest、README、刷新后的 overview 集合 |
 
 ## 共享库
 

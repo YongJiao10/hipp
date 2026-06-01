@@ -411,7 +411,7 @@ if __name__ == "__main__":
     raise SystemExit(
         run_stage(
             StageSpec(
-                step_id="06_07_render_confidence_maps",
+                step_id="06_06_render_confidence_maps",
                 purpose="Render functional parcellation confidence maps on folded and unfolded surfaces.",
                 stage_main=lambda: main(args),
                 upstream_defaults=("05_04_compute_confidence_maps",),

@@ -30,7 +30,7 @@ def _load_numbered_module(script_name: str, alias: str):
     return module
 
 
-mod = _load_numbered_module("06_06_render_group_gradient_heatmaps.py", "core_06_05_group_gradient_heatmaps")
+mod = _load_numbered_module("06_05_render_group_gradient_heatmaps.py", "core_06_05_group_gradient_heatmaps")
 
 
 def test_reconstruct_full_components_fills_nans_for_non_support_vertices() -> None:

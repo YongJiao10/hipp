@@ -87,6 +87,13 @@ CLUSTERLESS_METHODS = {"wta-top"}
 ASSIGNMENT_VARIANTS = ("fisherz", "count")
 DEFAULT_CROSS_ATLAS_MERGE = REPO_ROOT / "config" / "cross_atlas_network_merge.json"
 DEFAULT_NETWORK_STYLE = REPO_ROOT / "config" / "hipp_network_style.json"
+WTA_OVERVIEW_PROFILE_BINS = 20
+WTA_OVERVIEW_SIDE_PANEL_FONT_DELTA_PT = 4
+WTA_OVERVIEW_SIDE_PANEL_TITLE_FS = FS_TITLE + WTA_OVERVIEW_SIDE_PANEL_FONT_DELTA_PT
+WTA_OVERVIEW_SIDE_PANEL_LABEL_FS = FS_LABEL + WTA_OVERVIEW_SIDE_PANEL_FONT_DELTA_PT
+WTA_OVERVIEW_SIDE_PANEL_TICK_FS = FS_TICK + WTA_OVERVIEW_SIDE_PANEL_FONT_DELTA_PT
+WTA_OVERVIEW_SIDE_PANEL_LEGEND_FS = FS_LEGEND_SMALL + WTA_OVERVIEW_SIDE_PANEL_FONT_DELTA_PT
+WTA_NON_NETWORK_NAME = "__non_network_or_null__"
 GRADIENT_METHOD = "gradient-spectral"
 
 
@@ -489,7 +496,15 @@ def plot_confidence_panel(ax, rows: list[dict[str, object]], title: str) -> None
     ax.legend(fontsize=FS_TICK, loc="lower right")
 
 
-def plot_vertex_assignment_counts(ax, rows: list[dict[str, object]], title: str) -> None:
+def plot_vertex_assignment_counts(
+    ax,
+    rows: list[dict[str, object]],
+    title: str,
+    *,
+    title_fs: float = FS_TITLE,
+    label_fs: float = FS_LABEL,
+    tick_fs: float = FS_TICK,
+) -> None:
     if not rows:
         ax.axis("off")
         ax.text(0.5, 0.5, "missing", ha="center", va="center", fontsize=FS_MISSING)
@@ -504,11 +519,11 @@ def plot_vertex_assignment_counts(ax, rows: list[dict[str, object]], title: str)
     y = np.arange(len(names))
     ax.barh(y, vals, color="#2c7fb8", alpha=0.88)
     ax.set_yticks(y)
-    ax.set_yticklabels(names, fontsize=FS_TICK)
+    ax.set_yticklabels(names, fontsize=tick_fs)
     ax.invert_yaxis()
-    ax.set_xlabel("Vertices", fontsize=FS_LABEL)
-    ax.set_title(title, fontsize=FS_TITLE)
-    ax.tick_params(labelsize=FS_TICK)
+    ax.set_xlabel("Vertices", fontsize=label_fs)
+    ax.set_title(title, fontsize=title_fs)
+    ax.tick_params(labelsize=tick_fs)
     ax.grid(axis="x", color="#dddddd", lw=0.5, alpha=0.7)
 
 
@@ -610,6 +625,109 @@ def plot_global_top_connections(ax, payload: dict[str, object], title: str) -> N
     ax.text(0.02, 0.98, "\n".join(lines), va="top", ha="left", fontsize=FS_SMALL, family="monospace")
 
 
+
+def compute_wta_overview_profile_rows(
+    *,
+    labels_by_hemi: dict[str, np.ndarray],
+    order_by_hemi: dict[str, np.ndarray],
+    network_names: list[str],
+    network_label_keys: dict[str, int],
+    n_bins: int = WTA_OVERVIEW_PROFILE_BINS,
+) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    network_keys = {int(network_label_keys[name]) for name in network_names}
+    for hemi in sorted(labels_by_hemi):
+        labels = np.asarray(labels_by_hemi[hemi]).reshape(-1)
+        order = np.asarray(order_by_hemi[hemi], dtype=np.int64).reshape(-1)
+        if labels.size != order.size:
+            raise ValueError(f"Label/order size mismatch for hemi-{hemi}: labels={labels.size} order={order.size}")
+        bins = [np.asarray(x, dtype=np.int64) for x in np.array_split(order, int(n_bins))]
+        for bin_idx, vertices in enumerate(bins, start=1):
+            bin_labels = labels[vertices] if vertices.size else np.asarray([], dtype=labels.dtype)
+            denom = int(bin_labels.size)
+            for network_name in network_names:
+                key = int(network_label_keys[network_name])
+                count = int(np.sum(bin_labels == key)) if denom else 0
+                pct = (100.0 * float(count) / float(denom)) if denom else 0.0
+                rows.append(
+                    {
+                        "hemi": str(hemi),
+                        "bin_index": int(bin_idx),
+                        "network_name": str(network_name),
+                        "percent_of_bin_vertices": float(pct),
+                    }
+                )
+            non_network_count = int(np.sum(~np.isin(bin_labels, list(network_keys)))) if denom else 0
+            if non_network_count > 0:
+                rows.append(
+                    {
+                        "hemi": str(hemi),
+                        "bin_index": int(bin_idx),
+                        "network_name": WTA_NON_NETWORK_NAME,
+                        "percent_of_bin_vertices": 100.0 * float(non_network_count) / float(denom),
+                    }
+                )
+    return rows
+
+
+def plot_wta_overview_profile_axis(
+    ax,
+    *,
+    rows: list[dict[str, object]],
+    network_names: list[str],
+    hemi: str,
+    title: str,
+    show_ylabel: bool,
+) -> None:
+    hemi_rows = [r for r in rows if str(r["hemi"]) == str(hemi)]
+    if not hemi_rows:
+        ax.axis("off")
+        ax.text(0.5, 0.5, "profile missing", ha="center", va="center", fontsize=FS_MISSING)
+        return
+    max_bin = max(int(r["bin_index"]) for r in hemi_rows)
+    plotted_names = list(network_names)
+    if any(str(r["network_name"]) == WTA_NON_NETWORK_NAME for r in hemi_rows):
+        plotted_names.append(WTA_NON_NETWORK_NAME)
+    for network_name in plotted_names:
+        pts = sorted(
+            [r for r in hemi_rows if str(r["network_name"]) == network_name],
+            key=lambda r: int(r["bin_index"]),
+        )
+        if not pts:
+            continue
+        xs = [float(r["percent_of_bin_vertices"]) for r in pts]
+        ys = [int(r["bin_index"]) for r in pts]
+        if network_name == WTA_NON_NETWORK_NAME:
+            ax.plot(xs, ys, color="#777777", lw=0.9, ls="--", marker="o", markersize=1.9, label="non-network/null")
+        else:
+            ax.plot(
+                xs,
+                ys,
+                color=NETWORK_BAR_COLORS.get(network_name),
+                lw=1.15,
+                marker="o",
+                markersize=2.1,
+                label=network_name,
+            )
+    ax.set_title(title, fontsize=WTA_OVERVIEW_SIDE_PANEL_TITLE_FS)
+    ax.set_xlabel("Vertices in bin (%)", fontsize=WTA_OVERVIEW_SIDE_PANEL_LABEL_FS)
+    ax.set_ylabel("Long-axis bin" if show_ylabel else "", fontsize=WTA_OVERVIEW_SIDE_PANEL_LABEL_FS)
+    ax.set_ylim(max_bin + 0.5, 0.5)
+    ax.set_xlim(left=0.0)
+    ax.grid(True, axis="x", color="#dddddd", linewidth=0.5, alpha=0.75)
+    ax.spines[["top", "right"]].set_visible(False)
+    ax.tick_params(labelsize=WTA_OVERVIEW_SIDE_PANEL_TICK_FS)
+    if show_ylabel:
+        step = 5 if max_bin >= 20 else max(1, max_bin // 4)
+        ticks = list(range(1, max_bin + 1, step))
+        if ticks[-1] != max_bin:
+            ticks.append(max_bin)
+        ax.set_yticks(ticks)
+    else:
+        ax.set_yticklabels([])
+    if not show_ylabel:
+        ax.legend(fontsize=WTA_OVERVIEW_SIDE_PANEL_LEGEND_FS, frameon=False, loc="lower right", handlelength=1.4, labelspacing=0.22)
+
 def render_combo(
     *,
     group_root: Path,
@@ -625,8 +743,12 @@ def render_combo(
 ) -> dict[str, object]:
     effective_mode_tag = (None if method in CLUSTERLESS_METHODS else mode_tag)
     effective_assignment_variant = None if method in CLUSTERLESS_METHODS else str(assignment_variant)
-    fig = plt.figure(figsize=(15.4, 12.2), dpi=180, constrained_layout=True)
-    gs = fig.add_gridspec(nrows=2, ncols=2, width_ratios=[1.40, 1.30], hspace=0.06, wspace=0.05)
+    if method in CLUSTERLESS_METHODS:
+        fig = plt.figure(figsize=(19.0, 12.8), dpi=180, constrained_layout=True)
+        gs = fig.add_gridspec(nrows=2, ncols=3, width_ratios=[0.62, 1.18, 1.42], hspace=0.08, wspace=0.06)
+    else:
+        fig = plt.figure(figsize=(15.4, 12.2), dpi=180, constrained_layout=True)
+        gs = fig.add_gridspec(nrows=2, ncols=2, width_ratios=[1.40, 1.30], hspace=0.06, wspace=0.05)
     rows_meta: list[dict[str, object]] = []
 
     for ridx, smoothing in enumerate(SMOOTHINGS):
@@ -658,11 +780,49 @@ def render_combo(
             rows_r = [dict(x) for x in status_r.get("items", [])]
             rows_all = rows_l + rows_r
             ax_left = fig.add_subplot(gs[ridx, 0])
-            plot_vertex_assignment_counts(ax_left, rows_all, f"{smoothing} | vertex assignment counts")
+            plot_vertex_assignment_counts(
+                ax_left,
+                rows_all,
+                f"{smoothing} | vertex assignment counts",
+                title_fs=WTA_OVERVIEW_SIDE_PANEL_TITLE_FS,
+                label_fs=WTA_OVERVIEW_SIDE_PANEL_LABEL_FS,
+                tick_fs=WTA_OVERVIEW_SIDE_PANEL_TICK_FS,
+            )
 
-            ax_big = fig.add_subplot(gs[ridx, 1])
             surf_l = Path(str(m_l["template_left_or_right_surface"]))
             surf_r = Path(str(m_r["template_left_or_right_surface"]))
+            profile_sub = gs[ridx, 1].subgridspec(1, 2, wspace=0.18)
+            profile_axes = [fig.add_subplot(profile_sub[0, 0]), fig.add_subplot(profile_sub[0, 1])]
+            try:
+                label_map = load_json(d_l / "group_functional_atlas_label_map.json")
+                network_names = [str(x) for x in label_map["network_names"]]
+                network_label_keys = {str(k): int(v) for k, v in label_map["network_label_keys"].items()}
+                labels_by_hemi = {
+                    "L": np.load(d_l / "group_functional_atlas_labels.npy").astype(np.int32),
+                    "R": np.load(d_r / "group_functional_atlas_labels.npy").astype(np.int32),
+                }
+                order_by_hemi = {"L": long_axis_order(surf_l), "R": long_axis_order(surf_r)}
+                profile_rows = compute_wta_overview_profile_rows(
+                    labels_by_hemi=labels_by_hemi,
+                    order_by_hemi=order_by_hemi,
+                    network_names=network_names,
+                    network_label_keys=network_label_keys,
+                )
+                for ax_prof, hemi in zip(profile_axes, ["L", "R"]):
+                    plot_wta_overview_profile_axis(
+                        ax_prof,
+                        rows=profile_rows,
+                        network_names=network_names,
+                        hemi=hemi,
+                        title=f"{smoothing} | hemi-{hemi} long-axis profile",
+                        show_ylabel=(hemi == "L"),
+                    )
+            except Exception as exc:
+                for ax_prof in profile_axes:
+                    ax_prof.axis("off")
+                    ax_prof.text(0.5, 0.5, f"Profile unavailable\n{exc}", ha="center", va="center", fontsize=FS_SMALL)
+
+            ax_big = fig.add_subplot(gs[ridx, 2])
             left_label = Path(str(m_l.get("template_functional_atlas_label", m_l.get("template_cluster_label"))))
             right_label = Path(str(m_r.get("template_functional_atlas_label", m_r.get("template_cluster_label"))))
             template_subject, spec_path = resolve_template_render_spec(m_l)
@@ -699,6 +859,7 @@ def render_combo(
                     "k_final_L": None,
                     "k_final_R": None,
                     "n_subjects": int(m_l["n_subjects"]),
+                    "profile_bins": WTA_OVERVIEW_PROFILE_BINS,
                 }
             )
             continue

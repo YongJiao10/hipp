@@ -138,7 +138,7 @@
     {
       "step_id": "05_01_compute_hippomaps_gradients",
       "stage": "05_group_atlas",
-      "purpose": "Compute HippoMaps-style continuous gradients consumed by 05_02 gradient-spectral and rendered by 06_05.",
+      "purpose": "Compute HippoMaps-style continuous gradients consumed by 05_02 gradient-spectral and rendered by 06_04.",
       "branches": [
         "kong2022_routea",
         "kong2022_routea_ctxreg",
@@ -192,7 +192,7 @@
     {
       "step_id": "06_01_build_group_overview",
       "stage": "06_presentation_products",
-      "purpose": "Render canonical fixed-K=3 group overview products into outputs_core/present/overviews.",
+      "purpose": "Render canonical fixed-K=3 group overview products into outputs_core/present/overviews, including the embedded fixed 20-bin WTA-top long-axis profile panel.",
       "branches": [
         "kong2019",
         "kong2022_routea",
@@ -205,20 +205,7 @@
       "recommended_manifest": "manifests/core_workflow/06_01_build_group_overview.json"
     },
     {
-      "step_id": "06_02_build_wta_long_axis_profiles",
-      "stage": "06_presentation_products",
-      "purpose": "Generate WTA-top hippocampal long-axis network-composition profile TSV/PNG products under outputs_core/present/overviews.",
-      "branches": [
-        "kong2022_routea",
-        "kong2022_routea_ctxreg",
-        "kong2022_routea_ctxdrop"
-      ],
-      "entry_script": "scripts/core_workflow/06_02_build_wta_long_axis_profiles.py",
-      "implementation_script": "scripts/core_workflow/06_02_build_wta_long_axis_profiles.py",
-      "recommended_manifest": "outputs_core/present/overviews/kong2022_wta-top_long_axis_network_profile_routea_bins20_manifest.json"
-    },
-    {
-      "step_id": "06_03_materialize_group_labels",
+      "step_id": "06_02_materialize_group_labels",
       "stage": "06_presentation_products",
       "purpose": "Materialize group functional-atlas label arrays.",
       "branches": [
@@ -226,12 +213,12 @@
         "kong2022_routea",
         "kong2022_routeb"
       ],
-      "entry_script": "scripts/core_workflow/06_03_materialize_group_labels.py",
-      "implementation_script": "scripts/core_workflow/06_03_materialize_group_labels.py",
-      "recommended_manifest": "manifests/core_workflow/06_03_materialize_group_labels.json"
+      "entry_script": "scripts/core_workflow/06_02_materialize_group_labels.py",
+      "implementation_script": "scripts/core_workflow/06_02_materialize_group_labels.py",
+      "recommended_manifest": "manifests/core_workflow/06_02_materialize_group_labels.json"
     },
     {
-      "step_id": "06_04_build_cluster_cortex_panels",
+      "step_id": "06_03_build_cluster_cortex_panels",
       "stage": "06_presentation_products",
       "purpose": "Generate cortex/hippocampal summary panels.",
       "branches": [
@@ -241,12 +228,12 @@
         "kong2022_routea_ctxdrop",
         "kong2022_routeb"
       ],
-      "entry_script": "scripts/core_workflow/06_04_build_cluster_cortex_panels.py",
-      "implementation_script": "scripts/core_workflow/06_04_build_cluster_cortex_panels.py",
-      "recommended_manifest": "manifests/core_workflow/06_04_build_cluster_cortex_panels.json"
+      "entry_script": "scripts/core_workflow/06_03_build_cluster_cortex_panels.py",
+      "implementation_script": "scripts/core_workflow/06_03_build_cluster_cortex_panels.py",
+      "recommended_manifest": "manifests/core_workflow/06_03_build_cluster_cortex_panels.json"
     },
     {
-      "step_id": "06_05_render_hippomaps_gradient_products",
+      "step_id": "06_04_render_hippomaps_gradient_products",
       "stage": "06_presentation_products",
       "purpose": "Render HippoMaps folded/unfolded continuous gradients with hemisphere-specific EV labels and colorbars, EV plots, and endpoint FC contrasts.",
       "branches": [
@@ -255,24 +242,24 @@
         "kong2022_routea_ctxdrop",
         "kong2022_routeb"
       ],
-      "entry_script": "scripts/core_workflow/06_05_render_hippomaps_gradient_products.py",
-      "implementation_script": "scripts/core_workflow/06_05_render_hippomaps_gradient_products.py",
-      "recommended_manifest": "manifests/core_workflow/06_05_render_hippomaps_gradient_products.json"
+      "entry_script": "scripts/core_workflow/06_04_render_hippomaps_gradient_products.py",
+      "implementation_script": "scripts/core_workflow/06_04_render_hippomaps_gradient_products.py",
+      "recommended_manifest": "manifests/core_workflow/06_04_render_hippomaps_gradient_products.json"
     },
     {
-      "step_id": "06_06_render_group_gradient_heatmaps",
+      "step_id": "06_05_render_group_gradient_heatmaps",
       "stage": "06_presentation_products",
       "purpose": "Deprecated retired legacy locked-scene heatmap entrypoint; preserved only to emit deprecation guidance.",
       "branches": [
         "kong2022_routea",
         "kong2022_routeb"
       ],
-      "entry_script": "scripts/core_workflow/06_06_render_group_gradient_heatmaps.py",
-      "implementation_script": "scripts/core_workflow/06_06_render_group_gradient_heatmaps.py",
-      "recommended_manifest": "manifests/core_workflow/06_06_render_group_gradient_heatmaps.json"
+      "entry_script": "scripts/core_workflow/06_05_render_group_gradient_heatmaps.py",
+      "implementation_script": "scripts/core_workflow/06_05_render_group_gradient_heatmaps.py",
+      "recommended_manifest": "manifests/core_workflow/06_05_render_group_gradient_heatmaps.json"
     },
     {
-      "step_id": "06_07_render_confidence_maps",
+      "step_id": "06_06_render_confidence_maps",
       "stage": "06_presentation_products",
       "purpose": "Render gradient-spectral silhouette confidence maps on folded and unfolded hippocampal surfaces.",
       "branches": [
@@ -280,26 +267,26 @@
         "kong2022_routea_ctxreg",
         "kong2022_routea_ctxdrop"
       ],
-      "entry_script": "scripts/core_workflow/06_07_render_confidence_maps.py",
-      "implementation_script": "scripts/core_workflow/06_07_render_confidence_maps.py",
-      "recommended_manifest": "manifests/core_workflow/06_07_render_confidence_maps.json"
+      "entry_script": "scripts/core_workflow/06_06_render_confidence_maps.py",
+      "implementation_script": "scripts/core_workflow/06_06_render_confidence_maps.py",
+      "recommended_manifest": "manifests/core_workflow/06_06_render_confidence_maps.json"
     },
     {
-      "step_id": "06_08_render_ctxdrop_neighbor_counts",
+      "step_id": "06_07_render_ctxdrop_neighbor_counts",
       "stage": "06_presentation_products",
       "purpose": "Render group-average RouteA 20 mm local cortex-neighbor count summaries shared by ctxreg and ctxdrop.",
       "branches": [
         "kong2022_routea_ctxreg",
         "kong2022_routea_ctxdrop"
       ],
-      "entry_script": "scripts/core_workflow/06_08_render_ctxdrop_neighbor_counts.py",
-      "implementation_script": "scripts/core_workflow/06_08_render_ctxdrop_neighbor_counts.py",
+      "entry_script": "scripts/core_workflow/06_07_render_ctxdrop_neighbor_counts.py",
+      "implementation_script": "scripts/core_workflow/06_07_render_ctxdrop_neighbor_counts.py",
       "recommended_manifest": "outputs_core/present/local_cortex_neighbors/kong2022_routea_local_cortex_neighbors_mean20mm_manifest.json"
     },
     {
       "step_id": "07_01_build_group_matrix",
       "stage": "07_presentation_index",
-      "purpose": "Build the maintained overview index after 06_01 and 06_02 outputs are refreshed.",
+      "purpose": "Build the maintained overview index after 06_01 overview outputs are refreshed.",
       "branches": [
         "kong2019",
         "kong2022_routea",

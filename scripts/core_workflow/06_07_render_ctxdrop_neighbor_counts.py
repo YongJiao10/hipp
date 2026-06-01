@@ -363,7 +363,7 @@ def manifest_payload(
     outputs: dict[str, object],
 ) -> dict[str, object]:
     return {
-        "stage": "06_08_render_local_cortex_neighbors",
+        "stage": "06_07_render_local_cortex_neighbors",
         "status": "done",
         "timestamp_utc": utc_now_iso(),
         "route_tag": "routea",

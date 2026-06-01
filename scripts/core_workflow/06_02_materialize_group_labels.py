@@ -6,8 +6,8 @@ Process Step Description:
 Materialize group-level labels. Converts group-level clustering results into standard functional network label files (e.g., GIFTI format) for visualization and downstream analysis.
 
 Main Flow Path:
-- 9th step in the numbered pipeline sequence (first stage of presentation output generation, run in parallel with 06_01, 06_02, 06_04, 06_05, 06_06):
-  01_01_run_hippunfold_t1w_local.py -> 01_02_check_hippunfold_outputs.py -> 02_01_prepare_group_inputs.py -> 02_02_build_qc_manifest.py -> 03_01/03_02 reference building -> 04_01/04_02/04_03 FC materialization -> 05_01 gradient computation -> 05_02 group atlas parcellation -> 06_03_materialize_group_labels.py (this step) -> 07_01 group matrix overview.
+- 9th step in the numbered pipeline sequence (first stage of presentation output generation, run in parallel with 06_01, 06_03, 06_04, 06_05, 06_06, 06_07):
+  01_01_run_hippunfold_t1w_local.py -> 01_02_check_hippunfold_outputs.py -> 02_01_prepare_group_inputs.py -> 02_02_build_qc_manifest.py -> 03_01/03_02 reference building -> 04_01/04_02/04_03 FC materialization -> 05_01 gradient computation -> 05_02 group atlas parcellation -> 06_02_materialize_group_labels.py (this step) -> 07_01 group matrix overview.
 
 Inputs:
 - Command-line arguments:

@@ -24,7 +24,7 @@ def _load_numbered_module(script_name: str, alias: str):
     return module
 
 
-cortex_mod = _load_numbered_module("06_04_build_cluster_cortex_panels.py", "core_06_04_build_cluster_cortex_panels")
+cortex_mod = _load_numbered_module("06_03_build_cluster_cortex_panels.py", "core_06_03_build_cluster_cortex_panels")
 present_mod = _load_numbered_module("06_01_build_group_overview.py", "core_06_01_build_group_overview")
 atlas_mod = _load_numbered_module("05_02_run_group_atlas.py", "core_05_02_run_group_atlas")
 matrix_mod = _load_numbered_module("07_01_build_group_matrix.py", "core_07_01_build_group_matrix")
@@ -45,7 +45,6 @@ resolve_subject_fc_mode = atlas_mod.resolve_subject_fc_mode
 subject_fc_preprocessing_manifest_block = atlas_mod.subject_fc_preprocessing_manifest_block
 build_render_jobs = matrix_mod.build_render_jobs
 expected_overview_path = matrix_mod.expected_overview_path
-wta_profile_command = matrix_mod.wta_profile_command
 
 OLD_METHOD_NAMES = {"group-network-top", "group-network-spectral", "group-intrinsic-spectral"}
 NEW_METHOD_NAMES = {"wta-top", "network-spectral", "intrinsic-spectral"}
@@ -163,19 +162,15 @@ def test_overview_matrix_keeps_count_and_fisherz_assignment_variants() -> None:
     assert grad_out.name == "kong2022_gradient-spectral_group_overview_g1g2g3_routea_ctxreg_fisherz.png"
 
 
-def test_overview_matrix_generates_wta_long_axis_profiles_from_core_workflow() -> None:
-    cmd = wta_profile_command(
-        python_exe="/home/yojiao/.conda/envs/py314/bin/python",
-        group_root=REPO_ROOT / "outputs_core" / "work" / "group_atlas" / "routea_full_k3_fisherz",
-        present_dir=REPO_ROOT / "outputs_core" / "present" / "overviews",
-        route_tag="routea",
-        coverage_threshold=0.80,
-    )
-    joined = " ".join(cmd)
-    assert "06_02_build_wta_long_axis_profiles.py" in joined
-    assert "--bins 20 25" in joined
-    assert ("present_group_" + "t1only") not in joined
-    assert ("outputs_" + "experiments") not in joined
+def test_wta_profile_is_embedded_in_overview_with_fixed_20_bins() -> None:
+    assert present_mod.WTA_OVERVIEW_PROFILE_BINS == 20
+    assert present_mod.WTA_OVERVIEW_SIDE_PANEL_FONT_DELTA_PT == 4
+    assert present_mod.WTA_OVERVIEW_SIDE_PANEL_TITLE_FS == present_mod.FS_TITLE + 4
+    assert present_mod.WTA_OVERVIEW_SIDE_PANEL_LABEL_FS == present_mod.FS_LABEL + 4
+    assert present_mod.WTA_OVERVIEW_SIDE_PANEL_TICK_FS == present_mod.FS_TICK + 4
+    assert not hasattr(matrix_mod, "WTA_PROFILE_SCRIPT")
+    assert not hasattr(matrix_mod, "WTA_PROFILE_BINS")
+    assert not hasattr(matrix_mod, "wta_profile_command")
 
 
 def test_cortex_scene_renderer_help_works_when_executed_by_path() -> None:
@@ -272,7 +267,7 @@ def main() -> int:
     test_overview_matrix_uses_core_work_fixed_k3_fisherz_root_for_all_routea_methods()
     test_overview_matrix_defaults_to_routea_only()
     test_overview_matrix_keeps_count_and_fisherz_assignment_variants()
-    test_overview_matrix_generates_wta_long_axis_profiles_from_core_workflow()
+    test_wta_profile_is_embedded_in_overview_with_fixed_20_bins()
     test_cortex_scene_renderer_help_works_when_executed_by_path()
     test_gradient_component_parser_defaults_and_valid_combos()
     test_gradient_component_parser_rejects_bad_values()

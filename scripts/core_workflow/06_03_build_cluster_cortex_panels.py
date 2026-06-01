@@ -6,8 +6,8 @@ Process Step Description:
 Build cortical projection panels for clusters. Generates visualization panel data projecting hippocampal clustered networks onto the cerebral cortex surface to show hippocampal-cortical connectivity patterns.
 
 Main Flow Path:
-- 9th step in the numbered pipeline sequence (first stage of presentation output generation, run in parallel with 06_01, 06_02, 06_03, 06_05, 06_06):
-  01_01_run_hippunfold_t1w_local.py -> 01_02_check_hippunfold_outputs.py -> 02_01_prepare_group_inputs.py -> 02_02_build_qc_manifest.py -> 03_01/03_02 reference building -> 04_01/04_02/04_03 FC materialization -> 05_01 gradient computation -> 05_02 group atlas parcellation -> 06_04_build_cluster_cortex_panels.py (this step) -> 07_01 group matrix overview.
+- 9th step in the numbered pipeline sequence (first stage of presentation output generation, run in parallel with 06_01, 06_02, 06_04, 06_05, 06_06, 06_07):
+  01_01_run_hippunfold_t1w_local.py -> 01_02_check_hippunfold_outputs.py -> 02_01_prepare_group_inputs.py -> 02_02_build_qc_manifest.py -> 03_01/03_02 reference building -> 04_01/04_02/04_03 FC materialization -> 05_01 gradient computation -> 05_02 group atlas parcellation -> 06_03_build_cluster_cortex_panels.py (this step) -> 07_01 group matrix overview.
 
 Inputs:
 - Command-line arguments:

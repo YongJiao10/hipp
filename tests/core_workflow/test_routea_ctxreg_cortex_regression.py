@@ -43,13 +43,9 @@ overview_mod = _load_numbered_module(
     "scripts/core_workflow/06_01_build_group_overview.py",
     "core_06_01_build_group_overview_ctxreg_test",
 )
-wta_mod = _load_numbered_module(
-    "scripts/core_workflow/06_02_build_wta_long_axis_profiles.py",
-    "core_06_02_build_wta_long_axis_profiles_ctxreg_test",
-)
 grad_render_mod = _load_numbered_module(
-    "scripts/core_workflow/06_05_render_hippomaps_gradient_products.py",
-    "core_06_05_render_hippomaps_gradient_products_ctxreg_test",
+    "scripts/core_workflow/06_04_render_hippomaps_gradient_products.py",
+    "core_06_04_render_hippomaps_gradient_products_ctxreg_test",
 )
 matrix_mod = _load_numbered_module(
     "scripts/core_workflow/07_01_build_group_matrix.py",
@@ -64,12 +60,12 @@ intrinsic_mod = _load_numbered_module(
     "core_04_02_materialize_intrinsic_fc_ctxreg_test",
 )
 cortex_mod = _load_numbered_module(
-    "scripts/core_workflow/06_04_build_cluster_cortex_panels.py",
-    "core_06_04_build_cluster_cortex_panels_ctxreg_test",
+    "scripts/core_workflow/06_03_build_cluster_cortex_panels.py",
+    "core_06_03_build_cluster_cortex_panels_ctxreg_test",
 )
 neighbors_mod = _load_numbered_module(
-    "scripts/core_workflow/06_08_render_ctxdrop_neighbor_counts.py",
-    "core_06_08_render_ctxdrop_neighbor_counts_ctxreg_test",
+    "scripts/core_workflow/06_07_render_ctxdrop_neighbor_counts.py",
+    "core_06_07_render_ctxdrop_neighbor_counts_ctxreg_test",
 )
 
 
@@ -308,26 +304,6 @@ def test_routea_ctx_control_route_contracts_and_paths() -> None:
     assert "routea_ctxdrop" in grad_render_mod.ROUTES
     assert "routea_ctxreg" in matrix_mod.ROUTE_CHOICES
     assert "routea_ctxdrop" in matrix_mod.ROUTE_CHOICES
-
-    paths = wta_mod.profile_output_paths(
-        present_dir=Path("/tmp/present"),
-        atlas="kong2022",
-        method="wta-top",
-        route_tag="routea_ctxreg",
-        smoothing="4mm",
-        n_bins=25,
-    )
-    assert paths["png"].name == "kong2022_wta-top_long_axis_network_profile_routea_ctxreg_4mm_bins25.png"
-
-    ctxdrop_paths = wta_mod.profile_output_paths(
-        present_dir=Path("/tmp/present"),
-        atlas="kong2022",
-        method="wta-top",
-        route_tag="routea_ctxdrop",
-        smoothing="4mm",
-        n_bins=25,
-    )
-    assert ctxdrop_paths["png"].name == "kong2022_wta-top_long_axis_network_profile_routea_ctxdrop_4mm_bins25.png"
 
     overview_path = matrix_mod.expected_overview_path(
         Path("/tmp/present"),

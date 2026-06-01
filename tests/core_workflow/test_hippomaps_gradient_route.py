@@ -39,8 +39,8 @@ compute_mod = _load_module(
     "core_05_01_compute_hippomaps_gradients",
 )
 render_mod = _load_module(
-    "scripts/core_workflow/06_05_render_hippomaps_gradient_products.py",
-    "core_06_05_render_hippomaps_gradient_products",
+    "scripts/core_workflow/06_04_render_hippomaps_gradient_products.py",
+    "core_06_04_render_hippomaps_gradient_products",
 )
 atlas_mod = _load_module(
     "scripts/core_workflow/05_02_run_group_atlas.py",
@@ -55,8 +55,8 @@ matrix_mod = _load_module(
     "core_07_01_build_group_matrix",
 )
 cortex_mod = _load_module(
-    "scripts/core_workflow/06_04_build_cluster_cortex_panels.py",
-    "core_06_04_build_cluster_cortex_panels",
+    "scripts/core_workflow/06_03_build_cluster_cortex_panels.py",
+    "core_06_03_build_cluster_cortex_panels",
 )
 output_layout = _load_module(
     "scripts/core_workflow/lib/output_layout.py",
@@ -556,6 +556,96 @@ def test_render_gradient_figure_calls_official_hippomaps_plotter_options() -> No
     assert Path(calls[1]["savefig"]).name != "", calls
 
 
+
+def test_cross_route_display_alignment_flips_negative_components_without_mutating_source() -> None:
+    source = {
+        "L": np.asarray(
+            [
+                [1.0, -2.0, 7.0],
+                [2.0, -3.0, 8.0],
+                [3.0, -4.0, 9.0],
+                [4.0, -5.0, 10.0],
+            ],
+            dtype=np.float32,
+        ),
+    }
+    reference = {
+        "L": np.asarray(
+            [
+                [10.0, 2.0, 7.0],
+                [20.0, 3.0, 8.0],
+                [30.0, 4.0, 9.0],
+                [40.0, 5.0, 10.0],
+            ],
+            dtype=np.float32,
+        ),
+    }
+    original = source["L"].copy()
+
+    display, meta = render_mod.align_display_gradients_to_reference(
+        route="routea_ctxreg",
+        smoothing="4mm",
+        gradients_by_hemi=source,
+        reference_by_hemi=reference,
+        selected_components=[1, 2, 3],
+        reference_route="routea",
+    )
+
+    assert np.allclose(source["L"], original), "display alignment must not mutate saved analysis arrays"
+    assert np.allclose(display["L"][:, 0], original[:, 0])
+    assert np.allclose(display["L"][:, 1], -original[:, 1])
+    assert np.allclose(display["L"][:, 2], original[:, 2])
+    g2 = next(item for item in meta["decisions"] if item["hemi"] == "L" and item["component"] == "G2")
+    assert g2["display_sign"] == -1
+    assert g2["flipped"] is True
+    assert g2["correlation_to_reference"] < 0.0
+
+
+def test_shared_display_color_ranges_use_component_bounds_across_routes() -> None:
+    routea = {
+        "L": np.asarray([[0.0, -1.0], [2.0, 3.0]], dtype=np.float32),
+        "R": np.asarray([[1.0, -2.0], [3.0, 4.0]], dtype=np.float32),
+    }
+    ctxreg = {
+        "L": np.asarray([[-4.0, -5.0], [5.0, 7.0]], dtype=np.float32),
+    }
+
+    ranges = render_mod.compute_shared_display_color_ranges(
+        [routea, ctxreg],
+        selected_components=[1, 2],
+        trim_fraction=0.0,
+    )
+
+    assert ranges == {1: (-4.0, 5.0), 2: (-5.0, 7.0)}
+    assert render_mod.format_color_ranges_for_components(ranges, [1, 2]) == [[(-4.0, 5.0)], [(-5.0, 7.0)]]
+
+
+def test_render_gradient_figure_passes_explicit_shared_color_ranges() -> None:
+    calls: list[dict[str, object]] = []
+
+    class FakeFigure:
+        def savefig(self, path, **kwargs):
+            calls.append({"savefig": Path(path).name, "kwargs": kwargs})
+            Image.new("RGB", (24, 24), (255, 255, 255)).save(path)
+
+    def fake_plotter(cdata, **kwargs):
+        calls.append({"shape": tuple(cdata.shape), "kwargs": kwargs})
+        return FakeFigure()
+
+    out = REPO_ROOT / "outputs_core" / "reruns" / "test_hippomaps_renderer" / "hippomaps_renderer_test_ranges.png"
+    render_mod.render_gradient_figure(
+        left=np.ones((4, 2), dtype=np.float32),
+        right=np.zeros((4, 2), dtype=np.float32),
+        output_png=out,
+        den="512",
+        plotter=fake_plotter,
+        color_ranges=[[(-2.0, 3.0)], [(-4.0, 5.0)]],
+        tighten_cwindow=False,
+    )
+
+    assert calls[0]["kwargs"]["color_range"] == [[(-2.0, 3.0)], [(-4.0, 5.0)]], calls
+    assert calls[0]["kwargs"]["tighten_cwindow"] is False, calls
+
 def test_render_gradient_figure_can_render_left_hemi_only() -> None:
     calls: list[dict[str, object]] = []
 
@@ -648,6 +738,9 @@ def main() -> int:
     test_gradient_alignment_anchor_combo_is_identity_without_raw_outputs()
     test_endpoint_fc_contrast_uses_top_minus_bottom_gradient_quartiles()
     test_render_gradient_figure_calls_official_hippomaps_plotter_options()
+    test_cross_route_display_alignment_flips_negative_components_without_mutating_source()
+    test_shared_display_color_ranges_use_component_bounds_across_routes()
+    test_render_gradient_figure_passes_explicit_shared_color_ranges()
     test_render_gradient_figure_can_render_left_hemi_only()
     test_annotate_gradient_image_adds_left_margin_and_ev_labels()
     test_ensure_bilateral_gradient_annotations_repairs_late_raw_screenshot()

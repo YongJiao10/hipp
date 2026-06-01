@@ -6,29 +6,32 @@ Process Step Description:
 Render HippoMaps gradient products. Renders computed continuous functional gradient data into standard visualization products (including unfolded/folded surface renderings, explained variance plots, and endpoint functional connectivity contrasts).
 
 Main Flow Path:
-- 9th step in the numbered pipeline sequence (first stage of presentation output generation, run in parallel with 06_01, 06_02, 06_03, 06_04, 06_06):
-  01_01_run_hippunfold_t1w_local.py -> 01_02_check_hippunfold_outputs.py -> 02_01_prepare_group_inputs.py -> 02_02_build_qc_manifest.py -> 03_01/03_02 reference building -> 04_01/04_02/04_03 FC materialization -> 05_01 gradient computation -> 05_02 group atlas parcellation -> 06_05_render_hippomaps_gradient_products.py (this step) -> 07_01 group matrix overview.
+- 9th step in the numbered pipeline sequence (first stage of presentation output generation, run in parallel with 06_01, 06_02, 06_03, 06_05, 06_06, 06_07):
+  01_01_run_hippunfold_t1w_local.py -> 01_02_check_hippunfold_outputs.py -> 02_01_prepare_group_inputs.py -> 02_02_build_qc_manifest.py -> 03_01/03_02 reference building -> 04_01/04_02/04_03 FC materialization -> 05_01 gradient computation -> 05_02 group atlas parcellation -> 06_04_render_hippomaps_gradient_products.py (this step) -> 07_01 group matrix overview.
 
 Inputs:
 - Command-line arguments:
   - --gradient-root: Root directory containing gradient data outputs (default: `outputs_core/work/hippomaps_gradients`).
   - --present-root: Root directory for saving presentation figures (default: `outputs_core/present/gradients`).
   - --hippomaps-root: Root directory for the HippoMaps repository package (default: `external/HippoMaps`).
-  - --routes: Routes to process (choices: "routea", "routeb", default: ["routea", "routeb"]).
+  - --routes: Routes to process (choices: "routea", "routea_ctxreg", "routea_ctxdrop", "routeb"; default: all).
   - --smoothings: Smoothing kernel values to process (default: ["2mm", "4mm"]).
   - --den: Output density resolution (default: "512").
   - --components: Comma-separated list of gradient components to plot (default: "1,2,3").
   - --hemis: Hemispheres to process (default: ["L", "R"]).
+  - --cross-route-display-reference: Route used as the display-only sign reference (default: "routea").
+  - --no-cross-route-display-alignment: Disable cross-route display sign alignment and shared color ranges.
+  - --display-color-trim-fraction: Quantile trim for shared per-component color ranges (default: 0.05).
 - Physical inputs:
   - Gradient output arrays and manifests: `{gradient_root}/{route}/{smoothing}/hemi_{hemi}/hippomaps_gradient_manifest.json` and matching `*.npy`/`*.gii` files.
   - Group-level FC matrix: `{routes_root}/intrinsic_group_fc_smooth-{smoothing}_hemi-{hemi}.npy` or matching path.
 
 Outputs:
 - File outputs:
-  - Folded/Unfolded gradient surface rendering PNG: `{present_root}/combos/{route}_{smoothing}_{out_tag}/hippomaps_gradients_{route}_{smoothing}_{out_tag}.png`
-  - Explained variance fraction plot PNG: `{present_root}/combos/{route}_{smoothing}_{out_tag}/hippomaps_ev_plot_{route}_{smoothing}_{out_tag}.png`
-  - Endpoint FC contrast plot PNG: `{present_root}/combos/{route}_{smoothing}_{out_tag}/hippomaps_endpoint_fc_contrast_{route}_{smoothing}_{out_tag}.png`
-  - Manifest JSON: `{present_root}/combos/{route}_{smoothing}_{out_tag}/hippomaps_gradient_products_{route}_{smoothing}_{out_tag}_manifest.json`
+  - Folded/Unfolded gradient surface rendering PNG: `{present_root}/{route}/{smoothing}/hippomaps_gradients_{route}_{smoothing}_{out_tag}_g1g2g3.png`
+  - Explained variance fraction plot PNG: `{present_root}/{route}/{smoothing}/hippomaps_ev_{route}_{smoothing}_{out_tag}.png`
+  - Endpoint FC contrast plot PNG: `{present_root}/{route}/{smoothing}/hippomaps_endpoint_fc_contrast_{route}_{smoothing}_{out_tag}.png`
+  - Manifest JSON: `{present_root}/{route}/{smoothing}/hippomaps_gradient_products_{route}_{smoothing}_{out_tag}_manifest.json`
 """
 import argparse
 import json
@@ -114,6 +117,176 @@ def normalize_hemis(hemis: list[str] | tuple[str, ...]) -> list[str]:
 
 def hemi_output_tag(hemis: list[str]) -> str:
     return "bilateral" if tuple(hemis) == HEMIS else "hemi-" + "".join(hemis)
+
+
+
+def finite_pearson_correlation(a: np.ndarray, b: np.ndarray) -> float:
+    x = np.asarray(a, dtype=np.float64).reshape(-1)
+    y = np.asarray(b, dtype=np.float64).reshape(-1)
+    finite = np.isfinite(x) & np.isfinite(y)
+    if int(np.count_nonzero(finite)) < 2:
+        return float("nan")
+    x = x[finite]
+    y = y[finite]
+    x = x - float(np.mean(x))
+    y = y - float(np.mean(y))
+    denom = float(np.sqrt(np.sum(x * x) * np.sum(y * y)))
+    if denom <= 0.0 or not np.isfinite(denom):
+        return float("nan")
+    return float(np.sum(x * y) / denom)
+
+
+def align_display_gradients_to_reference(
+    *,
+    route: str,
+    smoothing: str,
+    gradients_by_hemi: dict[str, np.ndarray],
+    reference_by_hemi: dict[str, np.ndarray],
+    selected_components: list[int],
+    reference_route: str = "routea",
+) -> tuple[dict[str, np.ndarray], dict[str, Any]]:
+    display = {hemi: np.asarray(arr, dtype=np.float32).copy() for hemi, arr in gradients_by_hemi.items()}
+    decisions: list[dict[str, Any]] = []
+    for hemi in sorted(display):
+        ref = reference_by_hemi.get(hemi)
+        if ref is None:
+            raise FileNotFoundError(f"Missing reference gradients for route={reference_route} smoothing={smoothing} hemi={hemi}")
+        ref_arr = np.asarray(ref, dtype=np.float32)
+        src_arr = np.asarray(gradients_by_hemi[hemi], dtype=np.float32)
+        for comp in selected_components:
+            comp_idx = int(comp) - 1
+            if comp_idx < 0 or comp_idx >= src_arr.shape[1] or comp_idx >= ref_arr.shape[1]:
+                raise ValueError(
+                    f"Component G{comp} is unavailable for route={route} smoothing={smoothing} hemi={hemi}: "
+                    f"source_shape={src_arr.shape} reference_shape={ref_arr.shape}"
+                )
+            corr = finite_pearson_correlation(src_arr[:, comp_idx], ref_arr[:, comp_idx])
+            sign = -1 if np.isfinite(corr) and corr < 0.0 else 1
+            if sign == -1:
+                display[hemi][:, comp_idx] *= -1.0
+            decisions.append(
+                {
+                    "hemi": hemi,
+                    "component": f"G{int(comp)}",
+                    "correlation_to_reference": None if not np.isfinite(corr) else float(corr),
+                    "display_sign": int(sign),
+                    "flipped": bool(sign == -1),
+                }
+            )
+    return display, {
+        "enabled": True,
+        "mode": "sign_only_per_hemi_component",
+        "reference_route": reference_route,
+        "route": route,
+        "smoothing": smoothing,
+        "array_scope": "display_only_saved_gradient_arrays_unchanged",
+        "decisions": decisions,
+    }
+
+
+def compute_shared_display_color_ranges(
+    display_gradient_sets: list[dict[str, np.ndarray]],
+    *,
+    selected_components: list[int],
+    trim_fraction: float = 0.05,
+) -> dict[int, tuple[float, float]]:
+    trim = float(trim_fraction)
+    if trim < 0.0 or trim >= 0.5:
+        raise ValueError(f"trim_fraction must be in [0, 0.5), got {trim_fraction}")
+    ranges: dict[int, tuple[float, float]] = {}
+    for comp in selected_components:
+        comp_idx = int(comp) - 1
+        chunks: list[np.ndarray] = []
+        for by_hemi in display_gradient_sets:
+            for arr in by_hemi.values():
+                mat = np.asarray(arr, dtype=np.float32)
+                if comp_idx < 0 or comp_idx >= mat.shape[1]:
+                    raise ValueError(f"Component G{comp} is unavailable for display color range; shape={mat.shape}")
+                vals = mat[:, comp_idx]
+                vals = vals[np.isfinite(vals)]
+                if vals.size:
+                    chunks.append(vals.astype(np.float64, copy=False))
+        if not chunks:
+            ranges[int(comp)] = (-1.0, 1.0)
+            continue
+        all_vals = np.concatenate(chunks)
+        lo = float(np.quantile(all_vals, trim))
+        hi = float(np.quantile(all_vals, 1.0 - trim))
+        if not np.isfinite(lo) or not np.isfinite(hi):
+            lo, hi = -1.0, 1.0
+        if lo == hi:
+            pad = max(abs(lo) * 0.05, 1.0)
+            lo -= pad
+            hi += pad
+        ranges[int(comp)] = (float(lo), float(hi))
+    return ranges
+
+
+def format_color_ranges_for_components(
+    color_ranges_by_component: dict[int, tuple[float, float]], selected_components: list[int]
+) -> list[list[tuple[float, float]]]:
+    return [[tuple(map(float, color_ranges_by_component[int(comp)]))] for comp in selected_components]
+
+
+def load_gradient_arrays_for_display(
+    *, gradient_root: Path, route: str, smoothing: str, hemis: list[str]
+) -> dict[str, np.ndarray]:
+    return {
+        hemi: np.load(gradient_root / route / smoothing / f"hemi_{hemi}" / "hippomaps_gradients_full.npy").astype(np.float32)
+        for hemi in hemis
+    }
+
+
+def build_cross_route_display_specs(
+    *,
+    gradient_root: Path,
+    routes: list[str],
+    smoothings: list[str],
+    hemis: list[str],
+    selected_components: list[int],
+    reference_route: str,
+    trim_fraction: float = 0.05,
+) -> dict[tuple[str, str], dict[str, Any]]:
+    specs: dict[tuple[str, str], dict[str, Any]] = {}
+    for smoothing in smoothings:
+        reference_by_hemi = load_gradient_arrays_for_display(
+            gradient_root=gradient_root,
+            route=reference_route,
+            smoothing=smoothing,
+            hemis=hemis,
+        )
+        aligned_sets: list[dict[str, np.ndarray]] = []
+        pending: dict[str, tuple[dict[str, np.ndarray], dict[str, Any]]] = {}
+        for route in routes:
+            gradients_by_hemi = load_gradient_arrays_for_display(
+                gradient_root=gradient_root,
+                route=route,
+                smoothing=smoothing,
+                hemis=hemis,
+            )
+            display_by_hemi, alignment_meta = align_display_gradients_to_reference(
+                route=route,
+                smoothing=smoothing,
+                gradients_by_hemi=gradients_by_hemi,
+                reference_by_hemi=reference_by_hemi,
+                selected_components=selected_components,
+                reference_route=reference_route,
+            )
+            pending[route] = (display_by_hemi, alignment_meta)
+            aligned_sets.append(display_by_hemi)
+        shared_ranges = compute_shared_display_color_ranges(
+            aligned_sets,
+            selected_components=selected_components,
+            trim_fraction=trim_fraction,
+        )
+        for route, (display_by_hemi, alignment_meta) in pending.items():
+            specs[(route, smoothing)] = {
+                "display_gradients_by_hemi": display_by_hemi,
+                "cross_route_display_alignment": alignment_meta,
+                "display_color_ranges_by_component": shared_ranges,
+                "display_color_trim_fraction": float(trim_fraction),
+            }
+    return specs
 
 
 def annotate_gradient_image(
@@ -225,6 +398,8 @@ def render_gradient_figure(
     den: str = "512",
     hemis: list[str] | tuple[str, ...] = HEMIS,
     plotter: Callable[..., object] | None = None,
+    color_ranges: list[list[tuple[float, float]]] | None = None,
+    tighten_cwindow: bool = True,
 ) -> Path:
     hemis = normalize_hemis(hemis)
     arrays: list[np.ndarray] = []
@@ -245,29 +420,31 @@ def render_gradient_figure(
         prefix=f".{output_png.stem}.", suffix=output_png.suffix, dir=output_png.parent, delete=False
     ) as tmp:
         render_png = Path(tmp.name)
-    fig = plotter(
-        cdata,
-        hemis=hemis,
-        labels=["hipp"],
-        den=str(den),
-        unfoldAPrescale=unfold_ap_rescale,
-        tighten_cwindow=True,
-        cmap="plasma",
-        share="row",
-        color_bar="right",
-        background=(1, 1, 1),
-        transparent_bg=False,
-        interactive=False,
-        screenshot=True,
-        filename=str(render_png),
-        suppress_warnings=True,
-        size=[450, 300],
-        cb__width=0.95,
-        cb__position=[0.02, 0.25],
-        cb__barRatio=0.18,
-        cb__labelTextProperty={"fontSize": 13},
-        zoom=1.45,
-    )
+    plotter_kwargs = {
+        "hemis": hemis,
+        "labels": ["hipp"],
+        "den": str(den),
+        "unfoldAPrescale": unfold_ap_rescale,
+        "tighten_cwindow": bool(tighten_cwindow),
+        "cmap": "plasma",
+        "share": "row",
+        "color_bar": "right",
+        "background": (1, 1, 1),
+        "transparent_bg": False,
+        "interactive": False,
+        "screenshot": True,
+        "filename": str(render_png),
+        "suppress_warnings": True,
+        "size": [450, 300],
+        "cb__width": 0.95,
+        "cb__position": [0.02, 0.25],
+        "cb__barRatio": 0.18,
+        "cb__labelTextProperty": {"fontSize": 13},
+        "zoom": 1.45,
+    }
+    if color_ranges is not None:
+        plotter_kwargs["color_range"] = color_ranges
+    fig = plotter(cdata, **plotter_kwargs)
     final_render = render_png
     if fig is None:
         if not render_png.exists() or render_png.stat().st_size <= 0:
@@ -304,6 +481,8 @@ def render_bilateral_gradient_figure(
     selected_components: list[int],
     ev_by_hemi: dict[str, list[float]],
     plotter: Callable[..., object] | None = None,
+    color_ranges: list[list[tuple[float, float]]] | None = None,
+    tighten_cwindow: bool = True,
 ) -> Path:
     output_png.parent.mkdir(parents=True, exist_ok=True)
     if plotter is None:
@@ -318,6 +497,8 @@ def render_bilateral_gradient_figure(
         den=den,
         hemis=["L"],
         plotter=plotter,
+        color_ranges=color_ranges,
+        tighten_cwindow=tighten_cwindow,
     )
     render_gradient_figure(
         left=np.empty((0, np.asarray(right).shape[1]), dtype=np.float32),
@@ -326,6 +507,8 @@ def render_bilateral_gradient_figure(
         den=den,
         hemis=["R"],
         plotter=plotter,
+        color_ranges=color_ranges,
+        tighten_cwindow=tighten_cwindow,
     )
     for hemi, title in [("L", "L Gradient"), ("R", "R Gradient")]:
         wait_for_stable_file(side_paths[hemi])
@@ -418,6 +601,7 @@ def render_combo(
     den: str,
     selected_components: list[int],
     hemis: list[str],
+    display_spec: dict[str, Any] | None = None,
 ) -> Path:
     hemis = normalize_hemis(hemis)
     combo_root = present_root / route / smoothing
@@ -436,8 +620,23 @@ def render_combo(
         group_fc_by_hemi[hemi] = np.load(run_dir / "group_mean_fisherz_fc_full.npy").astype(np.float32)
 
     comp_indices = [int(c) - 1 for c in selected_components]
-    left = gradients_by_hemi["L"][:, comp_indices] if "L" in hemis else np.empty((0, len(comp_indices)), dtype=np.float32)
-    right = gradients_by_hemi["R"][:, comp_indices] if "R" in hemis else None
+    display_gradients_by_hemi = gradients_by_hemi
+    cross_route_display_alignment = {"enabled": False}
+    display_color_ranges_by_component: dict[int, tuple[float, float]] | None = None
+    display_color_trim_fraction: float | None = None
+    if display_spec is not None:
+        display_gradients_by_hemi = display_spec["display_gradients_by_hemi"]
+        cross_route_display_alignment = display_spec["cross_route_display_alignment"]
+        display_color_ranges_by_component = display_spec["display_color_ranges_by_component"]
+        display_color_trim_fraction = float(display_spec["display_color_trim_fraction"])
+    plot_color_ranges = (
+        format_color_ranges_for_components(display_color_ranges_by_component, selected_components)
+        if display_color_ranges_by_component is not None
+        else None
+    )
+    plot_tighten_cwindow = plot_color_ranges is None
+    left = display_gradients_by_hemi["L"][:, comp_indices] if "L" in hemis else np.empty((0, len(comp_indices)), dtype=np.float32)
+    right = display_gradients_by_hemi["R"][:, comp_indices] if "R" in hemis else None
     out_tag = hemi_output_tag(hemis)
     gradient_png = combo_root / f"hippomaps_gradients_{route}_{smoothing}_{out_tag}_g1g2g3.png"
     den512_plotting_v2_added = enable_den512_plotting_v2(hippomaps_root) if str(den) == "512" else False
@@ -454,6 +653,8 @@ def render_combo(
             selected_components=selected_components,
             ev_by_hemi=ev_by_hemi,
             plotter=plotter,
+            color_ranges=plot_color_ranges,
+            tighten_cwindow=plot_tighten_cwindow,
         )
         side_gradient_outputs = {
             "L": str(gradient_png.with_name(f"{gradient_png.stem}_hemi-L{gradient_png.suffix}").resolve()),
@@ -467,6 +668,8 @@ def render_combo(
             den=den,
             hemis=hemis,
             plotter=plotter,
+            color_ranges=plot_color_ranges,
+            tighten_cwindow=plot_tighten_cwindow,
         )
         hemi = hemis[0]
         annotate_gradient_image(
@@ -519,7 +722,8 @@ def render_combo(
                 "hemis": hemis,
                 "den": den,
                 "unfoldAPrescale": unfold_ap_rescale,
-                "tighten_cwindow": True,
+                "tighten_cwindow": bool(plot_tighten_cwindow),
+                "color_range": plot_color_ranges,
             },
             "bilateral_rendering": {
                 "hemi_specific_ev_labels": True,
@@ -537,6 +741,13 @@ def render_combo(
             "gradient_alignment": {
                 hemi: manifests[hemi].get("gradient_alignment", {"enabled": False}) for hemi in hemis
             },
+            "cross_route_display_alignment": cross_route_display_alignment,
+            "display_color_ranges_by_component": (
+                {f"G{comp}": list(map(float, rng)) for comp, rng in sorted(display_color_ranges_by_component.items())}
+                if display_color_ranges_by_component is not None
+                else None
+            ),
+            "display_color_trim_fraction": display_color_trim_fraction,
             "endpoint_contrast": "top_25pct_minus_bottom_25pct_gradient_vertices_by_kong2022_roi",
             "outputs": {
                 "gradient_figure": str(gradient_png.resolve()),
@@ -568,6 +779,23 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--den", default="512")
     parser.add_argument("--components", default="1,2,3")
     parser.add_argument("--hemis", nargs="+", choices=HEMIS, default=list(HEMIS))
+    parser.add_argument(
+        "--cross-route-display-reference",
+        choices=ROUTES,
+        default="routea",
+        help="Reference route used for display-only sign alignment across branches.",
+    )
+    parser.add_argument(
+        "--no-cross-route-display-alignment",
+        action="store_true",
+        help="Disable display-only cross-route sign alignment and shared color ranges.",
+    )
+    parser.add_argument(
+        "--display-color-trim-fraction",
+        type=float,
+        default=0.05,
+        help="Per-component quantile trim used to define shared cross-route display color ranges.",
+    )
     return parser.parse_args()
 
 
@@ -576,17 +804,31 @@ def main() -> int:
     hippomaps_root = ensure_hippomaps_on_path(Path(args.hippomaps_root))
     components = parse_components(args.components)
     hemis = normalize_hemis(args.hemis)
+    gradient_root = Path(args.gradient_root).resolve()
+    present_root = Path(args.present_root).resolve()
+    display_specs: dict[tuple[str, str], dict[str, Any]] = {}
+    if not bool(args.no_cross_route_display_alignment):
+        display_specs = build_cross_route_display_specs(
+            gradient_root=gradient_root,
+            routes=list(args.routes),
+            smoothings=list(args.smoothings),
+            hemis=hemis,
+            selected_components=components,
+            reference_route=str(args.cross_route_display_reference),
+            trim_fraction=float(args.display_color_trim_fraction),
+        )
     for route in args.routes:
         for smoothing in args.smoothings:
             render_combo(
                 route=route,
                 smoothing=smoothing,
-                gradient_root=Path(args.gradient_root).resolve(),
-                present_root=Path(args.present_root).resolve(),
+                gradient_root=gradient_root,
+                present_root=present_root,
                 hippomaps_root=hippomaps_root,
                 den=str(args.den),
                 selected_components=components,
                 hemis=hemis,
+                display_spec=display_specs.get((route, smoothing)),
             )
     return 0
 
@@ -595,7 +837,7 @@ if __name__ == "__main__":
     raise SystemExit(
         run_stage(
             StageSpec(
-                step_id="06_05_render_hippomaps_gradient_products",
+                step_id="06_04_render_hippomaps_gradient_products",
                 purpose="Render HippoMaps folded/unfolded gradient figures, EV plots, and endpoint FC contrasts.",
                 stage_main=main,
                 upstream_defaults=("05_01_compute_hippomaps_gradients",),

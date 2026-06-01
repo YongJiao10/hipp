@@ -50,7 +50,7 @@ Kong2022 RouteA cortex-control group clustering example:
 /home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/05_02_run_group_atlas.py --shared-root outputs_core/inputs/hcp7t_hippocampus/kong2022/shared_inputs/routea_ctxreg_151 --surface-root outputs_core/inputs/hcp7t_hippocampus/kong2022/shared_inputs/surface_151 --reference-root outputs_core/inputs/hcp7t_hippocampus/kong2022/shared_inputs/routea_151 --out-root outputs_core/work/group_atlas/routea_ctxreg_full_k3_fisherz --methods intrinsic-spectral network-spectral gradient-spectral wta-top --atlases kong2022 --gradient-root outputs_core/work/hippomaps_gradients --route-tag routea_ctxreg --k-min 2 --k-max 10 --force-final-k 3
 /home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/05_02_run_group_atlas.py --shared-root outputs_core/inputs/hcp7t_hippocampus/kong2022/shared_inputs/routea_ctxdrop_151 --surface-root outputs_core/inputs/hcp7t_hippocampus/kong2022/shared_inputs/surface_151 --reference-root outputs_core/inputs/hcp7t_hippocampus/kong2022/shared_inputs/routea_151 --out-root outputs_core/work/group_atlas/routea_ctxdrop_full_k3_fisherz --methods gradient-spectral wta-top --atlases kong2022 --gradient-root outputs_core/work/hippomaps_gradients --route-tag routea_ctxdrop --k-min 2 --k-max 10 --force-final-k 3
 /home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/05_02_run_group_atlas.py --shared-root outputs_core/inputs/hcp7t_hippocampus/kong2022/shared_inputs/routeb_151 --surface-root outputs_core/inputs/hcp7t_hippocampus/kong2022/shared_inputs/surface_151 --out-root outputs_core/work/group_atlas/routeb_full_k3_fisherz --methods intrinsic-spectral network-spectral gradient-spectral wta-top --atlases kong2022 --gradient-root outputs_core/work/hippomaps_gradients --route-tag routeb --k-min 2 --k-max 10 --force-final-k 3
-/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/06_08_render_ctxdrop_neighbor_counts.py --shared-root outputs_core/inputs/hcp7t_hippocampus/kong2022/shared_inputs/routea_ctxdrop_151 --source-branch routea_ctxdrop
+/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/06_07_render_ctxdrop_neighbor_counts.py --shared-root outputs_core/inputs/hcp7t_hippocampus/kong2022/shared_inputs/routea_ctxdrop_151 --source-branch routea_ctxdrop
 ```
 
 ## 6. Presentation Products
@@ -58,18 +58,18 @@ Kong2022 RouteA cortex-control group clustering example:
 These products are derived from group atlas and gradient work and can be refreshed from layer 5 products.
 
 1. `06_01_build_group_overview.py`
-2. `06_02_build_wta_long_axis_profiles.py`
-3. `06_03_materialize_group_labels.py`
-4. `06_04_build_cluster_cortex_panels.py`
-5. `06_05_render_hippomaps_gradient_products.py`
-6. `06_06_render_group_gradient_heatmaps.py` (deprecated retired; exits with guidance to use `06_05` route outputs)
-7. `06_07_render_confidence_maps.py` for silhouette confidence map rendering on folded/unfolded surfaces
+2. `06_02_materialize_group_labels.py`
+3. `06_03_build_cluster_cortex_panels.py`
+4. `06_04_render_hippomaps_gradient_products.py` (defaults to RouteA-referenced display sign alignment and shared per-component color ranges across rendered gradient branches)
+5. `06_05_render_group_gradient_heatmaps.py` (deprecated retired; exits with guidance to use `06_04` route outputs)
+6. `06_06_render_confidence_maps.py` for silhouette confidence map rendering on folded/unfolded surfaces
+7. `06_07_render_ctxdrop_neighbor_counts.py` for shared ctxreg/ctxdrop local cortex-neighbor overlays
 
 ## 7. Presentation Index
 
 1. `07_01_build_group_matrix.py`
 
-`07_01` reads refreshed `06_01` method overviews and `06_02` WTA long-axis profile products from canonical group-atlas roots, including `routea_ctxreg`, `routea_ctxdrop`, and `routeb` when requested, then writes `outputs_core/present/overviews/group_overview_matrix_manifest.json` and the overview README. Use `--methods` to restrict exports to completed methods (for example `gradient-spectral wta-top`).
+`07_01` reads refreshed `06_01` method overviews from canonical group-atlas roots, including `routea_ctxreg`, `routea_ctxdrop`, and `routeb` when requested, then writes `outputs_core/present/overviews/group_overview_matrix_manifest.json` and the overview README. The WTA-top overview itself contains the fixed 20-bin transposed long-axis network profile; standalone WTA profile code and PNG/TSV products are removed from the maintained workflow. Use `--methods` to restrict exports to completed methods (for example `gradient-spectral wta-top`).
 
 ## Utilities
 
