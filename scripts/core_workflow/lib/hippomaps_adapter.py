@@ -10,6 +10,7 @@ import numpy as np
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_HIPPOMAPS_ROOT = REPO_ROOT / "external" / "hippomaps"
+DEFAULT_GRADIENT_RANDOM_STATE = 0
 
 
 def ensure_hippomaps_on_path(hippomaps_root: Path = DEFAULT_HIPPOMAPS_ROOT) -> Path:
@@ -80,6 +81,7 @@ def fit_gradientmaps_pearson(
     group_fc: np.ndarray,
     *,
     n_components: int,
+    random_state: int | None = DEFAULT_GRADIENT_RANDOM_STATE,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     matrix = np.asarray(group_fc, dtype=np.float32)
     if matrix.ndim != 2:
@@ -94,7 +96,7 @@ def fit_gradientmaps_pearson(
     from brainspace.gradient import GradientMaps
 
     matrix_z = feature_zscore_columns(matrix)
-    model = GradientMaps(n_components=n_comp, kernel="pearson")
+    model = GradientMaps(n_components=n_comp, kernel="pearson", random_state=random_state)
     fitted = model.fit(matrix_z)
     model_out = fitted if fitted is not None else model
     gradients = _extract_gradientmaps_array(model_out, "gradients_", "gradients", "gradients")

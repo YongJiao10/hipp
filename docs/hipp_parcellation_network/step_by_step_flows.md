@@ -38,10 +38,10 @@ This is the execution-ordered flow for active workflows. The first numeric field
 3. `05_03_run_spectral_fast_rerun.py` for optional rerun orchestration after the primary atlas step
 4. `05_04_compute_confidence_maps.py` for vertex-level silhouette confidence maps in G1/G2/G3 feature space
 
-Kong2022 HippoMaps gradient artifact example:
+Kong2022 HippoMaps gradient artifact example. The default `--gradient-random-state 0` fixes BrainSpace diffusion initialization and is recorded in each `05_01` manifest:
 
 ```bash
-/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/05_01_compute_hippomaps_gradients.py --routes routea routea_ctxreg routea_ctxdrop routeb --smoothings 2mm 4mm --hemis L R --n-components 5 --selected-components 1,2,3
+/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/05_01_compute_hippomaps_gradients.py --routes routea routea_ctxreg routea_ctxdrop routeb --smoothings 2mm 4mm --hemis L R --n-components 5 --gradient-random-state 0 --selected-components 1,2,3
 ```
 
 Kong2022 RouteA cortex-control group clustering example:

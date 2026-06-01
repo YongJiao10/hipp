@@ -91,6 +91,7 @@ from sklearn.metrics import adjusted_rand_score
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 from lib.hippomaps_adapter import (
+    DEFAULT_GRADIENT_RANDOM_STATE,
     DEFAULT_HIPPOMAPS_ROOT,
     ensure_hippomaps_on_path,
     fit_gradientmaps_pearson,
@@ -712,7 +713,8 @@ def build_group_gradient_features(
         "selected_components": selected_labels,
         "gradient_embedding_engine": "brainspace_gradientmaps_via_hippomaps_adapter",
         "brainspace_version": brainspace_version(),
-        "gradientmaps_call": "brainspace.gradient.GradientMaps(n_components=N, kernel='pearson').fit(column_zscored_group_mean_fisherz_fc)",
+        "gradientmaps_call": "brainspace.gradient.GradientMaps(n_components=N, kernel='pearson', random_state=gradient_random_state).fit(column_zscored_group_mean_fisherz_fc)",
+        "gradient_random_state": int(DEFAULT_GRADIENT_RANDOM_STATE),
         "feature_zscore_pre_gradientmaps": "column-wise z-score across vertices after group Fisher-z averaging",
         "kernel": GRADIENT_BRAINSPACE_KERNEL,
         "brainspace_sparsity": "default(0.9)",

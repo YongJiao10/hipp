@@ -140,7 +140,7 @@ def test_gradientmaps_called_with_official_pearson_kernel_and_full_lambda_ev() -
             raw,
             n_components=3,
         )
-    assert calls[0]["init"] == {"n_components": 3, "kernel": "pearson"}, calls
+    assert calls[0]["init"] == {"n_components": 3, "kernel": "pearson", "random_state": 0}, calls
     assert calls[1]["fit_shape"] == (4, 4), calls
     expected = adapter.feature_zscore_columns(raw)
     assert np.allclose(calls[1]["fit_matrix"], expected, atol=1e-6), calls[1]["fit_matrix"]
@@ -148,6 +148,29 @@ def test_gradientmaps_called_with_official_pearson_kernel_and_full_lambda_ev() -
     assert gradients.shape == (4, 3), gradients.shape
     assert np.allclose(lambdas, [5.0, 3.0, 2.0])
     assert np.allclose(ev, [0.5, 0.3, 0.2])
+
+
+def test_gradientmaps_accepts_explicit_random_state() -> None:
+    calls: list[dict[str, object]] = []
+
+    class FakeGradientMaps:
+        def __init__(self, **kwargs):
+            calls.append({"init": kwargs})
+            self.gradients_ = np.ones((4, 2), dtype=np.float32)
+            self.lambdas_ = np.asarray([3.0, 1.0], dtype=np.float32)
+
+        def fit(self, matrix):
+            return self
+
+    raw = np.arange(16, dtype=np.float32).reshape(4, 4)
+    with patch("brainspace.gradient.GradientMaps", FakeGradientMaps):
+        adapter.fit_gradientmaps_pearson(
+            raw,
+            n_components=2,
+            random_state=17,
+        )
+
+    assert calls[0]["init"] == {"n_components": 2, "kernel": "pearson", "random_state": 17}, calls
 
 
 def test_group_atlas_gradient_spectral_uses_hippomaps_adapter_and_records_provenance() -> None:
@@ -223,8 +246,9 @@ def test_group_atlas_gradient_spectral_uses_hippomaps_adapter_and_records_proven
     assert np.allclose(selected[:, 0], [1.0, 6.0, 11.0, 16.0, 21.0, 26.0], atol=1e-6)
     assert np.allclose(selected[:, 1], [3.0, 8.0, 13.0, 18.0, 23.0, 28.0], atol=1e-6)
     assert meta["gradientmaps_call"] == (
-        "brainspace.gradient.GradientMaps(n_components=N, kernel='pearson').fit(column_zscored_group_mean_fisherz_fc)"
+        "brainspace.gradient.GradientMaps(n_components=N, kernel='pearson', random_state=gradient_random_state).fit(column_zscored_group_mean_fisherz_fc)"
     )
+    assert meta["gradient_random_state"] == 0
     assert meta["feature_zscore_pre_gradientmaps"] == (
         "column-wise z-score across vertices after group Fisher-z averaging"
     )
@@ -608,6 +632,7 @@ def test_ensure_bilateral_gradient_annotations_repairs_late_raw_screenshot() -> 
 def main() -> int:
     test_group_mean_fc_applies_fisher_z_before_averaging()
     test_gradientmaps_called_with_official_pearson_kernel_and_full_lambda_ev()
+    test_gradientmaps_accepts_explicit_random_state()
     test_group_atlas_gradient_spectral_uses_hippomaps_adapter_and_records_provenance()
     test_group_atlas_public_methods_drop_partial_corr_branches()
     test_group_atlas_parser_defaults_to_fixed_k3()

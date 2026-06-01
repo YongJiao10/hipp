@@ -50,6 +50,7 @@ import numpy as np
 from lib.hippomaps_adapter import (
     DEFAULT_HIPPOMAPS_ROOT,
     ensure_hippomaps_on_path,
+    DEFAULT_GRADIENT_RANDOM_STATE,
     fit_gradientmaps_pearson,
     hippomaps_commit,
     hippomaps_import_path,
@@ -104,6 +105,7 @@ class GradientComboResult:
     run_dir: Path
     hippomaps_root: Path
     n_components: int
+    gradient_random_state: int | None
 
 
 def finite_pearson_corr(a: np.ndarray, b: np.ndarray) -> float:
@@ -278,6 +280,7 @@ def compute_combo(
     hippomaps_root: Path,
     n_components: int,
     selected_components: list[int],
+    gradient_random_state: int | None,
     force: bool,
 ) -> GradientComboResult:
     surface_path = (
@@ -310,6 +313,7 @@ def compute_combo(
     gradients_active, lambdas, ev_fractions = fit_gradientmaps_pearson(
         group_fc_active,
         n_components=int(n_components),
+        random_state=gradient_random_state,
     )
     gradients_full = reconstruct_full_surface(gradients_active, support_mask, vertex_count)
     group_fc_full = reconstruct_full_surface(group_fc_active, support_mask, vertex_count)
@@ -341,6 +345,7 @@ def compute_combo(
         run_dir=run_dir,
         hippomaps_root=hippomaps_root,
         n_components=int(n_components),
+        gradient_random_state=gradient_random_state,
     )
 
 
@@ -408,7 +413,8 @@ def write_aligned_combo_outputs(
         "gradient_shape_active": [int(x) for x in gradients_active.shape],
         "gradient_shape_full": [int(x) for x in gradients_full.shape],
         "gradientmaps_kernel": "pearson",
-        "gradientmaps_call": "brainspace.gradient.GradientMaps(n_components=N, kernel='pearson').fit(column_zscored_group_mean_fisherz_fc) with BrainSpace default sparsity=0.9",
+        "gradientmaps_call": "brainspace.gradient.GradientMaps(n_components=N, kernel='pearson', random_state=gradient_random_state).fit(column_zscored_group_mean_fisherz_fc) with BrainSpace default sparsity=0.9",
+        "gradient_random_state": None if result.gradient_random_state is None else int(result.gradient_random_state),
         "n_components_computed": int(result.n_components),
         "selected_components": selected_labels,
         "lambdas": [float(x) for x in lambdas],
@@ -480,6 +486,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--out-root", default=str(DEFAULT_OUT_ROOT))
     parser.add_argument("--hippomaps-root", default=str(DEFAULT_HIPPOMAPS_ROOT))
     parser.add_argument("--n-components", type=int, default=5)
+    parser.add_argument(
+        "--gradient-random-state",
+        type=int,
+        default=DEFAULT_GRADIENT_RANDOM_STATE,
+        help="Random seed passed to BrainSpace GradientMaps for reproducible diffusion initialization.",
+    )
     parser.add_argument("--selected-components", default="1,2,3")
     parser.add_argument("--max-subjects", type=int, default=None, help="Optional smoke-test cap after loading the manifest.")
     parser.add_argument("--force", action="store_true")
@@ -517,6 +529,7 @@ def main() -> int:
                         hippomaps_root=hippomaps_root,
                         n_components=int(args.n_components),
                         selected_components=selected_components,
+                        gradient_random_state=int(args.gradient_random_state),
                         force=bool(args.force),
                     )
                 )

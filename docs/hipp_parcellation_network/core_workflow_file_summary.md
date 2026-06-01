@@ -27,7 +27,7 @@
 | `scripts/core_workflow/04_01_materialize_kong2022_roi_fc.py` | 平滑后的 hippocampal timeseries、cortex reference | 物化 Kong2022 的 vertex-to-ROI FC | ROI FC 缓存 |
 | `scripts/core_workflow/04_02_materialize_intrinsic_fc.py` | 平滑后的 hippocampal timeseries | 物化 intrinsic FC | intrinsic FC 缓存 |
 | `scripts/core_workflow/04_03_materialize_kong2019_fc.py` | Kong2019 共享输入、被试清单 | 物化 Kong2019 FC bank | Kong2019 / Kong2019_8net FC 缓存 |
-| `scripts/core_workflow/05_01_compute_hippomaps_gradients.py` | Kong2022 FC 缓存、support mask、group average surface | 计算 HippoMaps 风格连续梯度并统一 component/sign alignment | aligned G1-G5 梯度、aligned lambda/EV fraction、group mean Fisher-z FC、alignment manifest |
+| `scripts/core_workflow/05_01_compute_hippomaps_gradients.py` | Kong2022 FC 缓存、support mask、group average surface | 计算 HippoMaps 风格连续梯度，默认固定 BrainSpace `random_state=0`，并统一 component/sign alignment | aligned G1-G5 梯度、aligned lambda/EV fraction、group mean Fisher-z FC、alignment manifest |
 | `scripts/core_workflow/05_02_run_group_atlas.py` | FC 缓存、group template、分支控制、可选 gradient 根目录 | 构建 merged-canonical group atlas，并做 K=2..10 诊断，最终固定 K=3 | group labels、K 汇总、assignment 状态、functional atlas labels |
 | `scripts/core_workflow/05_03_run_spectral_fast_rerun.py` | 现有分支根目录、manifest、template | 在主 group atlas 之后做可选重跑编排 | 刷新的 spectral 输出和可继续用于展示的 group root |
 | `scripts/core_workflow/06_01_build_group_overview.py` | `05_02` 的 group-atlas 运行产物 | 生成每种方法的 overview 图 | method overview PNG 和摘要 |
