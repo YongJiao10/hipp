@@ -6,12 +6,8 @@ This index tracks assets moved out of the active workflow surface during core-wo
 
 Moved to archive to reduce active-surface ambiguity:
 
-- `docs/hipp_parcellation_network/kong2022_route_b_flow.md`
-  - reason: superseded by canonical `core_workflow_*` docs and numbered entrypoints
-- `docs/hipp_parcellation_network/t1only_kong2022_route_b_runbook.md`
-  - reason: superseded by canonical step registry and branch-neutral workflow overview
-- `_archive/deprecated_2026-05-11/scripts/run_hippunfold_local_t2w_t1reg_isolated_cache.sh`
-  - reason: retired T2-specific launcher, no longer part of active public workflow
+- Retired branch-specific RouteB runbooks and old group-atlas planning notes are superseded by the canonical `core_workflow_*` docs and numbered entrypoints.
+- Retired T2-specific launchers are superseded by the active T1w-only core workflow surface.
 
 Archive destinations:
 

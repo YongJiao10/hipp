@@ -19,8 +19,8 @@ Primary docs:
 
 - `docs/hipp_parcellation_network/core_workflow_overview.md`
 - `docs/hipp_parcellation_network/core_workflow_step_registry.md`
+- `docs/hipp_parcellation_network/core_workflow_artifact_lineage.md`
 - `docs/hipp_parcellation_network/kong2022_route_a_smoke.md`
-- `docs/hipp_parcellation_network/merged_canonical_group_atlas_plan.md`
 
 TODO:
 

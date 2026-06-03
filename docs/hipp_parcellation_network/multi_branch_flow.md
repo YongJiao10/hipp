@@ -6,11 +6,12 @@ This document defines branch semantics for the active core workflow surface.
 
 - `kong2019`
 - `kong2022_routea`
+- `kong2022_routea_17net`
 - `kong2022_routea_ctxreg`
 - `kong2022_routea_ctxdrop`
 - `kong2022_routeb`
 
-`kong2019` and `kong2022` are treated as parallel mainlines. Within `kong2022`, RouteA, RouteA cortex-regression control, RouteA cortex-drop control, and RouteB are parallel mainlines. The cortex-control branches are isolated from uncontrolled RouteA outputs.
+`kong2019` and `kong2022` are treated as parallel mainlines. Within `kong2022`, RouteA, the RouteA 17-net taxonomy variant, RouteA cortex-regression control, RouteA cortex-drop control, and RouteB are parallel mainlines. The cortex-control branches are isolated from uncontrolled RouteA outputs.
 
 ## Pipeline Order
 
@@ -30,9 +31,14 @@ Use numbered public entrypoints in `scripts/core_workflow/`:
   - shared input root uses Kong2019 FC banks (`04_03_materialize_kong2019_fc`)
   - uses `05_02_run_group_atlas` for group outputs
 - Kong2022 RouteA branch:
-  - may include RouteA reference build (`03_02_build_kong2022_routea_reference`)
+  - requires generated RouteA ArealMSHBM individualized cortex labels before `03_02`; see `core_workflow_artifact_lineage.md` for the external-backend artifact contract and evidence requirements
+  - runs RouteA reference build (`03_02_build_kong2022_routea_reference`) from generated RouteA label files
   - uses `04_01`, `04_02`, `05_01`, then `05_02`; `05_03` is optional rerun orchestration
   - runs `05_01` HippoMaps gradients before `gradient-spectral` in `05_02`
+- Kong2022 RouteA 17-net taxonomy branch:
+  - reuses `shared_inputs/routea_151`, `surface_151`, RouteA 400-ROI FC caches, and RouteA HippoMaps gradients; it does not create a separate input tree or gradient tree
+  - `03_02_build_kong2022_routea_reference.py` also writes compact `cortex_family17_networks.tsv` and `cortex_family17_network_timeseries.npy` summaries under each existing RouteA subject reference
+  - runs `05_02_run_group_atlas.py` with `--route-tag routea_17net --network-taxonomy family17`, writing only taxonomy-dependent group outputs under `outputs_core/work/group_atlas/routea_17net_full_k3_fisherz`
 - Kong2022 RouteA cortex-control branch:
   - starts from RouteA references and `surface_151` hippocampal time series
   - runs `04_00_materialize_cortex_regressed_surface_timeseries.py` to write controlled time series and diagnostics under `shared_inputs/routea_ctxreg_151` after run-wise local cortex regression
@@ -40,7 +46,7 @@ Use numbered public entrypoints in `scripts/core_workflow/`:
   - writes gradients under `outputs_core/work/hippomaps_gradients/routea_ctxreg` and group atlas outputs under `outputs_core/work/group_atlas/routea_ctxreg_full_k3_fisherz`
   - controls local cortical smear before FC materialization and does not redefine or overwrite uncontrolled RouteA outputs
 - Kong2022 RouteA cortex-drop branch:
-  - starts from RouteA references, `surface_151` hippocampal time series, subject cortex dtseries, RouteA individualized Kong2022 labels, and the same 20 mm local cortex-neighborhood definition used by `routea_ctxreg`
+  - starts from RouteA references, `surface_151` hippocampal time series, subject cortex dtseries, generated RouteA individualized Kong2022 labels, and the same 20 mm local cortex-neighborhood definition used by `routea_ctxreg`
   - runs `04_01_materialize_kong2022_roi_fc.py --ctxdrop` to write isolated vertex-to-ROI FC caches under `shared_inputs/routea_ctxdrop_151`; hippocampal time series are not rewritten
   - for each hippocampal vertex and ROI, excludes valid cortex vertices within the 20 mm local neighborhood before computing that ROI mean time series and Pearson FC
   - maintained downstream outputs are `gradient-spectral` and `wta-top` only, with gradients under `outputs_core/work/hippomaps_gradients/routea_ctxdrop`, group atlas outputs under `outputs_core/work/group_atlas/routea_ctxdrop_full_k3_fisherz`, and shared local-neighbor hippocampal surface overlays rendered by `06_07_render_ctxdrop_neighbor_counts.py` under `outputs_core/present/local_cortex_neighbors/`
@@ -62,7 +68,7 @@ Use numbered public entrypoints in `scripts/core_workflow/`:
 
 Canonical presentation outputs live under `outputs_core/present/`: maintained method overview PNGs in `overviews/`, continuous gradient products in `gradients/`, and cortex panels in `cortex_panels/`. The WTA-top overview uses a compact first column, an embedded fixed 20-bin transposed long-axis network profile in the second column, and the hippocampal surface render in the third column; standalone WTA long-axis profile code and PNG/TSV products are removed from the maintained workflow. Smoke tests stay isolated under `outputs_core/smoke_runs/<run_id>/`.
 
-Full-cohort group-atlas intermediates owned by the active core workflow live under `outputs_core/work/group_atlas/`. The maintained RouteA full-FC fixed-K=3 root is `outputs_core/work/group_atlas/routea_full_k3_fisherz/`; the RouteB fixed-K=3 root is `outputs_core/work/group_atlas/routeb_full_k3_fisherz/`; the RouteA cortex-regression root is `outputs_core/work/group_atlas/routea_ctxreg_full_k3_fisherz/`, and the RouteA cortex-drop root is `outputs_core/work/group_atlas/routea_ctxdrop_full_k3_fisherz/`. Kong2022 cluster-level functional atlas labels are preserved as two official assignment variants: `fisherz` (`top1_fisher_z`) and `count` (`topn_count_positive_roi`).
+Full-cohort group-atlas intermediates owned by the active core workflow live under `outputs_core/work/group_atlas/`. The maintained RouteA full-FC fixed-K=3 root is `outputs_core/work/group_atlas/routea_full_k3_fisherz/`; the RouteA 17-net taxonomy root is `outputs_core/work/group_atlas/routea_17net_full_k3_fisherz/`; the RouteB fixed-K=3 root is `outputs_core/work/group_atlas/routeb_full_k3_fisherz/`; the RouteA cortex-regression root is `outputs_core/work/group_atlas/routea_ctxreg_full_k3_fisherz/`, and the RouteA cortex-drop root is `outputs_core/work/group_atlas/routea_ctxdrop_full_k3_fisherz/`. Kong2022 cluster-level functional atlas labels are preserved as two official assignment variants: `fisherz` (`top1_fisher_z`) and `count` (`topn_count_positive_roi`).
 
 ## Default Cohort Reminder
 
@@ -72,5 +78,6 @@ Default analysis cohort remains the QC-passed 151-subject set. See `fmri_qc.md` 
 
 - Workflow overview: `core_workflow_overview.md`
 - Step/IO matrix: `core_workflow_step_registry.md`
+- Artifact lineage: `core_workflow_artifact_lineage.md`
 - Ordered run flow: `step_by_step_flows.md`
 - Machine registry: `scripts/core_workflow/step_registry.json`

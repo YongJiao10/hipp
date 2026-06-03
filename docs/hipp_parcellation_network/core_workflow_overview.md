@@ -13,9 +13,10 @@ Branch mainlines:
 
 - `kong2019`
 - `kong2022_routea`
+- `kong2022_routea_17net`
 - `kong2022_routeb`
 
-Within `kong2022`, RouteA and RouteB are treated as equal mainlines.
+Within `kong2022`, RouteA and RouteB are treated as equal mainlines; `kong2022_routea_17net` is a shallow RouteA taxonomy variant that reuses RouteA inputs and gradients.
 
 ## Pipeline Stages
 
@@ -73,6 +74,10 @@ Directory names intentionally do not encode `t1only`, `present_fixedk`, or a
 - canonical public interface (`NN_MM_*`)
 - active implementation home (`scripts/core_workflow/lib/*`)
 
+RouteA reference construction has an explicit upstream label-generation dependency. The artifact-level contract for generated RouteA ArealMSHBM labels, local numbered-step products, presentation products, and required evidence is maintained in `docs/hipp_parcellation_network/core_workflow_artifact_lineage.md`.
+
+The `kong2022_routea_17net` branch uses the original Kong2022 17 network families for cluster annotation and network profiles. It reuses `shared_inputs/routea_151`, `surface_151`, 400-ROI FC caches, and RouteA gradients, then writes only taxonomy-dependent group outputs under `outputs_core/work/group_atlas/routea_17net_full_k3_fisherz/`. Run `05_02_run_group_atlas.py` with `--route-tag routea_17net --network-taxonomy family17`; do not run `05_01` for a separate `routea_17net` gradient tree.
+
 The `kong2022_routea_ctxreg` branch is an isolated RouteA derivative: `04_00_materialize_cortex_regressed_surface_timeseries.py` writes `shared_inputs/routea_ctxreg_151` with run-wise local cortex residualization before `04_01` and `04_02` materialize FC. It does not overwrite uncontrolled RouteA roots.
 
 The `kong2022_routea_ctxdrop` branch is the matched RouteA local-cortex exclusion control. `04_01_materialize_kong2022_roi_fc.py --ctxdrop` keeps hippocampal time series unchanged, excludes valid cortex vertices within 20 mm separately for each hippocampal vertex before ROI averaging, and writes isolated FC caches plus smoothing-independent local cortex-neighbor diagnostics under `shared_inputs/routea_ctxdrop_151/sub-*/surface/local_cortex_neighbors/hemi_*/`. Its maintained downstream scope is `gradient-spectral` and `wta-top`, with group outputs in `outputs_core/work/group_atlas/routea_ctxdrop_full_k3_fisherz/`. The shared local-cortex-neighbor count surface overlay for ctxreg/ctxdrop is rendered by `06_07_render_ctxdrop_neighbor_counts.py` under `outputs_core/present/local_cortex_neighbors/`.
@@ -98,6 +103,7 @@ Use these manifests to reconstruct exact lineage for each generated artifact set
 ## References
 
 - Step matrix: `docs/hipp_parcellation_network/core_workflow_step_registry.md`
+- Artifact lineage: `docs/hipp_parcellation_network/core_workflow_artifact_lineage.md`
 - Machine-readable registry: `scripts/core_workflow/step_registry.json`
 - Branch semantics: `docs/hipp_parcellation_network/multi_branch_flow.md`
 - Ordered procedure: `docs/hipp_parcellation_network/step_by_step_flows.md`
