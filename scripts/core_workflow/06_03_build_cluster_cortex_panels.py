@@ -205,7 +205,7 @@ def parse_args() -> argparse.Namespace:
         help="Root for all outputs (cluster figures, manifests, quicklook index). Defaults to <present-dir>/runtime.",
     )
     parser.add_argument("--atlas", default="kong2022", choices=["kong2022"])
-    parser.add_argument("--route-tag", default="routea", choices=["routea", "routea_ctxreg", "routea_ctxdrop", "routeb"])
+    parser.add_argument("--route-tag", default="routea", choices=["routea", "routea_17net", "routea_ctxreg", "routea_ctxdrop", "routeb"])
     parser.add_argument("--methods", nargs="+", default=METHODS_DEFAULT, choices=METHOD_CHOICES)
     parser.add_argument("--smoothings", nargs="+", default=SMOOTHINGS)
     parser.add_argument("--hemis", nargs="+", default=HEMIS)

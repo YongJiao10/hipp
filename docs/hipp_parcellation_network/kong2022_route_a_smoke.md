@@ -9,18 +9,31 @@ This runbook covers Route A minimal loop using **Kong2022_ArealMSHBM**:
 
 This runbook does not include downstream `reference`, `fc`, or `group-atlas`.
 
+For the maintained core workflow, the Argon SGE scripts under
+`scripts/core_workflow/sge_argon/` are tracked backend assets for the RouteA
+ArealMSHBM label-generation algorithm. They are not local numbered entrypoints
+and their contents should not be rewritten for local execution. Their handoff
+contract to `03_02_build_kong2022_routea_reference.py` is the generated label
+pair:
+
+- `sub-{sid}/kong2022_areal_mshbm*/project_dir/route_a_outputs/lh_labels.txt`
+- `sub-{sid}/kong2022_areal_mshbm*/project_dir/route_a_outputs/rh_labels.txt`
+
+Those files are required upstream artifacts for RouteA reference construction;
+they are not assumed to exist naturally.
+
 For the MATLAB-only smoke used on SGE, submit one job each time instead of
 running MATLAB on the login node:
 
 ```bash
-sh -c 'qsub tmp/matlab_kong2022_mshbm_subject_sge.sh'
+sh -c 'qsub scripts/core_workflow/sge_argon/matlab_kong2022_mshbm_subject_sge.sh'
 ```
 
 This script defaults to subject index `1` (`100610`). To run `102311`, submit a
 second single job:
 
 ```bash
-qsub -v SUBJECT_INDEX=2 tmp/matlab_kong2022_mshbm_subject_sge.sh
+qsub -v SUBJECT_INDEX=2 scripts/core_workflow/sge_argon/matlab_kong2022_mshbm_subject_sge.sh
 ```
 
 The SGE launcher is configured with `-q UI-HM` and `mem_free=64G`.
@@ -89,17 +102,21 @@ Common blockers:
 
 Route A execution is valid only when these dependencies pass preflight.
 
-## Current SGE Blocker
-As of 2026-04-28, the dependency and profile-generation stages pass, but both
-smoke subjects are killed by SGE with exit status `137` after
-`It is EM iteration.. 2..` / `Estep..` in
+## Historical SGE Smoke Blocker
+
+At the 2026-04-28 smoke checkpoint, the dependency and profile-generation
+stages passed, but both smoke subjects were killed by SGE with exit status
+`137` after `It is EM iteration.. 2..` / `Estep..` in
 `CBIG_ArealMSHBM_gMSHBM_generate_individual_parcellation`.
 
-Observed mitigation attempts that did not complete the MATLAB label stage:
+Observed mitigation attempts that did not complete that smoke MATLAB label
+stage:
 
 - `#$ -tc 1` to serialize subjects
 - `#$ -l mem_free=32G`
 - replacing the local connected-components helper with MATLAB `graph/conncomp`
 
-No `project_dir/route_a_outputs/lh_labels.txt` or `rh_labels.txt` files have
-been generated yet.
+This historical smoke status does not change the maintained core-workflow
+handoff contract: full RouteA reference construction requires generated
+`route_a_outputs/lh_labels.txt` and `route_a_outputs/rh_labels.txt` files for
+each subject before `03_02_build_kong2022_routea_reference.py` is run.

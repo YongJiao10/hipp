@@ -155,7 +155,8 @@ SUBJECT_FC_MODE_CHOICES = ["full", "top-percent"]
 DEFAULT_GRADIENT_COMPONENTS = (1, 2, 3)
 GRADIENT_N_COMPONENTS_COMPUTED = 5
 GRADIENT_BRAINSPACE_KERNEL = "pearson"
-ROUTE_TAG_CHOICES = ("routea", "routea_ctxreg", "routea_ctxdrop", "routeb")
+ROUTE_TAG_CHOICES = ("routea", "routea_17net", "routea_ctxreg", "routea_ctxdrop", "routeb")
+NETWORK_TAXONOMIES = ("canonical8", "family17")
 MAX_K_EVAL_JOBS = 10
 RESUME_SIGNATURE_VERSION = 1
 
@@ -187,6 +188,8 @@ class GroupAtlasConfig:
     reference_root: Path
     gradient_root: Path
     route_tag: str
+    gradient_route_tag: str
+    network_taxonomy: str
     hippunfold_batch_root: Path
     subjects_manifest_path: Path
     subjects: list[str]
@@ -377,11 +380,36 @@ def parse_network_names(tsv: Path) -> list[str]:
         for row in reader:
             if "canonical_network" in row:
                 out.append(str(row["canonical_network"]))
+            elif "family17_network" in row:
+                out.append(str(row["family17_network"]))
             else:
                 out.append(str(next(iter(row.values()))))
     if not out:
-        raise RuntimeError(f"No canonical network names found: {tsv}")
+        raise RuntimeError(f"No network names found: {tsv}")
     return out
+
+
+def resolve_kong2022_network_registry_column(network_taxonomy: str) -> str:
+    taxonomy = str(network_taxonomy)
+    if taxonomy == "canonical8":
+        return "canonical8"
+    if taxonomy == "family17":
+        return "family17"
+    raise ValueError(f"Unsupported Kong2022 network taxonomy: {network_taxonomy!r}")
+
+
+def network_reference_filenames(network_taxonomy: str) -> tuple[str, str]:
+    taxonomy = str(network_taxonomy)
+    if taxonomy == "canonical8":
+        return "cortex_canonical_networks.tsv", "cortex_canonical_network_timeseries.npy"
+    if taxonomy == "family17":
+        return "cortex_family17_networks.tsv", "cortex_family17_network_timeseries.npy"
+    raise ValueError(f"Unsupported Kong2022 network taxonomy: {network_taxonomy!r}")
+
+
+def gradient_route_for_route_tag(route_tag: str) -> str:
+    route = str(route_tag)
+    return "routea" if route == "routea_17net" else route
 
 
 def is_network_method(method: str) -> bool:
@@ -857,10 +885,14 @@ def one_sample_one_sided_vector(values: np.ndarray) -> tuple[np.ndarray, np.ndar
     return mean, t_stat, p_pos, p_neg, n.astype(np.float64)
 
 
-def split_kong2022_columns_by_network(roi_registry: list[dict[str, object]]) -> tuple[dict[str, list[int]], list[str]]:
+def split_kong2022_columns_by_network(
+    roi_registry: list[dict[str, object]],
+    network_column: str = "canonical8",
+) -> tuple[dict[str, list[int]], list[str]]:
+    column = resolve_kong2022_network_registry_column(network_column)
     cols_by_network: dict[str, list[int]] = {}
     for col, row in enumerate(roi_registry):
-        net = str(row["canonical8"])
+        net = str(row[column])
         cols_by_network.setdefault(net, []).append(int(col))
     network_names = sorted(cols_by_network.keys())
     return cols_by_network, network_names
@@ -896,20 +928,26 @@ def top_two_from_scores(score_by_network: dict[str, float]) -> tuple[str, float,
     return str(top1[1]), float(top1[2]), str(top2[1]), float(top2[2])
 
 
-def verify_canonical_network_order_consistency(reference_root: Path, subjects: list[str], atlas: str) -> list[str]:
+def verify_canonical_network_order_consistency(
+    reference_root: Path,
+    subjects: list[str],
+    atlas: str,
+    network_taxonomy: str = "canonical8",
+) -> list[str]:
+    order_tsv, _timeseries_npy = network_reference_filenames(network_taxonomy)
     ref_subject = subjects[0]
-    ref_path = reference_path(reference_root, ref_subject, atlas, "cortex_canonical_networks.tsv")
+    ref_path = reference_path(reference_root, ref_subject, atlas, order_tsv)
     ref_names = parse_network_names(ref_path)
     mismatched: list[str] = []
     for subject in subjects[1:]:
-        path = reference_path(reference_root, subject, atlas, "cortex_canonical_networks.tsv")
+        path = reference_path(reference_root, subject, atlas, order_tsv)
         names = parse_network_names(path)
         if names != ref_names:
             mismatched.append(f"sub-{subject}")
     if mismatched:
         raise RuntimeError(
-            "Canonical network ordering mismatch across subjects "
-            f"for atlas={atlas}; template=sub-{ref_subject}; mismatched={mismatched[:10]}"
+            "Network ordering mismatch across subjects "
+            f"for atlas={atlas} taxonomy={network_taxonomy}; template=sub-{ref_subject}; mismatched={mismatched[:10]}"
         )
     return ref_names
 
@@ -1878,12 +1916,14 @@ def cluster_network_profile(
     hemi: str,
     valid_masks_by_subject: dict[str, np.ndarray],
     profile_fc_mode: str,
+    network_taxonomy: str = "canonical8",
 ) -> np.ndarray:
     k_final = int(np.max(group_labels_final))
     profiles: list[np.ndarray] = []
     for subject in subjects:
         ts_path = surface_root / f"sub-{subject}" / "surface" / smoothing / f"sub-{subject}_hemi-{hemi}_timeseries.npy"
-        net_path = reference_path(reference_root, subject, atlas, "cortex_canonical_network_timeseries.npy")
+        _order_tsv, network_timeseries_npy = network_reference_filenames(network_taxonomy)
+        net_path = reference_path(reference_root, subject, atlas, network_timeseries_npy)
         if not (ts_path.exists() and net_path.exists()):
             continue
         ts = np.load(ts_path).astype(np.float32)
@@ -2226,6 +2266,7 @@ def assignment_status_from_cluster_roi_topn(
     roi_registry: list[dict[str, object]],
     q_thresh: float,
     top_n_cap: int,
+    network_column: str = "canonical8",
 ) -> tuple[list[dict[str, object]], list[str | None], np.ndarray]:
     k_final = int(profile_3d.shape[1])
     mean_profile = np.nanmean(profile_3d, axis=0).astype(np.float32)
@@ -2272,7 +2313,7 @@ def assignment_status_from_cluster_roi_topn(
             score_sum_by_network: dict[str, float] = {}
             for col in top_idx:
                 reg = roi_registry[int(col)]
-                net = str(reg["canonical8"])
+                net = str(reg[resolve_kong2022_network_registry_column(network_column)])
                 count_by_network[net] = int(count_by_network.get(net, 0) + 1)
                 score_sum_by_network[net] = float(score_sum_by_network.get(net, 0.0) + float(mean_z[int(col)]))
             top1_network, top1_count, top2_network, top2_count = top_two_from_counts(count_by_network, score_sum_by_network)
@@ -2317,8 +2358,9 @@ def network_mean_profile_from_kong2022_roi_profile(
     roi_profile: np.ndarray,
     roi_registry: list[dict[str, object]],
     network_names: list[str],
+    network_column: str = "canonical8",
 ) -> np.ndarray:
-    cols_by_network, _network_names_from_registry = split_kong2022_columns_by_network(roi_registry)
+    cols_by_network, _network_names_from_registry = split_kong2022_columns_by_network(roi_registry, network_column=network_column)
     out = np.full((int(roi_profile.shape[0]), int(len(network_names))), np.nan, dtype=np.float32)
     for net_idx, net_name in enumerate(network_names):
         cols = cols_by_network.get(str(net_name), [])
@@ -2332,8 +2374,9 @@ def assignment_status_from_kong2022_roi_profile(
     roi_profile: np.ndarray,
     roi_registry: list[dict[str, object]],
     network_names: list[str],
+    network_column: str = "canonical8",
 ) -> tuple[np.ndarray, list[dict[str, object]], list[str | None]]:
-    profile = network_mean_profile_from_kong2022_roi_profile(roi_profile, roi_registry, network_names)
+    profile = network_mean_profile_from_kong2022_roi_profile(roi_profile, roi_registry, network_names, network_column=network_column)
     status_rows, dominant = assignment_status_from_profile(profile, network_names)
     return profile, status_rows, dominant
 
@@ -2346,17 +2389,20 @@ def cluster_assignment_variants_from_kong2022_roi_profile(
     network_names: list[str],
     q_thresh: float,
     top_n_cap: int,
+    network_column: str = "canonical8",
 ) -> dict[str, dict[str, object]]:
     profile, fisherz_rows, fisherz_dominant = assignment_status_from_kong2022_roi_profile(
         roi_profile,
         roi_registry,
         network_names,
+        network_column=network_column,
     )
     count_rows, count_dominant, _profile400_mean = assignment_status_from_cluster_roi_topn(
         profile_3d=roi_profile_3d,
         roi_registry=roi_registry,
         q_thresh=float(q_thresh),
         top_n_cap=int(top_n_cap),
+        network_column=network_column,
     )
     return {
         "fisherz": {
@@ -2392,6 +2438,7 @@ def annotate_kong2022_clusters_topn(
     network_names: list[str],
     q_thresh: float,
     top_n_cap: int,
+    network_column: str = "canonical8",
 ) -> tuple[
     np.ndarray,
     list[dict[str, object]],
@@ -2420,6 +2467,7 @@ def annotate_kong2022_clusters_topn(
         network_names=network_names,
         q_thresh=float(q_thresh),
         top_n_cap=int(top_n_cap),
+        network_column=network_column,
     )
     fisherz_variant = assignment_variants["fisherz"]
     count_variant = assignment_variants["count"]
@@ -2451,6 +2499,7 @@ def build_global_top_connections(
     roi_registry: list[dict[str, object]],
     q_thresh: float,
     top_n_cap: int,
+    network_column: str = "canonical8",
 ) -> dict[str, object]:
     pos_rows: list[dict[str, object]] = []
     neg_rows: list[dict[str, object]] = []
@@ -2468,6 +2517,7 @@ def build_global_top_connections(
                     "vertex_index": int(global_vidx),
                     "roi_idx": int(reg["roi_id"]),
                     "roi_name": str(reg["roi_name"]),
+                    "family17": str(reg["family17"]),
                     "canonical8": str(reg["canonical8"]),
                     "sign": "positive",
                     "fisher_z": float(mean_z[int(col)]),
@@ -2481,6 +2531,7 @@ def build_global_top_connections(
                     "vertex_index": int(global_vidx),
                     "roi_idx": int(reg["roi_id"]),
                     "roi_name": str(reg["roi_name"]),
+                    "family17": str(reg["family17"]),
                     "canonical8": str(reg["canonical8"]),
                     "sign": "negative",
                     "fisher_z": float(mean_z[int(col)]),
@@ -2494,6 +2545,7 @@ def build_global_top_connections(
     return {
         "top_n_cap": int(top_n_cap),
         "q_threshold": float(q_thresh),
+        "network_column": resolve_kong2022_network_registry_column(network_column),
         "n_candidates_positive": int(len(pos_rows)),
         "n_candidates_negative": int(len(neg_rows)),
         "top_positive": pos_take,
@@ -2508,6 +2560,7 @@ def assignment_status_for_vertices_top(
     roi_registry: list[dict[str, object]],
     q_thresh: float,
     top_n_cap: int,
+    network_column: str = "canonical8",
 ) -> list[dict[str, object]]:
     rows: list[dict[str, object]] = []
     for local_vidx, global_vidx in enumerate(support_indices):
@@ -2543,7 +2596,7 @@ def assignment_status_for_vertices_top(
         count_by_network: dict[str, int] = {}
         score_sum_by_network: dict[str, float] = {}
         for col in top_idx:
-            net = str(roi_registry[int(col)]["canonical8"])
+            net = str(roi_registry[int(col)][resolve_kong2022_network_registry_column(network_column)])
             count_by_network[net] = int(count_by_network.get(net, 0) + 1)
             score_sum_by_network[net] = float(score_sum_by_network.get(net, 0.0) + float(mean_z[int(col)]))
         top1_network, top1_count, top2_network, top2_count = top_two_from_counts(count_by_network, score_sum_by_network)
@@ -2697,6 +2750,7 @@ def prepare_combo_inputs(
     subjects: list[str],
     subject_fc_mode: SubjectFCMode,
     k_selection_mode: str,
+    network_taxonomy: str = "canonical8",
 ) -> PreparedComboInputs:
     valid_masks = {s: subject_valid_mask(surface_root, shared_root, s, smoothing, hemi) for s in subjects}
     n_vertices = int(next(iter(valid_masks.values())).size)
@@ -2789,11 +2843,11 @@ def prepare_combo_inputs(
                     p = resolve_intrinsic_feature_path(shared_root, s, smoothing, hemi, rid)
                 runwise_feature_paths.append(p)
     reference_network_order_paths = [
-        reference_path(reference_root, s, atlas, "cortex_canonical_networks.tsv")
+        reference_path(reference_root, s, atlas, network_reference_filenames(network_taxonomy)[0])
         for s in subjects
     ]
     reference_network_ts_paths = [
-        reference_path(reference_root, s, atlas, "cortex_canonical_network_timeseries.npy")
+        reference_path(reference_root, s, atlas, network_reference_filenames(network_taxonomy)[1])
         for s in subjects
     ]
     surface_timeseries_paths = [
@@ -2845,6 +2899,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--gradient-root", default=str(DEFAULT_GRADIENT_ROOT))
     parser.add_argument("--hippomaps-root", default=str(DEFAULT_HIPPOMAPS_ROOT))
     parser.add_argument("--route-tag", choices=["auto", *ROUTE_TAG_CHOICES], default="auto")
+    parser.add_argument("--network-taxonomy", choices=NETWORK_TAXONOMIES, default="canonical8")
     parser.add_argument("--subjects-manifest", default=str(DEFAULT_SUBJECTS))
     parser.add_argument("--hippunfold-batch-root", default=str(DEFAULT_HIPPUNFOLD_BATCH_ROOT))
     parser.add_argument("--kong2022-dlabel", default=None)
@@ -2925,12 +2980,14 @@ def infer_route_tag(shared_root: Path, explicit: str = "auto") -> str:
         return "routea_ctxreg"
     if "routea_ctxdrop" in name or "routea_ctxdrop_151" in parts:
         return "routea_ctxdrop"
+    if "routea_17net" in name or "routea_17net_151" in parts:
+        return "routea_17net"
     if "routea" in name or "routea_151" in parts:
         return "routea"
     if "routeb" in name or "routeb_151" in parts:
         return "routeb"
     raise ValueError(
-        f"Could not infer --route-tag from --shared-root={shared_root}; pass --route-tag routea, routea_ctxreg, routea_ctxdrop, or routeb."
+        f"Could not infer --route-tag from --shared-root={shared_root}; pass an explicit supported --route-tag."
     )
 
 
@@ -2954,6 +3011,8 @@ def main() -> int:
     reference_root = Path(args.reference_root).resolve() if args.reference_root else shared_root
     gradient_root = Path(args.gradient_root).resolve()
     route_tag = infer_route_tag(shared_root, str(args.route_tag))
+    gradient_route_tag = gradient_route_for_route_tag(route_tag)
+    network_taxonomy = str(args.network_taxonomy)
     hippunfold_batch_root = Path(args.hippunfold_batch_root).resolve()
     out_root.mkdir(parents=True, exist_ok=True)
 
@@ -2981,6 +3040,8 @@ def main() -> int:
         reference_root=reference_root,
         gradient_root=gradient_root,
         route_tag=route_tag,
+        gradient_route_tag=gradient_route_tag,
+        network_taxonomy=network_taxonomy,
         hippunfold_batch_root=hippunfold_batch_root,
         subjects_manifest_path=subjects_manifest_path,
         subjects=subjects,
@@ -3048,7 +3109,9 @@ def main() -> int:
 
     for atlas in config.args.atlases:
         print(f"[check] canonical-network ordering atlas={atlas}", flush=True)
-        canonical_network_order_by_atlas[atlas] = verify_canonical_network_order_consistency(reference_root, subjects, atlas)
+        canonical_network_order_by_atlas[atlas] = verify_canonical_network_order_consistency(
+            reference_root, subjects, atlas, network_taxonomy=network_taxonomy
+        )
 
     for method in config.args.methods:
         for atlas in config.args.atlases:
@@ -3216,6 +3279,7 @@ def main() -> int:
                                 roi_registry=roi_registry,
                                 q_thresh=0.05,
                                 top_n_cap=20,
+                                network_column=resolve_kong2022_network_registry_column(network_taxonomy),
                             )
                             confidence_metric = "topn_count"
 
@@ -3225,6 +3289,7 @@ def main() -> int:
                                 roi_registry=roi_registry,
                                 q_thresh=0.05,
                                 top_n_cap=20,
+                                network_column=resolve_kong2022_network_registry_column(network_taxonomy),
                             )
                             functional_labels, functional_meta, functional_label_items = functional_atlas_from_vertices(
                                 n_vertices=n_vertices,
@@ -3395,7 +3460,7 @@ def main() -> int:
                         if is_gradient_method(method):
                             group_features_active, group_gradient_meta = load_hippomaps_gradient_features(
                                 gradient_root=gradient_root,
-                                route=route_tag,
+                                route=gradient_route_tag,
                                 smoothing=smoothing,
                                 hemi=hemi,
                                 support_mask=support,
@@ -3744,6 +3809,7 @@ def main() -> int:
                                 network_names=network_names,
                                 q_thresh=0.05,
                                 top_n_cap=20,
+                                network_column=resolve_kong2022_network_registry_column(network_taxonomy),
                             )
                         else:
                             profile = cluster_network_profile(
@@ -3758,6 +3824,7 @@ def main() -> int:
                                 hemi=hemi,
                                 valid_masks_by_subject=valid_masks,
                                 profile_fc_mode="pearson",
+                                network_taxonomy=network_taxonomy,
                             )
                             status_rows, dominant = assignment_status_from_profile(profile, network_names)
                         if atlas == "kong2022" and roi_profile is None:
@@ -3971,8 +4038,12 @@ def main() -> int:
                                 "n_faces": int(surface_meta[hemi]["n_faces"]),
                             },
                             "surface_topology_audit": topology_audit[hemi],
-                            "canonical_network_order_consistency_checked": True,
-                            "canonical_network_order_consensus_subject_count": int(len(subjects)),
+                            "network_taxonomy": network_taxonomy,
+                            "network_registry_column": resolve_kong2022_network_registry_column(network_taxonomy),
+                            "canonical_network_order_consistency_checked": network_taxonomy == "canonical8",
+                            "network_order_consistency_checked": True,
+                            "network_order_consensus_subject_count": int(len(subjects)),
+                            "canonical_network_order_consensus_subject_count": int(len(subjects)) if network_taxonomy == "canonical8" else None,
                             "n_subjects": int(len(subjects)),
                             "subjects": [f"sub-{s}" for s in subjects],
                             "n_support_vertices": int(n_support),
@@ -4021,7 +4092,12 @@ def main() -> int:
                             "template_cluster_label": str(lbl_path.resolve()),
                             "template_functional_atlas_label": str(func_lbl_path.resolve()),
                         }
-                        feature_summary: dict[str, object] = {"network_names": network_names, "N_ref": int(len(network_names))}
+                        feature_summary: dict[str, object] = {
+                            "network_names": network_names,
+                            "N_ref": int(len(network_names)),
+                            "network_taxonomy": network_taxonomy,
+                            "network_registry_column": resolve_kong2022_network_registry_column(network_taxonomy),
+                        }
                         if group_gradient_meta is not None:
                             feature_summary["gradient"] = group_gradient_meta
                         write_json(run_dir / "group_feature_summary.json", feature_summary)

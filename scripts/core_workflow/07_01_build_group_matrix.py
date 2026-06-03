@@ -45,6 +45,7 @@ from lib.output_layout import (
     DEFAULT_ROUTEA_CTXDROP_GROUP_ATLAS_ROOT,
     DEFAULT_ROUTEA_CTXREG_GROUP_ATLAS_ROOT,
     DEFAULT_ROUTEA_GROUP_ATLAS_ROOT,
+    DEFAULT_ROUTEA_17NET_GROUP_ATLAS_ROOT,
     DEFAULT_ROUTEB_GROUP_ATLAS_ROOT,
 )
 BUILD_PRESENT_SCRIPT = REPO_ROOT / "scripts" / "core_workflow" / "06_01_build_group_overview.py"
@@ -54,7 +55,7 @@ DEFAULT_CORE_GROUP_ATLAS_ROOT = DEFAULT_GROUP_ATLAS_ROOT
 DEFAULT_PRESENT_DIR = DEFAULT_OVERVIEWS_DIR
 DEFAULT_MANIFEST_NAME = "group_overview_matrix_manifest.json"
 DEFAULT_ROUTES = ("routea",)
-ROUTE_CHOICES = ("routea", "routea_ctxreg", "routea_ctxdrop", "routeb")
+ROUTE_CHOICES = ("routea", "routea_17net", "routea_ctxreg", "routea_ctxdrop", "routeb")
 METHODS = ["intrinsic-spectral", "network-spectral", "gradient-spectral", "wta-top"]
 ATLAS = "kong2022"
 CLUSTERLESS_METHODS = {"wta-top"}
@@ -85,12 +86,14 @@ def canonical_group_roots(group_atlas_root: Path) -> dict[str, Path]:
     if base == default_base:
         return {
             "routea": DEFAULT_ROUTEA_GROUP_ATLAS_ROOT.resolve(),
+            "routea_17net": DEFAULT_ROUTEA_17NET_GROUP_ATLAS_ROOT.resolve(),
             "routea_ctxreg": DEFAULT_ROUTEA_CTXREG_GROUP_ATLAS_ROOT.resolve(),
             "routea_ctxdrop": DEFAULT_ROUTEA_CTXDROP_GROUP_ATLAS_ROOT.resolve(),
             "routeb": DEFAULT_ROUTEB_GROUP_ATLAS_ROOT.resolve(),
         }
     return {
         "routea": (base / "routea_full_k3_fisherz").resolve(),
+        "routea_17net": (base / "routea_17net_full_k3_fisherz").resolve(),
         "routea_ctxreg": (base / "routea_ctxreg_full_k3_fisherz").resolve(),
         "routea_ctxdrop": (base / "routea_ctxdrop_full_k3_fisherz").resolve(),
         "routeb": (base / "routeb_full_k3_fisherz").resolve(),
@@ -113,10 +116,10 @@ def build_render_jobs(
     jobs: list[RenderJob] = []
     route_roots = canonical_group_roots(Path(group_atlas_root))
     route_roots_by_method = {
-        "intrinsic-spectral": [("routea", None, route_roots["routea"]), ("routea_ctxreg", None, route_roots["routea_ctxreg"]), ("routea_ctxdrop", None, route_roots["routea_ctxdrop"]), ("routeb", None, route_roots["routeb"])],
-        "network-spectral": [("routea", None, route_roots["routea"]), ("routea_ctxreg", None, route_roots["routea_ctxreg"]), ("routea_ctxdrop", None, route_roots["routea_ctxdrop"]), ("routeb", None, route_roots["routeb"])],
-        "gradient-spectral": [("routea", None, route_roots["routea"]), ("routea_ctxreg", None, route_roots["routea_ctxreg"]), ("routea_ctxdrop", None, route_roots["routea_ctxdrop"]), ("routeb", None, route_roots["routeb"])],
-        "wta-top": [("routea", None, route_roots["routea"]), ("routea_ctxreg", None, route_roots["routea_ctxreg"]), ("routea_ctxdrop", None, route_roots["routea_ctxdrop"]), ("routeb", None, route_roots["routeb"])],
+        "intrinsic-spectral": [("routea", None, route_roots["routea"]), ("routea_17net", None, route_roots["routea_17net"]), ("routea_ctxreg", None, route_roots["routea_ctxreg"]), ("routea_ctxdrop", None, route_roots["routea_ctxdrop"]), ("routeb", None, route_roots["routeb"])],
+        "network-spectral": [("routea", None, route_roots["routea"]), ("routea_17net", None, route_roots["routea_17net"]), ("routea_ctxreg", None, route_roots["routea_ctxreg"]), ("routea_ctxdrop", None, route_roots["routea_ctxdrop"]), ("routeb", None, route_roots["routeb"])],
+        "gradient-spectral": [("routea", None, route_roots["routea"]), ("routea_17net", None, route_roots["routea_17net"]), ("routea_ctxreg", None, route_roots["routea_ctxreg"]), ("routea_ctxdrop", None, route_roots["routea_ctxdrop"]), ("routeb", None, route_roots["routeb"])],
+        "wta-top": [("routea", None, route_roots["routea"]), ("routea_17net", None, route_roots["routea_17net"]), ("routea_ctxreg", None, route_roots["routea_ctxreg"]), ("routea_ctxdrop", None, route_roots["routea_ctxdrop"]), ("routeb", None, route_roots["routeb"])],
     }
     for method in requested_methods:
         for route_tag, mode_tag, group_root in route_roots_by_method[method]:
@@ -125,7 +128,7 @@ def build_render_jobs(
             variants: tuple[str | None, ...]
             if method in CLUSTERLESS_METHODS:
                 variants = (None,)
-            elif str(route_tag) in {"routea", "routea_ctxreg", "routea_ctxdrop"}:
+            elif str(route_tag) in {"routea", "routea_17net", "routea_ctxreg", "routea_ctxdrop"}:
                 variants = ASSIGNMENT_VARIANTS
             else:
                 variants = ("fisherz",)

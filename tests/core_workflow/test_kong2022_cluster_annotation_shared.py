@@ -29,6 +29,8 @@ method_uses_kong2022_topn_cluster_annotation = atlas_mod.method_uses_kong2022_to
 network_mean_profile_from_kong2022_roi_profile = atlas_mod.network_mean_profile_from_kong2022_roi_profile
 assignment_status_from_kong2022_roi_profile = atlas_mod.assignment_status_from_kong2022_roi_profile
 cluster_assignment_variants_from_kong2022_roi_profile = atlas_mod.cluster_assignment_variants_from_kong2022_roi_profile
+resolve_kong2022_network_registry_column = atlas_mod.resolve_kong2022_network_registry_column
+build_global_top_connections = atlas_mod.build_global_top_connections
 
 
 def test_method_gate_covers_both_spectral_methods_only() -> None:
@@ -63,6 +65,65 @@ def test_network_mean_profile_from_kong2022_roi_profile_groups_by_canonical8() -
         dtype=np.float32,
     )
     assert np.allclose(out, expected, atol=1e-6), (out, expected)
+
+
+
+def test_network_mean_profile_from_kong2022_roi_profile_can_group_by_family17() -> None:
+    roi_profile = np.array(
+        [
+            [1.0, 3.0, 10.0, 14.0],
+            [2.0, 6.0, 20.0, 22.0],
+        ],
+        dtype=np.float32,
+    )
+    roi_registry = [
+        {"roi_id": 1, "roi_name": "a", "hemi": "L", "family17": "DefaultA", "subregion": "s", "rank": 1, "canonical8": "Default"},
+        {"roi_id": 2, "roi_name": "b", "hemi": "L", "family17": "DefaultA", "subregion": "s", "rank": 2, "canonical8": "Default"},
+        {"roi_id": 3, "roi_name": "c", "hemi": "R", "family17": "DefaultB", "subregion": "s", "rank": 3, "canonical8": "Default"},
+        {"roi_id": 4, "roi_name": "d", "hemi": "R", "family17": "VisualA", "subregion": "s", "rank": 4, "canonical8": "Visual"},
+    ]
+    out = network_mean_profile_from_kong2022_roi_profile(
+        roi_profile,
+        roi_registry,
+        ["DefaultA", "DefaultB", "VisualA"],
+        network_column="family17",
+    )
+    expected = np.array(
+        [
+            [2.0, 10.0, 14.0],
+            [4.0, 20.0, 22.0],
+        ],
+        dtype=np.float32,
+    )
+    assert np.allclose(out, expected, atol=1e-6), (out, expected)
+
+
+def test_network_taxonomy_resolves_registry_column() -> None:
+    assert resolve_kong2022_network_registry_column("canonical8") == "canonical8"
+    assert resolve_kong2022_network_registry_column("family17") == "family17"
+    try:
+        resolve_kong2022_network_registry_column("bad")
+        raise AssertionError("expected invalid taxonomy to fail")
+    except ValueError as exc:
+        assert "network taxonomy" in str(exc)
+
+
+def test_global_top_connections_include_family17_metadata() -> None:
+    profile_3d = np.array([[[0.8, -0.7]], [[0.9, -0.8]]], dtype=np.float32)
+    roi_registry = [
+        {"roi_id": 1, "roi_name": "a", "hemi": "L", "family17": "DefaultA", "subregion": "s", "rank": 1, "canonical8": "Default"},
+        {"roi_id": 2, "roi_name": "b", "hemi": "L", "family17": "VisualA", "subregion": "s", "rank": 2, "canonical8": "Visual"},
+    ]
+    out = build_global_top_connections(
+        profile_3d=profile_3d,
+        support_indices=np.array([10], dtype=np.int32),
+        roi_registry=roi_registry,
+        q_thresh=1.0,
+        top_n_cap=5,
+        network_column="family17",
+    )
+    assert out["top_positive"][0]["family17"] == "DefaultA"
+    assert out["top_negative"][0]["family17"] == "VisualA"
 
 
 def test_kong2022_cluster_assignment_uses_mean_fisherz_not_topn_roi_counts() -> None:

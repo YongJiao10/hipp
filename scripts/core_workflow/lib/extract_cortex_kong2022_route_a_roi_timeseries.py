@@ -19,6 +19,7 @@ from .kong2022_label_utils import (
     KONG2022_DLABEL_PATH,
     KONG2022_MERGE_CONFIG,
     canonical_families_8_order,
+    canonical_families_17_order,
     load_kong2022_bundle,
 )
 
@@ -266,6 +267,7 @@ def main() -> int:
     )
     roi_registry = list(bundle["roi_registry"])
     canonical8_order = list(bundle["canonical8_order"])
+    family17_order = canonical_families_17_order()
 
     dt_img = nib.load(str(dtseries))
     dt_data = np.asarray(dt_img.dataobj, dtype=np.float32)
@@ -360,6 +362,34 @@ def main() -> int:
         ["canonical_network", "n_parcels_merged", "original_parent_networks", "n_grayordinates_used_total"],
     )
 
+    family17_rows: list[dict[str, object]] = []
+    family17_ts_rows: list[np.ndarray] = []
+    for family17 in family17_order:
+        idx = [i for i, row in enumerate(kept_rows) if str(row["family17"]) == family17]
+        if not idx:
+            raise RuntimeError(
+                f"Family17 network has zero parcels after tSNR gate: {family17}. "
+                "Kong2022 17-net branch requires fixed original-family outputs."
+            )
+        row_subset = [kept_rows[i] for i in idx]
+        ts = np.nanmean(parcel_ts[np.asarray(idx, dtype=np.int32), :], axis=0).astype(np.float32)
+        family17_ts_rows.append(ts)
+        family17_rows.append(
+            {
+                "family17_network": family17,
+                "n_parcels_merged": int(len(idx)),
+                "canonical_parent_networks": ",".join(sorted({str(r["canonical8"]) for r in row_subset})),
+                "n_grayordinates_used_total": int(sum(int(r["n_grayordinates_used"]) for r in row_subset)),
+            }
+        )
+    family17_ts = np.asarray(family17_ts_rows, dtype=np.float32)
+    np.save(outdir / "cortex_family17_network_timeseries.npy", family17_ts)
+    write_tsv(
+        outdir / "cortex_family17_networks.tsv",
+        family17_rows,
+        ["family17_network", "n_parcels_merged", "canonical_parent_networks", "n_grayordinates_used_total"],
+    )
+
     run_segments = parse_run_segments(args.run_lengths, n_timepoints)
     for seg in run_segments:
         rid = int(seg["run_id"])
@@ -388,7 +418,9 @@ def main() -> int:
             "n_timepoints": run_len,
             "n_roi_parcels_used": int(parcel_ts.shape[0]),
             "n_canonical_networks_used": int(canonical_ts.shape[0]),
+            "n_family17_networks_used": int(family17_ts.shape[0]),
             "canonical_network_timeseries_source": str((outdir / "cortex_canonical_network_timeseries.npy").resolve()),
+            "family17_network_timeseries_source": str((outdir / "cortex_family17_network_timeseries.npy").resolve()),
             "roi_timeseries_source": str((outdir / "cortex_roi_parcel_timeseries.npy").resolve()),
             "tsnr_threshold": float(TSNR_THRESHOLD),
             "run_slice_policy": "read_time_slice_from_full_timeseries",
@@ -410,6 +442,7 @@ def main() -> int:
                     "inputs": [
                         str((outdir / "cortex_roi_parcel_timeseries.npy").resolve()),
                         str((outdir / "cortex_canonical_network_timeseries.npy").resolve()),
+                        str((outdir / "cortex_family17_network_timeseries.npy").resolve()),
                     ],
                     "outputs": [
                         str((run_dir / "reference_summary.json").resolve()),
@@ -436,6 +469,8 @@ def main() -> int:
         "n_parcels_empty_after_tsnr": int(len(empty_rows)),
         "n_canonical_networks_used": int(canonical_ts.shape[0]),
         "canonical_networks_used": canonical8_order,
+        "n_family17_networks_used": int(family17_ts.shape[0]),
+        "family17_networks_used": family17_order,
         "n_timepoints": int(n_timepoints),
         "tsnr_threshold": float(TSNR_THRESHOLD),
         "left_tsnr_mask": str(left_tsnr_mask),
@@ -487,6 +522,8 @@ def main() -> int:
             str((outdir / "cortex_roi_parcel_timeseries.npy").resolve()),
             str((outdir / "cortex_canonical_networks.tsv").resolve()),
             str((outdir / "cortex_canonical_network_timeseries.npy").resolve()),
+            str((outdir / "cortex_family17_networks.tsv").resolve()),
+            str((outdir / "cortex_family17_network_timeseries.npy").resolve()),
         ],
     }
     (outdir / "stage_manifest.json").write_text(json.dumps(stage_manifest, indent=2), encoding="utf-8")

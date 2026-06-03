@@ -18,7 +18,7 @@ KONG2022_DLABEL_PATH = (
 )
 KONG2022_MERGE_CONFIG = REPO_ROOT / "config" / "cross_atlas_network_merge.json"
 
-KNOWN_FAMILIES_17: frozenset[str] = frozenset({
+FAMILIES_17_ORDER: tuple[str, ...] = (
     "DefaultA",
     "DefaultB",
     "DefaultC",
@@ -36,7 +36,8 @@ KNOWN_FAMILIES_17: frozenset[str] = frozenset({
     "VisualC",
     "Aud",
     "Language",
-})
+)
+KNOWN_FAMILIES_17: frozenset[str] = frozenset(FAMILIES_17_ORDER)
 
 _ROI_NAME_RE = re.compile(
     r"^17networks_(?P<hemi>LH|RH)_(?P<family>[A-Za-z0-9]+)(?:_(?P<subregion>.+))?_(?P<rank>\d+)$"
@@ -54,6 +55,10 @@ def parse_kong2022_roi_name(name: str) -> tuple[str, str, str, int]:
     subregion = str(m.group("subregion") or "")
     rank = int(m.group("rank"))
     return hemi, family17, subregion, rank
+
+
+def canonical_families_17_order() -> list[str]:
+    return list(FAMILIES_17_ORDER)
 
 
 def canonical_families_8_order() -> list[str]:

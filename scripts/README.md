@@ -14,7 +14,7 @@ from `common/`, `workbench/`, or the repo `wb_command` wrapper at runtime.
 
 Traceability contract for `core_workflow` entrypoints:
 
-- supports `--workflow-branch` with `kong2019`, `kong2022_routea`, `kong2022_routeb`
+- supports `--workflow-branch` with `kong2019`, `kong2022_routea`, `kong2022_routea_17net`, `kong2022_routea_ctxreg`, `kong2022_routea_ctxdrop`, `kong2022_routeb`
 - supports repeatable `--upstream-step-id`, `--input-artifact`, `--output-artifact`
 - supports `--step-manifest-out` emitting standardized JSON containing:
   - `step_id`

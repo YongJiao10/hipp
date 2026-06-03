@@ -5,6 +5,7 @@
   "branch_mainlines": [
     "kong2019",
     "kong2022_routea",
+    "kong2022_routea_17net",
     "kong2022_routea_ctxreg",
     "kong2022_routea_ctxdrop",
     "kong2022_routeb"
@@ -79,7 +80,8 @@
       "stage": "03_cortex_reference",
       "purpose": "Build RouteA-specific cortex references.",
       "branches": [
-        "kong2022_routea"
+        "kong2022_routea",
+        "kong2022_routea_17net"
       ],
       "entry_script": "scripts/core_workflow/03_02_build_kong2022_routea_reference.py",
       "implementation_script": "scripts/core_workflow/03_02_build_kong2022_routea_reference.py",
@@ -156,6 +158,7 @@
       "branches": [
         "kong2019",
         "kong2022_routea",
+        "kong2022_routea_17net",
         "kong2022_routea_ctxreg",
         "kong2022_routea_ctxdrop",
         "kong2022_routeb"
@@ -196,6 +199,7 @@
       "branches": [
         "kong2019",
         "kong2022_routea",
+        "kong2022_routea_17net",
         "kong2022_routea_ctxreg",
         "kong2022_routea_ctxdrop",
         "kong2022_routeb"
@@ -211,6 +215,7 @@
       "branches": [
         "kong2019",
         "kong2022_routea",
+        "kong2022_routea_17net",
         "kong2022_routeb"
       ],
       "entry_script": "scripts/core_workflow/06_02_materialize_group_labels.py",
@@ -224,6 +229,7 @@
       "branches": [
         "kong2019",
         "kong2022_routea",
+        "kong2022_routea_17net",
         "kong2022_routea_ctxreg",
         "kong2022_routea_ctxdrop",
         "kong2022_routeb"
@@ -290,6 +296,7 @@
       "branches": [
         "kong2019",
         "kong2022_routea",
+        "kong2022_routea_17net",
         "kong2022_routea_ctxreg",
         "kong2022_routea_ctxdrop",
         "kong2022_routeb"
