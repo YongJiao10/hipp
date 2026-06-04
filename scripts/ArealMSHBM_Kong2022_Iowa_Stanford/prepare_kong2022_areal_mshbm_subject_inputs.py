@@ -9,6 +9,16 @@ from pathlib import Path
 import nibabel as nib
 
 
+DATASET_DTSERIES_GLOBS = {
+    "jj_tms": ["*_task-rest_run-0*_space-fsLR_den-91k_bold.dtseries.nii"],
+    "stanford": ["*_task-rest_space-fsLR_den-91k_desc-denoised_bold.dtseries.nii"],
+}
+
+
+def normalize_dataset(value: str) -> str:
+    return value.strip().lower().replace("-", "_")
+
+
 def natural_key(path: Path) -> tuple:
     parts = re.split(r"(\d+)", path.name)
     return tuple(int(part) if part.isdigit() else part for part in parts)
@@ -29,13 +39,30 @@ def write_ones(path: Path, count: int) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Prepare JJ_TMS task-rest dtseries inputs for one Kong2022 ArealMSHBM SGE task."
+        description="Prepare task-rest dtseries inputs for one Kong2022 ArealMSHBM SGE task."
+    )
+    parser.add_argument(
+        "--dataset",
+        default="jj_tms",
+        help="Dataset preset: jj_tms or stanford. Default: jj_tms.",
     )
     parser.add_argument("--subject", required=True, help="Subject ID with or without sub- prefix.")
     parser.add_argument("--data-root", required=True, type=Path)
     parser.add_argument("--subject-output-dir", required=True, type=Path)
+    parser.add_argument(
+        "--dtseries-glob",
+        action="append",
+        default=None,
+        help="Override func/ dtseries glob. Repeat to allow multiple patterns.",
+    )
     parser.add_argument("--overwrite", action="store_true")
     args = parser.parse_args()
+
+    dataset = normalize_dataset(args.dataset)
+    if dataset not in DATASET_DTSERIES_GLOBS:
+        known = ", ".join(sorted(DATASET_DTSERIES_GLOBS))
+        raise SystemExit(f"Unsupported dataset: {args.dataset}. Expected one of: {known}")
+    dtseries_globs = args.dtseries_glob or DATASET_DTSERIES_GLOBS[dataset]
 
     subject = args.subject if args.subject.startswith("sub-") else f"sub-{args.subject}"
     subject_dir = args.data_root / subject
@@ -43,15 +70,14 @@ def main() -> int:
     if not func_dir.is_dir():
         raise SystemExit(f"Missing func directory: {func_dir}")
 
-    dtseries = sorted(
-        (
-            p
-            for p in func_dir.glob("*_task-rest_run-0*_space-fsLR_den-91k_bold.dtseries.nii")
-        ),
-        key=natural_key,
-    )
+    dtseries_by_path = {}
+    for pattern in dtseries_globs:
+        for path in func_dir.glob(pattern):
+            dtseries_by_path[path] = path
+    dtseries = sorted(dtseries_by_path, key=natural_key)
     if not dtseries:
-        raise SystemExit(f"No task-rest fsLR den-91k dtseries found in {func_dir}")
+        patterns = ", ".join(dtseries_globs)
+        raise SystemExit(f"No task-rest fsLR den-91k dtseries found in {func_dir}; patterns={patterns}")
 
     inputs_dir = args.subject_output_dir / "inputs"
     censor_dir = inputs_dir / "censors"
@@ -74,8 +100,10 @@ def main() -> int:
     censor_list_path.write_text("\n".join(str(p) for p in censor_paths) + "\n", encoding="utf-8")
 
     manifest = {
+        "dataset": dataset,
         "subject": subject,
         "data_root": str(args.data_root),
+        "dtseries_globs": dtseries_globs,
         "subject_dir": str(subject_dir),
         "run_count": len(rows),
         "runs": rows,

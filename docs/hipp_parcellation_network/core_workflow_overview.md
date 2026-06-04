@@ -74,6 +74,14 @@ Directory names intentionally do not encode `t1only`, `present_fixedk`, or a
 - canonical public interface (`NN_MM_*`)
 - active implementation home (`scripts/core_workflow/lib/*`)
 
+Subject-level RouteA gradient-spectral K=3 and WTA products are intentionally
+kept outside the group workflow in the sibling directory
+`scripts/individual_workflow/`. Those entrypoints reuse core workflow helpers.
+Computation outputs live in `outputs_core/work/individual_atlas/`, while
+per-subject presentation surface overviews live in
+`outputs_core/present/overviews/individual/{gradient,wta}/`. See
+`docs/hipp_parcellation_network/individual_workflow_routea_gradients_wta.md`.
+
 RouteA reference construction has an explicit upstream label-generation dependency. The artifact-level contract for generated RouteA ArealMSHBM labels, local numbered-step products, presentation products, and required evidence is maintained in `docs/hipp_parcellation_network/core_workflow_artifact_lineage.md`.
 
 The `kong2022_routea_17net` branch uses the original Kong2022 17 network families for cluster annotation and network profiles. It reuses `shared_inputs/routea_151`, `surface_151`, 400-ROI FC caches, and RouteA gradients, then writes only taxonomy-dependent group outputs under `outputs_core/work/group_atlas/routea_17net_full_k3_fisherz/`. Run `05_02_run_group_atlas.py` with `--route-tag routea_17net --network-taxonomy family17`; do not run `05_01` for a separate `routea_17net` gradient tree.

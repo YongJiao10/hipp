@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#$ -N jj_k22_mshbm
+#$ -N k22_mshbm
 #$ -pe smp 3
 #$ -l mem_free=64G
 #$ -l h_rt=24:00:00
@@ -20,16 +20,39 @@ export VECLIB_MAXIMUM_THREADS=1
 repo_root="${REPO_ROOT:-/old_Users/yojiao/hipp}"
 script_dir="${SCRIPT_DIR:-${repo_root}/scripts/ArealMSHBM_Kong2022_Iowa_Stanford}"
 
-data_root="${DATA_ROOT:-/Shared/jianglab/3_Data_Working/fmriprep_processed_JJ_TMS/derivatives_surf}"
-out_root="${OUT_ROOT:-/Shared/jianglab/3_Data_Working/fmriprep_processed_JJ_TMS/ArealMSHBM_Kong2022}"
+dataset="$(printf '%s' "${DATASET:-jj_tms}" | tr '[:upper:]-' '[:lower:]_')"
+case "${dataset}" in
+  jj_tms)
+    dataset_label="JJ_TMS"
+    default_data_root="/Shared/jianglab/3_Data_Working/fmriprep_processed_JJ_TMS/derivatives_surf"
+    default_out_root="/Shared/jianglab/3_Data_Working/fmriprep_processed_JJ_TMS/ArealMSHBM_Kong2022"
+    tmp_prefix="jj_tms_kong2022"
+    ;;
+  stanford)
+    dataset_label="Stanford"
+    default_data_root="/Shared/jianglab/3_Data_Working/fmriprep_processed_CausalConnectome/rest_fmriprep/DataOrg_PFM_36P"
+    default_out_root="/Shared/jianglab/3_Data_Working/fmriprep_processed_CausalConnectome/rest_fmriprep/ArealMSHBM_Kong2022"
+    tmp_prefix="stanford_kong2022"
+    ;;
+  *)
+    echo "ERROR: unsupported DATASET=${DATASET:-}. Expected jj_tms or stanford." >&2
+    exit 2
+    ;;
+esac
+
+data_root="${DATA_ROOT:-${default_data_root}}"
+out_root="${OUT_ROOT:-${default_out_root}}"
 subject_ids_file="${SUBJECT_IDS_FILE:-}"
 subject_ids_csv="${SUBJECT_IDS_CSV:-}"
 python_exe="${PYTHON_EXE:-/Users/yojiao/miniconda3/envs/py313/bin/python}"
 cbig_code_dir="${CBIG_CODE_DIR:-${repo_root}/external/CBIG}"
 group_prior="${GROUP_PRIOR:-${cbig_code_dir}/stable_projects/brain_parcellation/Kong2022_ArealMSHBM/lib/group_priors/HCP_fs_LR_32k_40sub/400/gMSHBM/beta50/Params_Final.mat}"
+wb_command="${WB_COMMAND:-${repo_root}/software/workbench/bin_linux64/wb_command}"
 overwrite="${OVERWRITE:-0}"
 task_dry_run="${TASK_DRY_RUN:-${DRY_RUN:-0}}"
 matlab_mode="${MATLAB_MODE:-batch}"
+
+export PATH="$(dirname "${wb_command}"):${PATH}"
 
 task_id="${SUBJECT_INDEX:-${SGE_TASK_ID:-1}}"
 job_id="${JOB_ID:-local}"
@@ -63,7 +86,7 @@ sid="${subject_ids[$((task_id - 1))]}"
 sid="${sid#sub-}"
 subject="sub-${sid}"
 subject_out="${out_root}/${subject}"
-tmp_root="/tmp/jj_tms_kong2022_${job_id}_${task_id}_${subject}"
+tmp_root="/tmp/${tmp_prefix}_${job_id}_${task_id}_${subject}"
 project_dir="${tmp_root}/cbig_project"
 run_list="${tmp_root}/inputs/task_rest_dtseries.txt"
 censor_list="${tmp_root}/inputs/task_rest_censors.txt"
@@ -72,7 +95,7 @@ rh_labels="${subject_out}/rh_labels.txt"
 
 cleanup_tmp_root() {
   case "${tmp_root:-}" in
-    /tmp/jj_tms_kong2022_*)
+    /tmp/jj_tms_kong2022_*|/tmp/stanford_kong2022_*)
       rm -rf -- "${tmp_root}"
       ;;
     "")
@@ -87,19 +110,22 @@ trap cleanup_tmp_root EXIT
 mkdir -p "${subject_out}" "${project_dir}"
 
 echo "=================================================================="
-echo "JJ_TMS Kong2022 ArealMSHBM"
+echo "${dataset_label} Kong2022 ArealMSHBM"
 echo "JobID=${job_id} TaskID=${task_id} Host=${host_name} Subject=${subject}"
+echo "Dataset=${dataset}"
 echo "Repo=${repo_root}"
 echo "DataRoot=${data_root}"
 echo "Out=${subject_out}"
 echo "Work=${tmp_root}"
+echo "WB_COMMAND=${wb_command}"
 echo "TASK_DRY_RUN=${task_dry_run} OVERWRITE=${overwrite}"
 echo "=================================================================="
 
 required=(
   "${python_exe}"
-  "${script_dir}/prepare_jj_tms_subject_inputs.py"
-  "${script_dir}/matlab/run_kong2022_areal_mshbm_subject.m"
+  "${script_dir}/prepare_kong2022_areal_mshbm_subject_inputs.py"
+  "${script_dir}/run_kong2022_areal_mshbm_subject.m"
+  "${wb_command}"
   "${cbig_code_dir}/stable_projects/brain_parcellation/Kong2022_ArealMSHBM/CBIG_ArealMSHBM_parcellation_single_subject.m"
   "${cbig_code_dir}/stable_projects/brain_parcellation/Kong2022_ArealMSHBM/lib/spatial_mask/400/spatial_mask_fs_LR_32k.mat"
   "${cbig_code_dir}/external_packages/python/mapalign-master/mapalign/embed.py"
@@ -115,7 +141,8 @@ for path in "${required[@]}"; do
   fi
 done
 
-"${python_exe}" "${script_dir}/prepare_jj_tms_subject_inputs.py" \
+"${python_exe}" "${script_dir}/prepare_kong2022_areal_mshbm_subject_inputs.py" \
+  --dataset "${dataset}" \
   --subject "${subject}" \
   --data-root "${data_root}" \
   --subject-output-dir "${tmp_root}" \
@@ -151,7 +178,7 @@ if [ "${overwrite}" = "1" ]; then
   overwrite_flag=1
 fi
 
-matlab_expr="addpath('${script_dir}/matlab'); run_kong2022_areal_mshbm_subject('${project_dir}', '${subject_out}', '${run_list}', '${censor_list}', '${cbig_code_dir}', '${group_prior}', ${overwrite_flag});"
+matlab_expr="addpath('${script_dir}'); run_kong2022_areal_mshbm_subject('${project_dir}', '${subject_out}', '${run_list}', '${censor_list}', '${cbig_code_dir}', '${group_prior}', ${overwrite_flag});"
 run_expr="try, ${matlab_expr}, catch ME, disp(getReport(ME,'extended')); exit(1); end; exit(0);"
 
 echo "MATLAB_MODE=${matlab_mode}"

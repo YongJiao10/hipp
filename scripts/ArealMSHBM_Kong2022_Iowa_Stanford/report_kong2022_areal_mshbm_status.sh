@@ -4,7 +4,19 @@ export LANG=C
 export LC_ALL=C
 export LC_CTYPE=C
 
-out_root="${OUT_ROOT:-/Shared/jianglab/3_Data_Working/fmriprep_processed_JJ_TMS/ArealMSHBM_Kong2022}"
+dataset="$(printf '%s' "${DATASET:-jj_tms}" | tr '[:upper:]-' '[:lower:]_')"
+case "${dataset}" in
+  jj_tms)
+    out_root="${OUT_ROOT:-/Shared/jianglab/3_Data_Working/fmriprep_processed_JJ_TMS/ArealMSHBM_Kong2022}"
+    ;;
+  stanford)
+    out_root="${OUT_ROOT:-/Shared/jianglab/3_Data_Working/fmriprep_processed_CausalConnectome/rest_fmriprep/ArealMSHBM_Kong2022}"
+    ;;
+  *)
+    echo "ERROR: unsupported DATASET=${DATASET:-}. Expected jj_tms or stanford." >&2
+    exit 2
+    ;;
+esac
 job_id="${1:-}"
 subject="${2:-sub-1006}"
 subject="sub-${subject#sub-}"
@@ -16,6 +28,7 @@ if [ -z "${job_id}" ]; then
 fi
 
 echo "Job: ${job_id}"
+echo "Dataset: ${dataset}"
 echo "Subject: ${subject}"
 echo "Output: ${subject_out}"
 echo
