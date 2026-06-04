@@ -52,9 +52,9 @@ Outputs:
 - Command-line output / file outputs:
   - Detailed group-atlas results directories under `{out_root}/{route_tag}/{method}/smooth-{smoothing}_hemi-{hemi}_cov-{threshold}/`:
     - `group_atlas_manifest.json`: Step-level execution trace and results.
-    - `group_functional_atlas_labels.npy`: Parcellation label array for chosen final K.
-    - `cluster_assignment_status.json`: Network mapping diagnostic summary.
-    - Suffixed label / profile files (`*_fisherz.npy`, `*_count.npy`, etc.).
+    - Suffixed default/variant files such as `group_functional_atlas_labels_fisherz.npy`.
+    - Suffixed network mapping diagnostics such as `cluster_assignment_status_fisherz.json`.
+    - `group_atlas_manifest.json` records `default_assignment_variant` and points top-level default fields to the selected suffixed variant.
 """
 import argparse
 import csv
@@ -3348,7 +3348,7 @@ def main() -> int:
                                 "template_left_or_right_surface": str(surfaces[hemi]),
                                 "template_spec_path": str(template_spec_path),
                                 "template_cluster_label": None,
-                                "template_functional_atlas_label": str(func_lbl_path.resolve()),
+                                "template_functional_atlas_label": str(func_lbl_path.with_name(f"{func_lbl_path.stem}_fisherz{func_lbl_path.suffix}").resolve()),
                             }
                             write_tsv(
                                 run_dir / "cluster_roi_registry.tsv",
@@ -3858,8 +3858,6 @@ def main() -> int:
                                 "top_n_cap": variant_spec["top_n_cap"],
                             }
                             write_json(run_dir / f"cluster_assignment_status_{variant_name}.json", payload)
-                            if variant_name == "fisherz":
-                                write_json(run_dir / "cluster_assignment_status.json", payload)
                             if variant_name == "count":
                                 write_json(run_dir / "cluster_roi_topn_assignment_status.json", payload)
                         write_json(
@@ -3907,8 +3905,6 @@ def main() -> int:
                             if variant_name == "fisherz":
                                 functional_labels = labels_variant
                                 functional_label_items = items_variant
-                                np.save(run_dir / "group_functional_atlas_labels.npy", labels_variant)
-                                write_json(run_dir / "group_functional_atlas_label_map.json", meta_variant)
 
                         write_tsv(
                             run_dir / "k_selection_summary.tsv",
@@ -3945,14 +3941,9 @@ def main() -> int:
                                 color_map=canonical_color_map,
                             )
                             func_lbl_variant = make_named_label_gifti(labels_variant, items_variant)
-                            if variant_name == "fisherz":
-                                variant_lbl_path = func_lbl_path
-                            else:
-                                variant_lbl_path = func_lbl_path.with_name(f"{func_lbl_path.stem}_{variant_name}{func_lbl_path.suffix}")
+                            variant_lbl_path = func_lbl_path.with_name(f"{func_lbl_path.stem}_{variant_name}{func_lbl_path.suffix}")
                             nib.save(func_lbl_variant, str(variant_lbl_path))
-                            suffixed_lbl_path = func_lbl_path.with_name(f"{func_lbl_path.stem}_{variant_name}{func_lbl_path.suffix}")
-                            if suffixed_lbl_path != variant_lbl_path:
-                                nib.save(func_lbl_variant, str(suffixed_lbl_path))
+                            suffixed_lbl_path = variant_lbl_path
                             functional_variant_payloads[variant_name].update(
                                 {
                                     "group_functional_atlas_labels": str(labels_path.resolve()),
@@ -4038,10 +4029,10 @@ def main() -> int:
                             "subject_coverage_count": str((run_dir / "subject_coverage_count.npy").resolve()),
                             "subject_coverage_fraction": str((run_dir / "subject_coverage_fraction.npy").resolve()),
                             "group_labels_final": str((run_dir / "group_labels_final.npy").resolve()),
-                            "group_functional_atlas_labels": str((run_dir / "group_functional_atlas_labels.npy").resolve()),
+                            "group_functional_atlas_labels": str((run_dir / "group_functional_atlas_labels_fisherz.npy").resolve()),
                             "cluster_network_profile": str((run_dir / "cluster_network_profile.npy").resolve()),
                             "cluster_dominant_network": str((run_dir / "cluster_dominant_network.json").resolve()),
-                            "cluster_assignment_status": str((run_dir / "cluster_assignment_status.json").resolve()),
+                            "cluster_assignment_status": str((run_dir / "cluster_assignment_status_fisherz.json").resolve()),
                             "cluster_assignment_status_fisherz": str((run_dir / "cluster_assignment_status_fisherz.json").resolve()),
                             "cluster_assignment_status_count": (
                                 str((run_dir / "cluster_assignment_status_count.json").resolve())
@@ -4053,7 +4044,7 @@ def main() -> int:
                                 if "count" in assignment_variant_specs
                                 else None
                             ),
-                            "group_functional_atlas_label_map": str((run_dir / "group_functional_atlas_label_map.json").resolve()),
+                            "group_functional_atlas_label_map": str((run_dir / "group_functional_atlas_label_map_fisherz.json").resolve()),
                             "cluster_roi_profile": (
                                 str((run_dir / "cluster_roi_profile.npy").resolve()) if atlas == "kong2022" else None
                             ),
@@ -4076,7 +4067,7 @@ def main() -> int:
                             "template_left_or_right_surface": str(surfaces[hemi]),
                             "template_spec_path": str(template_spec_path),
                             "template_cluster_label": str(lbl_path.resolve()),
-                            "template_functional_atlas_label": str(func_lbl_path.resolve()),
+                            "template_functional_atlas_label": str(func_lbl_path.with_name(f"{func_lbl_path.stem}_fisherz{func_lbl_path.suffix}").resolve()),
                         }
                         feature_summary: dict[str, object] = {
                             "network_names": network_names,

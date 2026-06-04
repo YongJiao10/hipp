@@ -109,10 +109,10 @@ cp -a "$WORK/ga_routea_10perc_k2_count"  "$WORK/ga_routea_10perc_k2_fisherz"
 cp -a "$WORK/ga_routea_10perc_k3_count"  "$WORK/ga_routea_10perc_k3_fisherz"
 ```
 
-In each fisher-z root, rewrite `cluster_assignment_status.json` to `assignment_metric=top1_fisher_z` and regenerate:
+In each fisher-z root, rewrite the manifest default variant to `assignment_metric=top1_fisher_z` and regenerate:
 
-- `group_functional_atlas_labels.npy`
-- `group_functional_atlas_label_map.json`
+- `group_functional_atlas_labels_fisherz.npy`
+- `group_functional_atlas_label_map_fisherz.json`
 - `template_functional_atlas_label` (label.gii)
 - `group_atlas_manifest.json` fields:
   - `cluster_assignment_metric=top1_fisher_z`
@@ -124,7 +124,7 @@ In each fisher-z root, rewrite `cluster_assignment_status.json` to `assignment_m
 
 Before rendering any fixed-K overview, ensure each run dir has:
 
-- `group_functional_atlas_labels.npy`
+- the manifest-declared default variant label array, normally `group_functional_atlas_labels_fisherz.npy`
 - `template_functional_atlas_label` in `group_atlas_manifest.json`
 - bytewise-consistent label arrays between the `.npy` and `.label.gii` payload
 
@@ -150,7 +150,7 @@ Use per-root `--present-dir` (temporary), then copy final PNGs into `present_fix
 - Every root has full `k_selection_summary.tsv` rows (header + K2..K10).
 - `fisherz` roots show `cluster_assignment_metric=top1_fisher_z`.
 - `template_functional_atlas_label` resolves inside the same fixed-K root (no stale cross-root absolute path).
-- `group_functional_atlas_labels.npy` and `template_functional_atlas_label` contain identical label arrays.
+- the manifest-declared default variant label array and `template_functional_atlas_label` contain identical label arrays.
 - `present_fixedk/` contains exactly 8 fixed-K overview PNGs:
   - `10perc/full x k2/k3 x count/fisherz`
 

@@ -71,10 +71,13 @@ fisher-z assignment root is
 `intrinsic-spectral`, `network-spectral`, and `gradient-spectral`, the workflow
 keeps two official cluster-to-network assignment variants: `fisherz`
 (`top1_fisher_z` from the mean network profile) and `count`
-(`topn_count_positive_roi`). The unsuffixed compatibility files
-`cluster_assignment_status.json` and `group_functional_atlas_labels.npy` point to
-the `fisherz` variant; suffixed `_fisherz` and `_count` files preserve both
-results for rendering and comparison.
+(`topn_count_positive_roi`). Cluster-level outputs do not keep unsuffixed
+default duplicates. `group_atlas_manifest.json` records
+`default_assignment_variant` and its top-level default fields point directly to
+the selected suffixed variant files, normally `_fisherz`. Use
+`scripts/core_workflow/migrate_default_variant_outputs.py` to migrate older roots:
+first generate the plan, then archive the verified duplicate targets, and only
+then delete the reviewed target list.
 
 Render-only reruns may point `06_01_build_group_overview.py` and
 `06_03_build_cluster_cortex_panels.py` at validated group-atlas intermediates

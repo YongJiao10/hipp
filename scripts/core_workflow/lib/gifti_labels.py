@@ -127,13 +127,13 @@ def _refresh_existing_functional_label_table(
     run_dir: Path,
     color_map: dict[str, tuple[int, int, int, int]],
 ) -> bool:
-    labels_raw = manifest.get("group_functional_atlas_labels")
-    map_raw = manifest.get("group_functional_atlas_label_map")
-    label_raw = manifest.get("template_functional_atlas_label")
-    if not labels_raw or not map_raw or not label_raw:
+    try:
+        labels_path, map_path = resolve_functional_atlas_array_paths(manifest, run_dir)
+    except ValueError:
         return False
-    labels_path = Path(str(labels_raw)).resolve()
-    map_path = Path(str(map_raw)).resolve()
+    label_raw = manifest.get("template_functional_atlas_label")
+    if not label_raw:
+        return False
     label_path = Path(str(label_raw)).resolve()
     if not labels_path.exists() or not map_path.exists():
         return False
@@ -143,6 +143,39 @@ def _refresh_existing_functional_label_table(
     label_path.parent.mkdir(parents=True, exist_ok=True)
     nib.save(func_lbl, str(label_path))
     return True
+
+
+def resolve_functional_atlas_array_paths(
+    manifest: dict,
+    run_dir: Path,
+    *,
+    variant: str | None = None,
+) -> tuple[Path, Path]:
+    variants = manifest.get("assignment_variants", {})
+    has_variants = isinstance(variants, dict) and bool(variants)
+    is_cluster_level = str(manifest.get("assignment_mode", "")) == "cluster_level" or has_variants
+    if is_cluster_level:
+        selected = str(variant or manifest.get("default_assignment_variant") or "")
+        if not selected:
+            raise ValueError(f"Missing default_assignment_variant in manifest: {run_dir / 'group_atlas_manifest.json'}")
+        if not isinstance(variants, dict) or selected not in variants or not isinstance(variants[selected], dict):
+            raise ValueError(
+                f"Missing assignment_variants.{selected} in manifest: {run_dir / 'group_atlas_manifest.json'}"
+            )
+        row = variants[selected]
+        labels_raw = row.get("group_functional_atlas_labels")
+        map_raw = row.get("group_functional_atlas_label_map")
+        if not labels_raw or not map_raw:
+            raise ValueError(
+                f"Missing functional atlas array paths for variant {selected}: {run_dir / 'group_atlas_manifest.json'}"
+            )
+        return Path(str(labels_raw)).resolve(), Path(str(map_raw)).resolve()
+
+    labels_raw = manifest.get("group_functional_atlas_labels")
+    map_raw = manifest.get("group_functional_atlas_label_map")
+    if not labels_raw or not map_raw:
+        raise ValueError(f"Missing functional atlas array paths in manifest: {run_dir / 'group_atlas_manifest.json'}")
+    return Path(str(labels_raw)).resolve(), Path(str(map_raw)).resolve()
 
 
 def _write_functional_variant(
@@ -174,29 +207,13 @@ def materialize_combo(manifest_path: Path, color_map: dict[str, tuple[int, int, 
         if refreshed:
             write_json(manifest_path, manifest)
         return refreshed
-    if not (run_dir / "cluster_assignment_status.json").exists():
-        return False
-
     labels = np.load(run_dir / "group_labels_final.npy").astype(np.int32)
     network_names = [str(x) for x in load_json(run_dir / "group_feature_summary.json")["network_names"]]
     cluster_lbl_path = resolve_cluster_label_path(manifest, run_dir)
     func_lbl_path = cluster_lbl_path.with_name(cluster_lbl_path.name.replace("label-group_cluster_", "label-group_functional_atlas_"))
     func_lbl_path.parent.mkdir(parents=True, exist_ok=True)
 
-    _write_functional_variant(
-        labels=labels,
-        status_path=run_dir / "cluster_assignment_status.json",
-        network_names=network_names,
-        color_map=color_map,
-        labels_path=run_dir / "group_functional_atlas_labels.npy",
-        map_path=run_dir / "group_functional_atlas_label_map.json",
-        label_path=func_lbl_path,
-    )
-
     manifest["template_cluster_label"] = str(cluster_lbl_path)
-    manifest["group_functional_atlas_labels"] = str((run_dir / "group_functional_atlas_labels.npy").resolve())
-    manifest["group_functional_atlas_label_map"] = str((run_dir / "group_functional_atlas_label_map.json").resolve())
-    manifest["template_functional_atlas_label"] = str(func_lbl_path.resolve())
 
     variants = manifest.get("assignment_variants", {})
     if isinstance(variants, dict):
@@ -239,6 +256,19 @@ def materialize_combo(manifest_path: Path, color_map: dict[str, tuple[int, int, 
             raw_spec["group_functional_atlas_label_map"] = str(map_path)
             raw_spec["template_functional_atlas_label"] = str(variant_label_path)
             raw_spec["template_functional_atlas_label_variant"] = str(suffixed_label_path)
+
+    default_variant = str(manifest.get("default_assignment_variant") or "")
+    if default_variant:
+        default_labels_path, default_map_path = resolve_functional_atlas_array_paths(
+            manifest,
+            run_dir,
+            variant=default_variant,
+        )
+        manifest["group_functional_atlas_labels"] = str(default_labels_path)
+        manifest["group_functional_atlas_label_map"] = str(default_map_path)
+        default_spec = variants.get(default_variant, {}) if isinstance(variants, dict) else {}
+        if isinstance(default_spec, dict) and default_spec.get("template_functional_atlas_label"):
+            manifest["template_functional_atlas_label"] = str(Path(str(default_spec["template_functional_atlas_label"])).resolve())
 
     write_json(manifest_path, manifest)
     return True

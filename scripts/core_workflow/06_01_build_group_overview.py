@@ -25,8 +25,8 @@ Inputs:
   - --skip-manifest: Skip writing the overview manifest JSON file.
   - --allow-missing-combos: Allow running even when some methods/hemispheres are missing.
 - Physical inputs:
-  - Group parcellation label arrays: `{group_root}/{method}/smooth-{smoothing}_hemi-{hemi}_cov-{threshold}/group_functional_atlas_labels.npy`.
-  - Group mapping status files: `{group_root}/{method}/smooth-{smoothing}_hemi-{hemi}_cov-{threshold}/cluster_assignment_status.json`.
+  - Group parcellation label arrays: manifest `assignment_variants[default_assignment_variant].group_functional_atlas_labels` for cluster-level methods; vertex-level methods use the manifest top-level label array.
+  - Group mapping status files: manifest `assignment_variants[<variant>].cluster_assignment_status` for cluster-level methods.
 
 Outputs:
 - Command-line output / file outputs:
@@ -53,7 +53,12 @@ from lib.output_layout import DEFAULT_OVERVIEWS_DIR, DEFAULT_ROUTEA_GROUP_ATLAS_
 from lib.workflow_utils import write_json
 from lib.surface_utils import long_axis_order, render_locked_grid, network_color_map
 from lib.io_utils import load_json
-from lib.gifti_labels import resolve_cluster_label_path, make_named_label_gifti, materialize_combo
+from lib.gifti_labels import (
+    resolve_cluster_label_path,
+    resolve_functional_atlas_array_paths,
+    make_named_label_gifti,
+    materialize_combo,
+)
 from lib.network_colors import load_network_hex_colors
 
 
@@ -156,21 +161,7 @@ def resolve_assignment_variant_paths(
         label_raw = row.get("template_functional_atlas_label") or row.get("template_functional_atlas_label_variant")
         if status_raw and label_raw:
             return Path(str(status_raw)).resolve(), Path(str(label_raw)).resolve()
-    if variant == "fisherz":
-        status = run_dir / "cluster_assignment_status_fisherz.json"
-        if not status.exists():
-            status = run_dir / "cluster_assignment_status.json"
-        label_raw = manifest.get("template_functional_atlas_label")
-        label = Path(str(label_raw)).resolve() if label_raw else run_dir / "missing_fisherz_functional.label.gii"
-        return status, label
-    status = run_dir / "cluster_assignment_status_count.json"
-    if not status.exists():
-        status = run_dir / "cluster_roi_topn_assignment_status.json"
-    label = run_dir / "template" / "workbench_assets"
-    candidates = sorted(label.glob("*label-group_functional_atlas_*_count.label.gii"))
-    if candidates:
-        return status, candidates[0].resolve()
-    return status, run_dir / "missing_count_functional.label.gii"
+    return run_dir / f"missing_{variant}_assignment_status.json", run_dir / f"missing_{variant}_functional.label.gii"
 
 
 MATERIALIZE_COLOR_MAP = network_color_map()
@@ -189,14 +180,30 @@ def _load_label_vector(path: Path) -> np.ndarray:
     return np.asarray(img.darrays[0].data).astype(np.int32, copy=False)
 
 
+def load_default_functional_labels(run_dir: Path, manifest: dict) -> np.ndarray:
+    labels_path, _map_path = resolve_functional_atlas_array_paths(manifest, run_dir)
+    return np.load(labels_path).astype(np.int32, copy=False)
+
+
+def load_default_functional_label_map(run_dir: Path, manifest: dict) -> dict:
+    _labels_path, map_path = resolve_functional_atlas_array_paths(manifest, run_dir)
+    return load_json(map_path)
+
+
 def ensure_functional_label_consistency(manifest_path: Path, manifest: dict) -> dict:
     run_dir = manifest_path.parent
-    expected_npy = run_dir / "group_functional_atlas_labels.npy"
     raw_label = manifest.get("template_functional_atlas_label", None)
     label_path = Path(str(raw_label)).resolve() if raw_label is not None else None
 
     need_refresh = False
     reasons: list[str] = []
+    try:
+        expected_npy, _map_path = resolve_functional_atlas_array_paths(manifest, run_dir)
+    except ValueError as exc:
+        expected_npy = None
+        need_refresh = True
+        reasons.append(f"manifest_default_variant_error:{type(exc).__name__}")
+
     if label_path is None:
         need_refresh = True
         reasons.append("missing_template_functional_atlas_label")
@@ -206,11 +213,11 @@ def ensure_functional_label_consistency(manifest_path: Path, manifest: dict) -> 
     elif not _is_path_within(label_path, run_dir):
         need_refresh = True
         reasons.append("functional_label_path_outside_run_dir")
-    if not expected_npy.exists():
+    if expected_npy is None or not expected_npy.exists():
         need_refresh = True
-        reasons.append("missing_group_functional_atlas_labels_npy")
+        reasons.append("missing_default_functional_atlas_labels_npy")
 
-    if not need_refresh and label_path is not None:
+    if not need_refresh and label_path is not None and expected_npy is not None:
         try:
             arr_npy = np.load(expected_npy).astype(np.int32, copy=False)
             arr_gii = _load_label_vector(label_path)
@@ -227,7 +234,7 @@ def ensure_functional_label_consistency(manifest_path: Path, manifest: dict) -> 
     updated = materialize_combo(manifest_path, MATERIALIZE_COLOR_MAP)
     if not updated:
         raise RuntimeError(
-            f"Functional atlas label inconsistency detected but materialization was skipped: {manifest_path} reasons={','.join(reasons)}"
+            f"Functional atlas label inconsistency detected but materialization was skipped: {manifest_path} reasons={",".join(reasons)}"
         )
     refreshed = load_json(manifest_path)
     refreshed_label_raw = refreshed.get("template_functional_atlas_label", None)
@@ -238,9 +245,10 @@ def ensure_functional_label_consistency(manifest_path: Path, manifest: dict) -> 
         raise RuntimeError(f"materialize_combo wrote missing label file: {refreshed_label}")
     if not _is_path_within(refreshed_label, run_dir):
         raise RuntimeError(f"materialize_combo wrote label outside run dir: {refreshed_label} (run_dir={run_dir})")
-    if not expected_npy.exists():
-        raise RuntimeError(f"materialize_combo did not write expected npy: {expected_npy}")
-    arr_npy = np.load(expected_npy).astype(np.int32, copy=False)
+    refreshed_npy, _refreshed_map = resolve_functional_atlas_array_paths(refreshed, run_dir)
+    if not refreshed_npy.exists():
+        raise RuntimeError(f"materialize_combo did not write default npy: {refreshed_npy}")
+    arr_npy = np.load(refreshed_npy).astype(np.int32, copy=False)
     arr_gii = _load_label_vector(refreshed_label)
     if arr_npy.shape != arr_gii.shape or not np.array_equal(arr_npy, arr_gii):
         raise RuntimeError(f"materialize_combo still produced mismatched npy/gii labels: {manifest_path}")
@@ -786,12 +794,12 @@ def render_combo(
             profile_sub = gs[ridx, 1].subgridspec(1, 2, wspace=0.18)
             profile_axes = [fig.add_subplot(profile_sub[0, 0]), fig.add_subplot(profile_sub[0, 1])]
             try:
-                label_map = load_json(d_l / "group_functional_atlas_label_map.json")
+                label_map = load_default_functional_label_map(d_l, m_l)
                 network_names = [str(x) for x in label_map["network_names"]]
                 network_label_keys = {str(k): int(v) for k, v in label_map["network_label_keys"].items()}
                 labels_by_hemi = {
-                    "L": np.load(d_l / "group_functional_atlas_labels.npy").astype(np.int32),
-                    "R": np.load(d_r / "group_functional_atlas_labels.npy").astype(np.int32),
+                    "L": load_default_functional_labels(d_l, m_l),
+                    "R": load_default_functional_labels(d_r, m_r),
                 }
                 order_by_hemi = {"L": long_axis_order(surf_l), "R": long_axis_order(surf_r)}
                 profile_rows = compute_wta_overview_profile_rows(
@@ -1167,14 +1175,16 @@ def main() -> int:
         "Default is strict: require complete clustering outputs before rendering.",
     )
     args = p.parse_args()
-    if args.mode_tag is not None:
-        mode_tag = str(args.mode_tag)
-        if mode_tag != "full" and re.fullmatch(r"(?:[1-9][0-9]?|100)perc", mode_tag) is None:
-            raise ValueError(
-                f"--mode-tag must be 'full' or '<int>perc' where int is in [1,100], got {args.mode_tag}"
-            )
-
     group_root = Path(args.group_root).resolve()
+
+    # Enforce strict mode auto-detection from group_root to prevent provenance decoupling.
+    # Default full mode yields no suffix; sparsified yields "sparse".
+    if "full" in group_root.name:
+        args.mode_tag = None
+    else:
+        args.mode_tag = "sparse"
+
+
     present_dir = Path(args.present_dir).resolve()
     present_dir.mkdir(parents=True, exist_ok=True)
     tau_tag = f"cov_{args.coverage_threshold:.2f}".replace(".", "p")

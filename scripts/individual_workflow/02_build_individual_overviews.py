@@ -193,14 +193,11 @@ def materialize_gradient_core_inputs(*, subject: str, work_root: Path, adapter_r
             nib.save(core.make_named_label_gifti(functional_labels.astype(np.int32), label_items), str(func_label))
             np.save(dst / "group_labels_final.npy", labels.astype(np.int32))
             np.save(dst / "cluster_network_profile.npy", profile.astype(np.float32))
-            np.save(dst / "group_functional_atlas_labels.npy", functional_labels.astype(np.int32))
             np.save(dst / "group_functional_atlas_labels_fisherz.npy", functional_labels.astype(np.int32))
             write_json(dst / "group_feature_summary.json", {"network_names": network_names, "N_ref": int(len(network_names))})
             payload = {"items": [dict(x) for x in status_rows], "assignment_metric": "top1_fisher_z", "individual_level": True}
-            write_json(dst / "cluster_assignment_status.json", payload)
             write_json(dst / "cluster_assignment_status_fisherz.json", payload)
             write_json(dst / "cluster_dominant_network.json", {"dominant": dominant, "network_names": network_names, "assignment_variant": "fisherz"})
-            write_json(dst / "group_functional_atlas_label_map.json", functional_meta)
             write_json(dst / "group_functional_atlas_label_map_fisherz.json", functional_meta)
             write_tsv(dst / "k_selection_summary.tsv", [fixed_k_selection_row(method=GRADIENT_CORE_METHOD, smoothing=smoothing, hemi=hemi, n_support=int(np.sum(valid_mask)))], K_SELECTION_FIELDS)
             surf = subject_surface_path(hippunfold_batch_root, subject, hemi)
@@ -215,8 +212,10 @@ def materialize_gradient_core_inputs(*, subject: str, work_root: Path, adapter_r
                 "template_subject": subject,
                 "template_left_or_right_surface": str(surf.resolve()),
                 "template_spec_path": str(subject_spec_path(surf, subject).resolve()),
-                "group_functional_atlas_labels": str((dst / "group_functional_atlas_labels.npy").resolve()),
-                "group_functional_atlas_label_map": str((dst / "group_functional_atlas_label_map.json").resolve()),
+                "assignment_mode": "cluster_level",
+                "default_assignment_variant": "fisherz",
+                "group_functional_atlas_labels": str((dst / "group_functional_atlas_labels_fisherz.npy").resolve()),
+                "group_functional_atlas_label_map": str((dst / "group_functional_atlas_label_map_fisherz.json").resolve()),
                 "template_functional_atlas_label": str(func_label.resolve()),
                 "assignment_variants": {
                     "fisherz": {

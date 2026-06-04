@@ -16,15 +16,15 @@ Inputs:
   - Subdirectory manifests: `{out_root}/**/group_atlas_manifest.json`
   - From subdirectories containing the manifest:
     - Group-level parcellation clusters: `group_labels_final.npy`
-    - Cluster assignment status: `cluster_assignment_status.json`
+    - Cluster assignment status: manifest `assignment_variants[<variant>].cluster_assignment_status`
     - Group feature summary: `group_feature_summary.json`
   - Style configuration files:
     - `config/hipp_network_style.json`
   
 Outputs:
 - File outputs:
-  - Group functional atlas label array: `group_functional_atlas_labels.npy` under the same run subdirectory.
-  - Group functional atlas label map metadata: `group_functional_atlas_label_map.json` under the same run subdirectory.
+  - Group functional atlas label arrays and maps written to suffixed variant files such as `group_functional_atlas_labels_fisherz.npy` and `group_functional_atlas_label_map_fisherz.json` for cluster-level methods.
+  - Vertex-level methods keep their single manifest-declared label array and label map.
   - Standard GIFTI label image: `*label-group_functional_atlas_*.surf.gii` in template assets.
   - Updated manifest file: `group_atlas_manifest.json` updated in-place with new label keys.
 """

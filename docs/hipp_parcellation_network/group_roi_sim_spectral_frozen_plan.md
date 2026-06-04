@@ -29,9 +29,9 @@ This document freezes the design intent for `group-roi-sim-spectral` so it can b
 ## Expected Outputs (When Implemented Later)
 
 - `group_labels_final.npy`
-- `cluster_assignment_status.json`
+- `cluster_assignment_status_fisherz.json` plus manifest default variant pointers
 - `cluster_network_profile.npy` (or equivalent cluster summary profile)
-- `group_functional_atlas_labels.npy`
+- `group_functional_atlas_labels_fisherz.npy` plus manifest default variant pointers
 - `group_atlas_manifest.json` with full provenance and K-selection audit
 - template `.label.gii` exports for cluster and functional atlas labels
 
