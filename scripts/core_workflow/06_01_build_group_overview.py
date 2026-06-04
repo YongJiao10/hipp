@@ -54,6 +54,7 @@ from lib.workflow_utils import write_json
 from lib.surface_utils import long_axis_order, render_locked_grid, network_color_map
 from lib.io_utils import load_json
 from lib.gifti_labels import resolve_cluster_label_path, make_named_label_gifti, materialize_combo
+from lib.network_colors import load_network_hex_colors
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -85,8 +86,6 @@ FS_BIG_TITLE = 13
 FS_SUPTITLE = 18
 CLUSTERLESS_METHODS = {"wta-top"}
 ASSIGNMENT_VARIANTS = ("fisherz", "count")
-DEFAULT_CROSS_ATLAS_MERGE = REPO_ROOT / "config" / "cross_atlas_network_merge.json"
-DEFAULT_NETWORK_STYLE = REPO_ROOT / "config" / "hipp_network_style.json"
 WTA_OVERVIEW_PROFILE_BINS = 20
 WTA_OVERVIEW_SIDE_PANEL_FONT_DELTA_PT = 4
 WTA_OVERVIEW_SIDE_PANEL_TITLE_FS = FS_TITLE + WTA_OVERVIEW_SIDE_PANEL_FONT_DELTA_PT
@@ -135,16 +134,7 @@ def _build_run_dir(
 
 
 def load_network_bar_colors() -> dict[str, str]:
-    out: dict[str, str] = {}
-    if not DEFAULT_CROSS_ATLAS_MERGE.exists():
-        return out
-    payload = json.loads(DEFAULT_CROSS_ATLAS_MERGE.read_text(encoding="utf-8"))
-    for name, rgba in payload.get("shared_colors_rgba", {}).items():
-        if not isinstance(rgba, list) or len(rgba) != 4:
-            continue
-        r, g, b = int(rgba[0]), int(rgba[1]), int(rgba[2])
-        out[str(name)] = f"#{r:02x}{g:02x}{b:02x}"
-    return out
+    return load_network_hex_colors()
 
 
 NETWORK_BAR_COLORS = load_network_bar_colors()
@@ -453,7 +443,9 @@ def plot_confidence_panel(ax, rows: list[dict[str, object]], title: str) -> None
         if net in {"", "none", "unassigned"}:
             colors.append("#9a9a9a")
         else:
-            colors.append(str(NETWORK_BAR_COLORS.get(net, "#2c7fb8")))
+            if net not in NETWORK_BAR_COLORS:
+                raise KeyError(f"Missing network color for {net!r}")
+            colors.append(str(NETWORK_BAR_COLORS[net]))
     labels = []
     for r in rows:
         top1_name = str(r.get("top1_network", "unassigned"))
@@ -703,7 +695,7 @@ def plot_wta_overview_profile_axis(
             ax.plot(
                 xs,
                 ys,
-                color=NETWORK_BAR_COLORS.get(network_name),
+                color=NETWORK_BAR_COLORS[network_name],
                 lw=1.15,
                 marker="o",
                 markersize=2.1,

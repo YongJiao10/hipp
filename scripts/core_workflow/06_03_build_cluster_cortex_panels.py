@@ -27,7 +27,7 @@ Inputs:
   - --cortex-assets-root: Directory for template cortex surfaces (default: `data/cortex_assets`).
   - --scene: Cortical workbench manual scene template (default: `config/manual_wb_scenes/cortex_manual.scene`).
 - Physical inputs:
-  - Shared network colors: `config/cross_atlas_network_merge.json` or `config/hipp_network_style.json`
+  - Shared network colors: `config/hipp_network_style.json`
   - Group-level clusters: `group_labels_final.npy` under `{group_root}/{method}/smooth-{smoothing}_hemi-{hemi}_cov-{threshold}/`.
   - Subject-level cluster-to-cortex functional connectivity matrices.
   - Cortex surface files (`*.surf.gii`) and ROI maps under `--cortex-assets-root`.
@@ -76,6 +76,7 @@ from lib.io_utils import load_json, read_tsv_rows, write_tsv
 from lib.surface_utils import render_locked_grid, read_surface_vertex_count
 from lib.workflow_utils import write_json
 from lib.workbench import run_workbench
+from lib.network_colors import load_network_colors
 
 
 DEFAULT_GROUP_ROOT = DEFAULT_ROUTEA_GROUP_ATLAS_ROOT
@@ -265,13 +266,7 @@ def read_subject_roi_tsv(path: Path) -> list[dict[str, Any]]:
 
 
 def load_shared_network_colors() -> dict[str, tuple[int, int, int, int]]:
-    cfg = REPO_ROOT / "config" / "cross_atlas_network_merge.json"
-    payload = load_json(cfg)
-    out: dict[str, tuple[int, int, int, int]] = {}
-    for name, rgba in payload.get("shared_colors_rgba", {}).items():
-        if isinstance(rgba, list) and len(rgba) == 4:
-            out[str(name)] = tuple(int(v) for v in rgba)
-    return out
+    return load_network_colors()
 
 
 def neg_color_rgba(rgba: tuple[int, int, int, int], blend: float = 0.72) -> tuple[int, int, int, int]:
@@ -591,7 +586,9 @@ def build_cluster_label_files(
     for item in selected_items:
         roi_id = int(item["roi_id"])
         canonical = str(item["canonical8"])
-        base = network_colors.get(canonical, (128, 128, 128, 255))
+        if canonical not in network_colors:
+            raise KeyError(f"Missing network color for {canonical!r}")
+        base = network_colors[canonical]
         sign = str(item["sign"])
         color = display_color_for_sign(base, sign)
         sign_tag = "+" if sign == "positive" else "-"
@@ -881,7 +878,9 @@ def render_clusterless_global_figure(
         y = 0.49
         step = 0.050
         for net in sorted(net_counts.keys())[:12]:
-            base = network_colors.get(net, (128, 128, 128, 255))
+            if net not in network_colors:
+                raise KeyError(f"Missing network color for {net!r}")
+            base = network_colors[net]
             neg = neg_color_rgba(base)
             c_pos = tuple(x / 255.0 for x in base[:3]) + (1.0,)
             c_neg = tuple(x / 255.0 for x in neg[:3]) + (1.0,)
@@ -1030,7 +1029,9 @@ def render_cluster_figure(
         step = 0.064
         ordered_nets = sorted(net_counts.keys())
         for net in ordered_nets[:12]:
-            base = network_colors.get(net, (128, 128, 128, 255))
+            if net not in network_colors:
+                raise KeyError(f"Missing network color for {net!r}")
+            base = network_colors[net]
             neg = neg_color_rgba(base)
             c_pos = tuple(x / 255.0 for x in base[:3]) + (1.0,)
             c_neg = tuple(x / 255.0 for x in neg[:3]) + (1.0,)

@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import json
 import re
 from pathlib import Path
 
@@ -11,18 +10,15 @@ from nibabel.gifti import GiftiDataArray, GiftiImage, GiftiLabel, GiftiLabelTabl
 
 from lib.workbench_grid import compose_wb_grid_with_legend
 from lib.workbench_scene_batch import render_scene_batch
+from lib.network_colors import GLOBAL_NETWORK_STYLE_JSON, load_network_colors as _load_network_colors
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-NETWORK_STYLE_JSON = REPO_ROOT / "config" / "hipp_network_style.json"
+NETWORK_STYLE_JSON = GLOBAL_NETWORK_STYLE_JSON
 DEFAULT_SCENE = REPO_ROOT / "config" / "wb_locked_native_view_lateral_medial.scene"
 
 
 def load_network_colors(path: Path) -> dict[str, tuple[int, int, int, int]]:
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    out: dict[str, tuple[int, int, int, int]] = {}
-    for _, row in payload.items():
-        out[str(row["name"])] = tuple(int(v) for v in row["rgba"])
-    return out
+    return _load_network_colors(path)
 
 
 def infer_density_from_surface(path: Path) -> str:
@@ -76,7 +72,9 @@ def make_network_label_gifti(
     table.labels.append(null_label)
 
     for idx, name in enumerate(network_names, start=1):
-        rgba = network_colors.get(name, (128, 128, 128, 255))
+        if name not in network_colors:
+            raise KeyError(f"Missing network color for {name!r}")
+        rgba = network_colors[name]
         g = GiftiLabel(
             key=int(idx),
             red=float(rgba[0]) / 255.0,
@@ -147,23 +145,7 @@ def read_surface_vertex_count(surface_path: Path) -> int:
 
 def network_color_map(
     style_path: Path = NETWORK_STYLE_JSON,
-    merge_path: Path = REPO_ROOT / "config" / "cross_atlas_network_merge.json",
 ) -> dict[str, tuple[int, int, int, int]]:
-    out: dict[str, tuple[int, int, int, int]] = {}
-    if merge_path.exists():
-        payload = json.loads(merge_path.read_text(encoding="utf-8"))
-        for name, rgba in payload.get("shared_colors_rgba", {}).items():
-            if not isinstance(rgba, list) or len(rgba) != 4:
-                continue
-            out[str(name)] = tuple(int(v) for v in rgba)
-    if style_path.exists():
-        payload = json.loads(style_path.read_text(encoding="utf-8"))
-        for row in payload.values():
-            name = row.get("name")
-            rgba = row.get("rgba", [])
-            if not name or not isinstance(rgba, list) or len(rgba) != 4:
-                continue
-            out.setdefault(str(name), tuple(int(v) for v in rgba))
-    return out
+    return _load_network_colors(style_path)
 
 

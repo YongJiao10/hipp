@@ -16,27 +16,37 @@ and their contents should not be rewritten for local execution. Their handoff
 contract to `03_02_build_kong2022_routea_reference.py` is the generated label
 pair:
 
-- `sub-{sid}/kong2022_areal_mshbm*/project_dir/route_a_outputs/lh_labels.txt`
-- `sub-{sid}/kong2022_areal_mshbm*/project_dir/route_a_outputs/rh_labels.txt`
+- Flat Path (required): `sub-{sid}/lh_labels.txt` and `sub-{sid}/rh_labels.txt`
 
 Those files are required upstream artifacts for RouteA reference construction;
 they are not assumed to exist naturally.
 
 For the MATLAB-only smoke used on SGE, submit one job each time instead of
-running MATLAB on the login node:
+running MATLAB on the login node. Non-array `qsub` defaults to subject index
+`1`, even when Argon exposes `SGE_TASK_ID=undefined`:
 
 ```bash
 sh -c 'qsub scripts/core_workflow/sge_argon/matlab_kong2022_mshbm_subject_sge.sh'
 ```
 
-This script defaults to subject index `1` (`100610`). To run `102311`, submit a
-second single job:
+This script defaults to subject index `1` (`100610`). To run one explicit
+subject without the dual-queue launcher:
+
+```bash
+qsub -q PINC -v "SUBJECT_IDS_CSV=100610" \
+  scripts/core_workflow/sge_argon/matlab_kong2022_mshbm_subject_sge.sh
+```
+
+To run `102311` from the default two-subject list, submit a second single job:
 
 ```bash
 qsub -v SUBJECT_INDEX=2 scripts/core_workflow/sge_argon/matlab_kong2022_mshbm_subject_sge.sh
 ```
 
-The SGE launcher is configured with `-q UI-HM` and `mem_free=64G`.
+The dual-queue launcher in `scripts/core_workflow/sge_argon/` calls the
+same-directory MATLAB job script above, splits the manifest into UI and PINC
+arrays, and keeps the job script's default `mem_free=16G` / `smp 3` resource
+request.
 
 ## Command
 Two-subject smoke (`100610`, `102311`):
@@ -62,18 +72,14 @@ Preflight-only check:
 ```
 
 ## Output Layout
-Per subject outputs are written to:
+Per subject RouteA labels are written to:
 
-- `outputs_core/inputs/hcp7t_hippocampus/kong2022/cortex_references/routea_areal_mshbm/sub-{sid}/kong2022_areal_mshbm/`
+- `outputs_core/inputs/hcp7t_hippocampus/kong2022/cortex_references/routea_areal_mshbm/sub-{sid}/`
 
-Key files:
+Key RouteA files:
 
-- `sub-{sid}_atlas-kong2022_areal_mshbm.dlabel.nii`
-- `labels/sub-{sid}_atlas-kong2022_areal_mshbm.L.label.gii`
-- `labels/sub-{sid}_atlas-kong2022_areal_mshbm.R.label.gii`
-- `figures/sub-{sid}_kong2022_areal_mshbm_overview.png`
-- `summary.json`
-- `stage_manifest.json`
+- `lh_labels.txt`
+- `rh_labels.txt`
 - `matlab_wrapper.log`
 
 Batch logs:
@@ -118,5 +124,5 @@ stage:
 
 This historical smoke status does not change the maintained core-workflow
 handoff contract: full RouteA reference construction requires generated
-`route_a_outputs/lh_labels.txt` and `route_a_outputs/rh_labels.txt` files for
+flat `sub-{sid}/lh_labels.txt` and `sub-{sid}/rh_labels.txt` files for
 each subject before `03_02_build_kong2022_routea_reference.py` is run.

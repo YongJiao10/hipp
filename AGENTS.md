@@ -108,3 +108,9 @@ Reference runbook: `docs/environment/agent_runtime_contract.md`
   2. The folder contents/purpose.
   3. The directory path (disk location) where the folder will be created.
 - Do not create any directory in planning mode without this explicit user confirmation.
+
+## Deletion Safeguard
+
+- Agents MUST NOT perform any file or directory deletion operations (e.g. `rm`, `rmdir`, `shutil.rmtree`, etc. in commands or scripts) without explicit confirmation from the user in the current session.
+- Before performing any deletion, the agent must ask the user for confirmation and explain the target path and the reason.
+- 禁止在未获得用户明确授权的情况下，执行任何文件或目录的删除操作（包括 `rm`, `rmdir`, `shutil.rmtree` 等）。在进行任何删除前，必须向用户确认目标路径与删除原因。

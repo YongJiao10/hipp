@@ -49,7 +49,7 @@ for those details:
 |---|---|
 | `scripts/core_workflow/lib/branch_config.py` | Branch names, aliases, and branch-specific configuration |
 | `scripts/core_workflow/lib/extract_cortex_kong2022_roi_timeseries.py` | Kong2022 cortex ROI time-series extraction |
-| `scripts/core_workflow/lib/extract_cortex_kong2022_route_a_roi_timeseries.py` | RouteA label discovery and ROI time-series extraction |
+| `scripts/core_workflow/lib/extract_cortex_kong2022_route_a_roi_timeseries.py` | RouteA flat label loading and ROI time-series extraction |
 | `scripts/core_workflow/lib/extract_cortex_merged_network_timeseries.py` | Network-level cortex time-series aggregation |
 | `scripts/core_workflow/lib/fc_math.py` | Shared FC numeric helpers |
 | `scripts/core_workflow/lib/gifti_labels.py` | GIFTI label construction helpers |

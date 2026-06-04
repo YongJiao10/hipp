@@ -114,6 +114,7 @@ from lib.output_layout import (
 from lib.fc_math import corrcoef_rows, fisher_z_transform_fc, bh_fdr
 from lib.gifti_labels import make_cluster_label_gifti, make_named_label_gifti
 from lib.io_utils import load_subject_ids, write_tsv
+from lib.network_colors import load_cluster_palette, load_network_colors
 from lib.workflow_utils import write_json
 
 
@@ -125,7 +126,6 @@ DEFAULT_GRADIENT_ROOT = DEFAULT_HIPPOMAPS_GRADIENT_ROOT
 DEFAULT_SUBJECTS = DEFAULT_KONG2022_MANIFEST_ROOT / "hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt"
 DEFAULT_HIPPUNFOLD_BATCH_ROOT = CORE_HIPPUNFOLD_BATCH_ROOT
 DEFAULT_NETWORK_STYLE = REPO_ROOT / "config" / "hipp_network_style.json"
-DEFAULT_CROSS_ATLAS_MERGE = REPO_ROOT / "config" / "cross_atlas_network_merge.json"
 DEFAULT_GROUP_AVG_SURFACES_DIR = DEFAULT_KONG2022_TEMPLATE_ROOT / "group_average_surfaces"
 KONG2022_DLABEL_OVERRIDE: Path | None = None
 HIPPOMAPS_ROOT_OVERRIDE: Path = DEFAULT_HIPPOMAPS_ROOT
@@ -1120,31 +1120,11 @@ def select_k_final_after_redundancy_filter(candidate_pool: list[dict]) -> tuple[
 
 
 def load_cluster_colors() -> list[tuple[int, int, int, int]]:
-    payload = json.loads(DEFAULT_NETWORK_STYLE.read_text(encoding="utf-8"))
-    colors = [(128, 128, 128, 255)]
-    for row in payload.values():
-        rgba = tuple(int(v) for v in row["rgba"])
-        colors.append(rgba)
-    return colors
+    return load_cluster_palette(DEFAULT_NETWORK_STYLE)
 
 
 def load_canonical_network_color_map() -> dict[str, tuple[int, int, int, int]]:
-    out: dict[str, tuple[int, int, int, int]] = {}
-    if DEFAULT_CROSS_ATLAS_MERGE.exists():
-        payload = json.loads(DEFAULT_CROSS_ATLAS_MERGE.read_text(encoding="utf-8"))
-        for name, rgba in payload.get("shared_colors_rgba", {}).items():
-            if not isinstance(rgba, list) or len(rgba) != 4:
-                continue
-            out[str(name)] = tuple(int(v) for v in rgba)
-    if DEFAULT_NETWORK_STYLE.exists():
-        payload = json.loads(DEFAULT_NETWORK_STYLE.read_text(encoding="utf-8"))
-        for row in payload.values():
-            name = row.get("name")
-            rgba = row.get("rgba", [])
-            if not name or not isinstance(rgba, list) or len(rgba) != 4:
-                continue
-            out.setdefault(str(name), tuple(int(v) for v in rgba))
-    return out
+    return load_network_colors(DEFAULT_NETWORK_STYLE)
 
 
 def infer_surface_path(subject: str, hemi: str, batch_root: Path | None = None) -> Path:
@@ -2691,7 +2671,10 @@ def functional_atlas_from_clusters(
 
     label_items: list[tuple[int, str, tuple[int, int, int, int]]] = [(0, "Null", (158, 158, 158, 255))]
     for i, n in enumerate(network_names, start=1):
-        label_items.append((int(i), str(n), color_map.get(str(n), (80, 80, 80, 255))))
+        name = str(n)
+        if name not in color_map:
+            raise KeyError(f"Missing network color for {name!r}")
+        label_items.append((int(i), name, color_map[name]))
     label_items.append((key_unassigned, "unassigned", (20, 20, 20, 255)))
 
     meta = {
@@ -2724,7 +2707,10 @@ def functional_atlas_from_vertices(
 
     label_items: list[tuple[int, str, tuple[int, int, int, int]]] = [(0, "Null", (158, 158, 158, 255))]
     for i, n in enumerate(network_names, start=1):
-        label_items.append((int(i), str(n), color_map.get(str(n), (80, 80, 80, 255))))
+        name = str(n)
+        if name not in color_map:
+            raise KeyError(f"Missing network color for {name!r}")
+        label_items.append((int(i), name, color_map[name]))
     label_items.append((key_unassigned, "unassigned", (20, 20, 20, 255)))
 
     meta = {

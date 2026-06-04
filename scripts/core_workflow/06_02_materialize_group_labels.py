@@ -20,8 +20,7 @@ Inputs:
     - Group feature summary: `group_feature_summary.json`
   - Style configuration files:
     - `config/hipp_network_style.json`
-    - `config/cross_atlas_network_merge.json`
-
+  
 Outputs:
 - File outputs:
   - Group functional atlas label array: `group_functional_atlas_labels.npy` under the same run subdirectory.

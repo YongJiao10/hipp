@@ -52,8 +52,8 @@ from lib.fc_math import corrcoef_rows, compact_active_vertices
 from lib.extract_cortex_merged_network_timeseries import extract_structure_data
 from lib.extract_cortex_kong2022_route_a_roi_timeseries import (
     align_surface_labels_to_dt_vertices,
-    discover_route_a_outputs_dir,
     load_surface_label_vector,
+    route_a_label_paths,
 )
 
 import numpy as np
@@ -439,7 +439,6 @@ def load_ctxdrop_cortex_inputs(
     data_root: Path,
     subject: str,
     route_a_root: Path,
-    route_a_label_dir: Path | None,
     left_cortex_surface_template: str,
     right_cortex_surface_template: str,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, dict[str, int], dict[str, Path]]:
@@ -454,9 +453,9 @@ def load_ctxdrop_cortex_inputs(
     left_vertices, left_dt = extract_structure_data(axis, dt_data_t, "CORTEX_LEFT")
     right_vertices, right_dt = extract_structure_data(axis, dt_data_t, "CORTEX_RIGHT")
 
-    route_out_dir = discover_route_a_outputs_dir(route_a_root=route_a_root, subject=subject, explicit=route_a_label_dir)
-    lh_full = load_surface_label_vector(route_out_dir / "lh_labels.txt")
-    rh_full = load_surface_label_vector(route_out_dir / "rh_labels.txt")
+    lh_labels_path, rh_labels_path = route_a_label_paths(route_a_root=route_a_root, subject=subject)
+    lh_full = load_surface_label_vector(lh_labels_path)
+    rh_full = load_surface_label_vector(rh_labels_path)
     left_roi_ids = align_surface_labels_to_dt_vertices(lh_full, left_vertices, hemi="L")
     right_roi_ids = align_surface_labels_to_dt_vertices(rh_full, right_vertices, hemi="R")
 
@@ -475,7 +474,7 @@ def load_ctxdrop_cortex_inputs(
     ts = np.vstack([left_dt, right_dt]).astype(np.float32)
     roi_ids = np.concatenate([left_roi_ids, right_roi_ids]).astype(np.int32)
     counts = {"CORTEX_LEFT": int(left_dt.shape[0]), "CORTEX_RIGHT": int(right_dt.shape[0])}
-    paths = {"dtseries": dt_path.resolve(), "left_surface": cortex_surface_paths["L"], "right_surface": cortex_surface_paths["R"], "route_a_labels": route_out_dir.resolve()}
+    paths = {"dtseries": dt_path.resolve(), "left_surface": cortex_surface_paths["L"], "right_surface": cortex_surface_paths["R"], "route_a_labels": lh_labels_path.parent.resolve()}
     return coords, ts, roi_ids, counts, paths
 
 
@@ -677,7 +676,6 @@ def process_subject(
     data_root_str: str | None = None,
     hippunfold_batch_root_str: str | None = None,
     route_a_root_str: str | None = None,
-    route_a_label_dir_str: str | None = None,
     left_cortex_surface_template: str = DEFAULT_LEFT_CORTEX_SURFACE_TEMPLATE,
     right_cortex_surface_template: str = DEFAULT_RIGHT_CORTEX_SURFACE_TEMPLATE,
     ctxdrop_distance_mm: float = 20.0,
@@ -693,12 +691,10 @@ def process_subject(
         data_root = Path(data_root_str or DEFAULT_DATA_ROOT).resolve()
         hippunfold_batch_root = Path(hippunfold_batch_root_str or DEFAULT_HIPPUNFOLD_BATCH_ROOT).resolve()
         route_a_root = Path(route_a_root_str or DEFAULT_ROUTE_A_ROOT).resolve()
-        route_a_label_dir = Path(route_a_label_dir_str).resolve() if route_a_label_dir_str else None
         cortex_coords, cortex_ts, cortex_roi_ids, cortex_counts, _cortex_paths = load_ctxdrop_cortex_inputs(
             data_root=data_root,
             subject=subject,
             route_a_root=route_a_root,
-            route_a_label_dir=route_a_label_dir,
             left_cortex_surface_template=left_cortex_surface_template,
             right_cortex_surface_template=right_cortex_surface_template,
         )
@@ -738,7 +734,7 @@ def process_subject(
             n_fc += 1
     return {"subject": f"sub-{subject}", "fc_combos": int(n_fc), "ctxdrop": False}
 
-def main() -> int:
+def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Materialize Kong2022 hippocampal vertex-to-ROI FC caches.")
     parser.add_argument("--shared-root", default=str(DEFAULT_SHARED_ROOT))
     parser.add_argument("--surface-root", default=str(DEFAULT_SURFACE_ROOT))
@@ -754,9 +750,13 @@ def main() -> int:
     parser.add_argument("--data-root", default=str(DEFAULT_DATA_ROOT))
     parser.add_argument("--hippunfold-batch-root", default=str(DEFAULT_HIPPUNFOLD_BATCH_ROOT))
     parser.add_argument("--route-a-root", default=str(DEFAULT_ROUTE_A_ROOT))
-    parser.add_argument("--route-a-label-dir", default=None)
     parser.add_argument("--left-cortex-surface-template", default=DEFAULT_LEFT_CORTEX_SURFACE_TEMPLATE)
     parser.add_argument("--right-cortex-surface-template", default=DEFAULT_RIGHT_CORTEX_SURFACE_TEMPLATE)
+    return parser
+
+
+def main() -> int:
+    parser = build_arg_parser()
     args = parser.parse_args()
 
     shared_root = Path(args.shared_root).resolve()
@@ -782,7 +782,6 @@ def main() -> int:
                 data_root_str=str(Path(args.data_root).resolve()),
                 hippunfold_batch_root_str=str(Path(args.hippunfold_batch_root).resolve()),
                 route_a_root_str=str(Path(args.route_a_root).resolve()),
-                route_a_label_dir_str=(str(Path(args.route_a_label_dir).resolve()) if args.route_a_label_dir else None),
                 left_cortex_surface_template=str(args.left_cortex_surface_template),
                 right_cortex_surface_template=str(args.right_cortex_surface_template),
                 ctxdrop_distance_mm=float(args.ctxdrop_distance_mm),
@@ -805,7 +804,6 @@ def main() -> int:
                     str(Path(args.data_root).resolve()),
                     str(Path(args.hippunfold_batch_root).resolve()),
                     str(Path(args.route_a_root).resolve()),
-                    (str(Path(args.route_a_label_dir).resolve()) if args.route_a_label_dir else None),
                     str(args.left_cortex_surface_template),
                     str(args.right_cortex_surface_template),
                     float(args.ctxdrop_distance_mm),

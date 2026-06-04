@@ -107,23 +107,16 @@ def parse_run_segments(run_lengths: list[int] | None, expected_total_tp: int) ->
     return segments
 
 
-def discover_route_a_outputs_dir(route_a_root: Path, subject: str, explicit: Path | None) -> Path:
-    if explicit is not None:
-        out_dir = explicit.resolve()
-    else:
-        pattern = f"sub-{subject}/kong2022_areal_mshbm*/project_dir/route_a_outputs"
-        candidates = [p for p in route_a_root.glob(pattern) if p.is_dir()]
-        if not candidates:
-            raise FileNotFoundError(
-                f"No Route A route_a_outputs found for sub-{subject} under {route_a_root}"
-            )
-        candidates.sort(key=lambda p: p.stat().st_mtime_ns, reverse=True)
-        out_dir = candidates[0].resolve()
-    lh = out_dir / "lh_labels.txt"
-    rh = out_dir / "rh_labels.txt"
-    if not lh.exists() or not rh.exists():
-        raise FileNotFoundError(f"Missing lh/rh label files in {out_dir}")
-    return out_dir
+def route_a_label_paths(route_a_root: Path, subject: str) -> tuple[Path, Path]:
+    subject = str(subject).replace("sub-", "")
+    subject_dir = Path(route_a_root) / f"sub-{subject}"
+    lh = subject_dir / "lh_labels.txt"
+    rh = subject_dir / "rh_labels.txt"
+    missing = [p for p in (lh, rh) if not p.exists()]
+    if missing:
+        expected = f"{subject_dir}/lh_labels.txt and {subject_dir}/rh_labels.txt"
+        raise FileNotFoundError(f"Missing flat RouteA label files for sub-{subject}; expected {expected}")
+    return lh, rh
 
 
 def load_surface_label_vector(path: Path, expected_len: int = 32492) -> np.ndarray:
@@ -210,7 +203,7 @@ def aggregate_hemi_roi_timeseries(
     return ts_rows, kept_rows, empty_rows, stats
 
 
-def main() -> int:
+def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Bridge Route A individualized labels to Route B-compatible reference/kong2022 arrays."
     )
@@ -220,18 +213,21 @@ def main() -> int:
     parser.add_argument("--cross-atlas-merge-json", default=str(KONG2022_MERGE_CONFIG))
     parser.add_argument("--shared-root", default=str(DEFAULT_SHARED_ROOT))
     parser.add_argument("--route-a-root", default=str(DEFAULT_ROUTE_A_ROOT))
-    parser.add_argument("--route-a-label-dir", default=None)
     parser.add_argument("--left-tsnr-mask", default=None)
     parser.add_argument("--right-tsnr-mask", default=None)
     parser.add_argument("--run-lengths", nargs="*", type=int, default=None)
     parser.add_argument("--outdir", default=None)
     parser.add_argument("--overwrite", action="store_true", default=False)
+    return parser
+
+
+def main() -> int:
+    parser = build_arg_parser()
     args = parser.parse_args()
 
     subject = str(args.subject).replace("sub-", "")
     shared_root = Path(args.shared_root).resolve()
     route_a_root = Path(args.route_a_root).resolve()
-    route_a_label_dir = Path(args.route_a_label_dir).resolve() if args.route_a_label_dir else None
     dtseries = (
         Path(args.dtseries).resolve()
         if args.dtseries
@@ -255,9 +251,8 @@ def main() -> int:
                 "Use a different --shared-root or pass --overwrite."
             )
 
-    route_out_dir = discover_route_a_outputs_dir(route_a_root=route_a_root, subject=subject, explicit=route_a_label_dir)
-    lh_labels_path = route_out_dir / "lh_labels.txt"
-    rh_labels_path = route_out_dir / "rh_labels.txt"
+    lh_labels_path, rh_labels_path = route_a_label_paths(route_a_root=route_a_root, subject=subject)
+    route_out_dir = lh_labels_path.parent
     lh_full = load_surface_label_vector(lh_labels_path)
     rh_full = load_surface_label_vector(rh_labels_path)
 
