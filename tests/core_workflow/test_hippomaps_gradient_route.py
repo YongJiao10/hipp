@@ -58,6 +58,14 @@ cortex_mod = _load_module(
     "scripts/core_workflow/06_03_build_cluster_cortex_panels.py",
     "core_06_03_build_cluster_cortex_panels",
 )
+confidence_mod = _load_module(
+    "scripts/core_workflow/06_06_render_confidence_maps.py",
+    "core_06_06_render_confidence_maps",
+)
+route_tags = _load_module(
+    "scripts/core_workflow/lib/route_tags.py",
+    "core_route_tags",
+)
 output_layout = _load_module(
     "scripts/core_workflow/lib/output_layout.py",
     "core_output_layout",
@@ -719,6 +727,88 @@ def test_ensure_bilateral_gradient_annotations_repairs_late_raw_screenshot() -> 
         assert Image.open(final).size == (1480, 150)
 
 
+def test_route_tag_auto_detection_and_validation() -> None:
+    # Test 05_02 infer_route_tag function
+    assert atlas_mod.infer_route_tag(Path("/path/to/routea_151"), "auto") == "routea"
+    assert atlas_mod.infer_route_tag(Path("/path/to/routea_ctxreg_151"), "auto") == "routea_ctxreg"
+    assert atlas_mod.infer_route_tag(Path("/path/to/routeb_151"), "auto") == "routeb"
+    assert atlas_mod.infer_route_tag(Path("/path/to/any"), "routea") == "routea"
+
+    # Test that mismatched out-root under group_atlas raises ValueError
+    try:
+        route_tags.validate_group_atlas_root_for_route(
+            Path("outputs_core/work/group_atlas/routeb_full_k3_fisherz"),
+            "routea",
+        )
+    except ValueError as exc:
+        assert "Provenance discrepancy" in str(exc)
+    else:
+        raise AssertionError("routea must not validate against routeb group atlas root")
+
+    # Verify main arg parser in 06_03 defaults to auto for route-tag
+    with patch("sys.argv", ["06_03_build_cluster_cortex_panels.py"]):
+        args_06_03 = cortex_mod.parse_args()
+        assert args_06_03.route_tag == "auto"
+
+
+def test_route_tag_exact_group_root_validation_rejects_prefix_collisions() -> None:
+    route_tags.validate_group_atlas_root_for_route(
+        Path("outputs_core/work/group_atlas/routea_full_k3_fisherz"),
+        "routea",
+    )
+    route_tags.validate_group_atlas_root_for_route(
+        Path("outputs_core/work/group_atlas/routea_17net_full_k3_fisherz"),
+        "routea_17net",
+    )
+
+    try:
+        route_tags.validate_group_atlas_root_for_route(
+            Path("outputs_core/work/group_atlas/routea_17net_full_k3_fisherz"),
+            "routea",
+        )
+    except ValueError as exc:
+        assert "Provenance discrepancy" in str(exc)
+    else:
+        raise AssertionError("routea must not validate against routea_17net group atlas root")
+
+
+def test_family17_auto_route_requires_explicit_routea_17net() -> None:
+    try:
+        route_tags.resolve_route_tag_for_group_atlas_run(
+            shared_root=Path("outputs_core/inputs/hcp7t_hippocampus/kong2022/shared_inputs/routea_151"),
+            explicit_route="auto",
+            network_taxonomy="family17",
+        )
+    except ValueError as exc:
+        assert "routea_17net" in str(exc)
+    else:
+        raise AssertionError("family17 auto route must refuse to silently use routea")
+
+    assert (
+        route_tags.resolve_route_tag_for_group_atlas_run(
+            shared_root=Path("outputs_core/inputs/hcp7t_hippocampus/kong2022/shared_inputs/routea_151"),
+            explicit_route="routea_17net",
+            network_taxonomy="family17",
+        )
+        == "routea_17net"
+    )
+
+
+def test_route_auto_helpers_cover_renderers_and_confidence_choices() -> None:
+    assert (
+        route_tags.infer_route_tag_from_group_root(Path("outputs_core/work/group_atlas/routea_ctxdrop_full_k3_fisherz"))
+        == "routea_ctxdrop"
+    )
+    assert (
+        route_tags.infer_route_tag_from_group_root(Path("outputs_core/work/group_atlas/routea_17net_full_k3_fisherz"))
+        == "routea_17net"
+    )
+
+    confidence_args = confidence_mod.build_arg_parser().parse_args([])
+    assert confidence_args.route_tag == "auto"
+    assert "routea_17net" in confidence_mod.build_arg_parser()._option_string_actions["--route-tag"].choices
+
+
 def main() -> int:
     test_group_mean_fc_applies_fisher_z_before_averaging()
     test_gradientmaps_called_with_official_pearson_kernel_and_full_lambda_ev()
@@ -744,6 +834,10 @@ def main() -> int:
     test_render_gradient_figure_can_render_left_hemi_only()
     test_annotate_gradient_image_adds_left_margin_and_ev_labels()
     test_ensure_bilateral_gradient_annotations_repairs_late_raw_screenshot()
+    test_route_tag_auto_detection_and_validation()
+    test_route_tag_exact_group_root_validation_rejects_prefix_collisions()
+    test_family17_auto_route_requires_explicit_routea_17net()
+    test_route_auto_helpers_cover_renderers_and_confidence_choices()
     print("ok: hippomaps gradient route checks passed")
     return 0
 

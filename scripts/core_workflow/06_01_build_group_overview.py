@@ -50,6 +50,7 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 from nibabel.gifti import GiftiDataArray, GiftiImage, GiftiLabel, GiftiLabelTable
 
 from lib.output_layout import DEFAULT_OVERVIEWS_DIR, DEFAULT_ROUTEA_GROUP_ATLAS_ROOT
+from lib.route_tags import ROUTE_TAG_CHOICES, infer_route_tag_from_group_root, validate_group_atlas_root_for_route
 from lib.workflow_utils import write_json
 from lib.surface_utils import long_axis_order, render_locked_grid, network_color_map
 from lib.io_utils import load_json
@@ -72,7 +73,6 @@ METHOD_CHOICES = [
     "intrinsic-spectral",
     "wta-top",
 ]
-ROUTE_TAG_CHOICES = ["routea", "routea_17net", "routea_ctxreg", "routea_ctxdrop", "routeb"]
 METHODS_DEFAULT = [
     "intrinsic-spectral",
     "network-spectral",
@@ -1184,6 +1184,11 @@ def main() -> int:
     else:
         args.mode_tag = "sparse"
 
+    # Enforce strict route tag detection from group_root to prevent provenance decoupling.
+    if args.route_tag is None:
+        args.route_tag = infer_route_tag_from_group_root(group_root)
+    else:
+        validate_group_atlas_root_for_route(group_root, str(args.route_tag))
 
     present_dir = Path(args.present_dir).resolve()
     present_dir.mkdir(parents=True, exist_ok=True)

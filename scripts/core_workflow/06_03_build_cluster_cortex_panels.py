@@ -70,6 +70,7 @@ from lib.output_layout import (
     DEFAULT_KONG2022_ROUTEA_ROOT,
     DEFAULT_ROUTEA_GROUP_ATLAS_ROOT,
 )
+from lib.route_tags import ROUTE_TAG_CHOICES, infer_route_tag_from_group_root, validate_group_atlas_root_for_route
 from lib.fc_math import corrcoef_rows, bh_fdr
 from lib.gifti_labels import make_named_label_gifti
 from lib.io_utils import load_json, read_tsv_rows, write_tsv
@@ -206,7 +207,7 @@ def parse_args() -> argparse.Namespace:
         help="Root for all outputs (cluster figures, manifests, quicklook index). Defaults to <present-dir>/runtime.",
     )
     parser.add_argument("--atlas", default="kong2022", choices=["kong2022"])
-    parser.add_argument("--route-tag", default="routea", choices=["routea", "routea_17net", "routea_ctxreg", "routea_ctxdrop", "routeb"])
+    parser.add_argument("--route-tag", default="auto", choices=["auto", *ROUTE_TAG_CHOICES])
     parser.add_argument("--methods", nargs="+", default=METHODS_DEFAULT, choices=METHOD_CHOICES)
     parser.add_argument("--smoothings", nargs="+", default=SMOOTHINGS)
     parser.add_argument("--hemis", nargs="+", default=HEMIS)
@@ -1602,6 +1603,10 @@ def main() -> int:
     args = parse_args()
 
     group_root = Path(args.group_root).resolve()
+    if args.route_tag == "auto":
+        args.route_tag = infer_route_tag_from_group_root(group_root)
+    else:
+        validate_group_atlas_root_for_route(group_root, str(args.route_tag))
     shared_root = Path(args.shared_root).resolve()
     reference_root = Path(args.reference_root).resolve() if args.reference_root else shared_root
     mask_root = Path(args.mask_root).resolve() if args.mask_root else shared_root

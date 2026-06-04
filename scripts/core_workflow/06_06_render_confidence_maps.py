@@ -24,6 +24,7 @@ from PIL import Image, ImageDraw, ImageFont
 from lib.confidence_map import publication_display_data, publication_display_upper
 from lib.hippomaps_adapter import DEFAULT_HIPPOMAPS_ROOT, ensure_hippomaps_on_path
 from lib.output_layout import DEFAULT_GRADIENTS_DIR, DEFAULT_ROUTEA_GROUP_ATLAS_ROOT
+from lib.route_tags import ROUTE_TAG_CHOICES, infer_route_tag_from_group_root, validate_group_atlas_root_for_route
 from lib.traceability import StageSpec, run_stage
 from lib.io_utils import load_json
 
@@ -359,6 +360,10 @@ def render_combo(
 
 def main(args: argparse.Namespace) -> int:
     out_root = Path(args.out_root).resolve()
+    if args.route_tag == "auto":
+        args.route_tag = infer_route_tag_from_group_root(out_root)
+    else:
+        validate_group_atlas_root_for_route(out_root, str(args.route_tag))
     present_root = Path(args.present_root).resolve()
     hippomaps_root = Path(args.hippomaps_root).resolve()
     comp_str = args.gradient_components.strip()
@@ -390,7 +395,7 @@ def main(args: argparse.Namespace) -> int:
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Render functional parcellation confidence maps.")
     parser.add_argument("--out-root", default=str(DEFAULT_ROUTEA_GROUP_ATLAS_ROOT))
-    parser.add_argument("--route-tag", default="routea", choices=["routea", "routea_ctxreg", "routea_ctxdrop", "routeb"])
+    parser.add_argument("--route-tag", default="auto", choices=["auto", *ROUTE_TAG_CHOICES])
     parser.add_argument("--present-root", default=str(DEFAULT_GRADIENTS_DIR))
     parser.add_argument("--hippomaps-root", default=str(DEFAULT_HIPPOMAPS_ROOT))
     parser.add_argument("--smoothings", nargs="+", default=list(SMOOTHINGS))

@@ -27,7 +27,7 @@ For the RouteA cortex-control branch, run `04_00_materialize_cortex_regressed_su
 
 For the RouteA cortex-drop branch, run `04_01_materialize_kong2022_roi_fc.py --ctxdrop` with `--shared-root outputs_core/inputs/hcp7t_hippocampus/kong2022/shared_inputs/routea_ctxdrop_151`, `--surface-root outputs_core/inputs/hcp7t_hippocampus/kong2022/shared_inputs/surface_151`, `--reference-root outputs_core/inputs/hcp7t_hippocampus/kong2022/shared_inputs/routea_151`, and `--mask-root outputs_core/inputs/hcp7t_hippocampus/kong2022/shared_inputs/surface_151`. This branch keeps hippocampal time series unchanged, excludes valid cortex vertices within 20 mm before ROI averaging, stores smoothing-independent local cortex-neighbor diagnostics under `sub-*/surface/local_cortex_neighbors/hemi_*/`, and is maintained for `gradient-spectral` and `wta-top` outputs. Use `06_07_render_ctxdrop_neighbor_counts.py --source-branch routea_ctxdrop` to render the group-average local neighbor-count hippocampal surface overlay under `outputs_core/present/local_cortex_neighbors/`; the same renderer supports `--source-branch routea_ctxreg` from the ctxreg diagnostics.
 
-For the RouteA 17-net taxonomy branch, do not create a new input root or gradient root. Reuse `outputs_core/inputs/hcp7t_hippocampus/kong2022/shared_inputs/routea_151` and run `05_02_run_group_atlas.py` with `--route-tag routea_17net --network-taxonomy family17 --out-root outputs_core/work/group_atlas/routea_17net_full_k3_fisherz`. `05_02` reads RouteA gradients from `outputs_core/work/hippomaps_gradients/routea` for `gradient-spectral`, so `05_01` should not be run as `routea_17net`.
+For the RouteA 17-net taxonomy branch, do not create a new input root or gradient root. Reuse `outputs_core/inputs/hcp7t_hippocampus/kong2022/shared_inputs/routea_151` and run `05_02_run_group_atlas.py` with `--route-tag routea_17net --network-taxonomy family17 --out-root outputs_core/work/group_atlas/routea_17net_full_k3_fisherz`. `05_02` reads RouteA gradients from `outputs_core/work/hippomaps_gradients/routea` for `gradient-spectral`, so `05_01` should not be run as `routea_17net`. Because this branch intentionally reuses the RouteA input root, `--route-tag auto` refuses `--network-taxonomy family17`; pass `--route-tag routea_17net` explicitly.
 
 For the Kong2022 `gradient-spectral` branch, run
 `05_01_compute_hippomaps_gradients.py` first. `05_01` writes aligned
@@ -79,9 +79,16 @@ the selected suffixed variant files, normally `_fisherz`. Use
 first generate the plan, then archive the verified duplicate targets, and only
 then delete the reviewed target list.
 
-Render-only reruns may point `06_01_build_group_overview.py` and
-`06_03_build_cluster_cortex_panels.py` at validated group-atlas intermediates
-with `--group-root`. `07_01_build_group_matrix.py` defaults to `--routes routea`
+Render-only reruns may point `06_01_build_group_overview.py`,
+`06_03_build_cluster_cortex_panels.py`, and `06_06_render_confidence_maps.py`
+at validated group-atlas intermediates with `--group-root`/`--out-root`. When
+`--route-tag` is omitted or set to `auto`, these renderers infer the route from
+the group-atlas directory name using exact route prefixes such as
+`routea_full_k3_fisherz`, `routea_17net_full_k3_fisherz`,
+`routea_ctxreg_full_k3_fisherz`, `routea_ctxdrop_full_k3_fisherz`, or
+`routeb_full_k3_fisherz`. If an explicit route tag disagrees with a canonical
+`group_atlas/<route>_...` directory, the script aborts instead of writing
+cross-route outputs. `07_01_build_group_matrix.py` defaults to `--routes routea`
 and reads branch group-atlas outputs from `outputs_core/work/group_atlas/{route}_full_k3_fisherz/`, including `routea_17net_full_k3_fisherz` or `routeb_full_k3_fisherz` when those routes are requested. It renders both
 `fisherz` and `count` overviews for cluster-based methods and one WTA overview;
 pass `--routes routea routea_17net routea_ctxreg routea_ctxdrop routeb` only after the requested non-default route intermediates have

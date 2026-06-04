@@ -111,6 +111,12 @@ from lib.output_layout import (
     DEFAULT_KONG2022_TEMPLATE_ROOT,
     DEFAULT_ROUTEB_GROUP_ATLAS_ROOT,
 )
+from lib.route_tags import (
+    ROUTE_TAG_CHOICES,
+    resolve_group_atlas_out_root,
+    resolve_route_tag_for_group_atlas_run,
+    validate_group_atlas_root_for_route,
+)
 from lib.fc_math import corrcoef_rows, fisher_z_transform_fc, bh_fdr
 from lib.gifti_labels import make_cluster_label_gifti, make_named_label_gifti
 from lib.io_utils import load_subject_ids, write_tsv
@@ -155,7 +161,6 @@ SUBJECT_FC_MODE_CHOICES = ["full", "top-percent"]
 DEFAULT_GRADIENT_COMPONENTS = (1, 2, 3)
 GRADIENT_N_COMPONENTS_COMPUTED = 5
 GRADIENT_BRAINSPACE_KERNEL = "pearson"
-ROUTE_TAG_CHOICES = ("routea", "routea_17net", "routea_ctxreg", "routea_ctxdrop", "routeb")
 NETWORK_TAXONOMIES = ("canonical8", "family17")
 MAX_K_EVAL_JOBS = 10
 RESUME_SIGNATURE_VERSION = 1
@@ -2958,22 +2963,10 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 
 def infer_route_tag(shared_root: Path, explicit: str = "auto") -> str:
-    if explicit != "auto":
-        return explicit
-    parts = {p.lower() for p in Path(shared_root).parts}
-    name = Path(shared_root).name.lower()
-    if "routea_ctxreg" in name or "routea_ctxreg_151" in parts:
-        return "routea_ctxreg"
-    if "routea_ctxdrop" in name or "routea_ctxdrop_151" in parts:
-        return "routea_ctxdrop"
-    if "routea_17net" in name or "routea_17net_151" in parts:
-        return "routea_17net"
-    if "routea" in name or "routea_151" in parts:
-        return "routea"
-    if "routeb" in name or "routeb_151" in parts:
-        return "routeb"
-    raise ValueError(
-        f"Could not infer --route-tag from --shared-root={shared_root}; pass an explicit supported --route-tag."
+    return resolve_route_tag_for_group_atlas_run(
+        shared_root=Path(shared_root),
+        explicit_route=str(explicit),
+        network_taxonomy="canonical8",
     )
 
 
@@ -2993,14 +2986,26 @@ def main() -> int:
 
     shared_root = Path(args.shared_root).resolve()
     surface_root = Path(args.surface_root).resolve()
-    out_root = Path(args.out_root).resolve()
+    network_taxonomy = str(args.network_taxonomy)
+    route_tag = resolve_route_tag_for_group_atlas_run(
+        shared_root=shared_root,
+        explicit_route=str(args.route_tag),
+        network_taxonomy=network_taxonomy,
+    )
+    out_root, out_root_adjusted = resolve_group_atlas_out_root(
+        args.out_root,
+        route_tag,
+        default_routeb_out_root_selected=args.out_root == str(DEFAULT_ROUTEB_GROUP_ATLAS_ROOT),
+    )
+    if out_root_adjusted:
+        print(f"[info] Automatically adjusted --out-root to matching route directory: {out_root}", flush=True)
+    validate_group_atlas_root_for_route(out_root, route_tag)
+
+    out_root.mkdir(parents=True, exist_ok=True)
     reference_root = Path(args.reference_root).resolve() if args.reference_root else shared_root
     gradient_root = Path(args.gradient_root).resolve()
-    route_tag = infer_route_tag(shared_root, str(args.route_tag))
     gradient_route_tag = gradient_route_for_route_tag(route_tag)
-    network_taxonomy = str(args.network_taxonomy)
     hippunfold_batch_root = Path(args.hippunfold_batch_root).resolve()
-    out_root.mkdir(parents=True, exist_ok=True)
 
     subjects_manifest_path = Path(args.subjects_manifest).resolve()
     subjects = load_subject_ids(subjects_manifest_path)
