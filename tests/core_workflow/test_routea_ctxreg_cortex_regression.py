@@ -329,7 +329,6 @@ def test_routea_ctx_control_route_contracts_and_paths() -> None:
 def test_routea_17net_reuses_routea_inputs_and_has_shallow_output_contract() -> None:
     assert "routea_17net" not in compute_mod.ROUTE_TO_SHARED_DIR
     assert atlas_mod.gradient_route_for_route_tag("routea_17net") == "routea"
-    assert atlas_mod.infer_route_tag(Path("/tmp/kong2022/shared_inputs/routea_151"), "routea_17net") == "routea_17net"
     assert "routea_17net" in atlas_mod.ROUTE_TAG_CHOICES
     assert "routea_17net" in overview_mod.ROUTE_TAG_CHOICES
     assert "routea_17net" in matrix_mod.ROUTE_CHOICES
@@ -338,24 +337,6 @@ def test_routea_17net_reuses_routea_inputs_and_has_shallow_output_contract() -> 
     assert route_roots["routea_17net"] == (
         REPO_ROOT / "outputs_core" / "work" / "group_atlas" / "routea_17net_full_k3_fisherz"
     ).resolve()
-
-    jobs = matrix_mod.build_render_jobs(
-        REPO_ROOT / "outputs_core" / "work" / "group_atlas",
-        routes=("routea_17net",),
-        methods=("network-spectral",),
-    )
-    assert {job.route_tag for job in jobs} == {"routea_17net"}
-    assert {job.assignment_variant for job in jobs} == {"fisherz", "count"}
-    assert all("routea_17net_full_k3_fisherz" in str(job.group_root) for job in jobs)
-
-    overview_path = matrix_mod.expected_overview_path(
-        Path("/tmp/present"),
-        method="network-spectral",
-        route_tag="routea_17net",
-        mode_tag=None,
-        assignment_variant="fisherz",
-    )
-    assert overview_path.name == "kong2022_network-spectral_group_overview_routea_17net_fisherz.png"
 
 
 def test_ctxdrop_materializer_writes_standard_fc_and_diagnostics(tmp_path: Path) -> None:

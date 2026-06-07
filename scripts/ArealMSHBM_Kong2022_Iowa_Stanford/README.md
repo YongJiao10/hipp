@@ -79,7 +79,10 @@ Argon launcher submission pattern:
 
 Runtime subject lists and scheduler logs are written under `${OUT_ROOT}/_manifests`
 and `${OUT_ROOT}/_sge_logs`; the script directory should contain source files
-only.
+only. The launcher writes a queue-specific qsub wrapper under `_manifests` that
+exports the selected subject manifest before executing the task script. Task
+logs show the consumed manifest as `SubjectIDsFile=...`; verify this path when
+auditing a batch.
 
 ## Controls
 

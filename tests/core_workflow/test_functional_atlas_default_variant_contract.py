@@ -138,7 +138,6 @@ def test_overview_wta_profile_loads_manifest_default_variant_not_unsuffixed_name
 
 
 
-
 def test_migration_plan_archives_verified_unsuffixed_duplicates_and_rewrites_manifest(tmp_path: Path) -> None:
     migrate_mod = _load_numbered_module("migrate_default_variant_outputs.py", "core_migrate_default_variant_outputs_test")
     root = tmp_path / "outputs_core" / "work" / "group_atlas"

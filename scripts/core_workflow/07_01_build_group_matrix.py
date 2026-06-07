@@ -116,8 +116,8 @@ def build_render_jobs(
     jobs: list[RenderJob] = []
     route_roots = canonical_group_roots(Path(group_atlas_root))
     route_roots_by_method = {
-        "intrinsic-spectral": [("routea", None, route_roots["routea"]), ("routea_17net", None, route_roots["routea_17net"]), ("routea_ctxreg", None, route_roots["routea_ctxreg"]), ("routea_ctxdrop", None, route_roots["routea_ctxdrop"]), ("routeb", None, route_roots["routeb"])],
-        "network-spectral": [("routea", None, route_roots["routea"]), ("routea_17net", None, route_roots["routea_17net"]), ("routea_ctxreg", None, route_roots["routea_ctxreg"]), ("routea_ctxdrop", None, route_roots["routea_ctxdrop"]), ("routeb", None, route_roots["routeb"])],
+        "intrinsic-spectral": [("routea", None, route_roots["routea"]), ("routea_ctxreg", None, route_roots["routea_ctxreg"]), ("routeb", None, route_roots["routeb"])],
+        "network-spectral": [("routea", None, route_roots["routea"]), ("routea_ctxreg", None, route_roots["routea_ctxreg"]), ("routeb", None, route_roots["routeb"])],
         "gradient-spectral": [("routea", None, route_roots["routea"]), ("routea_17net", None, route_roots["routea_17net"]), ("routea_ctxreg", None, route_roots["routea_ctxreg"]), ("routea_ctxdrop", None, route_roots["routea_ctxdrop"]), ("routeb", None, route_roots["routeb"])],
         "wta-top": [("routea", None, route_roots["routea"]), ("routea_17net", None, route_roots["routea_17net"]), ("routea_ctxreg", None, route_roots["routea_ctxreg"]), ("routea_ctxdrop", None, route_roots["routea_ctxdrop"]), ("routeb", None, route_roots["routeb"])],
     }

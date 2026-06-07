@@ -23,7 +23,6 @@ Inputs:
   - --manifest-name: Name of generated presentation manifest JSON (default: "group_overview_manifest.json").
   - --skip-readme: Skip writing the README.md summary in presentation directory.
   - --skip-manifest: Skip writing the overview manifest JSON file.
-  - --allow-missing-combos: Allow running even when some methods/hemispheres are missing.
 - Physical inputs:
   - Group parcellation label arrays: manifest `assignment_variants[default_assignment_variant].group_functional_atlas_labels` for cluster-level methods; vertex-level methods use the manifest top-level label array.
   - Group mapping status files: manifest `assignment_variants[<variant>].cluster_assignment_status` for cluster-level methods.
@@ -754,18 +753,6 @@ def render_combo(
     for ridx, smoothing in enumerate(SMOOTHINGS):
         left_manifest = _build_run_dir(group_root, method, atlas, smoothing, coverage_tag, "L", gradient_comp_tag=gradient_comp_tag) / "group_atlas_manifest.json"
         right_manifest = _build_run_dir(group_root, method, atlas, smoothing, coverage_tag, "R", gradient_comp_tag=gradient_comp_tag) / "group_atlas_manifest.json"
-        if not (left_manifest.exists() and right_manifest.exists()):
-            sub = gs[ridx, 0].subgridspec(2, 2, wspace=0.08, hspace=0.035)
-            for rr in range(2):
-                for cc in range(2):
-                    ax = fig.add_subplot(sub[rr, cc])
-                    ax.axis("off")
-                    ax.text(0.5, 0.5, f"{smoothing} missing", ha="center", va="center", fontsize=FS_MISSING)
-            ax_big = fig.add_subplot(gs[ridx, 1])
-            ax_big.axis("off")
-            ax_big.text(0.5, 0.5, f"{smoothing} missing", ha="center", va="center", fontsize=FS_MISSING)
-            continue
-
         m_l = load_json(left_manifest)
         m_r = load_json(right_manifest)
         d_l = left_manifest.parent
@@ -1168,12 +1155,6 @@ def main() -> int:
         action="store_true",
         help="Skip writing manifest JSON (useful when an upstream driver writes a consolidated manifest).",
     )
-    p.add_argument(
-        "--allow-missing-combos",
-        action="store_true",
-        help="Allow rendering placeholders when group-atlas outputs are missing. "
-        "Default is strict: require complete clustering outputs before rendering.",
-    )
     args = p.parse_args()
     group_root = Path(args.group_root).resolve()
 
@@ -1197,13 +1178,12 @@ def main() -> int:
     items: list[dict[str, object]] = []
     for atlas in args.atlases:
         for method in args.methods:
-            if not bool(args.allow_missing_combos):
-                ensure_combo_ready(
-                    group_root=group_root,
-                    method=method,
-                    atlas=atlas,
-                    coverage_tag=tau_tag,
-                )
+            ensure_combo_ready(
+                group_root=group_root,
+                method=method,
+                atlas=atlas,
+                coverage_tag=tau_tag,
+            )
             comp_tags = _discover_gradient_comp_tags(
                 group_root, method, atlas, SMOOTHINGS[0], tau_tag,
             )

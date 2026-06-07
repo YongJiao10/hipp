@@ -155,14 +155,48 @@ write_list() {
   echo "${list_file}"
 }
 
+shell_quote() {
+  printf "%q" "$1"
+}
+
+write_job_wrapper() {
+  local queue_tag="$1"
+  local subject_list="$2"
+  local wrapper_file="${manifest_dir}/${manifest_prefix}_${queue_tag}_${timestamp}.job.sh"
+
+  {
+    echo "#!/bin/bash"
+    echo "set -euo pipefail"
+    printf "export DATASET=%s\n" "$(shell_quote "${dataset}")"
+    printf "export REPO_ROOT=%s\n" "$(shell_quote "${repo_root}")"
+    printf "export SCRIPT_DIR=%s\n" "$(shell_quote "${script_dir}")"
+    printf "export DATA_ROOT=%s\n" "$(shell_quote "${data_root}")"
+    printf "export OUT_ROOT=%s\n" "$(shell_quote "${out_root}")"
+    printf "export SUBJECT_IDS_FILE=%s\n" "$(shell_quote "${subject_list}")"
+    printf "export PYTHON_EXE=%s\n" "$(shell_quote "${python_exe}")"
+    printf "export CBIG_CODE_DIR=%s\n" "$(shell_quote "${cbig_code_dir}")"
+    printf "export GROUP_PRIOR=%s\n" "$(shell_quote "${group_prior}")"
+    printf "export WB_COMMAND=%s\n" "$(shell_quote "${wb_command}")"
+    printf "export TASK_DRY_RUN=%s\n" "$(shell_quote "${task_dry_run}")"
+    printf "export OVERWRITE=%s\n" "$(shell_quote "${overwrite}")"
+    printf "exec %s\n" "$(shell_quote "${task_script}")"
+  } > "${wrapper_file}"
+  chmod +x "${wrapper_file}"
+  echo "${wrapper_file}"
+}
+
 submit_queue() {
   local queue="$1"
   local tc="$2"
   local subject_list="$3"
   local subject_count="$4"
   local job_name="$5"
+  local queue_tag
+  queue_tag="$(printf '%s' "${queue}" | tr '[:upper:]' '[:lower:]')"
   local log_dir="${log_root}/${queue}"
   mkdir -p "${log_dir}"
+  local job_wrapper
+  job_wrapper="$(write_job_wrapper "${queue_tag}" "${subject_list}")"
 
   local qsub_cmd=(
     qsub
@@ -170,14 +204,17 @@ submit_queue() {
     -q "${queue}"
     -t "1-${subject_count}"
     -tc "${tc}"
+    -pe smp 3
+    -l mem_free=64G
+    -l h_rt=24:00:00
     -j y
     -o "${log_dir}/${job_name}.\$JOB_ID.\$TASK_ID.log"
-    -v "DATASET=${dataset},REPO_ROOT=${repo_root},SCRIPT_DIR=${script_dir},DATA_ROOT=${data_root},OUT_ROOT=${out_root},SUBJECT_IDS_FILE=${subject_list},PYTHON_EXE=${python_exe},CBIG_CODE_DIR=${cbig_code_dir},GROUP_PRIOR=${group_prior},WB_COMMAND=${wb_command},TASK_DRY_RUN=${task_dry_run},OVERWRITE=${overwrite}"
-    "${task_script}"
+    "${job_wrapper}"
   )
 
   echo "[submit] ${queue}: subjects=${subject_count} tc=${tc} task_dry_run=${task_dry_run} dry_run=${dry_run}" >&2
   echo "[submit] ${queue}: subject_list=${subject_list}" >&2
+  echo "[submit] ${queue}: job_wrapper=${job_wrapper}" >&2
   echo "[submit] ${queue}: out_root=${out_root}" >&2
   echo "[submit] ${queue}: ${qsub_cmd[*]}" >&2
 
