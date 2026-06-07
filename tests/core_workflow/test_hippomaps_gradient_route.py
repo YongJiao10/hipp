@@ -737,7 +737,7 @@ def test_route_tag_auto_detection_and_validation() -> None:
     # Test that mismatched out-root under group_atlas raises ValueError
     try:
         route_tags.validate_group_atlas_root_for_route(
-            Path("outputs_core/work/group_atlas/routeb_full_k3_fisherz"),
+            Path("outputs_hcp/work/group_atlas/routeb_full_k3_fisherz"),
             "routea",
         )
     except ValueError as exc:
@@ -753,17 +753,17 @@ def test_route_tag_auto_detection_and_validation() -> None:
 
 def test_route_tag_exact_group_root_validation_rejects_prefix_collisions() -> None:
     route_tags.validate_group_atlas_root_for_route(
-        Path("outputs_core/work/group_atlas/routea_full_k3_fisherz"),
+        Path("outputs_hcp/work/group_atlas/routea_full_k3_fisherz"),
         "routea",
     )
     route_tags.validate_group_atlas_root_for_route(
-        Path("outputs_core/work/group_atlas/routea_17net_full_k3_fisherz"),
+        Path("outputs_hcp/work/group_atlas/routea_17net_full_k3_fisherz"),
         "routea_17net",
     )
 
     try:
         route_tags.validate_group_atlas_root_for_route(
-            Path("outputs_core/work/group_atlas/routea_17net_full_k3_fisherz"),
+            Path("outputs_hcp/work/group_atlas/routea_17net_full_k3_fisherz"),
             "routea",
         )
     except ValueError as exc:
@@ -775,7 +775,7 @@ def test_route_tag_exact_group_root_validation_rejects_prefix_collisions() -> No
 def test_family17_auto_route_requires_explicit_routea_17net() -> None:
     try:
         route_tags.resolve_route_tag_for_group_atlas_run(
-            shared_root=Path("outputs_core/inputs/hcp7t_hippocampus/kong2022/shared_inputs/routea_151"),
+            shared_root=Path("outputs_hcp/inputs/hcp/kong2022/shared_inputs/routea_151"),
             explicit_route="auto",
             network_taxonomy="family17",
         )
@@ -786,7 +786,7 @@ def test_family17_auto_route_requires_explicit_routea_17net() -> None:
 
     assert (
         route_tags.resolve_route_tag_for_group_atlas_run(
-            shared_root=Path("outputs_core/inputs/hcp7t_hippocampus/kong2022/shared_inputs/routea_151"),
+            shared_root=Path("outputs_hcp/inputs/hcp/kong2022/shared_inputs/routea_151"),
             explicit_route="routea_17net",
             network_taxonomy="family17",
         )
@@ -796,11 +796,11 @@ def test_family17_auto_route_requires_explicit_routea_17net() -> None:
 
 def test_route_auto_helpers_cover_renderers_and_confidence_choices() -> None:
     assert (
-        route_tags.infer_route_tag_from_group_root(Path("outputs_core/work/group_atlas/routea_ctxdrop_full_k3_fisherz"))
+        route_tags.infer_route_tag_from_group_root(Path("outputs_hcp/work/group_atlas/routea_ctxdrop_full_k3_fisherz"))
         == "routea_ctxdrop"
     )
     assert (
-        route_tags.infer_route_tag_from_group_root(Path("outputs_core/work/group_atlas/routea_17net_full_k3_fisherz"))
+        route_tags.infer_route_tag_from_group_root(Path("outputs_hcp/work/group_atlas/routea_17net_full_k3_fisherz"))
         == "routea_17net"
     )
 

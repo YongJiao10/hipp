@@ -11,13 +11,13 @@ scripts/individual_workflow/
 Computation outputs live under:
 
 ```bash
-outputs_core/work/individual_atlas/
+outputs_hcp/work/individual_atlas/
 ```
 
 Presentation surface overviews live under:
 
 ```bash
-outputs_core/present/overviews/individual/
+outputs_hcp/present/overviews/individual/
   gradient/sub-<id>_gradient_overview.png
   wta/sub-<id>_wta_overview.png
 ```
@@ -25,8 +25,8 @@ outputs_core/present/overviews/individual/
 ## Scope
 
 - Route: `routea`
-- Inputs: `outputs_core/inputs/hcp7t_hippocampus/kong2022/shared_inputs/routea_151`
-- Subject manifest: `outputs_core/inputs/hcp7t_hippocampus/kong2022/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt`
+- Inputs: `outputs_hcp/inputs/hcp/kong2022/shared_inputs/routea_151`
+- Subject manifest: `outputs_hcp/inputs/hcp/kong2022/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt`
 - Smoothings: `2mm`, `4mm`
 - Hemispheres: `L`, `R`
 - Total default workload: 151 subjects x 2 smoothings x 2 hemispheres = 604 subject-combos
@@ -61,7 +61,7 @@ After computation completes, build one overview PNG per subject per task with:
 /home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/02_build_individual_overviews.py --jobs 4 --resume
 ```
 
-The builder reads `cluster_labels_k3.npy` from `outputs_core/work/individual_atlas/gradient_spectral_k3/` and `wta_top_labels.npy` from `outputs_core/work/individual_atlas/wta_top/`. It writes `gradient/` and `wta/` PNGs, plus `overview_status.tsv` and `overview_manifest.json`, under `outputs_core/present/overviews/individual/`.
+The builder reads `cluster_labels_k3.npy` from `outputs_hcp/work/individual_atlas/gradient_spectral_k3/` and `wta_top_labels.npy` from `outputs_hcp/work/individual_atlas/wta_top/`. It writes `gradient/` and `wta/` PNGs, plus `overview_status.tsv` and `overview_manifest.json`, under `outputs_hcp/present/overviews/individual/`.
 
 ## Monitoring and Handoff
 
@@ -74,9 +74,9 @@ Monitor the latest run with:
 Run state is recorded in:
 
 ```bash
-outputs_core/work/individual_atlas/gradient_spectral_k3/_runs/logs/<run_id>/heartbeat.json
-outputs_core/work/individual_atlas/gradient_spectral_k3/_runs/summaries/combo_status.tsv
-outputs_core/work/individual_atlas/gradient_spectral_k3/_runs/handoff/<run_id>_handoff.md
+outputs_hcp/work/individual_atlas/gradient_spectral_k3/_runs/logs/<run_id>/heartbeat.json
+outputs_hcp/work/individual_atlas/gradient_spectral_k3/_runs/summaries/combo_status.tsv
+outputs_hcp/work/individual_atlas/gradient_spectral_k3/_runs/handoff/<run_id>_handoff.md
 ```
 
 Use the handoff file for later agent continuation or failure triage.

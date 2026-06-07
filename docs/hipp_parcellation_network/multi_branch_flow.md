@@ -38,23 +38,23 @@ Use numbered public entrypoints in `scripts/core_workflow/`:
 - Kong2022 RouteA 17-net taxonomy branch:
   - reuses `shared_inputs/routea_151`, `surface_151`, RouteA 400-ROI FC caches, and RouteA HippoMaps gradients; it does not create a separate input tree or gradient tree
   - `03_02_build_kong2022_routea_reference.py` also writes compact `cortex_family17_networks.tsv` and `cortex_family17_network_timeseries.npy` summaries under each existing RouteA subject reference
-  - runs `05_02_run_group_atlas.py` with `--route-tag routea_17net --network-taxonomy family17`, writing only taxonomy-dependent group outputs under `outputs_core/work/group_atlas/routea_17net_full_k3_fisherz`
+  - runs `05_02_run_group_atlas.py` with `--route-tag routea_17net --network-taxonomy family17`, writing only taxonomy-dependent group outputs under `outputs_hcp/work/group_atlas/routea_17net_full_k3_fisherz`
 - Kong2022 RouteA cortex-control branch:
   - starts from RouteA references and `surface_151` hippocampal time series
   - runs `04_00_materialize_cortex_regressed_surface_timeseries.py` to write controlled time series and diagnostics under `shared_inputs/routea_ctxreg_151` after run-wise local cortex regression
   - then runs `04_01`, `04_02`, `05_01`, and `05_02` with `--route-tag routea_ctxreg`; static RouteA references are read from `routea_151` and masks from `surface_151` through explicit root arguments rather than being copied
-  - writes gradients under `outputs_core/work/hippomaps_gradients/routea_ctxreg` and group atlas outputs under `outputs_core/work/group_atlas/routea_ctxreg_full_k3_fisherz`
+  - writes gradients under `outputs_hcp/work/hippomaps_gradients/routea_ctxreg` and group atlas outputs under `outputs_hcp/work/group_atlas/routea_ctxreg_full_k3_fisherz`
   - controls local cortical smear before FC materialization and does not redefine or overwrite uncontrolled RouteA outputs
 - Kong2022 RouteA cortex-drop branch:
   - starts from RouteA references, `surface_151` hippocampal time series, subject cortex dtseries, generated RouteA individualized Kong2022 labels, and the same 20 mm local cortex-neighborhood definition used by `routea_ctxreg`
   - runs `04_01_materialize_kong2022_roi_fc.py --ctxdrop` to write isolated vertex-to-ROI FC caches under `shared_inputs/routea_ctxdrop_151`; hippocampal time series are not rewritten
   - for each hippocampal vertex and ROI, excludes valid cortex vertices within the 20 mm local neighborhood before computing that ROI mean time series and Pearson FC
-  - maintained downstream outputs are `gradient-spectral` and `wta-top` only, with gradients under `outputs_core/work/hippomaps_gradients/routea_ctxdrop`, group atlas outputs under `outputs_core/work/group_atlas/routea_ctxdrop_full_k3_fisherz`, and shared local-neighbor hippocampal surface overlays rendered by `06_07_render_ctxdrop_neighbor_counts.py` under `outputs_core/present/local_cortex_neighbors/`
+  - maintained downstream outputs are `gradient-spectral` and `wta-top` only, with gradients under `outputs_hcp/work/hippomaps_gradients/routea_ctxdrop`, group atlas outputs under `outputs_hcp/work/group_atlas/routea_ctxdrop_full_k3_fisherz`, and shared local-neighbor hippocampal surface overlays rendered by `06_07_render_ctxdrop_neighbor_counts.py` under `outputs_hcp/present/local_cortex_neighbors/`
 - Kong2022 RouteB branch:
   - uses shared Kong2022 reference build (`03_01`) and standard FC stages
   - uses `05_01`, then `05_02`; `05_03` is optional rerun orchestration
   - runs `05_01` HippoMaps gradients before `gradient-spectral` in `05_02`
-  - writes maintained fixed-K=3 group atlas outputs under `outputs_core/work/group_atlas/routeb_full_k3_fisherz`
+  - writes maintained fixed-K=3 group atlas outputs under `outputs_hcp/work/group_atlas/routeb_full_k3_fisherz`
 
 ## Gradient-Spectral Branch
 
@@ -64,11 +64,11 @@ Use numbered public entrypoints in `scripts/core_workflow/`:
 
 ## Confidence And Presentation
 
-`06_06_render_confidence_maps.py` renders silhouette maps under `outputs_core/present/gradients/{route_tag}/{smoothing}/`. `06_04_render_hippomaps_gradient_products.py` renders continuous gradients for `routea`, `routea_ctxreg`, `routea_ctxdrop`, and `routeb` from `outputs_core/work/hippomaps_gradients/{route}`. Continuous gradient PNGs are display-aligned across branches by default: `routea` is the sign reference, non-reference route/hemi/component maps are flipped only for rendering when their correlation to the matching `routea` component is negative, and per-component color ranges are shared across rendered routes within each smoothing level. The display decisions are recorded in the `06_04` manifests; the saved `05_01` arrays and downstream clustering inputs are not rewritten.
+`06_06_render_confidence_maps.py` renders silhouette maps under `outputs_hcp/present/gradients/{route_tag}/{smoothing}/`. `06_04_render_hippomaps_gradient_products.py` renders continuous gradients for `routea`, `routea_ctxreg`, `routea_ctxdrop`, and `routeb` from `outputs_hcp/work/hippomaps_gradients/{route}`. Continuous gradient PNGs are display-aligned across branches by default: `routea` is the sign reference, non-reference route/hemi/component maps are flipped only for rendering when their correlation to the matching `routea` component is negative, and per-component color ranges are shared across rendered routes within each smoothing level. The display decisions are recorded in the `06_04` manifests; the saved `05_01` arrays and downstream clustering inputs are not rewritten.
 
-Canonical presentation outputs live under `outputs_core/present/`: maintained method overview PNGs in `overviews/`, continuous gradient products in `gradients/`, and cortex panels in `cortex_panels/`. The WTA-top overview uses a compact first column, an embedded fixed 20-bin transposed long-axis network profile in the second column, and the hippocampal surface render in the third column; standalone WTA long-axis profile code and PNG/TSV products are removed from the maintained workflow. Smoke tests stay isolated under `outputs_core/smoke_runs/<run_id>/`.
+Canonical presentation outputs live under `outputs_hcp/present/`: maintained method overview PNGs in `overviews/`, continuous gradient products in `gradients/`, and cortex panels in `cortex_panels/`. The WTA-top overview uses a compact first column, an embedded fixed 20-bin transposed long-axis network profile in the second column, and the hippocampal surface render in the third column; standalone WTA long-axis profile code and PNG/TSV products are removed from the maintained workflow. Smoke tests stay isolated under `outputs_hcp/smoke_runs/<run_id>/`.
 
-Full-cohort group-atlas intermediates owned by the active core workflow live under `outputs_core/work/group_atlas/`. The maintained RouteA full-FC fixed-K=3 root is `outputs_core/work/group_atlas/routea_full_k3_fisherz/`; the RouteA 17-net taxonomy root is `outputs_core/work/group_atlas/routea_17net_full_k3_fisherz/`; the RouteB fixed-K=3 root is `outputs_core/work/group_atlas/routeb_full_k3_fisherz/`; the RouteA cortex-regression root is `outputs_core/work/group_atlas/routea_ctxreg_full_k3_fisherz/`, and the RouteA cortex-drop root is `outputs_core/work/group_atlas/routea_ctxdrop_full_k3_fisherz/`. Kong2022 cluster-level functional atlas labels are preserved as two official assignment variants: `fisherz` (`top1_fisher_z`) and `count` (`topn_count_positive_roi`).
+Full-cohort group-atlas intermediates owned by the active core workflow live under `outputs_hcp/work/group_atlas/`. The maintained RouteA full-FC fixed-K=3 root is `outputs_hcp/work/group_atlas/routea_full_k3_fisherz/`; the RouteA 17-net taxonomy root is `outputs_hcp/work/group_atlas/routea_17net_full_k3_fisherz/`; the RouteB fixed-K=3 root is `outputs_hcp/work/group_atlas/routeb_full_k3_fisherz/`; the RouteA cortex-regression root is `outputs_hcp/work/group_atlas/routea_ctxreg_full_k3_fisherz/`, and the RouteA cortex-drop root is `outputs_hcp/work/group_atlas/routea_ctxdrop_full_k3_fisherz/`. Kong2022 cluster-level functional atlas labels are preserved as two official assignment variants: `fisherz` (`top1_fisher_z`) and `count` (`topn_count_positive_roi`).
 
 ## Default Cohort Reminder
 

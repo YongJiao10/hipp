@@ -12,8 +12,8 @@ Main Flow Path:
 Inputs:
 - Command-line arguments:
   - --python-exe: Explicit python interpreter path used to execute child scripts (default: `/home/yojiao/.conda/envs/py314/bin/python`).
-  - --group-atlas-root: Base directory containing branch-level group-atlas outputs (default: `outputs_core/work/group_atlas`).
-  - --present-dir: Output directory for final matrix presentation figures and manifest (default: `outputs_core/present/overviews`).
+  - --group-atlas-root: Base directory containing branch-level group-atlas outputs (default: `outputs_hcp/work/group_atlas`).
+  - --present-dir: Output directory for final matrix presentation figures and manifest (default: `outputs_hcp/present/overviews`).
   - --routes: Routes/branches to process (choices: "routea", "routea_ctxreg", "routea_ctxdrop", "routeb", default: ["routea"]).
   - --methods: Methods to export (default: all supported methods).
   - --coverage-threshold: Coverage threshold used to filter outputs (default: 0.80).

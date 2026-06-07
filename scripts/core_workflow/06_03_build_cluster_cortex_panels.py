@@ -11,9 +11,9 @@ Main Flow Path:
 
 Inputs:
 - Command-line arguments:
-  - --group-root: Root directory containing group atlas results (default: `outputs_core/work/group_atlas`).
-  - --shared-root: Root directory containing shared atlas reference files (default: `outputs_core/work/kong2022_reference_routea`).
-  - --present-dir: Output directory for final presentation figures (default: `outputs_core/present/cortex_panels`).
+  - --group-root: Root directory containing group atlas results (default: `outputs_hcp/work/group_atlas`).
+  - --shared-root: Root directory containing shared atlas reference files (default: `outputs_hcp/work/kong2022_reference_routea`).
+  - --present-dir: Output directory for final presentation figures (default: `outputs_hcp/present/cortex_panels`).
   - --runtime-root: Root for intermediate files and index layout (default: `<present-dir>/runtime`).
   - --atlas: Cortical atlas choice (default: "kong2022").
   - --methods: Methods to process (default: ["intrinsic-spectral", "network-spectral", "wta-top"]).

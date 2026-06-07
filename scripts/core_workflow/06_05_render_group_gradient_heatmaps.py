@@ -13,11 +13,11 @@ Main Flow Path:
 
 Inputs:
 - Command-line arguments:
-  - --group-root: Root directory containing group atlas results (default: `outputs_core/work/group_atlas`).
+  - --group-root: Root directory containing group atlas results (default: `outputs_hcp/work/group_atlas`).
   - --scene: Connectome Workbench template scene file (default: `config/wb_locked_native_view_lateral_medial.scene`).
-  - --output-png: Output path for the composite 2x3 heatmap figure (default: `outputs_core/present/gradients/kong2022_gradient-spectral_group_gradients_heatmap_routea_2mm4mm_g1g2g3.png`).
-  - --output-manifest: Output path for the manifest JSON (default: `outputs_core/present/gradients/kong2022_gradient-spectral_group_gradients_heatmap_routea_2mm4mm_g1g2g3_manifest.json`).
-  - --runtime-root: Root for intermediate files and temporary scene directories (default: `outputs_core/present/gradients/group_gradient_heatmaps/runtime/routea_full`).
+  - --output-png: Output path for the composite 2x3 heatmap figure (default: `outputs_hcp/present/gradients/kong2022_gradient-spectral_group_gradients_heatmap_routea_2mm4mm_g1g2g3.png`).
+  - --output-manifest: Output path for the manifest JSON (default: `outputs_hcp/present/gradients/kong2022_gradient-spectral_group_gradients_heatmap_routea_2mm4mm_g1g2g3_manifest.json`).
+  - --runtime-root: Root for intermediate files and temporary scene directories (default: `outputs_hcp/present/gradients/group_gradient_heatmaps/runtime/routea_full`).
   - --method: Parcellation method tag (default: "gradient-spectral").
   - --atlas: Cortical atlas name (default: "kong2022").
   - --smoothings: Smoothing values to process (default: ["2mm", "4mm"]).
@@ -1032,7 +1032,7 @@ def main() -> int:
         "status": "deprecated",
         "step": "06_05_render_group_gradient_heatmaps",
         "message": "This legacy locked-scene heatmap output is retired and must not be refreshed.",
-        "replacement": "Use scripts/core_workflow/06_04_render_hippomaps_gradient_products.py outputs under outputs_core/present/gradients/routea and outputs_core/present/gradients/routeb.",
+        "replacement": "Use scripts/core_workflow/06_04_render_hippomaps_gradient_products.py outputs under outputs_hcp/present/gradients/routea and outputs_hcp/present/gradients/routeb.",
     }, indent=2), flush=True)
     return 2
 

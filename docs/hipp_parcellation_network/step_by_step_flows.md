@@ -48,11 +48,11 @@ Kong2022 HippoMaps gradient artifact example. The default `--gradient-random-sta
 Kong2022 RouteA cortex-control group clustering example:
 
 ```bash
-/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/05_02_run_group_atlas.py --shared-root outputs_core/inputs/hcp7t_hippocampus/kong2022/shared_inputs/routea_ctxreg_151 --surface-root outputs_core/inputs/hcp7t_hippocampus/kong2022/shared_inputs/surface_151 --reference-root outputs_core/inputs/hcp7t_hippocampus/kong2022/shared_inputs/routea_151 --out-root outputs_core/work/group_atlas/routea_ctxreg_full_k3_fisherz --methods intrinsic-spectral network-spectral gradient-spectral wta-top --atlases kong2022 --gradient-root outputs_core/work/hippomaps_gradients --route-tag routea_ctxreg --k-min 2 --k-max 10 --force-final-k 3
-/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/05_02_run_group_atlas.py --shared-root outputs_core/inputs/hcp7t_hippocampus/kong2022/shared_inputs/routea_ctxdrop_151 --surface-root outputs_core/inputs/hcp7t_hippocampus/kong2022/shared_inputs/surface_151 --reference-root outputs_core/inputs/hcp7t_hippocampus/kong2022/shared_inputs/routea_151 --out-root outputs_core/work/group_atlas/routea_ctxdrop_full_k3_fisherz --methods gradient-spectral wta-top --atlases kong2022 --gradient-root outputs_core/work/hippomaps_gradients --route-tag routea_ctxdrop --k-min 2 --k-max 10 --force-final-k 3
-/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/05_02_run_group_atlas.py --shared-root outputs_core/inputs/hcp7t_hippocampus/kong2022/shared_inputs/routeb_151 --surface-root outputs_core/inputs/hcp7t_hippocampus/kong2022/shared_inputs/surface_151 --out-root outputs_core/work/group_atlas/routeb_full_k3_fisherz --methods intrinsic-spectral network-spectral gradient-spectral wta-top --atlases kong2022 --gradient-root outputs_core/work/hippomaps_gradients --route-tag routeb --k-min 2 --k-max 10 --force-final-k 3
-/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/05_02_run_group_atlas.py --shared-root outputs_core/inputs/hcp7t_hippocampus/kong2022/shared_inputs/routea_151 --surface-root outputs_core/inputs/hcp7t_hippocampus/kong2022/shared_inputs/surface_151 --reference-root outputs_core/inputs/hcp7t_hippocampus/kong2022/shared_inputs/routea_151 --out-root outputs_core/work/group_atlas/routea_17net_full_k3_fisherz --methods gradient-spectral wta-top --atlases kong2022 --gradient-root outputs_core/work/hippomaps_gradients --route-tag routea_17net --network-taxonomy family17 --k-min 2 --k-max 10 --force-final-k 3
-/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/06_07_render_ctxdrop_neighbor_counts.py --shared-root outputs_core/inputs/hcp7t_hippocampus/kong2022/shared_inputs/routea_ctxdrop_151 --source-branch routea_ctxdrop
+/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/05_02_run_group_atlas.py --shared-root outputs_hcp/inputs/hcp/kong2022/shared_inputs/routea_ctxreg_151 --surface-root outputs_hcp/inputs/hcp/kong2022/shared_inputs/surface_151 --reference-root outputs_hcp/inputs/hcp/kong2022/shared_inputs/routea_151 --out-root outputs_hcp/work/group_atlas/routea_ctxreg_full_k3_fisherz --methods intrinsic-spectral network-spectral gradient-spectral wta-top --atlases kong2022 --gradient-root outputs_hcp/work/hippomaps_gradients --route-tag routea_ctxreg --k-min 2 --k-max 10 --force-final-k 3
+/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/05_02_run_group_atlas.py --shared-root outputs_hcp/inputs/hcp/kong2022/shared_inputs/routea_ctxdrop_151 --surface-root outputs_hcp/inputs/hcp/kong2022/shared_inputs/surface_151 --reference-root outputs_hcp/inputs/hcp/kong2022/shared_inputs/routea_151 --out-root outputs_hcp/work/group_atlas/routea_ctxdrop_full_k3_fisherz --methods gradient-spectral wta-top --atlases kong2022 --gradient-root outputs_hcp/work/hippomaps_gradients --route-tag routea_ctxdrop --k-min 2 --k-max 10 --force-final-k 3
+/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/05_02_run_group_atlas.py --shared-root outputs_hcp/inputs/hcp/kong2022/shared_inputs/routeb_151 --surface-root outputs_hcp/inputs/hcp/kong2022/shared_inputs/surface_151 --out-root outputs_hcp/work/group_atlas/routeb_full_k3_fisherz --methods intrinsic-spectral network-spectral gradient-spectral wta-top --atlases kong2022 --gradient-root outputs_hcp/work/hippomaps_gradients --route-tag routeb --k-min 2 --k-max 10 --force-final-k 3
+/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/05_02_run_group_atlas.py --shared-root outputs_hcp/inputs/hcp/kong2022/shared_inputs/routea_151 --surface-root outputs_hcp/inputs/hcp/kong2022/shared_inputs/surface_151 --reference-root outputs_hcp/inputs/hcp/kong2022/shared_inputs/routea_151 --out-root outputs_hcp/work/group_atlas/routea_17net_full_k3_fisherz --methods gradient-spectral wta-top --atlases kong2022 --gradient-root outputs_hcp/work/hippomaps_gradients --route-tag routea_17net --network-taxonomy family17 --k-min 2 --k-max 10 --force-final-k 3
+/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/06_07_render_ctxdrop_neighbor_counts.py --shared-root outputs_hcp/inputs/hcp/kong2022/shared_inputs/routea_ctxdrop_151 --source-branch routea_ctxdrop
 ```
 
 ## 6. Presentation Products
@@ -71,18 +71,18 @@ These products are derived from group atlas and gradient work and can be refresh
 
 1. `07_01_build_group_matrix.py`
 
-`07_01` reads refreshed `06_01` method overviews from canonical group-atlas roots, including `routea_17net`, `routea_ctxreg`, `routea_ctxdrop`, and `routeb` when requested, then writes `outputs_core/present/overviews/group_overview_matrix_manifest.json` and the overview README. The WTA-top overview itself contains the fixed 20-bin transposed long-axis network profile; standalone WTA profile code and PNG/TSV products are removed from the maintained workflow. Use `--methods` to restrict exports to completed methods (for example `gradient-spectral wta-top`).
+`07_01` reads refreshed `06_01` method overviews from canonical group-atlas roots, including `routea_17net`, `routea_ctxreg`, `routea_ctxdrop`, and `routeb` when requested, then writes `outputs_hcp/present/overviews/group_overview_matrix_manifest.json` and the overview README. The WTA-top overview itself contains the fixed 20-bin transposed long-axis network profile; standalone WTA profile code and PNG/TSV products are removed from the maintained workflow. Use `--methods` to restrict exports to completed methods (for example `gradient-spectral wta-top`).
 
 ## Utilities
 
-- `tests/core_workflow/smoke_prepare_run.py` prepares isolated smoke-run command plans under `outputs_core/smoke_runs/<run_id>/`. It is not part of the numbered pipeline.
+- `tests/core_workflow/smoke_prepare_run.py` prepares isolated smoke-run command plans under `outputs_hcp/smoke_runs/<run_id>/`. It is not part of the numbered pipeline.
 
 Maintained active output roots:
 
-- Work: `outputs_core/work/`
-- Presentation: `outputs_core/present/`
-- Smoke tests: `outputs_core/smoke_runs/<run_id>/`
-- Non-official reruns: `outputs_core/reruns/<run_id>/`
+- Work: `outputs_hcp/work/`
+- Presentation: `outputs_hcp/present/`
+- Smoke tests: `outputs_hcp/smoke_runs/<run_id>/`
+- Non-official reruns: `outputs_hcp/reruns/<run_id>/`
 
 For branch flags, path roots, and exact artifact contracts, use:
 

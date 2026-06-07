@@ -11,8 +11,8 @@ Main Flow Path:
 
 Inputs:
 - Command-line arguments:
-  - --group-root: Directory where group-atlas intermediate files are saved (default: `outputs_core/work/group_atlas/routea_full_k3_fisherz`).
-  - --present-dir: Directory where final presentation figures will be saved (default: `outputs_core/present/overviews`).
+  - --group-root: Directory where group-atlas intermediate files are saved (default: `outputs_hcp/work/group_atlas/routea_full_k3_fisherz`).
+  - --present-dir: Directory where final presentation figures will be saved (default: `outputs_hcp/present/overviews`).
   - --methods: Parcellation methods to process: "intrinsic-spectral", "network-spectral", "gradient-spectral", "wta-top".
   - --atlases: Cortical atlases to process (default: ["kong2022"]).
   - --coverage-threshold: Selected coverage threshold for overview outputs (default: 0.80).

@@ -85,7 +85,7 @@ def test_overview_matrix_uses_core_work_fixed_k3_fisherz_root_for_all_routea_met
     assert set(by_method) == {"intrinsic-spectral", "network-spectral", "gradient-spectral", "wta-top"}
     for method in ("intrinsic-spectral", "network-spectral", "gradient-spectral", "wta-top"):
         root_text = str(by_method[method].group_root)
-        assert "outputs_core/work/group_atlas/routea_full_k3_fisherz" in root_text
+        assert "outputs_hcp/work/group_atlas/routea_full_k3_fisherz" in root_text
         assert "fixedk_work" not in root_text
         assert "hipp_group_merged_canonical_atlas_routea_full" not in root_text
 
@@ -98,15 +98,15 @@ def test_routeb_group_atlas_root_is_core_work_fixed_k3_fisherz() -> None:
     assert {job.route_tag for job in jobs} == {"routeb"}
     for job in jobs:
         root_text = str(job.group_root)
-        assert "outputs_core/work/group_atlas/routeb_full_k3_fisherz" in root_text
-        assert "outputs_core/inputs" not in root_text
+        assert "outputs_hcp/work/group_atlas/routeb_full_k3_fisherz" in root_text
+        assert "outputs_hcp/inputs" not in root_text
         assert "hipp_group_merged_canonical_atlas_routeb_full" not in root_text
         assert "routeb_auto" not in root_text
 
 
 def test_group_atlas_default_out_root_matches_routeb_fixed_k3_contract() -> None:
     root_text = str(atlas_mod.DEFAULT_OUT_ROOT)
-    assert root_text.endswith("outputs_core/work/group_atlas/routeb_full_k3_fisherz")
+    assert root_text.endswith("outputs_hcp/work/group_atlas/routeb_full_k3_fisherz")
     assert "routeb_auto" not in root_text
 
 
@@ -256,7 +256,7 @@ def test_gradient_matrix_jobs_are_route_only_and_core_rooted_for_routea() -> Non
     assert all(job.mode_tag is None for job in gradient_jobs)
     routea_jobs = [job for job in gradient_jobs if job.route_tag == "routea"]
     assert routea_jobs
-    assert all("outputs_core/work/group_atlas/routea_full_k3_fisherz" in str(job.group_root) for job in routea_jobs)
+    assert all("outputs_hcp/work/group_atlas/routea_full_k3_fisherz" in str(job.group_root) for job in routea_jobs)
     assert all("10perc" not in str(job.group_root) for job in gradient_jobs)
 
 

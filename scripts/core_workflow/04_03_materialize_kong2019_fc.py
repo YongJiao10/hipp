@@ -11,8 +11,8 @@ Main Flow Path:
 
 Inputs:
 - Command-line arguments:
-  - --shared-root: Path to shared outputs root (default: `outputs_core/inputs/hcp7t_hippocampus/kong2019/shared_inputs/pfm_151`).
-  - --subjects-manifest: Path to QC-passed subject list manifest (default: `outputs_core/inputs/hcp7t_hippocampus/kong2019/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_151.txt`).
+  - --shared-root: Path to shared outputs root (default: `outputs_hcp/inputs/hcp/kong2019/shared_inputs/pfm_151`).
+  - --subjects-manifest: Path to QC-passed subject list manifest (default: `outputs_hcp/inputs/hcp/kong2019/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_151.txt`).
   - --subjects: Space-separated list of explicit subject IDs.
   - --atlases: Atlases to process: "kong2019" (17net) and "kong2019_8net".
   - --smoothings: Smoothing levels to process: "2mm", "4mm".

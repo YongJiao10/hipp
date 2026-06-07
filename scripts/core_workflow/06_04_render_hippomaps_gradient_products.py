@@ -11,8 +11,8 @@ Main Flow Path:
 
 Inputs:
 - Command-line arguments:
-  - --gradient-root: Root directory containing gradient data outputs (default: `outputs_core/work/hippomaps_gradients`).
-  - --present-root: Root directory for saving presentation figures (default: `outputs_core/present/gradients`).
+  - --gradient-root: Root directory containing gradient data outputs (default: `outputs_hcp/work/hippomaps_gradients`).
+  - --present-root: Root directory for saving presentation figures (default: `outputs_hcp/present/gradients`).
   - --hippomaps-root: Root directory for the HippoMaps repository package (default: `external/HippoMaps`).
   - --routes: Routes to process (choices: "routea", "routea_ctxreg", "routea_ctxdrop", "routeb"; default: all).
   - --smoothings: Smoothing kernel values to process (default: ["2mm", "4mm"]).

@@ -10,7 +10,7 @@ Main Flow Path:
 Inputs:
 - Command-line arguments:
   - --input-root: Input root containing structural raw sub-* directories (default: `data/hippunfold_input`).
-  - --batch-root: Batch output root containing sub-*/hippunfold outputs (default: `outputs_core/inputs/hcp7t_hippocampus/hippunfold/dense_corobl_batch`).
+  - --batch-root: Batch output root containing sub-*/hippunfold outputs (default: `outputs_hcp/inputs/hcp/hippunfold/dense_corobl_batch`).
   - --subject: Subject ID without "sub-" prefix. Can be specified multiple times.
   - --manifest-cache: Path to manifest cache JSON file (default: `<batch-root>/_batch_logs/output_integrity_manifest.json`).
   - --json-out: Path for full validation JSON report.
@@ -33,6 +33,12 @@ import re
 from pathlib import Path
 from typing import Any
 
+from lib.output_layout import (
+    DATASET_KEYS,
+    DEFAULT_DATASET,
+    resolve_hippunfold_batch_root,
+)
+
 SUCCESS_MARKER = "Finished jobid: 0 (Rule: all)"
 FAIL_MARKER = "At least one job did not complete successfully."
 
@@ -42,6 +48,8 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Check whether each subject has a full HippUnfold final output set."
     )
+    parser.add_argument("--dataset", default=DEFAULT_DATASET, choices=DATASET_KEYS,
+                        help="Dataset key (default: hcp)")
     parser.add_argument(
         "--input-root",
         default=str(repo_root / "data" / "hippunfold_input"),
@@ -49,7 +57,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--batch-root",
-        default=str(repo_root / "outputs_core" / "inputs" / "hcp7t_hippocampus" / "hippunfold" / "dense_corobl_batch"),
+        default=str(resolve_hippunfold_batch_root()),
         help="Batch output root containing sub-*/hippunfold.",
     )
     parser.add_argument(

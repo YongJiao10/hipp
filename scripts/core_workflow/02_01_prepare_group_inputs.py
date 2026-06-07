@@ -11,10 +11,10 @@ Main Flow Path:
 
 Inputs:
 - Command-line arguments:
-  - --hippunfold-batch-root: Batch output root containing sub-*/hippunfold outputs (default: `outputs_core/inputs/hcp7t_hippocampus/hippunfold/dense_corobl_batch`).
-  - --route-root: Route-specific processing directory (default: `outputs_core/inputs/hcp7t_hippocampus/kong2022`).
-  - --shared-root: Path to output shared processed surface files (default: `outputs_core/inputs/hcp7t_hippocampus/kong2022/shared_inputs/surface_151`).
-  - --template-root: Path to template root directory (default: `outputs_core/inputs/hcp7t_hippocampus/kong2022/shared_inputs/template`).
+  - --hippunfold-batch-root: Batch output root containing sub-*/hippunfold outputs (default: `outputs_hcp/inputs/hcp/hippunfold/dense_corobl_batch`).
+  - --route-root: Route-specific processing directory (default: `outputs_hcp/inputs/hcp/kong2022`).
+  - --shared-root: Path to output shared processed surface files (default: `outputs_hcp/inputs/hcp/kong2022/shared_inputs/surface_151`).
+  - --template-root: Path to template root directory (default: `outputs_hcp/inputs/hcp/kong2022/shared_inputs/template`).
   - --bold-root: Root path containing raw fMRI volume timeseries (default: `/home/yojiao/LSS/jianglab/3_Data_Working/HCP_7T_Hippocampus/rsfmri_volume`).
   - --subjects-manifest: Path to subject manifest list (txt file, one ID per line).
   - --subjects: Space-separated list of explicit subject IDs.

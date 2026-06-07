@@ -74,7 +74,7 @@ Preflight-only check:
 ## Output Layout
 Per subject RouteA labels are written to:
 
-- `outputs_core/inputs/hcp7t_hippocampus/kong2022/cortex_references/routea_areal_mshbm/sub-{sid}/`
+- `outputs_hcp/inputs/hcp/kong2022/cortex_references/routea_areal_mshbm/sub-{sid}/`
 
 Key RouteA files:
 
@@ -84,7 +84,7 @@ Key RouteA files:
 
 Batch logs:
 
-- `outputs_core/inputs/hcp7t_hippocampus/kong2022/cortex_references/routea_areal_mshbm/_logs/sub-{sid}_kong2022_areal_mshbm.log`
+- `outputs_hcp/inputs/hcp/kong2022/cortex_references/routea_areal_mshbm/_logs/sub-{sid}_kong2022_areal_mshbm.log`
 
 ## Failure Diagnostics
 The driver is fail-fast and does not auto-download dependencies.

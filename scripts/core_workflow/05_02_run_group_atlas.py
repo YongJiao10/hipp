@@ -11,10 +11,10 @@ Main Flow Path:
 
 Inputs:
 - Command-line arguments:
-  - --shared-root: Path to shared processed files (default: `outputs_core/inputs/hcp7t_hippocampus/kong2022/shared_inputs/routeb_151`).
-  - --surface-root: Path to BOLD surfaces root directory (default: `outputs_core/inputs/hcp7t_hippocampus/kong2022/shared_inputs/surface_151`).
-  - --out-root: Directory where group-atlas intermediate files will be saved (default: `outputs_core/work/group_atlas/routeb_full_k3_fisherz`).
-  - --gradient-root: Directory containing computed continuous gradients (default: `outputs_core/work/hippomaps_gradients`).
+  - --shared-root: Path to shared processed files (default: `outputs_hcp/inputs/hcp/kong2022/shared_inputs/routeb_151`).
+  - --surface-root: Path to BOLD surfaces root directory (default: `outputs_hcp/inputs/hcp/kong2022/shared_inputs/surface_151`).
+  - --out-root: Directory where group-atlas intermediate files will be saved (default: `outputs_hcp/work/group_atlas/routeb_full_k3_fisherz`).
+  - --gradient-root: Directory containing computed continuous gradients (default: `outputs_hcp/work/hippomaps_gradients`).
   - --hippomaps-root: Root path to external HippoMaps codebase (default: `external/hippomaps`).
   - --route-tag: Expected workflow branch tag, e.g., "routea", "routea_ctxreg", "routea_ctxdrop", or "routeb".
   - --subjects-manifest: Path to QC-passed subject list manifest.

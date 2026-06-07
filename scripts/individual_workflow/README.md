@@ -9,7 +9,7 @@ It reuses `scripts/core_workflow` helpers but stays outside the group-level work
 Intermediate and per-combo computation products live under:
 
 ```bash
-outputs_core/work/individual_atlas/
+outputs_hcp/work/individual_atlas/
   gradient_spectral_k3/subjects/sub-<id>/smooth-<2mm|4mm>/hemi-<L|R>/
   wta_top/subjects/sub-<id>/smooth-<2mm|4mm>/hemi-<L|R>/
 ```
@@ -17,7 +17,7 @@ outputs_core/work/individual_atlas/
 Per-subject presentation surface overviews live under the canonical present tree:
 
 ```bash
-outputs_core/present/overviews/individual/
+outputs_hcp/present/overviews/individual/
   gradient/sub-<id>_gradient_overview.png
   wta/sub-<id>_wta_overview.png
 ```
@@ -25,7 +25,7 @@ outputs_core/present/overviews/individual/
 Run and handoff metadata for the computation stage live under:
 
 ```bash
-outputs_core/work/individual_atlas/gradient_spectral_k3/_runs/
+outputs_hcp/work/individual_atlas/gradient_spectral_k3/_runs/
 ```
 
 ## Run Computation
@@ -53,14 +53,14 @@ The launcher uses `setsid nohup`, fixes native thread counts at 1, and starts 4 
 The monitor refreshes:
 
 ```bash
-outputs_core/work/individual_atlas/gradient_spectral_k3/_runs/summaries/combo_status.tsv
+outputs_hcp/work/individual_atlas/gradient_spectral_k3/_runs/summaries/combo_status.tsv
 ```
 
 Each run also writes:
 
 ```bash
-outputs_core/work/individual_atlas/gradient_spectral_k3/_runs/logs/<run_id>/heartbeat.json
-outputs_core/work/individual_atlas/gradient_spectral_k3/_runs/handoff/<run_id>_handoff.md
+outputs_hcp/work/individual_atlas/gradient_spectral_k3/_runs/logs/<run_id>/heartbeat.json
+outputs_hcp/work/individual_atlas/gradient_spectral_k3/_runs/handoff/<run_id>_handoff.md
 ```
 
 ## Build Overviews
@@ -69,7 +69,7 @@ outputs_core/work/individual_atlas/gradient_spectral_k3/_runs/handoff/<run_id>_h
 /home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/02_build_individual_overviews.py --jobs 4 --resume
 ```
 
-The overview builder reads completed label arrays from `outputs_core/work/individual_atlas/` and writes quicklook PNGs plus `overview_status.tsv` and `overview_manifest.json` under `outputs_core/present/overviews/individual/`.
+The overview builder reads completed label arrays from `outputs_hcp/work/individual_atlas/` and writes quicklook PNGs plus `overview_status.tsv` and `overview_manifest.json` under `outputs_hcp/present/overviews/individual/`.
 
 ## Method Notes
 

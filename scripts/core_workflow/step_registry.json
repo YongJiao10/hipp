@@ -195,7 +195,7 @@
     {
       "step_id": "06_01_build_group_overview",
       "stage": "06_presentation_products",
-      "purpose": "Render canonical fixed-K=3 group overview products into outputs_core/present/overviews, including the embedded fixed 20-bin WTA-top long-axis profile panel.",
+      "purpose": "Render canonical fixed-K=3 group overview products into outputs_hcp/present/overviews, including the embedded fixed 20-bin WTA-top long-axis profile panel.",
       "branches": [
         "kong2019",
         "kong2022_routea",
@@ -287,7 +287,7 @@
       ],
       "entry_script": "scripts/core_workflow/06_07_render_ctxdrop_neighbor_counts.py",
       "implementation_script": "scripts/core_workflow/06_07_render_ctxdrop_neighbor_counts.py",
-      "recommended_manifest": "outputs_core/present/local_cortex_neighbors/kong2022_routea_local_cortex_neighbors_mean20mm_manifest.json"
+      "recommended_manifest": "outputs_hcp/present/local_cortex_neighbors/kong2022_routea_local_cortex_neighbors_mean20mm_manifest.json"
     },
     {
       "step_id": "07_01_build_group_matrix",
@@ -303,21 +303,21 @@
       ],
       "entry_script": "scripts/core_workflow/07_01_build_group_matrix.py",
       "implementation_script": "scripts/core_workflow/07_01_build_group_matrix.py",
-      "recommended_manifest": "outputs_core/present/overviews/group_overview_matrix_manifest.json"
+      "recommended_manifest": "outputs_hcp/present/overviews/group_overview_matrix_manifest.json"
     }
   ],
   "utilities": [
     {
       "step_id": "smoke_prepare_run",
       "stage": "utility_smoke_test",
-      "purpose": "Prepare an isolated 5-subject smoke run directory, subject manifest, and command manifest under outputs_core/smoke_runs/<run_id>.",
+      "purpose": "Prepare an isolated 5-subject smoke run directory, subject manifest, and command manifest under outputs_hcp/smoke_runs/<run_id>.",
       "branches": [
         "kong2022_routea",
         "kong2022_routeb"
       ],
       "entry_script": "tests/core_workflow/smoke_prepare_run.py",
       "implementation_script": "tests/core_workflow/smoke_prepare_run.py",
-      "recommended_manifest": "outputs_core/smoke_runs/<run_id>/manifests/smoke_command_manifest.json"
+      "recommended_manifest": "outputs_hcp/smoke_runs/<run_id>/manifests/smoke_command_manifest.json"
     }
   ]
 }

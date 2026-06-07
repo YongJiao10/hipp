@@ -31,20 +31,22 @@ from lib.hippomaps_adapter import (  # noqa: E402
     reconstruct_full_surface,
 )
 from lib.output_layout import (  # noqa: E402
-    DEFAULT_HIPPUNFOLD_BATCH_ROOT,
-    DEFAULT_KONG2022_MANIFEST_ROOT,
-    DEFAULT_KONG2022_ROUTEA_ROOT,
-    DEFAULT_KONG2022_SURFACE_ROOT,
-    DEFAULT_OVERVIEWS_DIR,
+    DEFAULT_DATASET,
+    resolve_hippunfold_batch_root,
+    resolve_kong2022_manifest_root,
+    resolve_kong2022_routea_root,
+    resolve_kong2022_surface_root,
+    resolve_overviews_dir,
+    resolve_work_root,
 )
 from lib.workflow_utils import git_commit, utc_now_iso, utc_timestamp_compact_z  # noqa: E402
 
 
 DEFAULT_SUBJECTS_MANIFEST = (
-    DEFAULT_KONG2022_MANIFEST_ROOT / "hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt"
+    resolve_kong2022_manifest_root() / "hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt"
 )
-DEFAULT_OUT_ROOT = REPO_ROOT / "outputs_core" / "work" / "individual_atlas"
-DEFAULT_INDIVIDUAL_OVERVIEW_ROOT = DEFAULT_OVERVIEWS_DIR / "individual"
+DEFAULT_OUT_ROOT = resolve_work_root() / "individual_atlas"
+DEFAULT_INDIVIDUAL_OVERVIEW_ROOT = resolve_overviews_dir() / "individual"
 DEFAULT_SMOOTHINGS = ("2mm", "4mm")
 DEFAULT_HEMIS = ("L", "R")
 DEFAULT_JOBS = 4

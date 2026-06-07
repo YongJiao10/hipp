@@ -3,11 +3,12 @@ from __future__ import annotations
 from pathlib import Path
 
 from .output_layout import (
-    DEFAULT_ROUTEA_GROUP_ATLAS_ROOT,
-    DEFAULT_ROUTEA_17NET_GROUP_ATLAS_ROOT,
-    DEFAULT_ROUTEA_CTXREG_GROUP_ATLAS_ROOT,
-    DEFAULT_ROUTEA_CTXDROP_GROUP_ATLAS_ROOT,
-    DEFAULT_ROUTEB_GROUP_ATLAS_ROOT,
+    DEFAULT_DATASET,
+    resolve_routea_group_atlas_root,
+    resolve_routea_17net_group_atlas_root,
+    resolve_routea_ctxreg_group_atlas_root,
+    resolve_routea_ctxdrop_group_atlas_root,
+    resolve_routeb_group_atlas_root,
 )
 
 ROUTE_TAG_CHOICES = ("routea", "routea_17net", "routea_ctxreg", "routea_ctxdrop", "routeb")
@@ -15,11 +16,11 @@ ROUTE_TAG_CHOICES = ("routea", "routea_17net", "routea_ctxreg", "routea_ctxdrop"
 _ROUTE_DETECTION_ORDER = ("routea_ctxreg", "routea_ctxdrop", "routea_17net", "routeb", "routea")
 
 ROUTE_TO_GROUP_ATLAS_ROOT = {
-    "routea": DEFAULT_ROUTEA_GROUP_ATLAS_ROOT,
-    "routea_17net": DEFAULT_ROUTEA_17NET_GROUP_ATLAS_ROOT,
-    "routea_ctxreg": DEFAULT_ROUTEA_CTXREG_GROUP_ATLAS_ROOT,
-    "routea_ctxdrop": DEFAULT_ROUTEA_CTXDROP_GROUP_ATLAS_ROOT,
-    "routeb": DEFAULT_ROUTEB_GROUP_ATLAS_ROOT,
+    "routea": resolve_routea_group_atlas_root,
+    "routea_17net": resolve_routea_17net_group_atlas_root,
+    "routea_ctxreg": resolve_routea_ctxreg_group_atlas_root,
+    "routea_ctxdrop": resolve_routea_ctxdrop_group_atlas_root,
+    "routeb": resolve_routeb_group_atlas_root,
 }
 
 
@@ -55,8 +56,8 @@ def infer_route_tag_from_group_root(group_root: Path) -> str:
     return infer_route_tag_from_path(Path(group_root), arg_name="--group-root")
 
 
-def canonical_group_atlas_root_for_route(route_tag: str) -> Path:
-    return ROUTE_TO_GROUP_ATLAS_ROOT[_normalize_route_tag(route_tag)]
+def canonical_group_atlas_root_for_route(route_tag: str, dataset: str = DEFAULT_DATASET) -> Path:
+    return ROUTE_TO_GROUP_ATLAS_ROOT[_normalize_route_tag(route_tag)](dataset)
 
 
 def validate_group_atlas_root_for_route(group_root: Path, route_tag: str) -> None:
@@ -92,8 +93,8 @@ def resolve_route_tag_for_group_atlas_run(*, shared_root: Path, explicit_route: 
     return route
 
 
-def resolve_group_atlas_out_root(out_root: Path | str, route_tag: str, *, default_routeb_out_root_selected: bool) -> tuple[Path, bool]:
+def resolve_group_atlas_out_root(out_root: Path | str, route_tag: str, *, default_routeb_out_root_selected: bool, dataset: str = DEFAULT_DATASET) -> tuple[Path, bool]:
     route = _normalize_route_tag(route_tag)
     if default_routeb_out_root_selected and route != "routeb":
-        return canonical_group_atlas_root_for_route(route).resolve(), True
+        return canonical_group_atlas_root_for_route(route, dataset=dataset).resolve(), True
     return Path(out_root).resolve(), False

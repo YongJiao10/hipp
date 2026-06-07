@@ -23,14 +23,14 @@ Canonical public entrypoints are under `scripts/core_workflow/`. The numeric pre
 | `06_04_render_hippomaps_gradient_products` | Render HippoMaps continuous-gradient products with RouteA-referenced display sign alignment and shared color ranges | `kong2022_routea`, `kong2022_routea_17net`, `kong2022_routea_ctxreg`, `kong2022_routea_ctxdrop`, `kong2022_routeb` | `scripts/core_workflow/06_04_render_hippomaps_gradient_products.py` | `05_01` gradient manifests and arrays | Cross-branch comparable folded/unfolded G1-G3 figures, EV plots, endpoint FC contrast plots, manifest |
 | `06_05_render_group_gradient_heatmaps` | Deprecated retired legacy locked-scene heatmap entrypoint; preserved only to emit deprecation guidance. | `kong2022_routea`, `kong2022_routeb` | `scripts/core_workflow/06_05_render_group_gradient_heatmaps.py` | none (exits deprecated) | none |
 | `06_06_render_confidence_maps` | Render gradient-spectral confidence maps | `kong2022_routea`, `kong2022_routea_ctxreg` | `scripts/core_workflow/06_06_render_confidence_maps.py` | `05_04` confidence arrays | Folded/unfolded confidence PNGs |
-| `06_07_render_ctxdrop_neighbor_counts` | Render RouteA local cortex-neighbor count summaries | `kong2022_routea_ctxreg`, `kong2022_routea_ctxdrop` | `scripts/core_workflow/06_07_render_ctxdrop_neighbor_counts.py` | Per-subject `surface/local_cortex_neighbors/hemi_*/neighbor_counts.npy` from ctxreg or ctxdrop | `outputs_core/present/local_cortex_neighbors/` group mean/sd/n arrays, TSV, hippocampal surface-overlay PNG, manifest |
+| `06_07_render_ctxdrop_neighbor_counts` | Render RouteA local cortex-neighbor count summaries | `kong2022_routea_ctxreg`, `kong2022_routea_ctxdrop` | `scripts/core_workflow/06_07_render_ctxdrop_neighbor_counts.py` | Per-subject `surface/local_cortex_neighbors/hemi_*/neighbor_counts.npy` from ctxreg or ctxdrop | `outputs_hcp/present/local_cortex_neighbors/` group mean/sd/n arrays, TSV, hippocampal surface-overlay PNG, manifest |
 | `07_01_build_group_matrix` | Build maintained presentation index after layer 6 products | `kong2022_routea` by default; `kong2022_routea_17net`, `kong2022_routea_ctxreg`, `kong2022_routea_ctxdrop`, and `kong2022_routeb` optional | `scripts/core_workflow/07_01_build_group_matrix.py` | Canonical group-atlas roots and method overview products | Matrix manifest, README, refreshed overview set |
 
 ## Utilities
 
 | Utility ID | Purpose | Entrypoint | Output Root |
 |---|---|---|---|
-| `smoke_prepare_run` | Prepare an isolated smoke-run command plan; not a numbered pipeline step | `tests/core_workflow/smoke_prepare_run.py` | `outputs_core/smoke_runs/<run_id>/` |
+| `smoke_prepare_run` | Prepare an isolated smoke-run command plan; not a numbered pipeline step | `tests/core_workflow/smoke_prepare_run.py` | `outputs_hcp/smoke_runs/<run_id>/` |
 
 Machine-readable source of truth: `scripts/core_workflow/step_registry.json`.
 Artifact-level provenance and required evidence are maintained in

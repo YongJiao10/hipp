@@ -62,11 +62,11 @@ Manifests record the `external/hippomaps` import path, commit, plotter support
 settings, upstream gradient alignment provenance, display flip decisions, and
 shared color ranges.
 
-Canonical presentation outputs live under `outputs_core/present/`. All maintained
-method overview PNGs are written to `outputs_core/present/overviews/`.
-Supplementary continuous-gradient products live in `outputs_core/present/gradients/`,
-and cortex panels live in `outputs_core/present/cortex_panels/`. Smoke tests stay
-isolated under `outputs_core/smoke_runs/<run_id>/`.
+Canonical presentation outputs live under `outputs_hcp/present/`. All maintained
+method overview PNGs are written to `outputs_hcp/present/overviews/`.
+Supplementary continuous-gradient products live in `outputs_hcp/present/gradients/`,
+and cortex panels live in `outputs_hcp/present/cortex_panels/`. Smoke tests stay
+isolated under `outputs_hcp/smoke_runs/<run_id>/`.
 Directory names intentionally do not encode `t1only`, `present_fixedk`, or a
 `10perc/full` presentation split.
 
@@ -77,20 +77,20 @@ Directory names intentionally do not encode `t1only`, `present_fixedk`, or a
 Subject-level RouteA gradient-spectral K=3 and WTA products are intentionally
 kept outside the group workflow in the sibling directory
 `scripts/individual_workflow/`. Those entrypoints reuse core workflow helpers.
-Computation outputs live in `outputs_core/work/individual_atlas/`, while
+Computation outputs live in `outputs_hcp/work/individual_atlas/`, while
 per-subject presentation surface overviews live in
-`outputs_core/present/overviews/individual/{gradient,wta}/`. See
+`outputs_hcp/present/overviews/individual/{gradient,wta}/`. See
 `docs/hipp_parcellation_network/individual_workflow_routea_gradients_wta.md`.
 
 RouteA reference construction has an explicit upstream label-generation dependency. The artifact-level contract for generated RouteA ArealMSHBM labels, local numbered-step products, presentation products, and required evidence is maintained in `docs/hipp_parcellation_network/core_workflow_artifact_lineage.md`.
 
-The `kong2022_routea_17net` branch uses the original Kong2022 17 network families for cluster annotation and network profiles. It reuses `shared_inputs/routea_151`, `surface_151`, 400-ROI FC caches, and RouteA gradients, then writes only taxonomy-dependent group outputs under `outputs_core/work/group_atlas/routea_17net_full_k3_fisherz/`. Run `05_02_run_group_atlas.py` with `--route-tag routea_17net --network-taxonomy family17`; do not run `05_01` for a separate `routea_17net` gradient tree.
+The `kong2022_routea_17net` branch uses the original Kong2022 17 network families for cluster annotation and network profiles. It reuses `shared_inputs/routea_151`, `surface_151`, 400-ROI FC caches, and RouteA gradients, then writes only taxonomy-dependent group outputs under `outputs_hcp/work/group_atlas/routea_17net_full_k3_fisherz/`. Run `05_02_run_group_atlas.py` with `--route-tag routea_17net --network-taxonomy family17`; do not run `05_01` for a separate `routea_17net` gradient tree.
 
 Network display colors are centralized in `config/hipp_network_style.json`. Group-atlas label materialization, hippocampal overviews, WTA long-axis profiles, and cortex panels load network colors from that single file; `config/cross_atlas_network_merge.json` is mapping-only and must not carry color overrides. Missing colors are treated as errors, not gray/blue fallback display colors. For the RouteA 17-net taxonomy, same-family A/B/C subnetworks use deliberately separated lightness and saturation levels so overview bars, profiles, and label-table colors remain distinguishable while preserving the parent family hue.
 
 The `kong2022_routea_ctxreg` branch is an isolated RouteA derivative: `04_00_materialize_cortex_regressed_surface_timeseries.py` writes `shared_inputs/routea_ctxreg_151` with run-wise local cortex residualization before `04_01` and `04_02` materialize FC. It does not overwrite uncontrolled RouteA roots.
 
-The `kong2022_routea_ctxdrop` branch is the matched RouteA local-cortex exclusion control. `04_01_materialize_kong2022_roi_fc.py --ctxdrop` keeps hippocampal time series unchanged, excludes valid cortex vertices within 20 mm separately for each hippocampal vertex before ROI averaging, and writes isolated FC caches plus smoothing-independent local cortex-neighbor diagnostics under `shared_inputs/routea_ctxdrop_151/sub-*/surface/local_cortex_neighbors/hemi_*/`. Its maintained downstream scope is `gradient-spectral` and `wta-top`, with group outputs in `outputs_core/work/group_atlas/routea_ctxdrop_full_k3_fisherz/`. The shared local-cortex-neighbor count surface overlay for ctxreg/ctxdrop is rendered by `06_07_render_ctxdrop_neighbor_counts.py` under `outputs_core/present/local_cortex_neighbors/`.
+The `kong2022_routea_ctxdrop` branch is the matched RouteA local-cortex exclusion control. `04_01_materialize_kong2022_roi_fc.py --ctxdrop` keeps hippocampal time series unchanged, excludes valid cortex vertices within 20 mm separately for each hippocampal vertex before ROI averaging, and writes isolated FC caches plus smoothing-independent local cortex-neighbor diagnostics under `shared_inputs/routea_ctxdrop_151/sub-*/surface/local_cortex_neighbors/hemi_*/`. Its maintained downstream scope is `gradient-spectral` and `wta-top`, with group outputs in `outputs_hcp/work/group_atlas/routea_ctxdrop_full_k3_fisherz/`. The shared local-cortex-neighbor count surface overlay for ctxreg/ctxdrop is rendered by `06_07_render_ctxdrop_neighbor_counts.py` under `outputs_hcp/present/local_cortex_neighbors/`.
 
 Active numbered steps no longer shell out to the legacy hippocampal/cortex runtime directories.
 The active runtime boundary allows external assets and the Workbench executable

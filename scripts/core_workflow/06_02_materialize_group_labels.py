@@ -11,7 +11,7 @@ Main Flow Path:
 
 Inputs:
 - Command-line arguments:
-  - --out-root: Root directory containing group atlas results (default: `outputs_core/work/group_atlas`).
+  - --out-root: Root directory containing group atlas results (default: `outputs_hcp/work/group_atlas`).
 - Physical inputs:
   - Subdirectory manifests: `{out_root}/**/group_atlas_manifest.json`
   - From subdirectories containing the manifest:

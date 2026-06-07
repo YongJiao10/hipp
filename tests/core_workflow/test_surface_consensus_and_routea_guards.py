@@ -148,8 +148,8 @@ def test_subject_surface_consensus_fails_on_long_axis_mismatch() -> None:
 
 
 def test_routea_path_guards_reject_routeb_paths() -> None:
-    bad = REPO_ROOT / "outputs_core" / "inputs" / "hcp7t_hippocampus" / "kong2022_route_b" / "x"
-    good = REPO_ROOT / "outputs_core" / "inputs" / "hcp7t_hippocampus" / "kong2022" / "manifests" / "y.txt"
+    bad = REPO_ROOT / "outputs_hcp" / "inputs" / "hcp7t_hippocampus" / "kong2022_route_b" / "x"
+    good = REPO_ROOT / "outputs_hcp" / "inputs" / "hcp7t_hippocampus" / "kong2022" / "manifests" / "y.txt"
 
     try:
         validate_routea_path(bad, "--subjects-manifest")
@@ -160,13 +160,13 @@ def test_routea_path_guards_reject_routeb_paths() -> None:
     enforce_routea_path_compliance(
         shared_root=good.parent,
         manifest=good,
-        group_root_raw=REPO_ROOT / "outputs_core" / "work" / "group_atlas" / "routea_full_k3_fisherz",
+        group_root_raw=REPO_ROOT / "outputs_hcp" / "work" / "group_atlas" / "routea_full_k3_fisherz",
     )
     try:
         enforce_routea_path_compliance(
             shared_root=bad,
             manifest=good,
-            group_root_raw=REPO_ROOT / "outputs_core" / "work" / "group_atlas" / "routea_full_k3_fisherz",
+            group_root_raw=REPO_ROOT / "outputs_hcp" / "work" / "group_atlas" / "routea_full_k3_fisherz",
         )
         raise AssertionError("expected enforce_routea_path_compliance failure")
     except RuntimeError as exc:

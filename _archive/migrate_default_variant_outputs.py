@@ -19,8 +19,21 @@ from typing import Any
 import nibabel as nib
 import numpy as np
 
+from lib.output_layout import (
+    DEFAULT_DATASET,
+    resolve_group_atlas_root,
+    resolve_work_root,
+)
 
-DEFAULT_ROOTS = [Path("outputs_core/work/group_atlas"), Path("outputs_core/work/individual_atlas")]
+
+def _default_roots(dataset: str = DEFAULT_DATASET) -> list[Path]:
+    return [
+        resolve_group_atlas_root(dataset),
+        resolve_work_root(dataset) / "individual_atlas",
+    ]
+
+
+DEFAULT_ROOTS = _default_roots()
 DEFAULT_FIELDS = {
     "group_functional_atlas_labels": "group_functional_atlas_labels.npy",
     "group_functional_atlas_label_map": "group_functional_atlas_label_map.json",
@@ -196,8 +209,10 @@ def delete_targets_from_plan(plan_json: Path, cwd: Path) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Migrate cluster-level default variant outputs without unsuffixed duplicates.")
-    parser.add_argument("--roots", nargs="*", default=[str(p) for p in DEFAULT_ROOTS])
-    parser.add_argument("--plan-out", default="outputs_core/work/default_variant_migration_plan.json")
+    parser.add_argument("--dataset", default=DEFAULT_DATASET, choices=("hcp", "iowa", "stanford"),
+                        help="Dataset key (default: hcp)")
+    parser.add_argument("--roots", nargs="*", default=[str(p) for p in _default_roots()])
+    parser.add_argument("--plan-out", default=str(resolve_work_root() / "default_variant_migration_plan.json"))
     parser.add_argument("--write-manifests", action="store_true", help="Rewrite manifests to point default fields at suffixed default variants.")
     parser.add_argument("--archive", default=None, help="Create a tar.gz archive containing verified duplicate targets.")
     parser.add_argument("--delete-plan", default=None, help="Delete targets from a previously reviewed plan JSON.")

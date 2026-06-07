@@ -23,7 +23,7 @@ Inputs:
   - Core directory layouts and environment references.
 
 Outputs:
-- File outputs (generated under `outputs_core/smoke_runs/{run_id}/`):
+- File outputs (generated under `outputs_hcp/smoke_runs/{run_id}/`):
   - Selected subjects list: `inputs/subjects_smoke5.txt`
   - Sequential pipeline shell script: `manifests/run_smoke_commands.sh`
   - Sequential pipeline command manifest JSON: `manifests/smoke_command_manifest.json`
@@ -366,7 +366,7 @@ def write_command_script(path: Path, records: list[dict[str, Any]]) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Prepare an isolated 5-subject core-workflow smoke run directory and command manifest.")
-    parser.add_argument("--run-id", default=None, help="Run ID under outputs_core/smoke_runs/. Defaults to smoke5_<UTC timestamp>.")
+    parser.add_argument("--run-id", default=None, help="Run ID under outputs_hcp/smoke_runs/. Defaults to smoke5_<UTC timestamp>.")
     parser.add_argument("--source-subjects", default=str(DEFAULT_SOURCE_SUBJECTS))
     parser.add_argument("--subjects", nargs="*", default=None, help="Explicit smoke subject IDs. Overrides --source-subjects.")
     parser.add_argument("--subject-count", type=int, default=5)

@@ -3,21 +3,21 @@
 The active default hippocampal group-analysis cohort is the T1only 151-subject QC-passed set.
 Vertex-level QC is pre-Kong behavior and uses a branch-agnostic root:
 
-- `outputs_core/inputs/hcp7t_hippocampus/qc/vertex_qc_t1only/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_151.txt`
-- `outputs_core/inputs/hcp7t_hippocampus/qc/vertex_qc_t1only/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt`
+- `outputs_hcp/inputs/hcp/qc/vertex_qc_t1only/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_151.txt`
+- `outputs_hcp/inputs/hcp/qc/vertex_qc_t1only/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt`
 
 Legacy `manifests/hcp_7t_hippocampus_fmri_qc_pass_153.txt` is T2only-era and is not the active default for T1only workflows.
 
 Audit/provenance artifacts for current on-disk assets:
 
-- `outputs_core/inputs/hcp7t_hippocampus/qc/vertex_qc_t1only/qc/hcp7t_t1only_vertex_qc_166_audit.tsv`
-- `outputs_core/inputs/hcp7t_hippocampus/qc/vertex_qc_t1only/qc/hcp7t_t1only_vertex_qc_166_audit.json`
-- `outputs_core/inputs/hcp7t_hippocampus/qc/vertex_qc_t1only/manifests/hcp_7t_hippocampus_fmri_qc_excluded_t1only_15.txt`
-- `outputs_core/inputs/hcp7t_hippocampus/qc/vertex_qc_t1only/manifests/hcp_7t_hippocampus_fmri_qc_excluded_t1only_latest.txt`
+- `outputs_hcp/inputs/hcp/qc/vertex_qc_t1only/qc/hcp7t_t1only_vertex_qc_166_audit.tsv`
+- `outputs_hcp/inputs/hcp/qc/vertex_qc_t1only/qc/hcp7t_t1only_vertex_qc_166_audit.json`
+- `outputs_hcp/inputs/hcp/qc/vertex_qc_t1only/manifests/hcp_7t_hippocampus_fmri_qc_excluded_t1only_15.txt`
+- `outputs_hcp/inputs/hcp/qc/vertex_qc_t1only/manifests/hcp_7t_hippocampus_fmri_qc_excluded_t1only_latest.txt`
 
 Path plan (canonical):
 
-- Root: `outputs_core/inputs/hcp7t_hippocampus/qc/vertex_qc_t1only/`
+- Root: `outputs_hcp/inputs/hcp/qc/vertex_qc_t1only/`
 - Pass manifest: `manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_151.txt`
 - Excluded manifest: `manifests/hcp_7t_hippocampus_fmri_qc_excluded_t1only_15.txt`
 - 166-audit table: `qc/hcp7t_t1only_vertex_qc_166_audit.tsv`
@@ -40,7 +40,7 @@ tSNR convention used for the null-vertex QC gate:
 
 T1only uses the same thresholds, but the consumed HippUnfold surfaces and Dice TSVs come from:
 
-- `outputs_core/inputs/hcp7t_hippocampus/hippunfold/dense_corobl_batch/`
+- `outputs_hcp/inputs/hcp/hippunfold/dense_corobl_batch/`
 
 Excluded subjects:
 
@@ -68,8 +68,8 @@ Current audited breakdown for 166 -> 151:
 
 Active shared group-input root:
 
-- `outputs_core/inputs/hcp7t_hippocampus/kong2022/shared_inputs/routeb_151/`
+- `outputs_hcp/inputs/hcp/kong2022/shared_inputs/routeb_151/`
 
 Example active raw surface path:
 
-- `outputs_core/inputs/hcp7t_hippocampus/kong2022/shared_inputs/routeb_151/sub-<id>/surface/raw/sub-<id>_hemi-{L,R}_space-corobl_den-512_label-hipp_bold.func.gii`
+- `outputs_hcp/inputs/hcp/kong2022/shared_inputs/routeb_151/sub-<id>/surface/raw/sub-<id>_hemi-{L,R}_space-corobl_den-512_label-hipp_bold.func.gii`

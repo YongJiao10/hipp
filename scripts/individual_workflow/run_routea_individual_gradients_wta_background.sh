@@ -4,7 +4,7 @@ set -euo pipefail
 cd /home/yojiao/hpchome/hipp
 
 RUN_ID="${1:-routea_individual_gradients_wta_$(date -u +%Y%m%dT%H%M%SZ)}"
-OUT_ROOT="outputs_core/work/individual_atlas"
+OUT_ROOT="outputs_hcp/work/individual_atlas"
 LOG_DIR="${OUT_ROOT}/gradient_spectral_k3/_runs/logs/${RUN_ID}"
 mkdir -p "${LOG_DIR}"
 

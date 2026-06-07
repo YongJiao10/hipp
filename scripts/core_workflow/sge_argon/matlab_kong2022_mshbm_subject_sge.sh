@@ -57,7 +57,7 @@ if ! [[ "${task_id}" =~ ^[0-9]+$ ]] || [ "${task_id}" -lt 1 ] || [ "${task_id}" 
 fi
 
 subject="${subject_ids[$((task_id - 1))]}"
-out_root="${repo_root}/outputs_core/inputs/hcp7t_hippocampus/kong2022/cortex_references/routea_areal_mshbm"
+out_root="${repo_root}/outputs_hcp/inputs/hcp/kong2022/cortex_references/routea_areal_mshbm"
 subject_dir="${out_root}/sub-${subject}"
 runs_dir="${subject_dir}/temp_runs"
 project_dir="${subject_dir}/temp_project"
