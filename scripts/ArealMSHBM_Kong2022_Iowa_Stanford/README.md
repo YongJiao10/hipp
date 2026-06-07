@@ -11,7 +11,7 @@ Select the dataset with `DATASET=jj_tms` or `DATASET=stanford`. If unset,
 
 | Dataset | Default input root | Default output root | Rest dtseries pattern |
 | --- | --- | --- | --- |
-| `jj_tms` | `/Shared/jianglab/3_Data_Working/fmriprep_processed_JJ_TMS/derivatives_surf` | `/Shared/jianglab/3_Data_Working/fmriprep_processed_JJ_TMS/ArealMSHBM_Kong2022` | `func/*_task-rest_run-0*_space-fsLR_den-91k_bold.dtseries.nii` |
+| `jj_tms` | `/Shared/jianglab/3_Data_Working/fmriprep_processed_JJ_TMS/xcpd_surf` | `/Shared/jianglab/3_Data_Working/fmriprep_processed_JJ_TMS/ArealMSHBM_Kong2022` | `func/*_task-rest_run-*_space-fsLR_den-91k_desc-denoised_bold.dtseries.nii` |
 | `stanford` | `/Shared/jianglab/3_Data_Working/fmriprep_processed_CausalConnectome/rest_fmriprep/DataOrg_PFM_36P` | `/Shared/jianglab/3_Data_Working/fmriprep_processed_CausalConnectome/rest_fmriprep/ArealMSHBM_Kong2022` | `func/*_task-rest_space-fsLR_den-91k_desc-denoised_bold.dtseries.nii` |
 
 Each task scans one `sub-*` directory for the selected dataset's rest dtseries

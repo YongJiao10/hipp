@@ -24,7 +24,7 @@ dataset="$(printf '%s' "${DATASET:-jj_tms}" | tr '[:upper:]-' '[:lower:]_')"
 case "${dataset}" in
   jj_tms)
     dataset_label="JJ_TMS"
-    default_data_root="/Shared/jianglab/3_Data_Working/fmriprep_processed_JJ_TMS/derivatives_surf"
+    default_data_root="/Shared/jianglab/3_Data_Working/fmriprep_processed_JJ_TMS/xcpd_surf"
     default_out_root="/Shared/jianglab/3_Data_Working/fmriprep_processed_JJ_TMS/ArealMSHBM_Kong2022"
     tmp_prefix="jj_tms_kong2022"
     ;;

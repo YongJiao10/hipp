@@ -11,7 +11,7 @@ Use these instructions for Iowa/Stanford Kong2022 ArealMSHBM work on Argon.
   `matlab_kong2022_mshbm_subject_sge.sh`.
 - Supported dataset presets and subject functional inputs are only:
   - `DATASET=jj_tms`:
-    `/Shared/jianglab/3_Data_Working/fmriprep_processed_JJ_TMS/derivatives_surf/sub-*/func/*_task-rest_run-0*_space-fsLR_den-91k_bold.dtseries.nii`
+    `/Shared/jianglab/3_Data_Working/fmriprep_processed_JJ_TMS/xcpd_surf/sub-*/func/*_task-rest_run-*_space-fsLR_den-91k_desc-denoised_bold.dtseries.nii`
   - `DATASET=stanford`:
     `/Shared/jianglab/3_Data_Working/fmriprep_processed_CausalConnectome/rest_fmriprep/DataOrg_PFM_36P/sub-*/func/*_task-rest_space-fsLR_den-91k_desc-denoised_bold.dtseries.nii`
 - Multiple rest runs are passed to MATLAB as separate sessions in
