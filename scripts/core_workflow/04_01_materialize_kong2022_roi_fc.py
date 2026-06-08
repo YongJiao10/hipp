@@ -46,6 +46,7 @@ from lib.output_layout import (
     DEFAULT_KONG2022_MANIFEST_ROOT,
     DEFAULT_KONG2022_ROOT,
 )
+from lib.path_templates import format_subject_path_template
 from lib.workflow_utils import capped_jobs, utc_now_iso, write_json
 from lib.io_utils import load_subject_ids
 from lib.fc_math import corrcoef_rows, compact_active_vertices
@@ -66,6 +67,7 @@ DEFAULT_SHARED_ROOT = DEFAULT_SHARED_INPUTS_ROOT / "routeb_151"
 DEFAULT_SURFACE_ROOT = DEFAULT_SHARED_INPUTS_ROOT / "surface_151"
 DEFAULT_SUBJECTS = DEFAULT_KONG2022_MANIFEST_ROOT / "hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt"
 DEFAULT_DATA_ROOT = REPO_ROOT / "data" / "hippunfold_input"
+DEFAULT_DTSERIES_TEMPLATE = "{data_root}/{sub_subject}/func/{sub_subject}_task-rest_run-concat.dtseries.nii"
 DEFAULT_ROUTE_A_ROOT = DEFAULT_CORTEX_ROUTEA_ROOT
 DEFAULT_LEFT_CORTEX_SURFACE_TEMPLATE = (
     "{data_root}/{sub_subject}/anat/{sub_subject}_hemi-L_space-fsLR_den-32k_desc-MSMAll_midthickness.surf.gii"
@@ -441,9 +443,14 @@ def load_ctxdrop_cortex_inputs(
     route_a_root: Path,
     left_cortex_surface_template: str,
     right_cortex_surface_template: str,
+    dtseries_template: str = DEFAULT_DTSERIES_TEMPLATE,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, dict[str, int], dict[str, Path]]:
     subject = str(subject).replace("sub-", "")
-    dt_path = dtseries_path(data_root, subject)
+    dt_path = format_subject_path_template(
+        dtseries_template,
+        data_root=data_root,
+        subject=subject,
+    )
     dt_img = nib.load(str(dt_path))
     dt_data = np.asarray(dt_img.dataobj, dtype=np.float32)
     if dt_data.ndim != 2:
@@ -679,6 +686,7 @@ def process_subject(
     left_cortex_surface_template: str = DEFAULT_LEFT_CORTEX_SURFACE_TEMPLATE,
     right_cortex_surface_template: str = DEFAULT_RIGHT_CORTEX_SURFACE_TEMPLATE,
     ctxdrop_distance_mm: float = 20.0,
+    dtseries_template: str = DEFAULT_DTSERIES_TEMPLATE,
 ) -> dict[str, object]:
     subject = str(subject).replace("sub-", "")
     shared_root = Path(shared_root_str)
@@ -697,6 +705,7 @@ def process_subject(
             route_a_root=route_a_root,
             left_cortex_surface_template=left_cortex_surface_template,
             right_cortex_surface_template=right_cortex_surface_template,
+            dtseries_template=dtseries_template,
         )
         cortex_valid = load_optional_cortex_valid_mask(reference_root, subject, cortex_counts)
         neighbors_by_hemi: dict[str, list[np.ndarray]] = {}
@@ -752,6 +761,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--route-a-root", default=str(DEFAULT_ROUTE_A_ROOT))
     parser.add_argument("--left-cortex-surface-template", default=DEFAULT_LEFT_CORTEX_SURFACE_TEMPLATE)
     parser.add_argument("--right-cortex-surface-template", default=DEFAULT_RIGHT_CORTEX_SURFACE_TEMPLATE)
+    parser.add_argument(
+        "--dtseries-template",
+        default=DEFAULT_DTSERIES_TEMPLATE,
+        help=(
+            "Per-subject dtseries template. Variables: {data_root}, {subject}, "
+            "{sub_subject}. Default preserves the legacy HCP layout."
+        ),
+    )
     return parser
 
 
@@ -785,6 +802,7 @@ def main() -> int:
                 left_cortex_surface_template=str(args.left_cortex_surface_template),
                 right_cortex_surface_template=str(args.right_cortex_surface_template),
                 ctxdrop_distance_mm=float(args.ctxdrop_distance_mm),
+                dtseries_template=str(args.dtseries_template),
             )
             n_fc += int(obj["fc_combos"])
             print(f"[done] {obj['subject']}", flush=True)
@@ -807,6 +825,7 @@ def main() -> int:
                     str(args.left_cortex_surface_template),
                     str(args.right_cortex_surface_template),
                     float(args.ctxdrop_distance_mm),
+                    str(args.dtseries_template),
                 )
                 for s in subjects
             ]

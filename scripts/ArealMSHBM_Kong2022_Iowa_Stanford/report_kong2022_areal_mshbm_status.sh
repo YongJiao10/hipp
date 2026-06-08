@@ -12,8 +12,11 @@ case "${dataset}" in
   stanford)
     out_root="${OUT_ROOT:-/Shared/jianglab/3_Data_Working/fmriprep_processed_CausalConnectome/rest_fmriprep/ArealMSHBM_Kong2022}"
     ;;
+  iowa7t)
+    out_root="${OUT_ROOT:-/Shared/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/ArealMSHBM_Kong2022}"
+    ;;
   *)
-    echo "ERROR: unsupported DATASET=${DATASET:-}. Expected jj_tms or stanford." >&2
+    echo "ERROR: unsupported DATASET=${DATASET:-}. Expected jj_tms, stanford, or iowa7t." >&2
     exit 2
     ;;
 esac

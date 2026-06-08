@@ -125,6 +125,23 @@ explicit atlas assets to extraction/annotation modules, so smoke runs can reuse
 validated trees outside the current worktree without creating symlinks. `05_01`
 and `05_02` accept `--hippomaps-root` for the same reason.
 
+Path template arguments for non-HCP datasets:
+
+- `02_01_prepare_group_inputs.py` accepts `--bold-template` (default:
+  `{bold_root}/{subject}/func_uncompressed.nii`).
+- `03_01_build_kong2022_reference.py`,
+  `03_02_build_kong2022_routea_reference.py`,
+  `04_00_materialize_cortex_regressed_surface_timeseries.py`, and
+  `04_01_materialize_kong2022_roi_fc.py` accept `--dtseries-template`
+  (default: `{data_root}/{sub_subject}/func/{sub_subject}_task-rest_run-concat.dtseries.nii`).
+- Templates support `{data_root}`, `{bold_root}`, `{subject}`,
+  `{sub_subject}`, `{hemi}`, and `{hemi_lower}` where relevant.
+- Defaults preserve existing HCP behavior.
+- Stanford and future non-HCP datasets should prefer templates over broad
+  symlink trees. Use the shared helper
+  `scripts/core_workflow/lib/path_templates.py` to add template support to
+  additional entrypoints when needed.
+
 - `--workflow-branch`: one of `kong2019`, `kong2022_routea`, `kong2022_routea_17net`, `kong2022_routea_ctxreg`, `kong2022_routea_ctxdrop`, `kong2022_routeb`
 - `--upstream-step-id` (repeatable)
 - `--input-artifact` (repeatable)

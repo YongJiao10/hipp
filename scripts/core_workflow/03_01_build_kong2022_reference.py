@@ -39,6 +39,7 @@ from pathlib import Path
 
 from lib.output_layout import DEFAULT_KONG2022_MANIFEST_ROOT, DEFAULT_KONG2022_ROUTEB_ROOT
 from lib.io_utils import load_subject_ids
+from lib.path_templates import format_subject_path_template
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -46,6 +47,7 @@ PYTHON_EXE = sys.executable or "python"
 EXTRACT_MODULE = "scripts.core_workflow.lib.extract_cortex_kong2022_roi_timeseries"
 DEFAULT_SHARED_ROOT = DEFAULT_KONG2022_ROUTEB_ROOT
 DEFAULT_DATA_ROOT = REPO_ROOT / "data" / "hippunfold_input"
+DEFAULT_DTSERIES_TEMPLATE = "{data_root}/{sub_subject}/func/{sub_subject}_task-rest_run-concat.dtseries.nii"
 DEFAULT_MANIFEST = DEFAULT_KONG2022_MANIFEST_ROOT / "hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt"
 MAX_CONCURRENCY = 10
 
@@ -107,6 +109,7 @@ def run_subject(
     subject: str,
     shared_root: Path,
     data_root: Path,
+    dtseries_template: str,
     kong2022_dlabel: Path | None,
     cross_atlas_merge_json: Path | None,
 ) -> tuple[str, bool, str]:
@@ -119,7 +122,13 @@ def run_subject(
         "--shared-root",
         str(shared_root),
         "--dtseries",
-        str(data_root / f"sub-{subject}" / "func" / f"sub-{subject}_task-rest_run-concat.dtseries.nii"),
+        str(
+            format_subject_path_template(
+                dtseries_template,
+                data_root=data_root,
+                subject=subject,
+            )
+        ),
     ]
     if kong2022_dlabel is not None:
         cmd.extend(["--kong2022-dlabel", str(kong2022_dlabel)])
@@ -138,6 +147,14 @@ def main() -> int:
     )
     parser.add_argument("--shared-root", default=str(DEFAULT_SHARED_ROOT))
     parser.add_argument("--data-root", default=str(DEFAULT_DATA_ROOT))
+    parser.add_argument(
+        "--dtseries-template",
+        default=DEFAULT_DTSERIES_TEMPLATE,
+        help=(
+            "Per-subject dtseries template. Variables: {data_root}, {subject}, "
+            "{sub_subject}. Default preserves the legacy HCP layout."
+        ),
+    )
     parser.add_argument("--subjects-manifest", default=str(DEFAULT_MANIFEST))
     parser.add_argument("--subjects", nargs="*", default=None, help="Optional explicit subject IDs.")
     parser.add_argument("--jobs", type=int, default=4, help="Thread-pool concurrency (hard-capped at 10).")
@@ -178,6 +195,7 @@ def main() -> int:
     jobs = max(1, min(int(args.jobs), MAX_CONCURRENCY, len(todo)))
     dlabel = Path(args.kong2022_dlabel).resolve() if args.kong2022_dlabel else None
     merge_json = Path(args.cross_atlas_merge_json).resolve() if args.cross_atlas_merge_json else None
+    dtseries_template = args.dtseries_template
 
     failed: list[str] = []
     with ThreadPoolExecutor(max_workers=jobs) as pool:
@@ -187,6 +205,7 @@ def main() -> int:
                 subject=s,
                 shared_root=shared_root,
                 data_root=data_root,
+                dtseries_template=dtseries_template,
                 kong2022_dlabel=dlabel,
                 cross_atlas_merge_json=merge_json,
             ): s

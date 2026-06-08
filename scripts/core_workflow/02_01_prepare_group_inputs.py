@@ -36,6 +36,7 @@ Outputs:
 import argparse
 import json
 import os
+import subprocess
 import sys
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -52,6 +53,7 @@ from lib.output_layout import (
     DEFAULT_KONG2022_SURFACE_ROOT,
     DEFAULT_KONG2022_TEMPLATE_ROOT,
 )
+from lib.path_templates import format_subject_path_template
 from lib.workbench import run_workbench
 from lib.workflow_utils import file_meta, git_commit, utc_now_iso, write_json
 
@@ -62,6 +64,7 @@ DEFAULT_ROUTE_ROOT = DEFAULT_KONG2022_ROOT
 DEFAULT_SHARED_ROOT = DEFAULT_KONG2022_SURFACE_ROOT
 DEFAULT_TEMPLATE_ROOT = DEFAULT_KONG2022_TEMPLATE_ROOT
 DEFAULT_BOLD_ROOT = Path("/home/yojiao/LSS/jianglab/3_Data_Working/HCP_7T_Hippocampus/rsfmri_volume")
+DEFAULT_BOLD_TEMPLATE = "{bold_root}/{subject}/func_uncompressed.nii"
 QC_SCRIPT = REPO_ROOT / "scripts" / "core_workflow" / "02_02_build_qc_manifest.py"
 MAX_CONCURRENCY = 10
 # Workbench stages spawn a Python worker plus a wb_command wrapper and the real wb_command process per subject.
@@ -136,10 +139,14 @@ def tsnr_done(shared_root: Path, subject: str) -> bool:
     )
 
 
-def run_raw_sampling(subject: str, batch_root: str, shared_root: str, bold_root: str, log_dir: str) -> dict[str, object]:
+def run_raw_sampling(subject: str, batch_root: str, shared_root: str, bold_root: str, bold_template: str, log_dir: str) -> dict[str, object]:
     batch = Path(batch_root)
     shared = Path(shared_root)
-    bold = Path(bold_root) / subject / "func_uncompressed.nii"
+    bold = format_subject_path_template(
+        bold_template,
+        bold_root=bold_root,
+        subject=subject,
+    )
     out_dir = shared / f"sub-{subject}" / "surface" / "raw"
     out_dir.mkdir(parents=True, exist_ok=True)
     log_path = Path(log_dir) / f"sub-{subject}_raw_sampling.log"
@@ -418,6 +425,14 @@ def main() -> int:
     parser.add_argument("--shared-root", default=str(DEFAULT_SHARED_ROOT))
     parser.add_argument("--template-root", default=str(DEFAULT_TEMPLATE_ROOT))
     parser.add_argument("--bold-root", default=str(DEFAULT_BOLD_ROOT))
+    parser.add_argument(
+        "--bold-template",
+        default=DEFAULT_BOLD_TEMPLATE,
+        help=(
+            "Per-subject BOLD volume template. Variables: {bold_root}, {subject}, "
+            "{sub_subject}. Default preserves the legacy HCP layout."
+        ),
+    )
     parser.add_argument("--subjects-manifest", default=None)
     parser.add_argument("--subjects", nargs="*", default=None)
     parser.add_argument("--jobs", type=int, default=2)
@@ -457,7 +472,7 @@ def main() -> int:
     if args.stage in {"all", "raw"}:
         raw_todo = [s for s in dice_subjects if not (args.resume and raw_done(shared_root, s))]
         print(f"[info] raw sampling todo={len(raw_todo)}", flush=True)
-        run_parallel("raw", raw_todo, workbench_jobs, run_raw_sampling, str(batch_root), str(shared_root), str(bold_root), str(log_dir))
+        run_parallel("raw", raw_todo, workbench_jobs, run_raw_sampling, str(batch_root), str(shared_root), str(bold_root), args.bold_template, str(log_dir))
     if args.stage in {"all", "tsnr"}:
         tsnr_todo = [s for s in dice_subjects if not (args.resume and tsnr_done(shared_root, s))]
         print(f"[info] tsnr gate todo={len(tsnr_todo)}", flush=True)

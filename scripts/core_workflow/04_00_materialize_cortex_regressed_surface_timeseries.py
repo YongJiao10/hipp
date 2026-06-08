@@ -31,11 +31,13 @@ from lib.output_layout import (
     DEFAULT_KONG2022_ROUTEA_ROOT,
     DEFAULT_KONG2022_SURFACE_ROOT,
 )
+from lib.path_templates import format_subject_path_template
 from lib.workflow_utils import capped_jobs, utc_now_iso, write_json
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_DATA_ROOT = REPO_ROOT / "data" / "hippunfold_input"
+DEFAULT_DTSERIES_TEMPLATE = "{data_root}/{sub_subject}/func/{sub_subject}_task-rest_run-concat.dtseries.nii"
 DEFAULT_SOURCE_SHARED_ROOT = DEFAULT_KONG2022_ROUTEA_ROOT
 DEFAULT_OUT_SHARED_ROOT = DEFAULT_KONG2022_ROUTEA_CTXREG_ROOT
 DEFAULT_SURFACE_ROOT = DEFAULT_KONG2022_SURFACE_ROOT
@@ -438,6 +440,7 @@ def process_subject(
     hippunfold_batch_root: str,
     left_cortex_surface_template: str,
     right_cortex_surface_template: str,
+    dtseries_template: str,
     smoothings: list[str],
     hemis: list[str],
     distance_mm: float,
@@ -449,7 +452,11 @@ def process_subject(
     data = Path(data_root)
     (out_shared / f"sub-{subject}" / "surface").mkdir(parents=True, exist_ok=True)
 
-    dt_path = dtseries_path(data, subject)
+    dt_path = format_subject_path_template(
+        dtseries_template,
+        data_root=data,
+        subject=subject,
+    )
     cortex_surface_paths = {
         "L": format_subject_template(left_cortex_surface_template, data_root=data, subject=subject, hemi="L"),
         "R": format_subject_template(right_cortex_surface_template, data_root=data, subject=subject, hemi="R"),
@@ -526,6 +533,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--distance-mm", type=float, default=20.0)
     parser.add_argument("--left-cortex-surface-template", default=DEFAULT_LEFT_CORTEX_SURFACE_TEMPLATE)
     parser.add_argument("--right-cortex-surface-template", default=DEFAULT_RIGHT_CORTEX_SURFACE_TEMPLATE)
+    parser.add_argument(
+        "--dtseries-template",
+        default=DEFAULT_DTSERIES_TEMPLATE,
+        help=(
+            "Per-subject dtseries template. Variables: {data_root}, {subject}, "
+            "{sub_subject}. Default preserves the legacy HCP layout."
+        ),
+    )
     parser.add_argument("--jobs", type=int, default=1, help="Subject-level workers; hard-capped at 10.")
     return parser
 
@@ -542,6 +557,7 @@ def main() -> int:
         "hippunfold_batch_root": str(Path(args.hippunfold_batch_root).resolve()),
         "left_cortex_surface_template": str(args.left_cortex_surface_template),
         "right_cortex_surface_template": str(args.right_cortex_surface_template),
+        "dtseries_template": str(args.dtseries_template),
         "smoothings": [str(x) for x in args.smoothings],
         "hemis": [str(x) for x in args.hemis],
         "distance_mm": float(args.distance_mm),

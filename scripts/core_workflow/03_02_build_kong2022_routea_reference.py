@@ -39,6 +39,7 @@ from pathlib import Path
 
 from lib.output_layout import DEFAULT_CORTEX_ROUTEA_ROOT, DEFAULT_KONG2022_MANIFEST_ROOT, DEFAULT_KONG2022_ROUTEA_ROOT
 from lib.io_utils import load_subject_ids
+from lib.path_templates import format_subject_path_template
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -47,6 +48,7 @@ EXTRACT_MODULE = "scripts.core_workflow.lib.extract_cortex_kong2022_route_a_roi_
 DEFAULT_SHARED_ROOT = DEFAULT_KONG2022_ROUTEA_ROOT
 DEFAULT_ROUTE_A_ROOT = DEFAULT_CORTEX_ROUTEA_ROOT
 DEFAULT_DATA_ROOT = REPO_ROOT / "data" / "hippunfold_input"
+DEFAULT_DTSERIES_TEMPLATE = "{data_root}/{sub_subject}/func/{sub_subject}_task-rest_run-concat.dtseries.nii"
 DEFAULT_MANIFEST = DEFAULT_KONG2022_MANIFEST_ROOT / "hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt"
 MAX_CONCURRENCY = 10
 SOURCE_TAG = "route_a_kong2022_areal_mshbm"
@@ -83,6 +85,7 @@ def run_subject(
     shared_root: Path,
     route_a_root: Path,
     data_root: Path,
+    dtseries_template: str,
     kong2022_dlabel: Path | None,
     overwrite: bool,
 ) -> tuple[str, bool, str]:
@@ -97,7 +100,13 @@ def run_subject(
         "--route-a-root",
         str(route_a_root),
         "--dtseries",
-        str(data_root / f"sub-{subject}" / "func" / f"sub-{subject}_task-rest_run-concat.dtseries.nii"),
+        str(
+            format_subject_path_template(
+                dtseries_template,
+                data_root=data_root,
+                subject=subject,
+            )
+        ),
     ]
     if kong2022_dlabel is not None:
         cmd.extend(["--kong2022-dlabel", str(kong2022_dlabel)])
@@ -117,6 +126,14 @@ def main() -> int:
     parser.add_argument("--shared-root", default=str(DEFAULT_SHARED_ROOT))
     parser.add_argument("--route-a-root", default=str(DEFAULT_ROUTE_A_ROOT))
     parser.add_argument("--data-root", default=str(DEFAULT_DATA_ROOT))
+    parser.add_argument(
+        "--dtseries-template",
+        default=DEFAULT_DTSERIES_TEMPLATE,
+        help=(
+            "Per-subject dtseries template. Variables: {data_root}, {subject}, "
+            "{sub_subject}. Default preserves the legacy HCP layout."
+        ),
+    )
     parser.add_argument("--kong2022-dlabel", default=None)
     parser.add_argument("--subjects-manifest", default=str(DEFAULT_MANIFEST))
     parser.add_argument("--subjects", nargs="*", default=None, help="Optional explicit subject IDs.")
@@ -158,6 +175,7 @@ def main() -> int:
                 shared_root=shared_root,
                 route_a_root=route_a_root,
                 data_root=data_root,
+                dtseries_template=args.dtseries_template,
                 kong2022_dlabel=kong2022_dlabel,
                 overwrite=bool(args.overwrite),
             ): s

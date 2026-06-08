@@ -34,8 +34,14 @@ case "${dataset}" in
     default_out_root="/Shared/jianglab/3_Data_Working/fmriprep_processed_CausalConnectome/rest_fmriprep/ArealMSHBM_Kong2022"
     tmp_prefix="stanford_kong2022"
     ;;
+  iowa7t)
+    dataset_label="Iowa7T"
+    default_data_root="/Shared/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_36P"
+    default_out_root="/Shared/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/ArealMSHBM_Kong2022"
+    tmp_prefix="iowa7t_kong2022"
+    ;;
   *)
-    echo "ERROR: unsupported DATASET=${DATASET:-}. Expected jj_tms or stanford." >&2
+    echo "ERROR: unsupported DATASET=${DATASET:-}. Expected jj_tms, stanford, or iowa7t." >&2
     exit 2
     ;;
 esac
@@ -95,7 +101,7 @@ rh_labels="${subject_out}/rh_labels.txt"
 
 cleanup_tmp_root() {
   case "${tmp_root:-}" in
-    /tmp/jj_tms_kong2022_*|/tmp/stanford_kong2022_*)
+    /tmp/jj_tms_kong2022_*|/tmp/stanford_kong2022_*|/tmp/iowa7t_kong2022_*)
       rm -rf -- "${tmp_root}"
       ;;
     "")

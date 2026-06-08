@@ -12,6 +12,7 @@ import nibabel as nib
 DATASET_DTSERIES_GLOBS = {
     "jj_tms": ["*_task-rest_run-*_space-fsLR_den-91k_desc-denoised_bold.dtseries.nii"],
     "stanford": ["*_task-rest_space-fsLR_den-91k_desc-denoised_bold.dtseries.nii"],
+    "iowa7t": ["*_task-rest_run-concat_space-fsLR_den-91k_desc-denoised_bold.dtseries.nii"],
 }
 
 

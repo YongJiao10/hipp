@@ -24,8 +24,15 @@ case "${dataset}" in
     job_prefix="st_k22"
     manifest_prefix="stanford"
     ;;
+  iowa7t)
+    dataset_label="Iowa7T"
+    default_data_root="/Shared/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_36P"
+    default_out_root="/Shared/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/ArealMSHBM_Kong2022"
+    job_prefix="ia7t_k22"
+    manifest_prefix="iowa7t"
+    ;;
   *)
-    echo "ERROR: unsupported DATASET=${DATASET:-}. Expected jj_tms or stanford." >&2
+    echo "ERROR: unsupported DATASET=${DATASET:-}. Expected jj_tms, stanford, or iowa7t." >&2
     exit 2
     ;;
 esac
