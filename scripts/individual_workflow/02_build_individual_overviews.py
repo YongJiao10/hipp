@@ -27,6 +27,7 @@ from routea_individual_gradients_wta import (
     DEFAULT_KONG2022_SURFACE_ROOT,
     DEFAULT_HIPPUNFOLD_BATCH_ROOT,
     OVERVIEW_METHODS,
+    OVERVIEW_METHOD_ALIASES,
     THREAD_ENV_OVERRIDES,
     SubjectCombo,
     finite_fisher_z,

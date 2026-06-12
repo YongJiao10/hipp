@@ -95,7 +95,7 @@ METHOD_CHOICES = [
     "intrinsic-spectral",
     "wta-top",
 ]
-METHODS_DEFAULT = ["intrinsic-spectral", "network-spectral", "wta-top"]
+METHODS_DEFAULT = ["intrinsic-spectral", "network-spectral", "gradient-spectral", "wta-top"]
 SMOOTHINGS = ["2mm", "4mm"]
 HEMIS = ["L", "R"]
 VIEW_SPECS = [
@@ -1708,7 +1708,7 @@ def main() -> int:
                     "n_selected_negative": int(r.get("n_selected_negative", 0)),
                 }
             )
-        route_suffix = "" if str(args.route_tag) == "routea" else f"_{str(args.route_tag)}"
+        route_suffix = f"_{str(args.route_tag)}"
         if str(smoothing) == "2mm+4mm":
             overview_png = present_dir / f"cortex_{atlas}_{method}{route_suffix}_overview.png"
             title_txt = f"{atlas} | {method} | {args.route_tag} | 2mm+4mm merged | L+R merged"

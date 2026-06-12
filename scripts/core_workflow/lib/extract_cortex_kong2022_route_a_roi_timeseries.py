@@ -74,12 +74,11 @@ def compute_cortex_tsnr_gate(
 
 def parse_run_segments(run_lengths: list[int] | None, expected_total_tp: int) -> list[dict[str, object]]:
     if run_lengths is None:
-        if int(expected_total_tp) % len(DEFAULT_RUN_IDS) != 0:
-            raise RuntimeError(
-                f"Cannot infer equal run lengths: n_timepoints={expected_total_tp} n_runs={len(DEFAULT_RUN_IDS)}"
-            )
-        inferred = int(expected_total_tp) // len(DEFAULT_RUN_IDS)
-        run_lengths = [inferred for _ in DEFAULT_RUN_IDS]
+        n_runs = len(DEFAULT_RUN_IDS)
+        base = int(expected_total_tp) // n_runs
+        remainder = int(expected_total_tp) % n_runs
+        # Distribute remainder across the first `remainder` runs (one extra tp each)
+        run_lengths = [base + (1 if i < remainder else 0) for i in range(n_runs)]
     if len(run_lengths) != len(DEFAULT_RUN_IDS):
         raise ValueError(f"Expected {len(DEFAULT_RUN_IDS)} run lengths, got {run_lengths}")
     segments: list[dict[str, object]] = []

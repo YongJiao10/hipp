@@ -148,7 +148,6 @@ def test_overview_output_paths_are_per_subject_per_task(tmp_path):
     assert wta_png == overview_root / "wta" / "sub-100610_wta_overview.png"
 
 
-
 def test_individual_workflow_entrypoints_have_contiguous_numbering():
     workflow_dir = REPO_ROOT / "scripts" / "individual_workflow"
 
