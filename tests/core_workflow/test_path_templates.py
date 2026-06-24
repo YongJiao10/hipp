@@ -8,6 +8,10 @@ from scripts.core_workflow.lib.path_templates import (
     format_subject_path_template,
     normalize_subject,
 )
+from scripts.core_workflow.lib.output_layout import (
+    resolve_kong2022_routea_root,
+    resolve_kong2022_surface_root,
+)
 
 
 def test_normalize_subject_removes_sub_prefix():
@@ -95,3 +99,11 @@ def test_format_subject_path_template_resolves_relative_roots():
         subject="2001",
     )
     assert path.is_absolute()
+
+
+def test_kong2022_base_shared_roots_are_dataset_agnostic():
+    routea_root = resolve_kong2022_routea_root("iowa")
+    surface_root = resolve_kong2022_surface_root("iowa")
+
+    assert routea_root.parts[-2:] == ("shared_inputs", "routea")
+    assert surface_root.parts[-2:] == ("shared_inputs", "surface")

@@ -11,7 +11,7 @@ Main Flow Path:
 
 Inputs:
 - Command-line arguments:
-  - --shared-root: Path to output shared processed files (default: `outputs_hcp/inputs/hcp/kong2022/shared_inputs/routea_151`).
+  - --shared-root: Path to output shared processed files (default: `outputs_hcp/inputs/hcp/kong2022/shared_inputs/routea`).
   - --route-a-root: RouteA specific reference outputs root (default: `outputs_hcp/inputs/hcp/kong2022/shared_inputs/reference_151`).
   - --data-root: Root directory containing raw structural BIDS folders (default: `data/hippunfold_input`).
   - --kong2022-dlabel: Path to standard Kong2022 dlabel.nii cortical atlas file.

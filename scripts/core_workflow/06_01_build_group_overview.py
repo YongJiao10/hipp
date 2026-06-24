@@ -19,17 +19,17 @@ Inputs:
   - --scene: Path to standard wb scene template file.
   - --route-tag: Custom workflow branch tag to override automatic detection.
   - --mode-tag: Custom sparsification mode tag to override automatic detection.
-  - --assignment-variant: Network mapping variant: "fisherz", "count" (default: "fisherz").
+  - --assignment-variant: Network mapping variant: "fisherz", "count", or "both" (default: "both").
   - --manifest-name: Name of generated presentation manifest JSON (default: "group_overview_manifest.json").
   - --skip-readme: Skip writing the README.md summary in presentation directory.
   - --skip-manifest: Skip writing the overview manifest JSON file.
 - Physical inputs:
   - Group parcellation label arrays: manifest `assignment_variants[default_assignment_variant].group_functional_atlas_labels` for cluster-level methods; vertex-level methods use the manifest top-level label array.
-  - Group mapping status files: manifest `assignment_variants[<variant>].cluster_assignment_status` for cluster-level methods.
+  - Group mapping status files and template assets from manifest paths; same-run-dir canonical variant files are used as a final variant fallback.
 
 Outputs:
 - Command-line output / file outputs:
-  - Overview panel PNG figures for each combination: `{present_dir}/{atlas}_{method}_overview_{route_tag}_{smoothing}_cov{threshold_tag}.png`.
+  - Overview panel PNG figures for each rendered method/assignment variant; gradient names include the component tag, and cluster-based names include the assignment suffix.
   - Group overview manifest JSON file: `{present_dir}/{manifest_name}`.
   - Summary README file: `{present_dir}/README.md`.
 """
@@ -90,6 +90,7 @@ FS_BIG_TITLE = 13
 FS_SUPTITLE = 18
 CLUSTERLESS_METHODS = {"wta-top"}
 ASSIGNMENT_VARIANTS = ("fisherz", "count")
+ASSIGNMENT_VARIANT_CHOICES = ASSIGNMENT_VARIANTS + ("both",)
 WTA_OVERVIEW_PROFILE_BINS = 20
 WTA_OVERVIEW_SIDE_PANEL_FONT_DELTA_PT = 4
 WTA_OVERVIEW_SIDE_PANEL_TITLE_FS = FS_TITLE + WTA_OVERVIEW_SIDE_PANEL_FONT_DELTA_PT
@@ -98,6 +99,16 @@ WTA_OVERVIEW_SIDE_PANEL_TICK_FS = FS_TICK + WTA_OVERVIEW_SIDE_PANEL_FONT_DELTA_P
 WTA_OVERVIEW_SIDE_PANEL_LEGEND_FS = FS_LEGEND_SMALL + WTA_OVERVIEW_SIDE_PANEL_FONT_DELTA_PT
 WTA_NON_NETWORK_NAME = "__non_network_or_null__"
 GRADIENT_METHOD = "gradient-spectral"
+
+
+def resolve_render_assignment_variants(method: str, assignment_variant: str) -> tuple[str | None, ...]:
+    if method in CLUSTERLESS_METHODS:
+        return (None,)
+    if assignment_variant == "both":
+        return ASSIGNMENT_VARIANTS
+    if assignment_variant in ASSIGNMENT_VARIANTS:
+        return (assignment_variant,)
+    raise ValueError(f"Unknown assignment variant: {assignment_variant!r}")
 
 
 def _is_gradient_method(method: str) -> bool:
@@ -146,6 +157,13 @@ NETWORK_BAR_COLORS = load_network_bar_colors()
 
 
 
+def resolve_existing_manifest_path(raw: object, *, repo_root: Path = REPO_ROOT) -> Path:
+    path = Path(str(raw)).expanduser()
+    base = Path(repo_root).resolve()
+    path_abs = path if path.is_absolute() else base / path
+    return path_abs.resolve()
+
+
 def resolve_assignment_variant_paths(
     run_dir: Path,
     manifest: dict,
@@ -159,7 +177,14 @@ def resolve_assignment_variant_paths(
         status_raw = row.get("cluster_assignment_status")
         label_raw = row.get("template_functional_atlas_label") or row.get("template_functional_atlas_label_variant")
         if status_raw and label_raw:
-            return Path(str(status_raw)).resolve(), Path(str(label_raw)).resolve()
+            status_path = resolve_existing_manifest_path(status_raw)
+            label_path = resolve_existing_manifest_path(label_raw)
+            if status_path.exists() and label_path.exists():
+                return status_path, label_path
+            fallback_status = (run_dir / f"cluster_assignment_status_{variant}.json").resolve()
+            fallback_label = (run_dir / "template" / "workbench_assets" / label_path.name).resolve()
+            if fallback_status.exists() and fallback_label.exists():
+                return fallback_status, fallback_label
     return run_dir / f"missing_{variant}_assignment_status.json", run_dir / f"missing_{variant}_functional.label.gii"
 
 
@@ -266,7 +291,7 @@ def resolve_template_render_spec(manifest: dict) -> tuple[str | None, Path | Non
     spec_text = str(raw_spec).strip()
     if spec_text == "" or spec_text.lower() in {"none", "null"}:
         return None, None
-    spec_path = Path(spec_text)
+    spec_path = resolve_existing_manifest_path(spec_text)
     if not spec_path.exists():
         return None, None
     subject = str(manifest.get("template_subject", "")).replace("sub-", "").strip()
@@ -776,8 +801,8 @@ def render_combo(
                 tick_fs=WTA_OVERVIEW_SIDE_PANEL_TICK_FS,
             )
 
-            surf_l = Path(str(m_l["template_left_or_right_surface"]))
-            surf_r = Path(str(m_r["template_left_or_right_surface"]))
+            surf_l = resolve_existing_manifest_path(m_l["template_left_or_right_surface"])
+            surf_r = resolve_existing_manifest_path(m_r["template_left_or_right_surface"])
             profile_sub = gs[ridx, 1].subgridspec(1, 2, wspace=0.18)
             profile_axes = [fig.add_subplot(profile_sub[0, 0]), fig.add_subplot(profile_sub[0, 1])]
             try:
@@ -936,8 +961,8 @@ def render_combo(
             )
         status_l = load_json(status_l_path)
         status_r = load_json(status_r_path)
-        surf_l = Path(str(m_l["template_left_or_right_surface"]))
-        surf_r = Path(str(m_r["template_left_or_right_surface"]))
+        surf_l = resolve_existing_manifest_path(m_l["template_left_or_right_surface"])
+        surf_r = resolve_existing_manifest_path(m_r["template_left_or_right_surface"])
         order_l = long_axis_order(surf_l)
         order_r = long_axis_order(surf_r)
         cids_l = resolve_cluster_order_from_manifest(m_l, lbl_l, order_l, k_l)
@@ -1139,7 +1164,7 @@ def main() -> int:
     p.add_argument("--scene", default=str(DEFAULT_SCENE))
     p.add_argument("--route-tag", choices=ROUTE_TAG_CHOICES, default=None)
     p.add_argument("--mode-tag", default=None)
-    p.add_argument("--assignment-variant", choices=ASSIGNMENT_VARIANTS, default="fisherz")
+    p.add_argument("--assignment-variant", choices=ASSIGNMENT_VARIANT_CHOICES, default="both")
     p.add_argument(
         "--manifest-name",
         default="group_overview_manifest.json",
@@ -1187,45 +1212,47 @@ def main() -> int:
             comp_tags = _discover_gradient_comp_tags(
                 group_root, method, atlas, SMOOTHINGS[0], tau_tag,
             )
+            render_variants = resolve_render_assignment_variants(method, str(args.assignment_variant))
             for comp_tag in comp_tags:
-                meta = render_combo(
-                    group_root=group_root,
-                    present_dir=present_dir,
-                    method=method,
-                    atlas=atlas,
-                    coverage_tag=tau_tag,
-                    scene=Path(args.scene).resolve(),
-                    route_tag=args.route_tag,
-                    mode_tag=args.mode_tag,
-                    assignment_variant=str(args.assignment_variant),
-                    gradient_comp_tag=comp_tag,
-                )
-                row_meta = meta["rows"]
-                metric = (
-                    "; ".join(
-                        [
-                            f"{r['smoothing']}: K(L/R)={('-' if r['k_final_L'] is None else r['k_final_L'])}/"
-                            f"{('-' if r['k_final_R'] is None else r['k_final_R'])} N={r['n_subjects']}"
-                            for r in row_meta
-                        ]
+                for assignment_variant in render_variants:
+                    meta = render_combo(
+                        group_root=group_root,
+                        present_dir=present_dir,
+                        method=method,
+                        atlas=atlas,
+                        coverage_tag=tau_tag,
+                        scene=Path(args.scene).resolve(),
+                        route_tag=args.route_tag,
+                        mode_tag=args.mode_tag,
+                        assignment_variant=(assignment_variant or "fisherz"),
+                        gradient_comp_tag=comp_tag,
                     )
-                    if row_meta
-                    else "missing"
-                )
-                items.append(
-                    {
-                        "atlas": atlas,
-                        "method": method,
-                        "gradient_comp_tag": comp_tag or None,
-                        "overview_png": meta["overview_png"],
-                        "smoothings": [r["smoothing"] for r in row_meta],
-                        "metric_summary": metric,
-                        "route_tag": args.route_tag,
-                        "mode_tag": (None if method in CLUSTERLESS_METHODS else args.mode_tag),
-                        "assignment_variant": (None if method in CLUSTERLESS_METHODS else str(args.assignment_variant)),
-                        "source_group_root": str(group_root),
-                    }
-                )
+                    row_meta = meta["rows"]
+                    metric = (
+                        "; ".join(
+                            [
+                                f"{r['smoothing']}: K(L/R)={('-' if r['k_final_L'] is None else r['k_final_L'])}/"
+                                f"{('-' if r['k_final_R'] is None else r['k_final_R'])} N={r['n_subjects']}"
+                                for r in row_meta
+                            ]
+                        )
+                        if row_meta
+                        else "missing"
+                    )
+                    items.append(
+                        {
+                            "atlas": atlas,
+                            "method": method,
+                            "gradient_comp_tag": comp_tag or None,
+                            "overview_png": meta["overview_png"],
+                            "smoothings": [r["smoothing"] for r in row_meta],
+                            "metric_summary": metric,
+                            "route_tag": args.route_tag,
+                            "mode_tag": (None if method in CLUSTERLESS_METHODS else args.mode_tag),
+                            "assignment_variant": assignment_variant,
+                            "source_group_root": str(group_root),
+                        }
+                    )
 
     manifest = {"present_dir": str(present_dir), "count": len(items), "items": items}
     if not bool(args.skip_manifest):

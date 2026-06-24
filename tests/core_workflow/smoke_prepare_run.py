@@ -88,7 +88,7 @@ def build_command_plan(*, subjects: list[str], layout: dict[str, Path], python_e
     subject_manifest = layout["inputs"] / "subjects_smoke5.txt"
     shared_inputs = layout["features"] / "shared_inputs"
     surface_root = shared_inputs / "surface"
-    routea_root = shared_inputs / "routea_151"
+    routea_root = shared_inputs / "routea"
     routeb_root = shared_inputs / "routeb_151"
     template_root = layout["features"] / "templates" / "hipp_group_average"
     group_surfaces = template_root / "group_average_surfaces"

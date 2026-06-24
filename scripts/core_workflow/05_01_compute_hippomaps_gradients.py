@@ -13,7 +13,7 @@ Inputs:
 - Command-line arguments:
   - --routes: Workflow branches to process (choices: "routea", "routeb", default: both).
   - --shared-inputs-root: Directory containing route-specific shared reference inputs (default: `outputs_hcp/inputs/hcp/kong2022/shared_inputs`).
-  - --surface-root: Path to BOLD surfaces root directory (default: `outputs_hcp/inputs/hcp/kong2022/shared_inputs/surface_151`).
+  - --surface-root: Path to BOLD surfaces root directory (default: `outputs_hcp/inputs/hcp/kong2022/shared_inputs/surface`).
   - --subjects-manifest: Path to QC-passed subject list manifest (default: `outputs_hcp/inputs/hcp/kong2022/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt`).
   - --smoothings: Smoothing levels to process: "2mm", "4mm".
   - --hemis: Hemispheres to process: "L", "R".
@@ -77,7 +77,7 @@ DEFAULT_SURFACE_ROOT = DEFAULT_KONG2022_SURFACE_ROOT
 DEFAULT_SUBJECTS = DEFAULT_KONG2022_MANIFEST_ROOT / "hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt"
 DEFAULT_GROUP_AVG_SURFACES_DIR = DEFAULT_KONG2022_TEMPLATE_ROOT / "group_average_surfaces"
 DEFAULT_OUT_ROOT = DEFAULT_HIPPOMAPS_GRADIENT_ROOT
-ROUTE_TO_SHARED_DIR = {"routea": "routea_151", "routea_ctxreg": "routea_ctxreg_151", "routea_ctxdrop": "routea_ctxdrop_151", "routeb": "routeb_151"}
+ROUTE_TO_SHARED_DIR = {"routea": "routea", "routea_ctxreg": "routea_ctxreg_151", "routea_ctxdrop": "routea_ctxdrop_151", "routeb": "routeb_151"}
 SMOOTHINGS = ("2mm", "4mm")
 HEMIS = ("L", "R")
 

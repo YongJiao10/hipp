@@ -10,8 +10,12 @@ Intermediate and per-combo computation products live under:
 
 ```bash
 outputs_hcp/work/individual_atlas/
-  gradient_spectral_k3/subjects/sub-<id>/smooth-<2mm|4mm>/hemi-<L|R>/
-  wta_top/subjects/sub-<id>/smooth-<2mm|4mm>/hemi-<L|R>/
+  sub-<id>/
+    gradient/
+      <2mm|4mm>/<L|R>/
+    wta/
+      <2mm|4mm>/<L|R>/
+  _runs/
 ```
 
 Per-subject presentation surface overviews live under the canonical present tree:
@@ -25,7 +29,7 @@ outputs_hcp/present/overviews/individual/
 Run and handoff metadata for the computation stage live under:
 
 ```bash
-outputs_hcp/work/individual_atlas/gradient_spectral_k3/_runs/
+outputs_hcp/work/individual_atlas/_runs/
 ```
 
 ## Run Computation
@@ -35,6 +39,10 @@ Use the repository Python contract:
 ```bash
 /home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/routea_individual_gradients_wta.py --jobs 4 --resume
 ```
+
+Dataset-specific runs can override `--subjects-manifest`, `--shared-root`,
+`--surface-root`, `--hippunfold-batch-root`, and `--out-root` without changing
+the workflow implementation.
 
 Background launcher:
 
@@ -53,14 +61,14 @@ The launcher uses `setsid nohup`, fixes native thread counts at 1, and starts 4 
 The monitor refreshes:
 
 ```bash
-outputs_hcp/work/individual_atlas/gradient_spectral_k3/_runs/summaries/combo_status.tsv
+outputs_hcp/work/individual_atlas/_runs/summaries/combo_status.tsv
 ```
 
 Each run also writes:
 
 ```bash
-outputs_hcp/work/individual_atlas/gradient_spectral_k3/_runs/logs/<run_id>/heartbeat.json
-outputs_hcp/work/individual_atlas/gradient_spectral_k3/_runs/handoff/<run_id>_handoff.md
+outputs_hcp/work/individual_atlas/_runs/logs/<run_id>/heartbeat.json
+outputs_hcp/work/individual_atlas/_runs/handoff/<run_id>_handoff.md
 ```
 
 ## Build Overviews
@@ -73,7 +81,7 @@ The overview builder reads completed label arrays from `outputs_hcp/work/individ
 
 ## Method Notes
 
-- Route: RouteA only, from `shared_inputs/routea_151`.
+- Route: RouteA only, from `shared_inputs/routea`.
 - Subject count: 151 by default.
 - Combos: `2mm`, `4mm`, `L`, `R`, for 604 total subject-combos.
 - Gradient-spectral uses each subject's own valid mask and `space-corobl_den-512` HippUnfold hippocampal surface.

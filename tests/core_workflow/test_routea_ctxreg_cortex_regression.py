@@ -168,7 +168,7 @@ def test_ctxdrop_default_cortex_surface_template_matches_bids_input_layout() -> 
 
 
 def test_local_cortex_neighbor_renderer_uses_shallow_neutral_present_path() -> None:
-    assert neighbors_mod.DEFAULT_OUT_DIR == REPO_ROOT / "outputs_core" / "present" / "local_cortex_neighbors"
+    assert neighbors_mod.DEFAULT_OUT_DIR == REPO_ROOT / "outputs_hcp" / "present" / "local_cortex_neighbors"
     assert not any(part in {"gradients", "diagnostics", "ctxdrop", "ctxreg"} for part in neighbors_mod.DEFAULT_OUT_DIR.parts)
 
     ctxdrop_path = neighbors_mod.count_path(
@@ -408,8 +408,8 @@ def test_routea_ctxreg_fc_steps_use_separate_reference_and_mask_roots(tmp_path: 
     subject = "101"
     out_root = tmp_path / "routea_ctxreg_151"
     controlled_surface = tmp_path / "controlled_surface"
-    routea_reference = tmp_path / "routea_151"
-    source_masks = tmp_path / "surface_151"
+    routea_reference = tmp_path / "routea"
+    source_masks = tmp_path / "surface"
 
     ts_dir = controlled_surface / f"sub-{subject}" / "surface" / "2mm"
     ts_dir.mkdir(parents=True)
@@ -457,14 +457,14 @@ def test_routea_ctxreg_fc_steps_use_separate_reference_and_mask_roots(tmp_path: 
 
 
 def test_group_and_cortex_helpers_accept_reference_root_for_ctxreg() -> None:
-    routea_ref = Path("/tmp/routea_151")
+    routea_ref = Path("/tmp/routea")
     ctxreg = Path("/tmp/routea_ctxreg_151")
     assert atlas_mod.reference_path(routea_ref, "101", "kong2022", "cortex_roi_parcels.tsv").as_posix().endswith(
-        "/routea_151/sub-101/reference/kong2022/cortex_roi_parcels.tsv"
+        "/routea/sub-101/reference/kong2022/cortex_roi_parcels.tsv"
     )
     assert atlas_mod.reference_path(ctxreg, "101", "kong2022", "cortex_roi_parcels.tsv").as_posix().endswith(
         "/routea_ctxreg_151/sub-101/reference/kong2022/cortex_roi_parcels.tsv"
     )
     assert cortex_mod.subject_reference_path(routea_ref, "101", "kong2022", "cortex_roi_parcels.tsv").as_posix().endswith(
-        "/routea_151/sub-101/reference/kong2022/cortex_roi_parcels.tsv"
+        "/routea/sub-101/reference/kong2022/cortex_roi_parcels.tsv"
     )

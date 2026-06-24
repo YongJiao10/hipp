@@ -12,7 +12,7 @@ Main Flow Path:
 Inputs:
 - Command-line arguments:
   - --hippunfold-batch-root: Batch output root containing sub-*/hippunfold outputs (default: `outputs_hcp/inputs/hcp/hippunfold/dense_corobl_batch`).
-  - --shared-root: Path to output shared processed surface files (default: `outputs_hcp/inputs/hcp/kong2022/shared_inputs/surface_151`).
+  - --shared-root: Path to output shared processed surface files (default: `outputs_hcp/inputs/hcp/kong2022/shared_inputs/surface`).
   - --out-dir: Output directory for the QC report TSV (default: `outputs_hcp/inputs/hcp/kong2022/qc`).
   - --manifest-dir: Output directory for the generated subjects manifest (default: `outputs_hcp/inputs/hcp/kong2022/manifests`).
   - --subjects: Space-separated list of explicit subject IDs.

@@ -11,8 +11,8 @@ Main Flow Path:
 Inputs:
 - Command-line arguments:
   - --hippunfold-batch-root: Batch output root containing sub-*/hippunfold outputs (default: `outputs_hcp/inputs/hcp/hippunfold/dense_corobl_batch`).
-  - --shared-root: Path to shared processed files (default: `outputs_hcp/inputs/hcp/kong2022/shared_inputs/routea_151`).
-  - --surface-root: Path to BOLD surfaces root directory (default: `outputs_hcp/inputs/hcp/kong2022/shared_inputs/surface_151`).
+  - --shared-root: Path to shared processed files (default: `outputs_hcp/inputs/hcp/kong2022/shared_inputs/routea`).
+  - --surface-root: Path to BOLD surfaces root directory (default: `outputs_hcp/inputs/hcp/kong2022/shared_inputs/surface`).
   - --group-root: Directory where group-atlas intermediate files are saved (default: `outputs_hcp/work/group_atlas/routea_full_k3_fisherz`).
   - --subjects-manifest: Path to QC-passed subject list manifest.
   - --group-average-surfaces-dir: Directory containing group-average template surfaces.

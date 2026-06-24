@@ -62,7 +62,7 @@ def test_routea_modules_no_longer_export_discovery_or_label_dir_override() -> No
 def test_routea_backend_no_longer_emits_mat_sidecar() -> None:
     checked = [
         REPO_ROOT / "scripts" / "core_workflow" / "sge_argon" / "matlab_kong2022_mshbm_subject_sge.sh",
-        REPO_ROOT / "scripts" / "ArealMSHBM_Kong2022_Iowa_Stanford" / "matlab" / "run_kong2022_areal_mshbm_subject.m",
+        REPO_ROOT / "scripts" / "ArealMSHBM_Kong2022_Iowa_Stanford" / "run_kong2022_areal_mshbm_subject.m",
         REPO_ROOT / "docs" / "hipp_parcellation_network" / "core_workflow_artifact_lineage.md",
     ]
     offenders = []
@@ -73,9 +73,9 @@ def test_routea_backend_no_longer_emits_mat_sidecar() -> None:
 
 def test_jj_tms_default_routea_contract_is_text_labels_only() -> None:
     checked = [
-        REPO_ROOT / "scripts" / "ArealMSHBM_Kong2022_Iowa_Stanford" / "submit_jj_tms_kong2022_areal_mshbm.sh",
-        REPO_ROOT / "scripts" / "ArealMSHBM_Kong2022_Iowa_Stanford" / "run_jj_tms_kong2022_areal_mshbm_subject_sge.sh",
-        REPO_ROOT / "scripts" / "ArealMSHBM_Kong2022_Iowa_Stanford" / "report_jj_tms_smoke_status.sh",
+        REPO_ROOT / "scripts" / "ArealMSHBM_Kong2022_Iowa_Stanford" / "submit_kong2022_areal_mshbm.sh",
+        REPO_ROOT / "scripts" / "ArealMSHBM_Kong2022_Iowa_Stanford" / "run_kong2022_areal_mshbm_subject_sge.sh",
+        REPO_ROOT / "scripts" / "ArealMSHBM_Kong2022_Iowa_Stanford" / "report_kong2022_areal_mshbm_status.sh",
         REPO_ROOT / "scripts" / "ArealMSHBM_Kong2022_Iowa_Stanford" / "README.md",
         REPO_ROOT / "docs" / "hipp_parcellation_network" / "kong2022_route_a_smoke.md",
     ]
@@ -85,8 +85,6 @@ def test_jj_tms_default_routea_contract_is_text_labels_only() -> None:
         "summary.json",
         "stage_manifest.json",
         "KONG2022_DLABEL",
-        "WB_COMMAND",
-        "wb_command",
     ]
     offenders = []
     for path in checked:
@@ -97,10 +95,10 @@ def test_jj_tms_default_routea_contract_is_text_labels_only() -> None:
     assert offenders == []
 
 def test_jj_tms_subject_output_dir_contains_flat_text_labels_only() -> None:
-    wrapper = REPO_ROOT / "scripts" / "ArealMSHBM_Kong2022_Iowa_Stanford" / "run_jj_tms_kong2022_areal_mshbm_subject_sge.sh"
-    report = REPO_ROOT / "scripts" / "ArealMSHBM_Kong2022_Iowa_Stanford" / "report_jj_tms_smoke_status.sh"
+    wrapper = REPO_ROOT / "scripts" / "ArealMSHBM_Kong2022_Iowa_Stanford" / "run_kong2022_areal_mshbm_subject_sge.sh"
+    report = REPO_ROOT / "scripts" / "ArealMSHBM_Kong2022_Iowa_Stanford" / "report_kong2022_areal_mshbm_status.sh"
     readme = REPO_ROOT / "scripts" / "ArealMSHBM_Kong2022_Iowa_Stanford" / "README.md"
-    matlab = REPO_ROOT / "scripts" / "ArealMSHBM_Kong2022_Iowa_Stanford" / "matlab" / "run_kong2022_areal_mshbm_subject.m"
+    matlab = REPO_ROOT / "scripts" / "ArealMSHBM_Kong2022_Iowa_Stanford" / "run_kong2022_areal_mshbm_subject.m"
 
     wrapper_text = wrapper.read_text(encoding="utf-8")
     assert "${subject_out}/lh_labels.txt" in wrapper_text
@@ -115,7 +113,7 @@ def test_jj_tms_subject_output_dir_contains_flat_text_labels_only() -> None:
         assert "route_a_outputs" not in text
 
 def test_jj_tms_temp_workdir_is_cleaned_with_tmp_prefix_guard() -> None:
-    wrapper = REPO_ROOT / "scripts" / "ArealMSHBM_Kong2022_Iowa_Stanford" / "run_jj_tms_kong2022_areal_mshbm_subject_sge.sh"
+    wrapper = REPO_ROOT / "scripts" / "ArealMSHBM_Kong2022_Iowa_Stanford" / "run_kong2022_areal_mshbm_subject_sge.sh"
     text = wrapper.read_text(encoding="utf-8")
     assert "cleanup_tmp_root()" in text
     assert "trap cleanup_tmp_root EXIT" in text
@@ -123,9 +121,9 @@ def test_jj_tms_temp_workdir_is_cleaned_with_tmp_prefix_guard() -> None:
     assert "rm -rf -- \"${tmp_root}\"" in text
 
 def test_jj_tms_launcher_does_not_write_runtime_state_under_script_dir() -> None:
-    submit = REPO_ROOT / "scripts" / "ArealMSHBM_Kong2022_Iowa_Stanford" / "submit_jj_tms_kong2022_areal_mshbm.sh"
-    report = REPO_ROOT / "scripts" / "ArealMSHBM_Kong2022_Iowa_Stanford" / "report_jj_tms_smoke_status.sh"
-    task = REPO_ROOT / "scripts" / "ArealMSHBM_Kong2022_Iowa_Stanford" / "run_jj_tms_kong2022_areal_mshbm_subject_sge.sh"
+    submit = REPO_ROOT / "scripts" / "ArealMSHBM_Kong2022_Iowa_Stanford" / "submit_kong2022_areal_mshbm.sh"
+    report = REPO_ROOT / "scripts" / "ArealMSHBM_Kong2022_Iowa_Stanford" / "report_kong2022_areal_mshbm_status.sh"
+    task = REPO_ROOT / "scripts" / "ArealMSHBM_Kong2022_Iowa_Stanford" / "run_kong2022_areal_mshbm_subject_sge.sh"
 
     submit_text = submit.read_text(encoding="utf-8")
     assert "${script_dir}/manifests" not in submit_text

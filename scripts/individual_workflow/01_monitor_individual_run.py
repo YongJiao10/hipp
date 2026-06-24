@@ -9,7 +9,7 @@ from routea_individual_gradients_wta import DEFAULT_OUT_ROOT, build_monitor_summ
 
 
 def latest_heartbeat(out_root: Path) -> Path:
-    logs = Path(out_root) / "gradient_spectral_k3" / "_runs" / "logs"
+    logs = Path(out_root) / "_runs" / "logs"
     candidates = sorted(logs.glob("*/heartbeat.json"), key=lambda p: p.stat().st_mtime_ns if p.exists() else 0)
     if candidates:
         return candidates[-1]
@@ -27,7 +27,7 @@ def main() -> int:
     out_root = Path(args.out_root).resolve()
     heartbeat = Path(args.heartbeat).resolve() if args.heartbeat else latest_heartbeat(out_root)
     rows = manifest_rows(out_root)
-    write_status_tsv(out_root / "gradient_spectral_k3" / "_runs" / "summaries" / "combo_status.tsv", rows)
+    write_status_tsv(out_root / "_runs" / "summaries" / "combo_status.tsv", rows)
     summary = build_monitor_summary(
         out_root=out_root,
         heartbeat_path=heartbeat,
@@ -38,7 +38,7 @@ def main() -> int:
     else:
         print(f"status={summary['status']} ok={summary['ok']} failed={summary['failed']} running={summary['running']} stale={summary['heartbeat_stale']}")
         print(f"heartbeat={summary['heartbeat_path']}")
-        print(f"status_tsv={out_root / 'gradient_spectral_k3' / '_runs' / 'summaries' / 'combo_status.tsv'}")
+        print(f"status_tsv={out_root / '_runs' / 'summaries' / 'combo_status.tsv'}")
     return 1 if summary["failed"] or summary["heartbeat_stale"] else 0
 
 

@@ -67,8 +67,8 @@ def test_downstream_builders_method_contract() -> None:
         assert NEW_METHOD_NAMES.issubset(set(choices))
         assert GRADIENT_METHOD in set(choices)
         assert OLD_METHOD_NAMES.isdisjoint(set(choices))
-    for defaults in (CORTEX_DEFAULTS, PRESENT_DEFAULTS):
-        assert defaults == DEFAULT_METHODS
+    assert PRESENT_DEFAULTS == DEFAULT_METHODS
+    assert set(CORTEX_DEFAULTS) == {"intrinsic-spectral", "network-spectral", "gradient-spectral", "wta-top"}
     for clusterless in (CORTEX_CLUSTERLESS_METHODS, PRESENT_CLUSTERLESS_METHODS):
         assert clusterless == {"wta-top"}
 
@@ -80,7 +80,7 @@ def test_downstream_renderers_do_not_accept_legacy_group_prefixed_intermediates(
 
 
 def test_overview_matrix_uses_core_work_fixed_k3_fisherz_root_for_all_routea_methods() -> None:
-    jobs = build_render_jobs(REPO_ROOT / "outputs_core" / "inputs" / "hcp7t_hippocampus" / "kong2022")
+    jobs = build_render_jobs(REPO_ROOT / "outputs_hcp" / "inputs" / "hcp" / "kong2022")
     by_method = {job.method: job for job in jobs if job.route_tag == "routea"}
     assert set(by_method) == {"intrinsic-spectral", "network-spectral", "gradient-spectral", "wta-top"}
     for method in ("intrinsic-spectral", "network-spectral", "gradient-spectral", "wta-top"):
@@ -92,7 +92,7 @@ def test_overview_matrix_uses_core_work_fixed_k3_fisherz_root_for_all_routea_met
 
 def test_routeb_group_atlas_root_is_core_work_fixed_k3_fisherz() -> None:
     jobs = build_render_jobs(
-        REPO_ROOT / "outputs_core" / "work" / "group_atlas",
+        REPO_ROOT / "outputs_hcp" / "work" / "group_atlas",
         routes=("routeb",),
     )
     assert {job.route_tag for job in jobs} == {"routeb"}
@@ -119,14 +119,14 @@ def test_overview_matrix_custom_group_atlas_root_uses_canonical_branch_children(
 
 
 def test_overview_matrix_defaults_to_routea_only() -> None:
-    jobs = build_render_jobs(REPO_ROOT / "outputs_core" / "inputs" / "hcp7t_hippocampus" / "kong2022")
+    jobs = build_render_jobs(REPO_ROOT / "outputs_hcp" / "inputs" / "hcp" / "kong2022")
     assert {job.route_tag for job in jobs} == {"routea"}
     assert len(jobs) == 7
 
 
 def test_overview_matrix_can_filter_methods_for_gradient_and_wta_only() -> None:
     jobs = build_render_jobs(
-        REPO_ROOT / "outputs_core" / "inputs" / "hcp7t_hippocampus" / "kong2022",
+        REPO_ROOT / "outputs_hcp" / "inputs" / "hcp" / "kong2022",
         methods=("gradient-spectral", "wta-top"),
     )
     assert {job.route_tag for job in jobs} == {"routea"}
@@ -135,7 +135,7 @@ def test_overview_matrix_can_filter_methods_for_gradient_and_wta_only() -> None:
 
 
 def test_overview_matrix_keeps_count_and_fisherz_assignment_variants() -> None:
-    jobs = build_render_jobs(REPO_ROOT / "outputs_core" / "inputs" / "hcp7t_hippocampus" / "kong2022")
+    jobs = build_render_jobs(REPO_ROOT / "outputs_hcp" / "inputs" / "hcp" / "kong2022")
     by_method = {}
     for job in jobs:
         by_method.setdefault(job.method, []).append(job.assignment_variant)
@@ -160,6 +160,35 @@ def test_overview_matrix_keeps_count_and_fisherz_assignment_variants() -> None:
         assignment_variant="fisherz",
     )
     assert grad_out.name == "kong2022_gradient-spectral_group_overview_g1g2g3_routea_ctxreg_fisherz.png"
+
+
+def test_group_overview_direct_renderer_can_expand_both_assignment_variants() -> None:
+    assert present_mod.resolve_render_assignment_variants("gradient-spectral", "both") == ("fisherz", "count")
+    assert present_mod.resolve_render_assignment_variants("network-spectral", "count") == ("count",)
+    assert present_mod.resolve_render_assignment_variants("wta-top", "both") == (None,)
+
+
+def test_group_overview_assignment_variant_paths_fall_back_to_run_dir_when_manifest_paths_are_stale(tmp_path: Path) -> None:
+    run_dir = tmp_path / "run"
+    asset_dir = run_dir / "template" / "workbench_assets"
+    asset_dir.mkdir(parents=True)
+    status = run_dir / "cluster_assignment_status_count.json"
+    label = asset_dir / "group-average_hemi-L_label_count.gii"
+    status.write_text("{}\n", encoding="utf-8")
+    label.write_text("label\n", encoding="utf-8")
+    manifest = {
+        "assignment_variants": {
+            "count": {
+                "cluster_assignment_status": str(tmp_path / "stale" / "cluster_assignment_status_count.json"),
+                "template_functional_atlas_label": str(tmp_path / "stale" / "template" / "workbench_assets" / label.name),
+            }
+        }
+    }
+
+    got_status, got_label = present_mod.resolve_assignment_variant_paths(run_dir, manifest, "count")
+
+    assert got_status == status.resolve()
+    assert got_label == label.resolve()
 
 
 def test_wta_profile_is_embedded_in_overview_with_fixed_20_bins() -> None:
@@ -248,7 +277,7 @@ def test_gradient_subject_fc_preprocessing_manifest_is_mode_neutral() -> None:
 
 
 def test_gradient_matrix_jobs_are_route_only_and_core_rooted_for_routea() -> None:
-    jobs = build_render_jobs(REPO_ROOT / "outputs_core" / "inputs" / "hcp7t_hippocampus" / "kong2022")
+    jobs = build_render_jobs(REPO_ROOT / "outputs_hcp" / "inputs" / "hcp" / "kong2022")
     gradient_jobs = [job for job in jobs if job.method == GRADIENT_METHOD]
     assert gradient_jobs
     assert set(job.route_tag for job in gradient_jobs).issubset({"routea", "routeb"})

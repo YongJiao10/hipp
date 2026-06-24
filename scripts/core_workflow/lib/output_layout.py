@@ -68,11 +68,11 @@ def resolve_kong2022_shared_inputs_root(dataset: str = DEFAULT_DATASET) -> Path:
 
 
 def resolve_kong2022_surface_root(dataset: str = DEFAULT_DATASET) -> Path:
-    return resolve_kong2022_shared_inputs_root(dataset) / "surface_151"
+    return resolve_kong2022_shared_inputs_root(dataset) / "surface"
 
 
 def resolve_kong2022_routea_root(dataset: str = DEFAULT_DATASET) -> Path:
-    return resolve_kong2022_shared_inputs_root(dataset) / "routea_151"
+    return resolve_kong2022_shared_inputs_root(dataset) / "routea"
 
 
 def resolve_kong2022_routea_ctxreg_root(dataset: str = DEFAULT_DATASET) -> Path:

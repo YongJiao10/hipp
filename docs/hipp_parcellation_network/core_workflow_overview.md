@@ -77,14 +77,16 @@ Directory names intentionally do not encode `t1only`, `present_fixedk`, or a
 Subject-level RouteA gradient-spectral K=3 and WTA products are intentionally
 kept outside the group workflow in the sibling directory
 `scripts/individual_workflow/`. Those entrypoints reuse core workflow helpers.
-Computation outputs live in `outputs_hcp/work/individual_atlas/`, while
+Computation outputs use the subject-first layout
+`outputs_hcp/work/individual_atlas/sub-<id>/{gradient,wta}/<smoothing>/<hemi>/`,
+with run metadata under `outputs_hcp/work/individual_atlas/_runs/`, while
 per-subject presentation surface overviews live in
 `outputs_hcp/present/overviews/individual/{gradient,wta}/`. See
 `docs/hipp_parcellation_network/individual_workflow_routea_gradients_wta.md`.
 
 RouteA reference construction has an explicit upstream label-generation dependency. The artifact-level contract for generated RouteA ArealMSHBM labels, local numbered-step products, presentation products, and required evidence is maintained in `docs/hipp_parcellation_network/core_workflow_artifact_lineage.md`.
 
-The `kong2022_routea_17net` branch uses the original Kong2022 17 network families for cluster annotation and network profiles. It reuses `shared_inputs/routea_151`, `surface_151`, 400-ROI FC caches, and RouteA gradients, then writes only taxonomy-dependent group outputs under `outputs_hcp/work/group_atlas/routea_17net_full_k3_fisherz/`. Run `05_02_run_group_atlas.py` with `--route-tag routea_17net --network-taxonomy family17`; do not run `05_01` for a separate `routea_17net` gradient tree.
+The `kong2022_routea_17net` branch uses the original Kong2022 17 network families for cluster annotation and network profiles. It reuses `shared_inputs/routea`, `surface`, 400-ROI FC caches, and RouteA gradients, then writes only taxonomy-dependent group outputs under `outputs_hcp/work/group_atlas/routea_17net_full_k3_fisherz/`. Run `05_02_run_group_atlas.py` with `--route-tag routea_17net --network-taxonomy family17`; do not run `05_01` for a separate `routea_17net` gradient tree.
 
 Network display colors are centralized in `config/hipp_network_style.json`. Group-atlas label materialization, hippocampal overviews, WTA long-axis profiles, and cortex panels load network colors from that single file; `config/cross_atlas_network_merge.json` is mapping-only and must not carry color overrides. Missing colors are treated as errors, not gray/blue fallback display colors. For the RouteA 17-net taxonomy, same-family A/B/C subnetworks use deliberately separated lightness and saturation levels so overview bars, profiles, and label-table colors remain distinguishable while preserving the parent family hue.
 

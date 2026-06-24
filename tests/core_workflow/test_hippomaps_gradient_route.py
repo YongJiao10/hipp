@@ -374,8 +374,8 @@ def test_canonical_public_surfaces_drop_partial_corr_branches() -> None:
         assert "group-intrinsic-partial-spectral" not in mod.METHOD_CHOICES
 
 
-def test_canonical_present_defaults_use_outputs_core_layout() -> None:
-    expected_root = REPO_ROOT / "outputs_core" / "present"
+def test_canonical_present_defaults_use_outputs_hcp_layout() -> None:
+    expected_root = REPO_ROOT / "outputs_hcp" / "present"
     assert overview_mod.DEFAULT_PRESENT_DIR == expected_root / "overviews"
     assert matrix_mod.DEFAULT_PRESENT_DIR == expected_root / "overviews"
     assert cortex_mod.DEFAULT_PRESENT_DIR == expected_root / "cortex_panels"
@@ -397,14 +397,14 @@ def test_canonical_present_defaults_use_outputs_core_layout() -> None:
 
 def test_run_layout_keeps_smoke_outputs_in_dedicated_run_tree() -> None:
     layout = output_layout.run_layout("smoke5_test")
-    assert layout["run_root"] == REPO_ROOT / "outputs_core" / "smoke_runs" / "smoke5_test"
+    assert layout["run_root"] == REPO_ROOT / "outputs_hcp" / "smoke_runs" / "smoke5_test"
     assert layout["overviews"] == layout["present"] / "overviews"
     assert layout["gradient_products"] == layout["present"] / "gradients"
     assert layout["cortex_panels"] == layout["present"] / "cortex_panels"
 
 
 def test_smoke_command_plan_uses_isolated_fixedk_full_layout() -> None:
-    base = REPO_ROOT / "outputs_core" / "smoke_runs" / "smoke5_test"
+    base = REPO_ROOT / "outputs_hcp" / "smoke_runs" / "smoke5_test"
     present = base / "present"
     layout = {
         "run_root": base,
@@ -544,7 +544,7 @@ def test_render_gradient_figure_calls_official_hippomaps_plotter_options() -> No
         calls.append({"shape": tuple(cdata.shape), "kwargs": kwargs})
         return FakeFigure()
 
-    out = REPO_ROOT / "outputs_core" / "reruns" / "test_hippomaps_renderer" / "hippomaps_renderer_test.png"
+    out = REPO_ROOT / "outputs_hcp" / "reruns" / "test_hippomaps_renderer" / "hippomaps_renderer_test.png"
     render_mod.render_gradient_figure(
         left=np.ones((4, 3), dtype=np.float32),
         right=np.zeros((4, 3), dtype=np.float32),
@@ -640,7 +640,7 @@ def test_render_gradient_figure_passes_explicit_shared_color_ranges() -> None:
         calls.append({"shape": tuple(cdata.shape), "kwargs": kwargs})
         return FakeFigure()
 
-    out = REPO_ROOT / "outputs_core" / "reruns" / "test_hippomaps_renderer" / "hippomaps_renderer_test_ranges.png"
+    out = REPO_ROOT / "outputs_hcp" / "reruns" / "test_hippomaps_renderer" / "hippomaps_renderer_test_ranges.png"
     render_mod.render_gradient_figure(
         left=np.ones((4, 2), dtype=np.float32),
         right=np.zeros((4, 2), dtype=np.float32),
@@ -666,7 +666,7 @@ def test_render_gradient_figure_can_render_left_hemi_only() -> None:
         calls.append({"shape": tuple(cdata.shape), "kwargs": kwargs})
         return FakeFigure()
 
-    out = REPO_ROOT / "outputs_core" / "reruns" / "test_hippomaps_renderer" / "hippomaps_renderer_test_left.png"
+    out = REPO_ROOT / "outputs_hcp" / "reruns" / "test_hippomaps_renderer" / "hippomaps_renderer_test_left.png"
     render_mod.render_gradient_figure(
         left=np.ones((4, 3), dtype=np.float32),
         output_png=out,
@@ -729,7 +729,7 @@ def test_ensure_bilateral_gradient_annotations_repairs_late_raw_screenshot() -> 
 
 def test_route_tag_auto_detection_and_validation() -> None:
     # Test 05_02 infer_route_tag function
-    assert atlas_mod.infer_route_tag(Path("/path/to/routea_151"), "auto") == "routea"
+    assert atlas_mod.infer_route_tag(Path("/path/to/routea"), "auto") == "routea"
     assert atlas_mod.infer_route_tag(Path("/path/to/routea_ctxreg_151"), "auto") == "routea_ctxreg"
     assert atlas_mod.infer_route_tag(Path("/path/to/routeb_151"), "auto") == "routeb"
     assert atlas_mod.infer_route_tag(Path("/path/to/any"), "routea") == "routea"
@@ -775,7 +775,7 @@ def test_route_tag_exact_group_root_validation_rejects_prefix_collisions() -> No
 def test_family17_auto_route_requires_explicit_routea_17net() -> None:
     try:
         route_tags.resolve_route_tag_for_group_atlas_run(
-            shared_root=Path("outputs_hcp/inputs/hcp/kong2022/shared_inputs/routea_151"),
+            shared_root=Path("outputs_hcp/inputs/hcp/kong2022/shared_inputs/routea"),
             explicit_route="auto",
             network_taxonomy="family17",
         )
@@ -786,7 +786,7 @@ def test_family17_auto_route_requires_explicit_routea_17net() -> None:
 
     assert (
         route_tags.resolve_route_tag_for_group_atlas_run(
-            shared_root=Path("outputs_hcp/inputs/hcp/kong2022/shared_inputs/routea_151"),
+            shared_root=Path("outputs_hcp/inputs/hcp/kong2022/shared_inputs/routea"),
             explicit_route="routea_17net",
             network_taxonomy="family17",
         )
@@ -819,7 +819,7 @@ def main() -> int:
     test_group_atlas_gradient_spectral_loads_hippomaps_gradient_artifacts()
     test_group_atlas_gradient_loader_prefers_local_artifact_after_relocation()
     test_canonical_public_surfaces_drop_partial_corr_branches()
-    test_canonical_present_defaults_use_outputs_core_layout()
+    test_canonical_present_defaults_use_outputs_hcp_layout()
     test_run_layout_keeps_smoke_outputs_in_dedicated_run_tree()
     test_smoke_command_plan_uses_isolated_fixedk_full_layout()
     test_compute_defaults_to_five_components_like_hippomaps_paper()

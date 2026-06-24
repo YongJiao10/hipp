@@ -86,8 +86,8 @@ For fixed-K display runs, keep full K curve evaluation (`--k-min 2 --k-max 10`) 
 
 Shared arguments:
 
-- `--shared-root $BASE/shared_inputs/routea_151`
-- `--surface-root $BASE/shared_inputs/surface_151`
+- `--shared-root $BASE/shared_inputs/routea`
+- `--surface-root $BASE/shared_inputs/surface`
 - `--subjects-manifest $BASE/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_151.txt`
 - `--hippunfold-batch-root outputs_hcp/inputs/hcp/hippunfold/dense_corobl_batch`
 - `--group-average-surfaces-dir $BASE/templates/hipp_group_average_t1only_151/group_average_surfaces`

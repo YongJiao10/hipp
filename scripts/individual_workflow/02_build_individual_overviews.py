@@ -182,24 +182,61 @@ def materialize_gradient_core_inputs(*, subject: str, work_root: Path, adapter_r
                 profile_fc_mode="pearson",
                 network_taxonomy="canonical8",
             )
-            status_rows, dominant = core.assignment_status_from_profile(profile, network_names)
-            functional_labels, functional_meta, label_items = core.functional_atlas_from_clusters(
+            roi_profile, roi_registry = core.cluster_roi_profile(
                 group_labels_final=labels,
-                status_rows=[dict(x) for x in status_rows],
-                network_names=network_names,
-                color_map=color_map,
+                support_mask=valid_mask,
+                subjects=[subject],
+                shared_root=shared_root,
+                surface_root=surface_root,
+                reference_root=shared_root,
+                smoothing=smoothing,
+                hemi=hemi,
+                valid_masks_by_subject={subject: valid_mask},
             )
-            func_label = dst / "template" / "workbench_assets" / f"sub-{subject}_hemi-{hemi}_space-corobl_den-512_label-individual_functional_atlas_gradient-spectral_{smoothing}_fisherz.label.gii"
-            func_label.parent.mkdir(parents=True, exist_ok=True)
-            nib.save(core.make_named_label_gifti(functional_labels.astype(np.int32), label_items), str(func_label))
+            assignment_variants = core.cluster_assignment_variants_from_kong2022_roi_profile(
+                roi_profile=roi_profile,
+                roi_profile_3d=roi_profile[np.newaxis, :, :],
+                roi_registry=roi_registry,
+                network_names=network_names,
+                q_thresh=0.05,
+                top_n_cap=20,
+                network_column="canonical8",
+            )
+            functional_variant_payloads: dict[str, dict[str, object]] = {}
             np.save(dst / "group_labels_final.npy", labels.astype(np.int32))
             np.save(dst / "cluster_network_profile.npy", profile.astype(np.float32))
-            np.save(dst / "group_functional_atlas_labels_fisherz.npy", functional_labels.astype(np.int32))
+            np.save(dst / "cluster_roi_profile.npy", roi_profile.astype(np.float32))
             write_json(dst / "group_feature_summary.json", {"network_names": network_names, "N_ref": int(len(network_names))})
-            payload = {"items": [dict(x) for x in status_rows], "assignment_metric": "top1_fisher_z", "individual_level": True}
-            write_json(dst / "cluster_assignment_status_fisherz.json", payload)
+            for variant_name, variant_spec in assignment_variants.items():
+                variant_rows = [dict(x) for x in variant_spec["status_rows"]]
+                functional_labels, functional_meta, label_items = core.functional_atlas_from_clusters(
+                    group_labels_final=labels,
+                    status_rows=variant_rows,
+                    network_names=network_names,
+                    color_map=color_map,
+                )
+                func_label = dst / "template" / "workbench_assets" / f"sub-{subject}_hemi-{hemi}_space-corobl_den-512_label-individual_functional_atlas_gradient-spectral_{smoothing}_{variant_name}.label.gii"
+                func_label.parent.mkdir(parents=True, exist_ok=True)
+                nib.save(core.make_named_label_gifti(functional_labels.astype(np.int32), label_items), str(func_label))
+                np.save(dst / f"group_functional_atlas_labels_{variant_name}.npy", functional_labels.astype(np.int32))
+                status_payload = {
+                    "items": variant_rows,
+                    "assignment_metric": str(variant_spec["assignment_metric"]),
+                    "q_threshold": variant_spec["q_threshold"],
+                    "top_n_cap": variant_spec["top_n_cap"],
+                    "individual_level": True,
+                }
+                write_json(dst / f"cluster_assignment_status_{variant_name}.json", status_payload)
+                write_json(dst / f"group_functional_atlas_label_map_{variant_name}.json", functional_meta)
+                functional_variant_payloads[str(variant_name)] = {
+                    "cluster_assignment_status": str((dst / f"cluster_assignment_status_{variant_name}.json").resolve()),
+                    "group_functional_atlas_labels": str((dst / f"group_functional_atlas_labels_{variant_name}.npy").resolve()),
+                    "group_functional_atlas_label_map": str((dst / f"group_functional_atlas_label_map_{variant_name}.json").resolve()),
+                    "template_functional_atlas_label": str(func_label.resolve()),
+                }
+            dominant = [str(row.get("top1_network", "unassigned")) for row in assignment_variants["fisherz"]["status_rows"]]
             write_json(dst / "cluster_dominant_network.json", {"dominant": dominant, "network_names": network_names, "assignment_variant": "fisherz"})
-            write_json(dst / "group_functional_atlas_label_map_fisherz.json", functional_meta)
+            write_json(dst / "cluster_dominant_network_count.json", {"dominant": [str(row.get("top1_network", "unassigned")) for row in assignment_variants["count"]["status_rows"]], "network_names": network_names, "assignment_variant": "count"})
             write_tsv(dst / "k_selection_summary.tsv", [fixed_k_selection_row(method=GRADIENT_CORE_METHOD, smoothing=smoothing, hemi=hemi, n_support=int(np.sum(valid_mask)))], K_SELECTION_FIELDS)
             surf = subject_surface_path(hippunfold_batch_root, subject, hemi)
             manifest = {
@@ -217,15 +254,8 @@ def materialize_gradient_core_inputs(*, subject: str, work_root: Path, adapter_r
                 "default_assignment_variant": "fisherz",
                 "group_functional_atlas_labels": str((dst / "group_functional_atlas_labels_fisherz.npy").resolve()),
                 "group_functional_atlas_label_map": str((dst / "group_functional_atlas_label_map_fisherz.json").resolve()),
-                "template_functional_atlas_label": str(func_label.resolve()),
-                "assignment_variants": {
-                    "fisherz": {
-                        "cluster_assignment_status": str((dst / "cluster_assignment_status_fisherz.json").resolve()),
-                        "group_functional_atlas_labels": str((dst / "group_functional_atlas_labels_fisherz.npy").resolve()),
-                        "group_functional_atlas_label_map": str((dst / "group_functional_atlas_label_map_fisherz.json").resolve()),
-                        "template_functional_atlas_label": str(func_label.resolve()),
-                    }
-                },
+                "template_functional_atlas_label": functional_variant_payloads["fisherz"]["template_functional_atlas_label"],
+                "assignment_variants": functional_variant_payloads,
             }
             write_json(dst / "group_atlas_manifest.json", manifest, sort_keys=True)
 
@@ -270,7 +300,7 @@ def render_via_core(*, subject: str, method: str, work_root: Path, overview_root
     core_overview = core_overview_module()
     method_key = normalize_overview_method(method)
     subject_root = adapter_root / f"sub-{subject}"
-    if method_key == "gradient_spectral_k3":
+    if method_key in {"gradient_spectral_k3", "gradient_count"}:
         materialize_gradient_core_inputs(subject=subject, work_root=work_root, adapter_root=adapter_root, shared_root=shared_root, surface_root=surface_root, hippunfold_batch_root=hippunfold_batch_root)
         meta = core_overview.render_combo(
             group_root=subject_root,
@@ -281,7 +311,7 @@ def render_via_core(*, subject: str, method: str, work_root: Path, overview_root
             scene=scene,
             route_tag=ROUTE_TAG,
             mode_tag=None,
-            assignment_variant="fisherz",
+            assignment_variant=("count" if method_key == "gradient_count" else "fisherz"),
             gradient_comp_tag=GRADIENT_COMP_TAG,
         )
     else:
@@ -350,7 +380,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--subjects-manifest", default=str(DEFAULT_SUBJECTS_MANIFEST))
     parser.add_argument("--subjects", nargs="*", default=None)
     parser.add_argument("--max-subjects", type=int, default=None)
-    parser.add_argument("--methods", nargs="+", default=["gradient_spectral_k3", "wta_top"], choices=["gradient", "wta", "gradient_spectral_k3", "wta_top"])
+    parser.add_argument("--methods", nargs="+", default=["gradient_spectral_k3", "wta_top"], choices=["gradient", "count", "wta", "gradient_spectral_k3", "gradient_count", "wta_top"])
     parser.add_argument("--jobs", type=int, default=DEFAULT_JOBS)
     parser.add_argument("--resume", action="store_true")
     return parser

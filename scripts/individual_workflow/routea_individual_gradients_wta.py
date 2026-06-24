@@ -45,6 +45,9 @@ from lib.workflow_utils import git_commit, utc_now_iso, utc_timestamp_compact_z 
 DEFAULT_SUBJECTS_MANIFEST = (
     resolve_kong2022_manifest_root() / "hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt"
 )
+DEFAULT_KONG2022_ROUTEA_ROOT = resolve_kong2022_routea_root()
+DEFAULT_KONG2022_SURFACE_ROOT = resolve_kong2022_surface_root()
+DEFAULT_HIPPUNFOLD_BATCH_ROOT = resolve_hippunfold_batch_root()
 DEFAULT_OUT_ROOT = resolve_work_root() / "individual_atlas"
 DEFAULT_INDIVIDUAL_OVERVIEW_ROOT = resolve_overviews_dir() / "individual"
 DEFAULT_SMOOTHINGS = ("2mm", "4mm")
@@ -105,13 +108,18 @@ def iter_subject_combos(
 
 
 def method_combo_output_dir(out_root: Path, method: str, combo: SubjectCombo) -> Path:
+    method_dirs = {
+        "gradient_spectral_k3": "gradient",
+        "wta_top": "wta",
+    }
+    if method not in method_dirs:
+        raise ValueError(f"Unknown individual atlas method: {method!r}")
     return (
         Path(out_root)
-        / str(method)
-        / "subjects"
         / f"sub-{combo.subject}"
-        / f"smooth-{combo.smoothing}"
-        / f"hemi-{combo.hemi}"
+        / method_dirs[method]
+        / str(combo.smoothing)
+        / str(combo.hemi)
     )
 
 
@@ -126,9 +134,15 @@ def wta_combo_output_dir(out_root: Path, combo: SubjectCombo) -> Path:
 OVERVIEW_METHODS: dict[str, dict[str, str]] = {
     "gradient_spectral_k3": {
         "task_dir": "gradient",
-        "filename_stem": "gradient",
+        "filename_stem": "gradient_fisherz",
         "label_filename": "cluster_labels_k3.npy",
-        "title": "Individual gradient spectral K=3",
+        "title": "Individual gradient spectral K=3 fisher-z",
+    },
+    "gradient_count": {
+        "task_dir": "gradient",
+        "filename_stem": "gradient_count",
+        "label_filename": "cluster_labels_k3.npy",
+        "title": "Individual gradient spectral K=3 count",
     },
     "wta_top": {
         "task_dir": "wta",
@@ -140,6 +154,8 @@ OVERVIEW_METHODS: dict[str, dict[str, str]] = {
 OVERVIEW_METHOD_ALIASES = {
     "gradient": "gradient_spectral_k3",
     "gradient_spectral_k3": "gradient_spectral_k3",
+    "gradient_count": "gradient_count",
+    "count": "gradient_count",
     "wta": "wta_top",
     "wta_top": "wta_top",
 }
@@ -582,7 +598,7 @@ def process_combo(config: dict[str, object], combo_dict: dict[str, str]) -> dict
 
 def manifest_rows(out_root: Path) -> list[dict[str, object]]:
     rows: list[dict[str, object]] = []
-    for path in sorted((Path(out_root) / "gradient_spectral_k3").glob("subjects/sub-*/smooth-*/hemi-*/combo_manifest.json")):
+    for path in sorted(Path(out_root).glob("sub-*/gradient/*/*/combo_manifest.json")):
         try:
             payload = read_json(path)
         except Exception as exc:
@@ -659,7 +675,7 @@ def write_handoff(
     total_combos: int,
     jobs: int,
 ) -> Path:
-    handoff = Path(out_root) / "gradient_spectral_k3" / "_runs" / "handoff" / f"{run_id}_handoff.md"
+    handoff = Path(out_root) / "_runs" / "handoff" / f"{run_id}_handoff.md"
     summary = build_monitor_summary(out_root=out_root, heartbeat_path=heartbeat_path, stale_seconds=120)
     body = f"""# RouteA Individual Gradients + WTA Handoff
 
@@ -677,7 +693,7 @@ Runtime:
 - Total planned combos: `{total_combos}`
 - Output root: `{Path(out_root).resolve()}`
 - Heartbeat: `{heartbeat_path.resolve()}`
-- Status TSV: `{(Path(out_root) / "gradient_spectral_k3" / "_runs" / "summaries" / "combo_status.tsv").resolve()}`
+- Status TSV: `{(Path(out_root) / "_runs" / "summaries" / "combo_status.tsv").resolve()}`
 
 Current summary:
 
@@ -707,8 +723,8 @@ def run_supervisor(args: argparse.Namespace) -> int:
         os.environ[key] = value
     out_root = Path(args.out_root).resolve()
     run_id = str(args.run_id or f"routea_individual_gradients_wta_{utc_timestamp_compact_z()}")
-    log_dir = out_root / "gradient_spectral_k3" / "_runs" / "logs" / run_id
-    summary_dir = out_root / "gradient_spectral_k3" / "_runs" / "summaries"
+    log_dir = out_root / "_runs" / "logs" / run_id
+    summary_dir = out_root / "_runs" / "summaries"
     log_dir.mkdir(parents=True, exist_ok=True)
     summary_dir.mkdir(parents=True, exist_ok=True)
     heartbeat_path = log_dir / "heartbeat.json"

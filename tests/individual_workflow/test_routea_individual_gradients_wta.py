@@ -45,8 +45,43 @@ def test_method_output_dirs_are_direct_and_deterministic(tmp_path):
     gradient_dir = workflow.gradient_combo_output_dir(tmp_path, combo)
     wta_dir = workflow.wta_combo_output_dir(tmp_path, combo)
 
-    assert gradient_dir == tmp_path / "gradient_spectral_k3" / "subjects" / "sub-100610" / "smooth-4mm" / "hemi-R"
-    assert wta_dir == tmp_path / "wta_top" / "subjects" / "sub-100610" / "smooth-4mm" / "hemi-R"
+    assert gradient_dir == tmp_path / "sub-100610" / "gradient" / "4mm" / "R"
+    assert wta_dir == tmp_path / "sub-100610" / "wta" / "4mm" / "R"
+
+
+def test_parser_accepts_explicit_input_and_output_roots(tmp_path):
+    workflow = load_module()
+    shared_root = tmp_path / "routea"
+    surface_root = tmp_path / "surface"
+    hippunfold_root = tmp_path / "hippunfold"
+    out_root = tmp_path / "individual"
+
+    args = workflow.build_arg_parser().parse_args(
+        [
+            "--shared-root",
+            str(shared_root),
+            "--surface-root",
+            str(surface_root),
+            "--hippunfold-batch-root",
+            str(hippunfold_root),
+            "--out-root",
+            str(out_root),
+        ]
+    )
+
+    assert Path(args.shared_root) == shared_root
+    assert Path(args.surface_root) == surface_root
+    assert Path(args.hippunfold_batch_root) == hippunfold_root
+    assert Path(args.out_root) == out_root
+
+
+def test_parser_defaults_use_dataset_agnostic_shared_roots():
+    workflow = load_module()
+
+    args = workflow.build_arg_parser().parse_args([])
+
+    assert Path(args.shared_root).name == "routea"
+    assert Path(args.surface_root).name == "surface"
 
 
 def test_subject_wta_assignments_use_single_subject_top_positive_roi_votes():
@@ -89,7 +124,7 @@ def test_subject_wta_assignments_use_single_subject_top_positive_roi_votes():
 
 def test_monitor_summary_counts_ok_failed_running_and_stale(tmp_path):
     workflow = load_module()
-    manifest_dir = tmp_path / "gradient_spectral_k3" / "subjects" / "sub-100610" / "smooth-2mm" / "hemi-L"
+    manifest_dir = tmp_path / "sub-100610" / "gradient" / "2mm" / "L"
     manifest_dir.mkdir(parents=True)
     workflow.write_json(
         manifest_dir / "combo_manifest.json",
@@ -115,7 +150,7 @@ def test_monitor_summary_counts_ok_failed_running_and_stale(tmp_path):
 
 def test_monitor_summary_does_not_mark_completed_run_stale(tmp_path):
     workflow = load_module()
-    manifest_dir = tmp_path / "gradient_spectral_k3" / "subjects" / "sub-100610" / "smooth-2mm" / "hemi-L"
+    manifest_dir = tmp_path / "sub-100610" / "gradient" / "2mm" / "L"
     manifest_dir.mkdir(parents=True)
     workflow.write_json(
         manifest_dir / "combo_manifest.json",
@@ -144,8 +179,17 @@ def test_overview_output_paths_are_per_subject_per_task(tmp_path):
     gradient_png = workflow.overview_output_path(overview_root, "gradient_spectral_k3", "sub-100610")
     wta_png = workflow.overview_output_path(overview_root, "wta_top", "100610")
 
-    assert gradient_png == overview_root / "gradient" / "sub-100610_gradient_overview.png"
+    assert gradient_png == overview_root / "gradient" / "sub-100610_gradient_fisherz_overview.png"
     assert wta_png == overview_root / "wta" / "sub-100610_wta_overview.png"
+
+
+def test_overview_output_path_supports_gradient_count_variant(tmp_path):
+    workflow = load_module()
+    overview_root = tmp_path / "present" / "overviews" / "individual"
+
+    count_png = workflow.overview_output_path(overview_root, "gradient_count", "sub-04172026")
+
+    assert count_png == overview_root / "gradient" / "sub-04172026_gradient_count_overview.png"
 
 
 def test_individual_workflow_entrypoints_have_contiguous_numbering():
