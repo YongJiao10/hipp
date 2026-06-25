@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 
 from .workflow_utils import utc_timestamp_for_filename
@@ -9,6 +10,143 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 
 DATASET_KEYS = ("hcp", "iowa", "stanford", "iowa_hcp500")
 DEFAULT_DATASET = "hcp"
+
+IOWA7T_BRANCHES = ("single_echo", "multi_echo")
+LOCAL_JIANGLAB_ROOT = Path("/home/yojiao/LSS/jianglab")
+ARGON_JIANGLAB_ROOT = Path("/Shared/jianglab")
+IOWA7T_36P_RELATIVE_ROOT = Path(
+    "3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_36P"
+)
+
+
+@dataclass(frozen=True)
+class Iowa7TBranchLayout:
+    subject: str
+    branch: str
+    root: Path
+    cortex: Path
+    surface: Path
+    fc: Path
+    atlas: Path
+    qc: Path
+    figures: Path
+    provenance: Path
+
+
+@dataclass(frozen=True)
+class Iowa7TSubjectLayout:
+    subject: str
+    subject_root: Path
+    hippunfold_root: Path
+
+    def branch_root(self, branch: str) -> Path:
+        return self.subject_root / validate_iowa7t_branch(branch)
+
+
+def validate_iowa7t_subject(subject: str) -> str:
+    raw = str(subject).strip()
+    subject_id = raw.removeprefix("sub-")
+    if not (len(subject_id) == 8 and subject_id.isdigit()):
+        raise ValueError(
+            f"Invalid Iowa7T subject: {subject!r}; "
+            "expected MMDDYYYY digits with optional sub- prefix"
+        )
+    return subject_id
+
+
+def validate_iowa7t_branch(branch: str) -> str:
+    key = str(branch).strip().lower().replace("-", "_")
+    if key not in IOWA7T_BRANCHES:
+        raise ValueError(
+            f"Invalid Iowa7T branch: {branch!r}; expected one of {IOWA7T_BRANCHES}"
+        )
+    return key
+
+
+def resolve_jianglab_root(*, require_exists: bool = True) -> Path:
+    if LOCAL_JIANGLAB_ROOT.exists():
+        return LOCAL_JIANGLAB_ROOT
+    if ARGON_JIANGLAB_ROOT.exists():
+        return ARGON_JIANGLAB_ROOT
+    if require_exists:
+        raise FileNotFoundError(
+            "Jianglab root not found. Local uses /home/yojiao/LSS/jianglab; "
+            "Argon uses /Shared/jianglab."
+        )
+    return LOCAL_JIANGLAB_ROOT
+
+
+def resolve_iowa7t_36p_root(
+    *,
+    jianglab_root: Path | None = None,
+    require_exists: bool = True,
+) -> Path:
+    root = (
+        Path(jianglab_root)
+        if jianglab_root is not None
+        else resolve_jianglab_root(require_exists=require_exists)
+    )
+    return root / IOWA7T_36P_RELATIVE_ROOT
+
+
+def resolve_iowa7t_hipp_outputs_root(
+    *,
+    jianglab_root: Path | None = None,
+    require_exists: bool = True,
+) -> Path:
+    return (
+        resolve_iowa7t_36p_root(
+            jianglab_root=jianglab_root,
+            require_exists=require_exists,
+        )
+        / "hipp_outputs"
+    )
+
+
+def iowa7t_subject_layout(
+    subject: str,
+    *,
+    hipp_outputs_root: Path | None = None,
+) -> Iowa7TSubjectLayout:
+    subject_id = validate_iowa7t_subject(subject)
+    root = (
+        Path(hipp_outputs_root)
+        if hipp_outputs_root is not None
+        else resolve_iowa7t_hipp_outputs_root()
+    )
+    subject_root = root / "subjects" / f"sub-{subject_id}"
+    return Iowa7TSubjectLayout(
+        subject=subject_id,
+        subject_root=subject_root,
+        hippunfold_root=subject_root / "hippunfold",
+    )
+
+
+def iowa7t_branch_layout(
+    subject: str,
+    branch: str,
+    *,
+    hipp_outputs_root: Path | None = None,
+) -> Iowa7TBranchLayout:
+    subject_layout = iowa7t_subject_layout(
+        subject,
+        hipp_outputs_root=hipp_outputs_root,
+    )
+    branch_key = validate_iowa7t_branch(branch)
+    root = subject_layout.branch_root(branch_key)
+    return Iowa7TBranchLayout(
+        subject=subject_layout.subject,
+        branch=branch_key,
+        root=root,
+        cortex=root / "cortex",
+        surface=root / "surface",
+        fc=root / "fc",
+        atlas=root / "atlas",
+        qc=root / "qc",
+        figures=root / "figures",
+        provenance=root / "provenance.json",
+    )
+
 
 
 def _validate_dataset(dataset: str) -> str:

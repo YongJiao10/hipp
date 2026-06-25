@@ -27,6 +27,10 @@ Repository-local `outputs_iowa/` is not a valid production output root.
 
 ## Fixed Layout
 
+The tree below defines valid canonical locations. Directories are created only
+when they receive real content; empty future-scoped directories such as
+dataset-level `group/` must not be pre-created.
+
 ```text
 hipp_outputs/
 ├── subjects/
@@ -54,11 +58,6 @@ hipp_outputs/
 │       ├── hippunfold/
 │       ├── single_echo/
 │       └── multi_echo/
-├── group/
-│   ├── hippocampal_template/
-│   ├── qc/
-│   ├── manifests/
-│   └── figures/
 └── runs/
     ├── logs/
     ├── summaries/
@@ -94,9 +93,10 @@ dataset-level roots.
 
 ## Group and Runtime Ownership
 
-`group/` contains only cross-subject products. A one-subject run may populate
-these paths, but the paths remain group-scoped because future subjects are
-expected peers.
+`group/` contains only cross-subject products and is created only when a
+cross-subject product exists. A one-subject run may populate these paths when it
+creates an actual reusable group-scoped asset, but no empty `group/` subtree is
+created for future intent alone.
 
 `runs/` contains execution metadata and reproducible caches:
 
@@ -144,13 +144,13 @@ work/individual_atlas/_runs/
   -> runs/
 
 inputs/kong2022/templates/hipp_group_average_t1only_151/
-  -> group/hippocampal_template/
+  -> group/hippocampal_template/      # only if source has real content
 
 inputs/kong2022/qc/
-  -> group/qc/
+  -> group/qc/                        # only if source has real content
 
 inputs/kong2022/manifests/
-  -> group/manifests/
+  -> group/manifests/                 # only if source has real content
 ```
 
 The empty legacy `inputs/qc/` has no canonical destination because it has no
@@ -202,7 +202,8 @@ Migration is manifest-driven:
 2. Build an exact old-to-new mapping.
 3. Detect collisions and unresolved references before moving anything.
 4. Dry-run the transfer.
-5. Copy or move into canonical locations.
+5. Copy or move into canonical locations, creating only parent directories for
+   files or symlinks that are actually transferred.
 6. Rewrite path-bearing manifests through maintained code.
 7. Verify file counts, sizes, hashes for small critical files, CIFTI/GIFTI
    readability, HippUnfold completeness, and individual atlas manifests.
