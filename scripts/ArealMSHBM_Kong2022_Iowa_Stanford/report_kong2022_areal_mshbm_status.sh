@@ -15,8 +15,11 @@ case "${dataset}" in
   iowa7t)
     out_root="${OUT_ROOT:-/Shared/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/ArealMSHBM_Kong2022}"
     ;;
+  iowa_hcp500)
+    out_root="${OUT_ROOT:-/old_Users/yojiao/hipp/outputs_iowa_hcp500/inputs/iowa_hcp500/kong2022/cortex_references/routea_areal_mshbm}"
+    ;;
   *)
-    echo "ERROR: unsupported DATASET=${DATASET:-}. Expected jj_tms, stanford, or iowa7t." >&2
+    echo "ERROR: unsupported DATASET=${DATASET:-}. Expected jj_tms, stanford, iowa7t, or iowa_hcp500." >&2
     exit 2
     ;;
 esac
@@ -45,7 +48,9 @@ qacct -j "${job_id}" 2>/dev/null || true
 echo
 
 echo "logs:"
-find "${out_root}/_sge_logs" -type f -name "*.${job_id}.*.log" -print 2>/dev/null | sort || true
+shopt -s nullglob
+logs=("${out_root}"/_sge_logs/*/*."${job_id}".*.log)
+printf '%s\n' "${logs[@]}" | sort
 echo
 
 echo "expected label text outputs:"

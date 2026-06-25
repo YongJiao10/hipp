@@ -7,7 +7,7 @@ from .workflow_utils import utc_timestamp_for_filename
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
-DATASET_KEYS = ("hcp", "iowa", "stanford")
+DATASET_KEYS = ("hcp", "iowa", "stanford", "iowa_hcp500")
 DEFAULT_DATASET = "hcp"
 
 

@@ -137,10 +137,11 @@ Path template arguments for non-HCP datasets:
 - Templates support `{data_root}`, `{bold_root}`, `{subject}`,
   `{sub_subject}`, `{hemi}`, and `{hemi_lower}` where relevant.
 - Defaults preserve existing HCP behavior.
-- Stanford and future non-HCP datasets should prefer templates over broad
+- Stanford, Iowa, Iowa_HCP500, and future non-HCP datasets should prefer templates over broad
   symlink trees. Use the shared helper
   `scripts/core_workflow/lib/path_templates.py` to add template support to
   additional entrypoints when needed.
+- `iowa_hcp500` represents the Iowa 7T dataset preprocessed via the HCP pipeline (source data under `/home/yojiao/hpchome/HCPpipeline500`). It maps outputs to the independent `/home/yojiao/hpchome/hipp/outputs_iowa_hcp500/` directory.
 
 - `--workflow-branch`: one of `kong2019`, `kong2022_routea`, `kong2022_routea_17net`, `kong2022_routea_ctxreg`, `kong2022_routea_ctxdrop`, `kong2022_routeb`
 - `--upstream-step-id` (repeatable)

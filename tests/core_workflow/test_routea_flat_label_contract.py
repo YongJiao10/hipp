@@ -138,3 +138,30 @@ def test_jj_tms_launcher_does_not_write_runtime_state_under_script_dir() -> None
     task_text = task.read_text(encoding="utf-8")
     assert "${script_dir}/logs" not in task_text
 
+
+def test_iowa_hcp500_argon_preset_contract() -> None:
+    script_dir = REPO_ROOT / "scripts" / "ArealMSHBM_Kong2022_Iowa_Stanford"
+    checked = [
+        script_dir / "submit_kong2022_areal_mshbm.sh",
+        script_dir / "run_kong2022_areal_mshbm_subject_sge.sh",
+        script_dir / "report_kong2022_areal_mshbm_status.sh",
+    ]
+    required = [
+        "iowa_hcp500",
+        "/old_Users/yojiao/HCPpipeline500/work/qunex_iowa7t_hcppipeline500/sessions",
+        "outputs_iowa_hcp500/inputs/iowa_hcp500/kong2022/cortex_references/routea_areal_mshbm",
+    ]
+    for path in checked:
+        text = path.read_text(encoding="utf-8")
+        for token in required:
+            assert token in text, f"{path.name} missing {token}"
+
+    task_text = checked[1].read_text(encoding="utf-8")
+    assert "/tmp/iowa_hcp500_kong2022_*" in task_text
+    assert 'KEEP_TMP=1: retaining ${tmp_root}' in task_text
+    assert '-file-information "${dtseries}" -only-number-of-maps' in task_text
+    assert 'if [ "${dataset}" != "iowa_hcp500" ]; then' in task_text
+
+    submit_text = checked[0].read_text(encoding="utf-8")
+    assert "default_ui_tc=3" in submit_text
+    assert "default_pinc_tc=7" in submit_text

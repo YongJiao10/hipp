@@ -9,10 +9,26 @@ from pathlib import Path
 import nibabel as nib
 
 
-DATASET_DTSERIES_GLOBS = {
-    "jj_tms": ["*_task-rest_run-*_space-fsLR_den-91k_desc-denoised_bold.dtseries.nii"],
-    "stanford": ["*_task-rest_space-fsLR_den-91k_desc-denoised_bold.dtseries.nii"],
-    "iowa7t": ["*_task-rest_run-concat_space-fsLR_den-91k_desc-denoised_bold.dtseries.nii"],
+DATASET_SPECS = {
+    "jj_tms": {
+        "subject_prefix": "sub-",
+        "relative_globs": ["func/*_task-rest_run-*_space-fsLR_den-91k_desc-denoised_bold.dtseries.nii"],
+    },
+    "stanford": {
+        "subject_prefix": "sub-",
+        "relative_globs": ["func/*_task-rest_space-fsLR_den-91k_desc-denoised_bold.dtseries.nii"],
+    },
+    "iowa7t": {
+        "subject_prefix": "sub-",
+        "relative_globs": ["func/*_task-rest_run-concat_space-fsLR_den-91k_desc-denoised_bold.dtseries.nii"],
+    },
+    "iowa_hcp500": {
+        "subject_prefix": "",
+        "relative_globs": [
+            "hcp/{subject_id}/MNINonLinear/Results/REST/"
+            "REST_Atlas_MSMAll_hp0_clean_rclean.dtseries.nii"
+        ],
+    },
 }
 
 
@@ -45,7 +61,7 @@ def main() -> int:
     parser.add_argument(
         "--dataset",
         default="jj_tms",
-        help="Dataset preset: jj_tms or stanford. Default: jj_tms.",
+        help="Dataset preset: jj_tms, stanford, iowa7t, or iowa_hcp500. Default: jj_tms.",
     )
     parser.add_argument("--subject", required=True, help="Subject ID with or without sub- prefix.")
     parser.add_argument("--data-root", required=True, type=Path)
@@ -60,25 +76,27 @@ def main() -> int:
     args = parser.parse_args()
 
     dataset = normalize_dataset(args.dataset)
-    if dataset not in DATASET_DTSERIES_GLOBS:
-        known = ", ".join(sorted(DATASET_DTSERIES_GLOBS))
+    if dataset not in DATASET_SPECS:
+        known = ", ".join(sorted(DATASET_SPECS))
         raise SystemExit(f"Unsupported dataset: {args.dataset}. Expected one of: {known}")
-    dtseries_globs = args.dtseries_glob or DATASET_DTSERIES_GLOBS[dataset]
+    spec = DATASET_SPECS[dataset]
+    dtseries_globs = args.dtseries_glob or spec["relative_globs"]
 
-    subject = args.subject if args.subject.startswith("sub-") else f"sub-{args.subject}"
-    subject_dir = args.data_root / subject
-    func_dir = subject_dir / "func"
-    if not func_dir.is_dir():
-        raise SystemExit(f"Missing func directory: {func_dir}")
+    subject_id = args.subject.removeprefix("sub-")
+    subject = f"sub-{subject_id}"
+    subject_dir = args.data_root / f"{spec['subject_prefix']}{subject_id}"
+    if not subject_dir.is_dir():
+        raise SystemExit(f"Missing subject directory: {subject_dir}")
 
     dtseries_by_path = {}
     for pattern in dtseries_globs:
-        for path in func_dir.glob(pattern):
+        resolved_pattern = pattern.format(subject_id=subject_id)
+        for path in subject_dir.glob(resolved_pattern):
             dtseries_by_path[path] = path
     dtseries = sorted(dtseries_by_path, key=natural_key)
     if not dtseries:
         patterns = ", ".join(dtseries_globs)
-        raise SystemExit(f"No task-rest fsLR den-91k dtseries found in {func_dir}; patterns={patterns}")
+        raise SystemExit(f"No task-rest fsLR dtseries found under {subject_dir}; patterns={patterns}")
 
     inputs_dir = args.subject_output_dir / "inputs"
     censor_dir = inputs_dir / "censors"

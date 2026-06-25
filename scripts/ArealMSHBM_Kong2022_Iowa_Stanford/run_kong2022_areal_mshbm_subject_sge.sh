@@ -40,8 +40,14 @@ case "${dataset}" in
     default_out_root="/Shared/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/ArealMSHBM_Kong2022"
     tmp_prefix="iowa7t_kong2022"
     ;;
+  iowa_hcp500)
+    dataset_label="Iowa HCP500"
+    default_data_root="/old_Users/yojiao/HCPpipeline500/work/qunex_iowa7t_hcppipeline500/sessions"
+    default_out_root="${repo_root}/outputs_iowa_hcp500/inputs/iowa_hcp500/kong2022/cortex_references/routea_areal_mshbm"
+    tmp_prefix="iowa_hcp500_kong2022"
+    ;;
   *)
-    echo "ERROR: unsupported DATASET=${DATASET:-}. Expected jj_tms, stanford, or iowa7t." >&2
+    echo "ERROR: unsupported DATASET=${DATASET:-}. Expected jj_tms, stanford, iowa7t, or iowa_hcp500." >&2
     exit 2
     ;;
 esac
@@ -55,6 +61,7 @@ cbig_code_dir="${CBIG_CODE_DIR:-${repo_root}/external/CBIG}"
 group_prior="${GROUP_PRIOR:-${cbig_code_dir}/stable_projects/brain_parcellation/Kong2022_ArealMSHBM/lib/group_priors/HCP_fs_LR_32k_40sub/400/gMSHBM/beta50/Params_Final.mat}"
 wb_command="${WB_COMMAND:-${repo_root}/software/workbench/bin_linux64/wb_command}"
 overwrite="${OVERWRITE:-0}"
+keep_tmp="${KEEP_TMP:-$([ "${dataset}" = "iowa_hcp500" ] && printf 1 || printf 0)}"
 task_dry_run="${TASK_DRY_RUN:-${DRY_RUN:-0}}"
 matlab_mode="${MATLAB_MODE:-batch}"
 
@@ -100,8 +107,12 @@ lh_labels="${subject_out}/lh_labels.txt"
 rh_labels="${subject_out}/rh_labels.txt"
 
 cleanup_tmp_root() {
+  if [ "${keep_tmp}" = "1" ]; then
+    echo "KEEP_TMP=1: retaining ${tmp_root}" >&2
+    return
+  fi
   case "${tmp_root:-}" in
-    /tmp/jj_tms_kong2022_*|/tmp/stanford_kong2022_*|/tmp/iowa7t_kong2022_*)
+    /tmp/jj_tms_kong2022_*|/tmp/stanford_kong2022_*|/tmp/iowa7t_kong2022_*|/tmp/iowa_hcp500_kong2022_*)
       rm -rf -- "${tmp_root}"
       ;;
     "")
@@ -126,12 +137,10 @@ echo "SubjectCount=${#subject_ids[@]}"
 echo "Out=${subject_out}"
 echo "Work=${tmp_root}"
 echo "WB_COMMAND=${wb_command}"
-echo "TASK_DRY_RUN=${task_dry_run} OVERWRITE=${overwrite}"
+echo "TASK_DRY_RUN=${task_dry_run} OVERWRITE=${overwrite} KEEP_TMP=${keep_tmp}"
 echo "=================================================================="
 
 required=(
-  "${python_exe}"
-  "${script_dir}/prepare_kong2022_areal_mshbm_subject_inputs.py"
   "${script_dir}/run_kong2022_areal_mshbm_subject.m"
   "${wb_command}"
   "${cbig_code_dir}/stable_projects/brain_parcellation/Kong2022_ArealMSHBM/CBIG_ArealMSHBM_parcellation_single_subject.m"
@@ -142,6 +151,12 @@ required=(
   "${cbig_code_dir}/data/templates/surface/fs_LR_32k_downsample_900/fslr_downsample_900mesh_parcellation.dlabel.nii"
   "${group_prior}"
 )
+if [ "${dataset}" != "iowa_hcp500" ]; then
+  required+=(
+    "${python_exe}"
+    "${script_dir}/prepare_kong2022_areal_mshbm_subject_inputs.py"
+  )
+fi
 for path in "${required[@]}"; do
   if [ ! -e "${path}" ]; then
     echo "ERROR: missing required path: ${path}" >&2
@@ -149,12 +164,33 @@ for path in "${required[@]}"; do
   fi
 done
 
-"${python_exe}" "${script_dir}/prepare_kong2022_areal_mshbm_subject_inputs.py" \
-  --dataset "${dataset}" \
-  --subject "${subject}" \
-  --data-root "${data_root}" \
-  --subject-output-dir "${tmp_root}" \
-  $([ "${overwrite}" = "1" ] && printf "%s" "--overwrite")
+if [ "${dataset}" = "iowa_hcp500" ]; then
+  dtseries="${data_root}/${sid}/hcp/${sid}/MNINonLinear/Results/REST/REST_Atlas_MSMAll_hp0_clean_rclean.dtseries.nii"
+  if [ ! -s "${dtseries}" ] || [ ! -r "${dtseries}" ]; then
+    echo "ERROR: missing, empty, or unreadable Iowa HCP500 dtseries: ${dtseries}" >&2
+    exit 4
+  fi
+  n_timepoints="$("${wb_command}" -file-information "${dtseries}" -only-number-of-maps)"
+  if ! [[ "${n_timepoints}" =~ ^[0-9]+$ ]] || [ "${n_timepoints}" -lt 1 ]; then
+    echo "ERROR: invalid timepoint count from Workbench: ${n_timepoints}" >&2
+    exit 4
+  fi
+  inputs_dir="${tmp_root}/inputs"
+  censor_dir="${inputs_dir}/censors"
+  censor_path="${censor_dir}/${subject}_task-rest_run-01_censor.txt"
+  mkdir -p "${censor_dir}"
+  printf '%s\n' "${dtseries}" > "${run_list}"
+  printf '%s\n' "${censor_path}" > "${censor_list}"
+  awk -v count="${n_timepoints}" 'BEGIN { for (i = 0; i < count; i++) print 1 }' > "${censor_path}"
+  echo "Prepared Iowa HCP500 dtseries=${dtseries} timepoints=${n_timepoints}"
+else
+  "${python_exe}" "${script_dir}/prepare_kong2022_areal_mshbm_subject_inputs.py" \
+    --dataset "${dataset}" \
+    --subject "${subject}" \
+    --data-root "${data_root}" \
+    --subject-output-dir "${tmp_root}" \
+    $([ "${overwrite}" = "1" ] && printf "%s" "--overwrite")
+fi
 
 if [ ! -f "${run_list}" ] || [ ! -f "${censor_list}" ]; then
   echo "ERROR: prepared run/censor lists missing under ${tmp_root}/inputs" >&2

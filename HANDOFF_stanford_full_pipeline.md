@@ -43,8 +43,8 @@ AREA_ROOT=/home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_CausalConn
 STANFORD_OUT=outputs_stanford
 HIPPO_BATCH=${STANFORD_OUT}/inputs/stanford/hippunfold/dense_corobl_batch
 KONG_ROOT=${STANFORD_OUT}/inputs/stanford/kong2022
-SURFACE_ROOT=${KONG_ROOT}/shared_inputs/surface_151
-ROUTEA_ROOT=${KONG_ROOT}/shared_inputs/routea_151
+SURFACE_ROOT=${KONG_ROOT}/shared_inputs/surface
+ROUTEA_ROOT=${KONG_ROOT}/shared_inputs/routea
 ROUTEB_ROOT=${KONG_ROOT}/shared_inputs/routeb_151
 TEMPLATE_ROOT=${KONG_ROOT}/templates/hipp_group_average_t1only_151
 ROUTEA_LABEL_ROOT=${AREA_ROOT}    # 直接指向源数据，无需桥接
@@ -153,9 +153,9 @@ find outputs_stanford/inputs/stanford/hippunfold/dense_corobl_batch -maxdepth 5 
 **F11: Gradients (05_01)** — jobs=1 (计算密集)
 ```bash
 "${PY314}" scripts/core_workflow/05_01_compute_hippomaps_gradients.py \
-  --shared-root "${ROUTEB_ROOT}" \
-  --surface-root "${SURFACE_ROOT}" \
-  --jobs 1
+  --routes routeb \
+  --shared-inputs-root "${KONG_ROOT}/shared_inputs" \
+  --surface-root "${SURFACE_ROOT}"
 ```
 
 **F12: Group Atlas (05_02)** — jobs=1
@@ -166,6 +166,37 @@ find outputs_stanford/inputs/stanford/hippunfold/dense_corobl_batch -maxdepth 5 
   --surface-root "${SURFACE_ROOT}" \
   --jobs 1
 ```
+
+**RouteA subgroup rerun: HC/SYMP WTA + gradient-spectral**
+
+The Stanford RouteA/surface shared-input roots use canonical no-suffix paths:
+`shared_inputs/routea` and `shared_inputs/surface`. The legacy Stanford
+`routea_151` and `surface_151` directories were migrated away; do not create
+compatibility aliases for new runs.
+
+Subgroup manifests derived from the QC-pass latest manifest:
+
+- HC (`1xxx` + `2xxx`): `${KONG_ROOT}/manifests/stanford_hc_1xxx2xxx_qc_pass_t1only_91.txt`
+- SYMP (`3xxx` + `4xxx`): `${KONG_ROOT}/manifests/stanford_symp_3xxx4xxx_qc_pass_t1only_103.txt`
+
+RouteA subgroup gradient roots:
+
+- HC: `${STANFORD_OUT}/work/hippomaps_gradients_by_group/hc`
+- SYMP: `${STANFORD_OUT}/work/hippomaps_gradients_by_group/symp`
+
+RouteA subgroup atlas roots:
+
+- HC: `${STANFORD_OUT}/work/group_atlas/routea_hc_full_k3_fisherz`
+- SYMP: `${STANFORD_OUT}/work/group_atlas/routea_symp_full_k3_fisherz`
+
+Subgroup `05_02_run_group_atlas.py` reruns must also pass
+`--hippunfold-batch-root ${HIPPO_BATCH}`; otherwise the script falls back to the
+HCP HippUnfold batch root.
+
+Subgroup overview outputs:
+
+- HC: `${STANFORD_OUT}/present/overviews/routea_hc`
+- SYMP: `${STANFORD_OUT}/present/overviews/routea_symp`
 
 **F13: Visualization (06_01, 07_01)**
 ```bash

@@ -16,6 +16,8 @@ case "${dataset}" in
     default_out_root="/Shared/jianglab/3_Data_Working/fmriprep_processed_JJ_TMS/ArealMSHBM_Kong2022"
     job_prefix="jj_k22"
     manifest_prefix="jj_tms"
+    default_ui_tc=5
+    default_pinc_tc=15
     ;;
   stanford)
     dataset_label="Stanford"
@@ -23,6 +25,8 @@ case "${dataset}" in
     default_out_root="/Shared/jianglab/3_Data_Working/fmriprep_processed_CausalConnectome/rest_fmriprep/ArealMSHBM_Kong2022"
     job_prefix="st_k22"
     manifest_prefix="stanford"
+    default_ui_tc=5
+    default_pinc_tc=15
     ;;
   iowa7t)
     dataset_label="Iowa7T"
@@ -30,9 +34,20 @@ case "${dataset}" in
     default_out_root="/Shared/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/ArealMSHBM_Kong2022"
     job_prefix="ia7t_k22"
     manifest_prefix="iowa7t"
+    default_ui_tc=5
+    default_pinc_tc=15
+    ;;
+  iowa_hcp500)
+    dataset_label="Iowa HCP500"
+    default_data_root="/old_Users/yojiao/HCPpipeline500/work/qunex_iowa7t_hcppipeline500/sessions"
+    default_out_root="${repo_root}/outputs_iowa_hcp500/inputs/iowa_hcp500/kong2022/cortex_references/routea_areal_mshbm"
+    job_prefix="ia500_k22"
+    manifest_prefix="iowa_hcp500"
+    default_ui_tc=3
+    default_pinc_tc=7
     ;;
   *)
-    echo "ERROR: unsupported DATASET=${DATASET:-}. Expected jj_tms, stanford, or iowa7t." >&2
+    echo "ERROR: unsupported DATASET=${DATASET:-}. Expected jj_tms, stanford, iowa7t, or iowa_hcp500." >&2
     exit 2
     ;;
 esac
@@ -50,24 +65,26 @@ smoke_n="${SMOKE_N:-0}"
 subjects_csv="${SUBJECT_IDS_CSV:-}"
 subject_ids_file="${SUBJECT_IDS_FILE:-}"
 overwrite="${OVERWRITE:-0}"
-ui_tc="${UI_TC:-5}"
-pinc_tc="${PINC_TC:-15}"
+keep_tmp="${KEEP_TMP:-$([ "${dataset}" = "iowa_hcp500" ] && printf 1 || printf 0)}"
+ui_tc="${UI_TC:-${default_ui_tc}}"
+pinc_tc="${PINC_TC:-${default_pinc_tc}}"
 
 usage() {
   cat <<EOF
 Usage: $(basename "$0")
 
 Environment controls:
-  DATASET=jj_tms|stanford
+  DATASET=jj_tms|stanford|iowa7t|iowa_hcp500
                         Dataset preset. Default: jj_tms.
   DRY_RUN=1             Print qsub commands without submitting.
   TASK_DRY_RUN=1        Submitted tasks validate inputs/dependencies and stop before MATLAB.
   SMOKE_N=N             Use only the first N selected subjects.
   SUBJECT_IDS_CSV=...   Explicit comma-separated subject IDs.
   SUBJECT_IDS_FILE=...  Explicit subject list file.
-  UI_TC=N               UI array throttle. Default: 5.
-  PINC_TC=N             PINC array throttle. Default: 15.
+  UI_TC=N               UI array throttle. Default: 3 for iowa_hcp500, else 5.
+  PINC_TC=N             PINC array throttle. Default: 7 for iowa_hcp500, else 15.
   OVERWRITE=1           Recompute existing outputs.
+  KEEP_TMP=1            Retain task temporary files. Default: 1 for iowa_hcp500.
 
 Queue behavior follows scripts/core_workflow/sge_argon/submit_kong2022_route_a_dual_queues.sh:
   UI tasks use -tc ${ui_tc}.
@@ -116,7 +133,20 @@ read_subjects() {
   elif [ -n "${subjects_csv}" ]; then
     echo "${subjects_csv}" | tr ',' '\n' | awk '{gsub(/^[ \t]+|[ \t]+$/, ""); sub(/^sub-/, ""); if ($0 ~ /^[0-9]+$/) print $0}'
   else
-    find "${data_root}" -maxdepth 1 -type d -name 'sub-*' -printf '%f\n' | sed 's/^sub-//' | sort -V
+    if [ "${dataset}" = "iowa_hcp500" ]; then
+      local session_dir sid rest_path
+      for session_dir in "${data_root}"/*; do
+        [ -d "${session_dir}" ] || continue
+        sid="${session_dir##*/}"
+        rest_path="${session_dir}/hcp/${sid}/MNINonLinear/Results/REST/REST_Atlas_MSMAll_hp0_clean_rclean.dtseries.nii"
+        [ -s "${rest_path}" ] && printf '%s\n' "${sid}"
+      done | sort -V
+    else
+      local subject_dir
+      for subject_dir in "${data_root}"/sub-*; do
+        [ -d "${subject_dir}" ] && printf '%s\n' "${subject_dir##*/sub-}"
+      done | sort -V
+    fi
   fi
 }
 
@@ -186,6 +216,7 @@ write_job_wrapper() {
     printf "export WB_COMMAND=%s\n" "$(shell_quote "${wb_command}")"
     printf "export TASK_DRY_RUN=%s\n" "$(shell_quote "${task_dry_run}")"
     printf "export OVERWRITE=%s\n" "$(shell_quote "${overwrite}")"
+    printf "export KEEP_TMP=%s\n" "$(shell_quote "${keep_tmp}")"
     printf "exec %s\n" "$(shell_quote "${task_script}")"
   } > "${wrapper_file}"
   chmod +x "${wrapper_file}"
