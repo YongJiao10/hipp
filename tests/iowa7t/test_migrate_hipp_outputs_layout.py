@@ -1,6 +1,8 @@
 """Tests for Iowa7T hippocampal output layout migration."""
 
 from pathlib import Path
+import subprocess
+import sys
 
 import pytest
 
@@ -72,3 +74,34 @@ def test_collision_detection_refuses_different_destination_content(tmp_path):
 
     with pytest.raises(FileExistsError, match="Destination exists with different content"):
         mig.validate_mappings(mappings)
+
+
+def test_cli_runs_direct_script_path_from_repo_root(tmp_path):
+    legacy = tmp_path / "hipp_outputs"
+    write_file(
+        legacy / "inputs/kong2022/shared_inputs/routea/sub-04172026/fc/a.txt",
+        "old",
+    )
+    repo_root = Path(__file__).resolve().parents[2]
+
+    proc = subprocess.run(
+        [
+            sys.executable,
+            "scripts/iowa7t/migrate_hipp_outputs_layout.py",
+            "--hipp-outputs-root",
+            str(legacy),
+            "--subjects",
+            "04172026",
+            "--mode",
+            "dry-run",
+        ],
+        cwd=repo_root,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    assert '"mode": "dry-run"' in proc.stdout
+    assert '"mapping_count": 1' in proc.stdout
+    assert (legacy / "runs/manifests").is_dir()

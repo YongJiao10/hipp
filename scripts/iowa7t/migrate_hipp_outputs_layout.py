@@ -4,9 +4,14 @@ import argparse
 import filecmp
 import json
 import shutil
+import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Iterable
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 from scripts.core_workflow.lib.output_layout import (
     resolve_iowa7t_hipp_outputs_root,
