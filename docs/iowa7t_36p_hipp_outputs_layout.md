@@ -14,6 +14,7 @@ Rules:
 - There is no `variants/` wrapper.
 - Do not pre-create empty future directories such as `group/`.
 - Create directories only as parents for concrete files/symlinks/manifests being written.
+- Migration skips filesystem and notebook checkpoint junk: `.DS_Store`, `._*`, and `.ipynb_checkpoints/`.
 - Do not delete legacy paths until the exact deletion list is approved in the current session.
 
 Current canonical subject layout:

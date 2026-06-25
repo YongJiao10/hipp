@@ -76,6 +76,20 @@ def test_collision_detection_refuses_different_destination_content(tmp_path):
         mig.validate_mappings(mappings)
 
 
+def test_migration_skips_filesystem_and_notebook_checkpoint_junk(tmp_path):
+    legacy = tmp_path / "hipp_outputs"
+    write_file(legacy / "inputs/kong2022/manifests/valid.tsv")
+    write_file(legacy / "inputs/kong2022/manifests/.DS_Store")
+    write_file(legacy / "inputs/kong2022/manifests/._valid.tsv")
+    write_file(legacy / "inputs/kong2022/manifests/.ipynb_checkpoints/stale-checkpoint.tsv")
+
+    mappings = mig.build_mappings(legacy, subjects=("04172026",))
+
+    assert [m.destination.relative_to(legacy) for m in mappings] == [
+        Path("group/manifests/valid.tsv")
+    ]
+
+
 def test_cli_runs_direct_script_path_from_repo_root(tmp_path):
     legacy = tmp_path / "hipp_outputs"
     write_file(

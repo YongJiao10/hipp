@@ -30,14 +30,20 @@ class Mapping:
         return {key: str(value) for key, value in asdict(self).items()}
 
 
+def _is_migration_payload(path: Path) -> bool:
+    if any(part == ".ipynb_checkpoints" for part in path.parts):
+        return False
+    if path.name == ".DS_Store" or path.name.startswith("._"):
+        return False
+    return path.is_file() or path.is_symlink()
+
+
 def _iter_payload_files(root: Path) -> list[Path]:
     if not root.exists():
         return []
     if root.is_file() or root.is_symlink():
-        return [root]
-    return sorted(
-        path for path in root.rglob("*") if path.is_file() or path.is_symlink()
-    )
+        return [root] if _is_migration_payload(root) else []
+    return sorted(path for path in root.rglob("*") if _is_migration_payload(path))
 
 
 def _map_tree(source_root: Path, destination_root: Path) -> list[Mapping]:
