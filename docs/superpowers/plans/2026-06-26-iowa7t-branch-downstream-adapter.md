@@ -56,7 +56,7 @@ def test_resolve_branch_job_uses_branch_specific_input_templates(tmp_path: Path)
     assert single.bold_volume.name == "sub-06112026_task-rest_dir-concat_space-MNI152NLin6Asym_res-2_desc-denoised_bold.nii.gz"
     assert single.dtseries.name == "sub-06112026_task-rest_dir-concat_space-fsLR_den-91k_desc-denoised_bold.dtseries.nii"
     assert multi.bold_volume.name == "sub-06112026_task-rest_run-concat_space-MNI152NLin6Asym_res-2_desc-MEICA_XCPD36P_denoised_bold.nii.gz"
-    assert multi.dtseries.name == "sub-06112026_task-rest_run-concat_space-fsLR_den-32k_desc-MEICA_XCPD36P_denoised_bold.dtseries.nii"
+    assert multi.dtseries.name == "sub-06112026_task-rest_run-concat_space-fsLR_den-91k_desc-MEICA_XCPD36P_denoised_bold.dtseries.nii"
 ```
 
 - [ ] **Step 2: Run test to verify it fails**

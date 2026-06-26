@@ -100,7 +100,7 @@ def resolve_branch_job(
         dtseries = func_dir / f"{sub}_task-rest_dir-concat_space-fsLR_den-91k_desc-denoised_bold.dtseries.nii"
     else:
         bold_volume = func_dir / f"{sub}_task-rest_run-concat_space-MNI152NLin6Asym_res-2_desc-MEICA_XCPD36P_denoised_bold.nii.gz"
-        dtseries = func_dir / f"{sub}_task-rest_run-concat_space-fsLR_den-32k_desc-MEICA_XCPD36P_denoised_bold.dtseries.nii"
+        dtseries = func_dir / f"{sub}_task-rest_run-concat_space-fsLR_den-91k_desc-MEICA_XCPD36P_denoised_bold.dtseries.nii"
 
     cortex_root = branch_root / "cortex"
     return BranchJob(

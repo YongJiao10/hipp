@@ -43,7 +43,7 @@ For `multiband`:
 For `multi_echo`:
 
 - BOLD volume: `sub-<ID>/func/sub-<ID>_task-rest_run-concat_space-MNI152NLin6Asym_res-2_desc-MEICA_XCPD36P_denoised_bold.nii.gz`
-- CIFTI dtseries: `sub-<ID>/func/sub-<ID>_task-rest_run-concat_space-fsLR_den-32k_desc-MEICA_XCPD36P_denoised_bold.dtseries.nii`
+- CIFTI dtseries: `sub-<ID>/func/sub-<ID>_task-rest_run-concat_space-fsLR_den-91k_desc-MEICA_XCPD36P_denoised_bold.dtseries.nii`
 
 ## Implementation approach
 
