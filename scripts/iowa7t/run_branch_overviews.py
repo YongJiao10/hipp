@@ -175,7 +175,7 @@ def run_branch_overviews(job: BranchJob, *, overwrite: bool, jobs: int) -> dict[
 
 def parse_job(value: str) -> tuple[str, str]:
     if ":" not in value:
-        raise argparse.ArgumentTypeError("Expected --job value as <subject>:<single_echo|multi_echo>")
+        raise argparse.ArgumentTypeError("Expected --job value as <subject>:<multiband|multi_echo>")
     subject, branch = value.split(":", 1)
     return subject.replace("sub-", ""), branch
 

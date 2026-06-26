@@ -72,43 +72,43 @@ def build_mappings(hipp_outputs_root: Path, subjects: Iterable[str]) -> list[Map
         mappings.extend(
             _map_tree(
                 root / "inputs/kong2022/shared_inputs/surface" / sub / "surface",
-                root / "subjects" / sub / "single_echo" / "surface",
+                root / "subjects" / sub / "multiband" / "surface",
             )
         )
         mappings.extend(
             _map_tree(
                 root / "inputs/kong2022/shared_inputs/routea" / sub / "reference",
-                root / "subjects" / sub / "single_echo" / "cortex",
+                root / "subjects" / sub / "multiband" / "cortex",
             )
         )
         mappings.extend(
             _map_tree(
                 root / "inputs/kong2022/shared_inputs/routea" / sub / "fc",
-                root / "subjects" / sub / "single_echo" / "fc",
+                root / "subjects" / sub / "multiband" / "fc",
             )
         )
         mappings.extend(
             _map_tree(
                 root / "work/individual_atlas" / sub / "gradient",
-                root / "subjects" / sub / "single_echo" / "atlas" / "gradient",
+                root / "subjects" / sub / "multiband" / "atlas" / "gradient",
             )
         )
         mappings.extend(
             _map_tree(
                 root / "work/individual_atlas" / sub / "wta",
-                root / "subjects" / sub / "single_echo" / "atlas" / "wta",
+                root / "subjects" / sub / "multiband" / "atlas" / "wta",
             )
         )
         mappings.extend(
             _map_tree(
                 root / "present/overviews/individual/gradient",
-                root / "subjects" / sub / "single_echo" / "figures" / "gradient",
+                root / "subjects" / sub / "multiband" / "figures" / "gradient",
             )
         )
         mappings.extend(
             _map_tree(
                 root / "present/overviews/individual/wta",
-                root / "subjects" / sub / "single_echo" / "figures" / "wta",
+                root / "subjects" / sub / "multiband" / "figures" / "wta",
             )
         )
     mappings.extend(

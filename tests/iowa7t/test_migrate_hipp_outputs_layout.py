@@ -14,7 +14,7 @@ def write_file(path: Path, text: str = "x") -> None:
     path.write_text(text, encoding="utf-8")
 
 
-def test_build_mapping_places_04172026_single_echo_outputs_without_variants(tmp_path):
+def test_build_mapping_places_04172026_multiband_outputs_without_variants(tmp_path):
     legacy = tmp_path / "hipp_outputs"
     write_file(
         legacy
@@ -33,11 +33,11 @@ def test_build_mapping_places_04172026_single_echo_outputs_without_variants(tmp_
     destinations = {m.destination.relative_to(legacy) for m in mappings}
 
     assert Path("subjects/sub-04172026/hippunfold/sub-04172026/surf/a.func.gii") in destinations
-    assert Path("subjects/sub-04172026/single_echo/surface/raw/b.func.gii") in destinations
-    assert Path("subjects/sub-04172026/single_echo/fc/c.npy") in destinations
-    assert Path("subjects/sub-04172026/single_echo/atlas/gradient/d.json") in destinations
-    assert Path("subjects/sub-04172026/single_echo/atlas/wta/e.json") in destinations
-    assert Path("subjects/sub-04172026/single_echo/figures/gradient/f.png") in destinations
+    assert Path("subjects/sub-04172026/multiband/surface/raw/b.func.gii") in destinations
+    assert Path("subjects/sub-04172026/multiband/fc/c.npy") in destinations
+    assert Path("subjects/sub-04172026/multiband/atlas/gradient/d.json") in destinations
+    assert Path("subjects/sub-04172026/multiband/atlas/wta/e.json") in destinations
+    assert Path("subjects/sub-04172026/multiband/figures/gradient/f.png") in destinations
     assert all("variants" not in path.parts for path in destinations)
 
 
@@ -68,7 +68,7 @@ def test_nonempty_group_sources_are_mapped(tmp_path):
 def test_collision_detection_refuses_different_destination_content(tmp_path):
     legacy = tmp_path / "hipp_outputs"
     write_file(legacy / "inputs/kong2022/shared_inputs/routea/sub-04172026/fc/a.txt", "old")
-    write_file(legacy / "subjects/sub-04172026/single_echo/fc/a.txt", "new")
+    write_file(legacy / "subjects/sub-04172026/multiband/fc/a.txt", "new")
 
     mappings = mig.build_mappings(legacy, subjects=("04172026",))
 

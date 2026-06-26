@@ -2,7 +2,7 @@
 
 ## Goal
 
-Run post-ArealMSHBM downstream hippocampal/cortex comparison products for Iowa7T 36P subjects without creating legacy extra nesting such as `single_echo/sub-06112026/...`.
+Run post-ArealMSHBM downstream hippocampal/cortex comparison products for Iowa7T 36P subjects without creating legacy extra nesting such as `multiband/sub-06112026/...`.
 
 ## Fixed inputs
 
@@ -10,7 +10,7 @@ Run post-ArealMSHBM downstream hippocampal/cortex comparison products for Iowa7T
 - Iowa7T 36P root: `/home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_36P`
 - Output root: `/home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_36P/hipp_outputs`
 - HippUnfold root per subject: `hipp_outputs/subjects/sub-<ID>/hippunfold/`
-- Branch root per echo branch: `hipp_outputs/subjects/sub-<ID>/<single_echo|multi_echo>/`
+- Branch root per echo branch: `hipp_outputs/subjects/sub-<ID>/<multiband|multi_echo>/`
 - ArealMSHBM labels per branch: `<branch_root>/cortex/areal_mshbm/lh_labels.txt` and `rh_labels.txt`
 
 ## Fixed outputs
@@ -35,7 +35,7 @@ It must not create `variants/`, empty `group/`, or a nested `<branch_root>/sub-<
 
 ## Branch input templates
 
-For `single_echo`:
+For `multiband`:
 
 - BOLD volume: `sub-<ID>/func/sub-<ID>_task-rest_dir-concat_space-MNI152NLin6Asym_res-2_desc-denoised_bold.nii.gz`
 - CIFTI dtseries: `sub-<ID>/func/sub-<ID>_task-rest_dir-concat_space-fsLR_den-91k_desc-denoised_bold.dtseries.nii`
@@ -64,7 +64,7 @@ The adapter reuses core workflow helper functions and math where possible, but i
 Tests must assert the path contract before implementation:
 
 - branch output roots are direct branch-scoped paths;
-- input templates differ correctly between `single_echo` and `multi_echo`;
+- input templates differ correctly between `multiband` and `multi_echo`;
 - `cortex/areal_mshbm` is treated as flat branch-local label input.
 
 Runtime validation must verify the expected output files for all requested subject/branch jobs after the run.

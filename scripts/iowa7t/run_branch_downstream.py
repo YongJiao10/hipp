@@ -46,7 +46,7 @@ from lib.workflow_utils import file_meta, file_meta_unresolved, git_commit, utc_
 JIANGLAB_LOCAL_ROOT = Path("/home/yojiao/LSS/jianglab")
 DEFAULT_DATA_ROOT = JIANGLAB_LOCAL_ROOT / "3_Data_Working" / "fmriprep_processed_Iowa7T" / "DataOrg_PFM_36P"
 DEFAULT_OUTPUT_ROOT = DEFAULT_DATA_ROOT / "hipp_outputs"
-SUPPORTED_BRANCHES = {"single_echo", "multi_echo"}
+SUPPORTED_BRANCHES = {"multiband", "multi_echo"}
 HEMIS = ["L", "R"]
 SMOOTHINGS = ["2mm", "4mm"]
 ATLAS = "kong2022"
@@ -95,7 +95,7 @@ def resolve_branch_job(
     subject_root = output_root / "subjects" / sub
     branch_root = subject_root / branch
     func_dir = data_root / sub / "func"
-    if branch == "single_echo":
+    if branch == "multiband":
         bold_volume = func_dir / f"{sub}_task-rest_dir-concat_space-MNI152NLin6Asym_res-2_desc-denoised_bold.nii.gz"
         dtseries = func_dir / f"{sub}_task-rest_dir-concat_space-fsLR_den-91k_desc-denoised_bold.dtseries.nii"
     else:
@@ -845,7 +845,7 @@ def run_job(job: BranchJob, *, stage: str, overwrite: bool) -> dict[str, object]
 
 def parse_job(value: str) -> tuple[str, str]:
     if ":" not in value:
-        raise argparse.ArgumentTypeError("Expected --job value as <subject>:<single_echo|multi_echo>")
+        raise argparse.ArgumentTypeError("Expected --job value as <subject>:<multiband|multi_echo>")
     subject, branch = value.split(":", 1)
     return normalize_subject(subject), branch.strip()
 
@@ -854,7 +854,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run direct fixed-layout Iowa7T branch downstream products.")
     parser.add_argument("--data-root", default=str(DEFAULT_DATA_ROOT))
     parser.add_argument("--output-root", default=str(DEFAULT_OUTPUT_ROOT))
-    parser.add_argument("--job", action="append", type=parse_job, required=True, help="Subject/branch pair, e.g. 06112026:single_echo")
+    parser.add_argument("--job", action="append", type=parse_job, required=True, help="Subject/branch pair, e.g. 06112026:multiband")
     parser.add_argument("--stage", choices=["all", "surface", "reference", "fc"], default="all")
     parser.add_argument("--jobs", type=int, default=1, help="Reserved for future parallel execution; capped at 10.")
     parser.add_argument("--overwrite", action="store_true", default=False)
