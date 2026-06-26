@@ -24,7 +24,12 @@ The adapter writes directly under each branch root:
 - `<branch_root>/cortex/common/`
 - `<branch_root>/cortex/kong2022/`
 - `<branch_root>/fc/kong2022/<2mm|4mm>/hemi_<L|R>/`
+- `<branch_root>/atlas/gradient/<2mm|4mm>/<L|R>/`
+- `<branch_root>/atlas/wta/<2mm|4mm>/<L|R>/`
+- `<branch_root>/figures/gradient/`
+- `<branch_root>/figures/wta/`
 
+The overview wrapper may use non-empty compatibility caches under `hipp_outputs/runs/cache/iowa7t_branch_individual_overviews/sub-<ID>_<branch>/`, but final subject-facing outputs must be direct branch-scoped paths.
 It must not create `variants/`, empty `group/`, or a nested `<branch_root>/sub-<ID>/` compatibility tree.
 `cortex/common/` is allowed because it contains concrete shared cortex tSNR masks and run-boundary summaries consumed by FC.
 
