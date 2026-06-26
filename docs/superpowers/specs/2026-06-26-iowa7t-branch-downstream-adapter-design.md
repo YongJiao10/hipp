@@ -49,7 +49,8 @@ Create a thin Iowa7T-specific adapter script, `scripts/iowa7t/run_branch_downstr
 3. materializes surface sampling, hippocampal tSNR gate, 2 mm and 4 mm smoothed hippocampal timeseries directly under the branch root;
 4. builds Kong2022 cortex reference products directly under `<branch_root>/cortex/kong2022/`;
 5. materializes vertex-to-Kong2022 ROI FC directly under `<branch_root>/fc/kong2022/`;
-6. writes stage manifests only where a real stage has produced files.
+6. preserves the 400-row Kong2022 ROI dimension for branch comparison; ROI labels with no vertices are retained as NaN rows/FC columns and flagged in TSV/summary metadata;
+7. writes stage manifests only where a real stage has produced files.
 
 The adapter reuses core workflow helper functions and math where possible, but it does not call wrappers whose public interface always appends `sub-<ID>` below their roots.
 

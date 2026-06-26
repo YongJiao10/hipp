@@ -1,8 +1,13 @@
 from pathlib import Path
 
+import numpy as np
 import pytest
 
-from scripts.iowa7t.run_branch_downstream import resolve_branch_job
+from scripts.iowa7t.run_branch_downstream import (
+    fixed_400_roi_reference,
+    mark_missing_roi_fc_columns,
+    resolve_branch_job,
+)
 
 
 def test_resolve_branch_job_writes_direct_branch_paths(tmp_path: Path) -> None:
@@ -44,3 +49,91 @@ def test_resolve_branch_job_uses_branch_specific_input_templates(tmp_path: Path)
 def test_resolve_branch_job_rejects_unknown_branch(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="Unsupported Iowa7T branch"):
         resolve_branch_job("06112026", "echo2", data_root=tmp_path / "data", output_root=tmp_path / "hipp_outputs")
+
+
+def test_fixed_400_roi_reference_keeps_missing_roi_as_nan() -> None:
+    roi_registry = [
+        {
+            "roi_id": 1,
+            "roi_name": "L_missing",
+            "family17": "DefaultA",
+            "canonical8": "Default",
+            "hemi": "L",
+            "subregion": "FPole",
+            "rank": 1,
+        },
+        {
+            "roi_id": 2,
+            "roi_name": "L_present",
+            "family17": "DefaultA",
+            "canonical8": "Default",
+            "hemi": "L",
+            "subregion": "PFC",
+            "rank": 2,
+        },
+        {
+            "roi_id": 201,
+            "roi_name": "R_present",
+            "family17": "DefaultA",
+            "canonical8": "Default",
+            "hemi": "R",
+            "subregion": "PFC",
+            "rank": 1,
+        },
+    ]
+    left_rows = [
+        {
+            "parcel_id": 2,
+            "parcel_name": "L_present",
+            "family17": "DefaultA",
+            "canonical8": "Default",
+            "hemisphere": "L",
+            "subregion": "PFC",
+            "rank": 2,
+            "n_grayordinates_total": 4,
+            "n_grayordinates_used": 4,
+            "excluded_by_tsnr_gate": False,
+        }
+    ]
+    right_rows = [
+        {
+            "parcel_id": 201,
+            "parcel_name": "R_present",
+            "family17": "DefaultA",
+            "canonical8": "Default",
+            "hemisphere": "R",
+            "subregion": "PFC",
+            "rank": 1,
+            "n_grayordinates_total": 5,
+            "n_grayordinates_used": 5,
+            "excluded_by_tsnr_gate": False,
+        }
+    ]
+
+    parcel_ts, rows, missing_ids = fixed_400_roi_reference(
+        roi_registry=roi_registry,
+        left_ts=[np.asarray([1.0, 2.0, 3.0], dtype=np.float32)],
+        left_rows=left_rows,
+        right_ts=[np.asarray([4.0, 5.0, 6.0], dtype=np.float32)],
+        right_rows=right_rows,
+        n_timepoints=3,
+    )
+
+    assert parcel_ts.shape == (3, 3)
+    assert rows[0]["parcel_id"] == 1
+    assert rows[0]["included_in_timeseries"] is False
+    assert rows[0]["excluded_by_no_vertices"] is True
+    assert missing_ids == [1]
+    assert np.isnan(parcel_ts[0]).all()
+    np.testing.assert_array_equal(parcel_ts[1], np.asarray([1.0, 2.0, 3.0], dtype=np.float32))
+    np.testing.assert_array_equal(parcel_ts[2], np.asarray([4.0, 5.0, 6.0], dtype=np.float32))
+
+
+def test_mark_missing_roi_fc_columns_restores_nan_after_corrcoef() -> None:
+    fc = np.zeros((2, 4), dtype=np.float32)
+    out = mark_missing_roi_fc_columns(fc, missing_roi_ids=[2, 4], roi_ids=[1, 2, 3, 4])
+
+    assert np.all(out[:, 0] == 0.0)
+    assert np.isnan(out[:, 1]).all()
+    assert np.all(out[:, 2] == 0.0)
+    assert np.isnan(out[:, 3]).all()

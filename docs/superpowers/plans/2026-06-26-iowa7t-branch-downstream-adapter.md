@@ -14,6 +14,7 @@
 - Output root is `/home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_36P/hipp_outputs`.
 - Do not create `variants/`, empty `group/`, or nested branch compatibility trees such as `<branch_root>/sub-<ID>/`.
 - `cortex/common/` is a real non-empty branch output for cortex tSNR masks and run-boundary summaries.
+- Kong2022 ROI outputs preserve 400 rows/columns; missing individualized label parcels are represented with NaN rows/columns and explicit metadata.
 - Maximum concurrency is 10; default adapter execution is sequential.
 - Use `/home/yojiao/.conda/envs/py314/bin/python` for repository Python commands.
 - Do not delete files or directories.

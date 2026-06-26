@@ -316,6 +316,94 @@ def reference_outputs_done(job: BranchJob) -> bool:
     )
 
 
+def fixed_400_roi_reference(
+    *,
+    roi_registry: list[dict[str, object]],
+    left_ts: list[np.ndarray],
+    left_rows: list[dict[str, object]],
+    right_ts: list[np.ndarray],
+    right_rows: list[dict[str, object]],
+    n_timepoints: int,
+    left_empty: list[dict[str, object]] | None = None,
+    right_empty: list[dict[str, object]] | None = None,
+) -> tuple[np.ndarray, list[dict[str, object]], list[int]]:
+    row_by_id: dict[int, dict[str, object]] = {}
+    ts_by_id: dict[int, np.ndarray] = {}
+    for ts, row in zip(left_ts, left_rows, strict=True):
+        roi_id = int(row["parcel_id"])
+        row_by_id[roi_id] = dict(row)
+        ts_by_id[roi_id] = np.asarray(ts, dtype=np.float32)
+    for ts, row in zip(right_ts, right_rows, strict=True):
+        roi_id = int(row["parcel_id"])
+        row_by_id[roi_id] = dict(row)
+        ts_by_id[roi_id] = np.asarray(ts, dtype=np.float32)
+
+    for row in list(left_empty or []) + list(right_empty or []):
+        roi_id = int(row["parcel_id"])
+        row_by_id.setdefault(roi_id, dict(row))
+
+    rows: list[dict[str, object]] = []
+    ts_rows: list[np.ndarray] = []
+    missing_roi_ids: list[int] = []
+    for registry_row in sorted(roi_registry, key=lambda r: int(r["roi_id"])):
+        roi_id = int(registry_row["roi_id"])
+        source_row = dict(row_by_id.get(roi_id, {}))
+        row = {
+            "parcel_id": roi_id,
+            "parcel_name": str(source_row.get("parcel_name", registry_row.get("roi_name", f"roi_{roi_id}"))),
+            "family17": str(source_row.get("family17", registry_row.get("family17", ""))),
+            "canonical8": str(source_row.get("canonical8", registry_row.get("canonical8", ""))),
+            "hemisphere": str(source_row.get("hemisphere", registry_row.get("hemi", ""))),
+            "subregion": str(source_row.get("subregion", registry_row.get("subregion", ""))),
+            "rank": int(source_row.get("rank", registry_row.get("rank", 0))),
+            "n_grayordinates_total": int(source_row.get("n_grayordinates_total", 0)),
+            "n_grayordinates_used": int(source_row.get("n_grayordinates_used", 0)),
+            "excluded_by_tsnr_gate": bool(source_row.get("excluded_by_tsnr_gate", True)),
+        }
+        has_timeseries = roi_id in ts_by_id and int(row["n_grayordinates_used"]) > 0
+        row["excluded_by_no_vertices"] = bool(int(row["n_grayordinates_total"]) <= 0)
+        row["included_in_timeseries"] = bool(has_timeseries)
+        if has_timeseries:
+            ts = np.asarray(ts_by_id[roi_id], dtype=np.float32).reshape(-1)
+            if int(ts.shape[0]) != int(n_timepoints):
+                raise ValueError(f"ROI {roi_id} timepoint mismatch: {ts.shape[0]} vs {n_timepoints}")
+            ts_rows.append(ts)
+        else:
+            missing_roi_ids.append(roi_id)
+            ts_rows.append(np.full((int(n_timepoints),), np.nan, dtype=np.float32))
+        rows.append(row)
+
+    return np.asarray(ts_rows, dtype=np.float32), rows, missing_roi_ids
+
+
+def read_roi_metadata(path: Path) -> tuple[list[str], list[int], list[int]]:
+    with path.open("r", encoding="utf-8", newline="") as f:
+        reader = csv.DictReader(f, delimiter="\t")
+        names: list[str] = []
+        roi_ids: list[int] = []
+        missing_roi_ids: list[int] = []
+        for row in reader:
+            roi_id = int(row["parcel_id"])
+            value = row.get("parcel_name") or row.get("roi_name")
+            if not value:
+                raise ValueError(f"Missing parcel_name/roi_name in {path}")
+            names.append(str(value))
+            roi_ids.append(roi_id)
+            if str(row.get("included_in_timeseries", "True")).strip().lower() in {"false", "0", "no"}:
+                missing_roi_ids.append(roi_id)
+        return names, roi_ids, missing_roi_ids
+
+
+def mark_missing_roi_fc_columns(fc: np.ndarray, *, missing_roi_ids: list[int], roi_ids: list[int]) -> np.ndarray:
+    out = np.asarray(fc, dtype=np.float32).copy()
+    col_by_id = {int(roi_id): idx for idx, roi_id in enumerate(roi_ids)}
+    for roi_id in missing_roi_ids:
+        idx = col_by_id.get(int(roi_id))
+        if idx is not None:
+            out[:, idx] = np.nan
+    return out
+
+
 def run_reference_stage(job: BranchJob, *, overwrite: bool = False, run_lengths: list[int] | None = None) -> None:
     require_inputs(job)
     if not overwrite and reference_outputs_done(job):
@@ -373,12 +461,21 @@ def run_reference_stage(job: BranchJob, *, overwrite: bool = False, run_lengths:
         roi_registry=roi_registry,
     )
 
-    kept_rows = left_rows + right_rows
-    empty_rows = left_empty + right_empty
+    parcel_ts, roi_rows, missing_roi_ids = fixed_400_roi_reference(
+        roi_registry=roi_registry,
+        left_ts=left_ts,
+        left_rows=left_rows,
+        right_ts=right_ts,
+        right_rows=right_rows,
+        left_empty=left_empty,
+        right_empty=right_empty,
+        n_timepoints=n_timepoints,
+    )
+    kept_rows = [row for row in roi_rows if bool(row["included_in_timeseries"])]
+    empty_rows = [row for row in roi_rows if not bool(row["included_in_timeseries"])]
     if not kept_rows:
         raise RuntimeError(f"No Kong2022 ROI timeseries remained after tSNR gate for sub-{job.subject} {job.branch}.")
 
-    parcel_ts = np.asarray(left_ts + right_ts, dtype=np.float32)
     np.save(outdir / "cortex_roi_parcel_timeseries.npy", parcel_ts)
 
     roi_tsv_fields = [
@@ -392,17 +489,19 @@ def run_reference_stage(job: BranchJob, *, overwrite: bool = False, run_lengths:
         "n_grayordinates_total",
         "n_grayordinates_used",
         "excluded_by_tsnr_gate",
+        "excluded_by_no_vertices",
+        "included_in_timeseries",
     ]
-    write_tsv(outdir / "cortex_roi_parcels.tsv", kept_rows, roi_tsv_fields)
+    write_tsv(outdir / "cortex_roi_parcels.tsv", roi_rows, roi_tsv_fields)
     write_tsv(outdir / "cortex_roi_parcels_empty_after_tsnr.tsv", empty_rows, roi_tsv_fields)
 
     canonical_rows: list[dict[str, object]] = []
     canonical_ts_rows: list[np.ndarray] = []
     for canonical in canonical8_order:
-        idx = [i for i, row in enumerate(kept_rows) if str(row["canonical8"]) == canonical]
+        idx = [i for i, row in enumerate(roi_rows) if str(row["canonical8"]) == canonical and bool(row["included_in_timeseries"])]
         if not idx:
             raise RuntimeError(f"Canonical network has zero parcels after tSNR gate: {canonical}")
-        row_subset = [kept_rows[i] for i in idx]
+        row_subset = [roi_rows[i] for i in idx]
         ts = np.nanmean(parcel_ts[np.asarray(idx, dtype=np.int32), :], axis=0).astype(np.float32)
         canonical_ts_rows.append(ts)
         canonical_rows.append(
@@ -424,10 +523,10 @@ def run_reference_stage(job: BranchJob, *, overwrite: bool = False, run_lengths:
     family17_rows: list[dict[str, object]] = []
     family17_ts_rows: list[np.ndarray] = []
     for family17 in family17_order:
-        idx = [i for i, row in enumerate(kept_rows) if str(row["family17"]) == family17]
+        idx = [i for i, row in enumerate(roi_rows) if str(row["family17"]) == family17 and bool(row["included_in_timeseries"])]
         if not idx:
             raise RuntimeError(f"Family17 network has zero parcels after tSNR gate: {family17}")
-        row_subset = [kept_rows[i] for i in idx]
+        row_subset = [roi_rows[i] for i in idx]
         ts = np.nanmean(parcel_ts[np.asarray(idx, dtype=np.int32), :], axis=0).astype(np.float32)
         family17_ts_rows.append(ts)
         family17_rows.append(
@@ -464,7 +563,9 @@ def run_reference_stage(job: BranchJob, *, overwrite: bool = False, run_lengths:
             "run_stop": int(seg["run_stop"]),
             "run_length": int(seg["run_length"]),
             "n_timepoints": int(seg["run_length"]),
-            "n_roi_parcels_used": int(parcel_ts.shape[0]),
+            "n_roi_parcels_total": int(parcel_ts.shape[0]),
+            "n_roi_parcels_with_timeseries": int(len(kept_rows)),
+            "n_roi_parcels_missing_timeseries": int(len(missing_roi_ids)),
             "n_canonical_networks_used": int(canonical_ts.shape[0]),
             "n_family17_networks_used": int(family17_ts.shape[0]),
             "roi_timeseries_source": str((outdir / "cortex_roi_parcel_timeseries.npy").resolve()),
@@ -501,8 +602,10 @@ def run_reference_stage(job: BranchJob, *, overwrite: bool = False, run_lengths:
         "route_a_lh_labels": str(lh_labels_path),
         "route_a_rh_labels": str(rh_labels_path),
         "n_parcels_total": 400,
-        "n_parcels_used_after_tsnr": int(parcel_ts.shape[0]),
+        "n_parcels_materialized": int(parcel_ts.shape[0]),
+        "n_parcels_used_after_tsnr": int(len(kept_rows)),
         "n_parcels_empty_after_tsnr": int(len(empty_rows)),
+        "missing_roi_ids": missing_roi_ids,
         "n_canonical_networks_used": int(canonical_ts.shape[0]),
         "canonical_networks_used": canonical8_order,
         "n_family17_networks_used": int(family17_ts.shape[0]),
@@ -542,6 +645,9 @@ def run_reference_stage(job: BranchJob, *, overwrite: bool = False, run_lengths:
                 "reference_label_source": ROUTE_A_SOURCE_TAG,
                 "tsnr_threshold": float(TSNR_THRESHOLD),
                 "run_lengths": [int(seg["run_length"]) for seg in run_segments],
+                "n_parcels_materialized": int(parcel_ts.shape[0]),
+                "n_parcels_with_timeseries": int(len(kept_rows)),
+                "missing_roi_ids": missing_roi_ids,
             },
             "inputs": [
                 file_meta_unresolved(job.dtseries),
@@ -613,7 +719,7 @@ def run_fc_stage(job: BranchJob, *, overwrite: bool = False) -> None:
         raise FileNotFoundError(f"Surface smoothing stage is incomplete for sub-{job.subject} {job.branch}: {job.surface_root}")
 
     roi_ts = np.load(job.cortex_kong2022_root / "cortex_roi_parcel_timeseries.npy").astype(np.float32)
-    roi_names = read_roi_names(job.cortex_kong2022_root / "cortex_roi_parcels.tsv")
+    roi_names, roi_ids, missing_roi_ids = read_roi_metadata(job.cortex_kong2022_root / "cortex_roi_parcels.tsv")
     if roi_ts.ndim != 2:
         raise ValueError(f"Expected 2D ROI timeseries, got {roi_ts.shape}")
     if roi_ts.shape[0] != len(roi_names):
@@ -632,7 +738,11 @@ def run_fc_stage(job: BranchJob, *, overwrite: bool = False) -> None:
                 raise RuntimeError(
                     f"Time mismatch for sub-{job.subject} {job.branch} {smoothing} hemi-{hemi}: ts={ts.shape} roi={roi_ts.shape}"
                 )
-            pearson_valid = corrcoef_rows(ts[valid_mask, :], roi_ts)
+            pearson_valid = mark_missing_roi_fc_columns(
+                corrcoef_rows(ts[valid_mask, :], roi_ts),
+                missing_roi_ids=missing_roi_ids,
+                roi_ids=roi_ids,
+            )
             pearson_full = np.full((ts.shape[0], roi_ts.shape[0]), np.nan, dtype=np.float32)
             pearson_full[valid_mask, :] = pearson_valid
             np.save(fc_dir / "hipp_vertex_to_network_fc.npy", pearson_full.astype(np.float32))
@@ -655,7 +765,11 @@ def run_fc_stage(job: BranchJob, *, overwrite: bool = False) -> None:
                     )
                 run_dir = fc_dir / "runs" / f"run-{rid}"
                 run_dir.mkdir(parents=True, exist_ok=True)
-                run_pearson_valid = corrcoef_rows(run_ts[valid_mask, :], run_roi)
+                run_pearson_valid = mark_missing_roi_fc_columns(
+                    corrcoef_rows(run_ts[valid_mask, :], run_roi),
+                    missing_roi_ids=missing_roi_ids,
+                    roi_ids=roi_ids,
+                )
                 np.save(run_dir / "hipp_vertex_to_network_fc_active.npy", run_pearson_valid.astype(np.float32))
 
             if int(sum(run_lengths)) != int(ts.shape[1]):
@@ -676,7 +790,9 @@ def run_fc_stage(job: BranchJob, *, overwrite: bool = False) -> None:
                     "n_vertices_valid_high_tsnr": int(valid_mask.sum()),
                     "n_vertices_invalid_initial": int(ts.shape[0] - valid_mask.sum()),
                     "n_timepoints": int(ts.shape[1]),
-                    "n_roi_targets_used": int(roi_ts.shape[0]),
+                    "n_roi_targets_total": int(roi_ts.shape[0]),
+                    "n_roi_targets_with_timeseries": int(roi_ts.shape[0] - len(missing_roi_ids)),
+                    "missing_roi_ids": missing_roi_ids,
                     "run_labels": run_labels,
                     "run_lengths": run_lengths,
                     "fc_definition": "pearson_vertex_to_kong2022_roi_timeseries",
