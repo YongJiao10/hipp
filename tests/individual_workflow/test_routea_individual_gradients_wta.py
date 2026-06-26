@@ -211,3 +211,55 @@ def test_individual_workflow_entrypoints_have_contiguous_numbering():
     assert "01_run_routea_individual_gradients_wta.py" not in combined_text
     assert "02_monitor_individual_run.py" not in combined_text
     assert "03_build_individual_overviews.py" not in combined_text
+
+
+def test_materialize_wta_core_inputs(tmp_path):
+    import sys
+    path = REPO_ROOT / "scripts" / "individual_workflow" / "02_build_individual_overviews.py"
+    if str(path.parent) not in sys.path:
+        sys.path.insert(0, str(path.parent))
+    spec = importlib.util.spec_from_file_location("build_individual_overviews", path)
+    assert spec is not None and spec.loader is not None
+    build_overviews = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(build_overviews)
+
+    subject = "100610"
+    work_root = tmp_path / "work"
+    adapter_root = tmp_path / "adapter"
+    hippunfold_batch_root = tmp_path / "hippunfold"
+
+    for smoothing in ["2mm", "4mm"]:
+        for hemi in ["L", "R"]:
+            src = work_root / f"sub-{subject}" / "wta" / smoothing / hemi
+            src.mkdir(parents=True, exist_ok=True)
+            np.save(src / "wta_top_labels.npy", np.zeros(10, dtype=np.int32))
+            build_overviews.write_json(src / "wta_top_label_map.json", {"network_names": ["A", "B"]})
+            build_overviews.write_json(src / "vertex_assignment_status.json", {})
+            wb_assets = src / "workbench_assets"
+            wb_assets.mkdir(parents=True, exist_ok=True)
+            (wb_assets / "dummy.label.gii").write_text("dummy", encoding="utf-8")
+
+    for hemi in ["L", "R"]:
+        surf_dir = hippunfold_batch_root / f"sub-{subject}" / "hippunfold" / f"sub-{subject}" / "surf"
+        surf_dir.mkdir(parents=True, exist_ok=True)
+        (surf_dir / f"sub-{subject}_hemi-{hemi}_space-corobl_den-512_label-hipp_midthickness.surf.gii").write_text("surf", encoding="utf-8")
+        (surf_dir / f"sub-{subject}_den-512_label-hipp_surfaces.spec").write_text("spec", encoding="utf-8")
+
+    build_overviews.materialize_wta_core_inputs(
+        subject=subject,
+        work_root=work_root,
+        adapter_root=adapter_root,
+        hippunfold_batch_root=hippunfold_batch_root,
+    )
+
+    for smoothing in ["2mm", "4mm"]:
+        for hemi in ["L", "R"]:
+            dst = adapter_root / f"sub-{subject}" / "wta-top" / "kong2022" / smoothing / "cov_0p80" / f"hemi_{hemi}"
+            manifest_path = dst / "group_atlas_manifest.json"
+            assert manifest_path.exists()
+            manifest = build_overviews.read_json(manifest_path)
+            assert "group_functional_atlas_labels" in manifest
+            assert "group_functional_atlas_label_map" in manifest
+            assert Path(manifest["group_functional_atlas_labels"]).exists()
+            assert Path(manifest["group_functional_atlas_label_map"]).exists()
+

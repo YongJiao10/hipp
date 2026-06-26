@@ -165,3 +165,43 @@ def test_iowa_hcp500_argon_preset_contract() -> None:
     submit_text = checked[0].read_text(encoding="utf-8")
     assert "default_ui_tc=3" in submit_text
     assert "default_pinc_tc=7" in submit_text
+
+
+def test_iowa7t_argon_preset_contract_uses_subject_first_36p_layout() -> None:
+    script_dir = REPO_ROOT / "scripts" / "ArealMSHBM_Kong2022_Iowa_Stanford"
+    checked = {
+        script_dir / "submit_kong2022_areal_mshbm.sh",
+        script_dir / "run_kong2022_areal_mshbm_subject_sge.sh",
+        script_dir / "report_kong2022_areal_mshbm_status.sh",
+        script_dir / "README.md",
+    }
+    combined = "\n".join(path.read_text(encoding="utf-8") for path in checked)
+    required = [
+        "DATASET=iowa7t",
+        "IOWA7T_BRANCH",
+        "/Shared/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_36P",
+        "hipp_outputs",
+        "subjects/${subject}/${iowa7t_branch}/cortex/areal_mshbm",
+        "runs/logs",
+        "provenance.json",
+    ]
+    forbidden = [
+        "/Shared/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/ArealMSHBM_Kong2022",
+        "outputs_iowa/inputs/iowa",
+        "outputs_iowa_hcp500/inputs/iowa_hcp500/kong2022/cortex_references/routea_areal_mshbm",
+    ]
+    for token in required:
+        assert token in combined, f"missing {token}"
+
+    iowa7t_text = "\n".join(
+        line for line in combined.splitlines() if "iowa7t" in line.lower() or "Iowa7T" in line
+    )
+    for token in forbidden:
+        assert token not in iowa7t_text, f"Iowa7T contract contains forbidden {token}"
+
+    task_text = (script_dir / "run_kong2022_areal_mshbm_subject_sge.sh").read_text(
+        encoding="utf-8"
+    )
+    assert '[ "${dataset}" != "iowa_hcp500" ] && [ "${dataset}" != "iowa7t" ]' in task_text
+    assert 'Prepared Iowa7T ${iowa7t_branch} dtseries=' in task_text
+    assert 'wb_command": "$(json_escape "${wb_command}")"' in task_text

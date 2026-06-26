@@ -39,15 +39,15 @@ Bootstrap sources for new servers:
 ```text
 Item              Value
 ----------------- -------------------------------------------------
-OS                macOS
-Machine           arm64
-Shell             zsh
-Python runtime    /opt/miniconda3/envs/hippo2/bin/python
-Conda base        /opt/miniconda3
-Workspace root    /Users/jy/Documents/HippoMaps-network-first
+OS                Linux
+Machine           x86_64
+Shell             bash/zsh
+Python runtime    /home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2/bin/python
+Conda base        /opt/conda
+Workspace root    /home/yojiao/hpchome/hipp
 ```
 
-The launcher and wrappers assume this is an Apple Silicon Mac.
+The launcher and wrappers assume this local Linux host uses `/opt/conda` to activate the repo-local `hippo2` environment.
 
 ## Conda Layer
 
@@ -93,17 +93,17 @@ The `pip freeze` snapshot is archival and audit-friendly, but it should not be t
 
 ## Python Layer
 
-The environment was checked with `conda run -n hippo2 python`.
+The environment should be checked with `conda run -p /home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2 python` so the repo-local prefix is unambiguous.
 
 ```text
 Item                Observed value
 ------------------  ---------------------------------------------
 Python              3.11.15
-hippunfold module   /opt/miniconda3/envs/hippo2/lib/python3.11/
+hippunfold module   /home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2/lib/python3.11/
                     site-packages/hippunfold/__init__.py
-nnUNet_predict      /opt/miniconda3/envs/hippo2/bin/nnUNet_predict
+nnUNet_predict      /home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2/bin/nnUNet_predict
 reg_aladin          /home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2/bin/reg_aladin
-bash                /opt/miniconda3/envs/hippo2/bin/bash
+bash                /home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2/bin/bash
 ```
 
 Important package versions observed from Python metadata:
@@ -130,7 +130,7 @@ This environment contains a deliberate-looking but confusing mismatch that must 
 ```text
 Source                       Observed version
 --------------------------  -----------------
-`conda list -n hippo2`       2.0.0
+`conda list -p /home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2`       2.0.0
 `hippunfold --version`       2.0.0
 `importlib.metadata`         1.5.2rc2
 `site-packages` dist-info    hippunfold-1.5.2rc2.dist-info
@@ -149,10 +149,10 @@ The actual runnable commands used by the workflow are:
 ```text
 Command            Location / Behavior
 -----------------  ----------------------------------------------------------
-hippunfold         /opt/miniconda3/envs/hippo2/bin/hippunfold
-nnUNet_predict     /opt/miniconda3/envs/hippo2/bin/nnUNet_predict
+hippunfold         /home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2/bin/hippunfold
+nnUNet_predict     /home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2/bin/nnUNet_predict
 reg_aladin          /home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2/bin/reg_aladin
-bash               /opt/miniconda3/envs/hippo2/bin/bash
+bash               /home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2/bin/bash
 wb_command         /home/yojiao/hpchome/hipp/software/workbench/bin_linux64/wb_command
 LN2_LAYERS         resolved through `_archive/deprecated_2026-05-20/scripts_pre_core_workflow/LN2_LAYERS` wrapper
 ```
@@ -201,14 +201,14 @@ above. On a server, the shortest supported install path is usually the conda
 package:
 
 ```bash
-conda install -n hippo2 -c khanlab greedyreg
+conda install -p /home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2 -c khanlab greedyreg
 ```
 
 That package is the one that provides the `greedy` executable used by the
 registration helpers. After installation, verify:
 
 ```bash
-conda run -n hippo2 bash -lc 'command -v greedy; greedy -help | head -n 1'
+conda run -p /home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2 bash -lc 'command -v greedy; greedy -help | head -n 1'
 ```
 
 If you already have an ITK-SNAP bundle or another vendor-supplied binary
@@ -241,13 +241,13 @@ suite. On this workspace it may come either from:
 For a server, the shortest supported install path is usually:
 
 ```bash
-conda install -n hippo2 -c conda-forge laynii
+conda install -p /home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2 -c conda-forge laynii
 ```
 
 After installation, verify the executable is visible:
 
 ```bash
-conda run -n hippo2 bash -lc 'command -v LN2_LAYERS; LN2_LAYERS -help | head -n 1'
+conda run -p /home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2 bash -lc 'command -v LN2_LAYERS; LN2_LAYERS -help | head -n 1'
 ```
 
 If the binary lives outside `hippo2`, point the launcher at it explicitly:
@@ -275,6 +275,15 @@ vendored Python package from:
 ```text
 external/CBIG/external_packages/python/mapalign-master/mapalign/embed.py
 ```
+
+The outer Argon dataset adapter in
+`scripts/ArealMSHBM_Kong2022_Iowa_Stanford/` is separate from the CBIG MATLAB
+diffusion helper above. For `DATASET=iowa7t`, the adapter does not require a
+Python runtime: it uses fixed branch CIFTI paths plus
+`wb_command -file-information` for timepoint counts, writes branch-scoped
+labels under the production `hipp_outputs` tree, writes provenance with shell
+JSON emission after MATLAB succeeds, and writes qsub logs under
+`hipp_outputs/runs/logs/<run_id>/`.
 
 If that directory is missing, MATLAB reaches `Compute diffusion embedding
 matrix ...` and fails with `ModuleNotFoundError: No module named 'mapalign'`.
@@ -402,9 +411,9 @@ Parallel HippUnfold with shared disposable cache  Can fail due to cache-cleanup 
 
 From scratch, a future agent should:
 
-1. Create or activate the `hippo2` environment.
+1. Create or activate the repo-local `hippo2` prefix at `/home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2`.
 2. Install the conda snapshot from `manifests/hippo2/conda-explicit.txt`.
-3. Verify `conda list -n hippo2` reports `hippunfold 2.0.0`.
+3. Verify `conda list -p /home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2` reports `hippunfold 2.0.0`.
 4. Verify `hippunfold --version` reports `2.0.0`.
 5. Ignore `importlib.metadata.version("hippunfold")` if it still reports `1.5.2rc2`.
 6. Build or update the server environment from `environment/hippo2_server.yml` before first run.
@@ -421,38 +430,35 @@ From scratch, a future agent should:
 
 ## Activation Path Guardrail
 
-This workspace has seen both Conda layouts in different sessions:
+Current canonical Conda paths for the local host:
 
-- `/opt/miniconda3/...`
-- `/opt/conda/...`
+- `/opt/conda/...` as the canonical activation root on the local host
+- `/home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2/...` as the canonical `hippo2` environment prefix
 
-On the current host, `/opt/conda/etc/profile.d/conda.sh` is available and should
-be sourced first for interactive gate checks.
-
-Recommended activation fallback order:
+Canonical local activation:
 
 ```bash
-if [ -f /opt/conda/etc/profile.d/conda.sh ]; then
-  source /opt/conda/etc/profile.d/conda.sh
-elif [ -f /opt/miniconda3/etc/profile.d/conda.sh ]; then
-  source /opt/miniconda3/etc/profile.d/conda.sh
-else
-  echo "conda.sh not found under /opt/conda or /opt/miniconda3" >&2
-  return 1
-fi
-conda activate hippo2
+source /opt/conda/bin/activate hippo2
+which hippunfold
+```
+
+`which hippunfold` must print:
+
+```text
+/home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2/bin/hippunfold
 ```
 
 ## Minimal Verification Commands
 
 ```bash
-source /opt/conda/etc/profile.d/conda.sh
-conda activate hippo2
+source /opt/conda/bin/activate hippo2
+which hippunfold
 hippunfold --version
-conda list -n hippo2 | rg '^hippunfold\s'
-conda list -n hippo2 | rg '^c3d\s'
-conda run -n hippo2 python -c 'import importlib.metadata as m; print(m.version("hippunfold"))'
-conda run -n hippo2 bash -lc 'command -v c3d; command -v reg_aladin; command -v nnUNet_predict; command -v bash'
+hippunfold --modality T2w --output_density 512 --help | grep -F '512'
+conda list -p /home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2 | rg '^hippunfold\s'
+conda list -p /home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2 | rg '^c3d\s'
+conda run -p /home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2 python -c 'import importlib.metadata as m; print(m.version("hippunfold"))'
+conda run -p /home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2 bash -lc 'command -v c3d; command -v reg_aladin; command -v nnUNet_predict; command -v bash'
 ```
 
 For Workbench, use:

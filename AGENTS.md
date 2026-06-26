@@ -34,16 +34,16 @@
 
 - For direct `hippunfold` runs in this repository, the canonical local runtime environment is `hippo2`.
 - Do not trust `conda list` or the environment name alone as proof of HippUnfold compatibility.
-- Required validation sequence before a direct HippUnfold run:
-  1. `source /opt/miniconda3/bin/activate hippo2`
-  2. `which hippunfold` must resolve to `/opt/miniconda3/envs/hippo2/bin/hippunfold`
+- Required validation sequence before a direct HippUnfold run on the local host:
+  1. `source /opt/conda/bin/activate hippo2`
+  2. `which hippunfold` must resolve to `/home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2/bin/hippunfold`
   3. `hippunfold --version` must return `2.0.0`
   4. `hippunfold --modality T2w --output_density 512 --help` must succeed and show `512`
 - Do not use `importlib.metadata.version("hippunfold")` as authoritative version proof. In this workspace it can still report `1.5.2rc2` even when the CLI is the validated `2.0.0` build.
 - If the gate fails, repair in place with:
 
 ```bash
-CONDA_SAFETY_CHECKS=disabled conda install -y -n hippo2 -c khanlab -c conda-forge -c bioconda khanlab::hippunfold=2.0.0=py_0 --force-reinstall
+CONDA_SAFETY_CHECKS=disabled conda install -y -p /home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2 -c khanlab -c conda-forge -c bioconda khanlab::hippunfold=2.0.0=py_0 --force-reinstall
 ```
 
 - Do not treat `bioconda::hippunfold` as sufficient evidence of native `512` support.
@@ -54,12 +54,54 @@ CONDA_SAFETY_CHECKS=disabled conda install -y -n hippo2 -c khanlab -c conda-forg
 - Do not use bare `python` for repository tasks.
 - Always use an explicit interpreter path based on task type:
   - Core workflow scripts/tests/doc-contract checks: `/home/yojiao/.conda/envs/py314/bin/python`
-  - Direct HippUnfold CLI runs: `hippo2` gate above (`/opt/miniconda3/envs/hippo2/bin/hippunfold` after activation)
+  - Direct HippUnfold CLI runs: `hippo2` gate above (`/home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2/bin/hippunfold` after `/opt/conda` activation)
 - Before running any Python-based repo task, run `python -c "import sys; print(sys.executable)"` for informational context only; do not use this interpreter for repo tasks unless it exactly matches py314.
 - If command examples in docs use `python`, agents must rewrite them to the explicit interpreter path at execution time.
 - If an agent accidentally runs with the wrong interpreter, stop and rerun with the correct one; do not continue mixed-environment execution.
 
 Reference runbook: `docs/environment/agent_runtime_contract.md`
+
+## Local vs Argon Environment Boundary (Hard)
+
+This repository is used from two different execution contexts. Do not mix their
+paths or Python environments.
+
+### Local Repository / Core Workflow Context
+
+- Use this context for local code edits, tests, doc-contract checks, local
+  workflow scripts, and direct local HippUnfold runs.
+- Repository root in this context is `/old_Users/yojiao/hipp`.
+- Jianglab data may be visible through the local mount prefix:
+  `/home/yojiao/LSS/jianglab`.
+- For local core workflow Python tasks, use:
+  `/home/yojiao/.conda/envs/py314/bin/python`
+- For direct local HippUnfold CLI runs, use the `hippo2` gate above; do not use
+  py314 for HippUnfold CLI execution.
+
+### Argon SGE / MATLAB Launcher Context
+
+- Use this context for qsub jobs, MATLAB jobs, and scripts intended to execute
+  on Argon compute nodes.
+- Argon Jianglab data paths must use the `/Shared/jianglab` prefix.
+- Do not put the local mount prefix `/home/yojiao/LSS/jianglab` in Argon qsub
+  commands, qsub wrappers, production manifests, or production logs.
+- The local path `/home/yojiao/LSS/jianglab/...` is only the local equivalent of
+  `/Shared/jianglab/...`; it is not the Argon command path.
+- Do not apply the local py314 rule to Argon SGE MATLAB launchers.
+- Existing Argon Kong2022/ArealMSHBM launchers default to:
+  `/Users/yojiao/miniconda3/envs/py313/bin/python`
+- If an Argon launcher already avoids Python for a dataset branch, keep it that
+  way instead of introducing a local Python dependency.
+- For Iowa7T 36P fMRIPrep production paths on Argon, the project root is:
+  `/Shared/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_36P`
+- The Iowa7T 36P production output root on Argon is:
+  `/Shared/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_36P/hipp_outputs`
+- Do not route Iowa7T 36P fMRIPrep jobs to HCP500 paths, repo-local
+  `outputs_iowa*` paths, `variants/`, or legacy top-level
+  `ArealMSHBM_Kong2022` roots unless the user explicitly asks for a legacy
+  inspection.
+- qsub logs for Iowa7T 36P production runs belong under:
+  `hipp_outputs/runs/logs/<run_id>/`
 
 ## Planning Mode Folder Creation Guardrail
 

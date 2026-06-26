@@ -21,6 +21,14 @@ DATASET_SPECS = {
     "iowa7t": {
         "subject_prefix": "sub-",
         "relative_globs": ["func/*_task-rest_run-concat_space-fsLR_den-91k_desc-denoised_bold.dtseries.nii"],
+        "branch_relative_globs": {
+            "single_echo": [
+                "func/{subject}_task-rest_dir-concat_space-fsLR_den-91k_desc-denoised_bold.dtseries.nii"
+            ],
+            "multi_echo": [
+                "func/{subject}_task-rest_run-concat_space-fsLR_den-32k_desc-MEICA_XCPD36P_denoised_bold.dtseries.nii"
+            ],
+        },
     },
     "iowa_hcp500": {
         "subject_prefix": "",
@@ -67,6 +75,11 @@ def main() -> int:
     parser.add_argument("--data-root", required=True, type=Path)
     parser.add_argument("--subject-output-dir", required=True, type=Path)
     parser.add_argument(
+        "--branch",
+        default="",
+        help="Dataset branch selector. For iowa7t, use single_echo or multi_echo.",
+    )
+    parser.add_argument(
         "--dtseries-glob",
         action="append",
         default=None,
@@ -80,7 +93,15 @@ def main() -> int:
         known = ", ".join(sorted(DATASET_SPECS))
         raise SystemExit(f"Unsupported dataset: {args.dataset}. Expected one of: {known}")
     spec = DATASET_SPECS[dataset]
-    dtseries_globs = args.dtseries_glob or spec["relative_globs"]
+    branch = args.branch.strip()
+    branch_globs = spec.get("branch_relative_globs", {})
+    if branch:
+        if branch not in branch_globs:
+            known = ", ".join(sorted(branch_globs)) or "<none>"
+            raise SystemExit(f"Unsupported branch for dataset {dataset}: {branch}. Expected one of: {known}")
+        dtseries_globs = args.dtseries_glob or branch_globs[branch]
+    else:
+        dtseries_globs = args.dtseries_glob or spec["relative_globs"]
 
     subject_id = args.subject.removeprefix("sub-")
     subject = f"sub-{subject_id}"
@@ -90,7 +111,7 @@ def main() -> int:
 
     dtseries_by_path = {}
     for pattern in dtseries_globs:
-        resolved_pattern = pattern.format(subject_id=subject_id)
+        resolved_pattern = pattern.format(subject_id=subject_id, subject=subject)
         for path in subject_dir.glob(resolved_pattern):
             dtseries_by_path[path] = path
     dtseries = sorted(dtseries_by_path, key=natural_key)
@@ -120,6 +141,7 @@ def main() -> int:
 
     manifest = {
         "dataset": dataset,
+        "branch": branch or None,
         "subject": subject,
         "data_root": str(args.data_root),
         "dtseries_globs": dtseries_globs,

@@ -291,6 +291,8 @@ def materialize_wta_core_inputs(*, subject: str, work_root: Path, adapter_root: 
                     "template_left_or_right_surface": str(surf.resolve()),
                     "template_spec_path": str(subject_spec_path(surf, subject).resolve()),
                     "template_functional_atlas_label": str(local_label.resolve()),
+                    "group_functional_atlas_labels": str((dst / "group_functional_atlas_labels.npy").resolve()),
+                    "group_functional_atlas_label_map": str((dst / "group_functional_atlas_label_map.json").resolve()),
                 },
                 sort_keys=True,
             )

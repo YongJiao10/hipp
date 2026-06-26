@@ -16,8 +16,8 @@ Use exactly one of these based on task type.
 `/home/yojiao/.conda/envs/py314/bin/python`
 
 2. Direct HippUnfold CLI execution:
-- activate `hippo2` and pass the HippUnfold gate from `AGENTS.md`
-- expected CLI path after activation: `/opt/miniconda3/envs/hippo2/bin/hippunfold`
+- activate `hippo2` with `source /opt/conda/bin/activate hippo2` and pass the HippUnfold gate from `AGENTS.md`
+- expected CLI path after activation: `/home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2/bin/hippunfold`
 
 ## One-Shot Preflight (Run First)
 

@@ -27,6 +27,10 @@ hipp_outputs/
         ├── hippunfold/
         ├── single_echo/
         │   ├── cortex/
+        │   │   └── areal_mshbm/
+        │   │       ├── lh_labels.txt
+        │   │       ├── rh_labels.txt
+        │   │       └── provenance.json
         │   ├── surface/
         │   ├── fc/
         │   ├── atlas/
@@ -35,6 +39,10 @@ hipp_outputs/
         │   └── provenance.json
         └── multi_echo/
             ├── cortex/
+            │   └── areal_mshbm/
+            │       ├── lh_labels.txt
+            │       ├── rh_labels.txt
+            │       └── provenance.json
             ├── surface/
             ├── fc/
             ├── atlas/
@@ -66,3 +74,39 @@ Migration helper:
 `dry-run` writes only a concrete migration manifest under `runs/manifests/`.
 `copy` copies or recreates symlinks into canonical locations and leaves legacy
 paths in place. Deletion is a separate user-approved operation.
+
+## Cortex ArealMSHBM
+
+Iowa7T 36P cortex individualized labels use the Argon
+`scripts/ArealMSHBM_Kong2022_Iowa_Stanford` launcher with
+`DATASET=iowa7t` and an explicit `IOWA7T_BRANCH`.
+
+Branch inputs are fixed:
+
+- `single_echo` consumes
+  `sub-<ID>/func/sub-<ID>_task-rest_dir-concat_space-fsLR_den-91k_desc-denoised_bold.dtseries.nii`
+- `multi_echo` consumes
+  source CIFTI
+  `sub-<ID>/func/sub-<ID>_task-rest_run-concat_space-fsLR_den-91k_desc-MEICA_XCPD36P_denoised_bold.dtseries.nii`;
+  the Argon launcher derives a persistent cortex-only fsLR32k CIFTI under
+  `hipp_outputs/runs/derived_inputs/<run_id>/subjects/sub-<ID>/multi_echo/cortex_only/`
+  and passes that derived file to MATLAB
+
+Branch outputs are fixed:
+
+- `subjects/sub-<ID>/single_echo/cortex/areal_mshbm/`
+- `subjects/sub-<ID>/multi_echo/cortex/areal_mshbm/`
+
+Each completed branch writes `lh_labels.txt`, `rh_labels.txt`, and
+`provenance.json` in that `areal_mshbm` directory. The provenance records the
+input CIFTI path, output directory, qsub job/task IDs, MATLAB script, model
+parameters, CIFTI timepoint count, and elapsed runtime.
+
+For Argon submissions, qsub logs belong under:
+
+```text
+hipp_outputs/runs/logs/<run_id>/
+```
+
+Do not route these jobs to HCP500 paths, repo-local `outputs_iowa*` roots, or a
+`variants/` wrapper.

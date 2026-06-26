@@ -9,6 +9,8 @@ script_dir="${SCRIPT_DIR:-${repo_root}/scripts/ArealMSHBM_Kong2022_Iowa_Stanford
 task_script="${script_dir}/run_kong2022_areal_mshbm_subject_sge.sh"
 
 dataset="$(printf '%s' "${DATASET:-jj_tms}" | tr '[:upper:]-' '[:lower:]_')"
+iowa7t_branch="${IOWA7T_BRANCH:-${BRANCH:-}}"
+iowa7t_branch="$(printf '%s' "${iowa7t_branch}" | tr '[:upper:]-' '[:lower:]_')"
 case "${dataset}" in
   jj_tms)
     dataset_label="JJ_TMS"
@@ -31,7 +33,7 @@ case "${dataset}" in
   iowa7t)
     dataset_label="Iowa7T"
     default_data_root="/Shared/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_36P"
-    default_out_root="/Shared/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/ArealMSHBM_Kong2022"
+    default_out_root="/Shared/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_36P/hipp_outputs"
     job_prefix="ia7t_k22"
     manifest_prefix="iowa7t"
     default_ui_tc=5
@@ -52,6 +54,26 @@ case "${dataset}" in
     ;;
 esac
 
+if [ "${dataset}" = "iowa7t" ]; then
+  case "${iowa7t_branch}" in
+    single_echo)
+      job_prefix="ia7ts_k22"
+      manifest_prefix="iowa7t_single"
+      ;;
+    multi_echo)
+      job_prefix="ia7tm_k22"
+      manifest_prefix="iowa7t_multi"
+      ;;
+    *)
+      echo "ERROR: DATASET=iowa7t requires IOWA7T_BRANCH=single_echo or multi_echo." >&2
+      exit 2
+      ;;
+  esac
+elif [ -n "${iowa7t_branch}" ]; then
+  echo "ERROR: IOWA7T_BRANCH is only valid with DATASET=iowa7t." >&2
+  exit 2
+fi
+
 data_root="${DATA_ROOT:-${default_data_root}}"
 out_root="${OUT_ROOT:-${default_out_root}}"
 python_exe="${PYTHON_EXE:-/Users/yojiao/miniconda3/envs/py313/bin/python}"
@@ -68,6 +90,15 @@ overwrite="${OVERWRITE:-0}"
 keep_tmp="${KEEP_TMP:-$([ "${dataset}" = "iowa_hcp500" ] && printf 1 || printf 0)}"
 ui_tc="${UI_TC:-${default_ui_tc}}"
 pinc_tc="${PINC_TC:-${default_pinc_tc}}"
+timestamp="$(date +%Y%m%d_%H%M%S)"
+run_id="${RUN_ID:-${manifest_prefix}_${timestamp}}"
+if [ "${dataset}" = "iowa7t" ]; then
+  manifest_dir="${MANIFEST_DIR:-${out_root}/runs/manifests/${run_id}}"
+  log_root="${LOG_ROOT:-${out_root}/runs/logs/${run_id}}"
+else
+  manifest_dir="${MANIFEST_DIR:-${out_root}/_manifests}"
+  log_root="${LOG_ROOT:-${out_root}/_sge_logs}"
+fi
 
 usage() {
   cat <<EOF
@@ -85,6 +116,8 @@ Environment controls:
   PINC_TC=N             PINC array throttle. Default: 7 for iowa_hcp500, else 15.
   OVERWRITE=1           Recompute existing outputs.
   KEEP_TMP=1            Retain task temporary files. Default: 1 for iowa_hcp500.
+  IOWA7T_BRANCH=...     Required for DATASET=iowa7t: single_echo or multi_echo.
+  RUN_ID=...            Run identifier. Iowa7T defaults to <branch>_<timestamp>.
 
 Queue behavior follows scripts/core_workflow/sge_argon/submit_kong2022_route_a_dual_queues.sh:
   UI tasks use -tc ${ui_tc}.
@@ -118,10 +151,7 @@ if ! [[ "${pinc_tc}" =~ ^[0-9]+$ ]] || [ "${pinc_tc}" -lt 1 ]; then
   exit 2
 fi
 
-manifest_dir="${out_root}/_manifests"
-log_root="${out_root}/_sge_logs"
 mkdir -p "${manifest_dir}" "${log_root}"
-timestamp="$(date +%Y%m%d_%H%M%S)"
 
 read_subjects() {
   if [ -n "${subject_ids_file}" ]; then
@@ -209,6 +239,8 @@ write_job_wrapper() {
     printf "export SCRIPT_DIR=%s\n" "$(shell_quote "${script_dir}")"
     printf "export DATA_ROOT=%s\n" "$(shell_quote "${data_root}")"
     printf "export OUT_ROOT=%s\n" "$(shell_quote "${out_root}")"
+    printf "export IOWA7T_BRANCH=%s\n" "$(shell_quote "${iowa7t_branch}")"
+    printf "export RUN_ID=%s\n" "$(shell_quote "${run_id}")"
     printf "export SUBJECT_IDS_FILE=%s\n" "$(shell_quote "${subject_list}")"
     printf "export PYTHON_EXE=%s\n" "$(shell_quote "${python_exe}")"
     printf "export CBIG_CODE_DIR=%s\n" "$(shell_quote "${cbig_code_dir}")"
@@ -232,6 +264,9 @@ submit_queue() {
   local queue_tag
   queue_tag="$(printf '%s' "${queue}" | tr '[:upper:]' '[:lower:]')"
   local log_dir="${log_root}/${queue}"
+  if [ "${dataset}" = "iowa7t" ]; then
+    log_dir="${log_root}"
+  fi
   mkdir -p "${log_dir}"
   local job_wrapper
   job_wrapper="$(write_job_wrapper "${queue_tag}" "${subject_list}")"
@@ -242,7 +277,7 @@ submit_queue() {
     -q "${queue}"
     -t "1-${subject_count}"
     -tc "${tc}"
-    -pe smp 3
+    -pe smp 4
     -l mem_free=64G
     -l h_rt=24:00:00
     -j y
@@ -254,6 +289,7 @@ submit_queue() {
   echo "[submit] ${queue}: subject_list=${subject_list}" >&2
   echo "[submit] ${queue}: job_wrapper=${job_wrapper}" >&2
   echo "[submit] ${queue}: out_root=${out_root}" >&2
+  echo "[submit] ${queue}: run_id=${run_id} log_root=${log_root}" >&2
   echo "[submit] ${queue}: ${qsub_cmd[*]}" >&2
 
   if [ "${dry_run}" = "0" ]; then
@@ -261,7 +297,7 @@ submit_queue() {
   fi
 }
 
-echo "[dual-submit] dataset=${dataset_label} total=${#all_ids[@]} data_root=${data_root}" >&2
+echo "[dual-submit] dataset=${dataset_label} branch=${iowa7t_branch:-<none>} total=${#all_ids[@]} data_root=${data_root}" >&2
 
 if [ "${#ui_ids[@]}" -gt 0 ]; then
   ui_list="$(write_list ui "${ui_ids[@]}")"
