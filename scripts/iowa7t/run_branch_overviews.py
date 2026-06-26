@@ -58,8 +58,13 @@ def _ensure_link_or_dir_link(link_path: Path, target: Path) -> None:
     target = Path(target).resolve()
     link_path.parent.mkdir(parents=True, exist_ok=True)
     if link_path.is_symlink():
-        if link_path.resolve(strict=True) != target:
-            raise FileExistsError(f"Existing symlink points elsewhere: {link_path} -> {link_path.resolve(strict=True)} expected {target}")
+        try:
+            current_target = link_path.resolve(strict=True)
+        except FileNotFoundError:
+            current_target = None
+        if current_target != target:
+            link_path.unlink()
+            link_path.symlink_to(target, target_is_directory=target.is_dir())
         return
     if link_path.exists():
         if link_path.resolve() == target:

@@ -33,7 +33,7 @@ presets continue to use the Python input preparer.
 For `DATASET=iowa7t`, `IOWA7T_BRANCH` is required and the branch controls the
 exact subject CIFTI consumed by the task:
 
-- `IOWA7T_BRANCH=single_echo`:
+- `IOWA7T_BRANCH=multiband`:
   `sub-<ID>/func/sub-<ID>_task-rest_dir-concat_space-fsLR_den-91k_desc-denoised_bold.dtseries.nii`
 - `IOWA7T_BRANCH=multi_echo`:
   source CIFTI
@@ -119,7 +119,7 @@ DATASET=iowa_hcp500 SUBJECT_IDS_CSV=04172026 \
 Iowa7T 36P branch dry-runs for the two requested production subjects:
 
 ```bash
-DATASET=iowa7t IOWA7T_BRANCH=single_echo SUBJECT_IDS_CSV=06112026,06122026 \
+DATASET=iowa7t IOWA7T_BRANCH=multiband SUBJECT_IDS_CSV=06112026,06122026 \
   RUN_ID=iowa7t_36p_single_06112026_06122026 DRY_RUN=1 \
   scripts/ArealMSHBM_Kong2022_Iowa_Stanford/submit_kong2022_areal_mshbm.sh
 DATASET=iowa7t IOWA7T_BRANCH=multi_echo SUBJECT_IDS_CSV=06112026,06122026 \
@@ -149,7 +149,7 @@ auditing a batch.
 ## Controls
 
 - `DATASET=jj_tms|stanford|iowa7t|iowa_hcp500`: dataset preset and default path selector.
-- `IOWA7T_BRANCH=single_echo|multi_echo`: required with `DATASET=iowa7t`.
+- `IOWA7T_BRANCH=multiband|multi_echo`: required with `DATASET=iowa7t`.
 - `DATA_ROOT`: override the selected dataset input root.
 - `OUT_ROOT`: override the selected dataset output root.
 - `RUN_ID`: run identifier for manifest/log roots; Iowa7T defaults to branch plus timestamp.
@@ -183,7 +183,7 @@ DATASET=iowa_hcp500 scripts/ArealMSHBM_Kong2022_Iowa_Stanford/report_kong2022_ar
 For Iowa7T 36P:
 
 ```bash
-DATASET=iowa7t IOWA7T_BRANCH=single_echo \
+DATASET=iowa7t IOWA7T_BRANCH=multiband \
   scripts/ArealMSHBM_Kong2022_Iowa_Stanford/report_kong2022_areal_mshbm_status.sh <job_id> sub-06112026
 ```
 

@@ -22,7 +22,7 @@ DATASET_SPECS = {
         "subject_prefix": "sub-",
         "relative_globs": ["func/*_task-rest_run-concat_space-fsLR_den-91k_desc-denoised_bold.dtseries.nii"],
         "branch_relative_globs": {
-            "single_echo": [
+            "multiband": [
                 "func/{subject}_task-rest_dir-concat_space-fsLR_den-91k_desc-denoised_bold.dtseries.nii"
             ],
             "multi_echo": [
@@ -77,7 +77,7 @@ def main() -> int:
     parser.add_argument(
         "--branch",
         default="",
-        help="Dataset branch selector. For iowa7t, use single_echo or multi_echo.",
+        help="Dataset branch selector. For iowa7t, use multiband or multi_echo.",
     )
     parser.add_argument(
         "--dtseries-glob",

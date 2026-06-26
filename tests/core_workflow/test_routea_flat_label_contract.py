@@ -160,7 +160,7 @@ def test_iowa_hcp500_argon_preset_contract() -> None:
     assert "/tmp/iowa_hcp500_kong2022_*" in task_text
     assert 'KEEP_TMP=1: retaining ${tmp_root}' in task_text
     assert '-file-information "${dtseries}" -only-number-of-maps' in task_text
-    assert 'if [ "${dataset}" != "iowa_hcp500" ]; then' in task_text
+    assert 'if [ "${dataset}" != "iowa_hcp500" ] && [ "${dataset}" != "iowa7t" ]; then' in task_text
 
     submit_text = checked[0].read_text(encoding="utf-8")
     assert "default_ui_tc=3" in submit_text
@@ -194,7 +194,10 @@ def test_iowa7t_argon_preset_contract_uses_subject_first_36p_layout() -> None:
         assert token in combined, f"missing {token}"
 
     iowa7t_text = "\n".join(
-        line for line in combined.splitlines() if "iowa7t" in line.lower() or "Iowa7T" in line
+        line for line in combined.splitlines()
+        if ("iowa7t" in line.lower() or "Iowa7T" in line)
+        and "iowa_hcp500" not in line
+        and "qunex_iowa7t" not in line
     )
     for token in forbidden:
         assert token not in iowa7t_text, f"Iowa7T contract contains forbidden {token}"

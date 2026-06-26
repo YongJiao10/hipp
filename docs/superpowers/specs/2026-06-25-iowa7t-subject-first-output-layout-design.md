@@ -36,7 +36,7 @@ hipp_outputs/
 ├── subjects/
 │   ├── sub-04172026/
 │   │   ├── hippunfold/
-│   │   └── single_echo/
+│   │   └── multiband/
 │   │       ├── cortex/
 │   │       │   └── areal_mshbm/
 │   │       ├── surface/
@@ -56,7 +56,7 @@ hipp_outputs/
 │   │       └── provenance.json
 │   └── sub-06112026/
 │       ├── hippunfold/
-│       ├── single_echo/
+│       ├── multiband/
 │       └── multi_echo/
 └── runs/
     ├── logs/
@@ -66,13 +66,13 @@ hipp_outputs/
 ```
 
 There is no `variants/` wrapper. Processing branches are direct, fixed siblings
-under each subject: `single_echo/` and `multi_echo/`.
+under each subject: `multiband/` and `multi_echo/`.
 
 ## Structural and Functional Ownership
 
 `hippunfold/` is subject structural output and is shared by all functional
 branches. It must be generated once per subject and must not be copied into
-`single_echo/` or `multi_echo/`.
+`multiband/` or `multi_echo/`.
 
 Everything dependent on the functional time series belongs to its processing
 branch:
@@ -117,25 +117,25 @@ inputs/hippunfold/dense_corobl_batch/sub-04172026/hippunfold/
   -> subjects/sub-04172026/hippunfold/
 
 inputs/kong2022/shared_inputs/surface/sub-04172026/surface/
-  -> subjects/sub-04172026/single_echo/surface/
+  -> subjects/sub-04172026/multiband/surface/
 
 inputs/kong2022/shared_inputs/routea/sub-04172026/reference/
-  -> subjects/sub-04172026/single_echo/cortex/
+  -> subjects/sub-04172026/multiband/cortex/
 
 inputs/kong2022/shared_inputs/routea/sub-04172026/fc/
-  -> subjects/sub-04172026/single_echo/fc/
+  -> subjects/sub-04172026/multiband/fc/
 
 work/individual_atlas/sub-04172026/gradient/
-  -> subjects/sub-04172026/single_echo/atlas/gradient/
+  -> subjects/sub-04172026/multiband/atlas/gradient/
 
 work/individual_atlas/sub-04172026/wta/
-  -> subjects/sub-04172026/single_echo/atlas/wta/
+  -> subjects/sub-04172026/multiband/atlas/wta/
 
 present/overviews/individual/gradient/
-  -> subjects/sub-04172026/single_echo/figures/gradient/
+  -> subjects/sub-04172026/multiband/figures/gradient/
 
 present/overviews/individual/wta/
-  -> subjects/sub-04172026/single_echo/figures/wta/
+  -> subjects/sub-04172026/multiband/figures/wta/
 
 work/individual_atlas/_overview_core_adapter/
   -> runs/cache/overview_core_adapter/
@@ -176,7 +176,7 @@ overviews/
 individual/
 ```
 
-Scientific method names such as `gradient`, `wta`, `single_echo`, and
+Scientific method names such as `gradient`, `wta`, `multiband`, and
 `multi_echo` remain because they are genuine sibling categories.
 
 ## Code Contract
@@ -217,7 +217,7 @@ The migration must preserve `04172026` outputs and establish the same layout for
 ## Acceptance Criteria
 
 - `04172026` remains complete after migration.
-- `06112026` uses one shared HippUnfold result and direct `single_echo/` and
+- `06112026` uses one shared HippUnfold result and direct `multiband/` and
   `multi_echo/` branches.
 - No maintained command writes to `outputs_iowa/` or the legacy stage-first
   Jianglab tree.

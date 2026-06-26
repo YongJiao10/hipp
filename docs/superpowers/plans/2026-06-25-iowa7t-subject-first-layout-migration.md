@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Implement and apply the fixed Iowa7T 36P subject-first hippocampal output layout for `04172026` and prepare `06112026` with separate `single_echo/` and `multi_echo/` branches, without creating empty future directories.
+**Goal:** Implement and apply the fixed Iowa7T 36P subject-first hippocampal output layout for `04172026` and prepare `06112026` with separate `multiband/` and `multi_echo/` branches, without creating empty future directories.
 
 **Architecture:** Add Iowa7T-specific canonical path helpers to the existing layout authority, then add a manifest-driven migration planner that copies legacy outputs into canonical locations and verifies them before any old path is removed. The migration creates only target parent directories for real transferred files or symlinks; `group/` is not created unless a non-empty group-scoped source is migrated.
 
@@ -84,7 +84,7 @@ def test_iowa7t_subject_layout_has_shared_hippunfold_and_direct_branches():
     subject = layout.iowa7t_subject_layout("06112026", hipp_outputs_root=Path("/tmp/hipp_outputs"))
     assert subject.subject_root == Path("/tmp/hipp_outputs/subjects/sub-06112026")
     assert subject.hippunfold_root == Path("/tmp/hipp_outputs/subjects/sub-06112026/hippunfold")
-    assert subject.branch_root("single_echo") == Path("/tmp/hipp_outputs/subjects/sub-06112026/single_echo")
+    assert subject.branch_root("multiband") == Path("/tmp/hipp_outputs/subjects/sub-06112026/multiband")
     assert subject.branch_root("multi_echo") == Path("/tmp/hipp_outputs/subjects/sub-06112026/multi_echo")
     assert "variants" not in subject.branch_root("multi_echo").parts
 
@@ -137,7 +137,7 @@ Add to `output_layout.py`:
 ```python
 from dataclasses import dataclass
 
-IOWA7T_BRANCHES = ("single_echo", "multi_echo")
+IOWA7T_BRANCHES = ("multiband", "multi_echo")
 LOCAL_JIANGLAB_ROOT = Path("/home/yojiao/LSS/jianglab")
 ARGON_JIANGLAB_ROOT = Path("/Shared/jianglab")
 IOWA7T_36P_RELATIVE_ROOT = Path("3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_36P")
@@ -265,7 +265,7 @@ def write_file(path: Path, text: str = "x") -> None:
     path.write_text(text, encoding="utf-8")
 
 
-def test_build_mapping_places_04172026_single_echo_outputs_without_variants(tmp_path):
+def test_build_mapping_places_04172026_multiband_outputs_without_variants(tmp_path):
     legacy = tmp_path / "hipp_outputs"
     write_file(legacy / "inputs/hippunfold/dense_corobl_batch/sub-04172026/hippunfold/sub-04172026/surf/a.func.gii")
     write_file(legacy / "inputs/kong2022/shared_inputs/surface/sub-04172026/surface/raw/b.func.gii")
@@ -276,11 +276,11 @@ def test_build_mapping_places_04172026_single_echo_outputs_without_variants(tmp_
     mappings = mig.build_mappings(legacy, subjects=("04172026",))
     destinations = {m.destination.relative_to(legacy) for m in mappings}
     assert Path("subjects/sub-04172026/hippunfold/sub-04172026/surf/a.func.gii") in destinations
-    assert Path("subjects/sub-04172026/single_echo/surface/raw/b.func.gii") in destinations
-    assert Path("subjects/sub-04172026/single_echo/fc/c.npy") in destinations
-    assert Path("subjects/sub-04172026/single_echo/atlas/gradient/d.json") in destinations
-    assert Path("subjects/sub-04172026/single_echo/atlas/wta/e.json") in destinations
-    assert Path("subjects/sub-04172026/single_echo/figures/gradient/f.png") in destinations
+    assert Path("subjects/sub-04172026/multiband/surface/raw/b.func.gii") in destinations
+    assert Path("subjects/sub-04172026/multiband/fc/c.npy") in destinations
+    assert Path("subjects/sub-04172026/multiband/atlas/gradient/d.json") in destinations
+    assert Path("subjects/sub-04172026/multiband/atlas/wta/e.json") in destinations
+    assert Path("subjects/sub-04172026/multiband/figures/gradient/f.png") in destinations
     assert all("variants" not in path.parts for path in destinations)
 
 
@@ -305,7 +305,7 @@ def test_nonempty_group_sources_are_mapped(tmp_path):
 def test_collision_detection_refuses_different_destination_content(tmp_path):
     legacy = tmp_path / "hipp_outputs"
     write_file(legacy / "inputs/kong2022/shared_inputs/routea/sub-04172026/fc/a.txt", "old")
-    write_file(legacy / "subjects/sub-04172026/single_echo/fc/a.txt", "new")
+    write_file(legacy / "subjects/sub-04172026/multiband/fc/a.txt", "new")
     mappings = mig.build_mappings(legacy, subjects=("04172026",))
     with pytest.raises(FileExistsError, match="Destination exists with different content"):
         mig.validate_mappings(mappings)
@@ -385,13 +385,13 @@ def build_mappings(hipp_outputs_root: Path, subjects: Iterable[str]) -> list[Map
         subject = validate_iowa7t_subject(raw_subject)
         sub = f"sub-{subject}"
         mappings.extend(_map_tree(root / "inputs/hippunfold/dense_corobl_batch" / sub / "hippunfold", root / "subjects" / sub / "hippunfold"))
-        mappings.extend(_map_tree(root / "inputs/kong2022/shared_inputs/surface" / sub / "surface", root / "subjects" / sub / "single_echo" / "surface"))
-        mappings.extend(_map_tree(root / "inputs/kong2022/shared_inputs/routea" / sub / "reference", root / "subjects" / sub / "single_echo" / "cortex"))
-        mappings.extend(_map_tree(root / "inputs/kong2022/shared_inputs/routea" / sub / "fc", root / "subjects" / sub / "single_echo" / "fc"))
-        mappings.extend(_map_tree(root / "work/individual_atlas" / sub / "gradient", root / "subjects" / sub / "single_echo" / "atlas" / "gradient"))
-        mappings.extend(_map_tree(root / "work/individual_atlas" / sub / "wta", root / "subjects" / sub / "single_echo" / "atlas" / "wta"))
-        mappings.extend(_map_tree(root / "present/overviews/individual/gradient", root / "subjects" / sub / "single_echo" / "figures" / "gradient"))
-        mappings.extend(_map_tree(root / "present/overviews/individual/wta", root / "subjects" / sub / "single_echo" / "figures" / "wta"))
+        mappings.extend(_map_tree(root / "inputs/kong2022/shared_inputs/surface" / sub / "surface", root / "subjects" / sub / "multiband" / "surface"))
+        mappings.extend(_map_tree(root / "inputs/kong2022/shared_inputs/routea" / sub / "reference", root / "subjects" / sub / "multiband" / "cortex"))
+        mappings.extend(_map_tree(root / "inputs/kong2022/shared_inputs/routea" / sub / "fc", root / "subjects" / sub / "multiband" / "fc"))
+        mappings.extend(_map_tree(root / "work/individual_atlas" / sub / "gradient", root / "subjects" / sub / "multiband" / "atlas" / "gradient"))
+        mappings.extend(_map_tree(root / "work/individual_atlas" / sub / "wta", root / "subjects" / sub / "multiband" / "atlas" / "wta"))
+        mappings.extend(_map_tree(root / "present/overviews/individual/gradient", root / "subjects" / sub / "multiband" / "figures" / "gradient"))
+        mappings.extend(_map_tree(root / "present/overviews/individual/wta", root / "subjects" / sub / "multiband" / "figures" / "wta"))
     mappings.extend(_map_tree(root / "work/individual_atlas/_overview_core_adapter", root / "runs/cache/overview_core_adapter"))
     mappings.extend(_map_tree(root / "work/individual_atlas/_runs", root / "runs"))
     mappings.extend(_map_tree(root / "inputs/kong2022/templates/hipp_group_average_t1only_151", root / "group/hippocampal_template"))
@@ -485,7 +485,7 @@ Rules:
 - Iowa7T means the Jianglab 36P fMRIPrep tree, not HCPpipeline500.
 - `outputs_iowa/` in the repository is not a production output root.
 - Subject structural HippUnfold output is shared at `subjects/sub-<ID>/hippunfold/`.
-- Functional branches are direct siblings: `single_echo/` and `multi_echo/`.
+- Functional branches are direct siblings: `multiband/` and `multi_echo/`.
 - There is no `variants/` wrapper.
 - Do not pre-create empty future directories such as `group/`.
 - Create directories only as parents for concrete files/symlinks/manifests being written.
@@ -556,7 +556,7 @@ Run:
 timeout 60 find /home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_36P/hipp_outputs/subjects/sub-04172026 -maxdepth 2 2>/dev/null | sort
 ```
 
-Expected includes shared `hippunfold/` and branch `single_echo/` with `atlas/`, `fc/`, and `surface/`.
+Expected includes shared `hippunfold/` and branch `multiband/` with `atlas/`, `fc/`, and `surface/`.
 
 - [ ] **Step 3: Verify no `variants/` directory was created**
 
@@ -590,20 +590,20 @@ Expected: either no `group/` directory, or only real migrated payload-bearing di
 Run:
 
 ```bash
-/home/yojiao/.conda/envs/py314/bin/python -c "from scripts.core_workflow.lib.output_layout import iowa7t_subject_layout, iowa7t_branch_layout; s=iowa7t_subject_layout('06112026'); print(s.hippunfold_root); print(iowa7t_branch_layout('06112026','single_echo').root); print(iowa7t_branch_layout('06112026','multi_echo').root)"
+/home/yojiao/.conda/envs/py314/bin/python -c "from scripts.core_workflow.lib.output_layout import iowa7t_subject_layout, iowa7t_branch_layout; s=iowa7t_subject_layout('06112026'); print(s.hippunfold_root); print(iowa7t_branch_layout('06112026','multiband').root); print(iowa7t_branch_layout('06112026','multi_echo').root)"
 ```
 
 Expected:
 
 ```text
 /home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_36P/hipp_outputs/subjects/sub-06112026/hippunfold
-/home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_36P/hipp_outputs/subjects/sub-06112026/single_echo
+/home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_36P/hipp_outputs/subjects/sub-06112026/multiband
 /home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_36P/hipp_outputs/subjects/sub-06112026/multi_echo
 ```
 
 - [ ] **Step 2: Use these paths when launching HippUnfold and branch-specific processing**
 
-Do not create placeholder directories. The processing launcher should create `hippunfold/`, `single_echo/`, or `multi_echo/` only when writing actual outputs.
+Do not create placeholder directories. The processing launcher should create `hippunfold/`, `multiband/`, or `multi_echo/` only when writing actual outputs.
 
 Expected: future processing for `06112026` has one shared HippUnfold output and two direct branch outputs.
 
@@ -637,6 +637,6 @@ Expected: deletion remains a separate, explicitly approved operation.
 
 ## Self-Review
 
-- Spec coverage: subject-first layout, direct `single_echo/`/`multi_echo/`, shared HippUnfold, no `variants/`, no empty `group/`, Jianglab local/Argon path mapping, dry-run/copy/verify/delete-later flow are covered.
+- Spec coverage: subject-first layout, direct `multiband/`/`multi_echo/`, shared HippUnfold, no `variants/`, no empty `group/`, Jianglab local/Argon path mapping, dry-run/copy/verify/delete-later flow are covered.
 - Placeholder scan: no `TBD`, `TODO`, or unspecified implementation step remains.
 - Type consistency: tests use `Iowa7TSubjectLayout`, `Iowa7TBranchLayout`, `build_mappings`, `validate_mappings`, and `apply_mappings`, all defined in implementation tasks.

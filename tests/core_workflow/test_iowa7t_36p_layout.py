@@ -44,7 +44,7 @@ def test_iowa7t_subject_layout_has_shared_hippunfold_and_direct_branches():
 
     assert subject.subject_root == root / "subjects" / "sub-06112026"
     assert subject.hippunfold_root == root / "subjects" / "sub-06112026" / "hippunfold"
-    assert subject.branch_root("single_echo") == root / "subjects" / "sub-06112026" / "single_echo"
+    assert subject.branch_root("multiband") == root / "subjects" / "sub-06112026" / "multiband"
     assert subject.branch_root("multi_echo") == root / "subjects" / "sub-06112026" / "multi_echo"
     assert "variants" not in subject.branch_root("multi_echo").parts
 

@@ -56,11 +56,11 @@ esac
 
 if [ "${dataset}" = "iowa7t" ]; then
   case "${iowa7t_branch}" in
-    single_echo|multi_echo)
+    multiband|multi_echo)
       tmp_prefix="${tmp_prefix}_${iowa7t_branch}"
       ;;
     *)
-      echo "ERROR: DATASET=iowa7t requires IOWA7T_BRANCH=single_echo or multi_echo." >&2
+      echo "ERROR: DATASET=iowa7t requires IOWA7T_BRANCH=multiband or multi_echo." >&2
       exit 2
       ;;
   esac
@@ -198,7 +198,7 @@ json_escape() {
 
 if [ "${dataset}" = "iowa7t" ]; then
   case "${iowa7t_branch}" in
-    single_echo)
+    multiband)
       dtseries="${data_root}/${subject}/func/${subject}_task-rest_dir-concat_space-fsLR_den-91k_desc-denoised_bold.dtseries.nii"
       ;;
     multi_echo)

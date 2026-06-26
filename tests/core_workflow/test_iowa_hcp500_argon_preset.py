@@ -78,7 +78,7 @@ def test_iowa7t_input_preparer_selects_branch_exact_dtseries(
             "--dataset",
             "iowa7t",
             "--branch",
-            "single_echo",
+            "multiband",
             "--subject",
             "06112026",
             "--data-root",
@@ -92,7 +92,7 @@ def test_iowa7t_input_preparer_selects_branch_exact_dtseries(
     single_manifest = json.loads(
         (tmp_path / "single_prepared" / "inputs" / "input_manifest.json").read_text()
     )
-    assert single_manifest["branch"] == "single_echo"
+    assert single_manifest["branch"] == "multiband"
     assert single_manifest["runs"][0]["dtseries"] == str(single)
 
     monkeypatch.setattr(
@@ -130,6 +130,7 @@ def test_iowa_hcp500_launcher_dry_run_prints_one_ui_qsub(tmp_path: Path) -> None
             "OUT_ROOT": str(tmp_path / "labels"),
             "SUBJECT_IDS_CSV": "04172026",
             "DRY_RUN": "1",
+            "REPO_ROOT": str(REPO_ROOT),
         }
     )
     result = subprocess.run(
@@ -156,12 +157,13 @@ def test_iowa7t_launcher_dry_run_uses_canonical_branch_layout(tmp_path: Path) ->
     env.update(
         {
             "DATASET": "iowa7t",
-            "IOWA7T_BRANCH": "single_echo",
+            "IOWA7T_BRANCH": "multiband",
             "DATA_ROOT": str(tmp_path / "DataOrg_PFM_36P"),
             "OUT_ROOT": str(tmp_path / "hipp_outputs"),
             "SUBJECT_IDS_CSV": "06112026,06122026",
             "RUN_ID": "iowa7t_single_test",
             "DRY_RUN": "1",
+            "REPO_ROOT": str(REPO_ROOT),
         }
     )
     result = subprocess.run(

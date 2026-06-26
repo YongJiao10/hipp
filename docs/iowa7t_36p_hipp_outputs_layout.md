@@ -10,7 +10,7 @@ Rules:
 - Iowa7T means the Jianglab 36P fMRIPrep tree, not HCPpipeline500.
 - `outputs_iowa/` in the repository is not a production output root.
 - Subject structural HippUnfold output is shared at `subjects/sub-<ID>/hippunfold/`.
-- Functional branches are direct siblings: `single_echo/` and `multi_echo/`.
+- Functional branches are direct siblings: `multiband/` and `multi_echo/`.
 - There is no `variants/` wrapper.
 - Do not pre-create empty future directories such as `group/`.
 - Create directories only as parents for concrete files/symlinks/manifests being written.
@@ -25,7 +25,7 @@ hipp_outputs/
 └── subjects/
     └── sub-<ID>/
         ├── hippunfold/
-        ├── single_echo/
+        ├── multiband/
         │   ├── cortex/
         │   │   └── areal_mshbm/
         │   │       ├── lh_labels.txt
@@ -60,7 +60,7 @@ from scripts.core_workflow.lib.output_layout import (
 )
 
 subject = iowa7t_subject_layout("06112026")
-single = iowa7t_branch_layout("06112026", "single_echo")
+single = iowa7t_branch_layout("06112026", "multiband")
 multi = iowa7t_branch_layout("06112026", "multi_echo")
 ```
 
@@ -83,7 +83,7 @@ Iowa7T 36P cortex individualized labels use the Argon
 
 Branch inputs are fixed:
 
-- `single_echo` consumes
+- `multiband` consumes
   `sub-<ID>/func/sub-<ID>_task-rest_dir-concat_space-fsLR_den-91k_desc-denoised_bold.dtseries.nii`
 - `multi_echo` consumes
   source CIFTI
@@ -94,7 +94,7 @@ Branch inputs are fixed:
 
 Branch outputs are fixed:
 
-- `subjects/sub-<ID>/single_echo/cortex/areal_mshbm/`
+- `subjects/sub-<ID>/multiband/cortex/areal_mshbm/`
 - `subjects/sub-<ID>/multi_echo/cortex/areal_mshbm/`
 
 Each completed branch writes `lh_labels.txt`, `rh_labels.txt`, and

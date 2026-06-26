@@ -11,7 +11,7 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 DATASET_KEYS = ("hcp", "iowa", "stanford", "iowa_hcp500")
 DEFAULT_DATASET = "hcp"
 
-IOWA7T_BRANCHES = ("single_echo", "multi_echo")
+IOWA7T_BRANCHES = ("multiband", "multi_echo")
 LOCAL_JIANGLAB_ROOT = Path("/home/yojiao/LSS/jianglab")
 ARGON_JIANGLAB_ROOT = Path("/Shared/jianglab")
 IOWA7T_36P_RELATIVE_ROOT = Path(

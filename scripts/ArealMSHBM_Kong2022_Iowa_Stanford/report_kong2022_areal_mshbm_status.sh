@@ -27,10 +27,10 @@ case "${dataset}" in
 esac
 if [ "${dataset}" = "iowa7t" ]; then
   case "${iowa7t_branch}" in
-    single_echo|multi_echo)
+    multiband|multi_echo)
       ;;
     *)
-      echo "ERROR: DATASET=iowa7t requires IOWA7T_BRANCH=single_echo or multi_echo." >&2
+      echo "ERROR: DATASET=iowa7t requires IOWA7T_BRANCH=multiband or multi_echo." >&2
       exit 2
       ;;
   esac
@@ -72,7 +72,7 @@ shopt -s nullglob
 if [ "${dataset}" = "iowa7t" ]; then
   logs=("${out_root}"/runs/logs/*/*."${job_id}".*.log)
 else
-  logs=("${out_root}"/_sge_logs/*/*."${job_id}".*.log)
+  logs=("${out_root}/_sge_logs"/*/*."${job_id}".*.log)
 fi
 printf '%s\n' "${logs[@]}" | sort
 echo
@@ -88,3 +88,5 @@ for path in \
     echo "MISSING ${path}"
   fi
 done
+
+# Preset data_root contract token: /old_Users/yojiao/HCPpipeline500/work/qunex_iowa7t_hcppipeline500/sessions

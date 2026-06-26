@@ -56,7 +56,7 @@ esac
 
 if [ "${dataset}" = "iowa7t" ]; then
   case "${iowa7t_branch}" in
-    single_echo)
+    multiband)
       job_prefix="ia7ts_k22"
       manifest_prefix="iowa7t_single"
       ;;
@@ -65,7 +65,7 @@ if [ "${dataset}" = "iowa7t" ]; then
       manifest_prefix="iowa7t_multi"
       ;;
     *)
-      echo "ERROR: DATASET=iowa7t requires IOWA7T_BRANCH=single_echo or multi_echo." >&2
+      echo "ERROR: DATASET=iowa7t requires IOWA7T_BRANCH=multiband or multi_echo." >&2
       exit 2
       ;;
   esac
@@ -116,7 +116,7 @@ Environment controls:
   PINC_TC=N             PINC array throttle. Default: 7 for iowa_hcp500, else 15.
   OVERWRITE=1           Recompute existing outputs.
   KEEP_TMP=1            Retain task temporary files. Default: 1 for iowa_hcp500.
-  IOWA7T_BRANCH=...     Required for DATASET=iowa7t: single_echo or multi_echo.
+  IOWA7T_BRANCH=...     Required for DATASET=iowa7t: multiband or multi_echo.
   RUN_ID=...            Run identifier. Iowa7T defaults to <branch>_<timestamp>.
 
 Queue behavior follows scripts/core_workflow/sge_argon/submit_kong2022_route_a_dual_queues.sh:
