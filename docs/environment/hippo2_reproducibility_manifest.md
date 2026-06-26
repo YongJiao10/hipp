@@ -310,17 +310,17 @@ Route A MATLAB label generation.
 ```text
 Setting / Path                                 Purpose
 --------------------------------------------  -------------------------------------------
-`runtime/hippunfold_cache`                    Central cache root for this repo
-`runtime/hippunfold_asset_store_shared`       Persistent shared asset store for reusable template/model downloads
-`runtime_source_cache`                        Snakemake runtime source cache
+`HIPPUNFOLD_CACHE_ROOT`                      Per-run scratch root; safe to isolate by run
+`runtime/hippunfold_asset_store_shared`       Hardcoded shared asset store for reusable template/model downloads
+`runtime/hippunfold_asset_store_shared/hippunfold_assets`       Canonical `HIPPUNFOLD_CACHE_DIR`; noncanonical overrides are rejected
+`runtime/hippunfold_asset_store_shared/runtime_source_assets`   Canonical `HIPPUNFOLD_RUNTIME_SOURCE_CACHE`; noncanonical overrides are rejected
 `snakemake_conda`                             Optional local conda prefix for rule envs
 `conda_pkgs`                                  Local conda package cache
 `pip_cache`                                   Local pip wheel cache
 `tmp`                                         Local temporary build scratch
 `.runtime_py/sitecustomize.py`                 Multiprocessing + torch sharing tweaks
 `PATH` precedence                             `scripts/` first, external binaries second
-`XDG_CACHE_HOME`                               Redirects cache writes out of `~/Library`
-`HIPPUNFOLD_CACHE_DIR`                        HippUnfold cache root
+`XDG_CACHE_HOME`                               Per-run cache scratch, normally under `HIPPUNFOLD_CACHE_ROOT`
 `CONDA_SUBDIR=platform-default`              Selected by launcher based on host OS
 `HIPPUNFOLD_USE_GPU=1`                       Launcher defaults nnUNet inference to CUDA when available
 `LD_LIBRARY_PATH`                             Prepend `hippo2/lib` so the env libstdc++ overrides the system copy
@@ -338,6 +338,12 @@ torch.multiprocessing.set_sharing_strategy("file_system")
 ```
 
 That file is created under `.runtime_py/` inside the repo root.
+
+HippUnfold model/template assets are intentionally not run-specific. The wrappers
+hardcode `HIPPUNFOLD_CACHE_DIR` and `HIPPUNFOLD_RUNTIME_SOURCE_CACHE` to the
+shared asset store under `/home/yojiao/hpchome/hipp/runtime/hippunfold_asset_store_shared`
+and reject caller-provided noncanonical values. Only `HIPPUNFOLD_CACHE_ROOT` is
+allowed to vary for per-run scratch.
 
 For persistent conda installs outside the launcher, `~/.condarc` is set to keep
 `pkgs_dirs` and `envs_dirs` under the repo-local `.cache/` tree so package

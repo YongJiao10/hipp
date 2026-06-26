@@ -17,6 +17,22 @@ HIPPUNFOLD_WORKFLOW_PROFILE="${HIPPUNFOLD_WORKFLOW_PROFILE:-none}"
 HIPPUNFOLD_SDM="${HIPPUNFOLD_SDM:-env-modules}"
 HIPPUNFOLD_EXTERNAL_BIN_DIR="${HIPPUNFOLD_EXTERNAL_BIN_DIR:-/Applications/ITK-SNAP.app/Contents/bin}"
 CACHE_ROOT="${HIPPUNFOLD_CACHE_ROOT:-${BUNDLE_ROOT}/runtime/hippunfold_cache}"
+CANONICAL_HIPPUNFOLD_ASSET_ROOT="/home/yojiao/hpchome/hipp/runtime/hippunfold_asset_store_shared"
+CANONICAL_HIPPUNFOLD_CACHE_DIR="/home/yojiao/hpchome/hipp/runtime/hippunfold_asset_store_shared/hippunfold_assets"
+CANONICAL_HIPPUNFOLD_RUNTIME_SOURCE_CACHE="/home/yojiao/hpchome/hipp/runtime/hippunfold_asset_store_shared/runtime_source_assets"
+
+if [[ -n "${HIPPUNFOLD_CACHE_DIR:-}" && "${HIPPUNFOLD_CACHE_DIR}" != "${CANONICAL_HIPPUNFOLD_CACHE_DIR}" ]]; then
+  echo "run_hippunfold_local.sh: Refusing noncanonical HIPPUNFOLD_CACHE_DIR=${HIPPUNFOLD_CACHE_DIR}; expected ${CANONICAL_HIPPUNFOLD_CACHE_DIR}" >&2
+  exit 2
+fi
+
+if [[ -n "${HIPPUNFOLD_RUNTIME_SOURCE_CACHE:-}" && "${HIPPUNFOLD_RUNTIME_SOURCE_CACHE}" != "${CANONICAL_HIPPUNFOLD_RUNTIME_SOURCE_CACHE}" ]]; then
+  echo "run_hippunfold_local.sh: Refusing noncanonical HIPPUNFOLD_RUNTIME_SOURCE_CACHE=${HIPPUNFOLD_RUNTIME_SOURCE_CACHE}; expected ${CANONICAL_HIPPUNFOLD_RUNTIME_SOURCE_CACHE}" >&2
+  exit 2
+fi
+
+export HIPPUNFOLD_CACHE_DIR="${CANONICAL_HIPPUNFOLD_CACHE_DIR}"
+export HIPPUNFOLD_RUNTIME_SOURCE_CACHE="${CANONICAL_HIPPUNFOLD_RUNTIME_SOURCE_CACHE}"
 
 CONDA_SH=""
 for candidate in /opt/conda/etc/profile.d/conda.sh /opt/miniconda3/etc/profile.d/conda.sh; do
@@ -42,7 +58,6 @@ cleanup_runtime_dirs() {
 trap cleanup_runtime_dirs EXIT
 
 export XDG_CACHE_HOME="${XDG_CACHE_HOME:-${CACHE_ROOT}/xdg_cache}"
-export HIPPUNFOLD_CACHE_DIR="${HIPPUNFOLD_CACHE_DIR:-${CACHE_ROOT}/hippunfold_cache}"
 export PIP_CACHE_DIR="${PIP_CACHE_DIR:-${CACHE_ROOT}/pip_cache}"
 export TMPDIR="${TMPDIR:-${CACHE_ROOT}/tmp}"
 export PATH="${BUNDLE_ROOT}/scripts:${PATH}"
@@ -58,7 +73,6 @@ esac
 export CONDA_SUBDIR="${CONDA_SUBDIR:-${default_conda_subdir}}"
 export CONDA_PKGS_DIRS="${CONDA_PKGS_DIRS:-${CACHE_ROOT}/conda_pkgs}"
 mkdir -p "${CONDA_PKGS_DIRS}"
-export HIPPUNFOLD_RUNTIME_SOURCE_CACHE="${HIPPUNFOLD_RUNTIME_SOURCE_CACHE:-${CACHE_ROOT}/runtime_source_cache}"
 mkdir -p "${PIP_CACHE_DIR}" "${TMPDIR}"
 laynii_bin="$(find "${HIPPUNFOLD_CONDA_PREFIX}" -maxdepth 3 -type f -name LN2_LAYERS 2>/dev/null | head -n 1 || true)"
 if [[ -n "${laynii_bin}" ]]; then

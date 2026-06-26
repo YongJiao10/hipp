@@ -16,6 +16,7 @@ Rules:
 - Create directories only as parents for concrete files/symlinks/manifests being written.
 - Migration skips filesystem and notebook checkpoint junk: `.DS_Store`, `._*`, and `.ipynb_checkpoints/`.
 - Do not delete legacy paths until the exact deletion list is approved in the current session.
+- HippUnfold runs must use the shared asset store hardcoded in the wrappers; do not create subject/run-specific `HIPPUNFOLD_CACHE_DIR` or `HIPPUNFOLD_RUNTIME_SOURCE_CACHE` paths.
 
 Current canonical subject layout:
 
