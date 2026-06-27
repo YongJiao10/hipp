@@ -156,7 +156,7 @@ def adapter_run_dir(adapter_root: Path, subject: str, method: str, smoothing: st
     return adapter_root / f"sub-{subject}" / method / ATLAS / smoothing / COVERAGE_TAG / f"hemi_{hemi}"
 
 
-def materialize_gradient_core_inputs(*, subject: str, work_root: Path, adapter_root: Path, shared_root: Path, surface_root: Path, hippunfold_batch_root: Path) -> None:
+def materialize_gradient_core_inputs(*, subject: str, work_root: Path, adapter_root: Path, shared_root: Path, surface_root: Path, hippunfold_batch_root: Path, assignment_variant: str = "fisherz") -> None:
     core = core_atlas_module()
     network_names = core.verify_canonical_network_order_consistency(shared_root, [subject], ATLAS, network_taxonomy="canonical8")
     color_map = core.load_canonical_network_color_map()
@@ -203,8 +203,11 @@ def materialize_gradient_core_inputs(*, subject: str, work_root: Path, adapter_r
                 network_column="canonical8",
             )
             functional_variant_payloads: dict[str, dict[str, object]] = {}
+            profile_for_render = profile
+            if assignment_variant == "weighted_fisherz" and (src / "cluster_network_profile_weighted_fisherz.npy").exists():
+                profile_for_render = np.load(src / "cluster_network_profile_weighted_fisherz.npy").astype(np.float32)
             np.save(dst / "group_labels_final.npy", labels.astype(np.int32))
-            np.save(dst / "cluster_network_profile.npy", profile.astype(np.float32))
+            np.save(dst / "cluster_network_profile.npy", profile_for_render.astype(np.float32))
             np.save(dst / "cluster_roi_profile.npy", roi_profile.astype(np.float32))
             write_json(dst / "group_feature_summary.json", {"network_names": network_names, "N_ref": int(len(network_names))})
             for variant_name, variant_spec in assignment_variants.items():
@@ -234,11 +237,31 @@ def materialize_gradient_core_inputs(*, subject: str, work_root: Path, adapter_r
                     "group_functional_atlas_label_map": str((dst / f"group_functional_atlas_label_map_{variant_name}.json").resolve()),
                     "template_functional_atlas_label": str(func_label.resolve()),
                 }
+            weighted_status = src / "cluster_assignment_status_weighted_fisherz.json"
+            weighted_labels = src / "group_functional_atlas_labels_weighted_fisherz.npy"
+            weighted_map = src / "group_functional_atlas_label_map_weighted_fisherz.json"
+            weighted_label_candidates = sorted((src / "workbench_assets").glob("*_weighted_fisherz.label.gii"))
+            if weighted_status.exists() and weighted_labels.exists() and weighted_map.exists() and weighted_label_candidates:
+                local_weighted_label = dst / "template" / "workbench_assets" / weighted_label_candidates[0].name
+                local_weighted_label.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(weighted_label_candidates[0], local_weighted_label)
+                np.save(dst / "group_functional_atlas_labels_weighted_fisherz.npy", np.load(weighted_labels).astype(np.int32))
+                write_json(dst / "cluster_assignment_status_weighted_fisherz.json", read_json(weighted_status))
+                write_json(dst / "group_functional_atlas_label_map_weighted_fisherz.json", read_json(weighted_map))
+                functional_variant_payloads["weighted_fisherz"] = {
+                    "cluster_assignment_status": str((dst / "cluster_assignment_status_weighted_fisherz.json").resolve()),
+                    "group_functional_atlas_labels": str((dst / "group_functional_atlas_labels_weighted_fisherz.npy").resolve()),
+                    "group_functional_atlas_label_map": str((dst / "group_functional_atlas_label_map_weighted_fisherz.json").resolve()),
+                    "template_functional_atlas_label": str(local_weighted_label.resolve()),
+                }
             dominant = [str(row.get("top1_network", "unassigned")) for row in assignment_variants["fisherz"]["status_rows"]]
             write_json(dst / "cluster_dominant_network.json", {"dominant": dominant, "network_names": network_names, "assignment_variant": "fisherz"})
             write_json(dst / "cluster_dominant_network_count.json", {"dominant": [str(row.get("top1_network", "unassigned")) for row in assignment_variants["count"]["status_rows"]], "network_names": network_names, "assignment_variant": "count"})
+            if (src / "cluster_dominant_network_weighted_fisherz.json").exists():
+                write_json(dst / "cluster_dominant_network_weighted_fisherz.json", read_json(src / "cluster_dominant_network_weighted_fisherz.json"))
             write_tsv(dst / "k_selection_summary.tsv", [fixed_k_selection_row(method=GRADIENT_CORE_METHOD, smoothing=smoothing, hemi=hemi, n_support=int(np.sum(valid_mask)))], K_SELECTION_FIELDS)
             surf = subject_surface_path(hippunfold_batch_root, subject, hemi)
+            default_variant = assignment_variant if assignment_variant in functional_variant_payloads else "fisherz"
             manifest = {
                 "status": "ok",
                 "method": GRADIENT_CORE_METHOD,
@@ -251,26 +274,53 @@ def materialize_gradient_core_inputs(*, subject: str, work_root: Path, adapter_r
                 "template_left_or_right_surface": str(surf.resolve()),
                 "template_spec_path": str(subject_spec_path(surf, subject).resolve()),
                 "assignment_mode": "cluster_level",
-                "default_assignment_variant": "fisherz",
-                "group_functional_atlas_labels": str((dst / "group_functional_atlas_labels_fisherz.npy").resolve()),
-                "group_functional_atlas_label_map": str((dst / "group_functional_atlas_label_map_fisherz.json").resolve()),
-                "template_functional_atlas_label": functional_variant_payloads["fisherz"]["template_functional_atlas_label"],
+                "default_assignment_variant": default_variant,
+                "group_functional_atlas_labels": functional_variant_payloads[default_variant]["group_functional_atlas_labels"],
+                "group_functional_atlas_label_map": functional_variant_payloads[default_variant]["group_functional_atlas_label_map"],
+                "template_functional_atlas_label": functional_variant_payloads[default_variant]["template_functional_atlas_label"],
                 "assignment_variants": functional_variant_payloads,
             }
             write_json(dst / "group_atlas_manifest.json", manifest, sort_keys=True)
 
 
-def materialize_wta_core_inputs(*, subject: str, work_root: Path, adapter_root: Path, hippunfold_batch_root: Path) -> None:
+def wta_variant_suffix(assignment_variant: str) -> str:
+    if assignment_variant == "weighted_fisherz":
+        return "_weighted_fisherz"
+    if assignment_variant == "normalized_top20_count":
+        return "_normalized_top20_count"
+    if assignment_variant == "family17_normalized_top20_count":
+        return "_family17_normalized_top20_count"
+    return ""
+
+
+def resolve_wta_label_gifti(*, src: Path, subject: str, smoothing: str, hemi: str, suffix: str) -> Path:
+    expected = (
+        Path(src)
+        / "workbench_assets"
+        / f"sub-{subject}_hemi-{hemi}_space-corobl_den-512_label-individual_wta_top_{smoothing}{suffix}.label.gii"
+    )
+    if expected.exists():
+        return expected
+    if suffix:
+        raise FileNotFoundError(f"Missing WTA label GIFTI for suffix {suffix!r}: {expected}")
+    candidates = sorted((Path(src) / "workbench_assets").glob("*.label.gii"))
+    if not candidates:
+        raise FileNotFoundError(f"Missing WTA label GIFTI under {Path(src) / 'workbench_assets'}")
+    return candidates[0]
+
+
+def materialize_wta_core_inputs(*, subject: str, work_root: Path, adapter_root: Path, hippunfold_batch_root: Path, assignment_variant: str = "fisherz") -> None:
     for smoothing in DEFAULT_SMOOTHINGS:
         for hemi in DEFAULT_HEMIS:
             combo = SubjectCombo(subject, smoothing, hemi)
             src = wta_combo_output_dir(work_root, combo)
             dst = adapter_run_dir(adapter_root, subject, WTA_CORE_METHOD, smoothing, hemi)
             dst.mkdir(parents=True, exist_ok=True)
-            labels = np.load(src / "wta_top_labels.npy").astype(np.int32)
-            label_map = read_json(src / "wta_top_label_map.json")
-            status = read_json(src / "vertex_assignment_status.json")
-            src_label = sorted((src / "workbench_assets").glob("*.label.gii"))[0]
+            suffix = wta_variant_suffix(assignment_variant)
+            labels = np.load(src / f"wta_top_labels{suffix}.npy").astype(np.int32)
+            label_map = read_json(src / f"wta_top_label_map{suffix}.json")
+            status = read_json(src / f"vertex_assignment_status{suffix}.json")
+            src_label = resolve_wta_label_gifti(src=src, subject=subject, smoothing=smoothing, hemi=hemi, suffix=suffix)
             local_label = dst / "template" / "workbench_assets" / src_label.name
             local_label.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(src_label, local_label)
@@ -293,6 +343,8 @@ def materialize_wta_core_inputs(*, subject: str, work_root: Path, adapter_root: 
                     "template_functional_atlas_label": str(local_label.resolve()),
                     "group_functional_atlas_labels": str((dst / "group_functional_atlas_labels.npy").resolve()),
                     "group_functional_atlas_label_map": str((dst / "group_functional_atlas_label_map.json").resolve()),
+                    "assignment_variant": assignment_variant,
+                    "confidence_metric": assignment_variant if assignment_variant == "weighted_fisherz" else "topn_count",
                 },
                 sort_keys=True,
             )
@@ -302,8 +354,9 @@ def render_via_core(*, subject: str, method: str, work_root: Path, overview_root
     core_overview = core_overview_module()
     method_key = normalize_overview_method(method)
     subject_root = adapter_root / f"sub-{subject}"
-    if method_key in {"gradient_spectral_k3", "gradient_count"}:
-        materialize_gradient_core_inputs(subject=subject, work_root=work_root, adapter_root=adapter_root, shared_root=shared_root, surface_root=surface_root, hippunfold_batch_root=hippunfold_batch_root)
+    if method_key in {"gradient_spectral_k3", "gradient_count", "gradient_weighted_fisherz"}:
+        gradient_variant = "weighted_fisherz" if method_key == "gradient_weighted_fisherz" else "fisherz"
+        materialize_gradient_core_inputs(subject=subject, work_root=work_root, adapter_root=adapter_root, shared_root=shared_root, surface_root=surface_root, hippunfold_batch_root=hippunfold_batch_root, assignment_variant=gradient_variant)
         meta = core_overview.render_combo(
             group_root=subject_root,
             present_dir=adapter_present_root / f"sub-{subject}" / "gradient",
@@ -312,12 +365,19 @@ def render_via_core(*, subject: str, method: str, work_root: Path, overview_root
             coverage_tag=COVERAGE_TAG,
             scene=scene,
             route_tag=ROUTE_TAG,
-            mode_tag=None,
-            assignment_variant=("count" if method_key == "gradient_count" else "fisherz"),
+            mode_tag=("weighted_fisherz" if method_key == "gradient_weighted_fisherz" else None),
+            assignment_variant=("weighted_fisherz" if method_key == "gradient_weighted_fisherz" else ("count" if method_key == "gradient_count" else "fisherz")),
             gradient_comp_tag=GRADIENT_COMP_TAG,
         )
     else:
-        materialize_wta_core_inputs(subject=subject, work_root=work_root, adapter_root=adapter_root, hippunfold_batch_root=hippunfold_batch_root)
+        wta_variant_by_method = {
+            "wta_weighted_fisherz": "weighted_fisherz",
+            "wta_normalized_top20_count": "normalized_top20_count",
+            "wta_family17_normalized_top20_count": "family17_normalized_top20_count",
+        }
+        wta_variant = wta_variant_by_method.get(method_key, "fisherz")
+        materialize_wta_core_inputs(subject=subject, work_root=work_root, adapter_root=adapter_root, hippunfold_batch_root=hippunfold_batch_root, assignment_variant=wta_variant)
+        mode_tag = None if wta_variant == "fisherz" else wta_variant
         meta = core_overview.render_combo(
             group_root=subject_root,
             present_dir=adapter_present_root / f"sub-{subject}" / "wta",
@@ -326,8 +386,8 @@ def render_via_core(*, subject: str, method: str, work_root: Path, overview_root
             coverage_tag=COVERAGE_TAG,
             scene=scene,
             route_tag=ROUTE_TAG,
-            mode_tag=None,
-            assignment_variant="fisherz",
+            mode_tag=mode_tag,
+            assignment_variant=("weighted_fisherz" if mode_tag else "fisherz"),
             gradient_comp_tag="",
         )
     final = overview_output_path(overview_root, method_key, subject)
@@ -382,7 +442,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--subjects-manifest", default=str(DEFAULT_SUBJECTS_MANIFEST))
     parser.add_argument("--subjects", nargs="*", default=None)
     parser.add_argument("--max-subjects", type=int, default=None)
-    parser.add_argument("--methods", nargs="+", default=["gradient_spectral_k3", "wta_top"], choices=["gradient", "count", "wta", "gradient_spectral_k3", "gradient_count", "wta_top"])
+    parser.add_argument("--methods", nargs="+", default=["gradient_spectral_k3", "wta_top"], choices=["gradient", "count", "wta", "gradient_spectral_k3", "gradient_count", "gradient_weighted_fisherz", "wta_top", "wta_weighted_fisherz", "wta_normalized_top20_count", "wta_family17_normalized_top20_count"])
     parser.add_argument("--jobs", type=int, default=DEFAULT_JOBS)
     parser.add_argument("--resume", action="store_true")
     return parser

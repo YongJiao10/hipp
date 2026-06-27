@@ -921,6 +921,108 @@ def top_two_from_counts(
     return str(top1[2]), int(top1[0]), "none", 0
 
 
+def build_normalized_topn_count_vertex_rows(
+    *,
+    mean_profile: np.ndarray,
+    support_indices: np.ndarray,
+    roi_registry: list[dict[str, object]],
+    top_n_cap: int,
+    network_column: str = "canonical8",
+) -> list[dict[str, object]]:
+    """Assign vertices by top-positive-ROI counts normalized by network ROI opportunity.
+
+    The selected set remains the strongest top-N positive ROI FC values. Only the
+    final network vote is normalized, using finite available ROI columns for the
+    same vertex as the denominator.
+    """
+    arr = np.asarray(mean_profile, dtype=np.float32)
+    idx = np.asarray(support_indices, dtype=np.int32).reshape(-1)
+    if arr.ndim != 2:
+        raise ValueError(f"Expected 2D mean_profile, got shape={arr.shape}")
+    if arr.shape[0] != idx.size:
+        raise ValueError(f"Profile/support mismatch: profile={arr.shape[0]} support_indices={idx.size}")
+    if arr.shape[1] != len(roi_registry):
+        raise ValueError(f"Profile/ROI registry mismatch: profile_cols={arr.shape[1]} registry={len(roi_registry)}")
+    column = resolve_kong2022_network_registry_column(network_column)
+    roi_networks = [str(row[column]) for row in roi_registry]
+    rows: list[dict[str, object]] = []
+    for local_vidx, global_vidx in enumerate(idx):
+        values = arr[local_vidx, :]
+        finite_idx = np.flatnonzero(np.isfinite(values))
+        available_by_network: dict[str, int] = {}
+        for col in finite_idx:
+            net = roi_networks[int(col)]
+            available_by_network[net] = int(available_by_network.get(net, 0) + 1)
+        pos_idx = np.flatnonzero(np.isfinite(values) & (values > 0.0))
+        if pos_idx.size == 0:
+            rows.append(
+                {
+                    "vertex_index": int(global_vidx),
+                    "status": "unassigned",
+                    "unassigned_reason": "no_positive_roi",
+                    "top1_network": "unassigned",
+                    "top2_network": "unassigned",
+                    "top1_count": 0,
+                    "top2_count": 0,
+                    "margin_count": 0,
+                    "top1_available_rois": 0,
+                    "top2_available_rois": 0,
+                    "top1_normalized_count": 0.0,
+                    "top2_normalized_count": 0.0,
+                    "margin_normalized_count": 0.0,
+                    "n_top": 0,
+                    "network_column": str(column),
+                    "assignment_metric": "top20_count_normalized_by_network_roi_count",
+                }
+            )
+            continue
+        ordered = pos_idx[np.argsort(-values[pos_idx])]
+        top_idx = ordered[: int(min(int(top_n_cap), int(ordered.size)))]
+        count_by_network: dict[str, int] = {}
+        score_sum_by_network: dict[str, float] = {}
+        for col in top_idx:
+            net = roi_networks[int(col)]
+            count_by_network[net] = int(count_by_network.get(net, 0) + 1)
+            score_sum_by_network[net] = float(score_sum_by_network.get(net, 0.0) + float(values[int(col)]))
+        ranked: list[tuple[float, float, int, str]] = []
+        for net, count in count_by_network.items():
+            available = int(available_by_network.get(net, 0))
+            normalized = float(count) / float(available) if available > 0 else 0.0
+            ranked.append((normalized, float(score_sum_by_network.get(net, 0.0)), int(count), str(net)))
+        ranked.sort(key=lambda item: (-item[0], -item[1], -item[2], item[3]))
+        top1_norm, top1_score, top1_count, top1_network = ranked[0]
+        if len(ranked) > 1:
+            top2_norm, top2_score, top2_count, top2_network = ranked[1]
+        else:
+            top2_norm, top2_score, top2_count, top2_network = 0.0, 0.0, 0, "none"
+        top1_avail = int(available_by_network.get(str(top1_network), 0)) if str(top1_network) != "none" else 0
+        top2_avail = int(available_by_network.get(str(top2_network), 0)) if str(top2_network) != "none" else 0
+        rows.append(
+            {
+                "vertex_index": int(global_vidx),
+                "status": "dominant",
+                "top1_network": str(top1_network),
+                "top2_network": str(top2_network),
+                "top1_count": int(top1_count),
+                "top2_count": int(top2_count),
+                "margin_count": int(top1_count - top2_count),
+                "top1_available_rois": int(top1_avail),
+                "top2_available_rois": int(top2_avail),
+                "top1_normalized_count": float(top1_norm),
+                "top2_normalized_count": float(top2_norm),
+                "margin_normalized_count": float(top1_norm - top2_norm),
+                "top1_score_sum": float(top1_score),
+                "top2_score_sum": float(top2_score),
+                "n_top": int(top_idx.size),
+                "top1_fraction": float(top1_count / top_idx.size) if top_idx.size else 0.0,
+                "top2_fraction": float(top2_count / top_idx.size) if top_idx.size else 0.0,
+                "network_column": str(column),
+                "assignment_metric": "top20_count_normalized_by_network_roi_count",
+            }
+        )
+    return rows
+
+
 def top_two_from_scores(score_by_network: dict[str, float]) -> tuple[str, float, str, float]:
     rows: list[tuple[float, str, float]] = []
     for k, v in score_by_network.items():

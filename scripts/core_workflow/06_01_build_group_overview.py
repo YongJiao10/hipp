@@ -766,6 +766,40 @@ def plot_wta_overview_profile_axis(
     if not show_ylabel:
         ax.legend(fontsize=WTA_OVERVIEW_SIDE_PANEL_LEGEND_FS, frameon=False, loc="lower right", handlelength=1.4, labelspacing=0.22)
 
+
+def overview_png_path(
+    *,
+    present_dir: Path,
+    atlas: str,
+    method: str,
+    route_tag: str | None,
+    mode_tag: str | None,
+    assignment_variant: str | None,
+    gradient_comp_tag: str = "",
+    output_name: str | None = None,
+) -> Path:
+    if output_name is not None:
+        name = str(output_name).strip()
+        if not name:
+            raise ValueError("--output-name must not be empty")
+        out_name = Path(name)
+        if out_name.name != name or out_name.is_absolute():
+            raise ValueError("--output-name must be a filename, not a path")
+        if out_name.suffix == "":
+            out_name = out_name.with_suffix(".png")
+        return Path(present_dir) / out_name
+
+    name_bits = [atlas, method, "group_overview"]
+    if gradient_comp_tag:
+        name_bits.append(gradient_comp_tag)
+    if route_tag:
+        name_bits.append(route_tag)
+    if mode_tag:
+        name_bits.append(mode_tag)
+    if assignment_variant:
+        name_bits.append(assignment_variant)
+    return Path(present_dir) / f"{'_'.join(name_bits)}.png"
+
 def render_combo(
     *,
     group_root: Path,
@@ -778,6 +812,7 @@ def render_combo(
     mode_tag: str | None,
     assignment_variant: str = "fisherz",
     gradient_comp_tag: str = "",
+    output_name: str | None = None,
 ) -> dict[str, object]:
     effective_mode_tag = effective_overview_mode_tag(method, mode_tag, assignment_variant)
     effective_assignment_variant = None if method in CLUSTERLESS_METHODS else str(assignment_variant)
@@ -1090,16 +1125,16 @@ def render_combo(
             }
         )
 
-    name_bits = [atlas, method, "group_overview"]
-    if gradient_comp_tag:
-        name_bits.append(gradient_comp_tag)
-    if route_tag:
-        name_bits.append(route_tag)
-    if effective_mode_tag:
-        name_bits.append(effective_mode_tag)
-    if effective_assignment_variant:
-        name_bits.append(effective_assignment_variant)
-    out_png = present_dir / f"{'_'.join(name_bits)}.png"
+    out_png = overview_png_path(
+        present_dir=present_dir,
+        atlas=atlas,
+        method=method,
+        route_tag=route_tag,
+        mode_tag=effective_mode_tag,
+        assignment_variant=effective_assignment_variant,
+        gradient_comp_tag=gradient_comp_tag,
+        output_name=output_name,
+    )
     fig.suptitle(
         f"Group Overview | {atlas} | {method}"
         + (f" | {route_tag}" if route_tag else "")
@@ -1178,6 +1213,11 @@ def main() -> int:
     p.add_argument("--scene", default=str(DEFAULT_SCENE))
     p.add_argument("--route-tag", choices=ROUTE_TAG_CHOICES, default=None)
     p.add_argument("--mode-tag", default=None)
+    p.add_argument(
+        "--output-name",
+        default=None,
+        help="Optional PNG filename override under --present-dir. Use only for single-render calls.",
+    )
     p.add_argument("--assignment-variant", choices=ASSIGNMENT_VARIANT_CHOICES, default="both")
     p.add_argument(
         "--manifest-name",
@@ -1236,6 +1276,7 @@ def main() -> int:
                         mode_tag=args.mode_tag,
                         assignment_variant=(assignment_variant or "fisherz"),
                         gradient_comp_tag=comp_tag,
+                        output_name=args.output_name,
                     )
                     row_meta = meta["rows"]
                     metric = (

@@ -55,6 +55,11 @@ Kong2022 RouteA cortex-control group clustering example:
 /home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/06_07_render_ctxdrop_neighbor_counts.py --shared-root outputs_hcp/inputs/hcp/kong2022/shared_inputs/routea_ctxdrop_151 --source-branch routea_ctxdrop
 ```
 
+WTA normalized top20-count comparison branches can be generated after the canonical RouteA and RouteA 17-net WTA roots exist. These runs preserve the canonical WTA roots and write isolated comparison roots. Normalized means top-20 positive ROI counts divided by finite available ROI counts in each network, not Fisher-z averaging. The maintained HCP roots and overview directories are:
+
+- `outputs_hcp/work/group_atlas/routea_wta_normalized_top20_count_full_k3/` rendered as `outputs_hcp/present/overviews/wta_normalized/top20_count.png`
+- `outputs_hcp/work/group_atlas/routea_17net_wta_normalized_top20_count_full_k3/` rendered as `outputs_hcp/present/overviews/wta_normalized/family17.png`
+
 ## 6. Presentation Products
 
 These products are derived from group atlas and gradient work and can be refreshed from layer 5 products.

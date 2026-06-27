@@ -25,12 +25,16 @@ def _load_numbered_module(script_name: str, alias: str):
 
 
 atlas_mod = _load_numbered_module("05_02_run_group_atlas.py", "core_05_02_run_group_atlas")
+weighted_branch_mod = _load_numbered_module("05_05_build_weighted_fisherz_branch.py", "core_05_05_build_weighted_fisherz_branch")
+overview_mod = _load_numbered_module("06_01_build_group_overview.py", "core_06_01_build_group_overview")
 method_uses_kong2022_topn_cluster_annotation = atlas_mod.method_uses_kong2022_topn_cluster_annotation
 network_mean_profile_from_kong2022_roi_profile = atlas_mod.network_mean_profile_from_kong2022_roi_profile
 assignment_status_from_kong2022_roi_profile = atlas_mod.assignment_status_from_kong2022_roi_profile
 cluster_assignment_variants_from_kong2022_roi_profile = atlas_mod.cluster_assignment_variants_from_kong2022_roi_profile
 resolve_kong2022_network_registry_column = atlas_mod.resolve_kong2022_network_registry_column
 build_global_top_connections = atlas_mod.build_global_top_connections
+build_normalized_topn_count_vertex_rows = atlas_mod.build_normalized_topn_count_vertex_rows
+functional_atlas_from_vertices = atlas_mod.functional_atlas_from_vertices
 from lib.weighted_fisherz import (  # noqa: E402
     assign_weighted_network_profile_rows,
     weighted_cluster_network_fisherz_profile_from_timeseries,
@@ -39,6 +43,22 @@ from lib.weighted_fisherz import (  # noqa: E402
     weighted_network_timeseries_from_roi_timeseries,
 )
 from lib.fc_math import corrcoef_rows, fisher_z_transform_fc  # noqa: E402
+
+
+
+def test_overview_output_name_override_shortens_normalized_wta_path(tmp_path: Path) -> None:
+    out = overview_mod.overview_png_path(
+        present_dir=tmp_path / "wta_normalized",
+        atlas="kong2022",
+        method="wta-top",
+        route_tag="routea_17net",
+        mode_tag="family17",
+        assignment_variant=None,
+        gradient_comp_tag="",
+        output_name="family17.png",
+    )
+
+    assert out == tmp_path / "wta_normalized" / "family17.png"
 
 
 def test_method_gate_covers_both_spectral_methods_only() -> None:
@@ -342,6 +362,38 @@ def test_weighted_wta_rows_use_top_network_fisherz_scores() -> None:
     assert rows[0]["top2_network"] == "Default"
     assert "top1_count" not in rows[0]
     assert rows[1]["top1_network"] == "Default"
+
+
+def test_normalized_topn_count_wta_corrects_network_roi_count_bias() -> None:
+    roi_registry = []
+    for idx in range(2):
+        roi_registry.append({"roi_id": idx + 1, "roi_name": f"default{idx}", "canonical8": "Default", "family17": "DefaultA"})
+    for idx in range(10):
+        roi_registry.append({"roi_id": idx + 3, "roi_name": f"visual{idx}", "canonical8": "Visual", "family17": "VisualA"})
+    mean_profile = np.array(
+        [
+            [0.90, 0.89, 0.88, 0.87, 0.86, -0.1, -0.1, -0.1, -0.1, -0.1, -0.1, -0.1],
+        ],
+        dtype=np.float32,
+    )
+
+    rows = build_normalized_topn_count_vertex_rows(
+        mean_profile=mean_profile,
+        support_indices=np.array([42], dtype=np.int32),
+        roi_registry=roi_registry,
+        top_n_cap=20,
+        network_column="canonical8",
+    )
+
+    row = rows[0]
+    assert row["top1_network"] == "Default"
+    assert row["top1_count"] == 2
+    assert row["top1_available_rois"] == 2
+    assert row["top1_normalized_count"] == 1.0
+    assert row["top2_network"] == "Visual"
+    assert row["top2_count"] == 3
+    assert row["top2_available_rois"] == 10
+    assert row["top2_normalized_count"] == 0.3
 
 def main() -> int:
     test_method_gate_covers_both_spectral_methods_only()

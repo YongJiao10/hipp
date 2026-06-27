@@ -213,6 +213,35 @@ def test_individual_workflow_entrypoints_have_contiguous_numbering():
     assert "03_build_individual_overviews.py" not in combined_text
 
 
+
+def test_wta_label_gifti_path_prefers_exact_normalized_variant(tmp_path):
+    import sys
+    path = REPO_ROOT / "scripts" / "individual_workflow" / "02_build_individual_overviews.py"
+    if str(path.parent) not in sys.path:
+        sys.path.insert(0, str(path.parent))
+    spec = importlib.util.spec_from_file_location("individual_overview_builder_exact_wta", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    assets = tmp_path / "workbench_assets"
+    assets.mkdir()
+    family17 = assets / "sub-06112026_hemi-L_space-corobl_den-512_label-individual_wta_top_2mm_family17_normalized_top20_count.label.gii"
+    canonical = assets / "sub-06112026_hemi-L_space-corobl_den-512_label-individual_wta_top_2mm_normalized_top20_count.label.gii"
+    family17.write_text("wrong", encoding="utf-8")
+    canonical.write_text("right", encoding="utf-8")
+
+    got = module.resolve_wta_label_gifti(
+        src=tmp_path,
+        subject="06112026",
+        smoothing="2mm",
+        hemi="L",
+        suffix="_normalized_top20_count",
+    )
+
+    assert got == canonical
+
+
 def test_materialize_wta_core_inputs(tmp_path):
     import sys
     path = REPO_ROOT / "scripts" / "individual_workflow" / "02_build_individual_overviews.py"

@@ -333,9 +333,9 @@ def test_routea_17net_reuses_routea_inputs_and_has_shallow_output_contract() -> 
     assert "routea_17net" in overview_mod.ROUTE_TAG_CHOICES
     assert "routea_17net" in matrix_mod.ROUTE_CHOICES
 
-    route_roots = matrix_mod.canonical_group_roots(REPO_ROOT / "outputs_core" / "work" / "group_atlas")
+    route_roots = matrix_mod.canonical_group_roots(REPO_ROOT / "outputs_hcp" / "work" / "group_atlas")
     assert route_roots["routea_17net"] == (
-        REPO_ROOT / "outputs_core" / "work" / "group_atlas" / "routea_17net_full_k3_fisherz"
+        REPO_ROOT / "outputs_hcp" / "work" / "group_atlas" / "routea_17net_full_k3_fisherz"
     ).resolve()
 
 

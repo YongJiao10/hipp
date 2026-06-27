@@ -110,3 +110,39 @@ hipp_outputs/runs/logs/<run_id>/
 
 Do not route these jobs to HCP500 paths, repo-local `outputs_iowa*` roots, or a
 `variants/` wrapper.
+
+## Branch Overview Figures
+
+Use the predefined overview wrapper for Iowa7T branch-level overview
+regeneration:
+
+```bash
+/home/yojiao/.conda/envs/py314/bin/python scripts/iowa7t/run_branch_overviews.py --job 04172026:multiband --overwrite
+```
+
+The wrapper adapts branch-scoped individual products to
+`scripts/individual_workflow/02_build_individual_overviews.py` and the shared
+core overview renderer. It renders the maintained seven method panels:
+
+- `gradient_spectral_k3`
+- `gradient_count`
+- `gradient_weighted_fisherz`
+- `wta_top`
+- `wta_weighted_fisherz`
+- `wta_normalized_top20_count`
+- `wta_family17_normalized_top20_count`
+
+Final subject-facing PNGs are copied back to the existing branch figure roots:
+
+- `subjects/sub-<ID>/<branch>/figures/gradient/`
+- `subjects/sub-<ID>/<branch>/figures/wta/`
+
+The weighted Fisher-z panels reuse existing weighted atlas products from
+`subjects/sub-<ID>/<branch>/atlas/{gradient,wta}/` and synchronize them into the
+existing overview compatibility cache under `runs/cache/`; do not create
+separate weighted output folders for these overviews. The two normalized WTA
+panels are top-20 positive ROI count assignments normalized by the finite
+available ROI count in each network, not Fisher-z averaging. They are written
+as `wta_top_labels_normalized_top20_count.npy` for canonical8 and
+`wta_top_labels_family17_normalized_top20_count.npy` for family17.
+

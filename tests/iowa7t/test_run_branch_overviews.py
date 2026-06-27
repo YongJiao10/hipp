@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from scripts.iowa7t.run_branch_downstream import resolve_branch_job
-from scripts.iowa7t.run_branch_overviews import resolve_branch_overview_paths
+from scripts.iowa7t.run_branch_overviews import METHODS, resolve_branch_overview_paths
 
 
 def test_branch_overview_paths_are_direct_and_cache_scoped(tmp_path: Path) -> None:
@@ -19,3 +19,9 @@ def test_branch_overview_paths_are_direct_and_cache_scoped(tmp_path: Path) -> No
     assert paths.final_gradient_figures == job.branch_root / "figures" / "gradient"
     assert paths.final_wta_figures == job.branch_root / "figures" / "wta"
     assert f"multi_echo/sub-{job.subject}" not in str(paths.final_gradient_root)
+
+
+def test_branch_overview_methods_include_weighted_fisherz() -> None:
+    assert "gradient_weighted_fisherz" in METHODS
+    assert "wta_weighted_fisherz" in METHODS
+

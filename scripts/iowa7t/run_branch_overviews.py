@@ -19,7 +19,28 @@ from scripts.iowa7t.run_branch_downstream import DEFAULT_OUTPUT_ROOT, BranchJob,
 
 PY314 = Path("/home/yojiao/.conda/envs/py314/bin/python")
 CACHE_NAME = "iowa7t_branch_individual_overviews"
-METHODS = ["gradient_spectral_k3", "gradient_count", "wta_top"]
+METHODS = ["gradient_spectral_k3", "gradient_count", "gradient_weighted_fisherz", "wta_top", "wta_weighted_fisherz", "wta_normalized_top20_count", "wta_family17_normalized_top20_count"]
+WEIGHTED_GRADIENT_FILES = (
+    "cluster_network_profile_weighted_fisherz.npy",
+    "cluster_assignment_status_weighted_fisherz.json",
+    "cluster_dominant_network_weighted_fisherz.json",
+    "group_functional_atlas_labels_weighted_fisherz.npy",
+    "group_functional_atlas_label_map_weighted_fisherz.json",
+)
+WEIGHTED_WTA_FILES = (
+    "vertex_network_profile_weighted_fisherz.npy",
+    "wta_top_labels_weighted_fisherz.npy",
+    "vertex_assignment_status_weighted_fisherz.json",
+    "wta_top_label_map_weighted_fisherz.json",
+)
+NORMALIZED_WTA_FILES = (
+    "wta_top_labels_normalized_top20_count.npy",
+    "vertex_assignment_status_normalized_top20_count.json",
+    "wta_top_label_map_normalized_top20_count.json",
+    "wta_top_labels_family17_normalized_top20_count.npy",
+    "vertex_assignment_status_family17_normalized_top20_count.json",
+    "wta_top_label_map_family17_normalized_top20_count.json",
+)
 
 
 @dataclass(frozen=True)
@@ -113,13 +134,61 @@ def copy_file_payload(src: Path, dst: Path, *, overwrite: bool) -> None:
     shutil.copy2(src, dst)
 
 
+def copy_file_existing_parent(src: Path, dst: Path, *, overwrite: bool) -> None:
+    if not src.exists():
+        raise FileNotFoundError(f"Missing source payload: {src}")
+    if not dst.parent.exists():
+        raise FileNotFoundError(f"Destination parent does not exist: {dst.parent}")
+    if dst.exists() and not overwrite:
+        return
+    shutil.copy2(src, dst)
+
+
+def sync_weighted_outputs_to_cache(job: BranchJob, paths: BranchOverviewPaths, *, overwrite: bool) -> None:
+    sub = f"sub-{job.subject}"
+    for smoothing in ("2mm", "4mm"):
+        for hemi in ("L", "R"):
+            src_grad = paths.final_gradient_root / smoothing / hemi
+            dst_grad = paths.work_root / sub / "gradient" / smoothing / hemi
+            for name in WEIGHTED_GRADIENT_FILES:
+                copy_file_existing_parent(src_grad / name, dst_grad / name, overwrite=overwrite)
+            grad_labels = sorted((src_grad / "workbench_assets").glob("*_weighted_fisherz.label.gii"))
+            if not grad_labels:
+                raise FileNotFoundError(f"Missing weighted gradient label GIFTI under {src_grad / 'workbench_assets'}")
+            copy_file_existing_parent(grad_labels[0], dst_grad / "workbench_assets" / grad_labels[0].name, overwrite=overwrite)
+
+            src_wta = paths.final_wta_root / smoothing / hemi
+            dst_wta = paths.work_root / sub / "wta" / smoothing / hemi
+            for name in WEIGHTED_WTA_FILES:
+                copy_file_existing_parent(src_wta / name, dst_wta / name, overwrite=overwrite)
+            for name in NORMALIZED_WTA_FILES:
+                if not (dst_wta / name).exists():
+                    copy_file_existing_parent(src_wta / name, dst_wta / name, overwrite=overwrite)
+            for tag in ("weighted_fisherz",):
+                wta_labels = sorted((src_wta / "workbench_assets").glob(f"*_{tag}.label.gii"))
+                if not wta_labels:
+                    raise FileNotFoundError(f"Missing {tag} WTA label GIFTI under {src_wta / 'workbench_assets'}")
+                copy_file_existing_parent(wta_labels[0], dst_wta / "workbench_assets" / wta_labels[0].name, overwrite=overwrite)
+            for tag in ("normalized_top20_count", "family17_normalized_top20_count"):
+                if sorted((dst_wta / "workbench_assets").glob(f"*_{tag}.label.gii")):
+                    continue
+                wta_labels = sorted((src_wta / "workbench_assets").glob(f"*_{tag}.label.gii"))
+                if not wta_labels:
+                    raise FileNotFoundError(f"Missing {tag} WTA label GIFTI under {src_wta / 'workbench_assets'} and {dst_wta / 'workbench_assets'}")
+                copy_file_existing_parent(wta_labels[0], dst_wta / "workbench_assets" / wta_labels[0].name, overwrite=overwrite)
+
+
 def materialize_final_outputs(job: BranchJob, paths: BranchOverviewPaths, *, overwrite: bool) -> None:
     sub = f"sub-{job.subject}"
     copy_tree_payload(paths.work_root / sub / "gradient", paths.final_gradient_root, overwrite=overwrite)
     copy_tree_payload(paths.work_root / sub / "wta", paths.final_wta_root, overwrite=overwrite)
     copy_file_payload(paths.overview_root / "gradient" / f"{sub}_gradient_fisherz_overview.png", paths.final_gradient_figures / f"{sub}_gradient_fisherz_overview.png", overwrite=overwrite)
     copy_file_payload(paths.overview_root / "gradient" / f"{sub}_gradient_count_overview.png", paths.final_gradient_figures / f"{sub}_gradient_count_overview.png", overwrite=overwrite)
+    copy_file_payload(paths.overview_root / "gradient" / f"{sub}_gradient_weighted_fisherz_overview.png", paths.final_gradient_figures / f"{sub}_gradient_weighted_fisherz_overview.png", overwrite=overwrite)
     copy_file_payload(paths.overview_root / "wta" / f"{sub}_wta_overview.png", paths.final_wta_figures / f"{sub}_wta_overview.png", overwrite=overwrite)
+    copy_file_payload(paths.overview_root / "wta" / f"{sub}_wta_weighted_fisherz_overview.png", paths.final_wta_figures / f"{sub}_wta_weighted_fisherz_overview.png", overwrite=overwrite)
+    copy_file_payload(paths.overview_root / "wta" / f"{sub}_wta_normalized_top20_count_overview.png", paths.final_wta_figures / f"{sub}_wta_normalized_top20_count_overview.png", overwrite=overwrite)
+    copy_file_payload(paths.overview_root / "wta" / f"{sub}_wta_family17_normalized_top20_count_overview.png", paths.final_wta_figures / f"{sub}_wta_family17_normalized_top20_count_overview.png", overwrite=overwrite)
     manifest = {
         "status": "ok",
         "workflow": "iowa7t_branch_individual_overviews",
@@ -154,6 +223,7 @@ def run_branch_overviews(job: BranchJob, *, overwrite: bool, jobs: int) -> dict[
         "--jobs", str(max(1, min(int(jobs), 10))),
         "--network-column", "canonical8",
     ] + (["--resume"] if not overwrite else []))
+    sync_weighted_outputs_to_cache(job, paths, overwrite=overwrite)
     run_command([
         str(PY314),
         "scripts/individual_workflow/02_build_individual_overviews.py",

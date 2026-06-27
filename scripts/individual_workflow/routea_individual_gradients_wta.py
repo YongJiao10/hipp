@@ -110,7 +110,11 @@ def iter_subject_combos(
 def method_combo_output_dir(out_root: Path, method: str, combo: SubjectCombo) -> Path:
     method_dirs = {
         "gradient_spectral_k3": "gradient",
+        "gradient_weighted_fisherz": "gradient",
         "wta_top": "wta",
+        "wta_weighted_fisherz": "wta",
+        "wta_normalized_top20_count": "wta",
+        "wta_family17_normalized_top20_count": "wta",
     }
     if method not in method_dirs:
         raise ValueError(f"Unknown individual atlas method: {method!r}")
@@ -144,11 +148,35 @@ OVERVIEW_METHODS: dict[str, dict[str, str]] = {
         "label_filename": "cluster_labels_k3.npy",
         "title": "Individual gradient spectral K=3 count",
     },
+    "gradient_weighted_fisherz": {
+        "task_dir": "gradient",
+        "filename_stem": "gradient_weighted_fisherz",
+        "label_filename": "group_functional_atlas_labels_weighted_fisherz.npy",
+        "title": "Individual gradient spectral K=3 weighted fisher-z",
+    },
     "wta_top": {
         "task_dir": "wta",
         "filename_stem": "wta",
         "label_filename": "wta_top_labels.npy",
         "title": "Individual WTA top",
+    },
+    "wta_weighted_fisherz": {
+        "task_dir": "wta",
+        "filename_stem": "wta_weighted_fisherz",
+        "label_filename": "wta_top_labels_weighted_fisherz.npy",
+        "title": "Individual WTA weighted fisher-z",
+    },
+    "wta_normalized_top20_count": {
+        "task_dir": "wta",
+        "filename_stem": "wta_normalized_top20_count",
+        "label_filename": "wta_top_labels_normalized_top20_count.npy",
+        "title": "Individual WTA normalized top20 count",
+    },
+    "wta_family17_normalized_top20_count": {
+        "task_dir": "wta",
+        "filename_stem": "wta_family17_normalized_top20_count",
+        "label_filename": "wta_top_labels_family17_normalized_top20_count.npy",
+        "title": "Individual WTA family17 normalized top20 count",
     },
 }
 OVERVIEW_METHOD_ALIASES = {
@@ -156,8 +184,15 @@ OVERVIEW_METHOD_ALIASES = {
     "gradient_spectral_k3": "gradient_spectral_k3",
     "gradient_count": "gradient_count",
     "count": "gradient_count",
+    "gradient_weighted_fisherz": "gradient_weighted_fisherz",
+    "weighted_fisherz": "gradient_weighted_fisherz",
     "wta": "wta_top",
     "wta_top": "wta_top",
+    "wta_weighted_fisherz": "wta_weighted_fisherz",
+    "wta_normalized_top20_count": "wta_normalized_top20_count",
+    "normalized_top20_count": "wta_normalized_top20_count",
+    "wta_family17_normalized_top20_count": "wta_family17_normalized_top20_count",
+    "family17_normalized_top20_count": "wta_family17_normalized_top20_count",
 }
 
 
@@ -371,6 +406,67 @@ def write_label_gifti(path: Path, labels: np.ndarray, label_items: list[tuple[in
     nib.save(core.make_named_label_gifti(labels.astype(np.int32), label_items), str(path))
 
 
+def write_normalized_wta_outputs(
+    *,
+    wta_dir: Path,
+    subject: str,
+    smoothing: str,
+    hemi: str,
+    fc_full_fisherz: np.ndarray,
+    valid_mask: np.ndarray,
+    roi_registry: list[dict[str, object]],
+    network_column: str,
+    filename_suffix: str,
+    top_n_cap: int,
+    color_map: dict[str, tuple[int, int, int, int]],
+) -> dict[str, object]:
+    core = load_core_group_atlas_module()
+    column = core.resolve_kong2022_network_registry_column(network_column)
+    support_indices = np.flatnonzero(np.asarray(valid_mask, dtype=bool)).astype(np.int32)
+    profile = np.asarray(fc_full_fisherz, dtype=np.float32)[support_indices, :]
+    rows = core.build_normalized_topn_count_vertex_rows(
+        mean_profile=profile,
+        support_indices=support_indices,
+        roi_registry=roi_registry,
+        top_n_cap=int(top_n_cap),
+        network_column=column,
+    )
+    network_names, _network_to_key = load_network_names_and_keys(roi_registry, column)
+    labels, label_map, label_items = core.functional_atlas_from_vertices(
+        n_vertices=int(np.asarray(valid_mask).size),
+        status_rows=rows,
+        network_names=network_names,
+        color_map=color_map,
+    )
+    np.save(wta_dir / f"wta_top_labels_{filename_suffix}.npy", labels.astype(np.int32))
+    write_json(
+        wta_dir / f"vertex_assignment_status_{filename_suffix}.json",
+        {
+            "items": rows,
+            "assignment_metric": "top20_count_normalized_by_network_roi_count",
+            "normalization": "top20_count_divided_by_finite_available_roi_count",
+            "network_column": column,
+            "top_n_cap": int(top_n_cap),
+        },
+        sort_keys=True,
+    )
+    write_json(wta_dir / f"wta_top_label_map_{filename_suffix}.json", label_map, sort_keys=True)
+    label_path = (
+        wta_dir
+        / "workbench_assets"
+        / f"sub-{subject}_hemi-{hemi}_space-corobl_den-512_label-individual_wta_top_{smoothing}_{filename_suffix}.label.gii"
+    )
+    write_label_gifti(label_path, labels, label_items)
+    return {
+        "labels": str((wta_dir / f"wta_top_labels_{filename_suffix}.npy").resolve()),
+        "status": str((wta_dir / f"vertex_assignment_status_{filename_suffix}.json").resolve()),
+        "label_map": str((wta_dir / f"wta_top_label_map_{filename_suffix}.json").resolve()),
+        "label_gifti": str(label_path.resolve()),
+        "network_column": column,
+        "assignment_metric": "top20_count_normalized_by_network_roi_count",
+    }
+
+
 def compute_individual_gradients(
     *,
     fc_full_fisherz: np.ndarray,
@@ -516,6 +612,34 @@ def process_combo(config: dict[str, object], combo_dict: dict[str, str]) -> dict
             / f"sub-{combo.subject}_hemi-{combo.hemi}_space-corobl_den-512_label-individual_wta_top_{combo.smoothing}.label.gii"
         )
         write_label_gifti(wta_lbl_path, wta_labels, label_items_from_networks(network_names, color_map))
+        normalized_wta_outputs = {
+            "normalized_top20_count": write_normalized_wta_outputs(
+                wta_dir=wta_dir,
+                subject=combo.subject,
+                smoothing=combo.smoothing,
+                hemi=combo.hemi,
+                fc_full_fisherz=fc_full_fisherz,
+                valid_mask=valid_mask,
+                roi_registry=roi_registry,
+                network_column="canonical8",
+                filename_suffix="normalized_top20_count",
+                top_n_cap=int(config["top_n_cap"]),
+                color_map=color_map,
+            ),
+            "family17_normalized_top20_count": write_normalized_wta_outputs(
+                wta_dir=wta_dir,
+                subject=combo.subject,
+                smoothing=combo.smoothing,
+                hemi=combo.hemi,
+                fc_full_fisherz=fc_full_fisherz,
+                valid_mask=valid_mask,
+                roi_registry=roi_registry,
+                network_column="family17",
+                filename_suffix="family17_normalized_top20_count",
+                top_n_cap=int(config["top_n_cap"]),
+                color_map=color_map,
+            ),
+        }
 
         elapsed = float(time.time() - started)
         manifest = {
@@ -525,7 +649,7 @@ def process_combo(config: dict[str, object], combo_dict: dict[str, str]) -> dict
             "subject": f"sub-{combo.subject}",
             "smoothing": combo.smoothing,
             "hemi": combo.hemi,
-            "method_outputs": ["gradient", "gradient-spectral-k3", "wta-top"],
+            "method_outputs": ["gradient", "gradient-spectral-k3", "wta-top", "wta-normalized-top20-count", "wta-family17-normalized-top20-count"],
             "individual_level": True,
             "n_subjects": 1,
             "n_vertices": int(valid_mask.size),
@@ -547,6 +671,8 @@ def process_combo(config: dict[str, object], combo_dict: dict[str, str]) -> dict
                 "wta_top_dir": str(wta_dir.resolve()),
                 "cluster_label_gifti": str(cluster_lbl_path.resolve()),
                 "wta_label_gifti": str(wta_lbl_path.resolve()),
+                "wta_normalized_top20_count": normalized_wta_outputs["normalized_top20_count"],
+                "wta_family17_normalized_top20_count": normalized_wta_outputs["family17_normalized_top20_count"],
             },
             "hippomaps_repo": str(Path(hippomaps_root).resolve()),
             "hippomaps_import_path": hippomaps_import_path(hippomaps_root),
@@ -561,6 +687,8 @@ def process_combo(config: dict[str, object], combo_dict: dict[str, str]) -> dict
         wta_manifest["outputs"] = {
             "wta_top_dir": str(wta_dir.resolve()),
             "wta_label_gifti": str(wta_lbl_path.resolve()),
+            "wta_normalized_top20_count": normalized_wta_outputs["normalized_top20_count"],
+            "wta_family17_normalized_top20_count": normalized_wta_outputs["family17_normalized_top20_count"],
         }
         write_json(wta_manifest_path, wta_manifest, sort_keys=True)
         return {
