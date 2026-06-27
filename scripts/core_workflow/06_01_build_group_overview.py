@@ -89,7 +89,8 @@ FS_MISSING = 13
 FS_BIG_TITLE = 13
 FS_SUPTITLE = 18
 CLUSTERLESS_METHODS = {"wta-top"}
-ASSIGNMENT_VARIANTS = ("fisherz", "count")
+ASSIGNMENT_VARIANTS = ("fisherz", "count", "weighted_fisherz")
+DEFAULT_RENDER_ASSIGNMENT_VARIANTS = ("fisherz", "count")
 ASSIGNMENT_VARIANT_CHOICES = ASSIGNMENT_VARIANTS + ("both",)
 WTA_OVERVIEW_PROFILE_BINS = 20
 WTA_OVERVIEW_SIDE_PANEL_FONT_DELTA_PT = 4
@@ -103,12 +104,25 @@ GRADIENT_METHOD = "gradient-spectral"
 
 def resolve_render_assignment_variants(method: str, assignment_variant: str) -> tuple[str | None, ...]:
     if method in CLUSTERLESS_METHODS:
-        return (None,)
+        return ("weighted_fisherz",) if assignment_variant == "weighted_fisherz" else (None,)
     if assignment_variant == "both":
-        return ASSIGNMENT_VARIANTS
+        return DEFAULT_RENDER_ASSIGNMENT_VARIANTS
     if assignment_variant in ASSIGNMENT_VARIANTS:
         return (assignment_variant,)
     raise ValueError(f"Unknown assignment variant: {assignment_variant!r}")
+
+
+def effective_overview_mode_tag(method: str, mode_tag: str | None, assignment_variant: str | None) -> str | None:
+    if method in CLUSTERLESS_METHODS and assignment_variant != "weighted_fisherz":
+        return None
+    return mode_tag
+
+
+def resolve_overview_mode_tag(group_root: Path, explicit_mode_tag: str | None) -> str | None:
+    if explicit_mode_tag is not None:
+        text = str(explicit_mode_tag).strip()
+        return text if text else None
+    return None if "full" in Path(group_root).name else "sparse"
 
 
 def _is_gradient_method(method: str) -> bool:
@@ -765,7 +779,7 @@ def render_combo(
     assignment_variant: str = "fisherz",
     gradient_comp_tag: str = "",
 ) -> dict[str, object]:
-    effective_mode_tag = (None if method in CLUSTERLESS_METHODS else mode_tag)
+    effective_mode_tag = effective_overview_mode_tag(method, mode_tag, assignment_variant)
     effective_assignment_variant = None if method in CLUSTERLESS_METHODS else str(assignment_variant)
     if method in CLUSTERLESS_METHODS:
         fig = plt.figure(figsize=(19.0, 12.8), dpi=180, constrained_layout=True)
@@ -1183,12 +1197,8 @@ def main() -> int:
     args = p.parse_args()
     group_root = Path(args.group_root).resolve()
 
-    # Enforce strict mode auto-detection from group_root to prevent provenance decoupling.
-    # Default full mode yields no suffix; sparsified yields "sparse".
-    if "full" in group_root.name:
-        args.mode_tag = None
-    else:
-        args.mode_tag = "sparse"
+    # Preserve explicit comparison mode tags; otherwise infer from the group-root name.
+    args.mode_tag = resolve_overview_mode_tag(group_root, args.mode_tag)
 
     # Enforce strict route tag detection from group_root to prevent provenance decoupling.
     if args.route_tag is None:
@@ -1248,7 +1258,7 @@ def main() -> int:
                             "smoothings": [r["smoothing"] for r in row_meta],
                             "metric_summary": metric,
                             "route_tag": args.route_tag,
-                            "mode_tag": (None if method in CLUSTERLESS_METHODS else args.mode_tag),
+                            "mode_tag": effective_overview_mode_tag(method, args.mode_tag, assignment_variant),
                             "assignment_variant": assignment_variant,
                             "source_group_root": str(group_root),
                         }

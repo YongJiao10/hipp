@@ -177,3 +177,5 @@ Implementation structure contract:
 - New utility-style helpers should be added to `lib/` modules rather than redefined in numbered step files.
 
 The WTA-top overview embeds a fixed 20-bin long-axis network profile as its middle column, with percent-of-bin vertices on the horizontal axis and long-axis bins on the vertical axis. Standalone `06_02_build_wta_long_axis_profiles.py` code and `kong2022_wta-top_long_axis_network_profile_*` PNG/TSV products have been removed from the maintained workflow.
+
+Post-hoc RouteA weighted comparison outputs can be generated with `05_05_build_weighted_fisherz_branch.py`. This writes `outputs_hcp/work/group_atlas/routea_weighted_fisherz_full_k3/` and `outputs_hcp/present/overviews/weighted_fisherz/`, preserving the original RouteA `fisherz` branch while adding `weighted_fisherz` gradient assignment labels and WTA labels from vertex-count weighted network time series recomputed as Fisher-z FC. Render the comparison branch with `06_01_build_group_overview.py --assignment-variant weighted_fisherz --mode-tag weighted_fisherz --methods gradient-spectral wta-top`.

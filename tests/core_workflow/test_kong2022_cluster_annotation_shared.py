@@ -31,6 +31,14 @@ assignment_status_from_kong2022_roi_profile = atlas_mod.assignment_status_from_k
 cluster_assignment_variants_from_kong2022_roi_profile = atlas_mod.cluster_assignment_variants_from_kong2022_roi_profile
 resolve_kong2022_network_registry_column = atlas_mod.resolve_kong2022_network_registry_column
 build_global_top_connections = atlas_mod.build_global_top_connections
+from lib.weighted_fisherz import (  # noqa: E402
+    assign_weighted_network_profile_rows,
+    weighted_cluster_network_fisherz_profile_from_timeseries,
+    weighted_network_fisherz_profile_from_timeseries,
+    weighted_network_profile_from_roi_profile,
+    weighted_network_timeseries_from_roi_timeseries,
+)
+from lib.fc_math import corrcoef_rows, fisher_z_transform_fc  # noqa: E402
 
 
 def test_method_gate_covers_both_spectral_methods_only() -> None:
@@ -182,6 +190,158 @@ def test_kong2022_cluster_assignment_variants_keep_fisherz_and_count_results() -
     assert variants["fisherz"]["status_rows"][0]["top1_network"] == "Default"
     assert variants["count"]["status_rows"][0]["top1_network"] == "Somatomotor"
 
+
+
+
+def test_weighted_network_profile_uses_roi_vertex_counts_not_roi_equal_mean() -> None:
+    roi_profile = np.array([[1.0, 9.0, 10.0]], dtype=np.float32)
+    roi_registry = [
+        {"canonical8": "Default", "n_grayordinates_used": 1},
+        {"canonical8": "Default", "n_grayordinates_used": 3},
+        {"canonical8": "Visual", "n_grayordinates_used": 2},
+    ]
+
+    weighted = weighted_network_profile_from_roi_profile(
+        roi_profile,
+        roi_registry,
+        ["Default", "Visual"],
+    )
+
+    expected = np.array([[(1.0 * 1.0 + 9.0 * 3.0) / 4.0, 10.0]], dtype=np.float32)
+    assert np.allclose(weighted, expected, atol=1e-6), (weighted, expected)
+    assert not np.allclose(weighted[0, 0], np.float32(5.0), atol=1e-6)
+
+
+def test_weighted_network_timeseries_matches_direct_vertex_average() -> None:
+    roi_ts = np.array(
+        [
+            [1.0, 3.0, 5.0],
+            [9.0, 9.0, 9.0],
+            [2.0, 4.0, 6.0],
+        ],
+        dtype=np.float32,
+    )
+    roi_rows = [
+        {"canonical8": "Default", "n_grayordinates_used": 1},
+        {"canonical8": "Default", "n_grayordinates_used": 3},
+        {"canonical8": "Visual", "n_grayordinates_used": 2},
+    ]
+
+    network_ts = weighted_network_timeseries_from_roi_timeseries(
+        roi_ts,
+        roi_rows,
+        ["Default", "Visual"],
+    )
+
+    expected_default = (roi_ts[0] * 1.0 + roi_ts[1] * 3.0) / 4.0
+    expected = np.vstack([expected_default, roi_ts[2]]).astype(np.float32)
+    assert np.allclose(network_ts, expected, atol=1e-6), (network_ts, expected)
+
+
+
+
+def test_weighted_fisherz_profile_uses_weighted_network_timeseries_before_fc() -> None:
+    hipp_ts = np.array(
+        [
+            [-1.0, 0.0, 1.0, 2.0, 3.0],
+            [3.0, 1.0, 0.0, -1.0, -2.0],
+        ],
+        dtype=np.float32,
+    )
+    roi_ts = np.array(
+        [
+            [-1.0, 0.0, 1.0, 2.0, 3.0],
+            [2.0, -1.0, 0.5, 1.0, -0.5],
+            [3.0, 1.0, 0.0, -1.0, -2.0],
+        ],
+        dtype=np.float32,
+    )
+    roi_rows = [
+        {"canonical8": "Default", "n_grayordinates_used": 3},
+        {"canonical8": "Default", "n_grayordinates_used": 1},
+        {"canonical8": "Visual", "n_grayordinates_used": 2},
+    ]
+    network_names = ["Default", "Visual"]
+
+    got = weighted_network_fisherz_profile_from_timeseries(
+        hipp_ts,
+        roi_ts,
+        roi_rows,
+        network_names,
+    )
+
+    network_ts = weighted_network_timeseries_from_roi_timeseries(roi_ts, roi_rows, network_names)
+    expected = fisher_z_transform_fc(corrcoef_rows(hipp_ts, network_ts))
+    roi_fc_then_weight = weighted_network_profile_from_roi_profile(
+        fisher_z_transform_fc(corrcoef_rows(hipp_ts, roi_ts)),
+        roi_rows,
+        network_names,
+    )
+    assert np.allclose(got, expected, atol=1e-6), (got, expected)
+    assert not np.allclose(got[:, 0], roi_fc_then_weight[:, 0], atol=1e-4)
+
+
+def test_weighted_cluster_profile_averages_cluster_timeseries_before_fc() -> None:
+    hipp_ts = np.array(
+        [
+            [-1.0, 0.0, 1.0, 2.0, 3.0],
+            [0.0, 1.0, 1.0, 1.0, 2.0],
+            [3.0, 1.0, 0.0, -1.0, -2.0],
+        ],
+        dtype=np.float32,
+    )
+    labels = np.array([1, 1, 2], dtype=np.int32)
+    support = np.array([True, True, True], dtype=bool)
+    roi_ts = np.array(
+        [
+            [-1.0, 0.0, 1.0, 2.0, 3.0],
+            [2.0, -1.0, 0.5, 1.0, -0.5],
+        ],
+        dtype=np.float32,
+    )
+    roi_rows = [
+        {"canonical8": "Default", "n_grayordinates_used": 3},
+        {"canonical8": "Default", "n_grayordinates_used": 1},
+    ]
+
+    got = weighted_cluster_network_fisherz_profile_from_timeseries(
+        labels,
+        support,
+        hipp_ts,
+        roi_ts,
+        roi_rows,
+        ["Default"],
+    )
+
+    network_ts = weighted_network_timeseries_from_roi_timeseries(roi_ts, roi_rows, ["Default"])
+    cluster_ts = np.vstack([hipp_ts[:2].mean(axis=0), hipp_ts[2]])
+    expected = fisher_z_transform_fc(corrcoef_rows(cluster_ts, network_ts))
+    vertex_fc_mean = np.nanmean(fisher_z_transform_fc(corrcoef_rows(hipp_ts[:2], network_ts)), axis=0)
+    assert np.allclose(got, expected, atol=1e-6), (got, expected)
+    assert not np.allclose(got[0], vertex_fc_mean, atol=1e-4)
+
+
+def test_weighted_wta_rows_use_top_network_fisherz_scores() -> None:
+    profile = np.array(
+        [
+            [0.2, 0.9],
+            [1.1, 0.4],
+        ],
+        dtype=np.float32,
+    )
+
+    rows = assign_weighted_network_profile_rows(
+        profile=profile,
+        support_indices=np.array([5, 9], dtype=np.int32),
+        network_names=["Default", "Visual"],
+    )
+
+    assert rows[0]["vertex_index"] == 5
+    assert rows[0]["top1_network"] == "Visual"
+    assert rows[0]["top1_fisher_z"] == np.float32(0.9)
+    assert rows[0]["top2_network"] == "Default"
+    assert "top1_count" not in rows[0]
+    assert rows[1]["top1_network"] == "Default"
 
 def main() -> int:
     test_method_gate_covers_both_spectral_methods_only()

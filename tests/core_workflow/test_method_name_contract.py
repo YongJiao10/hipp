@@ -166,7 +166,23 @@ def test_group_overview_direct_renderer_can_expand_both_assignment_variants() ->
     assert present_mod.resolve_render_assignment_variants("gradient-spectral", "both") == ("fisherz", "count")
     assert present_mod.resolve_render_assignment_variants("network-spectral", "count") == ("count",)
     assert present_mod.resolve_render_assignment_variants("wta-top", "both") == (None,)
+    assert present_mod.resolve_render_assignment_variants("wta-top", "weighted_fisherz") == ("weighted_fisherz",)
+    assert present_mod.effective_overview_mode_tag("wta-top", "weighted_fisherz", None) is None
+    assert present_mod.effective_overview_mode_tag("wta-top", "weighted_fisherz", "weighted_fisherz") == "weighted_fisherz"
 
+
+
+
+def test_group_overview_direct_renderer_accepts_weighted_fisherz_without_changing_both() -> None:
+    assert present_mod.resolve_render_assignment_variants("gradient-spectral", "weighted_fisherz") == ("weighted_fisherz",)
+    assert present_mod.resolve_render_assignment_variants("network-spectral", "weighted_fisherz") == ("weighted_fisherz",)
+    assert present_mod.resolve_render_assignment_variants("gradient-spectral", "both") == ("fisherz", "count")
+
+
+def test_group_overview_keeps_explicit_weighted_mode_tag_for_full_root(tmp_path: Path) -> None:
+    group_root = tmp_path / "routea_weighted_fisherz_full_k3"
+    assert present_mod.resolve_overview_mode_tag(group_root, "weighted_fisherz") == "weighted_fisherz"
+    assert present_mod.resolve_overview_mode_tag(group_root, None) is None
 
 def test_group_overview_assignment_variant_paths_fall_back_to_run_dir_when_manifest_paths_are_stale(tmp_path: Path) -> None:
     run_dir = tmp_path / "run"
