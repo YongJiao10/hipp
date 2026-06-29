@@ -161,18 +161,40 @@ def functional_from_vertex_rows(n_vertices: int, rows: list[dict[str, object]], 
     return labels, label_map
 
 
-def normalize_template_paths(manifest: dict) -> dict:
+def template_subject_from_spec(template_spec: Path) -> str:
+    name = Path(template_spec).name
+    token = name.split("_", 1)[0]
+    return token if token.startswith("sub-") else "sub-100610"
+
+
+def normalize_template_paths(
+    manifest: dict,
+    *,
+    template_surface_dir: Path = DEFAULT_TEMPLATE_SURFACE_DIR,
+    template_spec: Path = DEFAULT_TEMPLATE_SPEC,
+) -> dict:
     hemi = str(manifest.get("hemi", ""))
-    surface = DEFAULT_TEMPLATE_SURFACE_DIR / f"group-average_hemi-{hemi}_space-corobl_den-512_label-hipp_midthickness.surf.gii"
+    surface = Path(template_surface_dir) / f"group-average_hemi-{hemi}_space-corobl_den-512_label-hipp_midthickness.surf.gii"
     if surface.exists():
-        manifest["template_left_or_right_surface"] = str(surface.resolve())
-    if DEFAULT_TEMPLATE_SPEC.exists():
-        manifest["template_subject"] = "sub-100610"
-        manifest["template_spec_path"] = str(DEFAULT_TEMPLATE_SPEC.resolve())
+        surface_resolved = str(surface.resolve())
+        manifest["template_left_or_right_surface"] = surface_resolved
+        density_evidence = manifest.get("density_evidence")
+        if isinstance(density_evidence, dict):
+            density_evidence["surface_path"] = surface_resolved
+    spec = Path(template_spec)
+    if spec.exists():
+        manifest["template_subject"] = template_subject_from_spec(spec)
+        manifest["template_spec_path"] = str(spec.resolve())
     return manifest
 
 
-def normalize_copied_manifest_paths(run_dir: Path, manifest: dict) -> dict:
+def normalize_copied_manifest_paths(
+    run_dir: Path,
+    manifest: dict,
+    *,
+    template_surface_dir: Path = DEFAULT_TEMPLATE_SURFACE_DIR,
+    template_spec: Path = DEFAULT_TEMPLATE_SPEC,
+) -> dict:
     variants = manifest.get("assignment_variants", {})
     if isinstance(variants, dict):
         for variant, spec in variants.items():
@@ -188,7 +210,7 @@ def normalize_copied_manifest_paths(run_dir: Path, manifest: dict) -> dict:
     raw_cluster = manifest.get("template_cluster_label")
     if raw_cluster:
         manifest["template_cluster_label"] = str((run_dir / "template" / "workbench_assets" / Path(str(raw_cluster)).name).resolve())
-    return normalize_template_paths(manifest)
+    return normalize_template_paths(manifest, template_surface_dir=template_surface_dir, template_spec=template_spec)
 
 
 def recompute_gradient_weighted_run(
@@ -197,9 +219,16 @@ def recompute_gradient_weighted_run(
     surface_root: Path,
     reference_root: Path,
     color_map: dict[str, tuple[int, int, int, int]],
+    template_surface_dir: Path,
+    template_spec: Path,
 ) -> dict[str, object]:
     manifest_path = dst_run / "group_atlas_manifest.json"
-    manifest = normalize_copied_manifest_paths(dst_run, load_json(manifest_path))
+    manifest = normalize_copied_manifest_paths(
+        dst_run,
+        load_json(manifest_path),
+        template_surface_dir=template_surface_dir,
+        template_spec=template_spec,
+    )
     if str(manifest.get("status", "ok")) != "ok":
         raise RuntimeError(f"Cannot recompute non-ok run: {manifest_path}")
     labels = np.load(dst_run / "group_labels_final.npy").astype(np.int32)
@@ -279,6 +308,8 @@ def recompute_wta_weighted_run(
     surface_root: Path,
     reference_root: Path,
     color_map: dict[str, tuple[int, int, int, int]],
+    template_surface_dir: Path,
+    template_spec: Path,
 ) -> dict[str, object]:
     manifest_path = dst_run / "group_atlas_manifest.json"
     manifest = load_json(manifest_path)
@@ -330,7 +361,7 @@ def recompute_wta_weighted_run(
     label_path.parent.mkdir(parents=True, exist_ok=True)
     nib.save(make_named_label_gifti(functional_labels.astype(np.int32), label_items(network_names, color_map)), str(label_path))
 
-    manifest = normalize_template_paths(manifest)
+    manifest = normalize_template_paths(manifest, template_surface_dir=template_surface_dir, template_spec=template_spec)
     manifest.update(
         {
             "assignment_mode": "vertex_level",
@@ -457,6 +488,8 @@ def build_branch(args: argparse.Namespace) -> dict[str, object]:
     surface_root = Path(args.surface_root).resolve()
     reference_root = Path(args.reference_root).resolve()
     present_dir = Path(args.present_dir).resolve()
+    template_surface_dir = Path(args.template_surface_dir).resolve()
+    template_spec = Path(args.template_spec).resolve()
     color_map = load_network_colors(Path(args.network_style).resolve())
 
     results: list[dict[str, object]] = []
@@ -467,9 +500,27 @@ def build_branch(args: argparse.Namespace) -> dict[str, object]:
             dst_run = out_root / src_run.relative_to(source_root)
             copy_run_tree(src_run, dst_run)
             if method == "gradient-spectral":
-                results.append(recompute_gradient_weighted_run(dst_run=dst_run, surface_root=surface_root, reference_root=reference_root, color_map=color_map))
+                results.append(
+                    recompute_gradient_weighted_run(
+                        dst_run=dst_run,
+                        surface_root=surface_root,
+                        reference_root=reference_root,
+                        color_map=color_map,
+                        template_surface_dir=template_surface_dir,
+                        template_spec=template_spec,
+                    )
+                )
             else:
-                results.append(recompute_wta_weighted_run(dst_run=dst_run, surface_root=surface_root, reference_root=reference_root, color_map=color_map))
+                results.append(
+                    recompute_wta_weighted_run(
+                        dst_run=dst_run,
+                        surface_root=surface_root,
+                        reference_root=reference_root,
+                        color_map=color_map,
+                        template_surface_dir=template_surface_dir,
+                        template_spec=template_spec,
+                    )
+                )
     write_comparison_summary(source_root, out_root, present_dir)
     manifest = {
         "status": "ok",
@@ -480,6 +531,8 @@ def build_branch(args: argparse.Namespace) -> dict[str, object]:
         "surface_root_note": "strict weighted_fisherz uses hippocampal surface timeseries plus ROI timeseries weighted by n_grayordinates_used",
         "reference_root": str(reference_root),
         "present_dir": str(present_dir),
+        "template_surface_dir": str(template_surface_dir),
+        "template_spec": str(template_spec),
         "runs": results,
     }
     write_json(out_root / "weighted_fisherz_branch_manifest.json", manifest)
@@ -494,6 +547,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--reference-root", default=str(DEFAULT_REFERENCE_ROOT))
     parser.add_argument("--present-dir", default=str(DEFAULT_PRESENT_DIR))
     parser.add_argument("--network-style", default=str(DEFAULT_STYLE))
+    parser.add_argument("--template-surface-dir", default=str(DEFAULT_TEMPLATE_SURFACE_DIR), help="Directory containing group-average hemi-L/R midthickness surfaces used in copied manifests.")
+    parser.add_argument("--template-spec", default=str(DEFAULT_TEMPLATE_SPEC), help="Template subject HippUnfold spec path used in copied manifests.")
     return parser
 
 

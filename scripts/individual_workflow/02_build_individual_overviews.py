@@ -20,6 +20,7 @@ from routea_individual_gradients_wta import (
     DEFAULT_HEMIS,
     DEFAULT_INDIVIDUAL_OVERVIEW_ROOT,
     DEFAULT_JOBS,
+    DEFAULT_K,
     DEFAULT_OUT_ROOT,
     DEFAULT_SMOOTHINGS,
     DEFAULT_SUBJECTS_MANIFEST,
@@ -107,47 +108,149 @@ def write_tsv(path: Path, rows: list[dict[str, object]], fields: list[str]) -> N
 
 
 def fixed_k_selection_row(*, method: str, smoothing: str, hemi: str, n_support: int) -> dict[str, object]:
-    row = {field: "" for field in K_SELECTION_FIELDS}
-    row.update(
-        {
-            "method": method,
-            "atlas": ATLAS,
-            "smoothing": smoothing,
-            "hemi": hemi,
-            "coverage_threshold": COVERAGE_THRESHOLD,
-            "k": 3,
-            "n_subjects": 1,
-            "n_support_vertices": int(n_support),
-            "V_min_effective": 1,
-            "group_ari_mean": 1.0,
-            "group_ari_se": 0.0,
-            "subject_split_requested": 0,
-            "subject_split_used": 0,
-            "ARI_null_mean": 0.0,
-            "ARI_null_5pct": 0.0,
-            "min_cluster_size": int(n_support),
-            "max_components_per_cluster": 1,
-            "min_profile_coherence": 1.0,
-            "mean_profile_coherence": 1.0,
-            "nontrivial_min_size_ok": 1,
-            "nontrivial_connectedness_ok": 1,
-            "nontrivial_coherence_ok": 1,
-            "local_max": 1,
-            "within_1se_best": 1,
-            "selected_nontrivial": 1,
-            "max_profile_similarity": 0.0,
-            "redundant_pair_count": 0,
-            "nonredundant_ok": 1,
-            "reject_nontrivial_fail": 0,
-            "reject_redundant": 0,
-            "reject_reason_primary": "fixed_individual_k3",
-            "selected_final": 1,
-            "within_1se_survivor_pool": 1,
-            "survivor_pool_argmax_k": 3,
-            "k_final_decision_path": "individual_fixed_k3",
-        }
-    )
-    return row
+    return fixed_k_selection_rows(
+        method=method,
+        smoothing=smoothing,
+        hemi=hemi,
+        n_support=n_support,
+        k_values=(DEFAULT_K,),
+    )[0]
+
+
+def fixed_k_selection_rows(
+    *,
+    method: str,
+    smoothing: str,
+    hemi: str,
+    n_support: int,
+    k_values: tuple[int, ...] | range = range(2, 11),
+    selected_k: int = DEFAULT_K,
+    redundancy_by_k: dict[int, tuple[float, int]] | None = None,
+) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    redundancy_by_k = redundancy_by_k or {}
+    for k_raw in k_values:
+        k = int(k_raw)
+        max_sim, redundant_pairs = redundancy_by_k.get(k, (0.0, 0))
+        row = {field: "" for field in K_SELECTION_FIELDS}
+        selected = int(k == int(selected_k))
+        row.update(
+            {
+                "method": method,
+                "atlas": ATLAS,
+                "smoothing": smoothing,
+                "hemi": hemi,
+                "coverage_threshold": COVERAGE_THRESHOLD,
+                "k": k,
+                "n_subjects": 1,
+                "n_support_vertices": int(n_support),
+                "V_min_effective": 1,
+                "group_ari_mean": 1.0,
+                "group_ari_se": 0.0,
+                "subject_split_requested": 0,
+                "subject_split_used": 0,
+                "subject_split_skipped_overlap": 0,
+                "subject_split_skipped_empty": 0,
+                "run_aware_ari_mean": "",
+                "run_aware_ari_se": "",
+                "run_aware_n_pairs": 0,
+                "run_aware_n_used": 0,
+                "ARI_null_mean": 0.0,
+                "ARI_null_5pct": 0.0,
+                "ARI_weak_null_mean": 0.0,
+                "B_null_requested": 0,
+                "B_null_used_strong": 0,
+                "B_null_used_weak": 0,
+                "min_cluster_size": int(n_support),
+                "max_components_per_cluster": 1,
+                "min_profile_coherence": 1.0,
+                "mean_profile_coherence": 1.0,
+                "nontrivial_min_size_ok": 1,
+                "nontrivial_connectedness_ok": 1,
+                "nontrivial_coherence_ok": 1,
+                "local_max": selected,
+                "within_1se_best": selected,
+                "selected_nontrivial": selected,
+                "max_profile_similarity": float(max_sim),
+                "redundant_pair_count": int(redundant_pairs),
+                "nonredundant_ok": int(float(max_sim) <= 0.80 and int(redundant_pairs) == 0),
+                "reject_nontrivial_fail": 0,
+                "reject_redundant": int(float(max_sim) > 0.80 or int(redundant_pairs) > 0),
+                "reject_reason_primary": "fixed_individual_k3" if selected else "individual_diagnostic_only",
+                "selected_final": selected,
+                "within_1se_survivor_pool": 1,
+                "survivor_pool_argmax_k": int(selected_k),
+                "k_final_decision_path": "individual_fixed_k3_full_k_diagnostic",
+            }
+        )
+        rows.append(row)
+    return rows
+
+
+def k_selection_summary_has_full_range(path: Path, *, k_values: range = range(2, 11)) -> bool:
+    if not Path(path).exists():
+        return False
+    lines = Path(path).read_text(encoding="utf-8").splitlines()
+    if len(lines) < 2:
+        return False
+    header = lines[0].split("	")
+    if "k" not in header:
+        return False
+    k_idx = header.index("k")
+    got: set[int] = set()
+    for line in lines[1:]:
+        parts = line.split("	")
+        if k_idx >= len(parts):
+            continue
+        try:
+            got.add(int(parts[k_idx]))
+        except ValueError:
+            continue
+    return set(int(k) for k in k_values).issubset(got)
+
+
+def individual_gradient_redundancy_by_k(
+    *,
+    core,
+    gradients_active: np.ndarray,
+    valid_mask: np.ndarray,
+    surface_path: Path,
+    subject: str,
+    shared_root: Path,
+    surface_root: Path,
+    smoothing: str,
+    hemi: str,
+    k_values: range = range(2, 11),
+) -> dict[int, tuple[float, int]]:
+    coords, faces = core.load_surface(Path(surface_path))
+    adjacency = core.build_surface_adjacency(faces, int(coords.shape[0]))
+    axis_order = core.long_axis_order(Path(surface_path))
+    valid = np.asarray(valid_mask, dtype=bool)
+    gradients = np.asarray(gradients_active, dtype=np.float32)[:, :3]
+    out: dict[int, tuple[float, int]] = {}
+    for k_raw in k_values:
+        k = int(k_raw)
+        _labels_active, labels_full = core.cluster_from_precomputed_group_features(
+            group_features=gradients,
+            support_mask=valid,
+            adjacency_full=adjacency,
+            k=k,
+            seed=0,
+        )
+        labels_full = core.reorder_labels_by_long_axis(labels_full.astype(np.int32), axis_order).astype(np.int32)
+        roi_profile, _roi_registry = core.cluster_roi_profile(
+            group_labels_final=labels_full,
+            support_mask=valid,
+            subjects=[subject],
+            shared_root=shared_root,
+            surface_root=surface_root,
+            reference_root=shared_root,
+            smoothing=smoothing,
+            hemi=hemi,
+            valid_masks_by_subject={subject: valid},
+        )
+        out[k] = core.profile_redundancy_metrics(roi_profile)
+    return out
 
 
 def adapter_run_dir(adapter_root: Path, subject: str, method: str, smoothing: str, hemi: str) -> Path:
@@ -259,8 +362,32 @@ def materialize_gradient_core_inputs(*, subject: str, work_root: Path, adapter_r
             write_json(dst / "cluster_dominant_network_count.json", {"dominant": [str(row.get("top1_network", "unassigned")) for row in assignment_variants["count"]["status_rows"]], "network_names": network_names, "assignment_variant": "count"})
             if (src / "cluster_dominant_network_weighted_fisherz.json").exists():
                 write_json(dst / "cluster_dominant_network_weighted_fisherz.json", read_json(src / "cluster_dominant_network_weighted_fisherz.json"))
-            write_tsv(dst / "k_selection_summary.tsv", [fixed_k_selection_row(method=GRADIENT_CORE_METHOD, smoothing=smoothing, hemi=hemi, n_support=int(np.sum(valid_mask)))], K_SELECTION_FIELDS)
             surf = subject_surface_path(hippunfold_batch_root, subject, hemi)
+            k_summary_path = dst / "k_selection_summary.tsv"
+            if not k_selection_summary_has_full_range(k_summary_path):
+                gradients_active = np.load(src / "gradients" / "hippomaps_gradients_active.npy").astype(np.float32)
+                redundancy_by_k = individual_gradient_redundancy_by_k(
+                    core=core,
+                    gradients_active=gradients_active,
+                    valid_mask=valid_mask,
+                    surface_path=surf,
+                    subject=subject,
+                    shared_root=shared_root,
+                    surface_root=surface_root,
+                    smoothing=smoothing,
+                    hemi=hemi,
+                )
+                write_tsv(
+                    k_summary_path,
+                    fixed_k_selection_rows(
+                        method=GRADIENT_CORE_METHOD,
+                        smoothing=smoothing,
+                        hemi=hemi,
+                        n_support=int(np.sum(valid_mask)),
+                        redundancy_by_k=redundancy_by_k,
+                    ),
+                    K_SELECTION_FIELDS,
+                )
             default_variant = assignment_variant if assignment_variant in functional_variant_payloads else "fisherz"
             manifest = {
                 "status": "ok",

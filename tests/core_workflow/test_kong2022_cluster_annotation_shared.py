@@ -364,6 +364,55 @@ def test_weighted_wta_rows_use_top_network_fisherz_scores() -> None:
     assert rows[1]["top1_network"] == "Default"
 
 
+def test_weighted_branch_parser_accepts_dataset_template_overrides(tmp_path: Path) -> None:
+    parser = weighted_branch_mod.build_arg_parser()
+
+    args = parser.parse_args(
+        [
+            "--source-root",
+            str(tmp_path / "source"),
+            "--out-root",
+            str(tmp_path / "out"),
+            "--surface-root",
+            str(tmp_path / "surface"),
+            "--reference-root",
+            str(tmp_path / "routea"),
+            "--template-surface-dir",
+            str(tmp_path / "templates" / "group_average_surfaces"),
+            "--template-spec",
+            str(tmp_path / "hippunfold" / "sub-1001_den-512_label-hipp_surfaces.spec"),
+        ]
+    )
+
+    assert args.template_surface_dir == str(tmp_path / "templates" / "group_average_surfaces")
+    assert args.template_spec == str(tmp_path / "hippunfold" / "sub-1001_den-512_label-hipp_surfaces.spec")
+
+
+def test_weighted_branch_normalizes_template_paths_from_explicit_dataset_roots(tmp_path: Path) -> None:
+    surface_dir = tmp_path / "templates" / "group_average_surfaces"
+    surface_dir.mkdir(parents=True)
+    left_surface = surface_dir / "group-average_hemi-L_space-corobl_den-512_label-hipp_midthickness.surf.gii"
+    left_surface.write_text("surface\n", encoding="utf-8")
+    spec = tmp_path / "hippunfold" / "sub-1001_den-512_label-hipp_surfaces.spec"
+    spec.parent.mkdir(parents=True)
+    spec.write_text("spec\n", encoding="utf-8")
+
+    manifest = weighted_branch_mod.normalize_template_paths(
+        {
+            "hemi": "L",
+            "template_subject": "sub-999999",
+            "density_evidence": {"surface_path": "/stale/hcp/surface.surf.gii"},
+        },
+        template_surface_dir=surface_dir,
+        template_spec=spec,
+    )
+
+    assert manifest["density_evidence"]["surface_path"] == str(left_surface.resolve())
+    assert manifest["template_left_or_right_surface"] == str(left_surface.resolve())
+    assert manifest["template_subject"] == "sub-1001"
+    assert manifest["template_spec_path"] == str(spec.resolve())
+
+
 def test_normalized_topn_count_wta_corrects_network_roi_count_bias() -> None:
     roi_registry = []
     for idx in range(2):

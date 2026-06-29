@@ -26,6 +26,8 @@ outputs_hcp/present/overviews/individual/
   wta/sub-<id>_wta_overview.png
 ```
 
+Gradient overview adapter rows cover K=2..10 for the K-selection and redundancy diagnostic panels, but final individual gradient labels remain fixed at K=3.
+
 Run and handoff metadata for the computation stage live under:
 
 ```bash

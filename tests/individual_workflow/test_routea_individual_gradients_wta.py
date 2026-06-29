@@ -242,6 +242,32 @@ def test_wta_label_gifti_path_prefers_exact_normalized_variant(tmp_path):
     assert got == canonical
 
 
+def test_individual_k_selection_rows_cover_full_fixed_k_curve():
+    import sys
+    path = REPO_ROOT / "scripts" / "individual_workflow" / "02_build_individual_overviews.py"
+    if str(path.parent) not in sys.path:
+        sys.path.insert(0, str(path.parent))
+    spec = importlib.util.spec_from_file_location("build_individual_overviews_k_rows", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    rows = module.fixed_k_selection_rows(
+        method="gradient-spectral",
+        smoothing="2mm",
+        hemi="L",
+        n_support=512,
+        redundancy_by_k={2: (0.25, 0), 3: (0.40, 0), 10: (0.90, 2)},
+    )
+
+    assert [int(row["k"]) for row in rows] == list(range(2, 11))
+    assert [int(row["selected_final"]) for row in rows].count(1) == 1
+    assert next(row for row in rows if int(row["selected_final"]) == 1)["k"] == 3
+    assert [float(row["group_ari_mean"]) for row in rows] == [1.0] * 9
+    assert float(rows[0]["max_profile_similarity"]) == 0.25
+    assert int(rows[-1]["redundant_pair_count"]) == 2
+
+
 def test_materialize_wta_core_inputs(tmp_path):
     import sys
     path = REPO_ROOT / "scripts" / "individual_workflow" / "02_build_individual_overviews.py"
