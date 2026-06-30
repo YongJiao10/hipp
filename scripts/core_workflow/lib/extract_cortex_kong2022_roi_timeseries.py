@@ -13,6 +13,7 @@ try:
     from .extract_cortex_merged_network_timeseries import extract_structure_data, load_required_mask
 except ImportError:  # pragma: no cover - supports direct script execution during local debugging.
     from extract_cortex_merged_network_timeseries import extract_structure_data, load_required_mask
+from .io_utils import write_tsv, compute_cortex_tsnr_gate, parse_run_segments
 from .output_layout import DEFAULT_KONG2022_ROUTEB_ROOT
 from .workflow_utils import file_meta_unresolved as file_meta, utc_now_iso, write_json
 from .kong2022_label_utils import (
@@ -32,42 +33,6 @@ ATLAS_SLUG = "kong2022"
 COMMON_REFERENCE_SLUG = "common"
 TSNR_THRESHOLD = 25.0
 HCP_MODE = 10000.0
-
-
-def write_tsv(path: Path, rows: list[dict[str, object]], fieldnames: list[str]) -> None:
-    with path.open("w", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames, delimiter="\t")
-        writer.writeheader()
-        writer.writerows(rows)
-
-
-def compute_cortex_tsnr_gate(
-    *,
-    data: np.ndarray,
-    outdir: Path,
-    hemi: str,
-    threshold: float,
-) -> Path:
-    sd = np.nanstd(np.asarray(data, dtype=np.float64), axis=1, ddof=1)
-    tsnr = np.where(sd > 0, HCP_MODE / sd, np.nan).astype(np.float32)
-    valid = np.isfinite(tsnr) & (tsnr >= float(threshold))
-    outdir.mkdir(parents=True, exist_ok=True)
-    np.save(outdir / f"cortex_{hemi.lower()}_tsnr.npy", tsnr)
-    mask_path = outdir / f"cortex_{hemi.lower()}_valid_mask.npy"
-    np.save(mask_path, valid.astype(bool))
-    write_json(
-        outdir / f"cortex_{hemi.lower()}_tsnr_gate_summary.json",
-        {
-            "hemi": hemi,
-            "threshold": float(threshold),
-            "tsnr_definition": "10000/std",
-            "n_grayordinates_total": int(valid.size),
-            "n_grayordinates_valid": int(valid.sum()),
-            "n_grayordinates_invalid": int(valid.size - valid.sum()),
-            "invalid_fraction": float(1.0 - (valid.sum() / max(1, valid.size))),
-        },
-    )
-    return mask_path
 
 
 def ensure_vertices_aligned(
@@ -93,39 +58,6 @@ def ensure_vertices_aligned(
         )
     return aligned
 
-
-def parse_run_segments(run_lengths: list[int] | None, expected_total_tp: int) -> list[dict[str, object]]:
-    if run_lengths is None:
-        n_runs = len(DEFAULT_RUN_IDS)
-        base = int(expected_total_tp) // n_runs
-        remainder = int(expected_total_tp) % n_runs
-        # Distribute remainder across the first `remainder` runs (one extra tp each)
-        run_lengths = [base + (1 if i < remainder else 0) for i in range(n_runs)]
-    if len(run_lengths) != len(DEFAULT_RUN_IDS):
-        raise ValueError(f"Expected {len(DEFAULT_RUN_IDS)} run lengths, got {run_lengths}")
-    segments: list[dict[str, object]] = []
-    offset = 0
-    for rid, run_len in zip(DEFAULT_RUN_IDS, run_lengths, strict=True):
-        run_len = int(run_len)
-        if run_len <= 0:
-            raise ValueError(f"Invalid run length for run-{rid}: {run_len}")
-        run_start = int(offset)
-        run_stop = int(offset + run_len)
-        segments.append(
-            {
-                "run_id": int(rid),
-                "run_label": f"run-{rid}",
-                "run_start": int(run_start),
-                "run_stop": int(run_stop),
-                "run_length": int(run_len),
-            }
-        )
-        offset = run_stop
-    if offset != int(expected_total_tp):
-        raise RuntimeError(
-            f"Run lengths do not sum to concat length: sum={offset} concat={expected_total_tp}"
-        )
-    return segments
 
 
 def aggregate_hemi_roi_timeseries(

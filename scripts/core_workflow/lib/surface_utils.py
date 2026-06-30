@@ -10,15 +10,11 @@ from nibabel.gifti import GiftiDataArray, GiftiImage, GiftiLabel, GiftiLabelTabl
 
 from lib.workbench_grid import compose_wb_grid_with_legend
 from lib.workbench_scene_batch import render_scene_batch
-from lib.network_colors import GLOBAL_NETWORK_STYLE_JSON, load_network_colors as _load_network_colors
+from lib.network_colors import GLOBAL_NETWORK_STYLE_JSON, load_network_colors
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 NETWORK_STYLE_JSON = GLOBAL_NETWORK_STYLE_JSON
 DEFAULT_SCENE = REPO_ROOT / "config" / "wb_locked_native_view_lateral_medial.scene"
-
-
-def load_network_colors(path: Path) -> dict[str, tuple[int, int, int, int]]:
-    return _load_network_colors(path)
 
 
 def infer_density_from_surface(path: Path) -> str:
@@ -146,6 +142,6 @@ def read_surface_vertex_count(surface_path: Path) -> int:
 def network_color_map(
     style_path: Path = NETWORK_STYLE_JSON,
 ) -> dict[str, tuple[int, int, int, int]]:
-    return _load_network_colors(style_path)
+    return load_network_colors(style_path)
 
 

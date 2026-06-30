@@ -193,6 +193,17 @@
       "recommended_manifest": "manifests/core_workflow/05_04_compute_confidence_maps.json"
     },
     {
+      "step_id": "05_05_build_weighted_fisherz_branch",
+      "stage": "05_group_atlas",
+      "purpose": "Build RouteA weighted_fisherz comparison branch recomputing network-timeseries Fisher-z FC.",
+      "branches": [
+        "kong2022_routea"
+      ],
+      "entry_script": "scripts/core_workflow/05_05_build_weighted_fisherz_branch.py",
+      "implementation_script": "scripts/core_workflow/05_05_build_weighted_fisherz_branch.py",
+      "recommended_manifest": "outputs_hcp/work/group_atlas/routea_weighted_fisherz_full_k3/weighted_fisherz_branch_manifest.json"
+    },
+    {
       "step_id": "06_01_build_group_overview",
       "stage": "06_presentation_products",
       "purpose": "Render canonical fixed-K=3 group overview products into outputs_hcp/present/overviews, including the embedded fixed 20-bin WTA-top long-axis profile panel.",
@@ -288,6 +299,17 @@
       "entry_script": "scripts/core_workflow/06_07_render_ctxdrop_neighbor_counts.py",
       "implementation_script": "scripts/core_workflow/06_07_render_ctxdrop_neighbor_counts.py",
       "recommended_manifest": "outputs_hcp/present/local_cortex_neighbors/kong2022_routea_local_cortex_neighbors_mean20mm_manifest.json"
+    },
+    {
+      "step_id": "06_08_render_hcp_subfield_composition",
+      "stage": "06_presentation_products",
+      "purpose": "Render HCP 151-subject weighted_fisherz gradient cluster subfield composition bars.",
+      "branches": [
+        "kong2022_routea"
+      ],
+      "entry_script": "scripts/core_workflow/06_08_render_hcp_subfield_composition.py",
+      "implementation_script": "scripts/core_workflow/06_08_render_hcp_subfield_composition.py",
+      "recommended_manifest": "outputs_hcp/present/subfield_composition/hcp151_routea_weighted-fisherz_gradient-spectral_k3_g1g2g3_subfield_composition_manifest.json"
     },
     {
       "step_id": "07_01_build_group_matrix",

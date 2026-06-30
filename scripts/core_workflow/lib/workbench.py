@@ -73,3 +73,27 @@ def run_workbench(
             f"STDERR:\n{proc.stderr}"
         )
     return proc
+
+
+def capture_scene(
+    scene_file: Path,
+    scene_index: int,
+    out_png: Path,
+    width: int,
+    height: int,
+    renderer: str,
+) -> None:
+    run_workbench(
+        [
+            "-scene-capture-image",
+            str(scene_file),
+            str(scene_index),
+            str(out_png),
+            "-size-width-height",
+            str(width),
+            str(height),
+            "-renderer",
+            str(renderer),
+        ]
+    )
+

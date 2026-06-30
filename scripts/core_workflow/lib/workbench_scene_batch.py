@@ -8,7 +8,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from lib.output_layout import DEFAULT_HIPPUNFOLD_BATCH_ROOT
-from lib.workbench import run_workbench
+from lib.workbench import capture_scene
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -133,22 +133,6 @@ def validate_scene_paths(root: ET.Element) -> None:
     if missing:
         preview = "\n".join(missing[:10])
         raise RuntimeError(f"Scene references missing files after subject replacement:\n{preview}")
-
-
-def capture_scene(scene_file: Path, scene_index: int, out_png: Path, width: int, height: int, renderer: str) -> None:
-    run_workbench(
-        [
-            "-scene-capture-image",
-            str(scene_file),
-            str(scene_index),
-            str(out_png),
-            "-size-width-height",
-            str(width),
-            str(height),
-            "-renderer",
-            str(renderer),
-        ]
-    )
 
 
 def render_scene_batch(

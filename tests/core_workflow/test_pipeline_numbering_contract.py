@@ -23,6 +23,7 @@ EXPECTED_NUMBERED_SCRIPTS = [
     "05_02_run_group_atlas.py",
     "05_03_run_spectral_fast_rerun.py",
     "05_04_compute_confidence_maps.py",
+    "05_05_build_weighted_fisherz_branch.py",
     "06_01_build_group_overview.py",
     "06_02_materialize_group_labels.py",
     "06_03_build_cluster_cortex_panels.py",
@@ -30,6 +31,7 @@ EXPECTED_NUMBERED_SCRIPTS = [
     "06_05_render_group_gradient_heatmaps.py",
     "06_06_render_confidence_maps.py",
     "06_07_render_ctxdrop_neighbor_counts.py",
+    "06_08_render_hcp_subfield_composition.py",
     "07_01_build_group_matrix.py",
 ]
 

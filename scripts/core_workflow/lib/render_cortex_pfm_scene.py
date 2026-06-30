@@ -13,7 +13,7 @@ CORE_WORKFLOW_DIR = Path(__file__).resolve().parents[1]
 if str(CORE_WORKFLOW_DIR) not in sys.path:
     sys.path.insert(0, str(CORE_WORKFLOW_DIR))
 
-from lib.workbench import run_workbench
+from lib.workbench import capture_scene
 
 
 def parse_args() -> argparse.Namespace:
@@ -125,22 +125,6 @@ def validate_required_paths(args: argparse.Namespace) -> None:
         path = Path(path_str).resolve()
         if not path.exists():
             raise FileNotFoundError(path)
-
-
-def capture_scene(scene_file: Path, scene_index: int, out_png: Path, width: int, height: int, renderer: str) -> None:
-    run_workbench(
-        [
-            "-scene-capture-image",
-            str(scene_file),
-            str(scene_index),
-            str(out_png),
-            "-size-width-height",
-            str(width),
-            str(height),
-            "-renderer",
-            str(renderer),
-        ]
-    )
 
 
 def main() -> int:
