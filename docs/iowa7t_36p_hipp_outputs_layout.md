@@ -132,7 +132,7 @@ core overview renderer. It renders the maintained seven method panels:
 - `wta_normalized_top20_count`
 - `wta_family17_normalized_top20_count`
 
-Final subject-facing PNGs are copied back to the existing branch figure roots:
+Final subject-facing PNGs are copied back to the existing branch figure roots. The wrapper preserves copy errors instead of falling back to content-only copying, and it skips notebook checkpoint artifacts because they are transient, non-output files:
 
 - `subjects/sub-<ID>/<branch>/figures/gradient/`
 - `subjects/sub-<ID>/<branch>/figures/wta/`
@@ -140,9 +140,68 @@ Final subject-facing PNGs are copied back to the existing branch figure roots:
 The weighted Fisher-z panels reuse existing weighted atlas products from
 `subjects/sub-<ID>/<branch>/atlas/{gradient,wta}/` and synchronize them into the
 existing overview compatibility cache under `runs/cache/`; do not create
-separate weighted output folders for these overviews. The two normalized WTA
-panels are top-20 positive ROI count assignments normalized by the finite
-available ROI count in each network, not Fisher-z averaging. They are written
-as `wta_top_labels_normalized_top20_count.npy` for canonical8 and
+separate weighted output folders for these overviews. Kong2022 weighted
+profiles, status JSON, label maps, and rendered heatmap columns must use the
+canonical8 network order `Default`, `Visual`, `Somatomotor`,
+`DorsalAttention`, `VentralAttention`, `Control`, `Auditory`, `Language`. Run
+the audit before trusting or publishing regenerated weighted panels:
+
+```bash
+/home/yojiao/.conda/envs/py314/bin/python scripts/iowa7t/audit_repair_weighted_network_order.py --output-root /home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_36P/hipp_outputs
+```
+
+Use `--repair` only when the audit reports mismatched derived products. The
+repair rewrites weighted Fisher-z profiles/status/label products in canonical
+network order and does not delete files. The overview adapter stores
+method-isolated renderer inputs under `overview_core_adapter/<method>/` so
+parallel rendering cannot mix `fisherz`, `count`, and `weighted_fisherz`
+profiles. Stale or missing manifest paths fail instead of falling back to
+same-run-dir variant files. For `gradient_fisherz`, the rendered heatmap is the same
+Kong2022 ROI-mean Fisher-z network profile used by confidence/status, not a
+separate direct cluster-to-network timeseries profile. For `gradient_weighted_fisherz`,
+the adapter recomputes network time series from ROI time series using
+`n_grayordinates_used` weights, then correlates cluster time series with those
+weighted network time series; it is not copied from `gradient_fisherz`. The two normalized WTA panels are top-20 positive ROI count
+assignments normalized by the finite available ROI count in each network, not
+Fisher-z averaging. They are written as
+`wta_top_labels_normalized_top20_count.npy` for canonical8 and
 `wta_top_labels_family17_normalized_top20_count.npy` for family17.
+
+For Kong2022 17-network gradient overviews, run the same wrapper with
+`--network-column family17`. This uses an isolated cache named
+`runs/cache/iowa7t_branch_individual_overviews_family17/` and publishes only
+the three gradient PNGs with explicit family17 filenames, leaving the default
+canonical8 atlas and overview outputs untouched:
+
+```bash
+/home/yojiao/.conda/envs/py314/bin/python scripts/iowa7t/run_branch_overviews.py \
+  --network-column family17 \
+  --job 04172026:multiband \
+  --job 06112026:multiband \
+  --job 06112026:multi_echo \
+  --job 06122026:multiband \
+  --job 06122026:multi_echo \
+  --output-root /home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_36P/hipp_outputs \
+  --jobs 4 \
+  --overwrite
+```
+
+The family17 gradient files are written under
+`subjects/sub-<ID>/<branch>/figures/gradient/` as
+`sub-<ID>_gradient_family17_fisherz_overview.png`,
+`sub-<ID>_gradient_family17_count_overview.png`, and
+`sub-<ID>_gradient_family17_weighted_fisherz_overview.png`. For family17, the
+weighted Fisher-z overview is recomputed from ROI time series and ROI
+grayordinate weights for the 17-network taxonomy; it is not copied from
+`gradient_fisherz` or from canonical8 weighted products. Identical surface
+colors can still occur when the weighted and unweighted profiles choose the
+same top-1 network, but the audit checks the underlying Fisher-z profile and
+status values. The count overview heatmap uses the same top-N
+ROI count profile family as the count confidence panel. Audit all five branch
+outputs before using them:
+
+```bash
+/home/yojiao/.conda/envs/py314/bin/python scripts/iowa7t/audit_family17_gradient_overviews.py \
+  --output-root /home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_36P/hipp_outputs
+```
 

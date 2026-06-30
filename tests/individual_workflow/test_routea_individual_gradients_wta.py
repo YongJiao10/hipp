@@ -121,6 +121,66 @@ def test_subject_wta_assignments_use_single_subject_top_positive_roi_votes():
     assert meta["assignment_definition"] == "single_subject_top_positive_roi_network_vote"
 
 
+def test_network_names_use_kong2022_canonical_order_not_alphabetical():
+    workflow = load_module()
+    roi_registry = [
+        {"canonical8": "Auditory", "family17": "Aud"},
+        {"canonical8": "Default", "family17": "DefaultA"},
+        {"canonical8": "Visual", "family17": "VisualA"},
+        {"canonical8": "Somatomotor", "family17": "SomMotA"},
+        {"canonical8": "DorsalAttention", "family17": "DorsAttnA"},
+        {"canonical8": "VentralAttention", "family17": "SalVenAttnA"},
+        {"canonical8": "Control", "family17": "ContA"},
+        {"canonical8": "Language", "family17": "Language"},
+    ]
+
+    names, keys = workflow.load_network_names_and_keys(roi_registry, "canonical8")
+
+    assert names == [
+        "Default",
+        "Visual",
+        "Somatomotor",
+        "DorsalAttention",
+        "VentralAttention",
+        "Control",
+        "Auditory",
+        "Language",
+    ]
+    assert keys["Default"] == 1
+    assert keys["Language"] == 8
+    assert names != sorted(names)
+
+
+def test_network_names_support_family17_canonical_order():
+    workflow = load_module()
+    family17 = [
+        "DefaultA",
+        "DefaultB",
+        "DefaultC",
+        "ContA",
+        "ContB",
+        "ContC",
+        "SalVenAttnA",
+        "SalVenAttnB",
+        "DorsAttnA",
+        "DorsAttnB",
+        "SomMotA",
+        "SomMotB",
+        "VisualA",
+        "VisualB",
+        "VisualC",
+        "Aud",
+        "Language",
+    ]
+    roi_registry = [{"canonical8": "Default", "family17": name} for name in family17]
+
+    names, keys = workflow.load_network_names_and_keys(roi_registry, "family17")
+
+    assert names == family17
+    assert keys["DefaultA"] == 1
+    assert keys["Language"] == 17
+
+
 
 def test_monitor_summary_counts_ok_failed_running_and_stale(tmp_path):
     workflow = load_module()
@@ -268,6 +328,33 @@ def test_individual_k_selection_rows_cover_full_fixed_k_curve():
     assert int(rows[-1]["redundant_pair_count"]) == 2
 
 
+
+def test_gradient_fisherz_overview_profile_uses_roi_mean_fisherz(tmp_path):
+    import sys
+    path = REPO_ROOT / "scripts" / "individual_workflow" / "02_build_individual_overviews.py"
+    if str(path.parent) not in sys.path:
+        sys.path.insert(0, str(path.parent))
+    spec = importlib.util.spec_from_file_location("build_individual_overviews_fisherz_profile", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    direct_profile = np.asarray([[9.0, 8.0]], dtype=np.float32)
+
+    got = module.gradient_profile_for_render(
+        assignment_variant="fisherz",
+        direct_profile=direct_profile,
+        assignment_variants={
+            "fisherz": {
+                "profile": np.asarray([[2.0, 12.0]], dtype=np.float32),
+            }
+        },
+        weighted_profile_path=tmp_path / "missing.npy",
+    )
+
+    assert got.tolist() == [[2.0, 12.0]]
+    assert got.tolist() != direct_profile.tolist()
+
 def test_materialize_wta_core_inputs(tmp_path):
     import sys
     path = REPO_ROOT / "scripts" / "individual_workflow" / "02_build_individual_overviews.py"
@@ -317,4 +404,123 @@ def test_materialize_wta_core_inputs(tmp_path):
             assert "group_functional_atlas_label_map" in manifest
             assert Path(manifest["group_functional_atlas_labels"]).exists()
             assert Path(manifest["group_functional_atlas_label_map"]).exists()
+
+
+
+def test_overview_builder_accepts_family17_network_column_and_names_outputs(tmp_path):
+    import sys
+    path = REPO_ROOT / "scripts" / "individual_workflow" / "02_build_individual_overviews.py"
+    if str(path.parent) not in sys.path:
+        sys.path.insert(0, str(path.parent))
+    spec = importlib.util.spec_from_file_location("build_individual_overviews_family17_parser", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    args = module.build_arg_parser().parse_args(["--network-column", "family17"])
+    out = module.overview_output_path(tmp_path, "gradient_weighted_fisherz", "sub-06112026", network_column="family17")
+
+    assert args.network_column == "family17"
+    assert out == tmp_path / "gradient" / "sub-06112026_gradient_family17_weighted_fisherz_overview.png"
+
+
+def test_count_profile_from_roi_profile_matches_topn_status_counts():
+    import sys
+    path = REPO_ROOT / "scripts" / "individual_workflow" / "02_build_individual_overviews.py"
+    if str(path.parent) not in sys.path:
+        sys.path.insert(0, str(path.parent))
+    spec = importlib.util.spec_from_file_location("build_individual_overviews_count_profile", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    roi_profile = np.asarray(
+        [
+            [0.9, 0.8, 0.7, -0.1],
+            [0.1, 0.4, 0.5, 0.6],
+        ],
+        dtype=np.float32,
+    )
+    roi_registry = [
+        {"family17": "DefaultA"},
+        {"family17": "DefaultA"},
+        {"family17": "ContA"},
+        {"family17": "ContB"},
+    ]
+    network_names = ["DefaultA", "ContA", "ContB"]
+
+    profile = module.count_profile_from_roi_profile(
+        roi_profile=roi_profile,
+        roi_registry=roi_registry,
+        network_names=network_names,
+        network_column="family17",
+        top_n_cap=3,
+    )
+
+    assert profile.tolist() == [[2.0, 1.0, 0.0], [1.0, 1.0, 1.0]]
+    assert int(np.nanargmax(profile[0])) == network_names.index("DefaultA")
+
+
+def test_gradient_count_overview_profile_uses_count_profile(tmp_path):
+    import sys
+    path = REPO_ROOT / "scripts" / "individual_workflow" / "02_build_individual_overviews.py"
+    if str(path.parent) not in sys.path:
+        sys.path.insert(0, str(path.parent))
+    spec = importlib.util.spec_from_file_location("build_individual_overviews_count_render_profile", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    direct_profile = np.asarray([[9.0, 8.0]], dtype=np.float32)
+    count_profile = np.asarray([[3.0, 1.0]], dtype=np.float32)
+
+    got = module.gradient_profile_for_render(
+        assignment_variant="count",
+        direct_profile=direct_profile,
+        assignment_variants={"fisherz": {"profile": np.asarray([[2.0, 12.0]], dtype=np.float32)}},
+        weighted_profile_path=tmp_path / "missing.npy",
+        count_profile=count_profile,
+    )
+
+    assert got.tolist() == [[3.0, 1.0]]
+    assert got.tolist() != direct_profile.tolist()
+
+
+def test_weighted_roi_rows_preserve_grayordinate_weights(tmp_path):
+    import sys
+    path = REPO_ROOT / "scripts" / "individual_workflow" / "02_build_individual_overviews.py"
+    if str(path.parent) not in sys.path:
+        sys.path.insert(0, str(path.parent))
+    spec = importlib.util.spec_from_file_location("build_individual_overviews_weight_rows", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    tsv = tmp_path / "cortex_roi_parcels.tsv"
+    tsv.write_text(
+        "parcel_id\tparcel_name\tfamily17\tcanonical8\themisphere\tsubregion\trank\tn_grayordinates_used\n"
+        "1\troi1\tDefaultA\tDefault\tL\t\t1\t42\n",
+        encoding="utf-8",
+    )
+
+    rows = module.read_kong2022_roi_weight_rows(tsv)
+
+    assert rows == [
+        {
+            "parcel_id": 1,
+            "parcel_name": "roi1",
+            "family17": "DefaultA",
+            "canonical8": "Default",
+            "hemisphere": "L",
+            "subregion": "",
+            "rank": 1,
+            "n_grayordinates_used": 42,
+        }
+    ]
+
+
+def test_weighted_gradient_recompute_is_not_limited_to_family17() -> None:
+    source = (REPO_ROOT / "scripts" / "individual_workflow" / "02_build_individual_overviews.py").read_text(encoding="utf-8")
+
+    assert "assignment_variant == \"weighted_fisherz\" and network_column != \"canonical8\"" not in source
 

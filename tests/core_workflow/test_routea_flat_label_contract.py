@@ -208,3 +208,23 @@ def test_iowa7t_argon_preset_contract_uses_subject_first_36p_layout() -> None:
     assert '[ "${dataset}" != "iowa_hcp500" ] && [ "${dataset}" != "iowa7t" ]' in task_text
     assert 'Prepared Iowa7T ${iowa7t_branch} dtseries=' in task_text
     assert 'wb_command": "$(json_escape "${wb_command}")"' in task_text
+
+
+def test_iowa7t_argon_preset_contract_supports_noxcpd_variant() -> None:
+    script_dir = REPO_ROOT / "scripts" / "ArealMSHBM_Kong2022_Iowa_Stanford"
+    checked = [
+        script_dir / "submit_kong2022_areal_mshbm.sh",
+        script_dir / "run_kong2022_areal_mshbm_subject_sge.sh",
+        script_dir / "report_kong2022_areal_mshbm_status.sh",
+        script_dir / "README.md",
+    ]
+    combined = "\n".join(path.read_text(encoding="utf-8") for path in checked)
+    required = [
+        "IOWA7T_VARIANT",
+        "DataOrg_PFM_NoXCPD",
+        "desc-NoXCPD_bold.dtseries.nii",
+        "desc-MEICA_NoXCPD_bold.dtseries.nii",
+        '"variant": "$(json_escape "${iowa7t_variant}")"',
+    ]
+    for token in required:
+        assert token in combined, f"missing {token}"

@@ -25,7 +25,7 @@ Inputs:
   - --skip-manifest: Skip writing the overview manifest JSON file.
 - Physical inputs:
   - Group parcellation label arrays: manifest `assignment_variants[default_assignment_variant].group_functional_atlas_labels` for cluster-level methods; vertex-level methods use the manifest top-level label array.
-  - Group mapping status files and template assets from manifest paths; same-run-dir canonical variant files are used as a final variant fallback.
+  - Group mapping status files and template assets from manifest paths; stale or missing manifest paths fail instead of falling back to same-run-dir files.
 
 Outputs:
 - Command-line output / file outputs:
@@ -195,10 +195,6 @@ def resolve_assignment_variant_paths(
             label_path = resolve_existing_manifest_path(label_raw)
             if status_path.exists() and label_path.exists():
                 return status_path, label_path
-            fallback_status = (run_dir / f"cluster_assignment_status_{variant}.json").resolve()
-            fallback_label = (run_dir / "template" / "workbench_assets" / label_path.name).resolve()
-            if fallback_status.exists() and fallback_label.exists():
-                return fallback_status, fallback_label
     return run_dir / f"missing_{variant}_assignment_status.json", run_dir / f"missing_{variant}_functional.label.gii"
 
 
@@ -472,6 +468,77 @@ def confidence_rows(status_payload: dict, hemi: str, cluster_ids: list[int]) -> 
             }
         )
     return out
+
+
+def validate_fisher_status_matches_profile(
+    *,
+    profile_ordered: np.ndarray,
+    status_payload: dict,
+    network_names: list[str],
+    cluster_ids: list[int],
+    context: str,
+) -> None:
+    by_cluster = {int(row["cluster_id"]): row for row in status_payload.get("items", []) if "cluster_id" in row}
+    for display_idx, old_id in enumerate(cluster_ids):
+        row = by_cluster.get(int(old_id))
+        if row is None or "top1_count" in row:
+            continue
+        prof_row = np.asarray(profile_ordered[int(display_idx), :], dtype=np.float32)
+        if not np.isfinite(prof_row).any():
+            continue
+        top_idx = int(np.nanargmax(prof_row))
+        expected_network = str(network_names[top_idx])
+        got_network = str(row.get("top1_network", ""))
+        if got_network != expected_network:
+            raise RuntimeError(
+                f"Profile/status network-order mismatch in {context} cluster_id={int(old_id)}: "
+                f"profile_top={expected_network} status_top={got_network}"
+            )
+        if "top1_fisher_z" in row:
+            got_value = float(row.get("top1_fisher_z", 0.0))
+            expected_value = float(prof_row[top_idx])
+            if abs(got_value - expected_value) > 1e-4:
+                raise RuntimeError(
+                    f"Profile/status Fisher-z mismatch in {context} cluster_id={int(old_id)}: "
+                    f"profile_top_z={expected_value:.6g} status_top_z={got_value:.6g}"
+                )
+
+
+def validate_count_status_matches_profile(
+    *,
+    profile_ordered: np.ndarray,
+    status_payload: dict,
+    network_names: list[str],
+    cluster_ids: list[int],
+    context: str,
+) -> None:
+    by_cluster = {int(row["cluster_id"]): row for row in status_payload.get("items", []) if "cluster_id" in row}
+    for display_idx, old_id in enumerate(cluster_ids):
+        row = by_cluster.get(int(old_id))
+        if row is None or "top1_count" not in row:
+            continue
+        prof_row = np.asarray(profile_ordered[int(display_idx), :], dtype=np.float32)
+        if not np.isfinite(prof_row).any():
+            continue
+        top1_network = str(row.get("top1_network", ""))
+        if top1_network in {"", "none", "unassigned"}:
+            continue
+        if top1_network not in network_names:
+            raise RuntimeError(
+                f"Count profile/status network mismatch in {context} cluster_id={int(old_id)}: "
+                f"status_top={top1_network} not in profile network names"
+            )
+        top_idx = int(network_names.index(top1_network))
+        expected_count = float(prof_row[top_idx])
+        got_count = float(row.get("top1_count", 0.0))
+        max_count = float(np.nanmax(prof_row))
+        if abs(got_count - expected_count) > 1e-4 or got_count < max_count - 1e-4:
+            raise RuntimeError(
+                f"Count profile/status mismatch in {context} cluster_id={int(old_id)}: "
+                f"profile_count_for_status_top={expected_count:.6g} profile_max_count={max_count:.6g} "
+                f"status_top_count={got_count:.6g}"
+            )
+
 
 
 def plot_confidence_panel(ax, rows: list[dict[str, object]], title: str) -> None:
@@ -1058,17 +1125,52 @@ def render_combo(
 
         ax1 = fig.add_subplot(sub[0, 1])
         nets = [str(x) for x in load_json(d_l / "group_feature_summary.json")["network_names"]]
-        profile_title = f"{smoothing} | cluster_network_profile (signed)"
+        if effective_assignment_variant in {"fisherz", "weighted_fisherz"}:
+            validate_fisher_status_matches_profile(
+                profile_ordered=prof_l_o,
+                status_payload=status_l,
+                network_names=nets,
+                cluster_ids=cids_l,
+                context=f"{method} {atlas} {smoothing} hemi-L variant={effective_assignment_variant}",
+            )
+            validate_fisher_status_matches_profile(
+                profile_ordered=prof_r_o,
+                status_payload=status_r,
+                network_names=nets,
+                cluster_ids=cids_r,
+                context=f"{method} {atlas} {smoothing} hemi-R variant={effective_assignment_variant}",
+            )
+        elif effective_assignment_variant == "count":
+            validate_count_status_matches_profile(
+                profile_ordered=prof_l_o,
+                status_payload=status_l,
+                network_names=nets,
+                cluster_ids=cids_l,
+                context=f"{method} {atlas} {smoothing} hemi-L variant={effective_assignment_variant}",
+            )
+            validate_count_status_matches_profile(
+                profile_ordered=prof_r_o,
+                status_payload=status_r,
+                network_names=nets,
+                cluster_ids=cids_r,
+                context=f"{method} {atlas} {smoothing} hemi-R variant={effective_assignment_variant}",
+            )
+        profile_is_count = effective_assignment_variant == "count"
+        profile_title = f"{smoothing} | cluster_network_profile ({'topN counts' if profile_is_count else 'signed'})"
         prof_lr, yt_prof, yl_prof = concat_lr(prof_l_o, row_lbl_l, prof_r_o, row_lbl_r)
-        vmax = float(np.nanmax(np.abs(prof_lr))) if np.isfinite(prof_lr).any() else 1.0
-        im1 = style_imshow(ax1, prof_lr, profile_title, vmin=-vmax, vmax=vmax, cmap="coolwarm")
+        if profile_is_count:
+            vmax = float(np.nanmax(prof_lr)) if np.isfinite(prof_lr).any() else 1.0
+            im1 = style_imshow(ax1, prof_lr, profile_title, vmin=0.0, vmax=max(1.0, vmax), cmap="magma")
+        else:
+            vmax = float(np.nanmax(np.abs(prof_lr))) if np.isfinite(prof_lr).any() else 1.0
+            im1 = style_imshow(ax1, prof_lr, profile_title, vmin=-vmax, vmax=vmax, cmap="coolwarm")
         ax1.set_yticks(yt_prof)
         ax1.set_yticklabels(yl_prof, fontsize=FS_LABEL)
         ax1.set_xticks(np.arange(len(nets)))
         ax1.set_xticklabels(nets, fontsize=FS_TICK, rotation=35, ha="right")
         annotate_profile_values(ax1, prof_lr, vmax)
         highlight_top1_profile_cells(ax1, prof_lr)
-        add_cbar(fig, ax1, im1, "Fisher-z")
+        add_cbar(fig, ax1, im1, "TopN ROI count" if profile_is_count else "Fisher-z")
 
         ax2 = fig.add_subplot(sub[1, 0])
         plot_k_gate_panel(

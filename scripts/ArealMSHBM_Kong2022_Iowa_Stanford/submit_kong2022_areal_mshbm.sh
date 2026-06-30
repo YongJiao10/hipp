@@ -11,6 +11,8 @@ task_script="${script_dir}/run_kong2022_areal_mshbm_subject_sge.sh"
 dataset="$(printf '%s' "${DATASET:-jj_tms}" | tr '[:upper:]-' '[:lower:]_')"
 iowa7t_branch="${IOWA7T_BRANCH:-${BRANCH:-}}"
 iowa7t_branch="$(printf '%s' "${iowa7t_branch}" | tr '[:upper:]-' '[:lower:]_')"
+iowa7t_variant="${IOWA7T_VARIANT:-}"
+iowa7t_variant="$(printf '%s' "${iowa7t_variant}" | tr '[:upper:]-' '[:lower:]_')"
 case "${dataset}" in
   jj_tms)
     dataset_label="JJ_TMS"
@@ -75,7 +77,34 @@ elif [ -n "${iowa7t_branch}" ]; then
 fi
 
 data_root="${DATA_ROOT:-${default_data_root}}"
-out_root="${OUT_ROOT:-${default_out_root}}"
+if [ "${dataset}" = "iowa7t" ] && [ "${iowa7t_variant}" = "noxcpd" ] && [ -z "${DATA_ROOT:-}" ]; then
+  data_root="/Shared/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_NoXCPD"
+fi
+if [ "${dataset}" = "iowa7t" ]; then
+  if [ -z "${iowa7t_variant}" ]; then
+    case "${data_root##*/}" in
+      DataOrg_PFM_NoXCPD)
+        iowa7t_variant="noxcpd"
+        ;;
+      *)
+        iowa7t_variant="36p"
+        ;;
+    esac
+  fi
+  case "${iowa7t_variant}" in
+    36p|noxcpd)
+      ;;
+    *)
+      echo "ERROR: IOWA7T_VARIANT must be 36p or noxcpd, got: ${IOWA7T_VARIANT:-}" >&2
+      exit 2
+      ;;
+  esac
+fi
+if [ "${dataset}" = "iowa7t" ] && [ "${iowa7t_variant}" = "noxcpd" ] && [ -z "${OUT_ROOT:-}" ]; then
+  out_root="${data_root}/hipp_outputs"
+else
+  out_root="${OUT_ROOT:-${default_out_root}}"
+fi
 python_exe="${PYTHON_EXE:-/Users/yojiao/miniconda3/envs/py313/bin/python}"
 cbig_code_dir="${CBIG_CODE_DIR:-${repo_root}/external/CBIG}"
 group_prior="${GROUP_PRIOR:-${cbig_code_dir}/stable_projects/brain_parcellation/Kong2022_ArealMSHBM/lib/group_priors/HCP_fs_LR_32k_40sub/400/gMSHBM/beta50/Params_Final.mat}"
@@ -117,6 +146,8 @@ Environment controls:
   OVERWRITE=1           Recompute existing outputs.
   KEEP_TMP=1            Retain task temporary files. Default: 1 for iowa_hcp500.
   IOWA7T_BRANCH=...     Required for DATASET=iowa7t: multiband or multi_echo.
+  IOWA7T_VARIANT=...    Optional for DATASET=iowa7t: 36p or noxcpd.
+                        Auto-detected from DATA_ROOT when it ends in DataOrg_PFM_NoXCPD.
   RUN_ID=...            Run identifier. Iowa7T defaults to <branch>_<timestamp>.
 
 Queue behavior follows scripts/core_workflow/sge_argon/submit_kong2022_route_a_dual_queues.sh:
@@ -240,6 +271,7 @@ write_job_wrapper() {
     printf "export DATA_ROOT=%s\n" "$(shell_quote "${data_root}")"
     printf "export OUT_ROOT=%s\n" "$(shell_quote "${out_root}")"
     printf "export IOWA7T_BRANCH=%s\n" "$(shell_quote "${iowa7t_branch}")"
+    printf "export IOWA7T_VARIANT=%s\n" "$(shell_quote "${iowa7t_variant}")"
     printf "export RUN_ID=%s\n" "$(shell_quote "${run_id}")"
     printf "export SUBJECT_IDS_FILE=%s\n" "$(shell_quote "${subject_list}")"
     printf "export PYTHON_EXE=%s\n" "$(shell_quote "${python_exe}")"
@@ -297,7 +329,7 @@ submit_queue() {
   fi
 }
 
-echo "[dual-submit] dataset=${dataset_label} branch=${iowa7t_branch:-<none>} total=${#all_ids[@]} data_root=${data_root}" >&2
+echo "[dual-submit] dataset=${dataset_label} branch=${iowa7t_branch:-<none>} variant=${iowa7t_variant:-<none>} total=${#all_ids[@]} data_root=${data_root}" >&2
 
 if [ "${#ui_ids[@]}" -gt 0 ]; then
   ui_list="$(write_list ui "${ui_ids[@]}")"

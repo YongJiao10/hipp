@@ -23,6 +23,8 @@ script_dir="${SCRIPT_DIR:-${repo_root}/scripts/ArealMSHBM_Kong2022_Iowa_Stanford
 dataset="$(printf '%s' "${DATASET:-jj_tms}" | tr '[:upper:]-' '[:lower:]_')"
 iowa7t_branch="${IOWA7T_BRANCH:-${BRANCH:-}}"
 iowa7t_branch="$(printf '%s' "${iowa7t_branch}" | tr '[:upper:]-' '[:lower:]_')"
+iowa7t_variant="${IOWA7T_VARIANT:-}"
+iowa7t_variant="$(printf '%s' "${iowa7t_variant}" | tr '[:upper:]-' '[:lower:]_')"
 case "${dataset}" in
   jj_tms)
     dataset_label="JJ_TMS"
@@ -70,7 +72,34 @@ elif [ -n "${iowa7t_branch}" ]; then
 fi
 
 data_root="${DATA_ROOT:-${default_data_root}}"
-out_root="${OUT_ROOT:-${default_out_root}}"
+if [ "${dataset}" = "iowa7t" ] && [ "${iowa7t_variant}" = "noxcpd" ] && [ -z "${DATA_ROOT:-}" ]; then
+  data_root="/Shared/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_NoXCPD"
+fi
+if [ "${dataset}" = "iowa7t" ]; then
+  if [ -z "${iowa7t_variant}" ]; then
+    case "${data_root##*/}" in
+      DataOrg_PFM_NoXCPD)
+        iowa7t_variant="noxcpd"
+        ;;
+      *)
+        iowa7t_variant="36p"
+        ;;
+    esac
+  fi
+  case "${iowa7t_variant}" in
+    36p|noxcpd)
+      ;;
+    *)
+      echo "ERROR: IOWA7T_VARIANT must be 36p or noxcpd, got: ${IOWA7T_VARIANT:-}" >&2
+      exit 2
+      ;;
+  esac
+fi
+if [ "${dataset}" = "iowa7t" ] && [ "${iowa7t_variant}" = "noxcpd" ] && [ -z "${OUT_ROOT:-}" ]; then
+  out_root="${data_root}/hipp_outputs"
+else
+  out_root="${OUT_ROOT:-${default_out_root}}"
+fi
 subject_ids_file="${SUBJECT_IDS_FILE:-}"
 subject_ids_csv="${SUBJECT_IDS_CSV:-}"
 python_exe="${PYTHON_EXE:-/Users/yojiao/miniconda3/envs/py313/bin/python}"
@@ -157,6 +186,7 @@ echo "${dataset_label} Kong2022 ArealMSHBM"
 echo "JobID=${job_id} TaskID=${task_id} Host=${host_name} Subject=${subject}"
 echo "Dataset=${dataset}"
 echo "Branch=${iowa7t_branch:-<none>}"
+echo "Variant=${iowa7t_variant:-<none>}"
 echo "Repo=${repo_root}"
 echo "DataRoot=${data_root}"
 echo "SubjectIDsFile=${subject_ids_file:-<scan-data-root>}"
@@ -199,14 +229,30 @@ json_escape() {
 if [ "${dataset}" = "iowa7t" ]; then
   case "${iowa7t_branch}" in
     multiband)
-      dtseries="${data_root}/${subject}/func/${subject}_task-rest_dir-concat_space-fsLR_den-91k_desc-denoised_bold.dtseries.nii"
+      case "${iowa7t_variant}" in
+        noxcpd)
+          dtseries="${data_root}/${subject}/func/${subject}_task-rest_dir-concat_space-fsLR_den-91k_desc-NoXCPD_bold.dtseries.nii"
+          ;;
+        *)
+          dtseries="${data_root}/${subject}/func/${subject}_task-rest_dir-concat_space-fsLR_den-91k_desc-denoised_bold.dtseries.nii"
+          ;;
+      esac
       ;;
     multi_echo)
-      source_dtseries="${data_root}/${subject}/func/${subject}_task-rest_run-concat_space-fsLR_den-91k_desc-MEICA_XCPD36P_denoised_bold.dtseries.nii"
+      case "${iowa7t_variant}" in
+        noxcpd)
+          source_dtseries="${data_root}/${subject}/func/${subject}_task-rest_run-concat_space-fsLR_den-91k_desc-MEICA_NoXCPD_bold.dtseries.nii"
+          derived_desc="MEICA_NoXCPD"
+          ;;
+        *)
+          source_dtseries="${data_root}/${subject}/func/${subject}_task-rest_run-concat_space-fsLR_den-91k_desc-MEICA_XCPD36P_denoised_bold.dtseries.nii"
+          derived_desc="MEICA_XCPD36P_denoised"
+          ;;
+      esac
       derived_input_dir="${out_root}/runs/derived_inputs/${run_id}/subjects/${subject}/multi_echo/cortex_only"
-      dtseries="${derived_input_dir}/${subject}_task-rest_run-concat_space-fsLR_den-32k_desc-MEICA_XCPD36P_denoised_bold_cortexonly.dtseries.nii"
-      lh_metric="${derived_input_dir}/${subject}_task-rest_run-concat_space-fsLR_den-32k_desc-MEICA_XCPD36P_denoised_bold_hemi-L.func.gii"
-      rh_metric="${derived_input_dir}/${subject}_task-rest_run-concat_space-fsLR_den-32k_desc-MEICA_XCPD36P_denoised_bold_hemi-R.func.gii"
+      dtseries="${derived_input_dir}/${subject}_task-rest_run-concat_space-fsLR_den-32k_desc-${derived_desc}_bold_cortexonly.dtseries.nii"
+      lh_metric="${derived_input_dir}/${subject}_task-rest_run-concat_space-fsLR_den-32k_desc-${derived_desc}_bold_hemi-L.func.gii"
+      rh_metric="${derived_input_dir}/${subject}_task-rest_run-concat_space-fsLR_den-32k_desc-${derived_desc}_bold_hemi-R.func.gii"
       ;;
   esac
   if [ "${iowa7t_branch}" = "multi_echo" ]; then
@@ -258,7 +304,8 @@ if [ "${dataset}" = "iowa7t" ]; then
     }
   ],
   "subject": "$(json_escape "${subject}")",
-  "subject_dir": "$(json_escape "${data_root}/${subject}")"
+  "subject_dir": "$(json_escape "${data_root}/${subject}")",
+  "variant": "$(json_escape "${iowa7t_variant}")"
 }
 EOF
   echo "Prepared Iowa7T ${iowa7t_branch} dtseries=${dtseries} timepoints=${n_timepoints}"
@@ -410,7 +457,8 @@ if [ -f "${input_manifest}" ]; then
     "run_end_utc": "$(json_escape "${run_end_utc}")",
     "run_start_utc": "$(json_escape "${run_start_utc}")",
     "runtime_seconds": ${runtime_seconds}
-  }
+  },
+  "variant": "$(json_escape "${iowa7t_variant}")"
 }
 EOF
   else

@@ -184,7 +184,7 @@ def test_group_overview_keeps_explicit_weighted_mode_tag_for_full_root(tmp_path:
     assert present_mod.resolve_overview_mode_tag(group_root, "weighted_fisherz") == "weighted_fisherz"
     assert present_mod.resolve_overview_mode_tag(group_root, None) is None
 
-def test_group_overview_assignment_variant_paths_fall_back_to_run_dir_when_manifest_paths_are_stale(tmp_path: Path) -> None:
+def test_group_overview_assignment_variant_paths_reject_stale_manifest_paths_without_fallback(tmp_path: Path) -> None:
     run_dir = tmp_path / "run"
     asset_dir = run_dir / "template" / "workbench_assets"
     asset_dir.mkdir(parents=True)
@@ -203,8 +203,8 @@ def test_group_overview_assignment_variant_paths_fall_back_to_run_dir_when_manif
 
     got_status, got_label = present_mod.resolve_assignment_variant_paths(run_dir, manifest, "count")
 
-    assert got_status == status.resolve()
-    assert got_label == label.resolve()
+    assert got_status == run_dir / "missing_count_assignment_status.json"
+    assert got_label == run_dir / "missing_count_functional.label.gii"
 
 
 def test_wta_profile_is_embedded_in_overview_with_fixed_20_bins() -> None:

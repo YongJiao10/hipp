@@ -121,6 +121,72 @@ def test_iowa7t_input_preparer_selects_branch_exact_dtseries(
     assert multi_manifest["runs"][0]["dtseries"] == str(multi)
 
 
+def test_iowa7t_input_preparer_selects_noxcpd_branch_exact_dtseries(
+    tmp_path: Path, monkeypatch
+) -> None:
+    sys.path.insert(0, str(SCRIPT_DIR))
+    import prepare_kong2022_areal_mshbm_subject_inputs as preparer
+
+    data_root = tmp_path / "DataOrg_PFM_NoXCPD"
+    func = data_root / "sub-06112026" / "func"
+    func.mkdir(parents=True)
+    single = func / "sub-06112026_task-rest_dir-concat_space-fsLR_den-91k_desc-NoXCPD_bold.dtseries.nii"
+    multi = func / "sub-06112026_task-rest_run-concat_space-fsLR_den-91k_desc-MEICA_NoXCPD_bold.dtseries.nii"
+    single.write_bytes(b"single")
+    multi.write_bytes(b"multi")
+
+    monkeypatch.setattr(preparer, "dtseries_n_timepoints", lambda _: 7)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "prepare",
+            "--dataset",
+            "iowa7t",
+            "--branch",
+            "noxcpd_multiband",
+            "--subject",
+            "06112026",
+            "--data-root",
+            str(data_root),
+            "--subject-output-dir",
+            str(tmp_path / "single_prepared"),
+        ],
+    )
+
+    assert preparer.main() == 0
+    single_manifest = json.loads(
+        (tmp_path / "single_prepared" / "inputs" / "input_manifest.json").read_text()
+    )
+    assert single_manifest["branch"] == "noxcpd_multiband"
+    assert single_manifest["runs"][0]["dtseries"] == str(single)
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "prepare",
+            "--dataset",
+            "iowa7t",
+            "--branch",
+            "noxcpd_multi_echo",
+            "--subject",
+            "06112026",
+            "--data-root",
+            str(data_root),
+            "--subject-output-dir",
+            str(tmp_path / "multi_prepared"),
+        ],
+    )
+
+    assert preparer.main() == 0
+    multi_manifest = json.loads(
+        (tmp_path / "multi_prepared" / "inputs" / "input_manifest.json").read_text()
+    )
+    assert multi_manifest["branch"] == "noxcpd_multi_echo"
+    assert multi_manifest["runs"][0]["dtseries"] == str(multi)
+
+
 def test_iowa_hcp500_launcher_dry_run_prints_one_ui_qsub(tmp_path: Path) -> None:
     env = os.environ.copy()
     env.update(
@@ -182,6 +248,39 @@ def test_iowa7t_launcher_dry_run_uses_canonical_branch_layout(tmp_path: Path) ->
     assert "HCPpipeline500" not in result.stderr
     manifests = list(
         (tmp_path / "hipp_outputs" / "runs" / "manifests" / "iowa7t_single_test").glob(
+            "iowa7t_single_*.txt"
+        )
+    )
+    assert len(manifests) == 2
+
+
+def test_iowa7t_launcher_dry_run_autodetects_noxcpd_variant(tmp_path: Path) -> None:
+    env = os.environ.copy()
+    env.update(
+        {
+            "DATASET": "iowa7t",
+            "IOWA7T_BRANCH": "multiband",
+            "DATA_ROOT": str(tmp_path / "DataOrg_PFM_NoXCPD"),
+            "SUBJECT_IDS_CSV": "06112026,06122026",
+            "RUN_ID": "iowa7t_noxcpd_single_test",
+            "DRY_RUN": "1",
+            "REPO_ROOT": str(REPO_ROOT),
+        }
+    )
+    result = subprocess.run(
+        [str(SCRIPT_DIR / "submit_kong2022_areal_mshbm.sh")],
+        cwd=REPO_ROOT,
+        env=env,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "variant=noxcpd" in result.stderr
+    assert str(tmp_path / "DataOrg_PFM_NoXCPD" / "hipp_outputs") in result.stderr
+    manifests = list(
+        (tmp_path / "DataOrg_PFM_NoXCPD" / "hipp_outputs" / "runs" / "manifests" / "iowa7t_noxcpd_single_test").glob(
             "iowa7t_single_*.txt"
         )
     )

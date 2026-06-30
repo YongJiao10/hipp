@@ -46,6 +46,8 @@ outputs_hcp/present/overviews/individual/
 
 `wta_top` is a single-subject vertex-level top-positive-ROI network vote. It is not a group one-sample statistical inference result; combo manifests record `wta_statistical_inference=false`.
 
+Kong2022 network labels are always emitted in canonical order, not alphabetical order: `Default`, `Visual`, `Somatomotor`, `DorsalAttention`, `VentralAttention`, `Control`, `Auditory`, `Language`. This order must match profile columns, assignment status rows, label maps, and rendered confidence/heatmap panels.
+
 ## Runtime
 
 Use the repository Python contract:
@@ -70,7 +72,7 @@ After computation completes, build one overview PNG per subject per task with:
 /home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/02_build_individual_overviews.py --jobs 4 --resume
 ```
 
-The builder reads `cluster_labels_k3.npy` and `wta_top_labels.npy` from each subject's `gradient/` and `wta/` directories under `outputs_hcp/work/individual_atlas/sub-<id>/`. For gradient overviews, the adapter writes K=2..10 diagnostic rows for the core renderer so the K-selection and redundancy panels show full curves, while final labels remain fixed at K=3. It writes both gradient assignment variants under `gradient/` using filename suffixes (`*_gradient_fisherz_overview.png` and `*_gradient_count_overview.png`) and the WTA overview under `wta/`, plus `overview_status.tsv` and `overview_manifest.json`, under `outputs_hcp/present/overviews/individual/`. Use `--methods count` or `--methods gradient_count` to backfill only the count overview for selected subjects.
+The builder reads `cluster_labels_k3.npy` and `wta_top_labels.npy` from each subject's `gradient/` and `wta/` directories under `outputs_hcp/work/individual_atlas/sub-<id>/`. For gradient overviews, the adapter writes K=2..10 diagnostic rows for the core renderer so the K-selection and redundancy panels show full curves, while final labels remain fixed at K=3. The `gradient_fisherz` heatmap and confidence bars both use the same Kong2022 ROI-mean Fisher-z network profile. It writes both gradient assignment variants under `gradient/` using filename suffixes (`*_gradient_fisherz_overview.png` and `*_gradient_count_overview.png`) and the WTA overview under `wta/`, plus `overview_status.tsv` and `overview_manifest.json`, under `outputs_hcp/present/overviews/individual/`. Use `--methods count` or `--methods gradient_count` to backfill only the count overview for selected subjects.
 
 ## Monitoring and Handoff
 
@@ -89,3 +91,20 @@ outputs_hcp/work/individual_atlas/_runs/handoff/<run_id>_handoff.md
 ```
 
 Use the handoff file for later agent continuation or failure triage.
+
+
+## Family17 Gradient Overview Rendering
+
+The individual overview adapter accepts `--network-column family17` for
+Kong2022 17-network gradient rendering. The option affects the gradient
+`fisherz`, `count`, and `weighted_fisherz` overviews and writes PNG names with
+a `gradient_family17_` prefix in the stem so canonical8 outputs are not
+overwritten. The adapter records `network_column: family17` in
+`group_feature_summary.json`; `fisherz` heatmaps use the ROI-mean Fisher-z
+cluster-network profile, while `weighted_fisherz` recomputes network time
+series from ROI time series using `n_grayordinates_used` weights before
+cluster-to-network correlation. `fisherz` and `weighted_fisherz` heatmaps are
+validated against their Fisher-z status rows, and `count` heatmaps use the
+same top-N ROI count profile used by the count status rows. Stale or missing
+assignment-variant manifest paths fail instead of falling back to same-run-dir
+files.

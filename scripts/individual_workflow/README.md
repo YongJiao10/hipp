@@ -46,6 +46,8 @@ Dataset-specific runs can override `--subjects-manifest`, `--shared-root`,
 `--surface-root`, `--hippunfold-batch-root`, and `--out-root` without changing
 the workflow implementation.
 
+Kong2022 network products use the canonical8 network order `Default`, `Visual`, `Somatomotor`, `DorsalAttention`, `VentralAttention`, `Control`, `Auditory`, `Language`; do not sort network names alphabetically when adding assignment variants or overview adapters.
+
 Background launcher:
 
 ```bash
@@ -79,7 +81,7 @@ outputs_hcp/work/individual_atlas/_runs/handoff/<run_id>_handoff.md
 /home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/02_build_individual_overviews.py --jobs 4 --resume
 ```
 
-The overview builder reads completed label arrays from `outputs_hcp/work/individual_atlas/` and writes quicklook PNGs plus `overview_status.tsv` and `overview_manifest.json` under `outputs_hcp/present/overviews/individual/`.
+The overview builder reads completed label arrays from `outputs_hcp/work/individual_atlas/` and writes quicklook PNGs plus `overview_status.tsv` and `overview_manifest.json` under `outputs_hcp/present/overviews/individual/`. For `gradient_fisherz`, the cluster-network heatmap and confidence bars are both derived from the same Kong2022 ROI-mean Fisher-z network profile; the direct cluster-to-network timeseries profile is not used for that rendered variant.
 
 ## Method Notes
 
@@ -89,3 +91,20 @@ The overview builder reads completed label arrays from `outputs_hcp/work/individ
 - Gradient-spectral uses each subject's own valid mask and `space-corobl_den-512` HippUnfold hippocampal surface.
 - Gradient-spectral final K is fixed at 3.
 - WTA is single-subject top-positive-ROI network voting. It is not a group one-sample statistical inference result; manifests record `wta_statistical_inference=false`.
+
+
+## Family17 Gradient Overview Rendering
+
+The individual overview adapter accepts `--network-column family17` for
+Kong2022 17-network gradient rendering. The option affects the gradient
+`fisherz`, `count`, and `weighted_fisherz` overviews and writes PNG names with
+a `gradient_family17_` prefix in the stem so canonical8 outputs are not
+overwritten. The adapter records `network_column: family17` in
+`group_feature_summary.json`; `fisherz` heatmaps use the ROI-mean Fisher-z
+cluster-network profile, while `weighted_fisherz` recomputes network time
+series from ROI time series using `n_grayordinates_used` weights before
+cluster-to-network correlation. `fisherz` and `weighted_fisherz` heatmaps are
+validated against their Fisher-z status rows, and `count` heatmaps use the
+same top-N ROI count profile used by the count status rows. Stale or missing
+assignment-variant manifest paths fail instead of falling back to same-run-dir
+files.

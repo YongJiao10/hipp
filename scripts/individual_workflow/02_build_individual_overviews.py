@@ -34,6 +34,8 @@ from routea_individual_gradients_wta import (
     finite_fisher_z,
     git_commit,
     gradient_combo_output_dir,
+    load_kong2022_roi_registry,
+    load_network_names_and_keys,
     load_subject_ids,
     normalize_overview_method,
     normalize_subject,
@@ -47,6 +49,10 @@ from routea_individual_gradients_wta import (
     write_json,
     wta_combo_output_dir,
 )
+from lib.weighted_fisherz import (
+    assignment_status_from_weighted_network_profile,
+    weighted_cluster_network_fisherz_profile_from_timeseries,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_ADAPTER_ROOT = DEFAULT_OUT_ROOT / "_overview_core_adapter"
@@ -59,6 +65,20 @@ ROUTE_TAG = "routea"
 GRADIENT_CORE_METHOD = "gradient-spectral"
 WTA_CORE_METHOD = "wta-top"
 GRADIENT_COMP_TAG = "g1g2g3"
+
+
+def require_label_map_network_order(label_map_payload: dict[str, Any], expected_network_names: list[str], *, context: str) -> None:
+    raw_names = label_map_payload.get("network_names")
+    if not isinstance(raw_names, list):
+        raise RuntimeError(f"Missing network_names in {context} label map")
+    got = [str(x) for x in raw_names]
+    expected = [str(x) for x in expected_network_names]
+    if got != expected:
+        raise RuntimeError(
+            f"Network order mismatch in {context}: label_map={got} expected={expected}. "
+            "Run scripts/iowa7t/audit_repair_weighted_network_order.py --repair before rendering."
+        )
+
 
 K_SELECTION_FIELDS = [
     "method", "atlas", "smoothing", "hemi", "coverage_threshold", "k", "n_subjects",
@@ -259,9 +279,120 @@ def adapter_run_dir(adapter_root: Path, subject: str, method: str, smoothing: st
     return adapter_root / f"sub-{subject}" / method / ATLAS / smoothing / COVERAGE_TAG / f"hemi_{hemi}"
 
 
-def materialize_gradient_core_inputs(*, subject: str, work_root: Path, adapter_root: Path, shared_root: Path, surface_root: Path, hippunfold_batch_root: Path, assignment_variant: str = "fisherz") -> None:
+
+def count_profile_from_roi_profile(
+    *,
+    roi_profile: np.ndarray,
+    roi_registry: list[dict[str, object]],
+    network_names: list[str],
+    network_column: str,
+    top_n_cap: int,
+) -> np.ndarray:
+    arr = np.asarray(roi_profile, dtype=np.float32)
+    if arr.ndim != 2:
+        raise ValueError(f"Expected 2D ROI profile, got shape={arr.shape}")
+    if arr.shape[1] != len(roi_registry):
+        raise ValueError(f"ROI profile/registry mismatch: profile_cols={arr.shape[1]} registry={len(roi_registry)}")
+    out = np.zeros((int(arr.shape[0]), int(len(network_names))), dtype=np.float32)
+    col = str(network_column)
+    net_to_idx = {str(name): idx for idx, name in enumerate(network_names)}
+    for row_idx in range(arr.shape[0]):
+        values = arr[row_idx, :]
+        pos_idx = np.flatnonzero(np.isfinite(values) & (values > 0.0))
+        if pos_idx.size == 0:
+            continue
+        ordered = pos_idx[np.argsort(-values[pos_idx])]
+        top_idx = ordered[: int(min(int(top_n_cap), int(ordered.size)))]
+        for roi_col in top_idx:
+            net = str(roi_registry[int(roi_col)][col])
+            if net in net_to_idx:
+                out[row_idx, int(net_to_idx[net])] += 1.0
+    return out.astype(np.float32)
+
+
+def read_kong2022_roi_weight_rows(path: Path) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    with Path(path).open("r", encoding="utf-8", newline="") as f:
+        reader = csv.DictReader(f, delimiter="\t")
+        for row in reader:
+            rows.append(
+                {
+                    "parcel_id": int(row["parcel_id"]),
+                    "parcel_name": str(row["parcel_name"]),
+                    "family17": str(row["family17"]),
+                    "canonical8": str(row["canonical8"]),
+                    "hemisphere": str(row.get("hemisphere", "")),
+                    "subregion": str(row.get("subregion", "")),
+                    "rank": int(row.get("rank", "0") or 0),
+                    "n_grayordinates_used": int(row.get("n_grayordinates_used", "0") or 0),
+                }
+            )
+    if not rows:
+        raise RuntimeError(f"No ROI rows found: {path}")
+    return rows
+
+
+def weighted_gradient_profile_from_reference(
+    *,
+    core,
+    labels: np.ndarray,
+    valid_mask: np.ndarray,
+    subject: str,
+    shared_root: Path,
+    surface_root: Path,
+    smoothing: str,
+    hemi: str,
+    network_names: list[str],
+    network_column: str,
+) -> np.ndarray:
+    ts_path = Path(surface_root) / f"sub-{subject}" / "surface" / smoothing / f"sub-{subject}_hemi-{hemi}_timeseries.npy"
+    roi_path = Path(shared_root) / f"sub-{subject}" / "reference" / ATLAS / "cortex_roi_parcel_timeseries.npy"
+    roi_tsv = Path(shared_root) / f"sub-{subject}" / "reference" / ATLAS / "cortex_roi_parcels.tsv"
+    if not ts_path.exists():
+        raise FileNotFoundError(f"Missing hippocampal timeseries for weighted profile: {ts_path}")
+    if not roi_path.exists():
+        raise FileNotFoundError(f"Missing ROI timeseries for weighted profile: {roi_path}")
+    if not roi_tsv.exists():
+        raise FileNotFoundError(f"Missing ROI metadata for weighted profile: {roi_tsv}")
+    return weighted_cluster_network_fisherz_profile_from_timeseries(
+        group_labels_final=np.asarray(labels, dtype=np.int32),
+        support_mask=np.asarray(valid_mask, dtype=bool),
+        hippocampal_timeseries=np.load(ts_path).astype(np.float32),
+        roi_timeseries=np.load(roi_path).astype(np.float32),
+        roi_rows=read_kong2022_roi_weight_rows(roi_tsv),
+        network_names=network_names,
+        network_column=network_column,
+    )
+
+
+def gradient_profile_for_render(
+    *,
+    assignment_variant: str,
+    direct_profile: np.ndarray,
+    assignment_variants: dict[str, dict[str, object]],
+    weighted_profile_path: Path,
+    count_profile: np.ndarray | None = None,
+    weighted_profile: np.ndarray | None = None,
+) -> np.ndarray:
+    if assignment_variant == "fisherz":
+        profile = assignment_variants.get("fisherz", {}).get("profile")
+        if profile is None:
+            raise RuntimeError("Missing fisherz assignment profile for gradient overview render")
+        return np.asarray(profile, dtype=np.float32)
+    if assignment_variant == "count":
+        if count_profile is None:
+            raise RuntimeError("Missing count assignment profile for gradient overview render")
+        return np.asarray(count_profile, dtype=np.float32)
+    if assignment_variant == "weighted_fisherz":
+        if weighted_profile is not None:
+            return np.asarray(weighted_profile, dtype=np.float32)
+        if weighted_profile_path.exists():
+            return np.load(weighted_profile_path).astype(np.float32)
+    return np.asarray(direct_profile, dtype=np.float32)
+
+def materialize_gradient_core_inputs(*, subject: str, work_root: Path, adapter_root: Path, shared_root: Path, surface_root: Path, hippunfold_batch_root: Path, assignment_variant: str = "fisherz", network_column: str = "canonical8") -> None:
     core = core_atlas_module()
-    network_names = core.verify_canonical_network_order_consistency(shared_root, [subject], ATLAS, network_taxonomy="canonical8")
+    network_names = core.verify_canonical_network_order_consistency(shared_root, [subject], ATLAS, network_taxonomy=network_column)
     color_map = core.load_canonical_network_color_map()
     for smoothing in DEFAULT_SMOOTHINGS:
         for hemi in DEFAULT_HEMIS:
@@ -283,7 +414,7 @@ def materialize_gradient_core_inputs(*, subject: str, work_root: Path, adapter_r
                 hemi=hemi,
                 valid_masks_by_subject={subject: valid_mask},
                 profile_fc_mode="pearson",
-                network_taxonomy="canonical8",
+                network_taxonomy=network_column,
             )
             roi_profile, roi_registry = core.cluster_roi_profile(
                 group_labels_final=labels,
@@ -303,16 +434,42 @@ def materialize_gradient_core_inputs(*, subject: str, work_root: Path, adapter_r
                 network_names=network_names,
                 q_thresh=0.05,
                 top_n_cap=20,
-                network_column="canonical8",
+                network_column=network_column,
             )
             functional_variant_payloads: dict[str, dict[str, object]] = {}
-            profile_for_render = profile
-            if assignment_variant == "weighted_fisherz" and (src / "cluster_network_profile_weighted_fisherz.npy").exists():
-                profile_for_render = np.load(src / "cluster_network_profile_weighted_fisherz.npy").astype(np.float32)
+            count_profile = count_profile_from_roi_profile(
+                roi_profile=roi_profile,
+                roi_registry=roi_registry,
+                network_names=network_names,
+                network_column=network_column,
+                top_n_cap=20,
+            )
+            computed_weighted_profile = None
+            if assignment_variant == "weighted_fisherz":
+                computed_weighted_profile = weighted_gradient_profile_from_reference(
+                    core=core,
+                    labels=labels,
+                    valid_mask=valid_mask,
+                    subject=subject,
+                    shared_root=shared_root,
+                    surface_root=surface_root,
+                    smoothing=smoothing,
+                    hemi=hemi,
+                    network_names=network_names,
+                    network_column=network_column,
+                )
+            profile_for_render = gradient_profile_for_render(
+                assignment_variant=assignment_variant,
+                direct_profile=profile,
+                assignment_variants=assignment_variants,
+                weighted_profile_path=src / "cluster_network_profile_weighted_fisherz.npy",
+                count_profile=count_profile,
+                weighted_profile=computed_weighted_profile,
+            )
             np.save(dst / "group_labels_final.npy", labels.astype(np.int32))
             np.save(dst / "cluster_network_profile.npy", profile_for_render.astype(np.float32))
             np.save(dst / "cluster_roi_profile.npy", roi_profile.astype(np.float32))
-            write_json(dst / "group_feature_summary.json", {"network_names": network_names, "N_ref": int(len(network_names))})
+            write_json(dst / "group_feature_summary.json", {"network_names": network_names, "N_ref": int(len(network_names)), "network_column": network_column})
             for variant_name, variant_spec in assignment_variants.items():
                 variant_rows = [dict(x) for x in variant_spec["status_rows"]]
                 functional_labels, functional_meta, label_items = core.functional_atlas_from_clusters(
@@ -331,6 +488,7 @@ def materialize_gradient_core_inputs(*, subject: str, work_root: Path, adapter_r
                     "q_threshold": variant_spec["q_threshold"],
                     "top_n_cap": variant_spec["top_n_cap"],
                     "individual_level": True,
+                    "network_column": network_column,
                 }
                 write_json(dst / f"cluster_assignment_status_{variant_name}.json", status_payload)
                 write_json(dst / f"group_functional_atlas_label_map_{variant_name}.json", functional_meta)
@@ -340,17 +498,24 @@ def materialize_gradient_core_inputs(*, subject: str, work_root: Path, adapter_r
                     "group_functional_atlas_label_map": str((dst / f"group_functional_atlas_label_map_{variant_name}.json").resolve()),
                     "template_functional_atlas_label": str(func_label.resolve()),
                 }
-            weighted_status = src / "cluster_assignment_status_weighted_fisherz.json"
-            weighted_labels = src / "group_functional_atlas_labels_weighted_fisherz.npy"
-            weighted_map = src / "group_functional_atlas_label_map_weighted_fisherz.json"
-            weighted_label_candidates = sorted((src / "workbench_assets").glob("*_weighted_fisherz.label.gii"))
-            if weighted_status.exists() and weighted_labels.exists() and weighted_map.exists() and weighted_label_candidates:
-                local_weighted_label = dst / "template" / "workbench_assets" / weighted_label_candidates[0].name
+            if assignment_variant == "weighted_fisherz" and computed_weighted_profile is not None:
+                weighted_rows, weighted_dominant = assignment_status_from_weighted_network_profile(computed_weighted_profile, network_names)
+                functional_labels, functional_meta, label_items = core.functional_atlas_from_clusters(
+                    group_labels_final=labels,
+                    status_rows=weighted_rows,
+                    network_names=network_names,
+                    color_map=color_map,
+                )
+                functional_meta["assignment_variant"] = "weighted_fisherz"
+                functional_meta["network_column"] = network_column
+                local_weighted_label = dst / "template" / "workbench_assets" / f"sub-{subject}_hemi-{hemi}_space-corobl_den-512_label-individual_functional_atlas_gradient-spectral_{smoothing}_weighted_fisherz.label.gii"
                 local_weighted_label.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(weighted_label_candidates[0], local_weighted_label)
-                np.save(dst / "group_functional_atlas_labels_weighted_fisherz.npy", np.load(weighted_labels).astype(np.int32))
-                write_json(dst / "cluster_assignment_status_weighted_fisherz.json", read_json(weighted_status))
-                write_json(dst / "group_functional_atlas_label_map_weighted_fisherz.json", read_json(weighted_map))
+                nib.save(core.make_named_label_gifti(functional_labels.astype(np.int32), label_items), str(local_weighted_label))
+                np.save(dst / "cluster_network_profile_weighted_fisherz.npy", computed_weighted_profile.astype(np.float32))
+                np.save(dst / "group_functional_atlas_labels_weighted_fisherz.npy", functional_labels.astype(np.int32))
+                write_json(dst / "cluster_assignment_status_weighted_fisherz.json", {"items": weighted_rows, "assignment_metric": "top1_weighted_network_fisher_z", "network_column": network_column})
+                write_json(dst / "cluster_dominant_network_weighted_fisherz.json", {"dominant": weighted_dominant, "network_names": network_names, "assignment_variant": "weighted_fisherz", "network_column": network_column})
+                write_json(dst / "group_functional_atlas_label_map_weighted_fisherz.json", functional_meta)
                 functional_variant_payloads["weighted_fisherz"] = {
                     "cluster_assignment_status": str((dst / "cluster_assignment_status_weighted_fisherz.json").resolve()),
                     "group_functional_atlas_labels": str((dst / "group_functional_atlas_labels_weighted_fisherz.npy").resolve()),
@@ -358,10 +523,8 @@ def materialize_gradient_core_inputs(*, subject: str, work_root: Path, adapter_r
                     "template_functional_atlas_label": str(local_weighted_label.resolve()),
                 }
             dominant = [str(row.get("top1_network", "unassigned")) for row in assignment_variants["fisherz"]["status_rows"]]
-            write_json(dst / "cluster_dominant_network.json", {"dominant": dominant, "network_names": network_names, "assignment_variant": "fisherz"})
-            write_json(dst / "cluster_dominant_network_count.json", {"dominant": [str(row.get("top1_network", "unassigned")) for row in assignment_variants["count"]["status_rows"]], "network_names": network_names, "assignment_variant": "count"})
-            if (src / "cluster_dominant_network_weighted_fisherz.json").exists():
-                write_json(dst / "cluster_dominant_network_weighted_fisherz.json", read_json(src / "cluster_dominant_network_weighted_fisherz.json"))
+            write_json(dst / "cluster_dominant_network.json", {"dominant": dominant, "network_names": network_names, "assignment_variant": "fisherz", "network_column": network_column})
+            write_json(dst / "cluster_dominant_network_count.json", {"dominant": [str(row.get("top1_network", "unassigned")) for row in assignment_variants["count"]["status_rows"]], "network_names": network_names, "assignment_variant": "count", "network_column": network_column})
             surf = subject_surface_path(hippunfold_batch_root, subject, hemi)
             k_summary_path = dst / "k_selection_summary.tsv"
             if not k_selection_summary_has_full_range(k_summary_path):
@@ -401,6 +564,7 @@ def materialize_gradient_core_inputs(*, subject: str, work_root: Path, adapter_r
                 "template_left_or_right_surface": str(surf.resolve()),
                 "template_spec_path": str(subject_spec_path(surf, subject).resolve()),
                 "assignment_mode": "cluster_level",
+                "network_column": network_column,
                 "default_assignment_variant": default_variant,
                 "group_functional_atlas_labels": functional_variant_payloads[default_variant]["group_functional_atlas_labels"],
                 "group_functional_atlas_label_map": functional_variant_payloads[default_variant]["group_functional_atlas_label_map"],
@@ -446,6 +610,14 @@ def materialize_wta_core_inputs(*, subject: str, work_root: Path, adapter_root: 
             suffix = wta_variant_suffix(assignment_variant)
             labels = np.load(src / f"wta_top_labels{suffix}.npy").astype(np.int32)
             label_map = read_json(src / f"wta_top_label_map{suffix}.json")
+            if assignment_variant == "weighted_fisherz":
+                roi_registry = load_kong2022_roi_registry()
+                expected_network_names, _network_to_key = load_network_names_and_keys(roi_registry, "canonical8")
+                require_label_map_network_order(
+                    label_map,
+                    expected_network_names,
+                    context=f"sub-{subject} wta {smoothing} hemi-{hemi} weighted_fisherz",
+                )
             status = read_json(src / f"vertex_assignment_status{suffix}.json")
             src_label = resolve_wta_label_gifti(src=src, subject=subject, smoothing=smoothing, hemi=hemi, suffix=suffix)
             local_label = dst / "template" / "workbench_assets" / src_label.name
@@ -477,16 +649,18 @@ def materialize_wta_core_inputs(*, subject: str, work_root: Path, adapter_root: 
             )
 
 
-def render_via_core(*, subject: str, method: str, work_root: Path, overview_root: Path, adapter_root: Path, adapter_present_root: Path, shared_root: Path, surface_root: Path, hippunfold_batch_root: Path, scene: Path) -> Path:
+def render_via_core(*, subject: str, method: str, work_root: Path, overview_root: Path, adapter_root: Path, adapter_present_root: Path, shared_root: Path, surface_root: Path, hippunfold_batch_root: Path, scene: Path, network_column: str = "canonical8") -> Path:
     core_overview = core_overview_module()
     method_key = normalize_overview_method(method)
-    subject_root = adapter_root / f"sub-{subject}"
+    method_adapter_root = adapter_root / method_key
+    method_adapter_present_root = adapter_present_root / method_key
+    subject_root = method_adapter_root / f"sub-{subject}"
     if method_key in {"gradient_spectral_k3", "gradient_count", "gradient_weighted_fisherz"}:
-        gradient_variant = "weighted_fisherz" if method_key == "gradient_weighted_fisherz" else "fisherz"
-        materialize_gradient_core_inputs(subject=subject, work_root=work_root, adapter_root=adapter_root, shared_root=shared_root, surface_root=surface_root, hippunfold_batch_root=hippunfold_batch_root, assignment_variant=gradient_variant)
+        gradient_variant = "weighted_fisherz" if method_key == "gradient_weighted_fisherz" else ("count" if method_key == "gradient_count" else "fisherz")
+        materialize_gradient_core_inputs(subject=subject, work_root=work_root, adapter_root=method_adapter_root, shared_root=shared_root, surface_root=surface_root, hippunfold_batch_root=hippunfold_batch_root, assignment_variant=gradient_variant, network_column=network_column)
         meta = core_overview.render_combo(
             group_root=subject_root,
-            present_dir=adapter_present_root / f"sub-{subject}" / "gradient",
+            present_dir=method_adapter_present_root / f"sub-{subject}" / "gradient",
             method=GRADIENT_CORE_METHOD,
             atlas=ATLAS,
             coverage_tag=COVERAGE_TAG,
@@ -503,11 +677,11 @@ def render_via_core(*, subject: str, method: str, work_root: Path, overview_root
             "wta_family17_normalized_top20_count": "family17_normalized_top20_count",
         }
         wta_variant = wta_variant_by_method.get(method_key, "fisherz")
-        materialize_wta_core_inputs(subject=subject, work_root=work_root, adapter_root=adapter_root, hippunfold_batch_root=hippunfold_batch_root, assignment_variant=wta_variant)
+        materialize_wta_core_inputs(subject=subject, work_root=work_root, adapter_root=method_adapter_root, hippunfold_batch_root=hippunfold_batch_root, assignment_variant=wta_variant)
         mode_tag = None if wta_variant == "fisherz" else wta_variant
         meta = core_overview.render_combo(
             group_root=subject_root,
-            present_dir=adapter_present_root / f"sub-{subject}" / "wta",
+            present_dir=method_adapter_present_root / f"sub-{subject}" / "wta",
             method=WTA_CORE_METHOD,
             atlas=ATLAS,
             coverage_tag=COVERAGE_TAG,
@@ -517,7 +691,7 @@ def render_via_core(*, subject: str, method: str, work_root: Path, overview_root
             assignment_variant=("weighted_fisherz" if mode_tag else "fisherz"),
             gradient_comp_tag="",
         )
-    final = overview_output_path(overview_root, method_key, subject)
+    final = overview_output_path(overview_root, method_key, subject, network_column=network_column)
     final.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(Path(str(meta["overview_png"])), final)
     return final
@@ -541,6 +715,7 @@ def overview_worker(payload: dict[str, object]) -> dict[str, object]:
             surface_root=Path(str(payload["surface_root"])),
             hippunfold_batch_root=Path(str(payload["hippunfold_batch_root"])),
             scene=Path(str(payload["scene"])),
+            network_column=str(payload.get("network_column", "canonical8")),
         )
         return {"status": "ok", "subject": f"sub-{subject}", "method": method, "task_dir": OVERVIEW_METHODS[method]["task_dir"], "output": str(out_path), "elapsed_seconds": time.time() - started}
     except Exception as exc:
@@ -571,6 +746,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-subjects", type=int, default=None)
     parser.add_argument("--methods", nargs="+", default=["gradient_spectral_k3", "wta_top"], choices=["gradient", "count", "wta", "gradient_spectral_k3", "gradient_count", "gradient_weighted_fisherz", "wta_top", "wta_weighted_fisherz", "wta_normalized_top20_count", "wta_family17_normalized_top20_count"])
     parser.add_argument("--jobs", type=int, default=DEFAULT_JOBS)
+    parser.add_argument("--network-column", default="canonical8", choices=["canonical8", "family17"])
     parser.add_argument("--resume", action="store_true")
     return parser
 
@@ -590,11 +766,11 @@ def main(argv: list[str] | None = None) -> int:
     rows: list[dict[str, object]] = []
     for subject in subjects:
         for method in methods:
-            expected = overview_output_path(overview_root, method, subject)
+            expected = overview_output_path(overview_root, method, subject, network_column=str(args.network_column))
             if args.resume and expected.exists():
                 rows.append({"status": "ok", "subject": f"sub-{subject}", "method": method, "task_dir": OVERVIEW_METHODS[method]["task_dir"], "output": str(expected), "elapsed_seconds": 0.0, "resumed": True})
                 continue
-            tasks.append({"work_root": str(work_root), "overview_root": str(overview_root), "adapter_root": str(adapter_root), "adapter_present_root": str(adapter_present_root), "shared_root": str(Path(args.shared_root).resolve()), "surface_root": str(Path(args.surface_root).resolve()), "hippunfold_batch_root": str(Path(args.hippunfold_batch_root).resolve()), "scene": str(Path(args.scene).resolve()), "subject": subject, "method": method})
+            tasks.append({"work_root": str(work_root), "overview_root": str(overview_root), "adapter_root": str(adapter_root), "adapter_present_root": str(adapter_present_root), "shared_root": str(Path(args.shared_root).resolve()), "surface_root": str(Path(args.surface_root).resolve()), "hippunfold_batch_root": str(Path(args.hippunfold_batch_root).resolve()), "scene": str(Path(args.scene).resolve()), "subject": subject, "method": method, "network_column": str(args.network_column)})
 
     jobs = max(1, min(int(args.jobs), 10, len(tasks) if tasks else 1))
     started = time.time()

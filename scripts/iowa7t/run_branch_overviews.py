@@ -20,6 +20,8 @@ from scripts.iowa7t.run_branch_downstream import DEFAULT_OUTPUT_ROOT, BranchJob,
 PY314 = Path("/home/yojiao/.conda/envs/py314/bin/python")
 CACHE_NAME = "iowa7t_branch_individual_overviews"
 METHODS = ["gradient_spectral_k3", "gradient_count", "gradient_weighted_fisherz", "wta_top", "wta_weighted_fisherz", "wta_normalized_top20_count", "wta_family17_normalized_top20_count"]
+GRADIENT_METHODS = ["gradient_spectral_k3", "gradient_count", "gradient_weighted_fisherz"]
+NETWORK_COLUMNS = ("canonical8", "family17")
 WEIGHTED_GRADIENT_FILES = (
     "cluster_network_profile_weighted_fisherz.npy",
     "cluster_assignment_status_weighted_fisherz.json",
@@ -58,8 +60,17 @@ class BranchOverviewPaths:
     final_wta_figures: Path
 
 
-def resolve_branch_overview_paths(job: BranchJob) -> BranchOverviewPaths:
-    cache_root = job.output_root / "runs" / "cache" / CACHE_NAME / f"sub-{job.subject}_{job.branch}"
+def cache_name_for_network_column(network_column: str) -> str:
+    column = str(network_column)
+    if column == "canonical8":
+        return CACHE_NAME
+    if column == "family17":
+        return f"{CACHE_NAME}_family17"
+    raise ValueError(f"Unsupported network column: {network_column!r}")
+
+
+def resolve_branch_overview_paths(job: BranchJob, *, network_column: str = "canonical8") -> BranchOverviewPaths:
+    cache_root = job.output_root / "runs" / "cache" / cache_name_for_network_column(network_column) / f"sub-{job.subject}_{job.branch}"
     return BranchOverviewPaths(
         cache_root=cache_root,
         work_root=cache_root / "work",
@@ -106,7 +117,6 @@ def run_command(cmd: list[str]) -> None:
     if completed.returncode != 0:
         raise RuntimeError(f"Command failed with exit code {completed.returncode}: {' '.join(cmd)}")
 
-
 def copy_tree_payload(src: Path, dst: Path, *, overwrite: bool) -> None:
     if not src.exists():
         raise FileNotFoundError(f"Missing source payload: {src}")
@@ -115,6 +125,8 @@ def copy_tree_payload(src: Path, dst: Path, *, overwrite: bool) -> None:
     dst.mkdir(parents=True, exist_ok=True)
     for item in src.rglob("*"):
         rel = item.relative_to(src)
+        if ".ipynb_checkpoints" in rel.parts:
+            continue
         out = dst / rel
         if item.is_dir():
             out.mkdir(parents=True, exist_ok=True)
@@ -178,22 +190,31 @@ def sync_weighted_outputs_to_cache(job: BranchJob, paths: BranchOverviewPaths, *
                 copy_file_existing_parent(wta_labels[0], dst_wta / "workbench_assets" / wta_labels[0].name, overwrite=overwrite)
 
 
-def materialize_final_outputs(job: BranchJob, paths: BranchOverviewPaths, *, overwrite: bool) -> None:
+def materialize_final_outputs(job: BranchJob, paths: BranchOverviewPaths, *, overwrite: bool, network_column: str = "canonical8") -> None:
     sub = f"sub-{job.subject}"
-    copy_tree_payload(paths.work_root / sub / "gradient", paths.final_gradient_root, overwrite=overwrite)
-    copy_tree_payload(paths.work_root / sub / "wta", paths.final_wta_root, overwrite=overwrite)
-    copy_file_payload(paths.overview_root / "gradient" / f"{sub}_gradient_fisherz_overview.png", paths.final_gradient_figures / f"{sub}_gradient_fisherz_overview.png", overwrite=overwrite)
-    copy_file_payload(paths.overview_root / "gradient" / f"{sub}_gradient_count_overview.png", paths.final_gradient_figures / f"{sub}_gradient_count_overview.png", overwrite=overwrite)
-    copy_file_payload(paths.overview_root / "gradient" / f"{sub}_gradient_weighted_fisherz_overview.png", paths.final_gradient_figures / f"{sub}_gradient_weighted_fisherz_overview.png", overwrite=overwrite)
-    copy_file_payload(paths.overview_root / "wta" / f"{sub}_wta_overview.png", paths.final_wta_figures / f"{sub}_wta_overview.png", overwrite=overwrite)
-    copy_file_payload(paths.overview_root / "wta" / f"{sub}_wta_weighted_fisherz_overview.png", paths.final_wta_figures / f"{sub}_wta_weighted_fisherz_overview.png", overwrite=overwrite)
-    copy_file_payload(paths.overview_root / "wta" / f"{sub}_wta_normalized_top20_count_overview.png", paths.final_wta_figures / f"{sub}_wta_normalized_top20_count_overview.png", overwrite=overwrite)
-    copy_file_payload(paths.overview_root / "wta" / f"{sub}_wta_family17_normalized_top20_count_overview.png", paths.final_wta_figures / f"{sub}_wta_family17_normalized_top20_count_overview.png", overwrite=overwrite)
+    column = str(network_column)
+    if column == "canonical8":
+        copy_tree_payload(paths.work_root / sub / "gradient", paths.final_gradient_root, overwrite=overwrite)
+        copy_tree_payload(paths.work_root / sub / "wta", paths.final_wta_root, overwrite=overwrite)
+        copy_file_payload(paths.overview_root / "gradient" / f"{sub}_gradient_fisherz_overview.png", paths.final_gradient_figures / f"{sub}_gradient_fisherz_overview.png", overwrite=overwrite)
+        copy_file_payload(paths.overview_root / "gradient" / f"{sub}_gradient_count_overview.png", paths.final_gradient_figures / f"{sub}_gradient_count_overview.png", overwrite=overwrite)
+        copy_file_payload(paths.overview_root / "gradient" / f"{sub}_gradient_weighted_fisherz_overview.png", paths.final_gradient_figures / f"{sub}_gradient_weighted_fisherz_overview.png", overwrite=overwrite)
+        copy_file_payload(paths.overview_root / "wta" / f"{sub}_wta_overview.png", paths.final_wta_figures / f"{sub}_wta_overview.png", overwrite=overwrite)
+        copy_file_payload(paths.overview_root / "wta" / f"{sub}_wta_weighted_fisherz_overview.png", paths.final_wta_figures / f"{sub}_wta_weighted_fisherz_overview.png", overwrite=overwrite)
+        copy_file_payload(paths.overview_root / "wta" / f"{sub}_wta_normalized_top20_count_overview.png", paths.final_wta_figures / f"{sub}_wta_normalized_top20_count_overview.png", overwrite=overwrite)
+        copy_file_payload(paths.overview_root / "wta" / f"{sub}_wta_family17_normalized_top20_count_overview.png", paths.final_wta_figures / f"{sub}_wta_family17_normalized_top20_count_overview.png", overwrite=overwrite)
+    elif column == "family17":
+        copy_file_payload(paths.overview_root / "gradient" / f"{sub}_gradient_family17_fisherz_overview.png", paths.final_gradient_figures / f"{sub}_gradient_family17_fisherz_overview.png", overwrite=overwrite)
+        copy_file_payload(paths.overview_root / "gradient" / f"{sub}_gradient_family17_count_overview.png", paths.final_gradient_figures / f"{sub}_gradient_family17_count_overview.png", overwrite=overwrite)
+        copy_file_payload(paths.overview_root / "gradient" / f"{sub}_gradient_family17_weighted_fisherz_overview.png", paths.final_gradient_figures / f"{sub}_gradient_family17_weighted_fisherz_overview.png", overwrite=overwrite)
+    else:
+        raise ValueError(f"Unsupported network column: {network_column!r}")
     manifest = {
         "status": "ok",
         "workflow": "iowa7t_branch_individual_overviews",
         "subject": sub,
         "branch": job.branch,
+        "network_column": column,
         "cache_root": str(paths.cache_root.resolve()),
         "final_outputs": {
             "atlas_gradient": str(paths.final_gradient_root.resolve()),
@@ -202,11 +223,15 @@ def materialize_final_outputs(job: BranchJob, paths: BranchOverviewPaths, *, ove
             "figures_wta": str(paths.final_wta_figures.resolve()),
         },
     }
-    (job.branch_root / "figures" / "overview_manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    manifest_name = "overview_manifest.json" if column == "canonical8" else f"overview_manifest_{column}.json"
+    (job.branch_root / "figures" / manifest_name).write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
 
 
-def run_branch_overviews(job: BranchJob, *, overwrite: bool, jobs: int) -> dict[str, object]:
-    paths = resolve_branch_overview_paths(job)
+def run_branch_overviews(job: BranchJob, *, overwrite: bool, jobs: int, network_column: str = "canonical8") -> dict[str, object]:
+    column = str(network_column)
+    if column not in NETWORK_COLUMNS:
+        raise ValueError(f"Unsupported network column: {network_column!r}")
+    paths = resolve_branch_overview_paths(job, network_column=column)
     prepare_compat_inputs(job, paths)
     subjects_arg = ["--subjects", job.subject]
     common_input_args = [
@@ -221,9 +246,10 @@ def run_branch_overviews(job: BranchJob, *, overwrite: bool, jobs: int) -> dict[
         *common_input_args,
         "--out-root", str(paths.work_root),
         "--jobs", str(max(1, min(int(jobs), 10))),
-        "--network-column", "canonical8",
+        "--network-column", column,
     ] + (["--resume"] if not overwrite else []))
-    sync_weighted_outputs_to_cache(job, paths, overwrite=overwrite)
+    if column == "canonical8":
+        sync_weighted_outputs_to_cache(job, paths, overwrite=overwrite)
     run_command([
         str(PY314),
         "scripts/individual_workflow/02_build_individual_overviews.py",
@@ -233,10 +259,11 @@ def run_branch_overviews(job: BranchJob, *, overwrite: bool, jobs: int) -> dict[
         "--overview-root", str(paths.overview_root),
         "--adapter-root", str(paths.adapter_root),
         "--adapter-present-root", str(paths.adapter_present_root),
-        "--methods", *METHODS,
+        "--methods", *(METHODS if column == "canonical8" else GRADIENT_METHODS),
+        "--network-column", column,
         "--jobs", str(max(1, min(int(jobs), 10))),
     ] + (["--resume"] if not overwrite else []))
-    materialize_final_outputs(job, paths, overwrite=overwrite)
+    materialize_final_outputs(job, paths, overwrite=overwrite, network_column=column)
     return {
         "subject": job.subject,
         "branch": job.branch,
@@ -245,6 +272,7 @@ def run_branch_overviews(job: BranchJob, *, overwrite: bool, jobs: int) -> dict[
         "atlas_wta": str(paths.final_wta_root),
         "figures_gradient": str(paths.final_gradient_figures),
         "figures_wta": str(paths.final_wta_figures),
+        "network_column": column,
     }
 
 
@@ -260,6 +288,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--job", action="append", type=parse_job, required=True)
     parser.add_argument("--output-root", default=str(DEFAULT_OUTPUT_ROOT))
     parser.add_argument("--jobs", type=int, default=1)
+    parser.add_argument("--network-column", choices=NETWORK_COLUMNS, default="canonical8")
     parser.add_argument("--overwrite", action="store_true", default=False)
     return parser
 
@@ -275,7 +304,7 @@ def main() -> int:
     for subject, branch in args.job:
         job = resolve_branch_job(subject, branch, output_root=output_root)
         print(f"[start] sub-{job.subject} {job.branch} individual overview", flush=True)
-        result = run_branch_overviews(job, overwrite=bool(args.overwrite), jobs=int(args.jobs))
+        result = run_branch_overviews(job, overwrite=bool(args.overwrite), jobs=int(args.jobs), network_column=str(args.network_column))
         results.append(result)
         print(f"[done] sub-{job.subject} {job.branch}", flush=True)
     print(json.dumps({"jobs": results}, indent=2), flush=True)

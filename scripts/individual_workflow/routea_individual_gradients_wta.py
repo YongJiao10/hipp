@@ -39,6 +39,7 @@ from lib.output_layout import (  # noqa: E402
     resolve_overviews_dir,
     resolve_work_root,
 )
+from lib.kong2022_label_utils import canonical_families_8_order, canonical_families_17_order  # noqa: E402
 from lib.workflow_utils import git_commit, utc_now_iso, utc_timestamp_compact_z  # noqa: E402
 
 
@@ -203,11 +204,17 @@ def normalize_overview_method(method: str) -> str:
     return OVERVIEW_METHOD_ALIASES[key]
 
 
-def overview_output_path(overview_root: Path, method: str, subject: str) -> Path:
+def overview_output_path(overview_root: Path, method: str, subject: str, *, network_column: str = "canonical8") -> Path:
     method_key = normalize_overview_method(method)
     spec = OVERVIEW_METHODS[method_key]
     subject_id = normalize_subject(subject)
-    return Path(overview_root) / spec["task_dir"] / f"sub-{subject_id}_{spec['filename_stem']}_overview.png"
+    stem = str(spec["filename_stem"])
+    column = str(network_column)
+    if column == "family17" and method_key in {"gradient_spectral_k3", "gradient_count", "gradient_weighted_fisherz"}:
+        stem = stem.replace("gradient_", "gradient_family17_", 1)
+    elif column != "canonical8":
+        raise ValueError(f"Unsupported network column: {network_column!r}")
+    return Path(overview_root) / spec["task_dir"] / f"sub-{subject_id}_{stem}_overview.png"
 
 
 def overview_label_path(work_root: Path, method: str, combo: SubjectCombo) -> Path:
@@ -286,7 +293,20 @@ def load_kong2022_roi_registry() -> list[dict[str, object]]:
 
 
 def load_network_names_and_keys(roi_registry: list[dict[str, object]], network_column: str) -> tuple[list[str], dict[str, int]]:
-    names = sorted({str(row[network_column]) for row in roi_registry})
+    if network_column == "canonical8":
+        expected = canonical_families_8_order()
+    elif network_column == "family17":
+        expected = canonical_families_17_order()
+    else:
+        raise ValueError(f"Unsupported network column: {network_column!r}")
+    present = {str(row[network_column]) for row in roi_registry}
+    missing = [name for name in expected if name not in present]
+    extra = sorted(present - set(expected))
+    if missing or extra:
+        raise ValueError(
+            f"Kong2022 {network_column} network set mismatch: missing={missing} extra={extra}"
+        )
+    names = list(expected)
     return names, {name: idx + 1 for idx, name in enumerate(names)}
 
 

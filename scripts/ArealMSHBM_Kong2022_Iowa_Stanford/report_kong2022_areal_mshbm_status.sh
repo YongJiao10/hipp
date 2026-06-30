@@ -7,6 +7,8 @@ export LC_CTYPE=C
 dataset="$(printf '%s' "${DATASET:-jj_tms}" | tr '[:upper:]-' '[:lower:]_')"
 iowa7t_branch="${IOWA7T_BRANCH:-${BRANCH:-}}"
 iowa7t_branch="$(printf '%s' "${iowa7t_branch}" | tr '[:upper:]-' '[:lower:]_')"
+iowa7t_variant="${IOWA7T_VARIANT:-}"
+iowa7t_variant="$(printf '%s' "${iowa7t_variant}" | tr '[:upper:]-' '[:lower:]_')"
 case "${dataset}" in
   jj_tms)
     out_root="${OUT_ROOT:-/Shared/jianglab/3_Data_Working/fmriprep_processed_JJ_TMS/ArealMSHBM_Kong2022}"
@@ -15,7 +17,21 @@ case "${dataset}" in
     out_root="${OUT_ROOT:-/Shared/jianglab/3_Data_Working/fmriprep_processed_CausalConnectome/rest_fmriprep/ArealMSHBM_Kong2022}"
     ;;
   iowa7t)
-    out_root="${OUT_ROOT:-/Shared/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_36P/hipp_outputs}"
+    if [ -z "${iowa7t_variant}" ]; then
+      iowa7t_variant="36p"
+    fi
+    case "${iowa7t_variant}" in
+      36p)
+        out_root="${OUT_ROOT:-/Shared/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_36P/hipp_outputs}"
+        ;;
+      noxcpd)
+        out_root="${OUT_ROOT:-/Shared/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_NoXCPD/hipp_outputs}"
+        ;;
+      *)
+        echo "ERROR: IOWA7T_VARIANT must be 36p or noxcpd, got: ${IOWA7T_VARIANT:-}" >&2
+        exit 2
+        ;;
+    esac
     ;;
   iowa_hcp500)
     out_root="${OUT_ROOT:-/old_Users/yojiao/hipp/outputs_iowa_hcp500/inputs/iowa_hcp500/kong2022/cortex_references/routea_areal_mshbm}"
@@ -55,6 +71,7 @@ fi
 echo "Job: ${job_id}"
 echo "Dataset: ${dataset}"
 echo "Branch: ${iowa7t_branch:-<none>}"
+echo "Variant: ${iowa7t_variant:-<none>}"
 echo "Subject: ${subject}"
 echo "Output: ${subject_out}"
 echo

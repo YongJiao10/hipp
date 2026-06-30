@@ -28,6 +28,12 @@ DATASET_SPECS = {
             "multi_echo": [
                 "func/{subject}_task-rest_run-concat_space-fsLR_den-32k_desc-MEICA_XCPD36P_denoised_bold.dtseries.nii"
             ],
+            "noxcpd_multiband": [
+                "func/{subject}_task-rest_dir-concat_space-fsLR_den-91k_desc-NoXCPD_bold.dtseries.nii"
+            ],
+            "noxcpd_multi_echo": [
+                "func/{subject}_task-rest_run-concat_space-fsLR_den-91k_desc-MEICA_NoXCPD_bold.dtseries.nii"
+            ],
         },
     },
     "iowa_hcp500": {
