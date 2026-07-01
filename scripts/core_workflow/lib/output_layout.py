@@ -12,11 +12,19 @@ DATASET_KEYS = ("hcp", "iowa", "stanford", "iowa_hcp500")
 DEFAULT_DATASET = "hcp"
 
 IOWA7T_BRANCHES = ("multiband", "multi_echo")
+IOWA7T_VARIANTS = ("36p", "noxcpd")
 LOCAL_JIANGLAB_ROOT = Path("/home/yojiao/LSS/jianglab")
 ARGON_JIANGLAB_ROOT = Path("/Shared/jianglab")
 IOWA7T_36P_RELATIVE_ROOT = Path(
     "3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_36P"
 )
+IOWA7T_NOXCPD_RELATIVE_ROOT = Path(
+    "3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_NoXCPD"
+)
+IOWA7T_VARIANT_RELATIVE_ROOTS = {
+    "36p": IOWA7T_36P_RELATIVE_ROOT,
+    "noxcpd": IOWA7T_NOXCPD_RELATIVE_ROOT,
+}
 
 
 @dataclass(frozen=True)
@@ -63,6 +71,15 @@ def validate_iowa7t_branch(branch: str) -> str:
     return key
 
 
+def validate_iowa7t_variant(variant: str) -> str:
+    key = str(variant).strip().lower().replace("-", "_")
+    if key not in IOWA7T_VARIANTS:
+        raise ValueError(
+            f"Invalid Iowa7T variant: {variant!r}; expected one of {IOWA7T_VARIANTS}"
+        )
+    return key
+
+
 def resolve_jianglab_root(*, require_exists: bool = True) -> Path:
     if LOCAL_JIANGLAB_ROOT.exists():
         return LOCAL_JIANGLAB_ROOT
@@ -76,26 +93,42 @@ def resolve_jianglab_root(*, require_exists: bool = True) -> Path:
     return LOCAL_JIANGLAB_ROOT
 
 
-def resolve_iowa7t_36p_root(
+def resolve_iowa7t_data_root(
     *,
+    variant: str = "36p",
     jianglab_root: Path | None = None,
     require_exists: bool = True,
 ) -> Path:
+    variant_key = validate_iowa7t_variant(variant)
     root = (
         Path(jianglab_root)
         if jianglab_root is not None
         else resolve_jianglab_root(require_exists=require_exists)
     )
-    return root / IOWA7T_36P_RELATIVE_ROOT
+    return root / IOWA7T_VARIANT_RELATIVE_ROOTS[variant_key]
 
 
-def resolve_iowa7t_hipp_outputs_root(
+def resolve_iowa7t_36p_root(
     *,
     jianglab_root: Path | None = None,
     require_exists: bool = True,
 ) -> Path:
+    return resolve_iowa7t_data_root(
+        variant="36p",
+        jianglab_root=jianglab_root,
+        require_exists=require_exists,
+    )
+
+
+def resolve_iowa7t_hipp_outputs_root(
+    *,
+    variant: str = "36p",
+    jianglab_root: Path | None = None,
+    require_exists: bool = True,
+) -> Path:
     return (
-        resolve_iowa7t_36p_root(
+        resolve_iowa7t_data_root(
+            variant=variant,
             jianglab_root=jianglab_root,
             require_exists=require_exists,
         )
@@ -106,13 +139,14 @@ def resolve_iowa7t_hipp_outputs_root(
 def iowa7t_subject_layout(
     subject: str,
     *,
+    variant: str = "36p",
     hipp_outputs_root: Path | None = None,
 ) -> Iowa7TSubjectLayout:
     subject_id = validate_iowa7t_subject(subject)
     root = (
         Path(hipp_outputs_root)
         if hipp_outputs_root is not None
-        else resolve_iowa7t_hipp_outputs_root()
+        else resolve_iowa7t_hipp_outputs_root(variant=variant)
     )
     subject_root = root / "subjects" / f"sub-{subject_id}"
     return Iowa7TSubjectLayout(
@@ -126,10 +160,12 @@ def iowa7t_branch_layout(
     subject: str,
     branch: str,
     *,
+    variant: str = "36p",
     hipp_outputs_root: Path | None = None,
 ) -> Iowa7TBranchLayout:
     subject_layout = iowa7t_subject_layout(
         subject,
+        variant=variant,
         hipp_outputs_root=hipp_outputs_root,
     )
     branch_key = validate_iowa7t_branch(branch)

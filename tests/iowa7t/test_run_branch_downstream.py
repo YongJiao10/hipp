@@ -46,6 +46,54 @@ def test_resolve_branch_job_uses_branch_specific_input_templates(tmp_path: Path)
     assert multi.dtseries.name == "sub-06112026_task-rest_run-concat_space-fsLR_den-91k_desc-MEICA_XCPD36P_denoised_bold.dtseries.nii"
 
 
+def test_resolve_branch_job_uses_noxcpd_input_templates(tmp_path: Path) -> None:
+    single = resolve_branch_job(
+        "06112026",
+        "multiband",
+        variant="noxcpd",
+        data_root=tmp_path / "DataOrg_PFM_NoXCPD",
+        output_root=tmp_path / "DataOrg_PFM_NoXCPD" / "hipp_outputs",
+    )
+    multi = resolve_branch_job(
+        "06112026",
+        "multi_echo",
+        variant="noxcpd",
+        data_root=tmp_path / "DataOrg_PFM_NoXCPD",
+        output_root=tmp_path / "DataOrg_PFM_NoXCPD" / "hipp_outputs",
+    )
+
+    assert single.bold_volume.name == "sub-06112026_task-rest_dir-concat_space-MNI152NLin6Asym_res-2_desc-NoXCPD_bold.nii.gz"
+    assert single.dtseries.name == "sub-06112026_task-rest_dir-concat_space-fsLR_den-91k_desc-NoXCPD_bold.dtseries.nii"
+    assert multi.bold_volume.name == "sub-06112026_task-rest_run-concat_space-MNI152NLin6Asym_res-2_desc-MEICA_NoXCPD_bold.nii.gz"
+    assert multi.dtseries.name == "sub-06112026_task-rest_run-concat_space-fsLR_den-91k_desc-MEICA_NoXCPD_bold.dtseries.nii"
+
+
+def test_resolve_branch_job_defaults_noxcpd_hippunfold_to_own_subject_tree(tmp_path: Path) -> None:
+    job = resolve_branch_job(
+        "06112026",
+        "multiband",
+        variant="noxcpd",
+        data_root=tmp_path / "DataOrg_PFM_NoXCPD",
+        output_root=tmp_path / "DataOrg_PFM_NoXCPD" / "hipp_outputs",
+        default_36p_output_root=tmp_path / "DataOrg_PFM_36P" / "hipp_outputs",
+    )
+
+    assert job.hippunfold_dir == tmp_path / "DataOrg_PFM_NoXCPD" / "hipp_outputs" / "subjects" / "sub-06112026" / "hippunfold"
+
+
+def test_resolve_branch_job_accepts_explicit_hippunfold_batch_root(tmp_path: Path) -> None:
+    job = resolve_branch_job(
+        "06112026",
+        "multi_echo",
+        variant="noxcpd",
+        data_root=tmp_path / "DataOrg_PFM_NoXCPD",
+        output_root=tmp_path / "DataOrg_PFM_NoXCPD" / "hipp_outputs",
+        hippunfold_batch_root=tmp_path / "shared_subjects",
+    )
+
+    assert job.hippunfold_dir == tmp_path / "shared_subjects" / "sub-06112026" / "hippunfold"
+
+
 def test_resolve_branch_job_rejects_unknown_branch(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="Unsupported Iowa7T branch"):
         resolve_branch_job("06112026", "echo2", data_root=tmp_path / "data", output_root=tmp_path / "hipp_outputs")

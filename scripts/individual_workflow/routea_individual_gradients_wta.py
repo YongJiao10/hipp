@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import importlib.util
 import json
 import os
@@ -40,6 +41,12 @@ from lib.output_layout import (  # noqa: E402
     resolve_work_root,
 )
 from lib.kong2022_label_utils import canonical_families_8_order, canonical_families_17_order  # noqa: E402
+from lib.weighted_fisherz import (  # noqa: E402
+    assign_weighted_network_profile_rows,
+    assignment_status_from_weighted_network_profile,
+    weighted_cluster_network_fisherz_profile_from_timeseries,
+    weighted_network_fisherz_profile_from_timeseries,
+)
 from lib.workflow_utils import git_commit, utc_now_iso, utc_timestamp_compact_z  # noqa: E402
 
 
@@ -426,6 +433,115 @@ def write_label_gifti(path: Path, labels: np.ndarray, label_items: list[tuple[in
     nib.save(core.make_named_label_gifti(labels.astype(np.int32), label_items), str(path))
 
 
+def read_kong2022_roi_weight_rows(path: Path) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    with Path(path).open("r", encoding="utf-8", newline="") as f:
+        reader = csv.DictReader(f, delimiter="	")
+        for row in reader:
+            rows.append(
+                {
+                    "parcel_id": int(row["parcel_id"]),
+                    "parcel_name": str(row["parcel_name"]),
+                    "family17": str(row["family17"]),
+                    "canonical8": str(row["canonical8"]),
+                    "hemisphere": str(row.get("hemisphere", "")),
+                    "subregion": str(row.get("subregion", "")),
+                    "rank": int(row.get("rank", "0") or 0),
+                    "n_grayordinates_used": int(row.get("n_grayordinates_used", "0") or 0),
+                }
+            )
+    if not rows:
+        raise RuntimeError(f"No ROI rows found: {path}")
+    return rows
+
+
+def write_weighted_fisherz_outputs(
+    *,
+    gradient_dir: Path,
+    wta_dir: Path,
+    subject: str,
+    smoothing: str,
+    hemi: str,
+    labels_k3: np.ndarray,
+    valid_mask: np.ndarray,
+    hippocampal_timeseries: np.ndarray,
+    roi_timeseries: np.ndarray,
+    roi_rows: list[dict[str, object]],
+    network_names: list[str],
+    network_column: str,
+    color_map: dict[str, tuple[int, int, int, int]],
+) -> dict[str, object]:
+    core = load_core_group_atlas_module()
+    valid = np.asarray(valid_mask, dtype=bool).reshape(-1)
+    labels = np.asarray(labels_k3, dtype=np.int32).reshape(-1)
+
+    cluster_profile = weighted_cluster_network_fisherz_profile_from_timeseries(
+        group_labels_final=labels,
+        support_mask=valid,
+        hippocampal_timeseries=np.asarray(hippocampal_timeseries, dtype=np.float32),
+        roi_timeseries=np.asarray(roi_timeseries, dtype=np.float32),
+        roi_rows=roi_rows,
+        network_names=network_names,
+        network_column=network_column,
+    )
+    cluster_rows, dominant = assignment_status_from_weighted_network_profile(cluster_profile, network_names)
+    functional_labels, functional_meta, label_items = core.functional_atlas_from_clusters(
+        group_labels_final=labels,
+        status_rows=cluster_rows,
+        network_names=network_names,
+        color_map=color_map,
+    )
+    functional_meta["assignment_variant"] = "weighted_fisherz"
+    functional_meta["network_column"] = network_column
+    np.save(gradient_dir / "cluster_network_profile_weighted_fisherz.npy", cluster_profile.astype(np.float32))
+    np.save(gradient_dir / "group_functional_atlas_labels_weighted_fisherz.npy", functional_labels.astype(np.int32))
+    write_json(gradient_dir / "cluster_assignment_status_weighted_fisherz.json", {"items": cluster_rows, "assignment_metric": "top1_weighted_network_fisher_z", "network_column": network_column})
+    write_json(gradient_dir / "cluster_dominant_network_weighted_fisherz.json", {"dominant": dominant, "network_names": network_names, "assignment_variant": "weighted_fisherz", "network_column": network_column})
+    write_json(gradient_dir / "group_functional_atlas_label_map_weighted_fisherz.json", functional_meta)
+    write_label_gifti(
+        gradient_dir / "workbench_assets" / f"sub-{subject}_hemi-{hemi}_space-corobl_den-512_label-individual_gradient_spectral_k3_{smoothing}_weighted_fisherz.label.gii",
+        functional_labels,
+        label_items,
+    )
+
+    vertex_profile = weighted_network_fisherz_profile_from_timeseries(
+        hippocampal_timeseries=np.asarray(hippocampal_timeseries, dtype=np.float32),
+        roi_timeseries=np.asarray(roi_timeseries, dtype=np.float32),
+        roi_rows=roi_rows,
+        network_names=network_names,
+        network_column=network_column,
+    )
+    support_indices = np.flatnonzero(valid).astype(np.int32)
+    vertex_rows = assign_weighted_network_profile_rows(
+        profile=vertex_profile[support_indices, :],
+        support_indices=support_indices,
+        network_names=network_names,
+    )
+    wta_labels, wta_meta, wta_label_items = core.functional_atlas_from_vertices(
+        n_vertices=int(valid.size),
+        status_rows=vertex_rows,
+        network_names=network_names,
+        color_map=color_map,
+    )
+    wta_meta["assignment_variant"] = "weighted_fisherz"
+    wta_meta["network_column"] = network_column
+    np.save(wta_dir / "vertex_network_profile_weighted_fisherz.npy", vertex_profile.astype(np.float32))
+    np.save(wta_dir / "wta_top_labels_weighted_fisherz.npy", wta_labels.astype(np.int32))
+    write_json(wta_dir / "vertex_assignment_status_weighted_fisherz.json", {"items": vertex_rows, "assignment_metric": "top1_weighted_network_fisher_z", "network_column": network_column})
+    write_json(wta_dir / "wta_top_label_map_weighted_fisherz.json", wta_meta)
+    write_label_gifti(
+        wta_dir / "workbench_assets" / f"sub-{subject}_hemi-{hemi}_space-corobl_den-512_label-individual_wta_top_{smoothing}_weighted_fisherz.label.gii",
+        wta_labels,
+        wta_label_items,
+    )
+    return {
+        "gradient_cluster_network_profile": str((gradient_dir / "cluster_network_profile_weighted_fisherz.npy").resolve()),
+        "gradient_labels": str((gradient_dir / "group_functional_atlas_labels_weighted_fisherz.npy").resolve()),
+        "wta_vertex_network_profile": str((wta_dir / "vertex_network_profile_weighted_fisherz.npy").resolve()),
+        "wta_labels": str((wta_dir / "wta_top_labels_weighted_fisherz.npy").resolve()),
+    }
+
+
 def write_normalized_wta_outputs(
     *,
     wta_dir: Path,
@@ -660,6 +776,22 @@ def process_combo(config: dict[str, object], combo_dict: dict[str, str]) -> dict
                 color_map=color_map,
             ),
         }
+        reference_root = Path(str(config["shared_root"])) / f"sub-{combo.subject}" / "reference" / "kong2022"
+        weighted_outputs = write_weighted_fisherz_outputs(
+            gradient_dir=k3_dir,
+            wta_dir=wta_dir,
+            subject=combo.subject,
+            smoothing=combo.smoothing,
+            hemi=combo.hemi,
+            labels_k3=labels_k3,
+            valid_mask=valid_mask,
+            hippocampal_timeseries=np.load(Path(str(config["surface_root"])) / f"sub-{combo.subject}" / "surface" / combo.smoothing / f"sub-{combo.subject}_hemi-{combo.hemi}_timeseries.npy").astype(np.float32),
+            roi_timeseries=np.load(reference_root / "cortex_roi_parcel_timeseries.npy").astype(np.float32),
+            roi_rows=read_kong2022_roi_weight_rows(reference_root / "cortex_roi_parcels.tsv"),
+            network_names=network_names,
+            network_column=network_column,
+            color_map=color_map,
+        )
 
         elapsed = float(time.time() - started)
         manifest = {
@@ -693,6 +825,7 @@ def process_combo(config: dict[str, object], combo_dict: dict[str, str]) -> dict
                 "wta_label_gifti": str(wta_lbl_path.resolve()),
                 "wta_normalized_top20_count": normalized_wta_outputs["normalized_top20_count"],
                 "wta_family17_normalized_top20_count": normalized_wta_outputs["family17_normalized_top20_count"],
+                "weighted_fisherz": weighted_outputs,
             },
             "hippomaps_repo": str(Path(hippomaps_root).resolve()),
             "hippomaps_import_path": hippomaps_import_path(hippomaps_root),
@@ -709,6 +842,7 @@ def process_combo(config: dict[str, object], combo_dict: dict[str, str]) -> dict
             "wta_label_gifti": str(wta_lbl_path.resolve()),
             "wta_normalized_top20_count": normalized_wta_outputs["normalized_top20_count"],
             "wta_family17_normalized_top20_count": normalized_wta_outputs["family17_normalized_top20_count"],
+            "weighted_fisherz": weighted_outputs,
         }
         write_json(wta_manifest_path, wta_manifest, sort_keys=True)
         return {

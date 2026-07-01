@@ -40,12 +40,19 @@ from lib.kong2022_label_utils import (
 )
 from lib.surface_sampling import sample_hipp_surface_timeseries
 from lib.workbench import run_workbench
+from lib.output_layout import (
+    IOWA7T_VARIANTS,
+    resolve_iowa7t_data_root,
+    resolve_iowa7t_hipp_outputs_root,
+    validate_iowa7t_variant,
+)
 from lib.workflow_utils import file_meta, file_meta_unresolved, git_commit, utc_now_iso, write_json
 
 
-JIANGLAB_LOCAL_ROOT = Path("/home/yojiao/LSS/jianglab")
-DEFAULT_DATA_ROOT = JIANGLAB_LOCAL_ROOT / "3_Data_Working" / "fmriprep_processed_Iowa7T" / "DataOrg_PFM_36P"
-DEFAULT_OUTPUT_ROOT = DEFAULT_DATA_ROOT / "hipp_outputs"
+DEFAULT_VARIANT = "36p"
+DEFAULT_DATA_ROOT = resolve_iowa7t_data_root(variant=DEFAULT_VARIANT, require_exists=False)
+DEFAULT_OUTPUT_ROOT = resolve_iowa7t_hipp_outputs_root(variant=DEFAULT_VARIANT, require_exists=False)
+DEFAULT_36P_OUTPUT_ROOT = DEFAULT_OUTPUT_ROOT
 SUPPORTED_BRANCHES = {"multiband", "multi_echo"}
 HEMIS = ["L", "R"]
 SMOOTHINGS = ["2mm", "4mm"]
@@ -58,10 +65,12 @@ MAX_CONCURRENCY = 10
 class BranchJob:
     subject: str
     branch: str
+    variant: str
     data_root: Path
     output_root: Path
     subject_root: Path
     branch_root: Path
+    hippunfold_batch_root: Path
     hippunfold_dir: Path
     bold_volume: Path
     dtseries: Path
@@ -81,36 +90,52 @@ def resolve_branch_job(
     subject: str,
     branch: str,
     *,
-    data_root: Path = DEFAULT_DATA_ROOT,
-    output_root: Path = DEFAULT_OUTPUT_ROOT,
+    variant: str = DEFAULT_VARIANT,
+    data_root: Path | None = None,
+    output_root: Path | None = None,
+    hippunfold_batch_root: Path | None = None,
+    default_36p_output_root: Path | None = None,
 ) -> BranchJob:
     subject = normalize_subject(subject)
     branch = str(branch).strip()
     if branch not in SUPPORTED_BRANCHES:
         raise ValueError(f"Unsupported Iowa7T branch {branch!r}; expected one of {sorted(SUPPORTED_BRANCHES)}")
 
-    data_root = Path(data_root)
-    output_root = Path(output_root)
+    variant_key = validate_iowa7t_variant(variant)
+    data_root = Path(data_root) if data_root is not None else resolve_iowa7t_data_root(variant=variant_key, require_exists=False)
+    output_root = Path(output_root) if output_root is not None else resolve_iowa7t_hipp_outputs_root(variant=variant_key, require_exists=False)
+    if default_36p_output_root is not None:
+        # Retained for backward-compatible callers; NoXCPD now defaults to its own subject tree.
+        Path(default_36p_output_root)
     sub = f"sub-{subject}"
     subject_root = output_root / "subjects" / sub
     branch_root = subject_root / branch
     func_dir = data_root / sub / "func"
     if branch == "multiband":
-        bold_volume = func_dir / f"{sub}_task-rest_dir-concat_space-MNI152NLin6Asym_res-2_desc-denoised_bold.nii.gz"
-        dtseries = func_dir / f"{sub}_task-rest_dir-concat_space-fsLR_den-91k_desc-denoised_bold.dtseries.nii"
+        desc = "NoXCPD" if variant_key == "noxcpd" else "denoised"
+        bold_volume = func_dir / f"{sub}_task-rest_dir-concat_space-MNI152NLin6Asym_res-2_desc-{desc}_bold.nii.gz"
+        dtseries = func_dir / f"{sub}_task-rest_dir-concat_space-fsLR_den-91k_desc-{desc}_bold.dtseries.nii"
     else:
-        bold_volume = func_dir / f"{sub}_task-rest_run-concat_space-MNI152NLin6Asym_res-2_desc-MEICA_XCPD36P_denoised_bold.nii.gz"
-        dtseries = func_dir / f"{sub}_task-rest_run-concat_space-fsLR_den-91k_desc-MEICA_XCPD36P_denoised_bold.dtseries.nii"
+        desc = "MEICA_NoXCPD" if variant_key == "noxcpd" else "MEICA_XCPD36P_denoised"
+        bold_volume = func_dir / f"{sub}_task-rest_run-concat_space-MNI152NLin6Asym_res-2_desc-{desc}_bold.nii.gz"
+        dtseries = func_dir / f"{sub}_task-rest_run-concat_space-fsLR_den-91k_desc-{desc}_bold.dtseries.nii"
+
+    if hippunfold_batch_root is not None:
+        resolved_hippunfold_batch_root = Path(hippunfold_batch_root)
+    else:
+        resolved_hippunfold_batch_root = output_root / "subjects"
 
     cortex_root = branch_root / "cortex"
     return BranchJob(
         subject=subject,
         branch=branch,
+        variant=variant_key,
         data_root=data_root,
         output_root=output_root,
         subject_root=subject_root,
         branch_root=branch_root,
-        hippunfold_dir=subject_root / "hippunfold",
+        hippunfold_batch_root=resolved_hippunfold_batch_root,
+        hippunfold_dir=resolved_hippunfold_batch_root / sub / "hippunfold",
         bold_volume=bold_volume,
         dtseries=dtseries,
         surface_root=branch_root / "surface",
@@ -852,8 +877,10 @@ def parse_job(value: str) -> tuple[str, str]:
 
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run direct fixed-layout Iowa7T branch downstream products.")
-    parser.add_argument("--data-root", default=str(DEFAULT_DATA_ROOT))
-    parser.add_argument("--output-root", default=str(DEFAULT_OUTPUT_ROOT))
+    parser.add_argument("--variant", choices=IOWA7T_VARIANTS, default=DEFAULT_VARIANT)
+    parser.add_argument("--data-root", default=None)
+    parser.add_argument("--output-root", default=None)
+    parser.add_argument("--hippunfold-batch-root", default=None)
     parser.add_argument("--job", action="append", type=parse_job, required=True, help="Subject/branch pair, e.g. 06112026:multiband")
     parser.add_argument("--stage", choices=["all", "surface", "reference", "fc"], default="all")
     parser.add_argument("--jobs", type=int, default=1, help="Reserved for future parallel execution; capped at 10.")
@@ -870,11 +897,19 @@ def main() -> int:
     if args.jobs != 1:
         print("[info] adapter currently executes jobs sequentially to keep Workbench process count bounded", flush=True)
 
-    data_root = Path(args.data_root)
-    output_root = Path(args.output_root)
+    data_root = Path(args.data_root) if args.data_root is not None else None
+    output_root = Path(args.output_root) if args.output_root is not None else None
+    hippunfold_batch_root = Path(args.hippunfold_batch_root) if args.hippunfold_batch_root is not None else None
     results = []
     for subject, branch in args.job:
-        job = resolve_branch_job(subject, branch, data_root=data_root, output_root=output_root)
+        job = resolve_branch_job(
+            subject,
+            branch,
+            variant=str(args.variant),
+            data_root=data_root,
+            output_root=output_root,
+            hippunfold_batch_root=hippunfold_batch_root,
+        )
         print(f"[start] sub-{job.subject} {job.branch} stage={args.stage}", flush=True)
         result = run_job(job, stage=args.stage, overwrite=bool(args.overwrite))
         results.append(result)

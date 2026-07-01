@@ -1,13 +1,17 @@
 # Iowa7T 36P Hippocampal Output Layout
 
-Canonical production root:
+Canonical production roots:
 
-- Local: `/home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_36P/hipp_outputs`
-- Argon: `/Shared/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_36P/hipp_outputs`
+- 36P local: `/home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_36P/hipp_outputs`
+- 36P Argon: `/Shared/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_36P/hipp_outputs`
+- NoXCPD local: `/home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_NoXCPD/hipp_outputs`
+- NoXCPD Argon: `/Shared/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_NoXCPD/hipp_outputs`
 
 Rules:
 
-- Iowa7T means the Jianglab 36P fMRIPrep tree, not HCPpipeline500.
+- Iowa7T means the Jianglab fMRIPrep Iowa7T trees, not HCPpipeline500.
+- `36p` remains the default workflow variant for backward compatibility.
+- `noxcpd` uses the parallel `DataOrg_PFM_NoXCPD` tree and must not write into the 36P output root.
 - `outputs_iowa/` in the repository is not a production output root.
 - Subject structural HippUnfold output is shared at `subjects/sub-<ID>/hippunfold/`.
 - Functional branches are direct siblings: `multiband/` and `multi_echo/`.
@@ -62,6 +66,7 @@ from scripts.core_workflow.lib.output_layout import (
 subject = iowa7t_subject_layout("06112026")
 single = iowa7t_branch_layout("06112026", "multiband")
 multi = iowa7t_branch_layout("06112026", "multi_echo")
+noxcpd = iowa7t_branch_layout("06112026", "multi_echo", variant="noxcpd")
 ```
 
 Migration helper:
@@ -74,6 +79,73 @@ Migration helper:
 `dry-run` writes only a concrete migration manifest under `runs/manifests/`.
 `copy` copies or recreates symlinks into canonical locations and leaves legacy
 paths in place. Deletion is a separate user-approved operation.
+
+## NoXCPD Variant
+
+NoXCPD is a first-class Iowa7T variant. Local wrappers accept
+`--variant noxcpd` and resolve defaults to
+`DataOrg_PFM_NoXCPD/hipp_outputs`; 36P remains the default when `--variant` is
+omitted.
+
+NoXCPD branch inputs are fixed:
+
+- `multiband` consumes `desc-NoXCPD` MNI volume and 91k dtseries files.
+- `multi_echo` consumes `desc-MEICA_NoXCPD` MNI volume and 91k dtseries files.
+
+NoXCPD uses an independent HippUnfold subject tree by default:
+`DataOrg_PFM_NoXCPD/hipp_outputs/subjects/sub-<ID>/hippunfold/`. Do not let
+NoXCPD production wrappers fall back to the 36P subject tree. Override with
+`--hippunfold-batch-root` only when intentionally testing an explicit alternate
+subject tree.
+
+Run NoXCPD HippUnfold before downstream products. Use an isolated BIDS staging
+root for the anatomical inputs so SnakeBIDS does not scan
+`hipp_outputs/subjects/sub-*/hippunfold/` as additional T1w inputs during reruns:
+
+```bash
+mkdir -p /tmp/noxcpd_hippunfold_bids_staging/sub-06112026 /tmp/noxcpd_hippunfold_bids_staging/sub-06122026
+ln -sfn /home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_NoXCPD/sub-06112026/anat /tmp/noxcpd_hippunfold_bids_staging/sub-06112026/anat
+ln -sfn /home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_NoXCPD/sub-06122026/anat /tmp/noxcpd_hippunfold_bids_staging/sub-06122026/anat
+
+HIPPUNFOLD_CACHE_ROOT=/home/yojiao/hpchome/hipp/runtime/hippunfold_workdirs/noxcpd_sub-06112026 \
+  /home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/01_01_run_hippunfold_t1w_local.py \
+  06112026 \
+  /tmp/noxcpd_hippunfold_bids_staging \
+  /home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_NoXCPD/hipp_outputs/subjects/sub-06112026/hippunfold
+
+HIPPUNFOLD_CACHE_ROOT=/home/yojiao/hpchome/hipp/runtime/hippunfold_workdirs/noxcpd_sub-06122026 \
+  /home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/01_01_run_hippunfold_t1w_local.py \
+  06122026 \
+  /tmp/noxcpd_hippunfold_bids_staging \
+  /home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_NoXCPD/hipp_outputs/subjects/sub-06122026/hippunfold
+```
+
+Example downstream rerun:
+
+```bash
+/home/yojiao/.conda/envs/py314/bin/python scripts/iowa7t/run_branch_downstream.py   --variant noxcpd   --job 06112026:multiband   --job 06112026:multi_echo   --job 06122026:multiband   --job 06122026:multi_echo
+```
+
+NoXCPD is complete only when each corresponding branch has the same relative
+overview PNG inventory as 36P under `figures/gradient/` and `figures/wta/`.
+The images are expected to differ in content; completion means the same named
+products exist in the NoXCPD tree.
+
+Audit the completed overview inventory with:
+
+```bash
+/home/yojiao/.conda/envs/py314/bin/python scripts/iowa7t/audit_branch_completion.py   --variant noxcpd   --compare-variant 36p   --job 06112026:multiband   --job 06112026:multi_echo   --job 06122026:multiband   --job 06122026:multi_echo
+```
+
+Regenerate overview figures with the same wrapper used for 36P, adding
+`--variant noxcpd`. Run both canonical8 and family17 when the 36P branch has
+both figure families:
+
+```bash
+/home/yojiao/.conda/envs/py314/bin/python scripts/iowa7t/run_branch_overviews.py   --variant noxcpd   --job 06112026:multiband   --job 06112026:multi_echo   --job 06122026:multiband   --job 06122026:multi_echo   --jobs 4   --overwrite
+
+/home/yojiao/.conda/envs/py314/bin/python scripts/iowa7t/run_branch_overviews.py   --variant noxcpd   --network-column family17   --job 06112026:multiband   --job 06112026:multi_echo   --job 06122026:multiband   --job 06122026:multi_echo   --jobs 4   --overwrite
+```
 
 ## Cortex ArealMSHBM
 

@@ -14,7 +14,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from scripts.iowa7t.run_branch_downstream import DEFAULT_OUTPUT_ROOT, BranchJob, resolve_branch_job
+from scripts.iowa7t.run_branch_downstream import DEFAULT_OUTPUT_ROOT, DEFAULT_VARIANT, IOWA7T_VARIANTS, BranchJob, resolve_branch_job
 
 
 PY314 = Path("/home/yojiao/.conda/envs/py314/bin/python")
@@ -146,8 +146,10 @@ def copy_file_payload(src: Path, dst: Path, *, overwrite: bool) -> None:
     shutil.copy2(src, dst)
 
 
-def copy_file_existing_parent(src: Path, dst: Path, *, overwrite: bool) -> None:
+def copy_file_existing_parent(src: Path, dst: Path, *, overwrite: bool, allow_existing_dst: bool = False) -> None:
     if not src.exists():
+        if allow_existing_dst and dst.exists():
+            return
         raise FileNotFoundError(f"Missing source payload: {src}")
     if not dst.parent.exists():
         raise FileNotFoundError(f"Destination parent does not exist: {dst.parent}")
@@ -163,31 +165,33 @@ def sync_weighted_outputs_to_cache(job: BranchJob, paths: BranchOverviewPaths, *
             src_grad = paths.final_gradient_root / smoothing / hemi
             dst_grad = paths.work_root / sub / "gradient" / smoothing / hemi
             for name in WEIGHTED_GRADIENT_FILES:
-                copy_file_existing_parent(src_grad / name, dst_grad / name, overwrite=overwrite)
+                copy_file_existing_parent(src_grad / name, dst_grad / name, overwrite=overwrite, allow_existing_dst=True)
             grad_labels = sorted((src_grad / "workbench_assets").glob("*_weighted_fisherz.label.gii"))
-            if not grad_labels:
-                raise FileNotFoundError(f"Missing weighted gradient label GIFTI under {src_grad / 'workbench_assets'}")
-            copy_file_existing_parent(grad_labels[0], dst_grad / "workbench_assets" / grad_labels[0].name, overwrite=overwrite)
+            if grad_labels:
+                copy_file_existing_parent(grad_labels[0], dst_grad / "workbench_assets" / grad_labels[0].name, overwrite=overwrite, allow_existing_dst=True)
+            elif not sorted((dst_grad / "workbench_assets").glob("*_weighted_fisherz.label.gii")):
+                raise FileNotFoundError(f"Missing weighted gradient label GIFTI under {src_grad / 'workbench_assets'} or {dst_grad / 'workbench_assets'}")
 
             src_wta = paths.final_wta_root / smoothing / hemi
             dst_wta = paths.work_root / sub / "wta" / smoothing / hemi
             for name in WEIGHTED_WTA_FILES:
-                copy_file_existing_parent(src_wta / name, dst_wta / name, overwrite=overwrite)
+                copy_file_existing_parent(src_wta / name, dst_wta / name, overwrite=overwrite, allow_existing_dst=True)
             for name in NORMALIZED_WTA_FILES:
                 if not (dst_wta / name).exists():
-                    copy_file_existing_parent(src_wta / name, dst_wta / name, overwrite=overwrite)
+                    copy_file_existing_parent(src_wta / name, dst_wta / name, overwrite=overwrite, allow_existing_dst=True)
             for tag in ("weighted_fisherz",):
                 wta_labels = sorted((src_wta / "workbench_assets").glob(f"*_{tag}.label.gii"))
-                if not wta_labels:
-                    raise FileNotFoundError(f"Missing {tag} WTA label GIFTI under {src_wta / 'workbench_assets'}")
-                copy_file_existing_parent(wta_labels[0], dst_wta / "workbench_assets" / wta_labels[0].name, overwrite=overwrite)
+                if wta_labels:
+                    copy_file_existing_parent(wta_labels[0], dst_wta / "workbench_assets" / wta_labels[0].name, overwrite=overwrite, allow_existing_dst=True)
+                elif not sorted((dst_wta / "workbench_assets").glob(f"*_{tag}.label.gii")):
+                    raise FileNotFoundError(f"Missing {tag} WTA label GIFTI under {src_wta / 'workbench_assets'} or {dst_wta / 'workbench_assets'}")
             for tag in ("normalized_top20_count", "family17_normalized_top20_count"):
                 if sorted((dst_wta / "workbench_assets").glob(f"*_{tag}.label.gii")):
                     continue
                 wta_labels = sorted((src_wta / "workbench_assets").glob(f"*_{tag}.label.gii"))
                 if not wta_labels:
                     raise FileNotFoundError(f"Missing {tag} WTA label GIFTI under {src_wta / 'workbench_assets'} and {dst_wta / 'workbench_assets'}")
-                copy_file_existing_parent(wta_labels[0], dst_wta / "workbench_assets" / wta_labels[0].name, overwrite=overwrite)
+                copy_file_existing_parent(wta_labels[0], dst_wta / "workbench_assets" / wta_labels[0].name, overwrite=overwrite, allow_existing_dst=True)
 
 
 def materialize_final_outputs(job: BranchJob, paths: BranchOverviewPaths, *, overwrite: bool, network_column: str = "canonical8") -> None:
@@ -237,7 +241,7 @@ def run_branch_overviews(job: BranchJob, *, overwrite: bool, jobs: int, network_
     common_input_args = [
         "--shared-root", str(paths.compat_shared_root),
         "--surface-root", str(paths.compat_surface_root),
-        "--hippunfold-batch-root", str(job.output_root / "subjects"),
+        "--hippunfold-batch-root", str(job.hippunfold_batch_root),
     ]
     run_command([
         str(PY314),
@@ -286,7 +290,9 @@ def parse_job(value: str) -> tuple[str, str]:
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run fixed-layout Iowa7T branch individual gradient/WTA overviews.")
     parser.add_argument("--job", action="append", type=parse_job, required=True)
-    parser.add_argument("--output-root", default=str(DEFAULT_OUTPUT_ROOT))
+    parser.add_argument("--variant", choices=IOWA7T_VARIANTS, default=DEFAULT_VARIANT)
+    parser.add_argument("--output-root", default=None)
+    parser.add_argument("--hippunfold-batch-root", default=None)
     parser.add_argument("--jobs", type=int, default=1)
     parser.add_argument("--network-column", choices=NETWORK_COLUMNS, default="canonical8")
     parser.add_argument("--overwrite", action="store_true", default=False)
@@ -299,10 +305,17 @@ def main() -> int:
         raise ValueError("--jobs must be >= 1")
     if int(args.jobs) > 10:
         raise ValueError("--jobs exceeds repository hard cap 10")
-    output_root = Path(args.output_root)
+    output_root = Path(args.output_root) if args.output_root is not None else None
+    hippunfold_batch_root = Path(args.hippunfold_batch_root) if args.hippunfold_batch_root is not None else None
     results = []
     for subject, branch in args.job:
-        job = resolve_branch_job(subject, branch, output_root=output_root)
+        job = resolve_branch_job(
+            subject,
+            branch,
+            variant=str(args.variant),
+            output_root=output_root,
+            hippunfold_batch_root=hippunfold_batch_root,
+        )
         print(f"[start] sub-{job.subject} {job.branch} individual overview", flush=True)
         result = run_branch_overviews(job, overwrite=bool(args.overwrite), jobs=int(args.jobs), network_column=str(args.network_column))
         results.append(result)

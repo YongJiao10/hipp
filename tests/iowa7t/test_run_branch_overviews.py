@@ -41,6 +41,12 @@ def test_branch_overview_parser_accepts_family17_network_column() -> None:
     assert args.network_column == "family17"
 
 
+def test_branch_overview_parser_accepts_noxcpd_variant() -> None:
+    args = build_arg_parser().parse_args(["--variant", "noxcpd", "--job", "06112026:multiband"])
+
+    assert args.variant == "noxcpd"
+
+
 def test_copy_file_payload_propagates_copy2_metadata_errors(tmp_path: Path, monkeypatch) -> None:
     import pytest
     from scripts.iowa7t import run_branch_overviews

@@ -85,3 +85,44 @@ def test_iowa7t_layout_never_resolves_to_repo_outputs_iowa():
         "DataOrg_PFM_36P/hipp_outputs"
     )
     assert "outputs_iowa" not in root.parts
+
+
+def test_iowa7t_noxcpd_root_uses_variant_specific_directory():
+    root = layout.resolve_iowa7t_data_root(
+        variant="noxcpd",
+        jianglab_root=Path("/tmp/jianglab"),
+    )
+
+    assert root == Path(
+        "/tmp/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/"
+        "DataOrg_PFM_NoXCPD"
+    )
+
+
+def test_iowa7t_hipp_outputs_root_defaults_to_36p_variant():
+    root = layout.resolve_iowa7t_hipp_outputs_root(jianglab_root=Path("/tmp/jianglab"))
+
+    assert root == Path(
+        "/tmp/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/"
+        "DataOrg_PFM_36P/hipp_outputs"
+    )
+
+
+def test_iowa7t_hipp_outputs_root_accepts_noxcpd_variant():
+    root = layout.resolve_iowa7t_hipp_outputs_root(
+        variant="noxcpd",
+        jianglab_root=Path("/tmp/jianglab"),
+    )
+
+    assert root == Path(
+        "/tmp/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/"
+        "DataOrg_PFM_NoXCPD/hipp_outputs"
+    )
+
+
+def test_iowa7t_layout_rejects_bad_variant():
+    with pytest.raises(ValueError, match="Invalid Iowa7T variant"):
+        layout.resolve_iowa7t_data_root(
+            variant="xcpd-lite",
+            jianglab_root=Path("/tmp/jianglab"),
+        )
