@@ -32,8 +32,9 @@ presets continue to use the Python input preparer.
 
 For `DATASET=iowa7t`, `IOWA7T_BRANCH` is required and `IOWA7T_VARIANT` selects
 the fMRIPrep denoising tree. `IOWA7T_VARIANT=36p` is the default. If
-`DATA_ROOT` ends in `DataOrg_PFM_NoXCPD`, the launcher auto-selects
-`IOWA7T_VARIANT=noxcpd`; callers can also set it explicitly.
+`DATA_ROOT` ends in `DataOrg_PFM_0P`, `DataOrg_PFM_32P`, or
+`DataOrg_PFM_NoXCPD`, the launcher auto-selects `0p`, `32p`, or `noxcpd`;
+callers can also set it explicitly.
 
 With `IOWA7T_VARIANT=36p`, the branch controls the exact subject CIFTI consumed
 by the task:
@@ -55,6 +56,15 @@ With `IOWA7T_VARIANT=noxcpd`, the task consumes the NoXCPD equivalents:
   `sub-<ID>/func/sub-<ID>_task-rest_run-concat_space-fsLR_den-91k_desc-MEICA_NoXCPD_bold.dtseries.nii`
   is split into left/right cortex metrics and rebuilt as a persistent
   cortex-only fsLR32k dtseries before MATLAB.
+
+With `IOWA7T_VARIANT=0p` or `IOWA7T_VARIANT=32p`, the multiband CIFTI uses the
+same `desc-denoised_bold` filename as 36P, and the multi-echo branch consumes
+the variant-specific MEICA CIFTI:
+
+- `IOWA7T_VARIANT=0p`, `IOWA7T_BRANCH=multi_echo`:
+  `sub-<ID>/func/sub-<ID>_task-rest_run-concat_space-fsLR_den-91k_desc-MEICA_XCPD0P_denoised_bold.dtseries.nii`
+- `IOWA7T_VARIANT=32p`, `IOWA7T_BRANCH=multi_echo`:
+  `sub-<ID>/func/sub-<ID>_task-rest_run-concat_space-fsLR_den-91k_desc-MEICA_XCPD32P_denoised_bold.dtseries.nii`
 
 Per-subject outputs are written directly under:
 
@@ -153,6 +163,23 @@ DATASET=iowa7t IOWA7T_VARIANT=noxcpd IOWA7T_BRANCH=multi_echo \
   DRY_RUN=1 scripts/ArealMSHBM_Kong2022_Iowa_Stanford/submit_kong2022_areal_mshbm.sh
 ```
 
+Iowa7T 0P and 32P single-subject branch dry-runs:
+
+```bash
+DATASET=iowa7t IOWA7T_VARIANT=0p IOWA7T_BRANCH=multiband \
+  SUBJECT_IDS_CSV=06122026 RUN_ID=iowa7t_0p_multiband_06122026 DRY_RUN=1 \
+  scripts/ArealMSHBM_Kong2022_Iowa_Stanford/submit_kong2022_areal_mshbm.sh
+DATASET=iowa7t IOWA7T_VARIANT=0p IOWA7T_BRANCH=multi_echo \
+  SUBJECT_IDS_CSV=06122026 RUN_ID=iowa7t_0p_multi_echo_06122026 DRY_RUN=1 \
+  scripts/ArealMSHBM_Kong2022_Iowa_Stanford/submit_kong2022_areal_mshbm.sh
+DATASET=iowa7t IOWA7T_VARIANT=32p IOWA7T_BRANCH=multiband \
+  SUBJECT_IDS_CSV=06122026 RUN_ID=iowa7t_32p_multiband_06122026 DRY_RUN=1 \
+  scripts/ArealMSHBM_Kong2022_Iowa_Stanford/submit_kong2022_areal_mshbm.sh
+DATASET=iowa7t IOWA7T_VARIANT=32p IOWA7T_BRANCH=multi_echo \
+  SUBJECT_IDS_CSV=06122026 RUN_ID=iowa7t_32p_multi_echo_06122026 DRY_RUN=1 \
+  scripts/ArealMSHBM_Kong2022_Iowa_Stanford/submit_kong2022_areal_mshbm.sh
+```
+
 Use `DRY_RUN=1` with any example above to print qsub commands only.
 
 The default batch scans all subjects under `DATA_ROOT` and follows the source
@@ -179,8 +206,8 @@ auditing a batch.
 - `DATA_ROOT`: override the selected dataset input root.
 - `OUT_ROOT`: override the selected dataset output root.
 - `RUN_ID`: run identifier for manifest/log roots; Iowa7T defaults to branch plus timestamp.
-- `IOWA7T_VARIANT=36p|noxcpd`: Iowa7T input naming/root selector; defaults to
-  `36p` unless `DATA_ROOT` ends in `DataOrg_PFM_NoXCPD`.
+- `IOWA7T_VARIANT=0p|32p|36p|noxcpd`: Iowa7T input naming/root selector;
+  defaults to `36p` unless `DATA_ROOT` basename identifies another variant.
 - `WB_COMMAND`: override Workbench command path; default is
   `${REPO_ROOT}/software/workbench/bin_linux64/wb_command`.
 - `SMOKE_N=N`: submit only the first N selected subjects.

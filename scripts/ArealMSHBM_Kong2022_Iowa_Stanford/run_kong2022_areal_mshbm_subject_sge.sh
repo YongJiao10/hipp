@@ -72,12 +72,28 @@ elif [ -n "${iowa7t_branch}" ]; then
 fi
 
 data_root="${DATA_ROOT:-${default_data_root}}"
-if [ "${dataset}" = "iowa7t" ] && [ "${iowa7t_variant}" = "noxcpd" ] && [ -z "${DATA_ROOT:-}" ]; then
-  data_root="/Shared/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_NoXCPD"
+if [ "${dataset}" = "iowa7t" ] && [ -n "${iowa7t_variant}" ] && [ -z "${DATA_ROOT:-}" ]; then
+  case "${iowa7t_variant}" in
+    0p)
+      data_root="/Shared/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_0P"
+      ;;
+    32p)
+      data_root="/Shared/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_32P"
+      ;;
+    noxcpd)
+      data_root="/Shared/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_NoXCPD"
+      ;;
+  esac
 fi
 if [ "${dataset}" = "iowa7t" ]; then
   if [ -z "${iowa7t_variant}" ]; then
     case "${data_root##*/}" in
+      DataOrg_PFM_0P)
+        iowa7t_variant="0p"
+        ;;
+      DataOrg_PFM_32P)
+        iowa7t_variant="32p"
+        ;;
       DataOrg_PFM_NoXCPD)
         iowa7t_variant="noxcpd"
         ;;
@@ -87,15 +103,15 @@ if [ "${dataset}" = "iowa7t" ]; then
     esac
   fi
   case "${iowa7t_variant}" in
-    36p|noxcpd)
+    0p|32p|36p|noxcpd)
       ;;
     *)
-      echo "ERROR: IOWA7T_VARIANT must be 36p or noxcpd, got: ${IOWA7T_VARIANT:-}" >&2
+      echo "ERROR: IOWA7T_VARIANT must be 0p, 32p, 36p, or noxcpd, got: ${IOWA7T_VARIANT:-}" >&2
       exit 2
       ;;
   esac
 fi
-if [ "${dataset}" = "iowa7t" ] && [ "${iowa7t_variant}" = "noxcpd" ] && [ -z "${OUT_ROOT:-}" ]; then
+if [ "${dataset}" = "iowa7t" ] && [ "${iowa7t_variant}" != "36p" ] && [ -z "${OUT_ROOT:-}" ]; then
   out_root="${data_root}/hipp_outputs"
 else
   out_root="${OUT_ROOT:-${default_out_root}}"
@@ -240,6 +256,14 @@ if [ "${dataset}" = "iowa7t" ]; then
       ;;
     multi_echo)
       case "${iowa7t_variant}" in
+        0p)
+          source_dtseries="${data_root}/${subject}/func/${subject}_task-rest_run-concat_space-fsLR_den-91k_desc-MEICA_XCPD0P_denoised_bold.dtseries.nii"
+          derived_desc="MEICA_XCPD0P_denoised"
+          ;;
+        32p)
+          source_dtseries="${data_root}/${subject}/func/${subject}_task-rest_run-concat_space-fsLR_den-91k_desc-MEICA_XCPD32P_denoised_bold.dtseries.nii"
+          derived_desc="MEICA_XCPD32P_denoised"
+          ;;
         noxcpd)
           source_dtseries="${data_root}/${subject}/func/${subject}_task-rest_run-concat_space-fsLR_den-91k_desc-MEICA_NoXCPD_bold.dtseries.nii"
           derived_desc="MEICA_NoXCPD"

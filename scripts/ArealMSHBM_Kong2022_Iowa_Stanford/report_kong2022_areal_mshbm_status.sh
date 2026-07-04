@@ -21,6 +21,12 @@ case "${dataset}" in
       iowa7t_variant="36p"
     fi
     case "${iowa7t_variant}" in
+      0p)
+        out_root="${OUT_ROOT:-/Shared/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_0P/hipp_outputs}"
+        ;;
+      32p)
+        out_root="${OUT_ROOT:-/Shared/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_32P/hipp_outputs}"
+        ;;
       36p)
         out_root="${OUT_ROOT:-/Shared/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_36P/hipp_outputs}"
         ;;
@@ -28,7 +34,7 @@ case "${dataset}" in
         out_root="${OUT_ROOT:-/Shared/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_NoXCPD/hipp_outputs}"
         ;;
       *)
-        echo "ERROR: IOWA7T_VARIANT must be 36p or noxcpd, got: ${IOWA7T_VARIANT:-}" >&2
+        echo "ERROR: IOWA7T_VARIANT must be 0p, 32p, 36p, or noxcpd, got: ${IOWA7T_VARIANT:-}" >&2
         exit 2
         ;;
     esac

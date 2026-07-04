@@ -94,6 +94,36 @@ def test_resolve_branch_job_accepts_explicit_hippunfold_batch_root(tmp_path: Pat
     assert job.hippunfold_dir == tmp_path / "shared_subjects" / "sub-06112026" / "hippunfold"
 
 
+def test_resolve_branch_job_uses_0p_32p_input_templates(tmp_path: Path) -> None:
+    cases = {
+        "0p": "MEICA_XCPD0P_denoised",
+        "32p": "MEICA_XCPD32P_denoised",
+    }
+    for variant, multi_echo_desc in cases.items():
+        data_root = tmp_path / f"DataOrg_PFM_{variant.upper()}"
+        output_root = data_root / "hipp_outputs"
+        single = resolve_branch_job(
+            "06122026",
+            "multiband",
+            variant=variant,
+            data_root=data_root,
+            output_root=output_root,
+        )
+        multi = resolve_branch_job(
+            "06122026",
+            "multi_echo",
+            variant=variant,
+            data_root=data_root,
+            output_root=output_root,
+        )
+
+        assert single.bold_volume.name == "sub-06122026_task-rest_dir-concat_space-MNI152NLin6Asym_res-2_desc-denoised_bold.nii.gz"
+        assert single.dtseries.name == "sub-06122026_task-rest_dir-concat_space-fsLR_den-91k_desc-denoised_bold.dtseries.nii"
+        assert multi.bold_volume.name == f"sub-06122026_task-rest_run-concat_space-MNI152NLin6Asym_res-2_desc-{multi_echo_desc}_bold.nii.gz"
+        assert multi.dtseries.name == f"sub-06122026_task-rest_run-concat_space-fsLR_den-91k_desc-{multi_echo_desc}_bold.dtseries.nii"
+        assert multi.hippunfold_dir == output_root / "subjects" / "sub-06122026" / "hippunfold"
+
+
 def test_resolve_branch_job_rejects_unknown_branch(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="Unsupported Iowa7T branch"):
         resolve_branch_job("06112026", "echo2", data_root=tmp_path / "data", output_root=tmp_path / "hipp_outputs")

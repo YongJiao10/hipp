@@ -228,3 +228,23 @@ def test_iowa7t_argon_preset_contract_supports_noxcpd_variant() -> None:
     ]
     for token in required:
         assert token in combined, f"missing {token}"
+ 
+
+def test_iowa7t_argon_preset_contract_supports_0p_32p_variants() -> None:
+    script_dir = REPO_ROOT / "scripts" / "ArealMSHBM_Kong2022_Iowa_Stanford"
+    checked = [
+        script_dir / "submit_kong2022_areal_mshbm.sh",
+        script_dir / "run_kong2022_areal_mshbm_subject_sge.sh",
+        script_dir / "report_kong2022_areal_mshbm_status.sh",
+        script_dir / "README.md",
+    ]
+    combined = "\n".join(path.read_text(encoding="utf-8") for path in checked)
+    required = [
+        "DataOrg_PFM_0P",
+        "DataOrg_PFM_32P",
+        "MEICA_XCPD0P_denoised",
+        "MEICA_XCPD32P_denoised",
+        "0p|32p|36p|noxcpd",
+    ]
+    for token in required:
+        assert token in combined, f"missing {token}"

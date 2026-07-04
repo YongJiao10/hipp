@@ -116,7 +116,13 @@ def resolve_branch_job(
         bold_volume = func_dir / f"{sub}_task-rest_dir-concat_space-MNI152NLin6Asym_res-2_desc-{desc}_bold.nii.gz"
         dtseries = func_dir / f"{sub}_task-rest_dir-concat_space-fsLR_den-91k_desc-{desc}_bold.dtseries.nii"
     else:
-        desc = "MEICA_NoXCPD" if variant_key == "noxcpd" else "MEICA_XCPD36P_denoised"
+        multi_echo_desc_by_variant = {
+            "0p": "MEICA_XCPD0P_denoised",
+            "32p": "MEICA_XCPD32P_denoised",
+            "36p": "MEICA_XCPD36P_denoised",
+            "noxcpd": "MEICA_NoXCPD",
+        }
+        desc = multi_echo_desc_by_variant[variant_key]
         bold_volume = func_dir / f"{sub}_task-rest_run-concat_space-MNI152NLin6Asym_res-2_desc-{desc}_bold.nii.gz"
         dtseries = func_dir / f"{sub}_task-rest_run-concat_space-fsLR_den-91k_desc-{desc}_bold.dtseries.nii"
 

@@ -2,6 +2,10 @@
 
 Canonical production roots:
 
+- 0P local: `/home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_0P/hipp_outputs`
+- 0P Argon: `/Shared/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_0P/hipp_outputs`
+- 32P local: `/home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_32P/hipp_outputs`
+- 32P Argon: `/Shared/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_32P/hipp_outputs`
 - 36P local: `/home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_36P/hipp_outputs`
 - 36P Argon: `/Shared/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_36P/hipp_outputs`
 - NoXCPD local: `/home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_NoXCPD/hipp_outputs`
@@ -11,7 +15,7 @@ Rules:
 
 - Iowa7T means the Jianglab fMRIPrep Iowa7T trees, not HCPpipeline500.
 - `36p` remains the default workflow variant for backward compatibility.
-- `noxcpd` uses the parallel `DataOrg_PFM_NoXCPD` tree and must not write into the 36P output root.
+- `0p`, `32p`, and `noxcpd` use parallel `DataOrg_PFM_*` trees and must not write into the 36P output root.
 - `outputs_iowa/` in the repository is not a production output root.
 - Subject structural HippUnfold output is shared at `subjects/sub-<ID>/hippunfold/`.
 - Functional branches are direct siblings: `multiband/` and `multi_echo/`.
@@ -79,6 +83,38 @@ Migration helper:
 `dry-run` writes only a concrete migration manifest under `runs/manifests/`.
 `copy` copies or recreates symlinks into canonical locations and leaves legacy
 paths in place. Deletion is a separate user-approved operation.
+
+## 0P and 32P Variants
+
+0P and 32P are first-class Iowa7T variants. Local wrappers accept
+`--variant 0p` and `--variant 32p` and resolve defaults to
+`DataOrg_PFM_0P/hipp_outputs` and `DataOrg_PFM_32P/hipp_outputs`.
+
+0P/32P branch inputs are fixed:
+
+- `multiband` consumes the same `desc-denoised` MNI volume and 91k dtseries
+  filename pattern as 36P.
+- `0p` `multi_echo` consumes `desc-MEICA_XCPD0P_denoised` MNI volume and 91k
+  dtseries files.
+- `32p` `multi_echo` consumes `desc-MEICA_XCPD32P_denoised` MNI volume and
+  91k dtseries files.
+
+Like NoXCPD, 0P and 32P use independent HippUnfold subject trees under their
+selected `hipp_outputs/subjects/sub-<ID>/hippunfold/`. Use an isolated BIDS
+staging root for anatomical inputs before running HippUnfold so SnakeBIDS does
+not scan existing `hipp_outputs` as inputs.
+
+Example 06122026 downstream, overview, and FC heatmap reruns:
+
+```bash
+/home/yojiao/.conda/envs/py314/bin/python scripts/iowa7t/run_branch_downstream.py --variant 0p --job 06122026:multiband --job 06122026:multi_echo --stage all --overwrite
+/home/yojiao/.conda/envs/py314/bin/python scripts/iowa7t/run_branch_downstream.py --variant 32p --job 06122026:multiband --job 06122026:multi_echo --stage all --overwrite
+
+/home/yojiao/.conda/envs/py314/bin/python scripts/iowa7t/run_branch_overviews.py --variant 0p --job 06122026:multiband --job 06122026:multi_echo --jobs 4 --overwrite
+/home/yojiao/.conda/envs/py314/bin/python scripts/iowa7t/run_branch_overviews.py --variant 32p --job 06122026:multiband --job 06122026:multi_echo --jobs 4 --overwrite
+
+/home/yojiao/.conda/envs/py314/bin/python scripts/iowa7t/generate_all_subject_plots.py --variant 0p --variant 32p --subject 06122026 --branch multiband --branch multi_echo
+```
 
 ## NoXCPD Variant
 

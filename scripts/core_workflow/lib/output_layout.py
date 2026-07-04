@@ -12,9 +12,15 @@ DATASET_KEYS = ("hcp", "iowa", "stanford", "iowa_hcp500")
 DEFAULT_DATASET = "hcp"
 
 IOWA7T_BRANCHES = ("multiband", "multi_echo")
-IOWA7T_VARIANTS = ("36p", "noxcpd")
+IOWA7T_VARIANTS = ("0p", "32p", "36p", "noxcpd")
 LOCAL_JIANGLAB_ROOT = Path("/home/yojiao/LSS/jianglab")
 ARGON_JIANGLAB_ROOT = Path("/Shared/jianglab")
+IOWA7T_0P_RELATIVE_ROOT = Path(
+    "3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_0P"
+)
+IOWA7T_32P_RELATIVE_ROOT = Path(
+    "3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_32P"
+)
 IOWA7T_36P_RELATIVE_ROOT = Path(
     "3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_36P"
 )
@@ -22,6 +28,8 @@ IOWA7T_NOXCPD_RELATIVE_ROOT = Path(
     "3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_NoXCPD"
 )
 IOWA7T_VARIANT_RELATIVE_ROOTS = {
+    "0p": IOWA7T_0P_RELATIVE_ROOT,
+    "32p": IOWA7T_32P_RELATIVE_ROOT,
     "36p": IOWA7T_36P_RELATIVE_ROOT,
     "noxcpd": IOWA7T_NOXCPD_RELATIVE_ROOT,
 }

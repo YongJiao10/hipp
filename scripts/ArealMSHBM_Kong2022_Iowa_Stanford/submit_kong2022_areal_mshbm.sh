@@ -77,12 +77,28 @@ elif [ -n "${iowa7t_branch}" ]; then
 fi
 
 data_root="${DATA_ROOT:-${default_data_root}}"
-if [ "${dataset}" = "iowa7t" ] && [ "${iowa7t_variant}" = "noxcpd" ] && [ -z "${DATA_ROOT:-}" ]; then
-  data_root="/Shared/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_NoXCPD"
+if [ "${dataset}" = "iowa7t" ] && [ -n "${iowa7t_variant}" ] && [ -z "${DATA_ROOT:-}" ]; then
+  case "${iowa7t_variant}" in
+    0p)
+      data_root="/Shared/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_0P"
+      ;;
+    32p)
+      data_root="/Shared/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_32P"
+      ;;
+    noxcpd)
+      data_root="/Shared/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_NoXCPD"
+      ;;
+  esac
 fi
 if [ "${dataset}" = "iowa7t" ]; then
   if [ -z "${iowa7t_variant}" ]; then
     case "${data_root##*/}" in
+      DataOrg_PFM_0P)
+        iowa7t_variant="0p"
+        ;;
+      DataOrg_PFM_32P)
+        iowa7t_variant="32p"
+        ;;
       DataOrg_PFM_NoXCPD)
         iowa7t_variant="noxcpd"
         ;;
@@ -92,15 +108,15 @@ if [ "${dataset}" = "iowa7t" ]; then
     esac
   fi
   case "${iowa7t_variant}" in
-    36p|noxcpd)
+    0p|32p|36p|noxcpd)
       ;;
     *)
-      echo "ERROR: IOWA7T_VARIANT must be 36p or noxcpd, got: ${IOWA7T_VARIANT:-}" >&2
+      echo "ERROR: IOWA7T_VARIANT must be 0p, 32p, 36p, or noxcpd, got: ${IOWA7T_VARIANT:-}" >&2
       exit 2
       ;;
   esac
 fi
-if [ "${dataset}" = "iowa7t" ] && [ "${iowa7t_variant}" = "noxcpd" ] && [ -z "${OUT_ROOT:-}" ]; then
+if [ "${dataset}" = "iowa7t" ] && [ "${iowa7t_variant}" != "36p" ] && [ -z "${OUT_ROOT:-}" ]; then
   out_root="${data_root}/hipp_outputs"
 else
   out_root="${OUT_ROOT:-${default_out_root}}"
@@ -146,8 +162,8 @@ Environment controls:
   OVERWRITE=1           Recompute existing outputs.
   KEEP_TMP=1            Retain task temporary files. Default: 1 for iowa_hcp500.
   IOWA7T_BRANCH=...     Required for DATASET=iowa7t: multiband or multi_echo.
-  IOWA7T_VARIANT=...    Optional for DATASET=iowa7t: 36p or noxcpd.
-                        Auto-detected from DATA_ROOT when it ends in DataOrg_PFM_NoXCPD.
+  IOWA7T_VARIANT=...    Optional for DATASET=iowa7t: 0p, 32p, 36p, or noxcpd.
+                        Auto-detected from DATA_ROOT basename when possible.
   RUN_ID=...            Run identifier. Iowa7T defaults to <branch>_<timestamp>.
 
 Queue behavior follows scripts/core_workflow/sge_argon/submit_kong2022_route_a_dual_queues.sh:

@@ -120,6 +120,19 @@ def test_iowa7t_hipp_outputs_root_accepts_noxcpd_variant():
     )
 
 
+def test_iowa7t_hipp_outputs_root_accepts_0p_32p_variants():
+    cases = {
+        "0p": "DataOrg_PFM_0P/hipp_outputs",
+        "32p": "DataOrg_PFM_32P/hipp_outputs",
+    }
+    for variant, suffix in cases.items():
+        root = layout.resolve_iowa7t_hipp_outputs_root(
+            variant=variant,
+            jianglab_root=Path("/tmp/jianglab"),
+        )
+        assert root == Path("/tmp/jianglab/3_Data_Working/fmriprep_processed_Iowa7T") / suffix
+
+
 def test_iowa7t_layout_rejects_bad_variant():
     with pytest.raises(ValueError, match="Invalid Iowa7T variant"):
         layout.resolve_iowa7t_data_root(
