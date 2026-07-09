@@ -289,6 +289,22 @@ def resolve_kong2019_root(dataset: str = DEFAULT_DATASET) -> Path:
     return resolve_inputs_root(dataset) / "kong2019_fast_pfm_t1only"
 
 
+def resolve_lynch2024_root(dataset: str = DEFAULT_DATASET) -> Path:
+    return resolve_inputs_root(dataset) / "lynch2024_fast_pfm_t1only"
+
+
+def resolve_lynch2024_manifest_root(dataset: str = DEFAULT_DATASET) -> Path:
+    return resolve_lynch2024_root(dataset) / "manifests"
+
+
+def resolve_lynch2024_shared_inputs_base(dataset: str = DEFAULT_DATASET) -> Path:
+    return resolve_lynch2024_root(dataset) / "shared_inputs"
+
+
+def resolve_lynch2024_shared_inputs_root(dataset: str = DEFAULT_DATASET) -> Path:
+    return resolve_lynch2024_shared_inputs_base(dataset) / "pfm_nsi043_78"
+
+
 # ── work subtree resolvers ────────────────────────────────────────────
 
 def resolve_group_atlas_root(dataset: str = DEFAULT_DATASET) -> Path:
@@ -313,6 +329,14 @@ def resolve_routea_ctxdrop_group_atlas_root(dataset: str = DEFAULT_DATASET) -> P
 
 def resolve_routeb_group_atlas_root(dataset: str = DEFAULT_DATASET) -> Path:
     return resolve_group_atlas_root(dataset) / "routeb_full_k3_fisherz"
+
+
+def resolve_lynch2024_21net_group_atlas_root(dataset: str = DEFAULT_DATASET) -> Path:
+    return resolve_group_atlas_root(dataset) / "lynch2024_21net_nsi043_full_k3_normalized_wta"
+
+
+def resolve_lynch2024_8net_group_atlas_root(dataset: str = DEFAULT_DATASET) -> Path:
+    return resolve_group_atlas_root(dataset) / "lynch2024_8net_nsi043_full_k3_normalized_wta"
 
 
 def resolve_hippomaps_gradient_root(dataset: str = DEFAULT_DATASET) -> Path:
@@ -359,6 +383,10 @@ DEFAULT_KONG2022_MANIFEST_ROOT = resolve_kong2022_manifest_root()
 DEFAULT_KONG2022_QC_ROOT = resolve_kong2022_qc_root()
 DEFAULT_CORTEX_ROUTEA_ROOT = resolve_cortex_routea_root()
 DEFAULT_KONG2019_ROOT = resolve_kong2019_root()
+DEFAULT_LYNCH2024_ROOT = resolve_lynch2024_root()
+DEFAULT_LYNCH2024_MANIFEST_ROOT = resolve_lynch2024_manifest_root()
+DEFAULT_LYNCH2024_SHARED_INPUTS_BASE = resolve_lynch2024_shared_inputs_base()
+DEFAULT_LYNCH2024_SHARED_INPUTS_ROOT = resolve_lynch2024_shared_inputs_root()
 DEFAULT_WORK_ROOT = resolve_work_root()
 DEFAULT_GROUP_ATLAS_ROOT = resolve_group_atlas_root()
 DEFAULT_ROUTEA_GROUP_ATLAS_ROOT = resolve_routea_group_atlas_root()
@@ -366,6 +394,8 @@ DEFAULT_ROUTEA_17NET_GROUP_ATLAS_ROOT = resolve_routea_17net_group_atlas_root()
 DEFAULT_ROUTEA_CTXREG_GROUP_ATLAS_ROOT = resolve_routea_ctxreg_group_atlas_root()
 DEFAULT_ROUTEA_CTXDROP_GROUP_ATLAS_ROOT = resolve_routea_ctxdrop_group_atlas_root()
 DEFAULT_ROUTEB_GROUP_ATLAS_ROOT = resolve_routeb_group_atlas_root()
+DEFAULT_LYNCH2024_21NET_GROUP_ATLAS_ROOT = resolve_lynch2024_21net_group_atlas_root()
+DEFAULT_LYNCH2024_8NET_GROUP_ATLAS_ROOT = resolve_lynch2024_8net_group_atlas_root()
 DEFAULT_HIPPOMAPS_GRADIENT_ROOT = resolve_hippomaps_gradient_root()
 DEFAULT_CORTEX_ASSETS_ROOT = resolve_cortex_assets_root()
 SMOKE_RUNS_ROOT = resolve_smoke_runs_root()

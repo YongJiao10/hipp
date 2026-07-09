@@ -130,8 +130,8 @@ def test_gradientmaps_called_with_official_pearson_kernel_and_full_lambda_ev() -
             )
             self.lambdas_ = np.asarray([5.0, 3.0, 2.0], dtype=np.float32)
 
-        def fit(self, matrix):
-            calls.append({"fit_shape": tuple(matrix.shape), "fit_matrix": np.asarray(matrix).copy()})
+        def fit(self, matrix, **kwargs):
+            calls.append({"fit_shape": tuple(matrix.shape), "fit_matrix": np.asarray(matrix).copy(), "fit_kwargs": kwargs})
             return self
 
     raw = np.asarray(
@@ -149,6 +149,7 @@ def test_gradientmaps_called_with_official_pearson_kernel_and_full_lambda_ev() -
             n_components=3,
         )
     assert calls[0]["init"] == {"n_components": 3, "kernel": "pearson", "random_state": 0}, calls
+    assert calls[1]["fit_kwargs"] == {"sparsity": 0.0}, calls
     assert calls[1]["fit_shape"] == (4, 4), calls
     expected = adapter.feature_zscore_columns(raw)
     assert np.allclose(calls[1]["fit_matrix"], expected, atol=1e-6), calls[1]["fit_matrix"]
@@ -156,6 +157,12 @@ def test_gradientmaps_called_with_official_pearson_kernel_and_full_lambda_ev() -
     assert gradients.shape == (4, 3), gradients.shape
     assert np.allclose(lambdas, [5.0, 3.0, 2.0])
     assert np.allclose(ev, [0.5, 0.3, 0.2])
+
+
+def test_gradientmaps_low_dimensional_sparsity_uses_full_graph() -> None:
+    assert adapter.brainspace_sparsity_for_feature_count(8) == 0.0
+    assert adapter.brainspace_sparsity_for_feature_count(20) == 0.0
+    assert adapter.brainspace_sparsity_for_feature_count(400) == 0.9
 
 
 def test_gradientmaps_accepts_explicit_random_state() -> None:
@@ -167,7 +174,8 @@ def test_gradientmaps_accepts_explicit_random_state() -> None:
             self.gradients_ = np.ones((4, 2), dtype=np.float32)
             self.lambdas_ = np.asarray([3.0, 1.0], dtype=np.float32)
 
-        def fit(self, matrix):
+        def fit(self, matrix, **kwargs):
+            calls.append({"fit_kwargs": kwargs})
             return self
 
     raw = np.arange(16, dtype=np.float32).reshape(4, 4)
@@ -179,6 +187,7 @@ def test_gradientmaps_accepts_explicit_random_state() -> None:
         )
 
     assert calls[0]["init"] == {"n_components": 2, "kernel": "pearson", "random_state": 17}, calls
+    assert calls[1]["fit_kwargs"] == {"sparsity": 0.0}, calls
 
 
 def test_group_atlas_gradient_spectral_uses_hippomaps_adapter_and_records_provenance() -> None:
@@ -254,8 +263,9 @@ def test_group_atlas_gradient_spectral_uses_hippomaps_adapter_and_records_proven
     assert np.allclose(selected[:, 0], [1.0, 6.0, 11.0, 16.0, 21.0, 26.0], atol=1e-6)
     assert np.allclose(selected[:, 1], [3.0, 8.0, 13.0, 18.0, 23.0, 28.0], atol=1e-6)
     assert meta["gradientmaps_call"] == (
-        "brainspace.gradient.GradientMaps(n_components=N, kernel='pearson', random_state=gradient_random_state).fit(column_zscored_group_mean_fisherz_fc)"
+        "brainspace.gradient.GradientMaps(n_components=N, kernel='pearson', random_state=gradient_random_state).fit(column_zscored_group_mean_fisherz_fc, sparsity=brainspace_sparsity)"
     )
+    assert np.isclose(meta["brainspace_sparsity"], 0.0), meta
     assert meta["gradient_random_state"] == 0
     assert meta["feature_zscore_pre_gradientmaps"] == (
         "column-wise z-score across vertices after group Fisher-z averaging"
@@ -268,6 +278,170 @@ def test_group_atlas_gradient_spectral_uses_hippomaps_adapter_and_records_proven
     assert np.allclose(meta["gradient_eigenvalues"], [5.0, 4.0, 3.0, 2.0, 1.0], atol=1e-6)
     assert np.allclose(meta["ev_fractions"], [1.0 / 3.0, 4.0 / 15.0, 1.0 / 5.0, 2.0 / 15.0, 1.0 / 15.0], atol=1e-6)
 
+
+
+def test_gradient_split_diagnostic_failures_are_counted_when_allowed() -> None:
+    subjects = ["a", "b", "c", "d"]
+    support = np.ones((5,), dtype=bool)
+    feature_bank = {s: np.zeros((5, 2), dtype=np.float32) for s in subjects}
+    valid_masks = {s: support.copy() for s in subjects}
+    adjacency = atlas_mod.sparse.csr_matrix(np.ones((5, 5), dtype=np.float32))
+
+    with patch.object(
+        atlas_mod,
+        "cluster_for_subset",
+        side_effect=RuntimeError("GradientMaps lambdas contain non-finite values"),
+    ):
+        out = atlas_mod.subject_split_ari(
+            method="gradient-spectral",
+            feature_bank=feature_bank,
+            valid_masks_by_subject=valid_masks,
+            subjects=subjects,
+            tau=0.8,
+            adjacency_full=adjacency,
+            k=2,
+            seeds=[11, 22],
+            allow_diagnostic_failures=True,
+        )
+
+    assert out["values"] == []
+    assert out["n_requested"] == 2
+    assert out["n_used"] == 0
+    assert out["n_skipped_failure"] == 2
+    assert "GradientMaps lambdas" in out["failure_examples"][0]
+
+    with patch.object(
+        atlas_mod,
+        "cluster_for_subset",
+        side_effect=RuntimeError("GradientMaps lambdas contain non-finite values"),
+    ):
+        try:
+            atlas_mod.subject_split_ari(
+                method="gradient-spectral",
+                feature_bank=feature_bank,
+                valid_masks_by_subject=valid_masks,
+                subjects=subjects,
+                tau=0.8,
+                adjacency_full=adjacency,
+                k=2,
+                seeds=[11],
+                allow_diagnostic_failures=False,
+            )
+        except RuntimeError as exc:
+            assert "GradientMaps lambdas" in str(exc)
+        else:
+            raise AssertionError("strict diagnostic mode should propagate gradient failures")
+
+
+def test_evaluate_k_candidate_records_no_valid_gradient_diagnostic_status() -> None:
+    combo = atlas_mod.Combo(
+        method="gradient-spectral",
+        atlas="lynch2024_21net",
+        smoothing="2mm",
+        hemi="L",
+        coverage_threshold=0.8,
+    )
+    support = np.ones((5,), dtype=bool)
+    group_features = np.asarray(
+        [
+            [1.0, 0.0],
+            [0.8, 0.1],
+            [0.0, 1.0],
+            [0.1, 0.9],
+            [0.2, 0.7],
+        ],
+        dtype=np.float32,
+    )
+    labels_active = np.asarray([1, 1, 2, 2, 2], dtype=np.int32)
+    labels_full = labels_active.copy()
+    adjacency = atlas_mod.sparse.csr_matrix(np.ones((5, 5), dtype=np.float32))
+    no_split = {
+        "values": [],
+        "n_requested": 1,
+        "n_used": 0,
+        "n_skipped_overlap": 0,
+        "n_skipped_empty": 0,
+        "n_skipped_failure": 1,
+        "failure_examples": ["GradientMaps lambdas contain non-finite values"],
+    }
+    no_run = {"values": [], "n_pairs": 0, "n_used": 0, "n_skipped_failure": 4, "failure_examples": []}
+
+    with (
+        patch.object(atlas_mod, "cluster_from_precomputed_group_features", return_value=(labels_active, labels_full)),
+        patch.object(atlas_mod, "subject_split_ari", return_value=dict(no_split)),
+        patch.object(atlas_mod, "strong_null_ari", return_value={**dict(no_split), "permutation_scope": "subject_specific"}),
+        patch.object(atlas_mod, "run_aware_ari", return_value=no_run),
+    ):
+        k, labels, row = atlas_mod.evaluate_k_candidate(
+            combo=combo,
+            method="gradient-spectral",
+            k=2,
+            seed=101,
+            n_support=5,
+            v_min=1,
+            group_features_active=group_features,
+            support_mask=support,
+            adjacency_full=adjacency,
+            adjacency_support=adjacency,
+            feature_bank={},
+            valid_masks={},
+            subjects=["a", "b", "c", "d"],
+            tau=0.8,
+            split_seeds=[11],
+            null_seeds=[22],
+            null_resamples=1,
+            run_feature_banks={},
+            seed_base=20260420,
+            max_components_threshold=3,
+            min_profile_coherence_threshold=0.0,
+            k_selection_mode="redundancy-aware",
+            roi_fc_bank_for_redundancy=None,
+            allow_diagnostic_failures=True,
+        )
+
+    assert k == 2
+    assert labels.tolist() == labels_full.tolist()
+    assert np.isnan(row["group_ari_mean"])
+    assert np.isnan(row["group_ari_se"])
+    assert row["group_ari_diagnostic_status"] == "no_valid_subject_split_resamples"
+    assert row["subject_split_skipped_failure"] == 1
+    assert row["run_aware_ari_status"] == "no_valid_run_pairs"
+    assert row["run_aware_skipped_failure"] == 4
+    assert row["B_null_skipped_failure_strong"] == 1
+
+
+def test_run_aware_ari_pairs_only_successful_runs_after_skipped_failures() -> None:
+    support = np.ones((4,), dtype=bool)
+    adjacency = atlas_mod.sparse.csr_matrix(np.ones((4, 4), dtype=np.float32))
+    full_by_rid = {
+        1: np.asarray([1, 1, 2, 2], dtype=np.int32),
+        3: np.asarray([1, 2, 2, 1], dtype=np.int32),
+    }
+
+    def fake_cluster_for_subset(**kwargs):
+        seed = int(kwargs["seed"])
+        rid = (seed - 20260420 - 2) // 1000
+        if rid == 2:
+            raise RuntimeError("GradientMaps lambdas contain non-finite values")
+        full = full_by_rid[int(rid)]
+        return full[support], full
+
+    with patch.object(atlas_mod, "cluster_for_subset", side_effect=fake_cluster_for_subset):
+        out = atlas_mod.run_aware_ari(
+            method="gradient-spectral",
+            run_feature_banks={1: {}, 2: {}, 3: {}},
+            subjects=["a", "b", "c", "d"],
+            support_mask=support,
+            adjacency_full=adjacency,
+            k=2,
+            seed_base=20260420,
+            allow_diagnostic_failures=True,
+        )
+
+    assert out["n_skipped_failure"] == 1
+    assert out["n_pairs"] == 1
+    assert out["n_used"] == 1
+    assert len(out["values"]) == 1
 
 def test_group_atlas_public_methods_drop_partial_corr_branches() -> None:
     assert "group-network-partial-spectral" not in atlas_mod.METHOD_CHOICES
@@ -814,6 +988,9 @@ def main() -> int:
     test_gradientmaps_called_with_official_pearson_kernel_and_full_lambda_ev()
     test_gradientmaps_accepts_explicit_random_state()
     test_group_atlas_gradient_spectral_uses_hippomaps_adapter_and_records_provenance()
+    test_gradient_split_diagnostic_failures_are_counted_when_allowed()
+    test_evaluate_k_candidate_records_no_valid_gradient_diagnostic_status()
+    test_run_aware_ari_pairs_only_successful_runs_after_skipped_failures()
     test_group_atlas_public_methods_drop_partial_corr_branches()
     test_group_atlas_parser_defaults_to_fixed_k3()
     test_group_atlas_gradient_spectral_loads_hippomaps_gradient_artifacts()

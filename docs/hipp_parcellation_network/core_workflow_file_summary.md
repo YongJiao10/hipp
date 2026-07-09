@@ -42,6 +42,8 @@ for those details:
 | `scripts/core_workflow/06_05_render_group_gradient_heatmaps.py` | Deprecated heatmap entrypoint that exits with guidance |
 | `scripts/core_workflow/06_06_render_confidence_maps.py` | Render confidence maps |
 | `scripts/core_workflow/06_07_render_ctxdrop_neighbor_counts.py` | Render ctxreg/ctxdrop local cortex-neighbor overlays |
+| `scripts/core_workflow/06_08_render_hcp_subfield_composition.py` | Render HCP subfield composition plots |
+| `scripts/core_workflow/06_09_plot_cortex_kong2022_mshbm.py` | Render subject-level Kong2022 MSHBM cortical parcellation brain maps |
 | `scripts/core_workflow/07_01_build_group_matrix.py` | Build the maintained presentation matrix/index |
 
 ## Shared Library Modules

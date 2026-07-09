@@ -77,6 +77,20 @@ def _extract_gradientmaps_array(model: object, primary: str, fallback: str, labe
     return arr
 
 
+def brainspace_sparsity_for_feature_count(
+    n_features: int,
+    *,
+    default: float = 0.9,
+    full_graph_feature_threshold: int = 50,
+) -> float:
+    n = int(n_features)
+    if n <= 0:
+        raise ValueError(f"n_features must be positive, got {n_features}")
+    if n <= int(full_graph_feature_threshold):
+        return 0.0
+    return float(default)
+
+
 def fit_gradientmaps_pearson(
     group_fc: np.ndarray,
     *,
@@ -96,8 +110,9 @@ def fit_gradientmaps_pearson(
     from brainspace.gradient import GradientMaps
 
     matrix_z = feature_zscore_columns(matrix)
+    sparsity = brainspace_sparsity_for_feature_count(matrix_z.shape[1])
     model = GradientMaps(n_components=n_comp, kernel="pearson", random_state=random_state)
-    fitted = model.fit(matrix_z)
+    fitted = model.fit(matrix_z, sparsity=sparsity)
     model_out = fitted if fitted is not None else model
     gradients = _extract_gradientmaps_array(model_out, "gradients_", "gradients", "gradients")
     lambdas = _extract_gradientmaps_array(model_out, "lambdas_", "lambdas", "lambdas").reshape(-1)

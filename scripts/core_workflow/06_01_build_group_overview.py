@@ -14,7 +14,7 @@ Inputs:
   - --group-root: Directory where group-atlas intermediate files are saved (default: `outputs_hcp/work/group_atlas/routea_full_k3_fisherz`).
   - --present-dir: Directory where final presentation figures will be saved (default: `outputs_hcp/present/overviews`).
   - --methods: Parcellation methods to process: "intrinsic-spectral", "network-spectral", "gradient-spectral", "wta-top".
-  - --atlases: Cortical atlases to process (default: ["kong2022"]).
+  - --atlases: Cortical atlases to process (default: Kong2019/Kong2022 atlas set; Lynch2024 atlases are explicit choices).
   - --coverage-threshold: Selected coverage threshold for overview outputs (default: 0.80).
   - --scene: Path to standard wb scene template file.
   - --route-tag: Custom workflow branch tag to override automatic detection.
@@ -77,7 +77,8 @@ METHODS_DEFAULT = [
     "network-spectral",
     "wta-top",
 ]
-ATLASES = ["kong2019", "kong2019_8net", "kong2022"]
+ATLASES = ["kong2019", "kong2019_8net", "kong2022", "lynch2024_21net", "lynch2024_8net"]
+DEFAULT_ATLASES = ["kong2019", "kong2019_8net", "kong2022"]
 SMOOTHINGS = ["2mm", "4mm"]
 FS_TITLE = 11
 FS_LABEL = 10
@@ -89,7 +90,7 @@ FS_MISSING = 13
 FS_BIG_TITLE = 13
 FS_SUPTITLE = 18
 CLUSTERLESS_METHODS = {"wta-top"}
-ASSIGNMENT_VARIANTS = ("fisherz", "count", "weighted_fisherz")
+ASSIGNMENT_VARIANTS = ("fisherz", "count", "normalized_top20_count", "weighted_fisherz")
 DEFAULT_RENDER_ASSIGNMENT_VARIANTS = ("fisherz", "count")
 ASSIGNMENT_VARIANT_CHOICES = ASSIGNMENT_VARIANTS + ("both",)
 WTA_OVERVIEW_PROFILE_BINS = 20
@@ -104,7 +105,11 @@ GRADIENT_METHOD = "gradient-spectral"
 
 def resolve_render_assignment_variants(method: str, assignment_variant: str) -> tuple[str | None, ...]:
     if method in CLUSTERLESS_METHODS:
-        return ("weighted_fisherz",) if assignment_variant == "weighted_fisherz" else (None,)
+        if assignment_variant == "weighted_fisherz":
+            return ("weighted_fisherz",)
+        if assignment_variant in {"normalized_top20_count", "both"}:
+            return ("normalized_top20_count",)
+        return (None,)
     if assignment_variant == "both":
         return DEFAULT_RENDER_ASSIGNMENT_VARIANTS
     if assignment_variant in ASSIGNMENT_VARIANTS:
@@ -662,6 +667,37 @@ def _metric_array(rows: list[dict[str, str]], key: str) -> np.ndarray:
     return np.asarray(vals, dtype=float)
 
 
+def plot_ari_summary_curve(ax, rows: list[dict[str, str]], *, hemi: str, color: str) -> bool:
+    rows = sorted(rows, key=lambda r: int(r["k"]))
+    ks = np.array([int(r["k"]) for r in rows], dtype=int)
+    mean = _metric_array(rows, "group_ari_mean")
+    se = _metric_array(rows, "group_ari_se")
+    finite = np.isfinite(mean)
+    if bool(finite.any()):
+        ax.plot(ks, mean, marker="o", lw=1.3, color=color, label=hemi)
+        ax.fill_between(ks, mean - se, mean + se, color=color, alpha=0.18)
+    null_ref = _metric_array(rows, "ARI_null_5pct")
+    if bool(np.isfinite(null_ref).any()):
+        ax.plot(ks, null_ref, ls=":", lw=1.0, color=color, alpha=0.85)
+    return bool(finite.any())
+
+
+def annotate_missing_ari_curves(ax, missing_hemis: list[str]) -> None:
+    if not missing_hemis:
+        return
+    ax.text(
+        0.03,
+        0.04,
+        "Subject-split ARI unavailable: hemi-" + "/".join(missing_hemis),
+        transform=ax.transAxes,
+        ha="left",
+        va="bottom",
+        fontsize=FS_SMALL,
+        color="#7a2e00",
+        bbox={"facecolor": "#fff7e6", "edgecolor": "#d08b00", "linewidth": 0.6, "alpha": 0.9},
+    )
+
+
 def plot_k_gate_panel(
     ax,
     *,
@@ -882,7 +918,11 @@ def render_combo(
     output_name: str | None = None,
 ) -> dict[str, object]:
     effective_mode_tag = effective_overview_mode_tag(method, mode_tag, assignment_variant)
-    effective_assignment_variant = None if method in CLUSTERLESS_METHODS else str(assignment_variant)
+    effective_assignment_variant = (
+        str(assignment_variant)
+        if method in CLUSTERLESS_METHODS and str(assignment_variant) == "normalized_top20_count"
+        else (None if method in CLUSTERLESS_METHODS else str(assignment_variant))
+    )
     if method in CLUSTERLESS_METHODS:
         fig = plt.figure(figsize=(19.0, 12.8), dpi=180, constrained_layout=True)
         gs = fig.add_gridspec(nrows=2, ncols=3, width_ratios=[0.62, 1.18, 1.42], hspace=0.08, wspace=0.06)
@@ -999,15 +1039,11 @@ def render_combo(
             ax0 = fig.add_subplot(sub[0, 0])
             rows_l_tsv = read_tsv(d_l / "k_selection_summary.tsv")
             rows_r_tsv = read_tsv(d_r / "k_selection_summary.tsv")
+            missing_ari_hemis: list[str] = []
             for hemi_lbl, tsv_rows, color in [("L", rows_l_tsv, "#1f77b4"), ("R", rows_r_tsv, "#d62728")]:
-                tsv_rows = sorted(tsv_rows, key=lambda r: int(r["k"]))
-                ks = np.array([int(r["k"]) for r in tsv_rows], dtype=int)
-                mean = np.array([float(r["group_ari_mean"]) for r in tsv_rows], dtype=float)
-                se = np.array([float(r["group_ari_se"]) for r in tsv_rows], dtype=float)
-                ax0.plot(ks, mean, marker="o", lw=1.3, color=color, label=hemi_lbl)
-                ax0.fill_between(ks, mean - se, mean + se, color=color, alpha=0.18)
-                null_ref = np.array([float(r["ARI_null_5pct"]) for r in tsv_rows], dtype=float)
-                ax0.plot(ks, null_ref, ls=":", lw=1.0, color=color, alpha=0.85)
+                if not plot_ari_summary_curve(ax0, tsv_rows, hemi=hemi_lbl, color=color):
+                    missing_ari_hemis.append(hemi_lbl)
+            annotate_missing_ari_curves(ax0, missing_ari_hemis)
             if k_l_raw is not None:
                 ax0.axvline(int(k_l_raw), color="#1f77b4", ls="--", lw=1.0)
             if k_r_raw is not None:
@@ -1092,15 +1128,11 @@ def render_combo(
         ax0 = fig.add_subplot(sub[0, 0])
         rows_l = read_tsv(d_l / "k_selection_summary.tsv")
         rows_r = read_tsv(d_r / "k_selection_summary.tsv")
+        missing_ari_hemis: list[str] = []
         for hemi, rows, color in [("L", rows_l, "#1f77b4"), ("R", rows_r, "#d62728")]:
-            rows = sorted(rows, key=lambda r: int(r["k"]))
-            ks = np.array([int(r["k"]) for r in rows], dtype=int)
-            mean = np.array([float(r["group_ari_mean"]) for r in rows], dtype=float)
-            se = np.array([float(r["group_ari_se"]) for r in rows], dtype=float)
-            ax0.plot(ks, mean, marker="o", lw=1.3, color=color, label=hemi)
-            ax0.fill_between(ks, mean - se, mean + se, color=color, alpha=0.18)
-            null_ref = np.array([float(r["ARI_null_5pct"]) for r in rows], dtype=float)
-            ax0.plot(ks, null_ref, ls=":", lw=1.0, color=color, alpha=0.85)
+            if not plot_ari_summary_curve(ax0, rows, hemi=hemi, color=color):
+                missing_ari_hemis.append(hemi)
+        annotate_missing_ari_curves(ax0, missing_ari_hemis)
         ax0.axvline(k_l, color="#1f77b4", ls="--", lw=1.0)
         ax0.axvline(k_r, color="#d62728", ls="--", lw=1.0)
         ax0.legend(
@@ -1310,7 +1342,7 @@ def main() -> int:
     p.add_argument("--group-root", default=str(DEFAULT_GROUP_ROOT))
     p.add_argument("--present-dir", default=str(DEFAULT_PRESENT_DIR))
     p.add_argument("--methods", nargs="+", default=METHODS_DEFAULT, choices=METHOD_CHOICES)
-    p.add_argument("--atlases", nargs="+", default=ATLASES)
+    p.add_argument("--atlases", nargs="+", default=DEFAULT_ATLASES)
     p.add_argument("--coverage-threshold", type=float, default=0.80)
     p.add_argument("--scene", default=str(DEFAULT_SCENE))
     p.add_argument("--route-tag", choices=ROUTE_TAG_CHOICES, default=None)

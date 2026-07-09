@@ -13,6 +13,7 @@ Inputs:
 - Command-line arguments:
   - --shared-root: Path to shared processed files (default: `outputs_hcp/inputs/hcp/kong2022/shared_inputs/routeb_151`).
   - --surface-root: Path to BOLD surfaces root directory (default: `outputs_hcp/inputs/hcp/kong2022/shared_inputs/surface`).
+  - --profile-surface-root: Optional root for hippocampal time series used only by cluster-network profile annotation; defaults to `--surface-root`.
   - --out-root: Directory where group-atlas intermediate files will be saved (default: `outputs_hcp/work/group_atlas/routeb_full_k3_fisherz`).
   - --gradient-root: Directory containing computed continuous gradients (default: `outputs_hcp/work/hippomaps_gradients`).
   - --hippomaps-root: Root path to external HippoMaps codebase (default: `external/hippomaps`).
@@ -93,6 +94,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 from lib.hippomaps_adapter import (
     DEFAULT_GRADIENT_RANDOM_STATE,
     DEFAULT_HIPPOMAPS_ROOT,
+    brainspace_sparsity_for_feature_count,
     ensure_hippomaps_on_path,
     fit_gradientmaps_pearson,
     hippomaps_commit,
@@ -148,11 +150,13 @@ METHODS_DEFAULT = [
     "network-spectral",
     "wta-top",
 ]
-ATLASES = ["kong2019", "kong2019_8net", "kong2022"]
+ATLASES = ["kong2019", "kong2019_8net", "kong2022", "lynch2024_21net", "lynch2024_8net"]
+DEFAULT_ATLASES = ["kong2019", "kong2019_8net", "kong2022"]
 SMOOTHINGS = ["2mm", "4mm"]
 HEMIS = ["L", "R"]
 K_RANGE = list(range(2, 11))
-KONG2022_ONLY_METHODS = {"group-roi-sim-spectral", "gradient-spectral", "wta-top"}
+KONG2022_ONLY_METHODS = {"group-roi-sim-spectral"}
+LYNCH2024_METHODS = {"gradient-spectral", "wta-top"}
 CLUSTERLESS_METHODS = {"wta-top"}
 PROFILE_REDUNDANCY_MAX_SIM = 0.80
 SUBJECT_FC_PREPROCESS_METHODS = {"group-roi-sim-spectral", "network-spectral", "intrinsic-spectral"}
@@ -161,9 +165,10 @@ SUBJECT_FC_MODE_CHOICES = ["full", "top-percent"]
 DEFAULT_GRADIENT_COMPONENTS = (1, 2, 3)
 GRADIENT_N_COMPONENTS_COMPUTED = 5
 GRADIENT_BRAINSPACE_KERNEL = "pearson"
-NETWORK_TAXONOMIES = ("canonical8", "family17")
+NETWORK_TAXONOMIES = ("canonical8", "family17", "lynch21", "lynch8")
 MAX_K_EVAL_JOBS = 10
 RESUME_SIGNATURE_VERSION = 1
+MAX_DIAGNOSTIC_FAILURE_EXAMPLES = 5
 
 
 @dataclass(frozen=True)
@@ -189,6 +194,7 @@ class GroupAtlasConfig:
     args: argparse.Namespace
     shared_root: Path
     surface_root: Path
+    profile_surface_root: Path
     out_root: Path
     reference_root: Path
     gradient_root: Path
@@ -387,6 +393,8 @@ def parse_network_names(tsv: Path) -> list[str]:
                 out.append(str(row["canonical_network"]))
             elif "family17_network" in row:
                 out.append(str(row["family17_network"]))
+            elif "lynch21_network" in row:
+                out.append(str(row["lynch21_network"]))
             else:
                 out.append(str(next(iter(row.values()))))
     if not out:
@@ -396,25 +404,33 @@ def parse_network_names(tsv: Path) -> list[str]:
 
 def resolve_kong2022_network_registry_column(network_taxonomy: str) -> str:
     taxonomy = str(network_taxonomy)
-    if taxonomy == "canonical8":
+    if taxonomy in {"canonical8", "lynch8"}:
         return "canonical8"
     if taxonomy == "family17":
         return "family17"
-    raise ValueError(f"Unsupported Kong2022 network taxonomy: {network_taxonomy!r}")
+    if taxonomy == "lynch21":
+        return "lynch21_network"
+    raise ValueError(f"Unsupported network taxonomy: {network_taxonomy!r}")
 
 
 def network_reference_filenames(network_taxonomy: str) -> tuple[str, str]:
     taxonomy = str(network_taxonomy)
-    if taxonomy == "canonical8":
+    if taxonomy in {"canonical8", "lynch8"}:
         return "cortex_canonical_networks.tsv", "cortex_canonical_network_timeseries.npy"
     if taxonomy == "family17":
         return "cortex_family17_networks.tsv", "cortex_family17_network_timeseries.npy"
-    raise ValueError(f"Unsupported Kong2022 network taxonomy: {network_taxonomy!r}")
+    if taxonomy == "lynch21":
+        return "cortex_lynch21_networks.tsv", "cortex_lynch21_network_timeseries.npy"
+    raise ValueError(f"Unsupported network taxonomy: {network_taxonomy!r}")
 
 
 def gradient_route_for_route_tag(route_tag: str) -> str:
     route = str(route_tag)
-    return "routea" if route == "routea_17net" else route
+    if route == "routea_17net":
+        return "routea"
+    if route == "lynch2024_8net":
+        return "lynch2024_21net"
+    return route
 
 
 def is_network_method(method: str) -> bool:
@@ -433,6 +449,26 @@ def method_uses_network_fc_input(method: str) -> bool:
     return is_network_method(method) or method in {"group-roi-sim-spectral", "gradient-spectral", "wta-top"}
 
 
+def is_lynch2024_atlas(atlas: str) -> bool:
+    return str(atlas).startswith("lynch2024_")
+
+
+def method_allowed_for_atlas(method: str, atlas: str) -> bool:
+    method_key = str(method)
+    atlas_key = str(atlas)
+    if is_lynch2024_atlas(atlas_key):
+        return method_key in LYNCH2024_METHODS
+    if method_key == "gradient-spectral":
+        return atlas_key == "kong2022"
+    if method_key in KONG2022_ONLY_METHODS:
+        return atlas_key == "kong2022"
+    return True
+
+
+def redundancy_profile_applicable(atlas: str) -> bool:
+    return not is_lynch2024_atlas(atlas)
+
+
 def is_clusterless_method(method: str) -> bool:
     return method in CLUSTERLESS_METHODS
 
@@ -446,7 +482,9 @@ def feature_family_for_method(method: str, atlas: str, gradient_components: tupl
         return "vertex_to_kong2022_400roi_fc_to_vertex_similarity_centered_cosine"
     if method == "gradient-spectral":
         comp_tag = "".join(f"g{int(c)}" for c in gradient_components)
-        return f"group_vertex_to_kong2022_400roi_fc_diffusion_gradients_{comp_tag}"
+        return f"group_vertex_to_{atlas}_roi_fc_diffusion_gradients_{comp_tag}"
+    if method == "wta-top":
+        return f"vertex_to_{atlas}_roi_fc_fisherz_normalized_top20_count"
     if method == "network-spectral" and atlas == "kong2022":
         return "vertex_to_kong2022_400roi_fc_fisherz_colzscore"
     if method == "network-spectral":
@@ -746,11 +784,12 @@ def build_group_gradient_features(
         "selected_components": selected_labels,
         "gradient_embedding_engine": "brainspace_gradientmaps_via_hippomaps_adapter",
         "brainspace_version": brainspace_version(),
-        "gradientmaps_call": "brainspace.gradient.GradientMaps(n_components=N, kernel='pearson', random_state=gradient_random_state).fit(column_zscored_group_mean_fisherz_fc)",
+        "gradientmaps_call": "brainspace.gradient.GradientMaps(n_components=N, kernel='pearson', random_state=gradient_random_state).fit(column_zscored_group_mean_fisherz_fc, sparsity=brainspace_sparsity)",
         "gradient_random_state": int(DEFAULT_GRADIENT_RANDOM_STATE),
         "feature_zscore_pre_gradientmaps": "column-wise z-score across vertices after group Fisher-z averaging",
         "kernel": GRADIENT_BRAINSPACE_KERNEL,
-        "brainspace_sparsity": "default(0.9)",
+        "brainspace_sparsity": float(brainspace_sparsity_for_feature_count(group_fc.shape[1])),
+        "brainspace_sparsity_policy": "0.0 for <=50 features; otherwise 0.9. Low-dimensional Lynch component banks use the full graph, while high-dimensional Kong400 retains BrainSpace default sparsity",
         "n_components_computed": int(GRADIENT_N_COMPONENTS_COMPUTED),
         "components_displayed": [int(c) for c in DEFAULT_GRADIENT_COMPONENTS],
         "group_vertex_to_roi_fc_shape": [int(v) for v in group_fc.shape],
@@ -827,7 +866,15 @@ def load_hippomaps_gradient_features(
     }
     if "gradient_alignment" in manifest:
         meta["gradient_alignment"] = manifest["gradient_alignment"]
-    for key in ("ev_fractions", "lambdas", "hippomaps_repo", "hippomaps_import_path", "hippomaps_commit"):
+    for key in (
+        "ev_fractions",
+        "lambdas",
+        "brainspace_sparsity",
+        "brainspace_sparsity_policy",
+        "hippomaps_repo",
+        "hippomaps_import_path",
+        "hippomaps_commit",
+    ):
         if key in manifest:
             meta[key] = manifest[key]
     if "lambdas" in meta and "gradient_eigenvalues" not in meta:
@@ -1023,6 +1070,35 @@ def build_normalized_topn_count_vertex_rows(
     return rows
 
 
+def assignment_variant_specs_for_roi_registry(
+    *,
+    fisherz_status_rows: list[dict[str, object]],
+    fisherz_dominant: list[str | None],
+    normalized_status_rows: list[dict[str, object]],
+) -> dict[str, object]:
+    """Return explicit legacy and default normalized WTA assignment variants."""
+    normalized_dominant = [str(row.get("top1_network", "unassigned")) for row in normalized_status_rows]
+    return {
+        "default_variant": "normalized_top20_count",
+        "variants": {
+            "fisherz": {
+                "status_rows": [dict(x) for x in fisherz_status_rows],
+                "dominant": list(fisherz_dominant),
+                "assignment_metric": "top1_fisher_z",
+                "q_threshold": None,
+                "top_n_cap": None,
+            },
+            "normalized_top20_count": {
+                "status_rows": [dict(x) for x in normalized_status_rows],
+                "dominant": normalized_dominant,
+                "assignment_metric": "top20_count_normalized_by_network_roi_count",
+                "q_threshold": None,
+                "top_n_cap": 20,
+            },
+        },
+    }
+
+
 def top_two_from_scores(score_by_network: dict[str, float]) -> tuple[str, float, str, float]:
     rows: list[tuple[float, str, float]] = []
     for k, v in score_by_network.items():
@@ -1144,11 +1220,18 @@ def remap_labels(labels: np.ndarray, mapping: dict[int, int]) -> np.ndarray:
 def local_maxima_flags(values: list[float]) -> list[bool]:
     if not values:
         return []
-    all_equal = len(set(float(x) for x in values)) == 1
+    finite_values = [float(x) for x in values if np.isfinite(float(x))]
+    if not finite_values:
+        return [False for _ in values]
+    all_equal = len(set(finite_values)) == 1 and len(finite_values) == len(values)
     flags: list[bool] = []
-    for i, v in enumerate(values):
-        left = values[i - 1] if i > 0 else -math.inf
-        right = values[i + 1] if i < len(values) - 1 else -math.inf
+    for i, raw_v in enumerate(values):
+        v = float(raw_v)
+        if not np.isfinite(v):
+            flags.append(False)
+            continue
+        left = float(values[i - 1]) if i > 0 and np.isfinite(float(values[i - 1])) else -math.inf
+        right = float(values[i + 1]) if i < len(values) - 1 and np.isfinite(float(values[i + 1])) else -math.inf
         is_local = all_equal or (v >= left and v >= right and (v > left or v > right or len(values) == 1))
         flags.append(bool(is_local))
     return flags
@@ -1168,10 +1251,13 @@ def select_k_final_from_survivors(survivors: list[dict]) -> tuple[int, str]:
       "within_1se_smallest"               — within-1SE but no local max
       "smallest_among_survivors_fallback" — degenerate fallback (should not occur)
     """
-    surv_means = np.asarray([float(r["group_ari_mean"]) for r in survivors], dtype=np.float64)
+    finite_survivors = [s for s in survivors if np.isfinite(float(s["group_ari_mean"]))]
+    if not finite_survivors:
+        return int(min(int(s["k"]) for s in survivors)), "no_valid_ari_smallest_fallback"
+    surv_means = np.asarray([float(r["group_ari_mean"]) for r in finite_survivors], dtype=np.float64)
     best_idx = int(np.argmax(surv_means))
-    cutoff = float(surv_means[best_idx]) - float(survivors[best_idx]["group_ari_se"])
-    within_1se = [s for s in survivors if float(s["group_ari_mean"]) >= cutoff - 1e-12]
+    cutoff = float(surv_means[best_idx]) - float(finite_survivors[best_idx]["group_ari_se"])
+    within_1se = [s for s in finite_survivors if float(s["group_ari_mean"]) >= cutoff - 1e-12]
     local_max_in_1se = [s for s in within_1se if int(s.get("local_max", 0)) == 1]
     if local_max_in_1se:
         pool, path = local_max_in_1se, "local_max_within_1se"
@@ -1183,28 +1269,25 @@ def select_k_final_from_survivors(survivors: list[dict]) -> tuple[int, str]:
 
 
 def select_k_final_after_redundancy_filter(candidate_pool: list[dict]) -> tuple[int, str, set[int], int]:
-    """Select final K after removing redundant candidates.
-
-    This re-applies the standard 1-SE/local-max/parsimony rule on the
-    remaining nonredundant, nontrivial pool instead of comparing against
-    redundant K values that are no longer eligible.
-
-    Returns:
-      k_final
-      decision_path
-      within_1se_k_set
-      pool_argmax_k
-    """
+    """Select final K after removing redundant candidates."""
     ordered = sorted(candidate_pool, key=lambda r: int(r["k"]))
     means = [float(r["group_ari_mean"]) for r in ordered]
     ses = [float(r["group_ari_se"]) for r in ordered]
     local_flags = local_maxima_flags(means)
-    best_idx = int(np.argmax(np.asarray(means, dtype=np.float64)))
+    finite_indices = [i for i, val in enumerate(means) if np.isfinite(float(val))]
+    if not finite_indices:
+        return (
+            int(min(int(row["k"]) for row in ordered)),
+            "no_valid_ari_smallest_after_redundancy_filter",
+            set(),
+            int(min(int(row["k"]) for row in ordered)),
+        )
+    best_idx = int(finite_indices[int(np.argmax(np.asarray([means[i] for i in finite_indices], dtype=np.float64)))])
     cutoff = float(means[best_idx] - ses[best_idx])
     within_1se = [
         row
         for row in ordered
-        if float(row["group_ari_mean"]) >= cutoff - 1e-12
+        if np.isfinite(float(row["group_ari_mean"])) and float(row["group_ari_mean"]) >= cutoff - 1e-12
     ]
     within_1se_k_set = {int(row["k"]) for row in within_1se}
     local_max_in_1se = [
@@ -1456,10 +1539,13 @@ def subject_split_ari(
     k: int,
     seeds: list[int],
     gradient_components: tuple[int, ...] = DEFAULT_GRADIENT_COMPONENTS,
+    allow_diagnostic_failures: bool = False,
 ) -> dict[str, object]:
     vals: list[float] = []
     n_skipped_overlap = 0
     n_skipped_empty = 0
+    n_skipped_failure = 0
+    failure_examples: list[str] = []
     n = len(subjects)
     if n < 4:
         raise RuntimeError("Need at least four subjects for subject-split instability")
@@ -1480,26 +1566,34 @@ def subject_split_ari(
             n_skipped_overlap += 1
             continue
 
-        _, full_a = cluster_for_subset(
-            method=method,
-            feature_bank=feature_bank,
-            subjects_subset=sub_a,
-            support_mask=mask_a,
-            adjacency_full=adjacency_full,
-            k=k,
-            seed=seed + 1001,
-            gradient_components=gradient_components,
-        )
-        _, full_b = cluster_for_subset(
-            method=method,
-            feature_bank=feature_bank,
-            subjects_subset=sub_b,
-            support_mask=mask_b,
-            adjacency_full=adjacency_full,
-            k=k,
-            seed=seed + 2001,
-            gradient_components=gradient_components,
-        )
+        try:
+            _, full_a = cluster_for_subset(
+                method=method,
+                feature_bank=feature_bank,
+                subjects_subset=sub_a,
+                support_mask=mask_a,
+                adjacency_full=adjacency_full,
+                k=k,
+                seed=seed + 1001,
+                gradient_components=gradient_components,
+            )
+            _, full_b = cluster_for_subset(
+                method=method,
+                feature_bank=feature_bank,
+                subjects_subset=sub_b,
+                support_mask=mask_b,
+                adjacency_full=adjacency_full,
+                k=k,
+                seed=seed + 2001,
+                gradient_components=gradient_components,
+            )
+        except RuntimeError as exc:
+            if not allow_diagnostic_failures:
+                raise
+            n_skipped_failure += 1
+            if len(failure_examples) < MAX_DIAGNOSTIC_FAILURE_EXAMPLES:
+                failure_examples.append(str(exc))
+            continue
         ref = full_a[overlap]
         tgt = full_b[overlap]
         if ref.size == 0:
@@ -1515,6 +1609,8 @@ def subject_split_ari(
         "n_used": int(len(vals)),
         "n_skipped_overlap": int(n_skipped_overlap),
         "n_skipped_empty": int(n_skipped_empty),
+        "n_skipped_failure": int(n_skipped_failure),
+        "failure_examples": failure_examples,
     }
 
 
@@ -1529,6 +1625,7 @@ def strong_null_ari(
     k: int,
     seeds: list[int],
     gradient_components: tuple[int, ...] = DEFAULT_GRADIENT_COMPONENTS,
+    allow_diagnostic_failures: bool = False,
 ) -> dict[str, object]:
     null_bank: dict[str, np.ndarray] = {}
     for s in subjects:
@@ -1549,6 +1646,7 @@ def strong_null_ari(
         k=k,
         seeds=seeds,
         gradient_components=gradient_components,
+        allow_diagnostic_failures=allow_diagnostic_failures,
     )
     out["permutation_scope"] = "subject_specific"
     return out
@@ -1626,6 +1724,7 @@ def evaluate_k_candidate(
     k_selection_mode: str,
     roi_fc_bank_for_redundancy: dict[str, np.ndarray] | None,
     gradient_components: tuple[int, ...] = DEFAULT_GRADIENT_COMPONENTS,
+    allow_diagnostic_failures: bool = False,
 ) -> tuple[int, np.ndarray, dict[str, object]]:
     labels_active, labels_full = cluster_from_precomputed_group_features(
         group_features=group_features_active,
@@ -1651,13 +1750,20 @@ def evaluate_k_candidate(
         k=int(k),
         seeds=split_seeds,
         gradient_components=gradient_components,
+        allow_diagnostic_failures=allow_diagnostic_failures,
     )
     ari_vals = list(ari_obj["values"])
     if not ari_vals:
-        raise RuntimeError(f"No valid ARI resamples for combo={combo} k={k}")
-    ari_arr = np.asarray(ari_vals, dtype=np.float64)
-    ari_mean = float(np.mean(ari_arr))
-    ari_se = float(np.std(ari_arr, ddof=1) / np.sqrt(ari_arr.size)) if ari_arr.size > 1 else 0.0
+        if not allow_diagnostic_failures:
+            raise RuntimeError(f"No valid ARI resamples for combo={combo} k={k}")
+        ari_mean = math.nan
+        ari_se = math.nan
+        ari_status = "no_valid_subject_split_resamples"
+    else:
+        ari_arr = np.asarray(ari_vals, dtype=np.float64)
+        ari_mean = float(np.mean(ari_arr))
+        ari_se = float(np.std(ari_arr, ddof=1) / np.sqrt(ari_arr.size)) if ari_arr.size > 1 else 0.0
+        ari_status = "ok" if int(ari_obj["n_skipped_failure"]) == 0 else "partial_resample_failures_skipped"
 
     weak_obj = weak_null_ari(int(k), int(n_support), null_seeds)
     weak = list(weak_obj["values"])
@@ -1671,6 +1777,7 @@ def evaluate_k_candidate(
         k=int(k),
         seeds=null_seeds,
         gradient_components=gradient_components,
+        allow_diagnostic_failures=allow_diagnostic_failures,
     )
     strong = list(strong_obj["values"])
     strong_arr = np.asarray(strong, dtype=np.float64) if strong else np.array([0.0], dtype=np.float64)
@@ -1684,27 +1791,39 @@ def evaluate_k_candidate(
         k=int(k),
         seed_base=int(seed_base),
         gradient_components=gradient_components,
+        allow_diagnostic_failures=allow_diagnostic_failures,
     )
     run_vals = list(run_obj["values"])
-    run_arr = np.asarray(run_vals, dtype=np.float64) if run_vals else np.array([np.nan], dtype=np.float64)
-    run_ari_mean = float(np.nanmean(run_arr))
-    run_ari_se = (
-        float(np.nanstd(run_arr, ddof=1) / np.sqrt(np.sum(np.isfinite(run_arr))))
-        if np.sum(np.isfinite(run_arr)) > 1
-        else 0.0
-    )
+    if run_vals:
+        run_arr = np.asarray(run_vals, dtype=np.float64)
+        run_ari_mean = float(np.nanmean(run_arr))
+        run_ari_se = (
+            float(np.nanstd(run_arr, ddof=1) / np.sqrt(np.sum(np.isfinite(run_arr))))
+            if np.sum(np.isfinite(run_arr)) > 1
+            else 0.0
+        )
+        run_ari_status = "ok" if int(run_obj["n_skipped_failure"]) == 0 else "partial_run_failures_skipped"
+    else:
+        run_ari_mean = 0.0
+        run_ari_se = 0.0
+        run_ari_status = "no_valid_run_pairs"
 
     max_profile_similarity = float("nan")
     redundant_pair_count = -1
+    redundancy_profile_status = "not_requested"
     if k_selection_mode == "redundancy-aware" and roi_fc_bank_for_redundancy is not None:
-        roi_profile_k = cluster_roi_profile_from_fc_bank(
-            labels_full=labels_full,
-            support_mask=support_mask,
-            subjects=subjects,
-            roi_fc_bank=roi_fc_bank_for_redundancy,
-            valid_masks_by_subject=valid_masks,
-        )
-        max_profile_similarity, redundant_pair_count = profile_redundancy_metrics(roi_profile_k)
+        if redundancy_profile_applicable(combo.atlas):
+            redundancy_profile = _cluster_vertex_fc_profile_for_redundancy_diagnostic(
+                labels_full=labels_full,
+                support_mask=support_mask,
+                subjects=subjects,
+                roi_fc_bank=roi_fc_bank_for_redundancy,
+                valid_masks_by_subject=valid_masks,
+            )
+            max_profile_similarity, redundant_pair_count = profile_redundancy_metrics(redundancy_profile)
+            redundancy_profile_status = "ok"
+        else:
+            redundancy_profile_status = "not_applicable_for_lynch2024"
 
     row = {
         "method": method,
@@ -1718,20 +1837,25 @@ def evaluate_k_candidate(
         "V_min_effective": int(v_min),
         "group_ari_mean": ari_mean,
         "group_ari_se": ari_se,
+        "group_ari_diagnostic_status": ari_status,
         "subject_split_requested": int(ari_obj["n_requested"]),
         "subject_split_used": int(ari_obj["n_used"]),
         "subject_split_skipped_overlap": int(ari_obj["n_skipped_overlap"]),
         "subject_split_skipped_empty": int(ari_obj["n_skipped_empty"]),
+        "subject_split_skipped_failure": int(ari_obj["n_skipped_failure"]),
         "run_aware_ari_mean": run_ari_mean,
         "run_aware_ari_se": run_ari_se,
+        "run_aware_ari_status": run_ari_status,
         "run_aware_n_pairs": int(run_obj["n_pairs"]),
         "run_aware_n_used": int(run_obj["n_used"]),
+        "run_aware_skipped_failure": int(run_obj["n_skipped_failure"]),
         "ARI_null_mean": float(np.mean(strong_arr)),
         "ARI_null_5pct": float(np.percentile(strong_arr, 5.0)),
         "ARI_weak_null_mean": float(np.mean(np.asarray(weak, dtype=np.float64))),
         "B_null_requested": int(null_resamples),
         "B_null_used_strong": int(strong_obj["n_used"]),
         "B_null_used_weak": int(weak_obj["n_used"]),
+        "B_null_skipped_failure_strong": int(strong_obj["n_skipped_failure"]),
         "min_cluster_size": int(min_size),
         "max_components_per_cluster": int(max_components),
         "min_profile_coherence": float(min_coh),
@@ -1741,8 +1865,10 @@ def evaluate_k_candidate(
         "nontrivial_coherence_ok": int(min_coh >= float(min_profile_coherence_threshold)),
         "max_profile_similarity": float(max_profile_similarity),
         "redundant_pair_count": int(redundant_pair_count),
+        "redundancy_profile_status": redundancy_profile_status,
         "nonredundant_ok": int(
             k_selection_mode != "redundancy-aware"
+            or redundancy_profile_status == "not_applicable_for_lynch2024"
             or (
                 np.isfinite(max_profile_similarity)
                 and max_profile_similarity <= float(PROFILE_REDUNDANCY_MAX_SIM)
@@ -1836,28 +1962,40 @@ def run_aware_ari(
     k: int,
     seed_base: int,
     gradient_components: tuple[int, ...] = DEFAULT_GRADIENT_COMPONENTS,
+    allow_diagnostic_failures: bool = False,
 ) -> dict[str, object]:
     runs = sorted(run_feature_banks.keys())
     labels_by_run: dict[int, np.ndarray] = {}
+    n_skipped_failure = 0
+    failure_examples: list[str] = []
     for rid in runs:
-        _, full = cluster_for_subset(
-            method=method,
-            feature_bank=run_feature_banks[rid],
-            subjects_subset=subjects,
-            support_mask=support_mask,
-            adjacency_full=adjacency_full,
-            k=int(k),
-            seed=int(seed_base + rid * 1000 + k),
-            gradient_components=gradient_components,
-        )
+        try:
+            _, full = cluster_for_subset(
+                method=method,
+                feature_bank=run_feature_banks[rid],
+                subjects_subset=subjects,
+                support_mask=support_mask,
+                adjacency_full=adjacency_full,
+                k=int(k),
+                seed=int(seed_base + rid * 1000 + k),
+                gradient_components=gradient_components,
+            )
+        except RuntimeError as exc:
+            if not allow_diagnostic_failures:
+                raise
+            n_skipped_failure += 1
+            if len(failure_examples) < MAX_DIAGNOSTIC_FAILURE_EXAMPLES:
+                failure_examples.append(str(exc))
+            continue
         labels_by_run[rid] = full[support_mask]
     vals: list[float] = []
     n_pairs = 0
-    for i in range(len(runs)):
-        for j in range(i + 1, len(runs)):
+    successful_runs = sorted(labels_by_run.keys())
+    for i in range(len(successful_runs)):
+        for j in range(i + 1, len(successful_runs)):
             n_pairs += 1
-            a = labels_by_run[runs[i]]
-            b = labels_by_run[runs[j]]
+            a = labels_by_run[successful_runs[i]]
+            b = labels_by_run[successful_runs[j]]
             mapping = build_hungarian_mapping(a, b, int(k))
             b_r = remap_labels(b, mapping)
             ari = float(adjusted_rand_score(a, b_r))
@@ -1866,6 +2004,8 @@ def run_aware_ari(
         "values": vals,
         "n_pairs": int(n_pairs),
         "n_used": int(len(vals)),
+        "n_skipped_failure": int(n_skipped_failure),
+        "failure_examples": failure_examples,
     }
 
 
@@ -2082,7 +2222,60 @@ def read_kong2022_roi_tsv(path: Path) -> list[dict[str, object]]:
     return out
 
 
-def cluster_roi_profile_from_fc_bank(
+def read_roi_registry_for_atlas(reference_root: Path, subject: str, atlas: str) -> list[dict[str, object]]:
+    if str(atlas) == "lynch2024_8net":
+        path = reference_path(reference_root, subject, atlas, "cortex_canonical_networks.tsv")
+        with path.open("r", encoding="utf-8", newline="") as f:
+            rows = list(csv.DictReader(f, delimiter="\t"))
+        if not rows:
+            raise RuntimeError(f"Empty canonical network TSV for atlas={atlas}: {path}")
+        out = []
+        for idx, row in enumerate(rows):
+            network = str(row.get("canonical_network", row.get("canonical8", idx + 1)))
+            out.append(
+                {
+                    "roi_id": int(row.get("roi_id", idx + 1)),
+                    "roi_name": network,
+                    "hemi": str(row.get("hemi", row.get("hemisphere", ""))),
+                    "family17": str(row.get("family17", "")),
+                    "lynch21_network": str(row.get("lynch21_network", "")),
+                    "canonical8": network,
+                    "subregion": str(row.get("subregion", "")),
+                    "rank": int(row.get("rank", idx + 1) or idx + 1),
+                    "n_grayordinates_used": row.get("n_grayordinates_used_total", row.get("n_grayordinates_used", "")),
+                }
+            )
+        return out
+
+    path = reference_path(reference_root, subject, atlas, "cortex_roi_parcels.tsv")
+    with path.open("r", encoding="utf-8", newline="") as f:
+        rows = list(csv.DictReader(f, delimiter="\t"))
+    if not rows:
+        raise RuntimeError(f"Empty ROI/component TSV for atlas={atlas}: {path}")
+    out: list[dict[str, object]] = []
+    for idx, row in enumerate(rows):
+        roi_id = int(row.get("parcel_id", row.get("roi_id", row.get("component_id", idx + 1))))
+        roi_name = str(row.get("parcel_name", row.get("roi_name", row.get("component_name", roi_id))))
+        canonical8 = str(row.get("canonical8", row.get("canonical_network", "")))
+        family17 = str(row.get("family17", ""))
+        lynch21 = str(row.get("lynch21_network", row.get("network", "")))
+        out.append(
+            {
+                "roi_id": roi_id,
+                "roi_name": roi_name,
+                "hemi": str(row.get("hemi", row.get("hemisphere", ""))),
+                "family17": family17,
+                "lynch21_network": lynch21,
+                "canonical8": canonical8,
+                "subregion": str(row.get("subregion", "")),
+                "rank": int(row.get("rank", row.get("component_order", idx + 1)) or idx + 1),
+                "n_grayordinates_used": row.get("n_grayordinates_used", ""),
+            }
+        )
+    return out
+
+
+def _cluster_vertex_fc_profile_for_redundancy_diagnostic(
     *,
     labels_full: np.ndarray,
     support_mask: np.ndarray,
@@ -2090,6 +2283,8 @@ def cluster_roi_profile_from_fc_bank(
     roi_fc_bank: dict[str, np.ndarray],
     valid_masks_by_subject: dict[str, np.ndarray],
 ) -> np.ndarray:
+    # Internal K-selection diagnostic only. This is not a network-profile
+    # annotation path and must not write cluster_network_profile.npy.
     labels = np.asarray(labels_full, dtype=np.int32)
     if labels.ndim != 1:
         raise ValueError(f"Expected 1D labels, got shape={labels.shape}")
@@ -2116,7 +2311,7 @@ def cluster_roi_profile_from_fc_bank(
                 cluster_profile[c - 1, :] = np.nanmean(fc[m, :], axis=0).astype(np.float32)
         profiles.append(cluster_profile)
     if not profiles:
-        raise RuntimeError("No ROI profiles available from roi_fc_bank")
+        raise RuntimeError("No redundancy profiles available from roi_fc_bank")
     out = np.nanmean(np.stack(profiles, axis=0), axis=0).astype(np.float32)
     out[~np.isfinite(out)] = 0.0
     return out
@@ -2838,6 +3033,7 @@ def prepare_combo_inputs(
     hemi: str,
     shared_root: Path,
     surface_root: Path,
+    profile_surface_root: Path,
     reference_root: Path,
     surfaces: dict[str, Path],
     subjects: list[str],
@@ -2894,10 +3090,11 @@ def prepare_combo_inputs(
             if atlas == "kong2022" and method == "network-spectral":
                 roi_fc_bank_for_redundancy[s] = feature_bank[s]
             else:
+                redundancy_atlas = atlas if is_lynch2024_atlas(atlas) else "kong2022"
                 roi_raw = subject_network_feature(
                     shared_root,
                     s,
-                    "kong2022",
+                    redundancy_atlas,
                     smoothing,
                     hemi,
                     "network-spectral",
@@ -2944,7 +3141,7 @@ def prepare_combo_inputs(
         for s in subjects
     ]
     surface_timeseries_paths = [
-        surface_root / f"sub-{s}" / "surface" / smoothing / f"sub-{s}_hemi-{hemi}_timeseries.npy"
+        profile_surface_root / f"sub-{s}" / "surface" / smoothing / f"sub-{s}_hemi-{hemi}_timeseries.npy"
         for s in subjects
     ]
     kong2022_roi_reference_paths: list[Path] = []
@@ -2987,6 +3184,16 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run merged canonical group hippocampal atlas (v3 plan).")
     parser.add_argument("--shared-root", default=str(DEFAULT_SHARED_ROOT))
     parser.add_argument("--surface-root", default=str(DEFAULT_SURFACE_ROOT))
+    parser.add_argument(
+        "--profile-surface-root",
+        default=None,
+        help=(
+            "Root containing sub-*/surface/<smoothing>/sub-*_hemi-*_timeseries.npy "
+            "for cluster-network profile annotation. Defaults to --surface-root. "
+            "Use this when masks/coverage live in a branch root but hippocampal "
+            "time series live in a separate controlled shared-input root."
+        ),
+    )
     parser.add_argument("--out-root", default=str(DEFAULT_OUT_ROOT))
     parser.add_argument("--reference-root", default=None, help="Read cortex reference metadata/time series from this root; defaults to --shared-root.")
     parser.add_argument("--gradient-root", default=str(DEFAULT_GRADIENT_ROOT))
@@ -2997,7 +3204,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--hippunfold-batch-root", default=str(DEFAULT_HIPPUNFOLD_BATCH_ROOT))
     parser.add_argument("--kong2022-dlabel", default=None)
     parser.add_argument("--methods", nargs="+", default=METHODS_DEFAULT, choices=METHOD_CHOICES)
-    parser.add_argument("--atlases", nargs="+", default=ATLASES)
+    parser.add_argument("--atlases", nargs="+", default=DEFAULT_ATLASES)
     parser.add_argument("--smoothings", nargs="+", default=SMOOTHINGS)
     parser.add_argument("--hemis", nargs="+", default=HEMIS)
     parser.add_argument("--coverage-thresholds", nargs="+", type=float, default=[0.80])
@@ -3088,6 +3295,7 @@ def main() -> int:
 
     shared_root = Path(args.shared_root).resolve()
     surface_root = Path(args.surface_root).resolve()
+    profile_surface_root = Path(args.profile_surface_root).resolve() if args.profile_surface_root else surface_root
     network_taxonomy = str(args.network_taxonomy)
     route_tag = resolve_route_tag_for_group_atlas_run(
         shared_root=shared_root,
@@ -3129,6 +3337,7 @@ def main() -> int:
         args=args,
         shared_root=shared_root,
         surface_root=surface_root,
+        profile_surface_root=profile_surface_root,
         out_root=out_root,
         reference_root=reference_root,
         gradient_root=gradient_root,
@@ -3208,10 +3417,9 @@ def main() -> int:
 
     for method in config.args.methods:
         for atlas in config.args.atlases:
-            if method in KONG2022_ONLY_METHODS and atlas != "kong2022":
+            if not method_allowed_for_atlas(method, atlas):
                 print(
-                    f"[warn] skipping unsupported combo atlas={atlas} method={method} "
-                    "(method is defined for kong2022 only)",
+                    f"[warn] skipping unsupported combo atlas={atlas} method={method}",
                     flush=True,
                 )
                 continue
@@ -3225,6 +3433,7 @@ def main() -> int:
                         hemi=hemi,
                         shared_root=shared_root,
                         surface_root=surface_root,
+                        profile_surface_root=config.profile_surface_root,
                         reference_root=reference_root,
                         surfaces=surfaces,
                         subjects=subjects,
@@ -3273,6 +3482,11 @@ def main() -> int:
                             "seed": int(args.seed),
                             "instability_resamples": int(args.instability_resamples),
                             "null_resamples": int(args.null_resamples),
+                            "diagnostic_failure_policy": (
+                                "skip_invalid_gradient_resamples_for_fixed_k"
+                                if bool(is_gradient_method(method) and args.force_final_k is not None)
+                                else "strict"
+                            ),
                             "v_min_fraction": float(args.v_min_fraction),
                             "max_components_threshold": int(args.max_components_threshold),
                             "min_profile_coherence": float(args.min_profile_coherence),
@@ -3315,20 +3529,25 @@ def main() -> int:
                             "V_min_effective",
                             "group_ari_mean",
                             "group_ari_se",
+                            "group_ari_diagnostic_status",
                             "subject_split_requested",
                             "subject_split_used",
                             "subject_split_skipped_overlap",
                             "subject_split_skipped_empty",
+                            "subject_split_skipped_failure",
                             "run_aware_ari_mean",
                             "run_aware_ari_se",
+                            "run_aware_ari_status",
                             "run_aware_n_pairs",
                             "run_aware_n_used",
+                            "run_aware_skipped_failure",
                             "ARI_null_mean",
                             "ARI_null_5pct",
                             "ARI_weak_null_mean",
                             "B_null_requested",
                             "B_null_used_strong",
                             "B_null_used_weak",
+                            "B_null_skipped_failure_strong",
                             "min_cluster_size",
                             "max_components_per_cluster",
                             "min_profile_coherence",
@@ -3341,6 +3560,7 @@ def main() -> int:
                             "selected_nontrivial",
                             "max_profile_similarity",
                             "redundant_pair_count",
+                            "redundancy_profile_status",
                             "nonredundant_ok",
                             "reject_nontrivial_fail",
                             "reject_redundant",
@@ -3356,9 +3576,7 @@ def main() -> int:
                         np.save(run_dir / "subject_coverage_fraction.npy", coverage_fraction.astype(np.float32))
 
                         if is_clusterless_method(method):
-                            if atlas != "kong2022":
-                                raise RuntimeError(f"Internal error: clusterless method requires kong2022, got atlas={atlas}")
-                            roi_registry = load_kong2022_roi_registry()
+                            roi_registry = read_roi_registry_for_atlas(reference_root, subjects[0], atlas)
                             vertex_profile_3d, vertex_profile_mean, support_indices = vertex_roi_profile_subjectwise(
                                 feature_bank=feature_bank,
                                 subjects=subjects,
@@ -3366,15 +3584,14 @@ def main() -> int:
                             )
                             if method != "wta-top":
                                 raise ValueError(f"Unknown clusterless method: {method}")
-                            vertex_status_rows = assignment_status_for_vertices_top(
-                                profile_3d=vertex_profile_3d,
+                            vertex_status_rows = build_normalized_topn_count_vertex_rows(
+                                mean_profile=vertex_profile_mean,
                                 support_indices=support_indices,
                                 roi_registry=roi_registry,
-                                q_thresh=0.05,
                                 top_n_cap=20,
-                                network_column=resolve_kong2022_network_registry_column(network_taxonomy),
+                                network_column=network_taxonomy,
                             )
-                            confidence_metric = "topn_count"
+                            confidence_metric = "normalized_top20_count"
 
                             global_top = build_global_top_connections(
                                 profile_3d=vertex_profile_3d,
@@ -3382,7 +3599,7 @@ def main() -> int:
                                 roi_registry=roi_registry,
                                 q_thresh=0.05,
                                 top_n_cap=20,
-                                network_column=resolve_kong2022_network_registry_column(network_taxonomy),
+                                network_column=network_taxonomy,
                             )
                             functional_labels, functional_meta, functional_label_items = functional_atlas_from_vertices(
                                 n_vertices=n_vertices,
@@ -3407,7 +3624,9 @@ def main() -> int:
                                 / f"{template_label}_hemi-{hemi}_space-corobl_den-512_label-group_functional_atlas_{method}_{atlas}_{smoothing}_cov-{tau_tag}.label.gii"
                             )
                             func_lbl_path.parent.mkdir(parents=True, exist_ok=True)
+                            normalized_func_lbl_path = func_lbl_path.with_name(f"{func_lbl_path.stem}_normalized_top20_count{func_lbl_path.suffix}")
                             nib.save(func_lbl, str(func_lbl_path))
+                            nib.save(func_lbl, str(normalized_func_lbl_path))
 
                             manifest = {
                                 "status": "ok",
@@ -3416,16 +3635,22 @@ def main() -> int:
                                 "smoothing": smoothing,
                                 "hemi": hemi,
                                 "assignment_mode": "vertex_level",
+                                "default_assignment_variant": "normalized_top20_count",
+                                "cluster_assignment_metric": "top20_count_normalized_by_network_roi_count",
                                 "confidence_metric": confidence_metric,
                                 "coverage_threshold": float(tau),
                                 "chosen_k_final": None,
                                 "q_threshold": 0.05,
                                 "top_n_cap": 20,
                                 "actual_consumed_input_paths": actual_input_paths,
+                                "shared_root": str(shared_root.resolve()),
+                                "surface_root": str(surface_root.resolve()),
+                                "profile_surface_root": str(config.profile_surface_root.resolve()),
+                                "reference_root": str(reference_root.resolve()),
                                 "resume_input_signature_version": int(RESUME_SIGNATURE_VERSION),
                                 "resume_input_signature": resume_input_signature,
                                 "resume_input_signature_payload": resume_signature_payload,
-                                "feature_family": "vertex_to_kong2022_400roi_fc_fisherz",
+                                "feature_family": feature_family_for_method(method, atlas, gradient_components),
                                 "fc_mode": "pearson_vertex_to_roi",
                                 "subject_fc_preprocessing": subject_fc_preprocessing,
                                 "n_subjects": int(len(subjects)),
@@ -3455,12 +3680,12 @@ def main() -> int:
                                 "template_left_or_right_surface": str(surfaces[hemi]),
                                 "template_spec_path": str(template_spec_path),
                                 "template_cluster_label": None,
-                                "template_functional_atlas_label": str(func_lbl_path.with_name(f"{func_lbl_path.stem}_fisherz{func_lbl_path.suffix}").resolve()),
+                                "template_functional_atlas_label": str(normalized_func_lbl_path.resolve()),
                             }
                             write_tsv(
                                 run_dir / "cluster_roi_registry.tsv",
                                 roi_registry,
-                                ["roi_id", "roi_name", "hemi", "family17", "subregion", "rank", "canonical8"],
+                                ["roi_id", "roi_name", "hemi", "family17", "lynch21_network", "subregion", "rank", "canonical8"],
                             )
                             write_json(run_dir / "group_feature_summary.json", {"network_names": network_names, "N_ref": int(len(network_names))})
                             write_json(manifest_path, manifest)
@@ -3547,6 +3772,7 @@ def main() -> int:
 
                         rows: list[dict[str, object]] = []
                         labels_by_k: dict[int, np.ndarray] = {}
+                        allow_gradient_diagnostic_failures = bool(is_gradient_method(method) and args.force_final_k is not None)
                         support_idx = np.flatnonzero(support)
                         adjacency_support = adjacency_by_hemi[hemi][support_idx][:, support_idx]
                         group_gradient_meta: dict[str, object] | None = None
@@ -3604,6 +3830,7 @@ def main() -> int:
                                     k_selection_mode=str(args.k_selection_mode),
                                     roi_fc_bank_for_redundancy=roi_fc_bank_for_redundancy,
                                     gradient_components=gradient_components,
+                                    allow_diagnostic_failures=allow_gradient_diagnostic_failures,
                                 )
                                 print(f"  [k-done] {k_result}", flush=True)
                                 labels_by_k[int(k_result)] = labels_full
@@ -3649,6 +3876,7 @@ def main() -> int:
                                         k_selection_mode=str(args.k_selection_mode),
                                         roi_fc_bank_for_redundancy=roi_fc_bank_for_redundancy,
                                         gradient_components=gradient_components,
+                                        allow_diagnostic_failures=allow_gradient_diagnostic_failures,
                                     ): int(k)
                                     for k in k_eff
                                 }
@@ -3664,11 +3892,16 @@ def main() -> int:
                         means = [float(r["group_ari_mean"]) for r in rows]
                         ses = [float(r["group_ari_se"]) for r in rows]
                         locals_ = local_maxima_flags(means)
-                        best_idx = int(np.argmax(np.asarray(means, dtype=np.float64)))
-                        cutoff = float(means[best_idx] - ses[best_idx])
+                        finite_indices = [i for i, val in enumerate(means) if np.isfinite(float(val))]
+                        if finite_indices:
+                            best_idx = int(finite_indices[int(np.argmax(np.asarray([means[i] for i in finite_indices], dtype=np.float64)))])
+                            cutoff = float(means[best_idx] - ses[best_idx])
+                        else:
+                            cutoff = math.nan
                         for i, row in enumerate(rows):
                             row["local_max"] = int(locals_[i])
-                            row["within_1se_best"] = int(float(row["group_ari_mean"]) >= cutoff - 1e-12)
+                            row_mean = float(row["group_ari_mean"])
+                            row["within_1se_best"] = int(np.isfinite(row_mean) and np.isfinite(cutoff) and row_mean >= cutoff - 1e-12)
                             row["selected_nontrivial"] = int(
                                 int(row["nontrivial_min_size_ok"]) == 1
                                 and int(row["nontrivial_connectedness_ok"]) == 1
@@ -3705,10 +3938,14 @@ def main() -> int:
                             survivors = [row for row in rows if int(row["selected_final"]) == 1]
                         elif args.k_selection_mode == "redundancy-aware":
                             for row in rows:
+                                redundancy_status = str(row.get("redundancy_profile_status", "ok"))
                                 row["nonredundant_ok"] = int(
-                                    np.isfinite(float(row["max_profile_similarity"]))
-                                    and float(row["max_profile_similarity"]) <= float(PROFILE_REDUNDANCY_MAX_SIM)
-                                    and int(row["redundant_pair_count"]) == 0
+                                    redundancy_status == "not_applicable_for_lynch2024"
+                                    or (
+                                        np.isfinite(float(row["max_profile_similarity"]))
+                                        and float(row["max_profile_similarity"]) <= float(PROFILE_REDUNDANCY_MAX_SIM)
+                                        and int(row["redundant_pair_count"]) == 0
+                                    )
                                 )
                                 row["reject_nontrivial_fail"] = int(int(row["selected_nontrivial"]) != 1)
                                 row["reject_redundant"] = int(int(row["nonredundant_ok"]) != 1)
@@ -3837,20 +4074,28 @@ def main() -> int:
                         if args.k_selection_mode != "redundancy-aware":
                             # Three-tier K selection: 1-SE on survivor pool → local-max
                             # preference → parsimony tiebreak. Annotate audit columns.
-                            surv_means = np.asarray(
-                                [float(s["group_ari_mean"]) for s in survivors], dtype=np.float64
-                            )
-                            surv_best_idx = int(np.argmax(surv_means))
-                            surv_cutoff = float(surv_means[surv_best_idx]) - float(
-                                survivors[surv_best_idx]["group_ari_se"]
-                            )
-                            surv_argmax_k = int(survivors[surv_best_idx]["k"])
+                            finite_survivors = [s for s in survivors if np.isfinite(float(s["group_ari_mean"]))]
+                            if finite_survivors:
+                                surv_means = np.asarray(
+                                    [float(s["group_ari_mean"]) for s in finite_survivors], dtype=np.float64
+                                )
+                                surv_best_idx = int(np.argmax(surv_means))
+                                surv_cutoff = float(surv_means[surv_best_idx]) - float(
+                                    finite_survivors[surv_best_idx]["group_ari_se"]
+                                )
+                                surv_argmax_k = int(finite_survivors[surv_best_idx]["k"])
+                            else:
+                                surv_cutoff = math.nan
+                                surv_argmax_k = int(min(int(s["k"]) for s in survivors))
                             k_final, decision_path = select_k_final_from_survivors(survivors)
                             for row in rows:
                                 row["survivor_pool_argmax_k"] = surv_argmax_k
+                                row_mean = float(row["group_ari_mean"])
                                 row["within_1se_survivor_pool"] = int(
                                     int(row["selected_final"]) == 1
-                                    and float(row["group_ari_mean"]) >= surv_cutoff - 1e-12
+                                    and np.isfinite(row_mean)
+                                    and np.isfinite(surv_cutoff)
+                                    and row_mean >= surv_cutoff - 1e-12
                                 )
                                 row["k_final_decision_path"] = decision_path
                         else:
@@ -3905,20 +4150,36 @@ def main() -> int:
                                 network_column=resolve_kong2022_network_registry_column(network_taxonomy),
                             )
                         else:
-                            profile = cluster_network_profile(
-                                group_labels_final=labels_final,
-                                support_mask=support,
-                                subjects=subjects,
-                                shared_root=shared_root,
-                                surface_root=surface_root,
-                                reference_root=reference_root,
-                                atlas=atlas,
-                                smoothing=smoothing,
-                                hemi=hemi,
-                                valid_masks_by_subject=valid_masks,
-                                profile_fc_mode="pearson",
-                                network_taxonomy=network_taxonomy,
-                            )
+                            if is_lynch2024_atlas(atlas):
+                                profile = cluster_network_profile(
+                                    group_labels_final=labels_final,
+                                    support_mask=support,
+                                    subjects=subjects,
+                                    shared_root=shared_root,
+                                    surface_root=config.profile_surface_root,
+                                    reference_root=reference_root,
+                                    atlas=atlas,
+                                    smoothing=smoothing,
+                                    hemi=hemi,
+                                    valid_masks_by_subject=valid_masks,
+                                    profile_fc_mode="pearson",
+                                    network_taxonomy=network_taxonomy,
+                                )
+                            else:
+                                profile = cluster_network_profile(
+                                    group_labels_final=labels_final,
+                                    support_mask=support,
+                                    subjects=subjects,
+                                    shared_root=shared_root,
+                                    surface_root=surface_root,
+                                    reference_root=reference_root,
+                                    atlas=atlas,
+                                    smoothing=smoothing,
+                                    hemi=hemi,
+                                    valid_masks_by_subject=valid_masks,
+                                    profile_fc_mode="pearson",
+                                    network_taxonomy=network_taxonomy,
+                                )
                             status_rows, dominant = assignment_status_from_profile(profile, network_names)
                         if atlas == "kong2022" and roi_profile is None:
                             roi_profile, roi_registry = cluster_roi_profile(
@@ -4071,7 +4332,7 @@ def main() -> int:
                             "default_assignment_variant": "fisherz",
                             "assignment_variants": functional_variant_payloads,
                             "cluster_roi_topn_assignment_metric": (
-                                "topn_count_positive_roi" if "count" in assignment_variant_specs else None
+                                "top20_count_normalized_by_network_roi_count" if "normalized_top20_count" in assignment_variant_specs else ("topn_count_positive_roi" if "count" in assignment_variant_specs else None)
                             ),
                             "k_selection_mode": str(args.k_selection_mode),
                             "force_final_k": int(args.force_final_k) if args.force_final_k is not None else None,
@@ -4082,6 +4343,10 @@ def main() -> int:
                             "fc_mode": fc_mode_for_method(method),
                             "gradient_components": [int(c) for c in gradient_components] if is_gradient_method(method) else None,
                             "actual_consumed_input_paths": actual_input_paths,
+                            "shared_root": str(shared_root.resolve()),
+                            "surface_root": str(surface_root.resolve()),
+                            "profile_surface_root": str(config.profile_surface_root.resolve()),
+                            "reference_root": str(reference_root.resolve()),
                             "resume_input_signature_version": int(RESUME_SIGNATURE_VERSION),
                             "resume_input_signature": resume_input_signature,
                             "resume_input_signature_payload": resume_signature_payload,

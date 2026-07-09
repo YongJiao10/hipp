@@ -14,9 +14,13 @@ Branch mainlines:
 - `kong2019`
 - `kong2022_routea`
 - `kong2022_routea_17net`
+- `kong2022_routea_ctxreg`
+- `kong2022_routea_ctxdrop`
 - `kong2022_routeb`
+- `lynch2024_21net`
+- `lynch2024_8net`
 
-Within `kong2022`, RouteA and RouteB are treated as equal mainlines; `kong2022_routea_17net` is a shallow RouteA taxonomy variant that reuses RouteA inputs and gradients.
+Within `kong2022`, RouteA, RouteA 17-net, RouteA cortex-regression, RouteA cortex-drop, and RouteB are treated as parallel mainlines. The Lynch2024 branches are NSI-filtered FASTANS/PFM comparison branches against Kong2022 RouteA, with separate shared inputs and group roots.
 
 ## Pipeline Stages
 
@@ -33,14 +37,14 @@ Group atlas method families include intrinsic FC, network/ROI FC, WTA, and
 `--auto-k` for diagnostics but is no longer the default display policy. Partial
 correlation spectral branches are retired from public method choices.
 
-`gradient-spectral` is Kong2022-only. It consumes aligned HippoMaps/BrainSpace
-gradient artifacts written by `05_01_compute_hippomaps_gradients.py` under
-`--gradient-root`, then clusters selected columns. `05_01` computes raw G1-G5
-from the column-wise z-scored group mean Fisher-z vertex-to-Kong2022 ROI FC
-matrix using `GradientMaps(n_components=N, kernel="pearson")`, aligns component
-order and sign within each route to the `4mm/hemi_L` anchor when available, and
-writes only the aligned arrays. `05_02` selects aligned G1-G3 by default
-(`--gradient-components 1,2,3`).
+`gradient-spectral` consumes aligned HippoMaps/BrainSpace gradient artifacts
+written by `05_01_compute_hippomaps_gradients.py` under `--gradient-root`, then
+clusters selected columns. For Kong2022 and Lynch2024 ROI-registry routes,
+`05_01` computes raw G1-G5 from the column-wise z-scored group mean Fisher-z
+vertex-to-ROI/component FC matrix using `GradientMaps(n_components=N,
+kernel="pearson")`, aligns component order and sign within each route to the
+`4mm/hemi_L` anchor when available, and writes only the aligned arrays. `05_02`
+selects aligned G1-G3 by default (`--gradient-components 1,2,3`).
 
 `06_04_render_hippomaps_gradient_products.py` renders the same continuous
 gradient artifacts with `hippomaps.plotting.surfplot_canonical_foldunfold`,
@@ -88,6 +92,8 @@ RouteA reference construction has an explicit upstream label-generation dependen
 
 The `kong2022_routea_17net` branch uses the original Kong2022 17 network families for cluster annotation and network profiles. It reuses `shared_inputs/routea`, `surface`, 400-ROI FC caches, and RouteA gradients, then writes only taxonomy-dependent group outputs under `outputs_hcp/work/group_atlas/routea_17net_full_k3_fisherz/`. Run `05_02_run_group_atlas.py` with `--route-tag routea_17net --network-taxonomy family17`; do not run `05_01` for a separate `routea_17net` gradient tree.
 
+The `lynch2024_21net` and `lynch2024_8net` branches use the NSI-filtered FASTANS/PFM cohort from `02_03_build_lynch2024_nsi_manifest.py` (`nsi >= 0.43`, expected `n=78`). External priors live under `external/FASTANS/resources/PFM/priors/Lynch2024/`; `03_04_run_lynch2024_fastans_pfm.py` generates official per-subject hard-label PFM dlabel/dscalar assets and hard-label component time series under `outputs_hcp/work/cortex_pfm/sub-<id>/lynch2024/`; shared inputs live under `outputs_hcp/inputs/hcp/lynch2024_fast_pfm_t1only/shared_inputs/pfm_nsi043_78/`. `03_03_build_lynch2024_reference.py` writes original Lynch21 references excluding `Noise` and canonical8 merged references from `config/cross_atlas_network_merge.json`. The maintained downstream scope is `gradient-spectral` and `wta-top` only. For `gradient-spectral`, only the non-Noise Lynch21 component bank is used; BrainSpace receives the low-dimensional Lynch feature matrix as a full graph (`brainspace_sparsity=0.0`), and `lynch2024_8net` reuses that gradient bank while applying the merged canonical8 taxonomy downstream. In `05_02`, Lynch runs use `--profile-surface-root outputs_hcp/inputs/hcp/kong2022/shared_inputs/routea_ctxreg_151` so cluster profiles are computed with the same cluster-mean hippocampal time-series correlation used by Kong RouteA; this does not change the Lynch PFM FC, masks, references, or gradient inputs.
+
 Network display colors are centralized in `config/hipp_network_style.json`. Group-atlas label materialization, hippocampal overviews, WTA long-axis profiles, and cortex panels load network colors from that single file; `config/cross_atlas_network_merge.json` is mapping-only and must not carry color overrides. Missing colors are treated as errors, not gray/blue fallback display colors. For the RouteA 17-net taxonomy, same-family A/B/C subnetworks use deliberately separated lightness and saturation levels so overview bars, profiles, and label-table colors remain distinguishable while preserving the parent family hue.
 
 The `kong2022_routea_ctxreg` branch is an isolated RouteA derivative: `04_00_materialize_cortex_regressed_surface_timeseries.py` writes `shared_inputs/routea_ctxreg_151` with run-wise local cortex residualization before `04_01` and `04_02` materialize FC. It does not overwrite uncontrolled RouteA roots.
@@ -122,3 +128,5 @@ Use these manifests to reconstruct exact lineage for each generated artifact set
 - Archive index: `docs/hipp_parcellation_network/archive_index.md`
 
 The WTA-top overview generated by `06_01_build_group_overview.py` embeds a fixed 20-bin long-axis network-composition profile between the compact vertex-assignment count panel and the hippocampal surface render. `06_02_build_wta_long_axis_profiles.py` and standalone `kong2022_wta-top_long_axis_network_profile_*` PNG/TSV products have been removed from the maintained workflow; `07_01_build_group_matrix.py` indexes the embedded overview only.
+
+For ROI-registry WTA outputs, `normalized_top20_count` is the default assignment: top-20 positive ROI/component counts divided by the finite available ROI/component count in each network. Manifests and overviews point to normalized WTA by default; legacy count/Fisher-z compatible variants remain explicit where supported.

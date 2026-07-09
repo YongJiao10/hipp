@@ -8,7 +8,9 @@
     "kong2022_routea_17net",
     "kong2022_routea_ctxreg",
     "kong2022_routea_ctxdrop",
-    "kong2022_routeb"
+    "kong2022_routeb",
+    "lynch2024_21net",
+    "lynch2024_8net"
   ],
   "steps": [
     {
@@ -64,6 +66,18 @@
       "recommended_manifest": "manifests/core_workflow/02_02_build_qc_manifest.json"
     },
     {
+      "step_id": "02_03_build_lynch2024_nsi_manifest",
+      "stage": "02_inputs_qc",
+      "purpose": "Build the NSI-filtered Lynch2024 FASTANS/PFM cohort manifest.",
+      "branches": [
+        "lynch2024_21net",
+        "lynch2024_8net"
+      ],
+      "entry_script": "scripts/core_workflow/02_03_build_lynch2024_nsi_manifest.py",
+      "implementation_script": "scripts/core_workflow/02_03_build_lynch2024_nsi_manifest.py",
+      "recommended_manifest": "outputs_hcp/inputs/hcp/lynch2024_fast_pfm_t1only/manifests/hcp_7t_lynch2024_nsi043_manifest.json"
+    },
+    {
       "step_id": "03_01_build_kong2022_reference",
       "stage": "03_cortex_reference",
       "purpose": "Build Kong2022 cortex references for shared processing.",
@@ -88,6 +102,30 @@
       "recommended_manifest": "manifests/core_workflow/03_02_build_kong2022_routea_reference.json"
     },
     {
+      "step_id": "03_03_build_lynch2024_reference",
+      "stage": "03_cortex_reference",
+      "purpose": "Build Lynch2024 hard-label cortex PFM component references plus Lynch21 and canonical8 summaries.",
+      "branches": [
+        "lynch2024_21net",
+        "lynch2024_8net"
+      ],
+      "entry_script": "scripts/core_workflow/03_03_build_lynch2024_reference.py",
+      "implementation_script": "scripts/core_workflow/03_03_build_lynch2024_reference.py",
+      "recommended_manifest": "outputs_hcp/inputs/hcp/lynch2024_fast_pfm_t1only/shared_inputs/pfm_nsi043_78/sub-<id>/reference/lynch2024_21net/stage_manifest.json"
+    },
+    {
+      "step_id": "03_04_run_lynch2024_fastans_pfm",
+      "stage": "03_cortex_reference",
+      "purpose": "Generate official FASTANS Lynch2024 hard-label PFM assets and hard-label component time series.",
+      "branches": [
+        "lynch2024_21net",
+        "lynch2024_8net"
+      ],
+      "entry_script": "scripts/core_workflow/03_04_run_lynch2024_fastans_pfm.py",
+      "implementation_script": "scripts/core_workflow/03_04_run_lynch2024_fastans_pfm.py",
+      "recommended_manifest": "outputs_hcp/work/cortex_pfm/sub-<id>/lynch2024/fastans_pfm_manifest.json"
+    },
+    {
       "step_id": "04_00_materialize_cortex_regressed_surface_timeseries",
       "stage": "04_hipp_fc",
       "purpose": "Materialize RouteA hippocampal surface time series after local cortex regression for the isolated cortex-control branch.",
@@ -101,12 +139,14 @@
     {
       "step_id": "04_01_materialize_kong2022_roi_fc",
       "stage": "04_hipp_fc",
-      "purpose": "Materialize hippocampal ROI FC caches for Kong2022.",
+      "purpose": "Materialize hippocampal ROI/component/reference FC caches; lynch2024_8net consumes canonical8 reference time series.",
       "branches": [
         "kong2022_routea",
         "kong2022_routea_ctxreg",
         "kong2022_routea_ctxdrop",
-        "kong2022_routeb"
+        "kong2022_routeb",
+        "lynch2024_21net",
+        "lynch2024_8net"
       ],
       "entry_script": "scripts/core_workflow/04_01_materialize_kong2022_roi_fc.py",
       "implementation_script": "scripts/core_workflow/04_01_materialize_kong2022_roi_fc.py",
@@ -140,12 +180,13 @@
     {
       "step_id": "05_01_compute_hippomaps_gradients",
       "stage": "05_group_atlas",
-      "purpose": "Compute HippoMaps-style continuous gradients consumed by 05_02 gradient-spectral and rendered by 06_04.",
+      "purpose": "Compute HippoMaps-style continuous gradients consumed by 05_02 gradient-spectral. Lynch2024 computes only the non-Noise Lynch21 component bank with full-graph BrainSpace affinity; lynch2024_8net reuses that bank downstream.",
       "branches": [
         "kong2022_routea",
         "kong2022_routea_ctxreg",
         "kong2022_routea_ctxdrop",
-        "kong2022_routeb"
+        "kong2022_routeb",
+        "lynch2024_21net"
       ],
       "entry_script": "scripts/core_workflow/05_01_compute_hippomaps_gradients.py",
       "implementation_script": "scripts/core_workflow/05_01_compute_hippomaps_gradients.py",
@@ -154,14 +195,16 @@
     {
       "step_id": "05_02_run_group_atlas",
       "stage": "05_group_atlas",
-      "purpose": "Build merged-canonical group atlas outputs; defaults evaluate K=2..10 while fixing maintained final presentation K=3. Kong2022 gradient-spectral consumes 05_01 HippoMaps gradient artifacts by default.",
+      "purpose": "Build group atlas outputs; defaults evaluate K=2..10 while fixing maintained final presentation K=3. Lynch2024 is maintained for gradient-spectral and normalized wta-top only, with --profile-surface-root used for Kong-style cluster time-series profile annotation when needed.",
       "branches": [
         "kong2019",
         "kong2022_routea",
         "kong2022_routea_17net",
         "kong2022_routea_ctxreg",
         "kong2022_routea_ctxdrop",
-        "kong2022_routeb"
+        "kong2022_routeb",
+        "lynch2024_21net",
+        "lynch2024_8net"
       ],
       "entry_script": "scripts/core_workflow/05_02_run_group_atlas.py",
       "implementation_script": "scripts/core_workflow/05_02_run_group_atlas.py",
@@ -206,14 +249,16 @@
     {
       "step_id": "06_01_build_group_overview",
       "stage": "06_presentation_products",
-      "purpose": "Render canonical fixed-K=3 group overview products into outputs_hcp/present/overviews, including the embedded fixed 20-bin WTA-top long-axis profile panel.",
+      "purpose": "Render canonical fixed-K=3 group overview products into outputs_hcp/present/overviews, including normalized WTA-top overviews for ROI-registry atlases.",
       "branches": [
         "kong2019",
         "kong2022_routea",
         "kong2022_routea_17net",
         "kong2022_routea_ctxreg",
         "kong2022_routea_ctxdrop",
-        "kong2022_routeb"
+        "kong2022_routeb",
+        "lynch2024_21net",
+        "lynch2024_8net"
       ],
       "entry_script": "scripts/core_workflow/06_01_build_group_overview.py",
       "implementation_script": "scripts/core_workflow/06_01_build_group_overview.py",
@@ -310,6 +355,17 @@
       "entry_script": "scripts/core_workflow/06_08_render_hcp_subfield_composition.py",
       "implementation_script": "scripts/core_workflow/06_08_render_hcp_subfield_composition.py",
       "recommended_manifest": "outputs_hcp/present/subfield_composition/hcp151_routea_weighted-fisherz_gradient-spectral_k3_g1g2g3_subfield_composition_manifest.json"
+    },
+    {
+      "step_id": "06_09_plot_cortex_kong2022_mshbm",
+      "stage": "06_presentation_products",
+      "purpose": "Render subject-level Kong2022 MSHBM cortical brain maps.",
+      "branches": [
+        "kong2022_routea"
+      ],
+      "entry_script": "scripts/core_workflow/06_09_plot_cortex_kong2022_mshbm.py",
+      "implementation_script": "scripts/core_workflow/06_09_plot_cortex_kong2022_mshbm.py",
+      "recommended_manifest": "manifests/core_workflow/06_09_plot_cortex_kong2022_mshbm.json"
     },
     {
       "step_id": "07_01_build_group_matrix",

@@ -5,7 +5,7 @@ Both CLI entrypoints and stage implementation modules live under `scripts/core_w
 
 - Naming scheme: `NN_MM_<semantic_name>.py`
 - Numbering reflects global pipeline order, not branch identity.
-- Active branches: `kong2019`, `kong2022_routea`, `kong2022_routea_17net`, `kong2022_routea_ctxreg`, `kong2022_routea_ctxdrop`, `kong2022_routeb`
+- Active branches: `kong2019`, `kong2022_routea`, `kong2022_routea_17net`, `kong2022_routea_ctxreg`, `kong2022_routea_ctxdrop`, `kong2022_routeb`, `lynch2024_21net`, `lynch2024_8net`
 
 Each entrypoint executes local implementation code and can emit a standardized traceability manifest:
 
@@ -29,6 +29,8 @@ For the RouteA cortex-drop branch, run `04_01_materialize_kong2022_roi_fc.py --c
 
 For the RouteA 17-net taxonomy branch, do not create a new input root or gradient root. Reuse `outputs_hcp/inputs/hcp/kong2022/shared_inputs/routea` and run `05_02_run_group_atlas.py` with `--route-tag routea_17net --network-taxonomy family17 --out-root outputs_hcp/work/group_atlas/routea_17net_full_k3_fisherz`. `05_02` reads RouteA gradients from `outputs_hcp/work/hippomaps_gradients/routea` for `gradient-spectral`, so `05_01` should not be run as `routea_17net`. Because this branch intentionally reuses the RouteA input root, `--route-tag auto` refuses `--network-taxonomy family17`; pass `--route-tag routea_17net` explicitly.
 
+For the Lynch2024 FASTANS/PFM comparison branches, first run `02_03_build_lynch2024_nsi_manifest.py` against the QC-pass subject manifest and an NSI TSV/CSV with `subject,nsi`. The default gate is `nsi >= 0.43` with `--expected-count 78`, and the script stops on count mismatch unless `--allow-count-mismatch` is explicit. External FASTANS priors are local assets under `external/FASTANS/resources/PFM/priors/Lynch2024/`; `03_04_run_lynch2024_fastans_pfm.py` generates official per-subject hard-label PFM dlabel/dscalar assets and hard-label component time series under `outputs_hcp/work/cortex_pfm/sub-<id>/lynch2024/`; maintained shared inputs live under `outputs_hcp/inputs/hcp/lynch2024_fast_pfm_t1only/shared_inputs/pfm_nsi043_78/`. `03_03_build_lynch2024_reference.py` consumes those hard-label component assets and writes both `reference/lynch2024_21net/` for original Lynch parent networks excluding `Noise` and `reference/lynch2024_8net/` for canonical merged networks from `config/cross_atlas_network_merge.json`. `04_01_materialize_kong2022_roi_fc.py --atlas lynch2024_21net` reads `cortex_roi_parcel_timeseries.npy` / `cortex_roi_parcels.tsv`; `--atlas lynch2024_8net` reads `cortex_canonical_network_timeseries.npy` / `cortex_canonical_networks.tsv`, so canonical8 FC caches are 8-column outputs rather than duplicated 20-component FC. Maintained downstream scope is `gradient-spectral` and `wta-top` only, with fixed final `K=3` after evaluating `K=2..10`; `05_01` computes one non-Noise Lynch21 component gradient bank using full-graph BrainSpace affinity (`brainspace_sparsity=0.0`), and the `lynch2024_8net` route reuses that bank for `gradient-spectral` while using canonical8 references for WTA and label assignment. In `05_02`, pass `--profile-surface-root outputs_hcp/inputs/hcp/kong2022/shared_inputs/routea_ctxreg_151` so cluster-network profiles use the same cluster-mean hippocampal time-series correlation as Kong RouteA while masks, FC caches, and references still come from the Lynch shared root. Fixed-K Lynch gradient diagnostics skip and count failed BrainSpace resample fits instead of aborting the atlas build, no-valid-resample ARI fields are recorded/rendered as unavailable rather than zero, and the legacy vertex-FC profile redundancy gate is not applied to Lynch (`redundancy_profile_status=not_applicable_for_lynch2024`). Group roots are `outputs_hcp/work/group_atlas/lynch2024_21net_nsi043_full_k3_normalized_wta/` and `outputs_hcp/work/group_atlas/lynch2024_8net_nsi043_full_k3_normalized_wta/`.
+
 For the Kong2022 `gradient-spectral` branch, run
 `05_01_compute_hippomaps_gradients.py` first. `05_01` writes aligned
 HippoMaps/BrainSpace gradient artifacts: raw G1-G5 are matched and sign-flipped
@@ -45,8 +47,8 @@ HippoMaps-style continuous gradients are computed by
 `06_04_render_hippomaps_gradient_products.py`. This route imports official
 package code from `external/hippomaps`, keeps Fisher-z before group averaging,
 applies column-wise feature z-score before `GradientMaps(kernel="pearson")`,
-then aligns component order and sign before writing the maintained gradient
-arrays. For `den=512`, the renderer treats `512` as HippoMaps v2 in the current
+uses BrainSpace sparsity `0.0` for low-dimensional feature banks (`n_features <= 50`) and `0.9` for high-dimensional banks such as Kong400, then aligns
+component order and sign before writing the maintained gradient arrays. For Lynch2024 this means direct full-graph gradient fitting on the non-Noise hard-label component bank, not a separate 8-column gradient bank. For `den=512`, the renderer treats `512` as HippoMaps v2 in the current
 Python process and disables `unfoldAPrescale`; no AP surfarea rescale is used
 for 512-density figures. The renderer defaults to bilateral products and renders
 each already-aligned hemisphere with its own colorbar and EV labels before
@@ -62,12 +64,12 @@ cortex panels live in `outputs_hcp/present/cortex_panels/`. Directory names
 intentionally omit `t1only`, `present_fixedk`, and `10perc`; fixed K=3 is the
 default presentation policy. Use `tests/core_workflow/smoke_prepare_run.py` only for isolated
 5-subject tests under `outputs_hcp/smoke_runs/<run_id>/`, and use
-`outputs_hcp/reruns/<run_id>/` for non-official render-only records.
+`outputs_hcp/reruns/<run_id>/` for non-official render-only records. Subject-specific cortical parcellation map rendering for Kong2022 ArealMSHBM is performed by `06_09_plot_cortex_kong2022_mshbm.py`, storing GIfTI and CIFTI assets under `outputs_hcp/inputs/hcp/kong2022/cortex_references/routea_areal_mshbm/sub-<subject>/assets/` and composed 2x2 overview PNGs under `outputs_hcp/inputs/hcp/kong2022/cortex_references/routea_areal_mshbm/sub-<subject>/figures/`.
 
 Official full-cohort group-atlas intermediates generated by `05_02` live under
 `outputs_hcp/work/group_atlas/`. The maintained RouteA full-FC, fixed-K=3,
 fisher-z assignment root is
-`outputs_hcp/work/group_atlas/routea_full_k3_fisherz/`. The shallow RouteA 17-net taxonomy root is `outputs_hcp/work/group_atlas/routea_17net_full_k3_fisherz/`. RouteB uses the parallel official root `outputs_hcp/work/group_atlas/routeb_full_k3_fisherz/`. The isolated cortex-control branch uses `outputs_hcp/work/group_atlas/routea_ctxreg_full_k3_fisherz/`; the cortex-drop branch uses `outputs_hcp/work/group_atlas/routea_ctxdrop_full_k3_fisherz/`. For Kong2022
+`outputs_hcp/work/group_atlas/routea_full_k3_fisherz/`. The shallow RouteA 17-net taxonomy root is `outputs_hcp/work/group_atlas/routea_17net_full_k3_fisherz/`. RouteB uses the parallel official root `outputs_hcp/work/group_atlas/routeb_full_k3_fisherz/`. The isolated cortex-control branch uses `outputs_hcp/work/group_atlas/routea_ctxreg_full_k3_fisherz/`; the cortex-drop branch uses `outputs_hcp/work/group_atlas/routea_ctxdrop_full_k3_fisherz/`. Lynch2024 writes comparison roots `outputs_hcp/work/group_atlas/lynch2024_21net_nsi043_full_k3_normalized_wta/` and `outputs_hcp/work/group_atlas/lynch2024_8net_nsi043_full_k3_normalized_wta/`. For Kong2022
 `intrinsic-spectral`, `network-spectral`, and `gradient-spectral`, the workflow
 keeps two official cluster-to-network assignment variants: `fisherz`
 (`top1_fisher_z` from the mean network profile) and `count`
@@ -78,6 +80,12 @@ the selected suffixed variant files, normally `_fisherz`. Use
 `scripts/core_workflow/migrate_default_variant_outputs.py` to migrate older roots:
 first generate the plan, then archive the verified duplicate targets, and only
 then delete the reviewed target list.
+
+For clusterless `wta-top` ROI-registry atlases, the default label assignment is
+`normalized_top20_count`: top-20 positive ROI/component counts divided by the
+finite available ROI/component count in each network. Legacy count/Fisher-z
+compatible metadata and suffixed variants remain explicit where already
+supported, but manifests and overviews point to normalized WTA by default.
 
 Render-only reruns may point `06_01_build_group_overview.py`,
 `06_03_build_cluster_cortex_panels.py`, and `06_06_render_confidence_maps.py`
@@ -90,7 +98,7 @@ the group-atlas directory name using exact route prefixes such as
 `group_atlas/<route>_...` directory, the script aborts instead of writing
 cross-route outputs. `07_01_build_group_matrix.py` defaults to `--routes routea`
 and reads branch group-atlas outputs from `outputs_hcp/work/group_atlas/{route}_full_k3_fisherz/`, including `routea_17net_full_k3_fisherz` or `routeb_full_k3_fisherz` when those routes are requested. It renders both
-`fisherz` and `count` overviews for cluster-based methods and one WTA overview. Direct `06_01_build_group_overview.py` runs can pass `--assignment-variant both` to emit both cluster-based variants in one invocation, including the `gradient-spectral` count overview; if variant manifest paths point at an obsolete absolute root, the renderer falls back to the same run directory canonical status file and same-named Workbench label asset.
+`fisherz` and `count` overviews for cluster-based methods when both variants are registered, and one WTA overview. Direct `06_01_build_group_overview.py` runs can pass `--assignment-variant both` to emit all registered default variants for that method; for Lynch2024, render `gradient-spectral` with `--assignment-variant fisherz` and `wta-top` with `--assignment-variant normalized_top20_count`. If variant manifest paths point at an obsolete absolute root, the renderer falls back to the same run directory canonical status file and same-named Workbench label asset.
 pass `--routes routea routea_17net routea_ctxreg routea_ctxdrop routeb` only after the requested non-default route intermediates have
 been generated. For partial exports (for example only `gradient-spectral` and
 `wta-top`), use `--methods` to restrict matrix rendering to already-built
@@ -143,7 +151,7 @@ Path template arguments for non-HCP datasets:
   additional entrypoints when needed.
 - `iowa_hcp500` represents the Iowa 7T dataset preprocessed via the HCP pipeline (source data under `/home/yojiao/hpchome/HCPpipeline500`). It maps outputs to the independent `/home/yojiao/hpchome/hipp/outputs_iowa_hcp500/` directory.
 
-- `--workflow-branch`: one of `kong2019`, `kong2022_routea`, `kong2022_routea_17net`, `kong2022_routea_ctxreg`, `kong2022_routea_ctxdrop`, `kong2022_routeb`
+- `--workflow-branch`: one of `kong2019`, `kong2022_routea`, `kong2022_routea_17net`, `kong2022_routea_ctxreg`, `kong2022_routea_ctxdrop`, `kong2022_routeb`, `lynch2024_21net`, `lynch2024_8net`
 - `--upstream-step-id` (repeatable)
 - `--input-artifact` (repeatable)
 - `--output-artifact` (repeatable)
@@ -180,4 +188,4 @@ The WTA-top overview embeds a fixed 20-bin long-axis network profile as its midd
 
 Post-hoc RouteA weighted comparison outputs can be generated with `05_05_build_weighted_fisherz_branch.py`. This writes `outputs_hcp/work/group_atlas/routea_weighted_fisherz_full_k3/` and `outputs_hcp/present/overviews/weighted_fisherz/`, preserving the original RouteA `fisherz` branch while adding `weighted_fisherz` gradient assignment labels and WTA labels from vertex-count weighted network time series recomputed as Fisher-z FC. Render the comparison branch with `06_01_build_group_overview.py --assignment-variant weighted_fisherz --mode-tag weighted_fisherz --methods gradient-spectral wta-top`.
 
-For Stanford subgroup reruns, keep the weighted outputs in separate branch roots and pass Stanford shared-input/template roots explicitly so manifests do not fall back to HCP assets. HC uses `outputs_stanford/work/group_atlas/routea_hc_weighted_fisherz_full_k3/`; Symp uses `outputs_stanford/work/group_atlas/routea_symp_weighted_fisherz_full_k3/`. Both should pass `--surface-root outputs_stanford/inputs/stanford/kong2022/shared_inputs/surface`, `--reference-root outputs_stanford/inputs/stanford/kong2022/shared_inputs/routea`, and `--template-surface-dir outputs_stanford/inputs/stanford/kong2022/templates/hipp_group_average_t1only_151/group_average_surfaces`, and `--template-spec outputs_stanford/inputs/stanford/hippunfold/dense_corobl_batch/sub-1001/hippunfold/sub-1001/surf/sub-1001_den-512_label-hipp_surfaces.spec`. The Stanford validation script supports `--analysis-version weighted_fisherz` to compare HCP weighted, Stanford HC weighted, and Stanford Symp weighted branches and to recompute subject-level endpoints from weighted network time series rather than equal ROI Fisher-z averaging. WTA-only normalized top20-count comparisons use isolated roots such as `routea_wta_normalized_top20_count_full_k3/` and `routea_17net_wta_normalized_top20_count_full_k3/`; normalized means top-20 positive ROI counts divided by finite available ROI counts in each network, not Fisher-z averaging, so canonical WTA labels remain unchanged. Render the HCP normalized WTA comparisons into `outputs_hcp/present/overviews/wta_normalized/` as `top20_count.png` and `family17.png`.
+For Stanford subgroup reruns, keep the weighted outputs in separate branch roots and pass Stanford shared-input/template roots explicitly so manifests do not fall back to HCP assets. HC uses `outputs_stanford/work/group_atlas/routea_hc_weighted_fisherz_full_k3/`; Symp uses `outputs_stanford/work/group_atlas/routea_symp_weighted_fisherz_full_k3/`. Both should pass `--surface-root outputs_stanford/inputs/stanford/kong2022/shared_inputs/surface`, `--reference-root outputs_stanford/inputs/stanford/kong2022/shared_inputs/routea`, and `--template-surface-dir outputs_stanford/inputs/stanford/kong2022/templates/hipp_group_average_t1only_151/group_average_surfaces`, and `--template-spec outputs_stanford/inputs/stanford/hippunfold/dense_corobl_batch/sub-1001/hippunfold/sub-1001/surf/sub-1001_den-512_label-hipp_surfaces.spec`. The Stanford validation script supports `--analysis-version weighted_fisherz` to compare HCP weighted, Stanford HC weighted, and Stanford Symp weighted branches and to recompute subject-level endpoints from weighted network time series rather than equal ROI Fisher-z averaging. Historical WTA-only normalized comparison roots such as `routea_wta_normalized_top20_count_full_k3/` and `routea_17net_wta_normalized_top20_count_full_k3/` remain isolated comparison records; new ROI-registry WTA runs use normalized top20-count labels as the default.

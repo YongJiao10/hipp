@@ -38,7 +38,7 @@
   1. `source /opt/conda/bin/activate hippo2`
   2. `which hippunfold` must resolve to `/home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2/bin/hippunfold`
   3. `hippunfold --version` must return `2.0.0`
-  4. `hippunfold --modality T2w --output_density 512 --help` must succeed and show `512`
+  4. `hippunfold --modality T1w --output_density 512 --help` must succeed and show `512`
 - Do not use `importlib.metadata.version("hippunfold")` as authoritative version proof. In this workspace it can still report `1.5.2rc2` even when the CLI is the validated `2.0.0` build.
 - If the gate fails, repair in place with:
 

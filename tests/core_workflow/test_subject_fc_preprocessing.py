@@ -243,7 +243,7 @@ def test_group_gradient_features_average_subject_roi_fc_then_select_components()
     assert meta["group_vertex_to_roi_fc_shape"] == [8, 12], meta
     assert meta["gradient_embedding_engine"] == "brainspace_gradientmaps_via_hippomaps_adapter", meta
     assert meta["kernel"] == "pearson", meta
-    assert meta["brainspace_sparsity"] == "default(0.9)", meta
+    assert np.isclose(meta["brainspace_sparsity"], 0.0), meta
     assert int(meta["n_components_computed"]) == 5, meta
     assert meta["components_displayed"] == [1, 2, 3], meta
     assert len(meta["gradient_eigenvalues"]) == 5, meta

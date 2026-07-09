@@ -75,7 +75,8 @@ DEFAULT_LEFT_CORTEX_SURFACE_TEMPLATE = (
 DEFAULT_RIGHT_CORTEX_SURFACE_TEMPLATE = (
     "{data_root}/{sub_subject}/anat/{sub_subject}_hemi-R_space-fsLR_den-32k_desc-MSMAll_midthickness.surf.gii"
 )
-ATLAS = "kong2022"
+DEFAULT_ATLAS = "kong2022"
+ATLAS = DEFAULT_ATLAS
 SMOOTHINGS = ["2mm", "4mm"]
 HEMIS = ["L", "R"]
 RUN_IDS = [1, 2, 3, 4]
@@ -230,6 +231,7 @@ def materialize_ctxdrop_fc_from_arrays(
     local_neighbor_dir: Path,
     cortex_valid_mask: np.ndarray | None = None,
 ) -> None:
+    atlas_slug = DEFAULT_ATLAS
     ts = np.asarray(hipp_ts, dtype=np.float32)
     valid = np.asarray(valid_mask, dtype=bool).reshape(-1)
     if ts.ndim != 2:
@@ -290,7 +292,7 @@ def materialize_ctxdrop_fc_from_arrays(
         fc_dir / "fc_summary.json",
         {
             "subject": subject,
-            "atlas_slug": ATLAS,
+            "atlas_slug": atlas_slug,
             "smooth": smoothing,
             "hemi": hemi,
             "route_tag": "routea_ctxdrop",
@@ -324,7 +326,7 @@ def materialize_ctxdrop_fc_from_arrays(
             "timestamp_utc": utc_now_iso(),
             "params": {
                 "subject": subject,
-                "atlas_slug": ATLAS,
+                "atlas_slug": atlas_slug,
                 "smooth": smoothing,
                 "hemi": hemi,
                 "route_tag": "routea_ctxdrop",
@@ -348,6 +350,31 @@ def read_roi_names(path: Path) -> list[str]:
     if not rows:
         raise RuntimeError(f"Empty ROI TSV: {path}")
     return [str(row["parcel_name"]) for row in rows]
+
+
+def reference_fc_target_files(atlas_slug: str) -> tuple[str, str, str]:
+    """Return TSV/NPY targets for vertex-to-reference FC materialization."""
+    if str(atlas_slug) == "lynch2024_8net":
+        return (
+            "cortex_canonical_networks.tsv",
+            "cortex_canonical_network_timeseries.npy",
+            "canonical_network",
+        )
+    return (
+        "cortex_roi_parcels.tsv",
+        "cortex_roi_parcel_timeseries.npy",
+        "parcel_name",
+    )
+
+
+def read_reference_target_names(path: Path, name_column: str) -> list[str]:
+    with path.open("r", encoding="utf-8", newline="") as f:
+        rows = list(csv.DictReader(f, delimiter="\t"))
+    if not rows:
+        raise RuntimeError(f"Empty reference TSV: {path}")
+    if name_column not in rows[0]:
+        raise RuntimeError(f"Reference TSV {path} is missing required column {name_column!r}")
+    return [str(row[name_column]) for row in rows]
 
 
 def load_run_segments(subj_root: Path) -> list[dict[str, int]]:
@@ -524,7 +551,8 @@ def materialize_ctxdrop_fc(
     ref_subj_root = Path(reference_root) / f"sub-{subject}"
     surf_subj_root = Path(surface_root) / f"sub-{subject}"
     mask_subj_root = Path(mask_root) / f"sub-{subject}"
-    fc_dir = subj_root / "fc" / ATLAS / smoothing / f"hemi_{hemi}"
+    atlas_slug = ATLAS
+    fc_dir = subj_root / "fc" / atlas_slug / smoothing / f"hemi_{hemi}"
 
     ts = np.load(surf_subj_root / "surface" / smoothing / f"sub-{subject}_hemi-{hemi}_timeseries.npy").astype(np.float32)
     valid_mask = np.load(mask_subj_root / "surface" / "tsnr_gate" / f"sub-{subject}_hemi-{hemi}_valid_mask.npy").astype(bool)
@@ -556,18 +584,23 @@ def materialize_fc(
     hemi: str,
     reference_root: Path | None = None,
     mask_root: Path | None = None,
+    atlas: str = DEFAULT_ATLAS,
 ) -> None:
     subj_root = shared_root / f"sub-{subject}"
     ref_subj_root = (reference_root or shared_root) / f"sub-{subject}"
     surf_subj_root = surface_root / f"sub-{subject}"
     mask_subj_root = (mask_root or surface_root) / f"sub-{subject}"
-    fc_dir = subj_root / "fc" / ATLAS / smoothing / f"hemi_{hemi}"
+    atlas_slug = str(atlas)
+    fc_dir = subj_root / "fc" / atlas_slug / smoothing / f"hemi_{hemi}"
     fc_dir.mkdir(parents=True, exist_ok=True)
 
     ts = np.load(surf_subj_root / "surface" / smoothing / f"sub-{subject}_hemi-{hemi}_timeseries.npy").astype(np.float32)
     valid_mask = np.load(mask_subj_root / "surface" / "tsnr_gate" / f"sub-{subject}_hemi-{hemi}_valid_mask.npy").astype(bool)
-    roi_ts = np.load(ref_subj_root / "reference" / ATLAS / "cortex_roi_parcel_timeseries.npy").astype(np.float32)
-    roi_names = read_roi_names(ref_subj_root / "reference" / ATLAS / "cortex_roi_parcels.tsv")
+    target_tsv_name, target_timeseries_name, target_name_column = reference_fc_target_files(atlas_slug)
+    target_timeseries_path = ref_subj_root / "reference" / atlas_slug / target_timeseries_name
+    target_tsv_path = ref_subj_root / "reference" / atlas_slug / target_tsv_name
+    roi_ts = np.load(target_timeseries_path).astype(np.float32)
+    roi_names = read_reference_target_names(target_tsv_path, target_name_column)
 
     if ts.ndim != 2 or roi_ts.ndim != 2:
         raise ValueError(
@@ -628,7 +661,7 @@ def materialize_fc(
         fc_dir / "fc_summary.json",
         {
             "subject": subject,
-            "atlas_slug": ATLAS,
+            "atlas_slug": atlas_slug,
             "smooth": smoothing,
             "hemi": hemi,
             "fc_shape": [int(pearson_full.shape[0]), int(pearson_full.shape[1])],
@@ -641,7 +674,7 @@ def materialize_fc(
             "n_roi_targets_used": int(roi_ts.shape[0]),
             "run_labels": run_labels,
             "run_lengths": run_lengths,
-            "fc_definition": "pearson_vertex_to_kong2022_roi_timeseries",
+            "fc_definition": f"pearson_vertex_to_{atlas_slug}_roi_timeseries",
         },
     )
     write_json(
@@ -652,13 +685,14 @@ def materialize_fc(
             "timestamp_utc": utc_now_iso(),
             "params": {
                 "subject": subject,
-                "atlas_slug": ATLAS,
+                "atlas_slug": atlas_slug,
                 "smooth": smoothing,
                 "hemi": hemi,
-                "fc_definition": "pearson_vertex_to_kong2022_roi_timeseries",
+                "fc_definition": f"pearson_vertex_to_{atlas_slug}_roi_timeseries",
             },
             "inputs": [
-                str((ref_subj_root / "reference" / ATLAS / "cortex_roi_parcel_timeseries.npy").resolve()),
+                str(target_timeseries_path.resolve()),
+                str(target_tsv_path.resolve()),
                 str((surf_subj_root / "surface" / smoothing / f"sub-{subject}_hemi-{hemi}_timeseries.npy").resolve()),
                 str((mask_subj_root / "surface" / "tsnr_gate" / f"sub-{subject}_hemi-{hemi}_valid_mask.npy").resolve()),
             ],
@@ -687,6 +721,7 @@ def process_subject(
     right_cortex_surface_template: str = DEFAULT_RIGHT_CORTEX_SURFACE_TEMPLATE,
     ctxdrop_distance_mm: float = 20.0,
     dtseries_template: str = DEFAULT_DTSERIES_TEMPLATE,
+    atlas: str = DEFAULT_ATLAS,
 ) -> dict[str, object]:
     subject = str(subject).replace("sub-", "")
     shared_root = Path(shared_root_str)
@@ -695,7 +730,10 @@ def process_subject(
     mask_root = Path(mask_root_str)
     n_fc = 0
 
+    atlas_slug = str(atlas)
     if ctxdrop:
+        if atlas_slug != DEFAULT_ATLAS:
+            raise ValueError("--ctxdrop is only supported for --atlas kong2022")
         data_root = Path(data_root_str or DEFAULT_DATA_ROOT).resolve()
         hippunfold_batch_root = Path(hippunfold_batch_root_str or DEFAULT_HIPPUNFOLD_BATCH_ROOT).resolve()
         route_a_root = Path(route_a_root_str or DEFAULT_ROUTE_A_ROOT).resolve()
@@ -739,7 +777,7 @@ def process_subject(
 
     for smoothing in smoothings:
         for hemi in hemis:
-            materialize_fc(shared_root, surface_root, subject, smoothing, hemi, reference_root=reference_root, mask_root=mask_root)
+            materialize_fc(shared_root, surface_root, subject, smoothing, hemi, reference_root=reference_root, mask_root=mask_root, atlas=atlas_slug)
             n_fc += 1
     return {"subject": f"sub-{subject}", "fc_combos": int(n_fc), "ctxdrop": False}
 
@@ -751,6 +789,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--mask-root", default=None, help="Read hippocampal valid masks from this root; defaults to --surface-root.")
     parser.add_argument("--subjects-manifest", default=str(DEFAULT_SUBJECTS))
     parser.add_argument("--subjects", nargs="*", default=None)
+    parser.add_argument("--atlas", default=DEFAULT_ATLAS, help="Reference/FC atlas slug under sub-*/reference and sub-*/fc.")
     parser.add_argument("--smoothings", nargs="+", default=SMOOTHINGS, choices=SMOOTHINGS)
     parser.add_argument("--hemis", nargs="+", default=HEMIS, choices=HEMIS)
     parser.add_argument("--jobs", type=int, default=1, help="Subject-level parallel workers; hard-capped at 10.")
@@ -803,6 +842,7 @@ def main() -> int:
                 right_cortex_surface_template=str(args.right_cortex_surface_template),
                 ctxdrop_distance_mm=float(args.ctxdrop_distance_mm),
                 dtseries_template=str(args.dtseries_template),
+                atlas=str(args.atlas),
             )
             n_fc += int(obj["fc_combos"])
             print(f"[done] {obj['subject']}", flush=True)
@@ -826,6 +866,7 @@ def main() -> int:
                     str(args.right_cortex_surface_template),
                     float(args.ctxdrop_distance_mm),
                     str(args.dtseries_template),
+                    str(args.atlas),
                 )
                 for s in subjects
             ]

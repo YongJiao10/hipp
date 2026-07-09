@@ -11,7 +11,7 @@ Main Flow Path:
 
 Inputs:
 - Command-line arguments:
-  - --routes: Workflow branches to process (choices: "routea", "routeb", default: both).
+  - --routes: Workflow branches to process (choices include routea, routea_ctxreg, routea_ctxdrop, routeb, lynch2024_21net, lynch2024_8net; default: routea and routeb).
   - --shared-inputs-root: Directory containing route-specific shared reference inputs (default: `outputs_hcp/inputs/hcp/kong2022/shared_inputs`).
   - --surface-root: Path to BOLD surfaces root directory (default: `outputs_hcp/inputs/hcp/kong2022/shared_inputs/surface`).
   - --subjects-manifest: Path to QC-passed subject list manifest (default: `outputs_hcp/inputs/hcp/kong2022/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt`).
@@ -26,7 +26,7 @@ Inputs:
   - --max-subjects: Max subjects to process (useful for smoke tests).
   - --force: Force recompute even if outputs exist.
 - Physical inputs:
-  - Subject active vertex-to-ROI FC matrices: `{shared_inputs_root}/{route_dir}/sub-<subject>/fc/kong2022/{smoothing}/hemi_{hemi}/hipp_vertex_to_network_fc_active.npy`.
+  - Subject active vertex-to-ROI/component FC matrices: `{shared_inputs_root}/{route_dir}/sub-<subject>/fc/{atlas}/{smoothing}/hemi_{hemi}/hipp_vertex_to_network_fc_active.npy`.
   - Subject active masks: `{surface_root}/sub-<subject>/surface/tsnr_gate/sub-<subject>_hemi-{hemi}_valid_mask.npy`.
   - Group template midthickness surfaces: `{group_average_surfaces_dir}/group-average_hemi-{hemi}_space-corobl_den-512_label-hipp_midthickness.surf.gii`.
 
@@ -51,6 +51,7 @@ from lib.hippomaps_adapter import (
     DEFAULT_HIPPOMAPS_ROOT,
     ensure_hippomaps_on_path,
     DEFAULT_GRADIENT_RANDOM_STATE,
+    brainspace_sparsity_for_feature_count,
     fit_gradientmaps_pearson,
     hippomaps_commit,
     hippomaps_import_path,
@@ -77,7 +78,22 @@ DEFAULT_SURFACE_ROOT = DEFAULT_KONG2022_SURFACE_ROOT
 DEFAULT_SUBJECTS = DEFAULT_KONG2022_MANIFEST_ROOT / "hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt"
 DEFAULT_GROUP_AVG_SURFACES_DIR = DEFAULT_KONG2022_TEMPLATE_ROOT / "group_average_surfaces"
 DEFAULT_OUT_ROOT = DEFAULT_HIPPOMAPS_GRADIENT_ROOT
-ROUTE_TO_SHARED_DIR = {"routea": "routea", "routea_ctxreg": "routea_ctxreg_151", "routea_ctxdrop": "routea_ctxdrop_151", "routeb": "routeb_151"}
+ROUTE_TO_SHARED_DIR = {
+    "routea": "routea",
+    "routea_ctxreg": "routea_ctxreg_151",
+    "routea_ctxdrop": "routea_ctxdrop_151",
+    "routeb": "routeb_151",
+    "lynch2024_21net": "pfm_nsi043_78",
+    "lynch2024_8net": "pfm_nsi043_78",
+}
+ROUTE_TO_ATLAS = {
+    "routea": "kong2022",
+    "routea_ctxreg": "kong2022",
+    "routea_ctxdrop": "kong2022",
+    "routeb": "kong2022",
+    "lynch2024_21net": "lynch2024_21net",
+    "lynch2024_8net": "lynch2024_8net",
+}
 SMOOTHINGS = ("2mm", "4mm")
 HEMIS = ("L", "R")
 
@@ -85,6 +101,7 @@ HEMIS = ("L", "R")
 @dataclass
 class GradientComboResult:
     route: str
+    atlas: str
     smoothing: str
     hemi: str
     subjects: list[str]
@@ -235,8 +252,26 @@ def subject_valid_mask(surface_root: Path, subject: str, hemi: str) -> np.ndarra
     return np.load(path).astype(bool)
 
 
-def load_subject_fc(shared_root: Path, subject: str, smoothing: str, hemi: str, valid_mask: np.ndarray) -> tuple[np.ndarray, Path]:
-    fc_path = shared_root / f"sub-{subject}" / "fc" / "kong2022" / smoothing / f"hemi_{hemi}" / "hipp_vertex_to_network_fc.npy"
+def atlas_for_gradient_route(route: str) -> str:
+    route_key = str(route).strip().lower()
+    if route_key not in ROUTE_TO_ATLAS:
+        raise ValueError(f"Unsupported gradient route: {route!r}")
+    return ROUTE_TO_ATLAS[route_key]
+
+
+def resolve_gradient_shared_root(shared_inputs_root: Path, route: str) -> Path:
+    route_key = str(route).strip().lower()
+    if route_key not in ROUTE_TO_SHARED_DIR:
+        raise ValueError(f"Unsupported gradient route: {route!r}")
+    return Path(shared_inputs_root).resolve() / ROUTE_TO_SHARED_DIR[route_key]
+
+
+def subject_fc_path(shared_root: Path, subject: str, atlas: str, smoothing: str, hemi: str) -> Path:
+    return Path(shared_root) / f"sub-{subject}" / "fc" / str(atlas) / smoothing / f"hemi_{hemi}" / "hipp_vertex_to_network_fc.npy"
+
+
+def load_subject_fc(shared_root: Path, subject: str, atlas: str, smoothing: str, hemi: str, valid_mask: np.ndarray) -> tuple[np.ndarray, Path]:
+    fc_path = subject_fc_path(shared_root, subject, atlas, smoothing, hemi)
     if not fc_path.exists():
         raise FileNotFoundError(f"Missing vertex-to-network FC cache: {fc_path}")
     arr = np.load(fc_path).astype(np.float32)
@@ -269,6 +304,7 @@ def compute_combo(
     *,
     route: str,
     shared_root: Path,
+    atlas: str,
     surface_root: Path,
     subjects: list[str],
     subjects_manifest: Path,
@@ -301,7 +337,7 @@ def compute_combo(
     feature_bank: dict[str, np.ndarray] = {}
     fc_paths: dict[str, str] = {}
     for subject in subjects:
-        fc, fc_path = load_subject_fc(shared_root, subject, smoothing, hemi, valid_masks[subject])
+        fc, fc_path = load_subject_fc(shared_root, subject, atlas, smoothing, hemi, valid_masks[subject])
         feature_bank[subject] = fc
         fc_paths[f"sub-{subject}"] = str(fc_path.resolve())
 
@@ -325,6 +361,7 @@ def compute_combo(
 
     return GradientComboResult(
         route=route,
+        atlas=atlas,
         smoothing=smoothing,
         hemi=hemi,
         subjects=list(subjects),
@@ -391,7 +428,7 @@ def write_aligned_combo_outputs(
     manifest = {
         "status": "ok",
         "route": result.route,
-        "atlas": "kong2022",
+        "atlas": result.atlas,
         "smoothing": result.smoothing,
         "hemi": result.hemi,
         "method": "hippomaps-gradient",
@@ -413,7 +450,9 @@ def write_aligned_combo_outputs(
         "gradient_shape_active": [int(x) for x in gradients_active.shape],
         "gradient_shape_full": [int(x) for x in gradients_full.shape],
         "gradientmaps_kernel": "pearson",
-        "gradientmaps_call": "brainspace.gradient.GradientMaps(n_components=N, kernel='pearson', random_state=gradient_random_state).fit(column_zscored_group_mean_fisherz_fc) with BrainSpace default sparsity=0.9",
+        "gradientmaps_call": "brainspace.gradient.GradientMaps(n_components=N, kernel='pearson', random_state=gradient_random_state).fit(column_zscored_group_mean_fisherz_fc, sparsity=brainspace_sparsity)",
+        "brainspace_sparsity": float(brainspace_sparsity_for_feature_count(result.group_fc_active.shape[1])),
+        "brainspace_sparsity_policy": "0.0 for <=50 features; otherwise 0.9. Low-dimensional Lynch component banks use the full graph, while high-dimensional Kong400 retains BrainSpace default sparsity",
         "gradient_random_state": None if result.gradient_random_state is None else int(result.gradient_random_state),
         "n_components_computed": int(result.n_components),
         "selected_components": selected_labels,
@@ -510,7 +549,8 @@ def main() -> int:
         if comp > int(args.n_components):
             raise ValueError(f"Selected G{comp} exceeds --n-components={args.n_components}")
     for route in args.routes:
-        shared_root = Path(args.shared_inputs_root).resolve() / ROUTE_TO_SHARED_DIR[route]
+        shared_root = resolve_gradient_shared_root(Path(args.shared_inputs_root), route)
+        atlas = atlas_for_gradient_route(route)
         route_results: list[GradientComboResult] = []
         for smoothing in args.smoothings:
             for hemi in args.hemis:
@@ -518,6 +558,7 @@ def main() -> int:
                     compute_combo(
                         route=route,
                         shared_root=shared_root,
+                        atlas=atlas,
                         surface_root=Path(args.surface_root).resolve(),
                         subjects=subjects,
                         subjects_manifest=subjects_manifest,
