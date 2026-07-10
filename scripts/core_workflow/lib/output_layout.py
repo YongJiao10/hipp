@@ -347,6 +347,10 @@ def resolve_cortex_assets_root(dataset: str = DEFAULT_DATASET) -> Path:
     return resolve_work_root(dataset) / "cortex_pfm"
 
 
+def resolve_crossfit_template_matching_root(dataset: str = DEFAULT_DATASET) -> Path:
+    return resolve_work_root(dataset) / "crossfit_template_matching"
+
+
 # ── present subtree resolvers ─────────────────────────────────────────
 
 def resolve_overviews_dir(dataset: str = DEFAULT_DATASET) -> Path:
@@ -363,6 +367,10 @@ def resolve_cortex_panels_dir(dataset: str = DEFAULT_DATASET) -> Path:
 
 def resolve_local_cortex_neighbors_dir(dataset: str = DEFAULT_DATASET) -> Path:
     return resolve_present_root(dataset) / "local_cortex_neighbors"
+
+
+def resolve_crossfit_template_matching_overview_root(dataset: str = DEFAULT_DATASET) -> Path:
+    return resolve_overviews_dir(dataset) / "crossfit_template_matching"
 
 
 # ── backward-compatible module-level constants (resolved for DEFAULT_DATASET) ──
