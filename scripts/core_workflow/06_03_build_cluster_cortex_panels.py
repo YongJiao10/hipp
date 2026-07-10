@@ -16,7 +16,7 @@ Inputs:
   - --present-dir: Output directory for final presentation figures (default: `outputs_hcp/present/cortex_panels`).
   - --runtime-root: Root for intermediate files and index layout (default: `<present-dir>/runtime`).
   - --atlas: Cortical atlas choice (default: "kong2022").
-  - --methods: Methods to process (default: ["intrinsic-spectral", "network-spectral", "wta-top"]).
+  - --methods: Cluster-based methods to process (default: ["intrinsic-spectral", "network-spectral", "gradient-spectral"]).
   - --smoothings: Smoothing kernel values to process (default: ["2mm", "4mm"]).
   - --hemis: Hemispheres to process (default: ["L", "R"]).
   - --coverage-threshold: Coverage threshold to process (default: 0.80).
@@ -93,9 +93,8 @@ METHOD_CHOICES = [
     "network-spectral",
     "gradient-spectral",
     "intrinsic-spectral",
-    "wta-top",
 ]
-METHODS_DEFAULT = ["intrinsic-spectral", "network-spectral", "gradient-spectral", "wta-top"]
+METHODS_DEFAULT = ["intrinsic-spectral", "network-spectral", "gradient-spectral"]
 SMOOTHINGS = ["2mm", "4mm"]
 HEMIS = ["L", "R"]
 VIEW_SPECS = [
@@ -104,7 +103,6 @@ VIEW_SPECS = [
     {"name": "dorsal", "axis": "x", "deg": 90.0},
     {"name": "ventral", "axis": "x", "deg": -90.0},
 ]
-CLUSTERLESS_METHODS = {"wta-top"}
 
 
 @dataclass(frozen=True)
@@ -181,7 +179,6 @@ class PanelComboInputs:
     labels_path: Path
     support_path: Path
     registry_path: Path
-    global_top_path: Path
 
 
 
@@ -669,267 +666,6 @@ def render_cortex_single_image(
     return out_png_single
 
 
-def dedupe_selected_items_from_global_top(global_top: dict[str, Any]) -> list[dict[str, Any]]:
-    best_by_roi: dict[int, dict[str, Any]] = {}
-    for sign_key in ["top_positive", "top_negative"]:
-        sign = "positive" if sign_key == "top_positive" else "negative"
-        for row in global_top.get(sign_key, []):
-            roi_id = int(row["roi_idx"])
-            cur = {
-                "roi_id": roi_id,
-                "roi_name": str(row["roi_name"]),
-                "canonical8": str(row["canonical8"]),
-                "sign": sign,
-                "fisher_z": float(row["fisher_z"]),
-            }
-            old = best_by_roi.get(roi_id)
-            if old is None or abs(cur["fisher_z"]) > abs(float(old["fisher_z"])):
-                best_by_roi[roi_id] = cur
-    return [best_by_roi[k] for k in sorted(best_by_roi)]
-
-
-
-def build_global_top_hippomaps_label_files(
-    *,
-    cluster_dir: Path,
-    combo_hemi: str,
-    global_top: dict[str, Any],
-    support_mask: np.ndarray,
-    left_surface: Path,
-    right_surface: Path,
-) -> tuple[Path, Path, dict[str, int]]:
-    n_left = read_surface_vertex_count(left_surface)
-    n_right = read_surface_vertex_count(right_surface)
-    labels_left = np.zeros((n_left,), dtype=np.int32)
-    labels_right = np.zeros((n_right,), dtype=np.int32)
-
-    # Keep one sign per vertex (strongest absolute FC among global-top edges).
-    best_by_vertex: dict[int, tuple[int, float]] = {}
-    for sign_key, sign_label in [("top_positive", 1), ("top_negative", 2)]:
-        for row in global_top.get(sign_key, []):
-            vidx = int(row["vertex_index"])
-            val = float(row["fisher_z"])
-            old = best_by_vertex.get(vidx)
-            if old is None or abs(val) > abs(float(old[1])):
-                best_by_vertex[vidx] = (int(sign_label), float(val))
-
-    if combo_hemi == "L":
-        n_vertices = int(labels_left.size)
-        target = labels_left
-    elif combo_hemi == "R":
-        n_vertices = int(labels_right.size)
-        target = labels_right
-    else:
-        raise ValueError(f"Unexpected combo_hemi={combo_hemi}")
-
-    if int(support_mask.size) != n_vertices:
-        raise RuntimeError(
-            f"Support-mask size mismatch for hemi-{combo_hemi}: support={support_mask.size}, surface={n_vertices}"
-        )
-
-    selected_pos = 0
-    selected_neg = 0
-    for vidx, (sign_label, _val) in best_by_vertex.items():
-        if 0 <= int(vidx) < n_vertices and bool(support_mask[int(vidx)]):
-            target[int(vidx)] = int(sign_label)
-            if int(sign_label) == 1:
-                selected_pos += 1
-            elif int(sign_label) == 2:
-                selected_neg += 1
-
-    label_items = [
-        (0, "Null", (158, 158, 158, 255)),
-        (1, "+ Top FC vertex", (220, 70, 70, 255)),
-        (2, "- Top FC vertex", (79, 120, 255, 255)),
-    ]
-
-    wb_dir = cluster_dir / "hippomaps_workbench_assets"
-    wb_dir.mkdir(parents=True, exist_ok=True)
-    out_left = wb_dir / "global_top_vertices.L.label.gii"
-    out_right = wb_dir / "global_top_vertices.R.label.gii"
-    nib.save(make_named_label_gifti(labels_left, label_items), str(out_left))
-    nib.save(make_named_label_gifti(labels_right, label_items), str(out_right))
-
-    return out_left, out_right, {"positive": int(selected_pos), "negative": int(selected_neg)}
-
-
-def render_clusterless_global_figure(
-    *,
-    cluster_dir: Path,
-    title: str,
-    left_label: Path,
-    right_label: Path,
-    cortex_assets: dict[str, Path],
-    network_colors: dict[str, tuple[int, int, int, int]],
-    global_top: dict[str, Any],
-    support_mask: np.ndarray,
-    combo_hemi: str,
-    template_subject: str,
-    template_spec_path: Path,
-    left_surface: Path,
-    right_surface: Path,
-) -> Path:
-    cortex_png = render_cortex_single_image(
-        cluster_dir=cluster_dir,
-        left_label=left_label,
-        right_label=right_label,
-        cortex_assets=cortex_assets,
-    )
-    hipp_left_label, hipp_right_label, vertex_counts = build_global_top_hippomaps_label_files(
-        cluster_dir=cluster_dir,
-        combo_hemi=combo_hemi,
-        global_top=global_top,
-        support_mask=support_mask,
-        left_surface=left_surface,
-        right_surface=right_surface,
-    )
-    hipp_render = render_locked_grid(
-        subject=str(template_subject),
-        scene=DEFAULT_HIPP_SCENE,
-        outdir=cluster_dir / "hippomaps_render",
-        name=f"global_top_vertices_hemi-{combo_hemi}",
-        title=f"{title} | top FC vertices",
-        left_labels=hipp_left_label,
-        right_labels=hipp_right_label,
-        left_surface=left_surface,
-        right_surface=right_surface,
-        spec_path=template_spec_path,
-    )
-    hipp_png = Path(str(hipp_render["native_scene_png"]))
-
-    out_png = cluster_dir / "global_top_connections_cortex_hippomaps.png"
-    fig = plt.figure(figsize=(18.0, 7.2), dpi=180, constrained_layout=True)
-    gs = fig.add_gridspec(1, 3, width_ratios=[3.2, 3.2, 2.1], wspace=0.05)
-    ax0 = fig.add_subplot(gs[0, 0])
-    ax0.imshow(plt.imread(cortex_png))
-    ax0.axis("off")
-    ax0.set_title(f"{title} | cortex ROI", fontsize=14)
-
-    ax1 = fig.add_subplot(gs[0, 1])
-    ax1.imshow(plt.imread(hipp_png))
-    ax1.axis("off")
-    ax1.set_title(f"{title} | hippomaps vertex", fontsize=14)
-
-    ax_leg = fig.add_subplot(gs[0, 2])
-    ax_leg.axis("off")
-    pos_n = int(len(global_top.get("top_positive", [])))
-    neg_n = int(len(global_top.get("top_negative", [])))
-    top_n_cap = int(global_top.get("top_n_cap", 20))
-    q_threshold = float(global_top.get("q_threshold", 0.05))
-    roi_pos = {int(x["roi_idx"]) for x in global_top.get("top_positive", [])}
-    roi_neg = {int(x["roi_idx"]) for x in global_top.get("top_negative", [])}
-    vertex_pos = {int(x["vertex_index"]) for x in global_top.get("top_positive", [])}
-    vertex_neg = {int(x["vertex_index"]) for x in global_top.get("top_negative", [])}
-    ax_leg.text(
-        0.0,
-        1.00,
-        f"global-top selection (q<{q_threshold:.2f}); top {top_n_cap}/sign",
-        ha="left",
-        va="top",
-        fontsize=13,
-        transform=ax_leg.transAxes,
-    )
-    ax_leg.text(
-        0.0,
-        0.90,
-        f"Selected FC edges: total={int(pos_n + neg_n)}  (+{pos_n} / -{neg_n})",
-        ha="left",
-        va="top",
-        fontsize=15,
-        fontweight="bold",
-        transform=ax_leg.transAxes,
-    )
-    ax_leg.text(
-        0.0,
-        0.83,
-        (
-            f"Unique ROI: {len(roi_pos | roi_neg)}  "
-            f"(+{len(roi_pos)} / -{len(roi_neg)})"
-        ),
-        ha="left",
-        va="top",
-        fontsize=14,
-        transform=ax_leg.transAxes,
-    )
-    ax_leg.text(
-        0.0,
-        0.78,
-        (
-            f"Unique vertices: {int(vertex_counts['positive'] + vertex_counts['negative'])}  "
-            f"(+{int(vertex_counts['positive'])} / -{int(vertex_counts['negative'])})"
-        ),
-        ha="left",
-        va="top",
-        fontsize=14,
-        transform=ax_leg.transAxes,
-    )
-    ax_leg.text(0.0, 0.71, "Sign coding:", ha="left", va="top", fontsize=15, fontweight="bold", transform=ax_leg.transAxes)
-    ax_leg.text(0.0, 0.66, "+ : network color (saturated)", ha="left", va="top", fontsize=14, transform=ax_leg.transAxes)
-    ax_leg.text(0.0, 0.61, "- : pale tint of network color", ha="left", va="top", fontsize=14, transform=ax_leg.transAxes)
-    ax_leg.text(0.0, 0.56, "Hippomap markers: red=+FC, blue=-FC", ha="left", va="top", fontsize=13, transform=ax_leg.transAxes)
-
-    net_counts: dict[str, dict[str, int]] = {}
-    for sign_key, sign in [("top_positive", "positive"), ("top_negative", "negative")]:
-        for row in global_top.get(sign_key, []):
-            net = str(row.get("canonical8", "Unknown"))
-            bucket = net_counts.setdefault(net, {"positive": 0, "negative": 0})
-            bucket[sign] += 1
-    if net_counts:
-        ax_leg.text(0.0, 0.53, "Network legend:", ha="left", va="top", fontsize=15, fontweight="bold", transform=ax_leg.transAxes)
-        y = 0.49
-        step = 0.050
-        for net in sorted(net_counts.keys())[:12]:
-            if net not in network_colors:
-                raise KeyError(f"Missing network color for {net!r}")
-            base = network_colors[net]
-            neg = neg_color_rgba(base)
-            c_pos = tuple(x / 255.0 for x in base[:3]) + (1.0,)
-            c_neg = tuple(x / 255.0 for x in neg[:3]) + (1.0,)
-            ax_leg.add_patch(
-                plt.Rectangle((0.0, y - 0.018), 0.030, 0.026, transform=ax_leg.transAxes, facecolor=c_pos, edgecolor="none")
-            )
-            ax_leg.add_patch(
-                plt.Rectangle((0.038, y - 0.018), 0.030, 0.026, transform=ax_leg.transAxes, facecolor=c_neg, edgecolor="none")
-            )
-            c = net_counts[net]
-            ax_leg.text(
-                0.076,
-                y,
-                f"{net} (+{int(c['positive'])}/-{int(c['negative'])})",
-                ha="left",
-                va="center",
-                fontsize=14,
-                transform=ax_leg.transAxes,
-            )
-            y -= step
-            if y < 0.02:
-                break
-    else:
-        ax_leg.text(
-            0.0,
-            0.53,
-            "No global-top edges selected.",
-            ha="left",
-            va="top",
-            fontsize=14,
-            transform=ax_leg.transAxes,
-        )
-
-    ax_leg.text(
-        0.0,
-        0.01,
-        f"Global top connections: +{pos_n} / -{neg_n}",
-        ha="left",
-        va="bottom",
-        fontsize=11,
-        transform=ax_leg.transAxes,
-    )
-
-    out_png.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out_png, dpi=220, bbox_inches="tight")
-    plt.close(fig)
-    return out_png
-
 
 def render_cluster_figure(
     *,
@@ -1111,7 +847,7 @@ def write_viewer_readme(
         f"- skipped combos: {len(skipped)}",
         "",
         "Quick entry points:",
-        "- `present_root/cortex_*_overview.png` collages per atlas/method (clusterless merges 2mm+4mm into one no-smoothing filename; cluster methods remain per smoothing)",
+        "- `present_root/cortex_*_overview.png` significance-filtered cluster-to-cortex collages per atlas/method/smoothing",
         "- `cluster_roi_cortex_manifest.json` index linking viewer and runtime manifests",
         "",
     ]
@@ -1208,10 +944,7 @@ def collect_panel_combo_inputs(
     labels_path = run_dir / "group_labels_final.npy"
     support_path = run_dir / "group_support_mask.npy"
     registry_path = run_dir / "cluster_roi_registry.tsv"
-    vertex_status_path = run_dir / "vertex_assignment_status.json"
-    global_top_path = run_dir / "global_top_connections.json"
     combo_id = combo_tag(combo)
-    clusterless = combo.method in CLUSTERLESS_METHODS
 
     if not manifest_path.exists():
         skipped.append(
@@ -1243,11 +976,7 @@ def collect_panel_combo_inputs(
         )
         return None
 
-    required_ok = (
-        (support_path.exists() and registry_path.exists() and vertex_status_path.exists() and global_top_path.exists())
-        if clusterless
-        else (labels_path.exists() and support_path.exists() and registry_path.exists())
-    )
+    required_ok = labels_path.exists() and support_path.exists() and registry_path.exists()
     if not required_ok:
         skipped.append(
             {
@@ -1284,7 +1013,6 @@ def collect_panel_combo_inputs(
         labels_path=labels_path,
         support_path=support_path,
         registry_path=registry_path,
-        global_top_path=global_top_path,
     )
 
 
@@ -1324,123 +1052,6 @@ def write_cortex_panel_manifests(
         "n_subjects_used": int(n_subjects_used),
     }
 
-
-def render_clusterless_combo_panels(
-    *,
-    panel_inputs: PanelComboInputs,
-    args: argparse.Namespace,
-    group_root: Path,
-    runtime_root: Path,
-    tau_tag: str,
-    cortex_assets: dict[str, Path],
-    vertex_arrays: dict[str, tuple[np.ndarray, np.ndarray]],
-    network_colors: dict[str, tuple[int, int, int, int]],
-    skipped: list[dict[str, Any]],
-    viewer_combo_manifest_dir: Path,
-) -> tuple[dict[str, Any], list[dict[str, Any]], tuple[str, str, str]] | None:
-    combo = panel_inputs.combo
-    run_dir = panel_inputs.run_dir
-    support = np.load(panel_inputs.support_path).astype(bool)
-    if support.ndim != 1:
-        raise RuntimeError(f"Invalid support shape in {run_dir}: {support.shape}")
-    roi_registry = parse_roi_registry(panel_inputs.registry_path)
-    global_top = load_json(panel_inputs.global_top_path)
-    selected_items = dedupe_selected_items_from_global_top(global_top)
-    combo_runtime_out = runtime_root / combo.atlas / combo.method / combo.smoothing / tau_tag / f"hemi_{combo.hemi}"
-    combo_runtime_out.mkdir(parents=True, exist_ok=True)
-    panel_dir = combo_runtime_out / "global_top"
-    other_hemi = "R" if combo.hemi == "L" else "L"
-    other_combo = Combo(atlas=combo.atlas, method=combo.method, smoothing=combo.smoothing, hemi=other_hemi, gradient_comp_tag=combo.gradient_comp_tag)
-    other_manifest_path = _build_run_dir(group_root, other_combo, tau_tag) / "group_atlas_manifest.json"
-    if not other_manifest_path.exists():
-        raise FileNotFoundError(
-            f"Missing opposite-hemi manifest required for hippomaps rendering: {other_manifest_path}"
-        )
-    other_manifest = load_json(other_manifest_path)
-    template_spec_raw = panel_inputs.manifest.get("template_spec_path")
-    if template_spec_raw is None or str(template_spec_raw).strip().lower() in {"", "none", "null"}:
-        skipped.append(
-            {
-                "atlas": combo.atlas,
-                "method": combo.method,
-                "smoothing": combo.smoothing,
-                "hemi": combo.hemi,
-                "reason": "missing_template_spec_path_subject_consensus",
-                "run_dir": str(run_dir),
-            }
-        )
-        return None
-    this_surface = Path(str(panel_inputs.manifest["template_left_or_right_surface"]))
-    other_surface = Path(str(other_manifest["template_left_or_right_surface"]))
-    left_surface = this_surface if combo.hemi == "L" else other_surface
-    right_surface = this_surface if combo.hemi == "R" else other_surface
-    left_label, right_label, _legend_items = build_cluster_label_files(
-        selected_items=selected_items,
-        cluster_dir=panel_dir,
-        vertex_arrays=vertex_arrays,
-        network_colors=network_colors,
-    )
-    figure_png = render_clusterless_global_figure(
-        cluster_dir=panel_dir,
-        title=f"{combo.atlas} | {combo.method} | {combo.smoothing} | hemi-{combo.hemi}",
-        left_label=left_label,
-        right_label=right_label,
-        cortex_assets=cortex_assets,
-        network_colors=network_colors,
-        global_top=global_top,
-        support_mask=support,
-        combo_hemi=combo.hemi,
-        template_subject=str(panel_inputs.manifest.get("template_subject", "")).replace("sub-", ""),
-        template_spec_path=Path(str(template_spec_raw)),
-        left_surface=left_surface,
-        right_surface=right_surface,
-    )
-    n_pos = int(len(global_top.get("top_positive", [])))
-    n_neg = int(len(global_top.get("top_negative", [])))
-    cluster_previews = [
-        {
-            "atlas": combo.atlas,
-            "method": combo.method,
-            "smoothing": combo.smoothing,
-            "hemi": combo.hemi,
-            "cluster_id": 0,
-            "runtime_png": str(figure_png),
-            "n_selected_positive": n_pos,
-            "n_selected_negative": n_neg,
-            "panel_label": f"{combo.smoothing}-{combo.hemi}-GlobalTop",
-            "n_subjects_used": int(len(panel_inputs.subjects)),
-        }
-    ]
-    combo_manifest = {
-        "atlas": combo.atlas,
-        "method": combo.method,
-        "smoothing": combo.smoothing,
-        "hemi": combo.hemi,
-        "coverage_threshold": float(args.coverage_threshold),
-        "selection_policy": "global_top_connections_2N",
-        "top_n_cap_per_sign": int(global_top.get("top_n_cap", 20)),
-        "q_threshold": float(global_top.get("q_threshold", 0.05)),
-        "n_subjects_used": int(len(panel_inputs.subjects)),
-        "subjects_used": [f"sub-{s}" for s in panel_inputs.subjects],
-        "panel_count": 1,
-        "cluster_count": 0,
-        "global_top": {
-            "n_positive": n_pos,
-            "n_negative": n_neg,
-            "figure_png": str(figure_png),
-            "source_json": str(panel_inputs.global_top_path),
-        },
-    }
-    item = write_cortex_panel_manifests(
-        combo=combo,
-        combo_id=panel_inputs.combo_id,
-        combo_runtime_out=combo_runtime_out,
-        viewer_combo_manifest_dir=viewer_combo_manifest_dir,
-        combo_manifest=combo_manifest,
-        cluster_previews=cluster_previews,
-        n_subjects_used=len(panel_inputs.subjects),
-    )
-    return item, cluster_previews, (combo.atlas, combo.method, "2mm+4mm")
 
 
 def render_clustered_combo_panels(
@@ -1653,22 +1264,6 @@ def main() -> int:
         if panel_inputs is None:
             continue
 
-        if combo.method in CLUSTERLESS_METHODS:
-            rendered = render_clusterless_combo_panels(
-                panel_inputs=panel_inputs,
-                args=args,
-                group_root=group_root,
-                runtime_root=runtime_root,
-                tau_tag=tau_tag,
-                cortex_assets=cortex_assets,
-                vertex_arrays=vertex_arrays,
-                network_colors=network_colors,
-                skipped=skipped,
-                viewer_combo_manifest_dir=viewer_combo_manifest_dir,
-            )
-            if rendered is None:
-                continue
-        else:
             rendered = render_clustered_combo_panels(
                 panel_inputs=panel_inputs,
                 args=args,

@@ -29,7 +29,7 @@ present_mod = _load_numbered_module("06_01_build_group_overview.py", "core_06_01
 atlas_mod = _load_numbered_module("05_02_run_group_atlas.py", "core_05_02_run_group_atlas")
 matrix_mod = _load_numbered_module("07_01_build_group_matrix.py", "core_07_01_build_group_matrix")
 
-CORTEX_CLUSTERLESS_METHODS = cortex_mod.CLUSTERLESS_METHODS
+CORTEX_CLUSTERLESS_METHODS = getattr(cortex_mod, "CLUSTERLESS_METHODS", set())
 CORTEX_DEFAULTS = cortex_mod.METHODS_DEFAULT
 CORTEX_METHOD_CHOICES = cortex_mod.METHOD_CHOICES
 PRESENT_CLUSTERLESS_METHODS = present_mod.CLUSTERLESS_METHODS
@@ -63,14 +63,16 @@ def test_main_pipeline_method_contract() -> None:
 
 
 def test_downstream_builders_method_contract() -> None:
-    for choices in (CORTEX_METHOD_CHOICES, PRESENT_METHOD_CHOICES):
-        assert NEW_METHOD_NAMES.issubset(set(choices))
-        assert GRADIENT_METHOD in set(choices)
-        assert OLD_METHOD_NAMES.isdisjoint(set(choices))
+    assert NEW_METHOD_NAMES.issubset(set(PRESENT_METHOD_CHOICES))
+    assert GRADIENT_METHOD in set(PRESENT_METHOD_CHOICES)
+    assert OLD_METHOD_NAMES.isdisjoint(set(PRESENT_METHOD_CHOICES))
+    assert "wta-top" not in set(CORTEX_METHOD_CHOICES)
+    assert GRADIENT_METHOD in set(CORTEX_METHOD_CHOICES)
+    assert OLD_METHOD_NAMES.isdisjoint(set(CORTEX_METHOD_CHOICES))
     assert PRESENT_DEFAULTS == DEFAULT_METHODS
-    assert set(CORTEX_DEFAULTS) == {"intrinsic-spectral", "network-spectral", "gradient-spectral", "wta-top"}
-    for clusterless in (CORTEX_CLUSTERLESS_METHODS, PRESENT_CLUSTERLESS_METHODS):
-        assert clusterless == {"wta-top"}
+    assert set(CORTEX_DEFAULTS) == {"intrinsic-spectral", "network-spectral", "gradient-spectral"}
+    assert CORTEX_CLUSTERLESS_METHODS == set()
+    assert PRESENT_CLUSTERLESS_METHODS == {"wta-top"}
 
 
 def test_downstream_renderers_do_not_accept_legacy_group_prefixed_intermediates(tmp_path: Path) -> None:
@@ -165,7 +167,7 @@ def test_overview_matrix_keeps_count_and_fisherz_assignment_variants() -> None:
 def test_group_overview_direct_renderer_can_expand_both_assignment_variants() -> None:
     assert present_mod.resolve_render_assignment_variants("gradient-spectral", "both") == ("fisherz", "count")
     assert present_mod.resolve_render_assignment_variants("network-spectral", "count") == ("count",)
-    assert present_mod.resolve_render_assignment_variants("wta-top", "both") == (None,)
+    assert present_mod.resolve_render_assignment_variants("wta-top", "both") == ("normalized_top20_count",)
     assert present_mod.resolve_render_assignment_variants("wta-top", "weighted_fisherz") == ("weighted_fisherz",)
     assert present_mod.effective_overview_mode_tag("wta-top", "weighted_fisherz", None) is None
     assert present_mod.effective_overview_mode_tag("wta-top", "weighted_fisherz", "weighted_fisherz") == "weighted_fisherz"

@@ -281,7 +281,7 @@
     {
       "step_id": "06_03_build_cluster_cortex_panels",
       "stage": "06_presentation_products",
-      "purpose": "Generate cortex/hippocampal summary panels.",
+      "purpose": "Generate cluster-based cortex/hippocampal significance panels.",
       "branches": [
         "kong2019",
         "kong2022_routea",
@@ -366,6 +366,21 @@
       "entry_script": "scripts/core_workflow/06_09_plot_cortex_kong2022_mshbm.py",
       "implementation_script": "scripts/core_workflow/06_09_plot_cortex_kong2022_mshbm.py",
       "recommended_manifest": "manifests/core_workflow/06_09_plot_cortex_kong2022_mshbm.json"
+    },
+    {
+      "step_id": "06_10_render_cluster_roi_strength_panels",
+      "stage": "06_presentation_products",
+      "purpose": "Render full 400-ROI gradient-spectral and normalized WTA cortex templates with shared diverging colorbars.",
+      "branches": [
+        "kong2022_routea",
+        "kong2022_routea_17net",
+        "kong2022_routea_ctxreg",
+        "kong2022_routea_ctxdrop",
+        "kong2022_routeb"
+      ],
+      "entry_script": "scripts/core_workflow/06_10_render_cluster_roi_strength_panels.py",
+      "implementation_script": "scripts/core_workflow/06_10_render_cluster_roi_strength_panels.py",
+      "recommended_manifest": "outputs_hcp/present/cortex_panels/cortex_kong2022_gradient-spectral_2mm4mm_template_strength_overview_manifest.json"
     },
     {
       "step_id": "07_01_build_group_matrix",

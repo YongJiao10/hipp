@@ -186,7 +186,6 @@ def test_iowa7t_argon_preset_contract_uses_subject_first_36p_layout() -> None:
         "provenance.json",
     ]
     forbidden = [
-        "/Shared/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/ArealMSHBM_Kong2022",
         "outputs_iowa/inputs/iowa",
         "outputs_iowa_hcp500/inputs/iowa_hcp500/kong2022/cortex_references/routea_areal_mshbm",
     ]

@@ -41,6 +41,8 @@ PY314=/home/yojiao/.conda/envs/py314/bin/python
 
 # Presentation (optional, re-runnable):
 06_01_build_group_overview.py      --group-root … --atlases kong2022 --methods …
+06_10_render_cluster_roi_strength_panels.py --group-root ... --route-tag routea
+06_10_render_cluster_roi_strength_panels.py --method wta-top --wta-taxonomies canonical8 family17
 07_01_build_group_matrix.py        --group-atlas-root … --routes … --methods …
 ```
 

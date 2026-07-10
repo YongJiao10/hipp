@@ -13,8 +13,11 @@ EXPECTED_NUMBERED_SCRIPTS = [
     "01_02_check_hippunfold_outputs.py",
     "02_01_prepare_group_inputs.py",
     "02_02_build_qc_manifest.py",
+    "02_03_build_lynch2024_nsi_manifest.py",
     "03_01_build_kong2022_reference.py",
     "03_02_build_kong2022_routea_reference.py",
+    "03_03_build_lynch2024_reference.py",
+    "03_04_run_lynch2024_fastans_pfm.py",
     "04_00_materialize_cortex_regressed_surface_timeseries.py",
     "04_01_materialize_kong2022_roi_fc.py",
     "04_02_materialize_intrinsic_fc.py",
@@ -32,6 +35,8 @@ EXPECTED_NUMBERED_SCRIPTS = [
     "06_06_render_confidence_maps.py",
     "06_07_render_ctxdrop_neighbor_counts.py",
     "06_08_render_hcp_subfield_composition.py",
+    "06_09_plot_cortex_kong2022_mshbm.py",
+    "06_10_render_cluster_roi_strength_panels.py",
     "07_01_build_group_matrix.py",
 ]
 
