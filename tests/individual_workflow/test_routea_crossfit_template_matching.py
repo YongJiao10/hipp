@@ -8,7 +8,9 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
+import nibabel as nib
 import pytest
+from nibabel.gifti import GiftiDataArray, GiftiImage
 from scipy import sparse
 
 
@@ -294,6 +296,30 @@ def _write_fold_subject_inputs(
     np.save(mask_dir / f"sub-{subject}_hemi-L_valid_mask.npy", np.ones(6, dtype=bool))
 
 
+def _write_surface(path: Path, n_vertices: int = 6) -> None:
+    coords = np.column_stack(
+        [
+            np.arange(n_vertices, dtype=np.float32),
+            np.zeros(n_vertices, dtype=np.float32),
+            np.zeros(n_vertices, dtype=np.float32),
+        ]
+    )
+    faces = np.asarray(
+        [[0, index, index + 1] for index in range(1, n_vertices - 1)],
+        dtype=np.int32,
+    )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    nib.save(
+        GiftiImage(
+            darrays=[
+                GiftiDataArray(data=coords, intent="NIFTI_INTENT_POINTSET"),
+                GiftiDataArray(data=faces, intent="NIFTI_INTENT_TRIANGLE"),
+            ]
+        ),
+        str(path),
+    )
+
+
 def test_fit_fold_template_uses_only_training_subjects_and_records_density(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -383,6 +409,12 @@ def test_fit_fold_template_uses_only_training_subjects_and_records_density(
     assert manifest["heldout_subjects"] == ["sub-03"]
     assert manifest["train_test_disjoint"] is True
 
+    changed_fc = workflow._subject_fc_path(shared_root, "01", "2mm", "L")
+    np.save(changed_fc, np.zeros((6, 4), dtype=np.float32))
+    workflow._FINGERPRINT_CACHE.clear()
+    with pytest.raises(ValueError, match="fingerprint"):
+        workflow.validate_template_manifest(manifest, config, 1, "2mm", "L")
+
 
 def test_write_heldout_subject_outputs_saves_labels_scores_margin_and_provenance(
     tmp_path: Path,
@@ -405,8 +437,7 @@ def test_write_heldout_subject_outputs_saves_labels_scores_margin_and_provenance
         / "surf"
         / "sub-03_hemi-L_space-corobl_den-512_label-hipp_midthickness.surf.gii"
     )
-    subject_surface.parent.mkdir(parents=True)
-    subject_surface.write_bytes(b"surface")
+    _write_surface(subject_surface)
     template_surface = (
         tmp_path
         / "group-average_hemi-L_space-corobl_den-512_label-hipp_midthickness.surf.gii"
@@ -449,6 +480,8 @@ def test_write_heldout_subject_outputs_saves_labels_scores_margin_and_provenance
         },
         template_dir=tmp_path / "crossfit" / "templates" / "fold-02" / "2mm" / "hemi_L",
     )
+    template.template_dir.mkdir(parents=True)
+    np.save(template.template_dir / "template_profiles.npy", template.prototypes)
 
     outputs = workflow.write_heldout_subject_outputs(config, template, "sub-03")
 
@@ -468,6 +501,62 @@ def test_write_heldout_subject_outputs_saves_labels_scores_margin_and_provenance
     assert manifest["density_evidence"]["consumed_subject_surface"] == str(
         subject_surface.resolve()
     )
+
+    np.save(outputs["labels"], np.zeros(6, dtype=np.int32))
+    workflow._FINGERPRINT_CACHE.clear()
+    with pytest.raises(ValueError, match="fingerprint"):
+        workflow.load_existing_heldout_subject_outputs(config, template, "03")
+
+
+def test_write_heldout_subject_outputs_rejects_surface_vertex_mismatch(tmp_path: Path):
+    workflow = load_module()
+    shared_root = tmp_path / "routea"
+    surface_root = tmp_path / "surface"
+    _write_fold_subject_inputs(
+        shared_root=shared_root,
+        surface_root=surface_root,
+        subject="03",
+        offset=0.0,
+    )
+    subject_surface = workflow._subject_surface_path(tmp_path / "hippunfold", "03", "L")
+    _write_surface(subject_surface, n_vertices=5)
+    template_surface = tmp_path / (
+        "group-average_hemi-L_space-corobl_den-512_label-hipp_midthickness.surf.gii"
+    )
+    _write_surface(template_surface)
+    template_dir = tmp_path / "crossfit" / "templates" / "fold-02" / "2mm" / "hemi_L"
+    template_dir.mkdir(parents=True)
+    prototypes = np.eye(3, 4, dtype=np.float32)
+    np.save(template_dir / "template_profiles.npy", prototypes)
+    config = workflow.CrossfitConfig(
+        shared_root=shared_root,
+        surface_root=surface_root,
+        template_surfaces_dir=tmp_path,
+        hippunfold_batch_root=tmp_path / "hippunfold",
+        out_root=tmp_path / "crossfit",
+        fold_by_subject={"01": 0, "02": 0, "03": 1},
+    )
+    template = workflow.FoldTemplateResult(
+        fold_index=1,
+        smoothing="2mm",
+        hemi="L",
+        training_subjects=("01", "02"),
+        heldout_subjects=("03",),
+        surface_path=template_surface,
+        support_mask=np.ones(6, dtype=bool),
+        coverage_count=np.ones(6, dtype=np.int32),
+        coverage_fraction=np.ones(6, dtype=np.float32),
+        group_fc_full=np.zeros((6, 4), dtype=np.float32),
+        gradients_full=np.zeros((6, 3), dtype=np.float32),
+        labels_full=np.ones(6, dtype=np.int32),
+        prototypes=prototypes,
+        fc_paths={},
+        density_evidence={"consumed_asset": str(template_surface)},
+        template_dir=template_dir,
+    )
+
+    with pytest.raises(ValueError, match="surface/mask vertex mismatch"):
+        workflow.write_heldout_subject_outputs(config, template, "03")
 
 
 def test_dry_run_audits_inputs_and_reports_exact_workload_without_writing_outputs(
@@ -631,6 +720,11 @@ def test_main_full_execution_maps_each_subject_once_and_writes_run_manifests(
     assert sorted(subject for _fold, subject in mapping_calls) == ["01", "02"]
     assert len(mapping_calls) == 2
     assert (out_root / "folds" / "fold_assignments.tsv").exists()
+    assignments_text = (out_root / "folds" / "fold_assignments.tsv").read_text(
+        encoding="utf-8"
+    )
+    assert assignments_text.splitlines()[0] == "subject\tfold_index\tfold_id"
+    assert "family_id" not in assignments_text
     fold_manifest = json.loads((out_root / "folds" / "fold_manifest.json").read_text())
     assert all(row["train_test_disjoint"] for row in fold_manifest["folds"])
     run_manifest = json.loads((out_root / "crossfit_manifest.json").read_text())
@@ -640,8 +734,12 @@ def test_main_full_execution_maps_each_subject_once_and_writes_run_manifests(
     assert run_manifest["family"]["subject_only_waiver"] is True
 
 
-def test_resume_template_validation_rejects_parameter_or_training_mismatch(tmp_path: Path):
+def test_resume_template_validation_rejects_parameter_or_training_mismatch(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
     workflow = load_module()
+    monkeypatch.setattr(workflow, "validate_file_fingerprints", lambda *args, **kwargs: None)
     surface = (
         tmp_path
         / "group-average_hemi-L_space-corobl_den-512_label-hipp_midthickness.surf.gii"
@@ -733,8 +831,12 @@ def test_fit_or_load_fold_template_prefers_valid_saved_template_on_resume(
     assert workflow.fit_or_load_fold_template(config, 0, "2mm", "L", resume=True) is sentinel
 
 
-def test_resume_subject_validation_rejects_wrong_template_fold(tmp_path: Path):
+def test_resume_subject_validation_rejects_wrong_template_fold(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
     workflow = load_module()
+    monkeypatch.setattr(workflow, "validate_file_fingerprints", lambda *args, **kwargs: None)
     config = workflow.CrossfitConfig(
         shared_root=tmp_path / "routea",
         surface_root=tmp_path / "surface",
@@ -833,6 +935,67 @@ def test_existing_run_manifest_requires_resume(tmp_path: Path):
         workflow.validate_output_root_policy(out_root, resume=False)
 
     workflow.validate_output_root_policy(out_root, resume=True)
+
+
+def test_nonempty_partial_output_root_requires_resume(tmp_path: Path):
+    workflow = load_module()
+    out_root = tmp_path / "crossfit"
+    partial = out_root / "templates" / "fold-01"
+    partial.mkdir(parents=True)
+    (partial / "partial.npy").write_bytes(b"partial")
+
+    with pytest.raises(FileExistsError, match="--resume"):
+        workflow.validate_output_root_policy(out_root, resume=False)
+
+
+def test_fold_assignments_do_not_persist_restricted_family_ids(tmp_path: Path):
+    workflow = load_module()
+    path = tmp_path / "fold_assignments.tsv"
+
+    workflow._write_fold_assignments_tsv(
+        path,
+        ["01", "02"],
+        {"01": 0, "02": 1},
+    )
+
+    text = path.read_text(encoding="utf-8")
+    assert text.splitlines()[0] == "subject\tfold_index\tfold_id"
+    assert "restricted-family-a" not in text
+
+
+@pytest.mark.parametrize(
+    "extra_args,match",
+    [
+        (["--n-folds", "1"], "n-folds"),
+        (["--coverage-threshold", "0"], "coverage-threshold"),
+        (["--smoothings", "2mm", "2mm"], "Duplicate smoothing"),
+        (["--hemis", "L", "L"], "Duplicate hemi"),
+    ],
+)
+def test_cli_validation_rejects_invalid_or_duplicate_combinations(extra_args, match):
+    workflow = load_module()
+    args = workflow.build_arg_parser().parse_args(
+        ["--allow-subject-only-folds", *extra_args]
+    )
+
+    with pytest.raises(ValueError, match=match):
+        workflow.validate_cli_args(args)
+
+
+def test_file_fingerprint_validation_rejects_changed_in_place_input(tmp_path: Path):
+    workflow = load_module()
+    path = tmp_path / "input.npy"
+    path.write_bytes(b"first")
+    recorded = {"input": workflow.file_fingerprint(path)}
+    path.write_bytes(b"other")
+    workflow._FINGERPRINT_CACHE.clear()
+
+    with pytest.raises(ValueError, match="fingerprint"):
+        workflow.validate_file_fingerprints(
+            recorded,
+            {"input": path},
+            context="resume input",
+        )
 
 
 def test_resume_run_manifest_rejects_changed_input_root(tmp_path: Path):

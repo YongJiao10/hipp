@@ -3,8 +3,10 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import importlib.util
 import json
+import os
 import sys
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
@@ -46,6 +48,8 @@ DEFAULT_SUBJECTS_MANIFEST = (
 DEFAULT_N_FOLDS = 5
 DEFAULT_FOLD_SEED = 20260710
 DEFAULT_K = 3
+SUPPORTED_SMOOTHINGS = {"2mm", "4mm"}
+_FINGERPRINT_CACHE: dict[tuple[str, int, int, int], dict[str, object]] = {}
 CLUSTER_LABEL_ITEMS = [
     (0, "Null", (158, 158, 158, 255)),
     (1, "Anterior", (220, 80, 75, 255)),
@@ -256,6 +260,24 @@ def build_arg_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def validate_cli_args(args: argparse.Namespace) -> None:
+    if int(args.n_folds) < 2:
+        raise ValueError("--n-folds must be at least 2")
+    if not 0.0 < float(args.coverage_threshold) <= 1.0:
+        raise ValueError("--coverage-threshold must be in (0, 1]")
+    smoothings = [str(value) for value in args.smoothings]
+    hemis = [str(value) for value in args.hemis]
+    if len(set(smoothings)) != len(smoothings):
+        raise ValueError("Duplicate smoothing values are not allowed")
+    unsupported = sorted(set(smoothings) - SUPPORTED_SMOOTHINGS)
+    if unsupported:
+        raise ValueError(f"Unsupported smoothing values: {unsupported}")
+    if len(set(hemis)) != len(hemis):
+        raise ValueError("Duplicate hemi values are not allowed")
+    if int(args.n_components) < DEFAULT_K:
+        raise ValueError(f"--n-components must be at least {DEFAULT_K}")
+
+
 def _read_family_rows(path: Path) -> dict[str, str]:
     family_path = Path(path)
     if not family_path.exists():
@@ -398,7 +420,68 @@ def load_group_atlas_module():
 
 def _write_json(path: Path, payload: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    temporary = path.with_name(f".{path.name}.tmp-{os.getpid()}")
+    temporary.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    os.replace(temporary, path)
+
+
+def file_fingerprint(path: Path, *, use_cache: bool = True) -> dict[str, object]:
+    resolved = Path(path).resolve()
+    stat = resolved.stat()
+    cache_key = (
+        str(resolved),
+        int(stat.st_size),
+        int(stat.st_mtime_ns),
+        int(stat.st_ctime_ns),
+    )
+    if use_cache:
+        cached = _FINGERPRINT_CACHE.get(cache_key)
+        if cached is not None:
+            return dict(cached)
+    digest = hashlib.sha256()
+    with resolved.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    fingerprint = {
+        "sha256": digest.hexdigest(),
+        "size_bytes": int(stat.st_size),
+    }
+    _FINGERPRINT_CACHE[cache_key] = fingerprint
+    return dict(fingerprint)
+
+
+def fingerprint_files(
+    paths: Mapping[str, Path],
+    *,
+    use_cache: bool = True,
+) -> dict[str, dict[str, object]]:
+    return {
+        str(key): file_fingerprint(Path(path), use_cache=use_cache)
+        for key, path in sorted(paths.items())
+    }
+
+
+def validate_file_fingerprints(
+    recorded: object,
+    paths: Mapping[str, Path],
+    *,
+    context: str,
+) -> None:
+    if not isinstance(recorded, Mapping):
+        raise ValueError(f"{context} fingerprint metadata is missing")
+    expected = fingerprint_files(paths)
+    normalized_recorded = {
+        str(key): dict(value) if isinstance(value, Mapping) else value
+        for key, value in recorded.items()
+    }
+    if normalized_recorded != expected:
+        raise ValueError(
+            f"{context} fingerprint mismatch: expected={expected!r} "
+            f"recorded={normalized_recorded!r}"
+        )
 
 
 def _subject_valid_mask_path(surface_root: Path, subject: str, hemi: str) -> Path:
@@ -479,6 +562,47 @@ def _fold_template_dir(
     )
 
 
+def _template_input_paths(
+    config: CrossfitConfig,
+    fold_index: int,
+    smoothing: str,
+    hemi: str,
+) -> dict[str, Path]:
+    training, _heldout = _fold_partitions(config.fold_by_subject, fold_index)
+    paths: dict[str, Path] = {
+        "template_surface": _template_surface_path(config.template_surfaces_dir, hemi),
+    }
+    for subject in training:
+        paths[f"fc:sub-{subject}"] = _subject_fc_path(
+            config.shared_root,
+            subject,
+            smoothing,
+            hemi,
+        )
+        paths[f"valid_mask:sub-{subject}"] = _subject_valid_mask_path(
+            config.surface_root,
+            subject,
+            hemi,
+        )
+    return paths
+
+
+def _template_artifact_paths(template_dir: Path) -> dict[str, Path]:
+    filenames = (
+        "group_support_mask.npy",
+        "coverage_count.npy",
+        "coverage_fraction.npy",
+        "group_mean_fisherz_fc.npy",
+        "group_gradients.npy",
+        "gradient_lambdas.npy",
+        "gradient_ev_fractions.npy",
+        "group_labels_k3.npy",
+        "template_profiles.npy",
+        "group_labels_k3.label.gii",
+    )
+    return {filename: Path(template_dir) / filename for filename in filenames}
+
+
 def validate_template_manifest(
     manifest: Mapping[str, object],
     config: CrossfitConfig,
@@ -544,6 +668,21 @@ def validate_template_manifest(
                 mismatches.append(
                     f"{field}: expected={expected_paths!r} actual={normalized_actual!r}"
                 )
+    try:
+        validate_file_fingerprints(
+            manifest.get("input_fingerprints"),
+            _template_input_paths(config, fold_index, smoothing, hemi),
+            context="Resume template input",
+        )
+        validate_file_fingerprints(
+            manifest.get("artifact_fingerprints"),
+            _template_artifact_paths(
+                _fold_template_dir(config.out_root, fold_index, smoothing, hemi)
+            ),
+            context="Resume template artifact",
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        mismatches.append(str(exc))
     if mismatches:
         raise ValueError("Resume template mismatch: " + "; ".join(mismatches))
 
@@ -590,6 +729,38 @@ def load_fold_template(
         _normalize_subject(subject): str(path)
         for subject, path in dict(fc_paths_raw).items()
     }
+    loaded = {key: np.load(path) for key, path in array_paths.items()}
+    vertex_count = int(loaded["support"].reshape(-1).size)
+    expected_vector_dtypes = {
+        "support": np.dtype(np.uint8),
+        "coverage_count": np.dtype(np.int32),
+        "coverage_fraction": np.dtype(np.float32),
+        "labels": np.dtype(np.int32),
+    }
+    for key, expected_dtype in expected_vector_dtypes.items():
+        array = loaded[key]
+        if array.ndim != 1 or array.size != vertex_count or array.dtype != expected_dtype:
+            raise ValueError(
+                f"Resume template array mismatch for {key}: "
+                f"shape={array.shape} dtype={array.dtype}"
+            )
+    for key in ("group_fc", "gradients"):
+        array = loaded[key]
+        if array.ndim != 2 or array.shape[0] != vertex_count or array.dtype != np.float32:
+            raise ValueError(
+                f"Resume template array mismatch for {key}: "
+                f"shape={array.shape} dtype={array.dtype}"
+            )
+    prototypes = loaded["prototypes"]
+    if (
+        prototypes.ndim != 2
+        or prototypes.shape != (DEFAULT_K, loaded["group_fc"].shape[1])
+        or prototypes.dtype != np.float32
+    ):
+        raise ValueError(
+            "Resume template array mismatch for prototypes: "
+            f"shape={prototypes.shape} dtype={prototypes.dtype}"
+        )
     return FoldTemplateResult(
         fold_index=int(fold_index),
         smoothing=str(smoothing),
@@ -597,13 +768,13 @@ def load_fold_template(
         training_subjects=training,
         heldout_subjects=heldout,
         surface_path=surface_path,
-        support_mask=np.load(array_paths["support"]).astype(bool),
-        coverage_count=np.load(array_paths["coverage_count"]).astype(np.int32),
-        coverage_fraction=np.load(array_paths["coverage_fraction"]).astype(np.float32),
-        group_fc_full=np.load(array_paths["group_fc"]).astype(np.float32),
-        gradients_full=np.load(array_paths["gradients"]).astype(np.float32),
-        labels_full=np.load(array_paths["labels"]).astype(np.int32),
-        prototypes=np.load(array_paths["prototypes"]).astype(np.float32),
+        support_mask=loaded["support"].astype(bool),
+        coverage_count=loaded["coverage_count"],
+        coverage_fraction=loaded["coverage_fraction"],
+        group_fc_full=loaded["group_fc"],
+        gradients_full=loaded["gradients"],
+        labels_full=loaded["labels"],
+        prototypes=prototypes,
         fc_paths=fc_paths,
         density_evidence=dict(manifest["density_evidence"]),
         template_dir=template_dir.resolve(),
@@ -754,6 +925,12 @@ def fit_fold_template(
         "valid_mask_paths": {
             f"sub-{subject}": path for subject, path in valid_mask_paths.items()
         },
+        "input_fingerprints": fingerprint_files(
+            _template_input_paths(config, fold_index, smoothing, hemi)
+        ),
+        "artifact_fingerprints": fingerprint_files(
+            _template_artifact_paths(template_dir)
+        ),
         "density_evidence": density_evidence,
     }
     _write_json(template_dir / "template_manifest.json", manifest)
@@ -792,6 +969,21 @@ def _subject_surface_path(
     )
 
 
+def _surface_vertex_count(path: Path) -> int:
+    surface = nib.load(str(path))
+    if not isinstance(surface, nib.gifti.GiftiImage):
+        raise ValueError(f"Expected GIFTI surface: {path}")
+    pointset_intent = int(nib.nifti1.intent_codes["NIFTI_INTENT_POINTSET"])
+    pointsets = [
+        np.asarray(darray.data)
+        for darray in surface.darrays
+        if int(darray.intent) == pointset_intent
+    ]
+    if len(pointsets) != 1 or pointsets[0].ndim != 2 or pointsets[0].shape[1] != 3:
+        raise ValueError(f"Expected one GIFTI pointset array: {path}")
+    return int(pointsets[0].shape[0])
+
+
 def _subject_combo_dir(
     out_root: Path,
     subject: str,
@@ -805,6 +997,33 @@ def _subject_combo_dir(
         / str(smoothing)
         / f"hemi_{hemi}"
     )
+
+
+def _subject_input_paths(
+    config: CrossfitConfig,
+    template: FoldTemplateResult,
+    subject: str,
+) -> dict[str, Path]:
+    subject_id = _normalize_subject(subject)
+    return {
+        "fc": _subject_fc_path(
+            config.shared_root,
+            subject_id,
+            template.smoothing,
+            template.hemi,
+        ),
+        "valid_mask": _subject_valid_mask_path(
+            config.surface_root,
+            subject_id,
+            template.hemi,
+        ),
+        "subject_surface": _subject_surface_path(
+            config.hippunfold_batch_root,
+            subject_id,
+            template.hemi,
+        ),
+        "template_profiles": template.template_dir / "template_profiles.npy",
+    }
 
 
 def validate_subject_manifest(
@@ -865,6 +1084,14 @@ def validate_subject_manifest(
             actual = actual_inputs.get(key)
             if actual is None or Path(str(actual)).resolve() != Path(value):
                 mismatches.append(f"inputs.{key}: expected={value!r} actual={actual!r}")
+    try:
+        validate_file_fingerprints(
+            manifest.get("input_fingerprints"),
+            _subject_input_paths(config, template, subject_id),
+            context="Resume subject input",
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        mismatches.append(str(exc))
     if mismatches:
         raise ValueError("Resume subject mismatch: " + "; ".join(mismatches))
 
@@ -903,6 +1130,27 @@ def load_existing_heldout_subject_outputs(
     missing_files = [str(path) for path in resolved.values() if not path.exists()]
     if missing_files:
         raise FileNotFoundError(f"Missing resumed subject outputs: {missing_files}")
+    validate_file_fingerprints(
+        manifest.get("output_fingerprints"),
+        resolved,
+        context="Resume subject output",
+    )
+    labels = np.load(resolved["labels"])
+    scores = np.load(resolved["template_correlations"])
+    margin = np.load(resolved["correlation_margin"])
+    expected_vertices = int(template.support_mask.size)
+    if labels.shape != (expected_vertices,) or labels.dtype != np.int32:
+        raise ValueError(
+            f"Resume subject labels shape/dtype mismatch: {labels.shape} {labels.dtype}"
+        )
+    if scores.shape != (expected_vertices, DEFAULT_K) or scores.dtype != np.float32:
+        raise ValueError(
+            f"Resume subject scores shape/dtype mismatch: {scores.shape} {scores.dtype}"
+        )
+    if margin.shape != (expected_vertices,) or margin.dtype != np.float32:
+        raise ValueError(
+            f"Resume subject margin shape/dtype mismatch: {margin.shape} {margin.dtype}"
+        )
     resolved["manifest"] = manifest_path.resolve()
     return resolved
 
@@ -947,6 +1195,19 @@ def write_heldout_subject_outputs(
     if not mask_path.exists():
         raise FileNotFoundError(f"Missing held-out valid mask: {mask_path}")
     valid_mask = np.load(mask_path).astype(bool).reshape(-1)
+    subject_surface = _subject_surface_path(
+        config.hippunfold_batch_root,
+        subject_id,
+        template.hemi,
+    )
+    if not subject_surface.exists():
+        raise FileNotFoundError(f"Missing held-out subject surface: {subject_surface}")
+    surface_vertex_count = _surface_vertex_count(subject_surface)
+    if surface_vertex_count != valid_mask.size:
+        raise ValueError(
+            "Held-out subject surface/mask vertex mismatch: "
+            f"surface={surface_vertex_count} mask={valid_mask.size}"
+        )
     fc_path = _subject_fc_path(
         config.shared_root,
         subject_id,
@@ -960,13 +1221,11 @@ def write_heldout_subject_outputs(
         valid_mask,
         template.prototypes,
     )
-    subject_surface = _subject_surface_path(
-        config.hippunfold_batch_root,
-        subject_id,
-        template.hemi,
-    )
-    if not subject_surface.exists():
-        raise FileNotFoundError(f"Missing held-out subject surface: {subject_surface}")
+    if labels.size != surface_vertex_count:
+        raise ValueError(
+            "Held-out output/surface vertex mismatch: "
+            f"labels={labels.size} surface={surface_vertex_count}"
+        )
 
     combo_dir = _subject_combo_dir(
         config.out_root,
@@ -988,6 +1247,17 @@ def write_heldout_subject_outputs(
     nib.save(
         make_named_label_gifti(labels, CLUSTER_LABEL_ITEMS),
         str(label_gifti_path),
+    )
+    input_fingerprints = fingerprint_files(
+        _subject_input_paths(config, template, subject_id)
+    )
+    output_fingerprints = fingerprint_files(
+        {
+            "labels": labels_path,
+            "template_correlations": scores_path,
+            "correlation_margin": margin_path,
+            "label_gifti": label_gifti_path,
+        }
     )
 
     finite_margin = margin[np.isfinite(margin)]
@@ -1034,6 +1304,8 @@ def write_heldout_subject_outputs(
                 (template.template_dir / "template_profiles.npy").resolve()
             ),
         },
+        "input_fingerprints": input_fingerprints,
+        "output_fingerprints": output_fingerprints,
         "density_evidence": density_evidence,
         "outputs": {
             "labels": str(labels_path.resolve()),
@@ -1127,19 +1399,17 @@ def _load_subject_ids(path: Path) -> list[str]:
 def _write_fold_assignments_tsv(
     path: Path,
     subjects: Sequence[str],
-    family_by_subject: Mapping[str, str],
     fold_by_subject: Mapping[str, int],
 ) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8", newline="") as stream:
         writer = csv.writer(stream, delimiter="\t", lineterminator="\n")
-        writer.writerow(["subject", "family_id", "fold_index", "fold_id"])
+        writer.writerow(["subject", "fold_index", "fold_id"])
         for subject in sorted(_normalize_subject(value) for value in subjects):
             fold_index = int(fold_by_subject[subject])
             writer.writerow(
                 [
                     f"sub-{subject}",
-                    family_by_subject[subject],
                     fold_index,
                     f"fold-{fold_index + 1:02d}",
                 ]
@@ -1147,10 +1417,17 @@ def _write_fold_assignments_tsv(
 
 
 def validate_output_root_policy(out_root: Path, *, resume: bool) -> None:
-    manifest_path = Path(out_root) / "crossfit_manifest.json"
-    if manifest_path.exists() and not resume:
+    root = Path(out_root)
+    manifest_path = root / "crossfit_manifest.json"
+    has_existing_content = root.exists() and any(root.iterdir())
+    if has_existing_content and not resume:
         raise FileExistsError(
-            f"Existing cross-fit run manifest requires --resume: {manifest_path}"
+            f"Nonempty cross-fit output root requires --resume: {root}"
+        )
+    if has_existing_content and resume and not manifest_path.exists():
+        raise FileExistsError(
+            "Cannot resume a nonempty cross-fit output root without its run "
+            f"manifest: {manifest_path}"
         )
 
 
@@ -1190,7 +1467,10 @@ def validate_run_manifest_for_resume(
     manifest: Mapping[str, object],
     run_config: Mapping[str, object],
 ) -> None:
-    if manifest.get("status") != "ok" or manifest.get("run_config") != dict(run_config):
+    if (
+        manifest.get("status") not in {"in_progress", "ok"}
+        or manifest.get("run_config") != dict(run_config)
+    ):
         raise ValueError(
             "Resume run mismatch: existing crossfit_manifest.json does not match "
             "the requested subjects, families, folds, paths, or parameters"
@@ -1199,6 +1479,7 @@ def validate_run_manifest_for_resume(
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_arg_parser().parse_args(list(argv) if argv is not None else None)
+    validate_cli_args(args)
     subjects = _load_subject_ids(args.subjects_manifest)
     family_by_subject, family_metadata = resolve_family_map(args, subjects)
     fold_by_subject = assign_grouped_folds(
@@ -1228,6 +1509,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             json.loads(existing_run_manifest.read_text(encoding="utf-8")),
             run_config,
         )
+    _write_json(
+        existing_run_manifest,
+        {
+            "status": "in_progress",
+            "workflow": "routea_crossfit_template_matching_k3",
+            "run_config": run_config,
+        },
+    )
     ensure_hippomaps_on_path(Path(args.hippomaps_root))
     out_root = Path(args.out_root)
     fold_payload = fold_manifest_payload(
@@ -1240,7 +1529,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     _write_fold_assignments_tsv(
         fold_root / "fold_assignments.tsv",
         subjects,
-        family_by_subject,
         fold_by_subject,
     )
     _write_json(fold_root / "fold_manifest.json", fold_payload)

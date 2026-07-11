@@ -81,6 +81,25 @@ def test_overview_title_reflects_requested_fold_count():
     assert overview.overview_title(3) == "HCP RouteA 3-fold K=3 template robustness"
 
 
+def test_vertex_agreement_excludes_unsupported_and_null_labels():
+    overview = load_module()
+    labels = np.asarray(
+        [[0, 1, 1], [0, 1, 2], [0, 0, 2]],
+        dtype=np.int32,
+    )
+    support = np.asarray(
+        [[0, 1, 1], [0, 1, 1], [0, 0, 1]],
+        dtype=bool,
+    )
+
+    agreement = overview.vertex_agreement(labels, support)
+
+    assert np.isnan(agreement[0])
+    assert agreement[1] == pytest.approx(1.0)
+    assert agreement[2] == pytest.approx(2.0 / 3.0)
+    assert overview._json_matrix(agreement)[0] is None
+
+
 def test_prototype_correlations_use_only_jointly_finite_features():
     overview = load_module()
     profiles = np.asarray(

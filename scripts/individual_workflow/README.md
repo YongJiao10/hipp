@@ -100,6 +100,9 @@ training-only group templates and AP-ordered FC profiles; each held-out subject
 is then matched using their full concat FC. HCP production requires an external
 `subject,family_id` family map. The explicit `--allow-subject-only-folds`
 waiver is recorded and is not the preferred HCP definition.
+Raw family identifiers remain memory-only and are not persisted in workflow
+outputs. Resume uses atomic in-progress state plus SHA-256 fingerprints for
+inputs and saved artifacts, and subject surfaces are vertex-count validated.
 
 ```bash
 /home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/routea_crossfit_template_matching.py --family-map /secure/path/hcp_family_map.tsv --dry-run

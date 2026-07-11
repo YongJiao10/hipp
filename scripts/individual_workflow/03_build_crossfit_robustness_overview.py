@@ -151,16 +151,32 @@ def pairwise_prototype_correlations(
     return correlations
 
 
-def vertex_agreement(labels_by_fold: np.ndarray) -> np.ndarray:
+def vertex_agreement(
+    labels_by_fold: np.ndarray,
+    support_by_fold: np.ndarray | None = None,
+) -> np.ndarray:
     labels = np.asarray(labels_by_fold, dtype=np.int32)
     if labels.ndim != 2:
         raise ValueError(f"labels_by_fold must be 2D, got shape={labels.shape}")
     if labels.shape[0] < 1:
         raise ValueError("labels_by_fold must contain at least one fold")
+    support = (
+        np.ones_like(labels, dtype=bool)
+        if support_by_fold is None
+        else np.asarray(support_by_fold, dtype=bool)
+    )
+    if support.shape != labels.shape:
+        raise ValueError(
+            f"labels/support shape mismatch: labels={labels.shape} support={support.shape}"
+        )
     agreement = np.empty(labels.shape[1], dtype=np.float64)
     for vertex in range(labels.shape[1]):
-        _values, counts = np.unique(labels[:, vertex], return_counts=True)
-        agreement[vertex] = float(np.max(counts) / labels.shape[0])
+        valid = support[:, vertex] & (labels[:, vertex] > 0)
+        if not np.any(valid):
+            agreement[vertex] = np.nan
+            continue
+        _values, counts = np.unique(labels[valid, vertex], return_counts=True)
+        agreement[vertex] = float(np.max(counts) / int(np.sum(valid)))
     return agreement
 
 
@@ -340,7 +356,10 @@ def _analyse_combination(combination: dict[str, Any]) -> dict[str, Any]:
     prototype_correlations = pairwise_prototype_correlations(
         combination["profiles_by_fold"]
     )
-    agreement = vertex_agreement(combination["labels_by_fold"])
+    agreement = vertex_agreement(
+        combination["labels_by_fold"],
+        combination["support_by_fold"],
+    )
 
     dice_values = _unique_pair_values(label_metrics["macro_dice"])
     ari_values = _unique_pair_values(label_metrics["adjusted_rand_index"])
@@ -500,7 +519,8 @@ def _write_summary_tsv(path: Path, rows: list[dict[str, Any]]) -> None:
 
 def _json_matrix(values: np.ndarray) -> list[Any]:
     array = np.asarray(values, dtype=np.float64)
-    return json.loads(json.dumps(array.tolist(), allow_nan=False))
+    serializable = np.where(np.isfinite(array), array, None).tolist()
+    return json.loads(json.dumps(serializable, allow_nan=False))
 
 
 def render_robustness_overview(

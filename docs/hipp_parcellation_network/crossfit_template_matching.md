@@ -29,6 +29,10 @@ require `--family-map`. The explicit `--allow-subject-only-folds` waiver is for
 non-family datasets or interface checks; its use is recorded in the manifest
 and is not the preferred HCP production definition.
 
+Raw `family_id` values are used only in memory to keep relatives together.
+They are not copied into `fold_assignments.tsv` or any JSON output; saved fold
+assignments contain only subject and fold identifiers.
+
 ## Commands
 
 Audit all expected inputs without writing workflow products:
@@ -44,9 +48,11 @@ Run the computation, or resume an exactly matching partial/completed run:
 ```
 
 Resume validation locks the cohort, family/fold assignment, input and output
-roots, smoothing/hemi combinations, and numerical parameters. Run without
-`--resume` for a new output root; an existing run manifest is never silently
-overwritten.
+roots, smoothing/hemi combinations, numerical parameters, SHA-256 input
+fingerprints, and saved-artifact fingerprints/shapes/dtypes. An atomic
+`status=in_progress` run manifest is written before the first fold artifact.
+Any nonempty output root requires `--resume`, and a nonempty root without that
+manifest is rejected rather than guessed or overwritten.
 
 After all five fold templates exist, render the quantitative robustness review:
 
@@ -84,7 +90,10 @@ outputs_hcp/work/crossfit_template_matching/
 
 Template and subject manifests record the exact training subjects, input FC
 and masks, consumed subject/template surfaces, density evidence, parameters,
-and output paths. Consumed surface assets are authoritative for density.
+SHA-256 integrity fingerprints, and output paths. Subject GIFTI point counts
+must match the valid mask and individualized label length before the surface is
+recorded as consumed density evidence. Consumed surface assets are
+authoritative for density.
 
 The robustness renderer writes:
 
@@ -102,4 +111,6 @@ measure whether modest changes in the training cohort materially change the
 learned template. They review template robustness; they are not held-out
 prediction-accuracy estimates and do not replace downstream biological
 validation.
-
+Agreement excludes null labels and unsupported fold vertices; a vertex with no
+supported nonzero fold label is recorded as missing rather than perfectly
+stable.
