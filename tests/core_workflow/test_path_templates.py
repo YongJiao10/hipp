@@ -10,6 +10,9 @@ from scripts.core_workflow.lib.path_templates import (
 )
 from scripts.core_workflow.lib.output_layout import (
     resolve_kong2022_routea_root,
+    resolve_kong2022_routea_ctxdrop_root,
+    resolve_kong2022_routea_ctxreg_root,
+    resolve_kong2022_routeb_root,
     resolve_kong2022_surface_root,
 )
 
@@ -107,3 +110,15 @@ def test_kong2022_base_shared_roots_are_dataset_agnostic():
 
     assert routea_root.parts[-2:] == ("shared_inputs", "routea")
     assert surface_root.parts[-2:] == ("shared_inputs", "surface")
+
+
+def test_kong2022_all_shared_input_roots_are_cohort_independent():
+    expected = {
+        resolve_kong2022_routea_root(): "routea",
+        resolve_kong2022_surface_root(): "surface",
+        resolve_kong2022_routeb_root(): "routeb",
+        resolve_kong2022_routea_ctxreg_root(): "routea_ctxreg",
+        resolve_kong2022_routea_ctxdrop_root(): "routea_ctxdrop",
+    }
+
+    assert {path.name for path in expected} == set(expected.values())

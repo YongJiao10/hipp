@@ -89,7 +89,7 @@ def build_command_plan(*, subjects: list[str], layout: dict[str, Path], python_e
     shared_inputs = layout["features"] / "shared_inputs"
     surface_root = shared_inputs / "surface"
     routea_root = shared_inputs / "routea"
-    routeb_root = shared_inputs / "routeb_151"
+    routeb_root = shared_inputs / "routeb"
     template_root = layout["features"] / "templates" / "hipp_group_average"
     group_surfaces = template_root / "group_average_surfaces"
     group_root_base = layout["group_atlas"]

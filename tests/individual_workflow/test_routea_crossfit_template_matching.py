@@ -220,6 +220,32 @@ def test_family_map_tsv_requires_subject_and_family_id_columns(tmp_path: Path):
     assert metadata["family_map_path"] == str(family_path.resolve())
 
 
+def test_hcp_native_family_csv_headings_are_accepted_case_insensitively(tmp_path: Path):
+    workflow = load_module()
+    family_path = tmp_path / "hcp_restricted.csv"
+    family_path.write_text(
+        "Subject,Family_ID,Age_in_Yrs\nsub-01,fam-a,30\n02,fam-b,31\n",
+        encoding="utf-8",
+    )
+
+    assert workflow._read_family_rows(family_path) == {
+        "01": "fam-a",
+        "02": "fam-b",
+    }
+
+
+def test_hcp_native_family_csv_rejects_duplicate_semantic_columns(tmp_path: Path):
+    workflow = load_module()
+    family_path = tmp_path / "ambiguous.csv"
+    family_path.write_text(
+        "Subject,subject,Family_ID\n01,01,fam-a\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="ambiguous"):
+        workflow._read_family_rows(family_path)
+
+
 def test_family_map_rejects_duplicate_normalized_subject_rows(tmp_path: Path):
     workflow = load_module()
     family_path = tmp_path / "families.tsv"

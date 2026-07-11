@@ -29,6 +29,11 @@ require `--family-map`. The explicit `--allow-subject-only-folds` waiver is for
 non-family datasets or interface checks; its use is recorded in the manifest
 and is not the preferred HCP production definition.
 
+For the maintained HCP run, pass
+`data/HCP_YA_subjects_2026_04_09_16_01_42.csv` directly. The parser accepts the
+HCP-native `Subject` and `Family_ID` headings case-insensitively as well as the
+generic `subject,family_id` form, and reads only those two semantic columns.
+
 Raw `family_id` values are used only in memory to keep relatives together.
 They are not copied into `fold_assignments.tsv` or any JSON output; saved fold
 assignments contain only subject and fold identifiers.
@@ -38,13 +43,13 @@ assignments contain only subject and fold identifiers.
 Audit all expected inputs without writing workflow products:
 
 ```bash
-/home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/routea_crossfit_template_matching.py --family-map /secure/path/hcp_family_map.tsv --dry-run
+/home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/routea_crossfit_template_matching.py --family-map /home/yojiao/hpchome/hipp/data/HCP_YA_subjects_2026_04_09_16_01_42.csv --dry-run
 ```
 
 Run the computation, or resume an exactly matching partial/completed run:
 
 ```bash
-/home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/routea_crossfit_template_matching.py --family-map /secure/path/hcp_family_map.tsv --resume
+/home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/routea_crossfit_template_matching.py --family-map /home/yojiao/hpchome/hipp/data/HCP_YA_subjects_2026_04_09_16_01_42.csv --resume
 ```
 
 Resume validation locks the cohort, family/fold assignment, input and output

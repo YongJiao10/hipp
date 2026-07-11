@@ -32,7 +32,7 @@ from lib.output_layout import DEFAULT_KONG2022_MANIFEST_ROOT, DEFAULT_KONG2022_S
 from lib.workflow_utils import utc_now_iso, write_json
 
 
-DEFAULT_SHARED_ROOT = DEFAULT_KONG2022_SHARED_INPUTS_ROOT / "routea_ctxdrop_151"
+DEFAULT_SHARED_ROOT = DEFAULT_KONG2022_SHARED_INPUTS_ROOT / "routea_ctxdrop"
 DEFAULT_SUBJECTS = DEFAULT_KONG2022_MANIFEST_ROOT / "hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt"
 DEFAULT_OUT_DIR = DEFAULT_LOCAL_CORTEX_NEIGHBORS_DIR
 HEMIS = ("L", "R")

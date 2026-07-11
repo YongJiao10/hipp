@@ -258,15 +258,15 @@ def resolve_kong2022_routea_root(dataset: str = DEFAULT_DATASET) -> Path:
 
 
 def resolve_kong2022_routea_ctxreg_root(dataset: str = DEFAULT_DATASET) -> Path:
-    return resolve_kong2022_shared_inputs_root(dataset) / "routea_ctxreg_151"
+    return resolve_kong2022_shared_inputs_root(dataset) / "routea_ctxreg"
 
 
 def resolve_kong2022_routea_ctxdrop_root(dataset: str = DEFAULT_DATASET) -> Path:
-    return resolve_kong2022_shared_inputs_root(dataset) / "routea_ctxdrop_151"
+    return resolve_kong2022_shared_inputs_root(dataset) / "routea_ctxdrop"
 
 
 def resolve_kong2022_routeb_root(dataset: str = DEFAULT_DATASET) -> Path:
-    return resolve_kong2022_shared_inputs_root(dataset) / "routeb_151"
+    return resolve_kong2022_shared_inputs_root(dataset) / "routeb"
 
 
 def resolve_kong2022_template_root(dataset: str = DEFAULT_DATASET) -> Path:

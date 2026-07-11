@@ -11,7 +11,7 @@ Main Flow Path:
 
 Inputs:
 - Command-line arguments:
-  - --shared-root: Path to shared reference outputs (default: `outputs_hcp/inputs/hcp/kong2022/shared_inputs/routeb_151`).
+  - --shared-root: Path to shared reference outputs (default: `outputs_hcp/inputs/hcp/kong2022/shared_inputs/routeb`).
   - --surface-root: Path to shared BOLD surfaces (default: `outputs_hcp/inputs/hcp/kong2022/shared_inputs/surface`).
   - --subjects-manifest: Path to QC-passed subject list manifest (default: `outputs_hcp/inputs/hcp/kong2022/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt`).
   - --subjects: Space-separated list of explicit subject IDs.
@@ -63,7 +63,7 @@ import numpy as np
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_ROUTE_ROOT = DEFAULT_KONG2022_ROOT
 DEFAULT_SHARED_INPUTS_ROOT = DEFAULT_ROUTE_ROOT / "shared_inputs"
-DEFAULT_SHARED_ROOT = DEFAULT_SHARED_INPUTS_ROOT / "routeb_151"
+DEFAULT_SHARED_ROOT = DEFAULT_SHARED_INPUTS_ROOT / "routeb"
 DEFAULT_SURFACE_ROOT = DEFAULT_SHARED_INPUTS_ROOT / "surface"
 DEFAULT_SUBJECTS = DEFAULT_KONG2022_MANIFEST_ROOT / "hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt"
 DEFAULT_DATA_ROOT = REPO_ROOT / "data" / "hippunfold_input"

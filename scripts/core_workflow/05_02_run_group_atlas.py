@@ -11,7 +11,7 @@ Main Flow Path:
 
 Inputs:
 - Command-line arguments:
-  - --shared-root: Path to shared processed files (default: `outputs_hcp/inputs/hcp/kong2022/shared_inputs/routeb_151`).
+  - --shared-root: Path to shared processed files (default: `outputs_hcp/inputs/hcp/kong2022/shared_inputs/routeb`).
   - --surface-root: Path to BOLD surfaces root directory (default: `outputs_hcp/inputs/hcp/kong2022/shared_inputs/surface`).
   - --profile-surface-root: Optional root for hippocampal time series used only by cluster-network profile annotation; defaults to `--surface-root`.
   - --out-root: Directory where group-atlas intermediate files will be saved (default: `outputs_hcp/work/group_atlas/routeb_full_k3_fisherz`).

@@ -68,8 +68,8 @@ Current audited breakdown for 166 -> 151:
 
 Active shared group-input root:
 
-- `outputs_hcp/inputs/hcp/kong2022/shared_inputs/routeb_151/`
+- `outputs_hcp/inputs/hcp/kong2022/shared_inputs/routeb/`
 
 Example active raw surface path:
 
-- `outputs_hcp/inputs/hcp/kong2022/shared_inputs/routeb_151/sub-<id>/surface/raw/sub-<id>_hemi-{L,R}_space-corobl_den-512_label-hipp_bold.func.gii`
+- `outputs_hcp/inputs/hcp/kong2022/shared_inputs/routeb/sub-<id>/surface/raw/sub-<id>_hemi-{L,R}_space-corobl_den-512_label-hipp_bold.func.gii`

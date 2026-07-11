@@ -283,18 +283,26 @@ def _read_family_rows(path: Path) -> dict[str, str]:
     if not family_path.exists():
         raise FileNotFoundError(f"Missing family map: {family_path}")
     delimiter = "\t" if family_path.suffix.lower() == ".tsv" else ","
-    with family_path.open("r", encoding="utf-8", newline="") as stream:
+    with family_path.open("r", encoding="utf-8-sig", newline="") as stream:
         reader = csv.DictReader(stream, delimiter=delimiter)
-        fields = set(reader.fieldnames or [])
-        required = {"subject", "family_id"}
-        if not required.issubset(fields):
+        fields = list(reader.fieldnames or [])
+        semantic_columns: dict[str, str] = {}
+        for semantic in ("subject", "family_id"):
+            matches = [field for field in fields if field.strip().lower() == semantic]
+            if len(matches) > 1:
+                raise ValueError(
+                    f"Family map has ambiguous {semantic} columns: {matches}"
+                )
+            if len(matches) == 1:
+                semantic_columns[semantic] = matches[0]
+        if set(semantic_columns) != {"subject", "family_id"}:
             raise ValueError(
                 f"Family map requires columns subject,family_id; got {sorted(fields)}"
             )
         family_by_subject: dict[str, str] = {}
         for row in reader:
-            subject = _normalize_subject(row["subject"])
-            family_id = str(row["family_id"]).strip()
+            subject = _normalize_subject(row[semantic_columns["subject"]])
+            family_id = str(row[semantic_columns["family_id"]]).strip()
             if not family_id:
                 raise ValueError(f"Empty family_id for subject {subject}")
             if subject in family_by_subject:

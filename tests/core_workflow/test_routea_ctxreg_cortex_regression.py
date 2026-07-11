@@ -172,19 +172,19 @@ def test_local_cortex_neighbor_renderer_uses_shallow_neutral_present_path() -> N
     assert not any(part in {"gradients", "diagnostics", "ctxdrop", "ctxreg"} for part in neighbors_mod.DEFAULT_OUT_DIR.parts)
 
     ctxdrop_path = neighbors_mod.count_path(
-        shared_root=Path("/tmp/shared/routea_ctxdrop_151"),
+        shared_root=Path("/tmp/shared/routea_ctxdrop"),
         subject="100610",
         hemi="L",
         source_branch="routea_ctxdrop",
     )
     ctxreg_path = neighbors_mod.count_path(
-        shared_root=Path("/tmp/shared/routea_ctxreg_151"),
+        shared_root=Path("/tmp/shared/routea_ctxreg"),
         subject="100610",
         hemi="L",
         source_branch="routea_ctxreg",
     )
-    assert ctxdrop_path.as_posix() == "/tmp/shared/routea_ctxdrop_151/sub-100610/surface/local_cortex_neighbors/hemi_L/neighbor_counts.npy"
-    assert ctxreg_path.as_posix() == "/tmp/shared/routea_ctxreg_151/sub-100610/surface/local_cortex_neighbors/hemi_L/neighbor_counts.npy"
+    assert ctxdrop_path.as_posix() == "/tmp/shared/routea_ctxdrop/sub-100610/surface/local_cortex_neighbors/hemi_L/neighbor_counts.npy"
+    assert ctxreg_path.as_posix() == "/tmp/shared/routea_ctxreg/sub-100610/surface/local_cortex_neighbors/hemi_L/neighbor_counts.npy"
 
 
 def test_local_cortex_neighbor_manifest_omits_smoothing_semantics() -> None:
@@ -294,10 +294,10 @@ def test_ctxdrop_vertex_to_roi_fc_excludes_only_each_hipp_vertex_local_cortex() 
 
 
 def test_routea_ctx_control_route_contracts_and_paths() -> None:
-    assert compute_mod.ROUTE_TO_SHARED_DIR["routea_ctxreg"] == "routea_ctxreg_151"
-    assert compute_mod.ROUTE_TO_SHARED_DIR["routea_ctxdrop"] == "routea_ctxdrop_151"
-    assert atlas_mod.infer_route_tag(Path("/tmp/kong2022/shared_inputs/routea_ctxreg_151"), "auto") == "routea_ctxreg"
-    assert atlas_mod.infer_route_tag(Path("/tmp/kong2022/shared_inputs/routea_ctxdrop_151"), "auto") == "routea_ctxdrop"
+    assert compute_mod.ROUTE_TO_SHARED_DIR["routea_ctxreg"] == "routea_ctxreg"
+    assert compute_mod.ROUTE_TO_SHARED_DIR["routea_ctxdrop"] == "routea_ctxdrop"
+    assert atlas_mod.infer_route_tag(Path("/tmp/kong2022/shared_inputs/routea_ctxreg"), "auto") == "routea_ctxreg"
+    assert atlas_mod.infer_route_tag(Path("/tmp/kong2022/shared_inputs/routea_ctxdrop"), "auto") == "routea_ctxdrop"
     assert "routea_ctxreg" in overview_mod.ROUTE_TAG_CHOICES
     assert "routea_ctxdrop" in overview_mod.ROUTE_TAG_CHOICES
     assert "routea_ctxreg" in grad_render_mod.ROUTES
@@ -341,8 +341,8 @@ def test_routea_17net_reuses_routea_inputs_and_has_shallow_output_contract() -> 
 
 def test_ctxdrop_materializer_writes_standard_fc_and_diagnostics(tmp_path: Path) -> None:
     subject = "101"
-    fc_dir = tmp_path / "routea_ctxdrop_151" / f"sub-{subject}" / "fc" / "kong2022" / "2mm" / "hemi_L"
-    diag_dir = tmp_path / "routea_ctxdrop_151" / f"sub-{subject}" / "surface" / "local_cortex_neighbors" / "hemi_L"
+    fc_dir = tmp_path / "routea_ctxdrop" / f"sub-{subject}" / "fc" / "kong2022" / "2mm" / "hemi_L"
+    diag_dir = tmp_path / "routea_ctxdrop" / f"sub-{subject}" / "surface" / "local_cortex_neighbors" / "hemi_L"
     hipp = np.asarray(
         [
             [0.0, 1.0, 0.0, 1.0],
@@ -406,7 +406,7 @@ def test_ctxdrop_materializer_writes_standard_fc_and_diagnostics(tmp_path: Path)
 
 def test_routea_ctxreg_fc_steps_use_separate_reference_and_mask_roots(tmp_path: Path) -> None:
     subject = "101"
-    out_root = tmp_path / "routea_ctxreg_151"
+    out_root = tmp_path / "routea_ctxreg"
     controlled_surface = tmp_path / "controlled_surface"
     routea_reference = tmp_path / "routea"
     source_masks = tmp_path / "surface"
@@ -458,12 +458,12 @@ def test_routea_ctxreg_fc_steps_use_separate_reference_and_mask_roots(tmp_path: 
 
 def test_group_and_cortex_helpers_accept_reference_root_for_ctxreg() -> None:
     routea_ref = Path("/tmp/routea")
-    ctxreg = Path("/tmp/routea_ctxreg_151")
+    ctxreg = Path("/tmp/routea_ctxreg")
     assert atlas_mod.reference_path(routea_ref, "101", "kong2022", "cortex_roi_parcels.tsv").as_posix().endswith(
         "/routea/sub-101/reference/kong2022/cortex_roi_parcels.tsv"
     )
     assert atlas_mod.reference_path(ctxreg, "101", "kong2022", "cortex_roi_parcels.tsv").as_posix().endswith(
-        "/routea_ctxreg_151/sub-101/reference/kong2022/cortex_roi_parcels.tsv"
+        "/routea_ctxreg/sub-101/reference/kong2022/cortex_roi_parcels.tsv"
     )
     assert cortex_mod.subject_reference_path(routea_ref, "101", "kong2022", "cortex_roi_parcels.tsv").as_posix().endswith(
         "/routea/sub-101/reference/kong2022/cortex_roi_parcels.tsv"

@@ -80,9 +80,9 @@ DEFAULT_GROUP_AVG_SURFACES_DIR = DEFAULT_KONG2022_TEMPLATE_ROOT / "group_average
 DEFAULT_OUT_ROOT = DEFAULT_HIPPOMAPS_GRADIENT_ROOT
 ROUTE_TO_SHARED_DIR = {
     "routea": "routea",
-    "routea_ctxreg": "routea_ctxreg_151",
-    "routea_ctxdrop": "routea_ctxdrop_151",
-    "routeb": "routeb_151",
+    "routea_ctxreg": "routea_ctxreg",
+    "routea_ctxdrop": "routea_ctxdrop",
+    "routeb": "routeb",
     "lynch2024_21net": "pfm_nsi043_78",
     "lynch2024_8net": "pfm_nsi043_78",
 }

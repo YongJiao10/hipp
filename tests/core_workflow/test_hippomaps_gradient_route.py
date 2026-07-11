@@ -904,8 +904,8 @@ def test_ensure_bilateral_gradient_annotations_repairs_late_raw_screenshot() -> 
 def test_route_tag_auto_detection_and_validation() -> None:
     # Test 05_02 infer_route_tag function
     assert atlas_mod.infer_route_tag(Path("/path/to/routea"), "auto") == "routea"
-    assert atlas_mod.infer_route_tag(Path("/path/to/routea_ctxreg_151"), "auto") == "routea_ctxreg"
-    assert atlas_mod.infer_route_tag(Path("/path/to/routeb_151"), "auto") == "routeb"
+    assert atlas_mod.infer_route_tag(Path("/path/to/routea_ctxreg"), "auto") == "routea_ctxreg"
+    assert atlas_mod.infer_route_tag(Path("/path/to/routeb"), "auto") == "routeb"
     assert atlas_mod.infer_route_tag(Path("/path/to/any"), "routea") == "routea"
 
     # Test that mismatched out-root under group_atlas raises ValueError

@@ -43,13 +43,13 @@ Use numbered public entrypoints in `scripts/core_workflow/`:
   - runs `05_02_run_group_atlas.py` with `--route-tag routea_17net --network-taxonomy family17`, writing only taxonomy-dependent group outputs under `outputs_hcp/work/group_atlas/routea_17net_full_k3_fisherz`
 - Kong2022 RouteA cortex-control branch:
   - starts from RouteA references and `surface` hippocampal time series
-  - runs `04_00_materialize_cortex_regressed_surface_timeseries.py` to write controlled time series and diagnostics under `shared_inputs/routea_ctxreg_151` after run-wise local cortex regression
+  - runs `04_00_materialize_cortex_regressed_surface_timeseries.py` to write controlled time series and diagnostics under `shared_inputs/routea_ctxreg` after run-wise local cortex regression
   - then runs `04_01`, `04_02`, `05_01`, and `05_02` with `--route-tag routea_ctxreg`; static RouteA references are read from `routea` and masks from `surface` through explicit root arguments rather than being copied
   - writes gradients under `outputs_hcp/work/hippomaps_gradients/routea_ctxreg` and group atlas outputs under `outputs_hcp/work/group_atlas/routea_ctxreg_full_k3_fisherz`
   - controls local cortical smear before FC materialization and does not redefine or overwrite uncontrolled RouteA outputs
 - Kong2022 RouteA cortex-drop branch:
   - starts from RouteA references, `surface` hippocampal time series, subject cortex dtseries, generated RouteA individualized Kong2022 labels, and the same 20 mm local cortex-neighborhood definition used by `routea_ctxreg`
-  - runs `04_01_materialize_kong2022_roi_fc.py --ctxdrop` to write isolated vertex-to-ROI FC caches under `shared_inputs/routea_ctxdrop_151`; hippocampal time series are not rewritten
+  - runs `04_01_materialize_kong2022_roi_fc.py --ctxdrop` to write isolated vertex-to-ROI FC caches under `shared_inputs/routea_ctxdrop`; hippocampal time series are not rewritten
   - for each hippocampal vertex and ROI, excludes valid cortex vertices within the 20 mm local neighborhood before computing that ROI mean time series and Pearson FC
   - maintained downstream outputs are `gradient-spectral` and `wta-top` only, with gradients under `outputs_hcp/work/hippomaps_gradients/routea_ctxdrop`, group atlas outputs under `outputs_hcp/work/group_atlas/routea_ctxdrop_full_k3_fisherz`, and shared local-neighbor hippocampal surface overlays rendered by `06_07_render_ctxdrop_neighbor_counts.py` under `outputs_hcp/present/local_cortex_neighbors/`
 - Lynch2024 FASTANS/PFM branches:
@@ -57,7 +57,7 @@ Use numbered public entrypoints in `scripts/core_workflow/`:
   - run `03_04_run_lynch2024_fastans_pfm.py` to create official per-subject hard-label PFM dlabel/dscalar assets and hard-label component time series under `outputs_hcp/work/cortex_pfm/sub-<id>/lynch2024/`, then write shared inputs under `outputs_hcp/inputs/hcp/lynch2024_fast_pfm_t1only/shared_inputs/pfm_nsi043_78/`
   - `lynch2024_21net` keeps original Lynch parent networks excluding `Noise`; `lynch2024_8net` uses the canonical merge from `config/cross_atlas_network_merge.json`
   - `gradient-spectral` uses one shared non-Noise Lynch21 component gradient bank with full-graph BrainSpace affinity (`brainspace_sparsity=0.0`); `lynch2024_8net` does not keep a separate 8-column gradient bank
-  - `05_02` passes `--profile-surface-root outputs_hcp/inputs/hcp/kong2022/shared_inputs/routea_ctxreg_151` for cluster-network profile annotation, matching Kong RouteA's cluster-mean hippocampal time-series correlation while leaving Lynch masks, FC caches, references, and gradient inputs under the Lynch shared root
+  - `05_02` passes `--profile-surface-root outputs_hcp/inputs/hcp/kong2022/shared_inputs/routea_ctxreg` for cluster-network profile annotation, matching Kong RouteA's cluster-mean hippocampal time-series correlation while leaving Lynch masks, FC caches, references, and gradient inputs under the Lynch shared root
   - Lynch K diagnostics do not apply the legacy vertex-FC profile redundancy gate; summaries record `redundancy_profile_status=not_applicable_for_lynch2024`
   - maintained downstream outputs are `gradient-spectral` and `wta-top` only, with group roots `outputs_hcp/work/group_atlas/lynch2024_21net_nsi043_full_k3_normalized_wta/` and `outputs_hcp/work/group_atlas/lynch2024_8net_nsi043_full_k3_normalized_wta/`
 - Kong2022 RouteB branch:
