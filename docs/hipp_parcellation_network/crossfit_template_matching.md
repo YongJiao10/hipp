@@ -113,4 +113,6 @@ prediction-accuracy estimates and do not replace downstream biological
 validation.
 Agreement excludes null labels and unsupported fold vertices; a vertex with no
 supported nonzero fold label is recorded as missing rather than perfectly
-stable.
+stable. Before loading numeric arrays, the renderer verifies the producing
+template manifest's surface/artifact SHA-256 fingerprints and native
+shape/dtype contracts; a modified fold cannot silently yield a new overview.

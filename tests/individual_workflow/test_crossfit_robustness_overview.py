@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import importlib.util
 import json
 import sys
@@ -29,6 +30,11 @@ def load_module():
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module
+
+
+def _fingerprint(path: Path) -> dict[str, object]:
+    data = path.read_bytes()
+    return {"sha256": hashlib.sha256(data).hexdigest(), "size_bytes": len(data)}
 
 
 def test_pairwise_metrics_and_vertex_agreement_detect_one_discordant_fold():
@@ -161,6 +167,14 @@ def test_renderer_writes_quantitative_outputs_for_five_synthetic_folds(
             fold_dir / "template_profiles.npy",
             base_profiles * float(fold_index + 1) + float(fold_index),
         )
+        artifact_fingerprints = {
+            filename: _fingerprint(fold_dir / filename)
+            for filename in (
+                "group_labels_k3.npy",
+                "group_support_mask.npy",
+                "template_profiles.npy",
+            )
+        }
         (fold_dir / "template_manifest.json").write_text(
             json.dumps(
                 {
@@ -173,6 +187,10 @@ def test_renderer_writes_quantitative_outputs_for_five_synthetic_folds(
                         "consumed_asset": str(surface_path.resolve()),
                         "evidence_source": "consumed_template_surface_path",
                     },
+                    "input_fingerprints": {
+                        "template_surface": _fingerprint(surface_path),
+                    },
+                    "artifact_fingerprints": artifact_fingerprints,
                 }
             ),
             encoding="utf-8",
@@ -213,3 +231,22 @@ def test_renderer_writes_quantitative_outputs_for_five_synthetic_folds(
         Path(source["labels"]).is_absolute()
         for source in manifest["combinations"][0]["source_folds"]
     )
+
+    changed_labels = (
+        crossfit_root
+        / "templates"
+        / "fold-01"
+        / "2mm"
+        / "hemi_L"
+        / "group_labels_k3.npy"
+    )
+    np.save(changed_labels, np.zeros(base_labels.size, dtype=np.int32))
+    with pytest.raises(ValueError, match="fingerprint"):
+        overview.render_robustness_overview(
+            crossfit_root=crossfit_root,
+            template_surfaces_dir=template_surfaces_dir,
+            output_dir=tmp_path / "changed-overview",
+            smoothings=["2mm"],
+            hemis=["L"],
+            n_folds=5,
+        )

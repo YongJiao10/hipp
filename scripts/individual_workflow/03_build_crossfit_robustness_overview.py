@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 import sys
 from collections.abc import Sequence
@@ -210,6 +211,32 @@ def _load_json(path: Path) -> dict[str, Any]:
     return payload
 
 
+def _file_fingerprint(path: Path) -> dict[str, object]:
+    resolved = Path(path)
+    digest = hashlib.sha256()
+    size = 0
+    with resolved.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+            size += len(chunk)
+    return {"sha256": digest.hexdigest(), "size_bytes": int(size)}
+
+
+def _validate_recorded_fingerprint(
+    recorded: object,
+    path: Path,
+    *,
+    context: str,
+) -> None:
+    if not isinstance(recorded, dict):
+        raise ValueError(f"{context} fingerprint metadata is missing")
+    actual = _file_fingerprint(path)
+    if recorded != actual:
+        raise ValueError(
+            f"{context} fingerprint mismatch: recorded={recorded!r} actual={actual!r}"
+        )
+
+
 def _load_combination(
     *,
     crossfit_root: Path,
@@ -274,10 +301,50 @@ def _load_combination(
                 f"Fold {fold_index + 1} template manifest mismatch: "
                 + "; ".join(mismatches)
             )
+        input_fingerprints = manifest.get("input_fingerprints")
+        artifact_fingerprints = manifest.get("artifact_fingerprints")
+        if not isinstance(input_fingerprints, dict):
+            raise ValueError(
+                f"Fold {fold_index + 1} template input fingerprints are missing"
+            )
+        if not isinstance(artifact_fingerprints, dict):
+            raise ValueError(
+                f"Fold {fold_index + 1} template artifact fingerprints are missing"
+            )
+        _validate_recorded_fingerprint(
+            input_fingerprints.get("template_surface"),
+            canonical_surface,
+            context=f"Fold {fold_index + 1} template surface",
+        )
+        for key in ("labels", "support_mask", "template_profiles"):
+            path = source_paths[key]
+            _validate_recorded_fingerprint(
+                artifact_fingerprints.get(path.name),
+                path,
+                context=f"Fold {fold_index + 1} {path.name}",
+            )
 
-        fold_labels = np.load(source_paths["labels"]).astype(np.int32).reshape(-1)
-        fold_support = np.load(source_paths["support_mask"]).astype(bool).reshape(-1)
-        fold_profiles = np.load(source_paths["template_profiles"]).astype(np.float64)
+        fold_labels_native = np.load(source_paths["labels"])
+        fold_support_native = np.load(source_paths["support_mask"])
+        fold_profiles_native = np.load(source_paths["template_profiles"])
+        if fold_labels_native.ndim != 1 or fold_labels_native.dtype != np.int32:
+            raise ValueError(
+                f"Fold {fold_index + 1} labels must be native int32 1D, "
+                f"got shape={fold_labels_native.shape} dtype={fold_labels_native.dtype}"
+            )
+        if fold_support_native.ndim != 1 or fold_support_native.dtype != np.uint8:
+            raise ValueError(
+                f"Fold {fold_index + 1} support must be native uint8 1D, "
+                f"got shape={fold_support_native.shape} dtype={fold_support_native.dtype}"
+            )
+        if fold_profiles_native.ndim != 2 or fold_profiles_native.dtype != np.float32:
+            raise ValueError(
+                f"Fold {fold_index + 1} profiles must be native float32 2D, "
+                f"got shape={fold_profiles_native.shape} dtype={fold_profiles_native.dtype}"
+            )
+        fold_labels = fold_labels_native
+        fold_support = fold_support_native.astype(bool)
+        fold_profiles = fold_profiles_native.astype(np.float64)
         if fold_support.shape != fold_labels.shape:
             raise ValueError(
                 f"Fold {fold_index + 1} label/support mismatch: "
