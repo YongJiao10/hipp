@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import importlib.util
 import json
 import sys
@@ -209,6 +210,21 @@ def test_family_map_tsv_requires_subject_and_family_id_columns(tmp_path: Path):
     assert metadata["family_aware"] is True
     assert metadata["subject_only_waiver"] is False
     assert metadata["family_map_path"] == str(family_path.resolve())
+
+
+def test_family_map_rejects_duplicate_normalized_subject_rows(tmp_path: Path):
+    workflow = load_module()
+    family_path = tmp_path / "families.tsv"
+    family_path.write_text(
+        "subject\tfamily_id\nsub-01\tfam-a\n01\tfam-a\n",
+        encoding="utf-8",
+    )
+    args = workflow.build_arg_parser().parse_args(
+        ["--family-map", str(family_path)]
+    )
+
+    with pytest.raises(ValueError, match="Duplicate family row"):
+        workflow.resolve_family_map(args, ["01"])
 
 
 def test_fold_manifest_has_disjoint_nonempty_training_and_heldout_subjects():
@@ -651,6 +667,22 @@ def test_resume_template_validation_rejects_parameter_or_training_mismatch(tmp_p
         "cluster_seed": 0,
         "k_final": 3,
         "density_evidence": {"consumed_asset": str(surface.resolve())},
+        "fc_paths": {
+            "sub-01": str(
+                (tmp_path / "routea" / "sub-01" / "fc" / "kong2022" / "2mm" / "hemi_L" / "hipp_vertex_to_network_fc.npy").resolve()
+            ),
+            "sub-02": str(
+                (tmp_path / "routea" / "sub-02" / "fc" / "kong2022" / "2mm" / "hemi_L" / "hipp_vertex_to_network_fc.npy").resolve()
+            ),
+        },
+        "valid_mask_paths": {
+            "sub-01": str(
+                (tmp_path / "surface" / "sub-01" / "surface" / "tsnr_gate" / "sub-01_hemi-L_valid_mask.npy").resolve()
+            ),
+            "sub-02": str(
+                (tmp_path / "surface" / "sub-02" / "surface" / "tsnr_gate" / "sub-02_hemi-L_valid_mask.npy").resolve()
+            ),
+        },
     }
 
     workflow.validate_template_manifest(manifest, config, 1, "2mm", "L")
@@ -661,6 +693,9 @@ def test_resume_template_validation_rejects_parameter_or_training_mismatch(tmp_p
     wrong_training = dict(manifest, training_subjects=["sub-01", "sub-03"])
     with pytest.raises(ValueError, match="Resume template mismatch"):
         workflow.validate_template_manifest(wrong_training, config, 1, "2mm", "L")
+    wrong_fc = dict(manifest, fc_paths=dict(manifest["fc_paths"], **{"sub-01": "/wrong/fc.npy"}))
+    with pytest.raises(ValueError, match="Resume template mismatch"):
+        workflow.validate_template_manifest(wrong_fc, config, 1, "2mm", "L")
 
 
 def test_fit_or_load_fold_template_prefers_valid_saved_template_on_resume(
@@ -792,3 +827,49 @@ def test_existing_run_manifest_requires_resume(tmp_path: Path):
         workflow.validate_output_root_policy(out_root, resume=False)
 
     workflow.validate_output_root_policy(out_root, resume=True)
+
+
+def test_resume_run_manifest_rejects_changed_input_root(tmp_path: Path):
+    workflow = load_module()
+    args = workflow.build_arg_parser().parse_args(
+        [
+            "--subjects-manifest",
+            str(tmp_path / "subjects.txt"),
+            "--allow-subject-only-folds",
+            "--shared-root",
+            str(tmp_path / "routea"),
+            "--out-root",
+            str(tmp_path / "crossfit"),
+        ]
+    )
+    subjects = ["01", "02", "03", "04", "05"]
+    family = {
+        "family_aware": False,
+        "subject_only_waiver": True,
+        "family_map_path": None,
+    }
+    folds = {subject: index for index, subject in enumerate(subjects)}
+    run_config = workflow.run_config_payload(args, subjects, family, folds)
+    manifest = {"status": "ok", "run_config": run_config}
+
+    workflow.validate_run_manifest_for_resume(manifest, run_config)
+
+    changed = dict(run_config, shared_root=str((tmp_path / "other-routea").resolve()))
+    with pytest.raises(ValueError, match="Resume run mismatch"):
+        workflow.validate_run_manifest_for_resume(manifest, changed)
+
+
+def test_main_guard_follows_all_function_definitions():
+    tree = ast.parse(MODULE_PATH.read_text(encoding="utf-8"))
+    function_lines = [node.lineno for node in tree.body if isinstance(node, ast.FunctionDef)]
+    guard_lines = [
+        node.lineno
+        for node in tree.body
+        if isinstance(node, ast.If)
+        and isinstance(node.test, ast.Compare)
+        and isinstance(node.test.left, ast.Name)
+        and node.test.left.id == "__name__"
+    ]
+
+    assert len(guard_lines) == 1
+    assert guard_lines[0] > max(function_lines)

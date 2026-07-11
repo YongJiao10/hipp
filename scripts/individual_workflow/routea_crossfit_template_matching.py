@@ -275,9 +275,8 @@ def _read_family_rows(path: Path) -> dict[str, str]:
             family_id = str(row["family_id"]).strip()
             if not family_id:
                 raise ValueError(f"Empty family_id for subject {subject}")
-            old = family_by_subject.get(subject)
-            if old is not None and old != family_id:
-                raise ValueError(f"Conflicting family entries for subject {subject}")
+            if subject in family_by_subject:
+                raise ValueError(f"Duplicate family row for subject {subject}")
             family_by_subject[subject] = family_id
     return family_by_subject
 
@@ -517,6 +516,34 @@ def validate_template_manifest(
         mismatches.append(
             f"density_evidence.consumed_asset: expected={expected_surface} actual={consumed!r}"
         )
+    expected_fc_paths = {
+        f"sub-{subject}": str(
+            _subject_fc_path(config.shared_root, subject, smoothing, hemi).resolve()
+        )
+        for subject in training
+    }
+    expected_mask_paths = {
+        f"sub-{subject}": str(
+            _subject_valid_mask_path(config.surface_root, subject, hemi).resolve()
+        )
+        for subject in training
+    }
+    for field, expected_paths in (
+        ("fc_paths", expected_fc_paths),
+        ("valid_mask_paths", expected_mask_paths),
+    ):
+        actual_paths = manifest.get(field)
+        if not isinstance(actual_paths, Mapping):
+            mismatches.append(f"{field}: missing or not an object")
+        else:
+            normalized_actual = {
+                str(key): str(Path(str(value)).resolve())
+                for key, value in actual_paths.items()
+            }
+            if normalized_actual != expected_paths:
+                mismatches.append(
+                    f"{field}: expected={expected_paths!r} actual={normalized_actual!r}"
+                )
     if mismatches:
         raise ValueError("Resume template mismatch: " + "; ".join(mismatches))
 
@@ -621,6 +648,7 @@ def fit_fold_template(
     coords, faces = core.load_surface(surface_path)
     vertex_count = int(coords.shape[0])
     valid_masks: dict[str, np.ndarray] = {}
+    valid_mask_paths: dict[str, str] = {}
     feature_bank: dict[str, np.ndarray] = {}
     fc_paths: dict[str, str] = {}
     for subject in training_subjects:
@@ -635,6 +663,7 @@ def fit_fold_template(
             )
         fc_path = _subject_fc_path(config.shared_root, subject, smoothing, hemi)
         valid_masks[subject] = valid_mask
+        valid_mask_paths[subject] = str(mask_path.resolve())
         feature_bank[subject] = _load_full_subject_fc(fc_path, valid_mask)
         fc_paths[subject] = str(fc_path.resolve())
 
@@ -722,6 +751,9 @@ def fit_fold_template(
         "k_final": DEFAULT_K,
         "cluster_label_semantics": {"1": "Anterior", "2": "Body", "3": "Posterior"},
         "fc_paths": {f"sub-{subject}": path for subject, path in fc_paths.items()},
+        "valid_mask_paths": {
+            f"sub-{subject}": path for subject, path in valid_mask_paths.items()
+        },
         "density_evidence": density_evidence,
     }
     _write_json(template_dir / "template_manifest.json", manifest)
@@ -1122,6 +1154,49 @@ def validate_output_root_policy(out_root: Path, *, resume: bool) -> None:
         )
 
 
+def run_config_payload(
+    args: argparse.Namespace,
+    subjects: Sequence[str],
+    family_metadata: Mapping[str, object],
+    fold_by_subject: Mapping[str, int],
+) -> dict[str, object]:
+    return {
+        "subjects_manifest": str(Path(args.subjects_manifest).resolve()),
+        "subjects": [f"sub-{_normalize_subject(subject)}" for subject in subjects],
+        "family": dict(family_metadata),
+        "fold_by_subject": {
+            _normalize_subject(subject): int(fold)
+            for subject, fold in fold_by_subject.items()
+        },
+        "n_folds": int(args.n_folds),
+        "fold_seed": int(args.fold_seed),
+        "shared_root": str(Path(args.shared_root).resolve()),
+        "surface_root": str(Path(args.surface_root).resolve()),
+        "hippunfold_batch_root": str(Path(args.hippunfold_batch_root).resolve()),
+        "template_surfaces_dir": str(Path(args.template_surfaces_dir).resolve()),
+        "hippomaps_root": str(Path(args.hippomaps_root).resolve()),
+        "out_root": str(Path(args.out_root).resolve()),
+        "smoothings": [str(value) for value in args.smoothings],
+        "hemis": [str(value) for value in args.hemis],
+        "coverage_threshold": float(args.coverage_threshold),
+        "n_components": int(args.n_components),
+        "gradient_random_state": int(args.gradient_random_state),
+        "cluster_seed": int(args.cluster_seed),
+        "k_final": DEFAULT_K,
+    }
+
+
+def validate_run_manifest_for_resume(
+    manifest: Mapping[str, object],
+    run_config: Mapping[str, object],
+) -> None:
+    if manifest.get("status") != "ok" or manifest.get("run_config") != dict(run_config):
+        raise ValueError(
+            "Resume run mismatch: existing crossfit_manifest.json does not match "
+            "the requested subjects, families, folds, paths, or parameters"
+        )
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_arg_parser().parse_args(list(argv) if argv is not None else None)
     subjects = _load_subject_ids(args.subjects_manifest)
@@ -1141,6 +1216,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
 
     validate_output_root_policy(Path(args.out_root), resume=bool(args.resume))
+    run_config = run_config_payload(
+        args,
+        subjects,
+        family_metadata,
+        fold_by_subject,
+    )
+    existing_run_manifest = Path(args.out_root) / "crossfit_manifest.json"
+    if args.resume and existing_run_manifest.exists():
+        validate_run_manifest_for_resume(
+            json.loads(existing_run_manifest.read_text(encoding="utf-8")),
+            run_config,
+        )
     ensure_hippomaps_on_path(Path(args.hippomaps_root))
     out_root = Path(args.out_root)
     fold_payload = fold_manifest_payload(
@@ -1212,14 +1299,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         "fold_manifest": str((fold_root / "fold_manifest.json").resolve()),
         "fold_assignments": str((fold_root / "fold_assignments.tsv").resolve()),
         "subject_manifests": [row["manifest"] for row in mapping_outputs],
+        "run_config": run_config,
     }
     _write_json(out_root / "crossfit_manifest.json", run_manifest)
     print(json.dumps(run_manifest, indent=2, sort_keys=True))
     return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
 
 
 def build_cluster_prototypes(
@@ -1316,3 +1400,7 @@ def match_vertices_to_prototypes(
             ordered = np.sort(scores[vertex_index, finite_indices])
             margin[vertex_index] = float(ordered[-1] - ordered[-2])
     return labels, scores, margin
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
