@@ -20,6 +20,12 @@ MODULE_PATH = (
     / "individual_workflow"
     / "routea_crossfit_template_matching.py"
 )
+DOC_PATH = (
+    REPO_ROOT
+    / "docs"
+    / "hipp_parcellation_network"
+    / "crossfit_template_matching.md"
+)
 if str(CORE_WORKFLOW_DIR) not in sys.path:
     sys.path.insert(0, str(CORE_WORKFLOW_DIR))
 
@@ -873,3 +879,14 @@ def test_main_guard_follows_all_function_definitions():
 
     assert len(guard_lines) == 1
     assert guard_lines[0] > max(function_lines)
+
+
+def test_crossfit_docs_name_family_gate_outputs_and_overview():
+    text = DOC_PATH.read_text(encoding="utf-8")
+    for token in [
+        "subject,family_id",
+        "--allow-subject-only-folds",
+        "individual_labels_k3.npy",
+        "robustness_summary.tsv",
+    ]:
+        assert token in text

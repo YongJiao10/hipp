@@ -92,6 +92,28 @@ The overview builder reads completed label arrays from `outputs_hcp/work/individ
 - Gradient-spectral final K is fixed at 3.
 - WTA is single-subject top-positive-ROI network voting. It is not a group one-sample statistical inference result; manifests record `wta_statistical_inference=false`.
 
+## Family-Aware Cross-Fitted Labels
+
+For reviewer-defensible individualized K=3 labels without run-level splitting,
+use `routea_crossfit_template_matching.py`. Five family-grouped folds learn
+training-only group templates and AP-ordered FC profiles; each held-out subject
+is then matched using their full concat FC. HCP production requires an external
+`subject,family_id` family map. The explicit `--allow-subject-only-folds`
+waiver is recorded and is not the preferred HCP definition.
+
+```bash
+/home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/routea_crossfit_template_matching.py --family-map /secure/path/hcp_family_map.tsv --dry-run
+/home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/routea_crossfit_template_matching.py --family-map /secure/path/hcp_family_map.tsv --resume
+/home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/03_build_crossfit_robustness_overview.py
+```
+
+The computation lives under
+`outputs_hcp/work/crossfit_template_matching/`; the quantitative five-fold
+overview and `robustness_summary.tsv` live under
+`outputs_hcp/present/overviews/crossfit_template_matching/`. See
+`docs/hipp_parcellation_network/crossfit_template_matching.md` for the
+non-circularity argument, artifacts, and interpretation.
+
 
 ## Family17 Gradient Overview Rendering
 

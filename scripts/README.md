@@ -7,6 +7,9 @@ This directory is organized by layer.
 - `cortex/`: legacy/auxiliary cortex scripts (active core entrypoints are archived)
 - `common/`: shared numerical helpers
 - `workbench/`: rendering and figure assembly helpers
+- `individual_workflow/`: subject-level RouteA workflows, including the
+  family-aware five-fold cross-fitted template-matching labels and their
+  quantitative robustness overview
 
 The active workflow should be launched from `scripts/core_workflow/` and resolved within `scripts/core_workflow/lib/`.
 Active numbered core steps must stay self-contained in that tree and must not call legacy helper code
@@ -68,3 +71,9 @@ Interpreter contract:
 - Use explicit Python path for repo tasks: `/home/yojiao/.conda/envs/py314/bin/python`
 - Do not run core workflow checks with bare `python`
 - Full runbook: `docs/environment/agent_runtime_contract.md`
+
+The HCP cross-fitted template-matching workflow deliberately uses full concat
+FC rather than run-level splits. Its production family map is an external
+`subject,family_id` input, and its labels/templates are isolated under
+`outputs_hcp/work/crossfit_template_matching/`. Usage and review outputs are
+documented in `docs/hipp_parcellation_network/crossfit_template_matching.md`.
