@@ -58,6 +58,29 @@ def test_pairwise_label_metrics_reject_empty_pairwise_support():
         overview.pairwise_label_metrics(labels, support, k=3)
 
 
+def test_pairwise_label_metrics_use_nonempty_support_intersection():
+    overview = load_module()
+    labels = np.asarray(
+        [[1, 1, 2, 3, 3], [1, 2, 2, 1, 3]],
+        dtype=np.int32,
+    )
+    support = np.asarray(
+        [[1, 1, 1, 0, 1], [1, 1, 1, 1, 0]],
+        dtype=bool,
+    )
+
+    metrics = overview.pairwise_label_metrics(labels, support, k=3)
+
+    assert metrics["macro_dice"][0, 1] == pytest.approx(7.0 / 9.0)
+    assert metrics["ari"][0, 1] == pytest.approx(-0.5)
+
+
+def test_overview_title_reflects_requested_fold_count():
+    overview = load_module()
+
+    assert overview.overview_title(3) == "HCP RouteA 3-fold K=3 template robustness"
+
+
 def test_prototype_correlations_use_only_jointly_finite_features():
     overview = load_module()
     profiles = np.asarray(

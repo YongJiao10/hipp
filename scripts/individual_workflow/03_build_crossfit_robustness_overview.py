@@ -406,6 +406,10 @@ def _draw_heatmap(
     axis.figure.colorbar(image, ax=axis, fraction=0.046, pad=0.04)
 
 
+def overview_title(n_folds: int) -> str:
+    return f"HCP RouteA {int(n_folds)}-fold K=3 template robustness"
+
+
 def _render_figure(analyses: list[dict[str, Any]], output_path: Path) -> None:
     import matplotlib
 
@@ -472,7 +476,10 @@ def _render_figure(analyses: list[dict[str, Any]], output_path: Path) -> None:
         row_axes[4].set_ylabel("Modal fraction", fontsize=8)
         row_axes[4].set_title("Vertex agreement", fontsize=10)
         row_axes[4].tick_params(labelsize=7)
-    figure.suptitle("HCP RouteA five-fold K=3 template robustness", fontsize=14)
+    figure.suptitle(
+        overview_title(int(analyses[0]["labels_by_fold"].shape[0])),
+        fontsize=14,
+    )
     output_path.parent.mkdir(parents=True, exist_ok=True)
     figure.savefig(output_path, dpi=180, bbox_inches="tight")
     plt.close(figure)
