@@ -22,6 +22,7 @@ present_network/
 runtime/
 .runtime_py/
 .cache/
+.worktrees/
 .claude/
 .codex
 .codex/
@@ -43,4 +44,3 @@ K_selection_plan.md
 outputs_hcp/
 outputs_iowa/
 outputs_stanford/
-
