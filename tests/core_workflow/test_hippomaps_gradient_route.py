@@ -455,6 +455,14 @@ def test_group_atlas_parser_defaults_to_fixed_k3() -> None:
     assert int(args.k_min) == 2
     assert int(args.k_max) == 10
     assert int(args.force_final_k) == 3
+    assert args.surface_affinity == "shifted-cosine"
+
+
+def test_group_atlas_parser_accepts_legacy_relu_cosine() -> None:
+    args = atlas_mod.build_arg_parser().parse_args(
+        ["--surface-affinity", "relu-cosine"]
+    )
+    assert args.surface_affinity == "relu-cosine"
 
 
 def test_group_atlas_gradient_spectral_loads_hippomaps_gradient_artifacts() -> None:

@@ -55,6 +55,31 @@ def test_pairwise_metrics_and_vertex_agreement_detect_one_discordant_fold():
     assert agreement.tolist() == pytest.approx([1.0, 2.0 / 3.0, 1.0, 1.0])
 
 
+def test_robustness_gate_requires_all_registered_thresholds():
+    overview = load_module()
+    summaries = [
+        {
+            "smoothing": "2mm",
+            "hemi": "R",
+            "max_affinity_graph_components": 1,
+            "min_cluster_fraction": 0.12,
+            "min_pairwise_macro_dice": 0.86,
+            "min_pairwise_ari": 0.71,
+            "min_pairwise_prototype_correlation": 0.51,
+        }
+    ]
+
+    passed = overview.evaluate_robustness_gate(summaries)
+    failed = overview.evaluate_robustness_gate(
+        [dict(summaries[0], min_pairwise_ari=0.69)]
+    )
+
+    assert passed["passed"] is True
+    assert passed["thresholds"]["min_pairwise_ari"] == pytest.approx(0.70)
+    assert failed["passed"] is False
+    assert failed["failures"][0]["metric"] == "min_pairwise_ari"
+
+
 def test_pairwise_label_metrics_reject_empty_pairwise_support():
     overview = load_module()
     labels = np.asarray([[1, 2], [1, 2]], dtype=np.int32)
@@ -182,8 +207,22 @@ def test_renderer_writes_quantitative_outputs_for_five_synthetic_folds(
                     "fold_index": fold_index,
                     "fold_id": f"fold-{fold_index + 1:02d}",
                     "smoothing": "2mm",
-                    "hemi": "L",
-                    "density_evidence": {
+                        "hemi": "L",
+                        "surface_affinity": "shifted-cosine",
+                        "affinity_graph_diagnostics": {
+                            "n_vertices": int(labels.size),
+                            "n_connected_components": 1,
+                            "connected_component_sizes": [int(labels.size)],
+                            "cluster_vertex_counts": {
+                                str(label): int(np.sum(labels == label))
+                                for label in (1, 2, 3)
+                            },
+                            "min_cluster_fraction": float(
+                                min(np.sum(labels == label) for label in (1, 2, 3))
+                                / labels.size
+                            ),
+                        },
+                        "density_evidence": {
                         "consumed_asset": str(surface_path.resolve()),
                         "evidence_source": "consumed_template_surface_path",
                     },

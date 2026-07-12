@@ -100,6 +100,10 @@ training-only group templates and AP-ordered FC profiles; each held-out subject
 is then matched using their full concat FC. HCP production requires an external
 `subject,family_id` family map. The explicit `--allow-subject-only-folds`
 waiver is recorded and is not the preferred HCP definition.
+Template clustering shares the core workflow's default `shifted-cosine`
+surface affinity. Historical reproduction can pass
+`--surface-affinity relu-cosine`; the selected mode is resume-locked and saved
+with graph-connectivity diagnostics.
 The maintained source `data/HCP_YA_subjects_2026_04_09_16_01_42.csv` can be
 passed directly; its native `Subject` and `Family_ID` headings are accepted
 without creating a derived restricted-data file.

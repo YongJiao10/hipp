@@ -69,6 +69,13 @@ All commands accept explicit root overrides. Run `--help` for the complete
 interface. The default production combinations are 2 mm and 4 mm smoothing,
 left and right hemispheres, fixed K=3, and five folds.
 
+Fold-template gradient-spectral clustering uses the same surface affinity as
+the group-atlas workflow. The maintained default is `shifted-cosine`, defined
+as `(1 + cosine_similarity) / 2` on surface-adjacent vertex pairs. The explicit
+`--surface-affinity relu-cosine` option reproduces the historical zero-clipped
+definition. The selected mode and graph-connectivity diagnostics are recorded
+in every template and run manifest and are locked during resume.
+
 ## Outputs and provenance
 
 Computation products are isolated under:
@@ -121,3 +128,7 @@ supported nonzero fold label is recorded as missing rather than perfectly
 stable. Before loading numeric arrays, the renderer verifies the producing
 template manifest's surface/artifact SHA-256 fingerprints and native
 shape/dtype contracts; a modified fold cannot silently yield a new overview.
+The renderer also evaluates the registered production gate: every fold graph
+must be connected, every cluster must contain at least 10% of supported
+vertices, and all unique fold pairs must meet macro-Dice 0.85, ARI 0.70, and
+prototype-correlation 0.50. It exits nonzero when the gate fails.

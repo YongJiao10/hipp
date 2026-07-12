@@ -42,6 +42,12 @@ arrays are saved. `05_02_run_group_atlas.py` loads those aligned artifacts from
 while fixing the final presentation atlas at `K=3` (`--k-min 2 --k-max 10
 --force-final-k 3`); `--auto-k` remains available only as legacy diagnostics.
 
+The maintained gradient-spectral surface affinity is `shifted-cosine`,
+`(1 + cosine_similarity) / 2` on surface-adjacent vertices. Use
+`--surface-affinity relu-cosine` only to reproduce the historical zero-clipped
+affinity. Group and cross-fit workflows share this implementation and record
+the selected mode plus graph diagnostics in their manifests.
+
 HippoMaps-style continuous gradients are computed by
 `05_01_compute_hippomaps_gradients.py` and rendered by
 `06_04_render_hippomaps_gradient_products.py`. This route imports official

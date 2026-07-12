@@ -39,6 +39,7 @@ for those details:
 | `scripts/core_workflow/06_02_materialize_group_labels.py` | Materialize functional-atlas label arrays |
 | `scripts/core_workflow/06_03_build_cluster_cortex_panels.py` | Render cluster-based cortex and hippocampal significance panels |
 | `scripts/core_workflow/06_10_render_cluster_roi_strength_panels.py` | Render gradient-spectral and normalized WTA full 400-ROI cortex templates |
+| `scripts/core_workflow/06_11_compare_gradient_spectral_affinities.py` | Compare legacy and shifted-cosine group labels and network assignments |
 | `scripts/core_workflow/06_04_render_hippomaps_gradient_products.py` | Render continuous-gradient products |
 | `scripts/core_workflow/06_05_render_group_gradient_heatmaps.py` | Deprecated heatmap entrypoint that exits with guidance |
 | `scripts/core_workflow/06_06_render_confidence_maps.py` | Render confidence maps |

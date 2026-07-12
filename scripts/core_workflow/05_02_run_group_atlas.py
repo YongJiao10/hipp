@@ -101,6 +101,13 @@ from lib.hippomaps_adapter import (
     hippomaps_import_path,
 )
 from lib.surface_utils import infer_spec_path, long_axis_order
+from lib.surface_affinity import (
+    DEFAULT_SURFACE_AFFINITY,
+    SURFACE_AFFINITY_CHOICES,
+    affinity_graph_diagnostics,
+    build_surface_affinity,
+    surface_affinity_description,
+)
 from lib.kong2022_label_utils import load_kong2022_bundle
 from lib.output_layout import (
     DEFAULT_GROUP_ATLAS_ROOT,
@@ -302,17 +309,6 @@ def profile_redundancy_metrics(profile: np.ndarray) -> tuple[float, int]:
     max_sim = float(np.max(vals))
     redundant_pairs = int(np.sum(vals > float(PROFILE_REDUNDANCY_MAX_SIM)))
     return max_sim, redundant_pairs
-
-
-def cosine_affinity(features: np.ndarray) -> np.ndarray:
-    x = np.asarray(features, dtype=np.float32)
-    norms = np.linalg.norm(x, axis=1, keepdims=True)
-    x = x / np.clip(norms, 1e-12, None)
-    sim = x @ x.T
-    sim = np.clip(sim, -1.0, 1.0)
-    aff = np.maximum(sim, 0.0)
-    np.fill_diagonal(aff, 1.0)
-    return aff.astype(np.float32)
 
 
 def suppress_known_runtime_warnings() -> None:
@@ -1511,7 +1507,11 @@ def cluster_for_subset(
     k: int,
     seed: int,
     gradient_components: tuple[int, ...] = DEFAULT_GRADIENT_COMPONENTS,
+    surface_affinity: str = DEFAULT_SURFACE_AFFINITY,
 ) -> tuple[np.ndarray, np.ndarray]:
+    effective_surface_affinity = (
+        surface_affinity if method == "gradient-spectral" else "relu-cosine"
+    )
     features = group_feature_matrix(
         method=method,
         feature_bank=feature_bank,
@@ -1525,6 +1525,7 @@ def cluster_for_subset(
         adjacency_full=adjacency_full,
         k=int(k),
         seed=int(seed),
+        surface_affinity=effective_surface_affinity,
     )
 
 
@@ -1539,6 +1540,7 @@ def subject_split_ari(
     k: int,
     seeds: list[int],
     gradient_components: tuple[int, ...] = DEFAULT_GRADIENT_COMPONENTS,
+    surface_affinity: str = DEFAULT_SURFACE_AFFINITY,
     allow_diagnostic_failures: bool = False,
 ) -> dict[str, object]:
     vals: list[float] = []
@@ -1576,6 +1578,7 @@ def subject_split_ari(
                 k=k,
                 seed=seed + 1001,
                 gradient_components=gradient_components,
+                surface_affinity=surface_affinity,
             )
             _, full_b = cluster_for_subset(
                 method=method,
@@ -1586,6 +1589,7 @@ def subject_split_ari(
                 k=k,
                 seed=seed + 2001,
                 gradient_components=gradient_components,
+                surface_affinity=surface_affinity,
             )
         except RuntimeError as exc:
             if not allow_diagnostic_failures:
@@ -1625,6 +1629,7 @@ def strong_null_ari(
     k: int,
     seeds: list[int],
     gradient_components: tuple[int, ...] = DEFAULT_GRADIENT_COMPONENTS,
+    surface_affinity: str = DEFAULT_SURFACE_AFFINITY,
     allow_diagnostic_failures: bool = False,
 ) -> dict[str, object]:
     null_bank: dict[str, np.ndarray] = {}
@@ -1646,6 +1651,7 @@ def strong_null_ari(
         k=k,
         seeds=seeds,
         gradient_components=gradient_components,
+        surface_affinity=surface_affinity,
         allow_diagnostic_failures=allow_diagnostic_failures,
     )
     out["permutation_scope"] = "subject_specific"
@@ -1684,14 +1690,17 @@ def cluster_from_precomputed_group_features(
     adjacency_full: sparse.csr_matrix,
     k: int,
     seed: int,
+    surface_affinity: str = DEFAULT_SURFACE_AFFINITY,
 ) -> tuple[np.ndarray, np.ndarray]:
     idx = np.flatnonzero(support_mask)
     if idx.size == 0:
         raise RuntimeError("Support mask has zero vertices")
     adj = adjacency_full[idx][:, idx]
-    aff = cosine_affinity(group_features)
-    fused = sparse.csr_matrix(aff).multiply(adj).tocsr()
-    fused = fused.maximum(fused.T)
+    fused = build_surface_affinity(
+        group_features,
+        adj,
+        mode=surface_affinity,
+    )
     labels = spectral_cluster_from_affinity(fused.toarray(), int(k), int(seed))
     full = np.zeros((support_mask.size,), dtype=np.int32)
     full[idx] = labels
@@ -1724,14 +1733,30 @@ def evaluate_k_candidate(
     k_selection_mode: str,
     roi_fc_bank_for_redundancy: dict[str, np.ndarray] | None,
     gradient_components: tuple[int, ...] = DEFAULT_GRADIENT_COMPONENTS,
+    surface_affinity: str = DEFAULT_SURFACE_AFFINITY,
     allow_diagnostic_failures: bool = False,
 ) -> tuple[int, np.ndarray, dict[str, object]]:
+    effective_surface_affinity = (
+        surface_affinity if method == "gradient-spectral" else "relu-cosine"
+    )
     labels_active, labels_full = cluster_from_precomputed_group_features(
         group_features=group_features_active,
         support_mask=support_mask,
         adjacency_full=adjacency_full,
         k=int(k),
         seed=int(seed),
+        surface_affinity=effective_surface_affinity,
+    )
+    support_indices = np.flatnonzero(support_mask)
+    affinity_graph = build_surface_affinity(
+        group_features_active,
+        adjacency_full[support_indices][:, support_indices],
+        mode=effective_surface_affinity,
+    )
+    graph_diagnostics = affinity_graph_diagnostics(
+        affinity_graph,
+        labels=labels_active,
+        k=int(k),
     )
 
     sizes = [int(np.sum(labels_active == c)) for c in range(1, int(k) + 1)]
@@ -1750,6 +1775,7 @@ def evaluate_k_candidate(
         k=int(k),
         seeds=split_seeds,
         gradient_components=gradient_components,
+        surface_affinity=effective_surface_affinity,
         allow_diagnostic_failures=allow_diagnostic_failures,
     )
     ari_vals = list(ari_obj["values"])
@@ -1777,6 +1803,7 @@ def evaluate_k_candidate(
         k=int(k),
         seeds=null_seeds,
         gradient_components=gradient_components,
+        surface_affinity=effective_surface_affinity,
         allow_diagnostic_failures=allow_diagnostic_failures,
     )
     strong = list(strong_obj["values"])
@@ -1791,6 +1818,7 @@ def evaluate_k_candidate(
         k=int(k),
         seed_base=int(seed_base),
         gradient_components=gradient_components,
+        surface_affinity=effective_surface_affinity,
         allow_diagnostic_failures=allow_diagnostic_failures,
     )
     run_vals = list(run_obj["values"])
@@ -1858,6 +1886,7 @@ def evaluate_k_candidate(
         "B_null_skipped_failure_strong": int(strong_obj["n_skipped_failure"]),
         "min_cluster_size": int(min_size),
         "max_components_per_cluster": int(max_components),
+        "affinity_graph_diagnostics": graph_diagnostics,
         "min_profile_coherence": float(min_coh),
         "mean_profile_coherence": float(mean_coh),
         "nontrivial_min_size_ok": int(min_size >= v_min),
@@ -1962,6 +1991,7 @@ def run_aware_ari(
     k: int,
     seed_base: int,
     gradient_components: tuple[int, ...] = DEFAULT_GRADIENT_COMPONENTS,
+    surface_affinity: str = DEFAULT_SURFACE_AFFINITY,
     allow_diagnostic_failures: bool = False,
 ) -> dict[str, object]:
     runs = sorted(run_feature_banks.keys())
@@ -1979,6 +2009,7 @@ def run_aware_ari(
                 k=int(k),
                 seed=int(seed_base + rid * 1000 + k),
                 gradient_components=gradient_components,
+                surface_affinity=surface_affinity,
             )
         except RuntimeError as exc:
             if not allow_diagnostic_failures:
@@ -3248,6 +3279,16 @@ def build_arg_parser() -> argparse.ArgumentParser:
              "Supported examples: 1, 2, 3, 1,2, 1,2,3. Default: 1,2,3. "
              "05_01 writes aligned G1-G5 via BrainSpace/HippoMaps; this option selects clustering columns.",
     )
+    parser.add_argument(
+        "--surface-affinity",
+        choices=SURFACE_AFFINITY_CHOICES,
+        default=DEFAULT_SURFACE_AFFINITY,
+        help=(
+            "Surface-edge affinity for gradient-spectral clustering. "
+            "shifted-cosine is the maintained default; relu-cosine reproduces "
+            "the legacy zero-clipped graph."
+        ),
+    )
     parser.add_argument("--resume", action="store_true", help="Skip combos that already have group_atlas_manifest.json.")
     parser.add_argument("--k-selection-mode", default="redundancy-aware", choices=["experimental", "redundancy-aware"])
     parser.add_argument(
@@ -3492,6 +3533,11 @@ def main() -> int:
                             "min_profile_coherence": float(args.min_profile_coherence),
                             "subject_fc_preprocessing": subject_fc_preprocessing_for_resume,
                             "gradient_components": [int(c) for c in gradient_components],
+                            "surface_affinity": (
+                                str(args.surface_affinity)
+                                if method == "gradient-spectral"
+                                else None
+                            ),
                             "gradient_root": str(gradient_root) if method == "gradient-spectral" else None,
                             "route_tag": route_tag if method == "gradient-spectral" else None,
                             "redundancy_early_stop": bool(args.redundancy_early_stop),
@@ -3830,6 +3876,7 @@ def main() -> int:
                                     k_selection_mode=str(args.k_selection_mode),
                                     roi_fc_bank_for_redundancy=roi_fc_bank_for_redundancy,
                                     gradient_components=gradient_components,
+                                    surface_affinity=str(args.surface_affinity),
                                     allow_diagnostic_failures=allow_gradient_diagnostic_failures,
                                 )
                                 print(f"  [k-done] {k_result}", flush=True)
@@ -3876,6 +3923,7 @@ def main() -> int:
                                         k_selection_mode=str(args.k_selection_mode),
                                         roi_fc_bank_for_redundancy=roi_fc_bank_for_redundancy,
                                         gradient_components=gradient_components,
+                                        surface_affinity=str(args.surface_affinity),
                                         allow_diagnostic_failures=allow_gradient_diagnostic_failures,
                                     ): int(k)
                                     for k in k_eff
@@ -4361,8 +4409,26 @@ def main() -> int:
                                 if is_gradient_method(method)
                                 else None
                             ),
-                            "clustering_algorithm": "spectral_clustering_precomputed_affinity_relu_cosine_diag0_kmeans_n_init_50",
-                            "affinity_description": "max(cosine_similarity,0)_hadamard_surface_adjacency_diag0",
+                            "clustering_algorithm": (
+                                "spectral_clustering_precomputed_affinity_"
+                                f"{(str(args.surface_affinity) if is_gradient_method(method) else 'relu-cosine').replace('-', '_')}_diag0_"
+                                "kmeans_n_init_50"
+                            ),
+                            "surface_affinity": (
+                                str(args.surface_affinity)
+                                if is_gradient_method(method)
+                                else "relu-cosine"
+                            ),
+                            "affinity_description": surface_affinity_description(
+                                str(args.surface_affinity)
+                                if is_gradient_method(method)
+                                else "relu-cosine"
+                            ),
+                            "affinity_graph_diagnostics": next(
+                                row["affinity_graph_diagnostics"]
+                                for row in rows
+                                if int(row["k"]) == int(k_final)
+                            ),
                             "candidate_k_range_requested": [int(min(k_values)), int(max(k_values))],
                             "candidate_k_range_effective": [int(min(k_eff)), int(max(k_eff))],
                             "candidate_k_values_evaluated": [int(r["k"]) for r in rows],

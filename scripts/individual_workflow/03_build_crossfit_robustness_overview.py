@@ -44,7 +44,44 @@ SUMMARY_FIELDS = (
     "min_pairwise_prototype_correlation",
     "mean_vertex_agreement",
     "min_vertex_agreement",
+    "max_affinity_graph_components",
+    "min_cluster_fraction",
+    "robustness_gate_passed",
 )
+
+ROBUSTNESS_GATE_THRESHOLDS = {
+    "max_affinity_graph_components": 1,
+    "min_cluster_fraction": 0.10,
+    "min_pairwise_macro_dice": 0.85,
+    "min_pairwise_ari": 0.70,
+    "min_pairwise_prototype_correlation": 0.50,
+}
+
+
+def evaluate_robustness_gate(
+    summaries: Sequence[dict[str, Any]],
+) -> dict[str, Any]:
+    failures: list[dict[str, Any]] = []
+    for summary in summaries:
+        combo = {
+            "smoothing": str(summary["smoothing"]),
+            "hemi": str(summary["hemi"]),
+        }
+        for metric, threshold in ROBUSTNESS_GATE_THRESHOLDS.items():
+            value = float(summary[metric])
+            if not np.isfinite(value):
+                failures.append({**combo, "metric": metric, "value": None, "threshold": threshold})
+                continue
+            passed = value <= threshold if metric == "max_affinity_graph_components" else value >= threshold
+            if not passed:
+                failures.append(
+                    {**combo, "metric": metric, "value": value, "threshold": threshold}
+                )
+    return {
+        "passed": not failures,
+        "thresholds": dict(ROBUSTNESS_GATE_THRESHOLDS),
+        "failures": failures,
+    }
 
 
 def _validate_fold_vertex_arrays(
@@ -301,6 +338,11 @@ def _load_combination(
                 f"Fold {fold_index + 1} template manifest mismatch: "
                 + "; ".join(mismatches)
             )
+        graph_diagnostics = manifest.get("affinity_graph_diagnostics")
+        if not isinstance(graph_diagnostics, dict):
+            raise ValueError(
+                f"Fold {fold_index + 1} affinity_graph_diagnostics are missing"
+            )
         input_fingerprints = manifest.get("input_fingerprints")
         artifact_fingerprints = manifest.get("artifact_fingerprints")
         if not isinstance(input_fingerprints, dict):
@@ -364,6 +406,8 @@ def _load_combination(
                 "fold_id": f"fold-{fold_index + 1:02d}",
                 **{key: str(path) for key, path in source_paths.items()},
                 "density_evidence": density_evidence,
+                "surface_affinity": manifest.get("surface_affinity"),
+                "affinity_graph_diagnostics": graph_diagnostics,
             }
         )
 
@@ -454,6 +498,14 @@ def _analyse_combination(combination: dict[str, Any]) -> dict[str, Any]:
         "min_pairwise_prototype_correlation": min_prototype,
         "mean_vertex_agreement": mean_agreement,
         "min_vertex_agreement": min_agreement,
+        "max_affinity_graph_components": max(
+            int(fold["affinity_graph_diagnostics"]["n_connected_components"])
+            for fold in combination["source_folds"]
+        ),
+        "min_cluster_fraction": min(
+            float(fold["affinity_graph_diagnostics"]["min_cluster_fraction"])
+            for fold in combination["source_folds"]
+        ),
     }
     return {
         **combination,
@@ -617,12 +669,16 @@ def render_robustness_overview(
         )
         for smoothing, hemi in requested
     ]
+    summaries = [analysis["summary"] for analysis in analyses]
+    gate = evaluate_robustness_gate(summaries)
+    for summary in summaries:
+        summary["robustness_gate_passed"] = bool(gate["passed"])
     output_root = Path(output_dir)
     png_path = output_root / DEFAULT_FIGURE_NAME
     summary_path = output_root / "robustness_summary.tsv"
     manifest_path = output_root / "robustness_manifest.json"
     _render_figure(analyses, png_path)
-    _write_summary_tsv(summary_path, [analysis["summary"] for analysis in analyses])
+    _write_summary_tsv(summary_path, summaries)
 
     combinations: list[dict[str, Any]] = []
     for analysis in analyses:
@@ -653,6 +709,7 @@ def render_robustness_overview(
         "crossfit_root": str(Path(crossfit_root).resolve()),
         "template_surfaces_dir": str(Path(template_surfaces_dir).resolve()),
         "combinations": combinations,
+        "robustness_gate": gate,
         "outputs": {
             "png": str(png_path.resolve()),
             "summary_tsv": str(summary_path.resolve()),
@@ -706,7 +763,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         n_folds=int(args.n_folds),
     )
     print(json.dumps({key: str(path) for key, path in outputs.items()}, indent=2))
-    return 0
+    manifest = _load_json(outputs["manifest"])
+    return 0 if bool(manifest["robustness_gate"]["passed"]) else 2
 
 
 if __name__ == "__main__":

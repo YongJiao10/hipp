@@ -179,6 +179,18 @@ def test_hcp_family_map_is_required_without_explicit_waiver(tmp_path: Path):
         workflow.resolve_family_map(args, ["01", "02"])
 
 
+def test_crossfit_defaults_to_shifted_cosine_and_accepts_legacy_mode():
+    workflow = load_module()
+
+    default_args = workflow.build_arg_parser().parse_args([])
+    legacy_args = workflow.build_arg_parser().parse_args(
+        ["--surface-affinity", "relu-cosine"]
+    )
+
+    assert default_args.surface_affinity == "shifted-cosine"
+    assert legacy_args.surface_affinity == "relu-cosine"
+
+
 def test_subject_only_family_map_requires_and_records_explicit_waiver(tmp_path: Path):
     workflow = load_module()
     args = workflow.build_arg_parser().parse_args(
@@ -795,6 +807,7 @@ def test_resume_template_validation_rejects_parameter_or_training_mismatch(
         "n_components": 5,
         "gradient_random_state": 0,
         "cluster_seed": 0,
+        "surface_affinity": "shifted-cosine",
         "k_final": 3,
         "density_evidence": {"consumed_asset": str(surface.resolve())},
         "fc_paths": {
@@ -820,6 +833,9 @@ def test_resume_template_validation_rejects_parameter_or_training_mismatch(
     wrong_parameter = dict(manifest, coverage_threshold=0.75)
     with pytest.raises(ValueError, match="Resume template mismatch"):
         workflow.validate_template_manifest(wrong_parameter, config, 1, "2mm", "L")
+    wrong_affinity = dict(manifest, surface_affinity="relu-cosine")
+    with pytest.raises(ValueError, match="surface_affinity"):
+        workflow.validate_template_manifest(wrong_affinity, config, 1, "2mm", "L")
     wrong_training = dict(manifest, training_subjects=["sub-01", "sub-03"])
     with pytest.raises(ValueError, match="Resume template mismatch"):
         workflow.validate_template_manifest(wrong_training, config, 1, "2mm", "L")
