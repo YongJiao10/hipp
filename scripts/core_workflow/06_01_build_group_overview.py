@@ -545,6 +545,39 @@ def validate_count_status_matches_profile(
             )
 
 
+def count_profile_from_status(
+    status_payload: dict,
+    *,
+    network_names: list[str],
+    cluster_ids: list[int],
+) -> np.ndarray:
+    by_cluster = {
+        int(row["cluster_id"]): row
+        for row in status_payload.get("items", [])
+        if "cluster_id" in row
+    }
+    network_index = {str(name): index for index, name in enumerate(network_names)}
+    profile = np.zeros((len(cluster_ids), len(network_names)), dtype=np.float32)
+    for display_index, cluster_id in enumerate(cluster_ids):
+        row = by_cluster.get(int(cluster_id), {})
+        for selected in row.get("top_positive_selected", []):
+            network = next(
+                (
+                    str(selected[key])
+                    for key in ("canonical8", "family17")
+                    if str(selected.get(key, "")) in network_index
+                ),
+                None,
+            )
+            if network is None:
+                raise RuntimeError(
+                    "Selected ROI has no taxonomy value represented in network_names: "
+                    f"cluster_id={cluster_id} selected={selected!r}"
+                )
+            profile[display_index, network_index[network]] += 1.0
+    return profile
+
+
 
 def plot_confidence_panel(ax, rows: list[dict[str, object]], title: str) -> None:
     if not rows:
@@ -1173,6 +1206,16 @@ def render_combo(
                 context=f"{method} {atlas} {smoothing} hemi-R variant={effective_assignment_variant}",
             )
         elif effective_assignment_variant == "count":
+            prof_l_o = count_profile_from_status(
+                status_l,
+                network_names=nets,
+                cluster_ids=cids_l,
+            )
+            prof_r_o = count_profile_from_status(
+                status_r,
+                network_names=nets,
+                cluster_ids=cids_r,
+            )
             validate_count_status_matches_profile(
                 profile_ordered=prof_l_o,
                 status_payload=status_l,

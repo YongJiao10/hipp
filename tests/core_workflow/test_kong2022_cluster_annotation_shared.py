@@ -444,6 +444,35 @@ def test_normalized_topn_count_wta_corrects_network_roi_count_bias() -> None:
     assert row["top2_available_rois"] == 10
     assert row["top2_normalized_count"] == 0.3
 
+
+def test_count_profile_is_reconstructed_from_selected_roi_taxonomy() -> None:
+    payload = {
+        "items": [
+            {
+                "cluster_id": 2,
+                "top_positive_selected": [
+                    {"canonical8": "Default"},
+                    {"canonical8": "Default"},
+                    {"canonical8": "Visual"},
+                ],
+            },
+            {
+                "cluster_id": 1,
+                "top_positive_selected": [
+                    {"canonical8": "Visual"},
+                ],
+            },
+        ]
+    }
+
+    got = overview_mod.count_profile_from_status(
+        payload,
+        network_names=["Visual", "Default"],
+        cluster_ids=[1, 2],
+    )
+
+    assert np.array_equal(got, [[1.0, 0.0], [1.0, 2.0]])
+
 def main() -> int:
     test_method_gate_covers_both_spectral_methods_only()
     test_network_mean_profile_from_kong2022_roi_profile_groups_by_canonical8()
