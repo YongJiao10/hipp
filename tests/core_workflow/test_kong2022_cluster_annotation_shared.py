@@ -398,6 +398,36 @@ def test_weighted_branch_methods_default_is_backward_compatible_and_selectable()
     assert tuple(gradient_only.methods) == ("gradient-spectral",)
 
 
+def test_weighted_gradient_branch_preserves_shifted_cosine_clustering_provenance() -> None:
+    provenance = weighted_branch_mod.weighted_gradient_provenance(
+        {
+            "surface_affinity": "shifted-cosine",
+            "affinity_description": weighted_branch_mod.GRADIENT_SPECTRAL_AFFINITY_DESCRIPTION,
+        }
+    )
+
+    assert provenance == {
+        "clustering_surface_affinity": "shifted-cosine",
+        "clustering_affinity_description": weighted_branch_mod.GRADIENT_SPECTRAL_AFFINITY_DESCRIPTION,
+        "weighted_assignment_only": True,
+    }
+
+
+def test_weighted_gradient_branch_rejects_nonformal_clustering_provenance() -> None:
+    for manifest in (
+        {
+            "surface_affinity": "relu-cosine",
+            "affinity_description": weighted_branch_mod.GRADIENT_SPECTRAL_AFFINITY_DESCRIPTION,
+        },
+        {"affinity_description": weighted_branch_mod.GRADIENT_SPECTRAL_AFFINITY_DESCRIPTION},
+    ):
+        with np.testing.assert_raises_regex(
+            ValueError,
+            "^Inconsistent gradient-spectral affinity provenance$",
+        ):
+            weighted_branch_mod.weighted_gradient_provenance(manifest)
+
+
 def test_weighted_branch_normalizes_template_paths_from_explicit_dataset_roots(tmp_path: Path) -> None:
     surface_dir = tmp_path / "templates" / "group_average_surfaces"
     surface_dir.mkdir(parents=True)

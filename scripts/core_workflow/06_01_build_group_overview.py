@@ -60,6 +60,10 @@ from lib.gifti_labels import (
     materialize_combo,
 )
 from lib.network_colors import load_network_hex_colors
+from lib.surface_affinity import (
+    GRADIENT_SPECTRAL_AFFINITY,
+    GRADIENT_SPECTRAL_AFFINITY_DESCRIPTION,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -101,6 +105,51 @@ WTA_OVERVIEW_SIDE_PANEL_TICK_FS = FS_TICK + WTA_OVERVIEW_SIDE_PANEL_FONT_DELTA_P
 WTA_OVERVIEW_SIDE_PANEL_LEGEND_FS = FS_LEGEND_SMALL + WTA_OVERVIEW_SIDE_PANEL_FONT_DELTA_PT
 WTA_NON_NETWORK_NAME = "__non_network_or_null__"
 GRADIENT_METHOD = "gradient-spectral"
+
+
+def gradient_affinity_provenance(manifests: list[dict[str, object]]) -> dict[str, str]:
+    affinities = {str(item.get("surface_affinity", "")) for item in manifests}
+    descriptions = {str(item.get("affinity_description", "")) for item in manifests}
+    if affinities != {GRADIENT_SPECTRAL_AFFINITY} or descriptions != {
+        GRADIENT_SPECTRAL_AFFINITY_DESCRIPTION
+    }:
+        raise ValueError("Inconsistent gradient-spectral affinity provenance")
+    return {
+        "surface_affinity": GRADIENT_SPECTRAL_AFFINITY,
+        "affinity_description": GRADIENT_SPECTRAL_AFFINITY_DESCRIPTION,
+    }
+
+
+def overview_source_provenance(
+    *,
+    method: str,
+    manifest_paths: list[Path],
+    manifests: list[dict[str, object]],
+) -> dict[str, object]:
+    provenance: dict[str, object] = {
+        "source_group_manifests": [str(path) for path in manifest_paths],
+    }
+    if _is_gradient_method(method):
+        provenance.update(gradient_affinity_provenance(manifests))
+    return provenance
+
+
+def overview_title(
+    *,
+    atlas: str,
+    method: str,
+    route_tag: str | None,
+    mode_tag: str | None,
+    assignment_variant: str | None,
+    surface_affinity: object = None,
+) -> str:
+    return (
+        f"Group Overview | {atlas} | {method}"
+        + (f" | {route_tag}" if route_tag else "")
+        + (f" | {mode_tag}" if mode_tag else "")
+        + (f" | {assignment_variant}" if assignment_variant else "")
+        + (f" | {surface_affinity}" if _is_gradient_method(method) else "")
+    )
 
 
 def resolve_render_assignment_variants(method: str, assignment_variant: str) -> tuple[str | None, ...]:
@@ -964,11 +1013,25 @@ def render_combo(
         gs = fig.add_gridspec(nrows=2, ncols=2, width_ratios=[1.40, 1.30], hspace=0.06, wspace=0.05)
     rows_meta: list[dict[str, object]] = []
 
+    manifest_paths: list[Path] = []
+    for smoothing in SMOOTHINGS:
+        manifest_paths.extend(
+            [
+                _build_run_dir(group_root, method, atlas, smoothing, coverage_tag, hemi, gradient_comp_tag=gradient_comp_tag)
+                / "group_atlas_manifest.json"
+                for hemi in ("L", "R")
+            ]
+        )
+    source_manifests = [load_json(path) for path in manifest_paths]
+    source_provenance = overview_source_provenance(
+        method=method,
+        manifest_paths=manifest_paths,
+        manifests=source_manifests,
+    )
+
     for ridx, smoothing in enumerate(SMOOTHINGS):
-        left_manifest = _build_run_dir(group_root, method, atlas, smoothing, coverage_tag, "L", gradient_comp_tag=gradient_comp_tag) / "group_atlas_manifest.json"
-        right_manifest = _build_run_dir(group_root, method, atlas, smoothing, coverage_tag, "R", gradient_comp_tag=gradient_comp_tag) / "group_atlas_manifest.json"
-        m_l = load_json(left_manifest)
-        m_r = load_json(right_manifest)
+        left_manifest, right_manifest = manifest_paths[2 * ridx : 2 * ridx + 2]
+        m_l, m_r = source_manifests[2 * ridx : 2 * ridx + 2]
         d_l = left_manifest.parent
         d_r = right_manifest.parent
         if method not in CLUSTERLESS_METHODS and effective_assignment_variant == "fisherz":
@@ -1312,17 +1375,24 @@ def render_combo(
         gradient_comp_tag=gradient_comp_tag,
         output_name=output_name,
     )
-    fig.suptitle(
-        f"Group Overview | {atlas} | {method}"
-        + (f" | {route_tag}" if route_tag else "")
-        + (f" | {effective_mode_tag}" if effective_mode_tag else "")
-        + (f" | {effective_assignment_variant}" if effective_assignment_variant else ""),
-        fontsize=FS_SUPTITLE,
+    rendered_title = overview_title(
+        atlas=atlas,
+        method=method,
+        route_tag=route_tag,
+        mode_tag=effective_mode_tag,
+        assignment_variant=effective_assignment_variant,
+        surface_affinity=source_provenance.get("surface_affinity"),
     )
+    fig.suptitle(rendered_title, fontsize=FS_SUPTITLE)
     out_png.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_png, dpi=300)
     plt.close(fig)
-    return {"overview_png": str(out_png), "rows": rows_meta}
+    return {
+        "overview_png": str(out_png),
+        "rows": rows_meta,
+        "rendered_title": rendered_title,
+        **source_provenance,
+    }
 
 
 def write_readme(present_dir: Path, items: list[dict[str, object]]) -> None:
@@ -1467,8 +1537,7 @@ def main() -> int:
                         if row_meta
                         else "missing"
                     )
-                    items.append(
-                        {
+                    item: dict[str, object] = {
                             "atlas": atlas,
                             "method": method,
                             "gradient_comp_tag": comp_tag or None,
@@ -1480,7 +1549,14 @@ def main() -> int:
                             "assignment_variant": assignment_variant,
                             "source_group_root": str(group_root),
                         }
-                    )
+                    for key in (
+                        "source_group_manifests",
+                        "surface_affinity",
+                        "affinity_description",
+                    ):
+                        if key in meta:
+                            item[key] = meta[key]
+                    items.append(item)
 
     manifest = {"present_dir": str(present_dir), "count": len(items), "items": items}
     if not bool(args.skip_manifest):

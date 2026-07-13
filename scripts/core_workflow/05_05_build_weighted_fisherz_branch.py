@@ -33,6 +33,10 @@ from lib.output_layout import (
     DEFAULT_OVERVIEWS_DIR,
     DEFAULT_ROUTEA_GROUP_ATLAS_ROOT,
 )
+from lib.surface_affinity import (
+    GRADIENT_SPECTRAL_AFFINITY,
+    GRADIENT_SPECTRAL_AFFINITY_DESCRIPTION,
+)
 from lib.workflow_utils import write_json
 from lib.weighted_fisherz import (
     assign_weighted_network_profile_rows,
@@ -58,6 +62,20 @@ HEMIS = ("L", "R")
 ATLAS = "kong2022"
 COVERAGE_TAG = "cov_0p80"
 WEIGHTED_VARIANT = "weighted_fisherz"
+
+
+def weighted_gradient_provenance(manifest: dict[str, object]) -> dict[str, object]:
+    if (
+        str(manifest.get("surface_affinity", "")) != GRADIENT_SPECTRAL_AFFINITY
+        or str(manifest.get("affinity_description", ""))
+        != GRADIENT_SPECTRAL_AFFINITY_DESCRIPTION
+    ):
+        raise ValueError("Inconsistent gradient-spectral affinity provenance")
+    return {
+        "clustering_surface_affinity": GRADIENT_SPECTRAL_AFFINITY,
+        "clustering_affinity_description": GRADIENT_SPECTRAL_AFFINITY_DESCRIPTION,
+        "weighted_assignment_only": True,
+    }
 
 
 def read_tsv(path: Path) -> list[dict[str, object]]:
@@ -229,6 +247,7 @@ def recompute_gradient_weighted_run(
         template_surface_dir=template_surface_dir,
         template_spec=template_spec,
     )
+    clustering_provenance = weighted_gradient_provenance(manifest)
     if str(manifest.get("status", "ok")) != "ok":
         raise RuntimeError(f"Cannot recompute non-ok run: {manifest_path}")
     labels = np.load(dst_run / "group_labels_final.npy").astype(np.int32)
@@ -296,6 +315,7 @@ def recompute_gradient_weighted_run(
         "source_assignment_variant_preserved": "fisherz",
         "network_profile_weighting": "network_timeseries_weighted_by_roi_n_grayordinates_used_then_fisherz_fc",
     }
+    manifest.update(clustering_provenance)
     write_json(manifest_path, manifest)
     if not materialize_combo(manifest_path, color_map):
         raise RuntimeError(f"Failed to materialize weighted_fisherz labels: {manifest_path}")
