@@ -17,6 +17,7 @@ if str(CORE_WORKFLOW_DIR) not in sys.path:
     sys.path.insert(0, str(CORE_WORKFLOW_DIR))
 
 from lib.formal_cohorts import cohort_key_for_manifest, load_formal_subjects
+from upgrade_retained_hcp_formal_provenance import prepare_retained_manifest_updates
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -397,7 +398,8 @@ def derive_formal_group_identities(
 ) -> tuple[tuple[str, str, str], ...]:
     """Derive formal identities from actual consumer/producer commands."""
     root = Path(repo_root).resolve()
-    identities: set[tuple[str, str, str]] = set()
+    producers: list[tuple[str, str, str]] = []
+    overview_consumers: list[tuple[str, str, str]] = []
     for stage in stages:
         for command in _stage_commands(stage):
             script = Path(command[1]).name
@@ -416,8 +418,33 @@ def derive_formal_group_identities(
             else:
                 continue
             branch = group_root.relative_to(root / dataset / "work/group_atlas").parts[0]
-            identities.add((dataset, branch, atlas))
-    return tuple(identity for identity in FORMAL_GROUPS if identity in identities)
+            identity = (dataset, branch, atlas)
+            if script == "06_01_build_group_overview.py":
+                overview_consumers.append(identity)
+            else:
+                producers.append(identity)
+    producer_counts = {identity: producers.count(identity) for identity in set(producers)}
+    consumer_counts = {
+        identity: overview_consumers.count(identity) for identity in set(overview_consumers)
+    }
+    ordered: list[tuple[str, str, str]] = []
+    for identity in [*producers, *overview_consumers]:
+        if identity not in ordered:
+            ordered.append(identity)
+    return tuple(
+        identity
+        for identity in ordered
+        for _ in range(max(producer_counts.get(identity, 0), consumer_counts.get(identity, 0)))
+    )
+
+
+def validate_retained_hcp_preflight(repo_root: Path) -> None:
+    root = Path(repo_root).resolve()
+    subjects_manifest = (
+        root / "outputs_hcp/inputs/hcp/kong2022/manifests"
+        / "hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt"
+    )
+    prepare_retained_manifest_updates(root, subjects_manifest)
 
 
 def _group_manifest_path(group_root: Path, smoothing: str, hemi: str) -> Path:
@@ -716,6 +743,7 @@ def preflight(repo_root: Path, stages: list[dict[str, object]]) -> None:
     missing = sorted(str(path) for path in required if not path.exists())
     if missing:
         raise FileNotFoundError("Missing formal refresh inputs:\n" + "\n".join(missing))
+    validate_retained_hcp_preflight(root)
     if len(stages) != 19:
         raise ValueError(f"Expected exactly 19 formal refresh stages, got {len(stages)}")
 

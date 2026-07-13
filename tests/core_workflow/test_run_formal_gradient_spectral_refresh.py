@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import subprocess
+from collections import Counter
 from pathlib import Path
 
 import pytest
@@ -327,22 +328,89 @@ def test_stage_plan_derived_groups_match_audit_and_upgrade_precedes_weighted() -
     audit = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(audit)
 
-    assert set(runner.derive_formal_group_identities(stages, REPO_ROOT)) == set(audit.FORMAL_GROUPS)
+    assert Counter(runner.derive_formal_group_identities(stages, REPO_ROOT)) == Counter(audit.FORMAL_GROUPS)
     registry = json.loads((REPO_ROOT / "scripts/core_workflow/step_registry.json").read_text())
-    derived = set(runner.derive_formal_group_identities(stages, REPO_ROOT))
+    derived = runner.derive_formal_group_identities(stages, REPO_ROOT)
     for utility in registry["utilities"]:
         if utility["step_id"] in {
             "audit_formal_gradient_spectral_release",
             "run_formal_gradient_spectral_refresh",
         }:
-            assert {
+            assert Counter(
                 (row["dataset"], row["group_root"], row["atlas"])
                 for row in utility["formal_groups"]
-            } == derived
+            ) == Counter(derived)
     weighted = next(stage for stage in stages if stage["name"] == "hcp_weighted_branch")
     commands = runner._stage_commands(weighted)
     assert commands[0][1].endswith("upgrade_retained_hcp_formal_provenance.py")
     assert commands[1][1].endswith("05_05_build_weighted_fisherz_branch.py")
+
+
+def test_derived_group_identities_expose_extra_and_duplicate_stages() -> None:
+    runner = load_runner()
+    stages = runner.build_stage_plan(repo_root=REPO_ROOT, python_exe=PY314, jobs=1)
+    baseline = runner.derive_formal_group_identities(stages, REPO_ROOT)
+    assert len(baseline) == 9
+
+    duplicate = [*stages, dict(next(stage for stage in stages if stage["name"] == "lynch20_group"))]
+    duplicate_identities = runner.derive_formal_group_identities(duplicate, REPO_ROOT)
+    assert len(duplicate_identities) == 10
+    assert duplicate_identities.count(("outputs_hcp", "lynch2024_20net_nsi043_full_k3_normalized_wta", "lynch2024_20net")) == 2
+    assert Counter(duplicate_identities) != Counter(baseline)
+
+    duplicate_consumer = [
+        *stages,
+        dict(next(stage for stage in stages if stage["name"] == "lynch20_overview")),
+    ]
+    duplicate_consumer_identities = runner.derive_formal_group_identities(
+        duplicate_consumer, REPO_ROOT
+    )
+    assert duplicate_consumer_identities.count(
+        ("outputs_hcp", "lynch2024_20net_nsi043_full_k3_normalized_wta", "lynch2024_20net")
+    ) == 2
+
+    extra_root = REPO_ROOT / "outputs_hcp/work/group_atlas/unplanned_full_k3"
+    extra_command = list(next(stage for stage in stages if stage["name"] == "hcp_routea_overviews")["command"])
+    extra_command[extra_command.index("--group-root") + 1] = str(extra_root)
+    extra = [*stages, {"name": "unplanned_overview", "command": extra_command}]
+    extra_identities = runner.derive_formal_group_identities(extra, REPO_ROOT)
+    assert ("outputs_hcp", "unplanned_full_k3", "kong2022") in extra_identities
+    assert Counter(extra_identities) != Counter(baseline)
+
+
+def test_launch_reuses_complete_retained_validation_before_popen(
+    tmp_path: Path, monkeypatch
+) -> None:
+    runner = load_runner()
+    fixture_path = REPO_ROOT / "tests/core_workflow/test_upgrade_retained_hcp_formal_provenance.py"
+    fixture_spec = importlib.util.spec_from_file_location("retained_fixture_for_preflight", fixture_path)
+    assert fixture_spec is not None and fixture_spec.loader is not None
+    fixture_module = importlib.util.module_from_spec(fixture_spec)
+    fixture_spec.loader.exec_module(fixture_module)
+    _subjects_manifest, manifests, _binaries = fixture_module.build_fixture(tmp_path)
+    payload = json.loads(manifests[0].read_text())
+    missing = tmp_path / "outputs_hcp/inputs/consumed_missing.npy"
+    payload["actual_consumed_input_paths"]["fixture"] = str(missing)
+    manifests[0].write_text(json.dumps(payload))
+    called = False
+    monkeypatch.setattr(runner, "required_preexisting_paths", lambda _root: [])
+    monkeypatch.setattr(
+        runner,
+        "build_stage_plan",
+        lambda **_kwargs: [
+            {"name": f"stage_{index}", "command": [str(PY314), str(SCRIPT)]}
+            for index in range(19)
+        ],
+    )
+    def fake_popen(*_args, **_kwargs):
+        nonlocal called
+        called = True
+
+    monkeypatch.setattr(runner.subprocess, "Popen", fake_popen)
+
+    with pytest.raises(FileNotFoundError, match="actual_consumed_input_paths"):
+        runner.launch(repo_root=tmp_path, run_id="formal", jobs=1)
+    assert called is False
 
 
 def test_launch_forwards_worker_command_and_writes_detached_paths(tmp_path, monkeypatch) -> None:

@@ -69,5 +69,12 @@ artifact fingerprints before any atomic JSON replacement. It runs as the first
 command inside the existing `hcp_weighted_branch` stage, preserving the approved
 19 top-level stage names while preceding weighted copying and all later HCP
 overview/audit consumers.
+The commit phase stages all eight JSON updates and rolls every manifest back to
+its exact original bytes if replacement 2 through 8 fails, leaving no temporary
+or backup files. Launcher preflight reuses the same pure prepare/validation
+phase before detaching. Formal identity derivation reads actual producer and
+otherwise-unrepresented overview commands without filtering through the
+expected constant, retaining duplicate producers and unexpected groups so the
+registry equality test detects drift.
 Artifact-level provenance and required evidence are maintained in
 `docs/hipp_parcellation_network/core_workflow_artifact_lineage.md`.

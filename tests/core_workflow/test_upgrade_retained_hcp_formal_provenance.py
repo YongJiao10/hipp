@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -147,3 +148,31 @@ def test_upgrade_rejects_invalid_input_without_partial_writes(tmp_path: Path, fa
         module.upgrade_retained_manifests(tmp_path, subjects_manifest)
 
     assert all("dataset" not in json.loads(path.read_text()) for path in manifests)
+
+
+@pytest.mark.parametrize("failure_index", range(2, 9))
+def test_commit_rolls_back_all_eight_on_mid_replacement_failure(
+    tmp_path: Path, failure_index: int
+) -> None:
+    module = load_module()
+    subjects_manifest, manifests, _binaries = build_fixture(tmp_path)
+    prepared = module.prepare_retained_manifest_updates(tmp_path, subjects_manifest)
+    originals = {path: path.read_bytes() for path in manifests}
+    replacement_count = 0
+
+    def failing_replace(source: Path, destination: Path) -> None:
+        nonlocal replacement_count
+        replacement_count += 1
+        if replacement_count == failure_index:
+            raise OSError(f"injected replacement failure {failure_index}")
+        os.replace(source, destination)
+
+    with pytest.raises(OSError, match="injected replacement failure"):
+        module.commit_prepared_updates(prepared, replace=failing_replace)
+
+    assert {path: path.read_bytes() for path in manifests} == originals
+    debris = [
+        path for manifest in manifests for path in manifest.parent.iterdir()
+        if path.name.startswith(f".{manifest.name}.")
+    ]
+    assert debris == []

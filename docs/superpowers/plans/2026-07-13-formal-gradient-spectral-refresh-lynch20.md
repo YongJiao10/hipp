@@ -17,6 +17,7 @@
 - Diagnostic K range is `[2, 8]`; final K is `3`.
 - Production execution is strictly sequential with `jobs=1`, safe run IDs, stop-on-first-failure status, and low-frequency monitoring.
 - Before retained HCP branches are consumed, a non-computational all-or-nothing validation pass atomically enriches their eight JSON manifests with dataset/root and verified artifact-fingerprint provenance; no binary output is rewritten.
+- The eight-manifest commit stages every JSON update first and restores all exact original bytes on any mid-replacement failure; launcher preflight runs the same complete read-only preparation before detaching.
 - Do not recompute RouteB, ctxreg, ctxdrop, or archived experimental gradient-spectral branches.
 - Do not alter continuous HippoMaps products except the Lynch gradient-bank route rename/rebuild.
 - Preserve unrelated root dirty deletions and the uncommitted root handoff.

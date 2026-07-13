@@ -11,6 +11,7 @@ import re
 import sys
 import uuid
 from pathlib import Path
+from typing import Callable, NamedTuple
 
 CORE_WORKFLOW_DIR = Path(__file__).resolve().parent
 if str(CORE_WORKFLOW_DIR) not in sys.path:
@@ -38,6 +39,12 @@ _ASSIGNMENT_FIELDS = (
     "cluster_assignment_status", "group_functional_atlas_labels",
     "group_functional_atlas_label_map", "template_functional_atlas_label",
 )
+
+
+class PreparedManifestUpdate(NamedTuple):
+    path: Path
+    original_bytes: bytes
+    updated_bytes: bytes
 
 
 def _within(path: Path, root: Path) -> bool:
@@ -90,10 +97,14 @@ def retained_manifest_paths(repo_root: Path) -> list[Path]:
     ]
 
 
-def _validated_payload(path: Path, hcp_root: Path, subjects_manifest: Path, subjects: list[str]) -> dict[str, object]:
+def _validated_payload(
+    path: Path, hcp_root: Path, subjects_manifest: Path, subjects: list[str],
+    *, original_bytes: bytes | None = None,
+) -> dict[str, object]:
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+        raw = path.read_bytes() if original_bytes is None else original_bytes
+        payload = json.loads(raw.decode("utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise ValueError(f"Cannot read retained manifest {path}: {exc}") from exc
     if not isinstance(payload, dict):
         raise ValueError(f"Retained manifest is not an object: {path}")
@@ -197,13 +208,10 @@ def _validated_payload(path: Path, hcp_root: Path, subjects_manifest: Path, subj
     return payload
 
 
-def _atomic_write(path: Path, payload: dict[str, object]) -> None:
-    temporary = path.with_name(f".{path.name}.{os.getpid()}.{uuid.uuid4().hex}.tmp")
-    temporary.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    os.replace(temporary, path)
-
-
-def upgrade_retained_manifests(repo_root: Path, subjects_manifest: Path) -> dict[str, object]:
+def prepare_retained_manifest_updates(
+    repo_root: Path, subjects_manifest: Path
+) -> tuple[PreparedManifestUpdate, ...]:
+    """Validate and render all eight updates without modifying the filesystem."""
     root = Path(repo_root).resolve()
     hcp_root = (root / "outputs_hcp").resolve()
     approved_subjects = Path(subjects_manifest).resolve()
@@ -211,14 +219,71 @@ def upgrade_retained_manifests(repo_root: Path, subjects_manifest: Path) -> dict
         raise ValueError(f"HCP 151 subject manifest outside canonical HCP root: {approved_subjects}")
     subjects = load_formal_subjects(approved_subjects, "hcp151")
     paths = retained_manifest_paths(root)
-    # Validate and fingerprint every manifest before the first write.
-    payloads = [
-        (path, _validated_payload(path, hcp_root, approved_subjects, subjects))
-        for path in paths
-    ]
-    for path, payload in payloads:
-        _atomic_write(path, payload)
-    return {"status": "ok", "updated_count": len(payloads), "manifests": [str(path) for path, _ in payloads]}
+    prepared: list[PreparedManifestUpdate] = []
+    for path in paths:
+        original = path.read_bytes()
+        payload = _validated_payload(
+            path, hcp_root, approved_subjects, subjects, original_bytes=original
+        )
+        updated = (json.dumps(payload, indent=2, sort_keys=True) + "\n").encode("utf-8")
+        prepared.append(PreparedManifestUpdate(path, original, updated))
+    return tuple(prepared)
+
+
+def _staged_path(path: Path, role: str) -> Path:
+    return path.with_name(
+        f".{path.name}.{os.getpid()}.{uuid.uuid4().hex}.{role}.tmp"
+    )
+
+
+def commit_prepared_updates(
+    prepared: tuple[PreparedManifestUpdate, ...],
+    *, replace: Callable[[Path, Path], None] = os.replace,
+) -> None:
+    """Commit every prepared JSON or restore every exact original byte string."""
+    staged: dict[Path, Path] = {}
+    cleanup: set[Path] = set()
+    try:
+        for update in prepared:
+            temporary = _staged_path(update.path, "new")
+            temporary.write_bytes(update.updated_bytes)
+            staged[update.path] = temporary
+            cleanup.add(temporary)
+        try:
+            for update in prepared:
+                replace(staged[update.path], update.path)
+                cleanup.discard(staged[update.path])
+        except Exception as commit_error:
+            rollback_errors: list[Exception] = []
+            for update in prepared:
+                try:
+                    if update.path.read_bytes() == update.original_bytes:
+                        continue
+                    rollback = _staged_path(update.path, "rollback")
+                    cleanup.add(rollback)
+                    rollback.write_bytes(update.original_bytes)
+                    os.replace(rollback, update.path)
+                    cleanup.discard(rollback)
+                except Exception as exc:  # pragma: no cover - catastrophic storage failure
+                    rollback_errors.append(exc)
+            if rollback_errors:
+                raise RuntimeError(
+                    f"Provenance transaction failed and rollback was incomplete: {rollback_errors}"
+                ) from commit_error
+            raise
+    finally:
+        for temporary in cleanup:
+            temporary.unlink(missing_ok=True)
+
+
+def upgrade_retained_manifests(repo_root: Path, subjects_manifest: Path) -> dict[str, object]:
+    prepared = prepare_retained_manifest_updates(repo_root, subjects_manifest)
+    commit_prepared_updates(prepared)
+    return {
+        "status": "ok",
+        "updated_count": len(prepared),
+        "manifests": [str(update.path) for update in prepared],
+    }
 
 
 def main() -> int:

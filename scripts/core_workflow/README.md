@@ -68,7 +68,10 @@ The formal runner first invokes
 retained RouteA canonical8/family17 manifests, the exact 151-subject cohort,
 canonical HCP roots, stored resume fingerprints, and assignment/binary assets
 before atomically adding JSON provenance to every manifest. Validation failure
-occurs before the first write; labels and other binary outputs are never changed.
+occurs before the first write. All eight updated JSON files are staged before
+commit; any mid-replacement failure restores the exact original bytes for every
+manifest and removes transaction debris. Labels and other binary outputs are
+never changed.
 Weighted branch manifests explicitly carry the dataset/root and exact source
 manifest/cohort provenance. The audit independently revalidates each formal
 manifest's cohort against its recorded subjects and subject count.
@@ -120,6 +123,10 @@ by an earlier stage of the same 19-stage plan are deliberately excluded from
 preflight. Missing-input errors list the exact absent paths. Successful launch
 JSON uses `status: launched` and reports detached records as `status_path`,
 `pid_path`, `stdout_path`, `stderr_path`, and `audit_path`.
+Preflight calls the retained upgrader's complete read-only prepare/validation
+phase, so consumed inputs, assignment assets, stored fingerprints, and every
+other upgrader-required leaf are checked before `Popen`, not deferred to the
+detached worker.
 
 To retire pre-formalization gradient-spectral products, write and review a
 signed inventory with `retire_legacy_gradient_spectral_outputs.py --write-plan
