@@ -36,6 +36,7 @@ from lib.output_layout import (
 from lib.surface_affinity import (
     GRADIENT_SPECTRAL_AFFINITY,
     GRADIENT_SPECTRAL_AFFINITY_DESCRIPTION,
+    validate_gradient_spectral_affinity_provenance,
 )
 from lib.workflow_utils import write_json
 from lib.weighted_fisherz import (
@@ -65,15 +66,10 @@ WEIGHTED_VARIANT = "weighted_fisherz"
 
 
 def weighted_gradient_provenance(manifest: dict[str, object]) -> dict[str, object]:
-    if (
-        str(manifest.get("surface_affinity", "")) != GRADIENT_SPECTRAL_AFFINITY
-        or str(manifest.get("affinity_description", ""))
-        != GRADIENT_SPECTRAL_AFFINITY_DESCRIPTION
-    ):
-        raise ValueError("Inconsistent gradient-spectral affinity provenance")
+    provenance = validate_gradient_spectral_affinity_provenance([manifest])
     return {
-        "clustering_surface_affinity": GRADIENT_SPECTRAL_AFFINITY,
-        "clustering_affinity_description": GRADIENT_SPECTRAL_AFFINITY_DESCRIPTION,
+        "clustering_surface_affinity": provenance["surface_affinity"],
+        "clustering_affinity_description": provenance["affinity_description"],
         "weighted_assignment_only": True,
     }
 

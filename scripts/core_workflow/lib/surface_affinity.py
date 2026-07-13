@@ -15,6 +15,21 @@ POSITIVE_COSINE_AFFINITY_DESCRIPTION = (
 )
 
 
+def validate_gradient_spectral_affinity_provenance(
+    manifests: list[dict[str, object]],
+) -> dict[str, str]:
+    affinities = {str(item.get("surface_affinity", "")) for item in manifests}
+    descriptions = {str(item.get("affinity_description", "")) for item in manifests}
+    if affinities != {GRADIENT_SPECTRAL_AFFINITY} or descriptions != {
+        GRADIENT_SPECTRAL_AFFINITY_DESCRIPTION
+    }:
+        raise ValueError("Inconsistent gradient-spectral affinity provenance")
+    return {
+        "surface_affinity": GRADIENT_SPECTRAL_AFFINITY,
+        "affinity_description": GRADIENT_SPECTRAL_AFFINITY_DESCRIPTION,
+    }
+
+
 def _cosine_on_surface_edges(
     features: np.ndarray,
     adjacency: sparse.spmatrix,

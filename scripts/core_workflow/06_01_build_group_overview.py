@@ -63,6 +63,7 @@ from lib.network_colors import load_network_hex_colors
 from lib.surface_affinity import (
     GRADIENT_SPECTRAL_AFFINITY,
     GRADIENT_SPECTRAL_AFFINITY_DESCRIPTION,
+    validate_gradient_spectral_affinity_provenance,
 )
 
 
@@ -108,16 +109,7 @@ GRADIENT_METHOD = "gradient-spectral"
 
 
 def gradient_affinity_provenance(manifests: list[dict[str, object]]) -> dict[str, str]:
-    affinities = {str(item.get("surface_affinity", "")) for item in manifests}
-    descriptions = {str(item.get("affinity_description", "")) for item in manifests}
-    if affinities != {GRADIENT_SPECTRAL_AFFINITY} or descriptions != {
-        GRADIENT_SPECTRAL_AFFINITY_DESCRIPTION
-    }:
-        raise ValueError("Inconsistent gradient-spectral affinity provenance")
-    return {
-        "surface_affinity": GRADIENT_SPECTRAL_AFFINITY,
-        "affinity_description": GRADIENT_SPECTRAL_AFFINITY_DESCRIPTION,
-    }
+    return validate_gradient_spectral_affinity_provenance(manifests)
 
 
 def overview_source_provenance(
@@ -1005,14 +997,6 @@ def render_combo(
         if method in CLUSTERLESS_METHODS and str(assignment_variant) == "normalized_top20_count"
         else (None if method in CLUSTERLESS_METHODS else str(assignment_variant))
     )
-    if method in CLUSTERLESS_METHODS:
-        fig = plt.figure(figsize=(19.0, 12.8), dpi=180, constrained_layout=True)
-        gs = fig.add_gridspec(nrows=2, ncols=3, width_ratios=[0.62, 1.18, 1.42], hspace=0.08, wspace=0.06)
-    else:
-        fig = plt.figure(figsize=(15.4, 12.2), dpi=180, constrained_layout=True)
-        gs = fig.add_gridspec(nrows=2, ncols=2, width_ratios=[1.40, 1.30], hspace=0.06, wspace=0.05)
-    rows_meta: list[dict[str, object]] = []
-
     manifest_paths: list[Path] = []
     for smoothing in SMOOTHINGS:
         manifest_paths.extend(
@@ -1028,6 +1012,14 @@ def render_combo(
         manifest_paths=manifest_paths,
         manifests=source_manifests,
     )
+
+    if method in CLUSTERLESS_METHODS:
+        fig = plt.figure(figsize=(19.0, 12.8), dpi=180, constrained_layout=True)
+        gs = fig.add_gridspec(nrows=2, ncols=3, width_ratios=[0.62, 1.18, 1.42], hspace=0.08, wspace=0.06)
+    else:
+        fig = plt.figure(figsize=(15.4, 12.2), dpi=180, constrained_layout=True)
+        gs = fig.add_gridspec(nrows=2, ncols=2, width_ratios=[1.40, 1.30], hspace=0.06, wspace=0.05)
+    rows_meta: list[dict[str, object]] = []
 
     for ridx, smoothing in enumerate(SMOOTHINGS):
         left_manifest, right_manifest = manifest_paths[2 * ridx : 2 * ridx + 2]

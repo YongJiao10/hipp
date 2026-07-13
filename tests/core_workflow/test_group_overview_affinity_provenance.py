@@ -88,3 +88,34 @@ def test_wta_overview_item_has_sources_without_gradient_affinity_fields() -> Non
     assert item == {"source_group_manifests": [str(path) for path in paths]}
     assert "surface_affinity" not in item
     assert "affinity_description" not in item
+
+
+def test_invalid_gradient_provenance_fails_before_figure_creation(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    invalid = _shifted_manifest()
+    invalid["surface_affinity"] = "relu-cosine"
+    monkeypatch.setattr(overview_mod, "load_json", lambda _path: dict(invalid))
+
+    def fail_if_figure_created(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("figure created before provenance validation")
+
+    monkeypatch.setattr(overview_mod.plt, "figure", fail_if_figure_created)
+
+    with pytest.raises(
+        ValueError,
+        match="^Inconsistent gradient-spectral affinity provenance$",
+    ):
+        overview_mod.render_combo(
+            group_root=tmp_path / "group",
+            present_dir=tmp_path / "present",
+            method="gradient-spectral",
+            atlas="kong2022",
+            coverage_tag="cov_0p80",
+            scene=tmp_path / "scene",
+            route_tag="routea",
+            mode_tag=None,
+            assignment_variant="fisherz",
+            gradient_comp_tag="g1g2g3",
+        )

@@ -428,6 +428,28 @@ def test_weighted_gradient_branch_rejects_nonformal_clustering_provenance() -> N
             weighted_branch_mod.weighted_gradient_provenance(manifest)
 
 
+def test_weighted_gradient_provenance_delegates_to_shared_validator(monkeypatch) -> None:
+    calls: list[list[dict[str, object]]] = []
+
+    def shared_validator(manifests: list[dict[str, object]]) -> dict[str, str]:
+        calls.append(manifests)
+        return {
+            "surface_affinity": "shifted-cosine",
+            "affinity_description": weighted_branch_mod.GRADIENT_SPECTRAL_AFFINITY_DESCRIPTION,
+        }
+
+    monkeypatch.setattr(
+        weighted_branch_mod,
+        "validate_gradient_spectral_affinity_provenance",
+        shared_validator,
+    )
+    manifest = {"source": "fixture"}
+
+    weighted_branch_mod.weighted_gradient_provenance(manifest)
+
+    assert calls == [[manifest]]
+
+
 def test_weighted_branch_normalizes_template_paths_from_explicit_dataset_roots(tmp_path: Path) -> None:
     surface_dir = tmp_path / "templates" / "group_average_surfaces"
     surface_dir.mkdir(parents=True)
