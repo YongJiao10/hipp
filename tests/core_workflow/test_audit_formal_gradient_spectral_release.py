@@ -7,6 +7,8 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+import pytest
+
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MODULE_PATH = REPO_ROOT / "scripts/core_workflow/audit_formal_gradient_spectral_release.py"
@@ -29,6 +31,7 @@ module = _load_module()
 class FormalFixture:
     contract: dict[str, object]
     manifests: tuple[Path, ...]
+    group_manifests: dict[tuple[str, str, str], tuple[Path, ...]]
     overview_manifest: Path
 
 
@@ -41,26 +44,35 @@ def build_formal_fixture(
     repo_root: Path,
     *,
     surface_affinity: str,
-    branch: str = "routea_full_k3_fisherz",
-    assignment_variant: str = "fisherz",
 ) -> FormalFixture:
-    group_root = repo_root / "outputs_hcp/work/group_atlas" / branch
+    contract = module.default_contract()
     manifest_paths: list[Path] = []
-    for smoothing in ("2mm", "4mm"):
-        for hemi in ("L", "R"):
-            manifest = (
-                group_root
-                / "gradient-spectral/kong2022"
-                / smoothing
-                / "cov_0p80/g1g2g3"
-                / f"hemi_{hemi}/group_atlas_manifest.json"
-            )
-            _write_json(
-                manifest,
-                {
+    group_manifests: dict[tuple[str, str, str], tuple[Path, ...]] = {}
+    overview_items: list[dict[str, object]] = []
+    for group in contract["groups"]:
+        identity = (
+            str(group["output_root"]),
+            str(group["branch"]),
+            str(group["atlas"]),
+        )
+        group_root = (
+            repo_root / identity[0] / "work/group_atlas" / identity[1]
+        )
+        group_paths: list[Path] = []
+        for smoothing in ("2mm", "4mm"):
+            for hemi in ("L", "R"):
+                manifest = (
+                    group_root
+                    / "gradient-spectral"
+                    / identity[2]
+                    / smoothing
+                    / "cov_0p80/g1g2g3"
+                    / f"hemi_{hemi}/group_atlas_manifest.json"
+                )
+                payload: dict[str, object] = {
                     "status": "ok",
                     "method": "gradient-spectral",
-                    "atlas": "kong2022",
+                    "atlas": identity[2],
                     "smoothing": smoothing,
                     "hemi": hemi,
                     "surface_affinity": surface_affinity,
@@ -81,48 +93,63 @@ def build_formal_fixture(
                     "actual_consumed_input_paths": {
                         "sub-001": str((repo_root / "inputs/features.npy").resolve())
                     },
-                    "default_assignment_variant": assignment_variant,
-                    "assignment_variants": {assignment_variant: {"status": "ok"}},
+                    "default_assignment_variant": group["assignment_variant"],
+                    "assignment_variants": {
+                        str(group["assignment_variant"]): {"status": "ok"}
+                    },
                     "resume_input_signature_payload": {
-                        "route_tag": "routea",
+                        "route_tag": group["route_tag"],
                         "gradient_root": str((repo_root / "inputs/gradients").resolve()),
                     },
-                },
-            )
-            manifest_paths.append(manifest.resolve())
+                }
+                if group["assignment_variant"] == "weighted_fisherz":
+                    payload.update(
+                        {
+                            "clustering_surface_affinity": "shifted-cosine",
+                            "clustering_affinity_description": (
+                                module.SHIFTED_COSINE_DESCRIPTION
+                            ),
+                            "weighted_assignment_only": True,
+                        }
+                    )
+                _write_json(manifest, payload)
+                manifest_paths.append(manifest.resolve())
+                group_paths.append(manifest.resolve())
+        group_manifests[identity] = tuple(group_paths)
+        overview_items.append(
+            {
+                "atlas": identity[2],
+                "method": "gradient-spectral",
+                "assignment_variant": group["assignment_variant"],
+                "source_group_root": str(group_root.resolve()),
+                "surface_affinity": surface_affinity,
+                "affinity_description": module.SHIFTED_COSINE_DESCRIPTION,
+                "source_group_manifests": [str(path) for path in group_paths],
+                "overview_png": str(
+                    (
+                        repo_root
+                        / identity[0]
+                        / "present/overviews/formal"
+                        / f"{identity[1]}.png"
+                    ).resolve()
+                ),
+            }
+        )
 
     overview_manifest = repo_root / "outputs_hcp/present/overviews/formal/group_overview_manifest.json"
     _write_json(
         overview_manifest,
         {
-            "count": 1,
-            "items": [
-                {
-                    "atlas": "kong2022",
-                    "method": "gradient-spectral",
-                    "assignment_variant": assignment_variant,
-                    "source_group_root": str(group_root.resolve()),
-                    "surface_affinity": surface_affinity,
-                    "affinity_description": module.SHIFTED_COSINE_DESCRIPTION,
-                    "source_group_manifests": [str(path) for path in manifest_paths],
-                    "overview_png": str((overview_manifest.parent / "overview.png").resolve()),
-                }
-            ],
+            "count": len(overview_items),
+            "items": overview_items,
         },
     )
-    contract: dict[str, object] = {
-        "groups": [
-            {
-                "output_root": "outputs_hcp",
-                "branch": branch,
-                "atlas": "kong2022",
-                "route_tag": "routea",
-                "assignment_variant": assignment_variant,
-            }
-        ],
-        "overview_roots": ["outputs_hcp/present/overviews"],
-    }
-    return FormalFixture(contract, tuple(manifest_paths), overview_manifest)
+    return FormalFixture(
+        contract,
+        tuple(manifest_paths),
+        group_manifests,
+        overview_manifest,
+    )
 
 
 def test_audit_rejects_legacy_group_manifest(tmp_path: Path) -> None:
@@ -143,8 +170,8 @@ def test_audit_accepts_complete_release(tmp_path: Path) -> None:
     fixture = build_formal_fixture(tmp_path, surface_affinity="shifted-cosine")
     report = module.audit_release(tmp_path, fixture.contract)
     assert report["status"] == "ok"
-    assert report["group_combinations"] == 4
-    assert report["overview_items"] == 1
+    assert report["group_combinations"] == 36
+    assert report["overview_items"] == 9
     assert report["failures"] == []
 
 
@@ -183,13 +210,78 @@ def test_default_contract_uses_routea_for_stanford_subgroups() -> None:
     assert {group["route_tag"] for group in groups} == {"routea"}
 
 
-def test_contract_accepts_brief_group_tuple(tmp_path: Path) -> None:
-    fixture = build_formal_fixture(tmp_path, surface_affinity="shifted-cosine")
-    fixture.contract["groups"] = [
-        ("outputs_hcp", "routea_full_k3_fisherz", "kong2022")
-    ]
+def test_default_contract_has_exact_formal_group_identities() -> None:
+    identities = {
+        (group["output_root"], group["branch"], group["atlas"])
+        for group in module.default_contract()["groups"]
+    }
 
-    assert module.audit_release(tmp_path, fixture.contract)["status"] == "ok"
+    assert identities == set(module.FORMAL_GROUPS)
+    assert len(module.default_contract()["groups"]) == len(module.FORMAL_GROUPS)
+
+
+def test_audit_rejects_empty_subset_extra_and_out_of_scope_contracts(
+    tmp_path: Path,
+) -> None:
+    fixture = build_formal_fixture(tmp_path, surface_affinity="shifted-cosine")
+    valid_groups = fixture.contract["groups"]
+    invalid_groups = (
+        [],
+        valid_groups[:-1],
+        [*valid_groups, valid_groups[0]],
+        [
+            *valid_groups[:-1],
+            {
+                "output_root": "outputs_hcp",
+                "branch": "routeb_full_k3_fisherz",
+                "atlas": "kong2022",
+                "route_tag": "routeb",
+                "assignment_variant": "fisherz",
+            },
+        ],
+        [
+            *valid_groups[:-1],
+            {
+                "output_root": "outputs_hcp",
+                "branch": "routea_ctxreg_full_k3_fisherz",
+                "atlas": "kong2022",
+                "route_tag": "routea_ctxreg",
+                "assignment_variant": "fisherz",
+            },
+        ],
+    )
+
+    for groups in invalid_groups:
+        contract = {**fixture.contract, "groups": groups}
+        report = module.audit_release(tmp_path, contract)
+        assert report["status"] == "failed"
+        assert any("formal group identities" in item for item in report["failures"])
+
+
+def test_audit_rejects_missing_or_wrong_weighted_affinity_description(
+    tmp_path: Path,
+) -> None:
+    fixture = build_formal_fixture(tmp_path, surface_affinity="shifted-cosine")
+    weighted_identity = (
+        "outputs_hcp",
+        "routea_weighted_fisherz_full_k3",
+        "kong2022",
+    )
+    manifest = fixture.group_manifests[weighted_identity][0]
+    original = json.loads(manifest.read_text(encoding="utf-8"))
+    for invalid in (None, "wrong-description"):
+        payload = dict(original)
+        if invalid is None:
+            payload.pop("clustering_affinity_description")
+        else:
+            payload["clustering_affinity_description"] = invalid
+        _write_json(manifest, payload)
+        report = module.audit_release(tmp_path, fixture.contract)
+        assert report["status"] == "failed"
+        assert any(
+            "clustering_affinity_description" in item
+            for item in report["failures"]
+        )
 
 
 def test_audit_reports_all_manifest_faults_in_one_pass(tmp_path: Path) -> None:
@@ -240,8 +332,6 @@ def test_allow_incomplete_only_changes_cli_exit_status(tmp_path: Path) -> None:
         [
             "--repo-root",
             str(tmp_path),
-            "--contract-json",
-            json.dumps(fixture.contract),
             "--output-json",
             str(output),
             "--allow-incomplete",
@@ -250,3 +340,8 @@ def test_allow_incomplete_only_changes_cli_exit_status(tmp_path: Path) -> None:
 
     assert exit_code == 0
     assert json.loads(output.read_text(encoding="utf-8"))["status"] == "failed"
+
+
+def test_cli_rejects_unplanned_contract_override() -> None:
+    with pytest.raises(SystemExit):
+        module._parser().parse_args(["--contract-json", "{}"])

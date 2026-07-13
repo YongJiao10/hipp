@@ -9,7 +9,7 @@ import os
 import sys
 import uuid
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Iterable
 
 
 SHIFTED_COSINE = "shifted-cosine"
@@ -295,6 +295,13 @@ def _audit_group_manifest(
             path,
             failures,
         )
+        _require_equal(
+            manifest,
+            "clustering_affinity_description",
+            SHIFTED_COSINE_DESCRIPTION,
+            path,
+            failures,
+        )
         _require_equal(manifest, "weighted_assignment_only", True, path, failures)
 
 
@@ -405,23 +412,31 @@ def _audit_group_overview(
     return valid_count
 
 
-def _normalize_group(raw_group: object) -> dict[str, object] | None:
+def _group_identity(raw_group: object) -> tuple[str, str, str] | None:
     if isinstance(raw_group, dict):
-        return raw_group
-    if isinstance(raw_group, (list, tuple)) and len(raw_group) == 3:
-        output_root, branch, atlas = (str(value) for value in raw_group)
-        settings = _GROUP_SETTINGS.get(branch)
-        if settings is None:
+        fields = ("output_root", "branch", "atlas")
+        if any(field not in raw_group for field in fields):
             return None
-        route_tag, assignment_variant = settings
-        return {
-            "output_root": output_root,
-            "branch": branch,
-            "atlas": atlas,
-            "route_tag": route_tag,
-            "assignment_variant": assignment_variant,
-        }
+        return (
+            str(raw_group["output_root"]),
+            str(raw_group["branch"]),
+            str(raw_group["atlas"]),
+        )
+    if isinstance(raw_group, (list, tuple)) and len(raw_group) == 3:
+        return (str(raw_group[0]), str(raw_group[1]), str(raw_group[2]))
     return None
+
+
+def _canonical_group(identity: tuple[str, str, str]) -> dict[str, object]:
+    output_root, branch, atlas = identity
+    route_tag, assignment_variant = _GROUP_SETTINGS[branch]
+    return {
+        "output_root": output_root,
+        "branch": branch,
+        "atlas": atlas,
+        "route_tag": route_tag,
+        "assignment_variant": assignment_variant,
+    }
 
 
 def audit_release(repo_root: Path, contract: dict[str, object]) -> dict[str, object]:
@@ -437,23 +452,28 @@ def audit_release(repo_root: Path, contract: dict[str, object]) -> dict[str, obj
             "failures": ["invalid: contract groups must be a list"],
         }
 
+    identities = [_group_identity(group) for group in groups]
+    expected_identities = set(FORMAL_GROUPS)
+    if (
+        any(identity is None for identity in identities)
+        or len(identities) != len(FORMAL_GROUPS)
+        or set(identities) != expected_identities
+    ):
+        return {
+            "status": "failed",
+            "group_combinations": 0,
+            "overview_items": 0,
+            "failures": [
+                "invalid: contract formal group identities must equal FORMAL_GROUPS exactly"
+            ],
+        }
+
     overview_items = _overview_items(root, contract, failures)
     audited_combinations = 0
     valid_overview_items = 0
-    for index, raw_group_value in enumerate(groups):
-        raw_group = _normalize_group(raw_group_value)
-        if raw_group is None:
-            failures.append(
-                f"invalid: contract groups[{index}] must be an object or known formal group tuple"
-            )
-            continue
-        required = {"output_root", "branch", "atlas", "route_tag", "assignment_variant"}
-        missing = sorted(required - raw_group.keys())
-        if missing:
-            failures.append(
-                f"invalid: contract groups[{index}] missing fields: {', '.join(missing)}"
-            )
-            continue
+    for identity in identities:
+        assert identity is not None
+        raw_group = _canonical_group(identity)
         expected_paths: set[Path] = set()
         for smoothing in SMOOTHINGS:
             for hemi in HEMIS:
@@ -504,18 +524,12 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--repo-root", type=Path, default=Path(__file__).resolve().parents[2])
     parser.add_argument("--output-json", type=Path)
     parser.add_argument("--allow-incomplete", action="store_true")
-    parser.add_argument("--contract-json", help=argparse.SUPPRESS)
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     contract = default_contract()
-    if args.contract_json:
-        decoded: Any = json.loads(args.contract_json)
-        if not isinstance(decoded, dict):
-            raise ValueError("--contract-json must decode to an object")
-        contract = decoded
     report = audit_release(args.repo_root, contract)
     if args.output_json is not None:
         _atomic_write_json(args.output_json, report)

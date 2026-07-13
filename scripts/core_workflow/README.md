@@ -48,6 +48,32 @@ runtime affinity selector or compatibility mode. Group and cross-fit workflows
 share this implementation and record the fixed definition plus graph diagnostics
 in their manifests.
 
+Audit the formal group release without modifying workflow outputs with:
+
+```bash
+/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/audit_formal_gradient_spectral_release.py --repo-root "$PWD"
+```
+
+The audit accepts exactly these nine group branches under each dataset's
+`work/group_atlas/` directory; an empty, partial, duplicated, additional, or
+substituted group contract is invalid:
+
+- HCP: `routea_full_k3_fisherz`, `routea_17net_full_k3_fisherz`,
+  `routea_weighted_fisherz_full_k3`,
+  `lynch2024_20net_nsi043_full_k3_normalized_wta`, and
+  `lynch2024_8net_nsi043_full_k3_normalized_wta`.
+- Stanford: `routea_hc_full_k3_fisherz`, `routea_symp_full_k3_fisherz`,
+  `routea_hc_weighted_fisherz_full_k3`, and
+  `routea_symp_weighted_fisherz_full_k3`.
+
+Every branch must provide its 2mm/4mm by L/R gradient-spectral manifests and
+matching overview lineage with formal shifted-cosine, K=2..8, final K=3,
+connected-graph, source-path, and assignment provenance. The default exit code
+is 0 only for a complete `status=ok` release; missing or invalid provenance
+exits 1. `--allow-incomplete` changes the exit code only when every failure is
+a missing artifact, and never accepts invalid or legacy provenance. Pass
+`--output-json PATH` to atomically write the same JSON report printed to stdout.
+
 To retire pre-formalization gradient-spectral products, write and review a
 signed inventory with `retire_legacy_gradient_spectral_outputs.py --write-plan
 _archive/gradient_spectral_relu_cosine_20260713/reviewed_plan.json`, then apply
