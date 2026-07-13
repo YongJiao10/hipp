@@ -10,13 +10,13 @@ For active core-workflow RouteA gradient presentation, use:
 
 ## Official Inputs
 
-When this repository refers to an unqualified `gradient` group-atlas result, use the weighted-fisherz branch by default: `outputs_hcp/work/group_atlas/routea_weighted_fisherz_full_k3/gradient-spectral/`. Use the non-weighted `routea_full_k3_fisherz` branch only when explicitly requested.
+When this repository refers to an unqualified `gradient` group-atlas result, use the formal shifted-cosine branch: `outputs_hcp/work/group_atlas/routea_full_k3_fisherz/gradient-spectral/`. Retired weighted-fisherz/relu-cosine products are archival provenance, not active defaults.
 
 - Hippocampal overview renderer: `scripts/core_workflow/06_01_build_group_overview.py`
 - Cluster significance panel renderer: `scripts/core_workflow/06_03_build_cluster_cortex_panels.py`
 - Full 400-ROI template renderer (gradient-spectral and normalized WTA): `scripts/core_workflow/06_10_render_cluster_roi_strength_panels.py`
 - Continuous HippoMaps gradient renderer: `scripts/core_workflow/06_04_render_hippomaps_gradient_products.py`
-- HCP 151 weighted-fisherz cluster/subfield composition renderer: `scripts/core_workflow/06_08_render_hcp_subfield_composition.py`; outputs PNG, subject-long TSV, summary TSV, and manifest under `outputs_hcp/present/subfield_composition/`. It computes area-weighted subject-level cluster/subfield proportions from HippUnfold `space-corobl_den-512_label-hipp_midthickness.surf.gii` surfaces, then reports cohort mean and SEM; the PNG legend omits subfields whose plotted mean contribution is zero across all panels, while TSV outputs retain those zero rows for provenance.
+- HCP 151 cluster/subfield composition renderer: `scripts/core_workflow/06_08_render_hcp_subfield_composition.py`; its default group root is the formal RouteA shifted-cosine branch. It outputs PNG, subject-long TSV, summary TSV, and manifest under `outputs_hcp/present/subfield_composition/`, computing area-weighted subject-level cluster/subfield proportions from HippUnfold `space-corobl_den-512_label-hipp_midthickness.surf.gii` surfaces.
 - Scene templates: `config/wb_locked_native_view_lateral_medial.scene` and `config/manual_wb_scenes/cortex_manual.scene`
 - Workbench executable: `software/workbench/bin_linux64/wb_command` through `scripts/core_workflow/lib/workbench.py`
 

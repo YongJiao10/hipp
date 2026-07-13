@@ -195,7 +195,7 @@
     {
       "step_id": "05_02_run_group_atlas",
       "stage": "05_group_atlas",
-      "purpose": "Build group atlas outputs; defaults evaluate K=2..10 while fixing maintained final presentation K=3. Lynch2024 is maintained for gradient-spectral and normalized wta-top only, with --profile-surface-root used for Kong-style cluster time-series profile annotation when needed.",
+      "purpose": "Build group atlas outputs; defaults evaluate K=2..8 while fixing maintained final presentation K=3. Lynch2024 is maintained for gradient-spectral and normalized wta-top only, with --profile-surface-root used for Kong-style cluster time-series profile annotation when needed.",
       "branches": [
         "kong2019",
         "kong2022_routea",
@@ -381,17 +381,6 @@
       "entry_script": "scripts/core_workflow/06_10_render_cluster_roi_strength_panels.py",
       "implementation_script": "scripts/core_workflow/06_10_render_cluster_roi_strength_panels.py",
       "recommended_manifest": "outputs_hcp/present/cortex_panels/cortex_kong2022_gradient-spectral_2mm4mm_template_strength_overview_manifest.json"
-    },
-    {
-      "step_id": "06_11_compare_gradient_spectral_affinities",
-      "stage": "06_presentation_products",
-      "purpose": "Compare legacy ReLU-cosine and shifted-cosine gradient-spectral group outputs.",
-      "branches": [
-        "kong2022_routea"
-      ],
-      "entry_script": "scripts/core_workflow/06_11_compare_gradient_spectral_affinities.py",
-      "implementation_script": "scripts/core_workflow/06_11_compare_gradient_spectral_affinities.py",
-      "recommended_manifest": "outputs_hcp/reruns/<run_id>/present/overviews/gradient_spectral_affinity_difference_manifest.json"
     },
     {
       "step_id": "07_01_build_group_matrix",

@@ -9,6 +9,7 @@ from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 import numpy as np
+import pytest
 from PIL import Image
 
 
@@ -453,16 +454,16 @@ def test_group_atlas_parser_defaults_to_fixed_k3() -> None:
     parser = atlas_mod.build_arg_parser()
     args = parser.parse_args([])
     assert int(args.k_min) == 2
-    assert int(args.k_max) == 10
+    assert int(args.k_max) == 8
     assert int(args.force_final_k) == 3
-    assert args.surface_affinity == "shifted-cosine"
+    assert not hasattr(args, "surface_affinity")
 
 
-def test_group_atlas_parser_accepts_legacy_relu_cosine() -> None:
-    args = atlas_mod.build_arg_parser().parse_args(
-        ["--surface-affinity", "relu-cosine"]
-    )
-    assert args.surface_affinity == "relu-cosine"
+def test_group_atlas_parser_rejects_retired_surface_affinity_option() -> None:
+    with pytest.raises(SystemExit):
+        atlas_mod.build_arg_parser().parse_args(
+            ["--surface-affinity", "relu-cosine"]
+        )
 
 
 def test_group_atlas_gradient_spectral_loads_hippomaps_gradient_artifacts() -> None:
@@ -614,7 +615,7 @@ def test_smoke_command_plan_uses_isolated_fixedk_full_layout() -> None:
     assert "present_fixedk" not in joined
     assert "10perc" not in joined
     assert "--force-final-k 3" in joined
-    assert "--k-min 2 --k-max 10" in joined
+    assert "--k-min 2 --k-max 8" in joined
     assert str(layout["overviews"]) in joined
     assert "group-network-partial-spectral" not in joined
     assert "group-intrinsic-partial-spectral" not in joined

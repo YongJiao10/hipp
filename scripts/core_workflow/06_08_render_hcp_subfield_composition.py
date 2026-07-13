@@ -27,7 +27,7 @@ import numpy as np
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_GROUP_ROOT = REPO_ROOT / "outputs_hcp" / "work" / "group_atlas" / "routea_weighted_fisherz_full_k3"
+DEFAULT_GROUP_ROOT = REPO_ROOT / "outputs_hcp" / "work" / "group_atlas" / "routea_full_k3_fisherz"
 DEFAULT_HIPPUNFOLD_ROOT = REPO_ROOT / "outputs_hcp" / "inputs" / "hcp" / "hippunfold" / "dense_corobl_batch"
 DEFAULT_OUT_DIR = REPO_ROOT / "outputs_hcp" / "present" / "subfield_composition"
 METHOD = "gradient-spectral"
@@ -527,7 +527,7 @@ def run(args: argparse.Namespace) -> dict[str, Path]:
             "atlas": args.atlas,
             "coverage_tag": args.coverage_tag,
             "gradient_components": args.gradient_components,
-            "gradient_default_policy": "unqualified gradient uses routea_weighted_fisherz_full_k3",
+            "gradient_default_policy": "unqualified gradient uses routea_full_k3_fisherz",
             "smoothings": list(args.smoothings),
             "hemis": [h.upper() for h in args.hemis],
             "cluster_display_names": CLUSTER_NAMES,

@@ -143,7 +143,7 @@ def fixed_k_selection_rows(
     smoothing: str,
     hemi: str,
     n_support: int,
-    k_values: tuple[int, ...] | range = range(2, 11),
+    k_values: tuple[int, ...] | range = range(2, 9),
     selected_k: int = DEFAULT_K,
     redundancy_by_k: dict[int, tuple[float, int]] | None = None,
 ) -> list[dict[str, object]]:
@@ -207,7 +207,7 @@ def fixed_k_selection_rows(
     return rows
 
 
-def k_selection_summary_has_full_range(path: Path, *, k_values: range = range(2, 11)) -> bool:
+def k_selection_summary_has_full_range(path: Path, *, k_values: range = range(2, 9)) -> bool:
     if not Path(path).exists():
         return False
     lines = Path(path).read_text(encoding="utf-8").splitlines()
@@ -240,7 +240,7 @@ def individual_gradient_redundancy_by_k(
     surface_root: Path,
     smoothing: str,
     hemi: str,
-    k_values: range = range(2, 11),
+    k_values: range = range(2, 9),
 ) -> dict[int, tuple[float, int]]:
     coords, faces = core.load_surface(Path(surface_path))
     adjacency = core.build_surface_adjacency(faces, int(coords.shape[0]))
@@ -251,6 +251,7 @@ def individual_gradient_redundancy_by_k(
     for k_raw in k_values:
         k = int(k_raw)
         _labels_active, labels_full = core.cluster_from_precomputed_group_features(
+            method="gradient-spectral",
             group_features=gradients,
             support_mask=valid,
             adjacency_full=adjacency,

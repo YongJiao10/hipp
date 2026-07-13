@@ -33,7 +33,7 @@ Within `kong2022`, RouteA, RouteA 17-net, RouteA cortex-regression, RouteA corte
 
 Group atlas method families include intrinsic FC, network/ROI FC, WTA, and
 `gradient-spectral`. The maintained presentation policy is fixed final `K=3`;
-`05_02_run_group_atlas.py` defaults to evaluating `K=2..10` while using `--force-final-k 3`. The legacy automatic K selector is still available through
+`05_02_run_group_atlas.py` defaults to evaluating `K=2..8` while using `--force-final-k 3`. The automatic K selector is still available through
 `--auto-k` for diagnostics but is no longer the default display policy. Partial
 correlation spectral branches are retired from public method choices.
 

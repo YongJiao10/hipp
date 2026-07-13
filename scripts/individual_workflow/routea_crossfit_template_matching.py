@@ -40,11 +40,10 @@ from lib.output_layout import (
 )
 from lib.surface_utils import long_axis_order
 from lib.surface_affinity import (
-    DEFAULT_SURFACE_AFFINITY,
-    SURFACE_AFFINITY_CHOICES,
+    GRADIENT_SPECTRAL_AFFINITY,
+    GRADIENT_SPECTRAL_AFFINITY_DESCRIPTION,
     affinity_graph_diagnostics,
-    build_surface_affinity,
-    surface_affinity_description,
+    build_gradient_spectral_affinity,
 )
 
 
@@ -77,7 +76,6 @@ class CrossfitConfig:
     n_components: int = 5
     gradient_random_state: int = 0
     cluster_seed: int = 0
-    surface_affinity: str = DEFAULT_SURFACE_AFFINITY
 
 
 @dataclass(frozen=True)
@@ -263,15 +261,6 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default=DEFAULT_GRADIENT_RANDOM_STATE,
     )
     parser.add_argument("--cluster-seed", type=int, default=0)
-    parser.add_argument(
-        "--surface-affinity",
-        choices=SURFACE_AFFINITY_CHOICES,
-        default=DEFAULT_SURFACE_AFFINITY,
-        help=(
-            "Surface-edge affinity for template gradient-spectral clustering. "
-            "shifted-cosine is the maintained default; relu-cosine is legacy."
-        ),
-    )
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--resume", action="store_true")
     return parser
@@ -649,7 +638,7 @@ def validate_template_manifest(
         "n_components": int(config.n_components),
         "gradient_random_state": int(config.gradient_random_state),
         "cluster_seed": int(config.cluster_seed),
-        "surface_affinity": str(config.surface_affinity),
+        "surface_affinity": GRADIENT_SPECTRAL_AFFINITY,
         "k_final": DEFAULT_K,
     }
     mismatches: list[str] = []
@@ -890,22 +879,21 @@ def fit_fold_template(
     gradients_full = reconstruct_full_surface(gradients_active, support_mask, vertex_count)
     adjacency = core.build_surface_adjacency(faces, vertex_count)
     _labels_active, labels_full = core.cluster_from_precomputed_group_features(
+        method="gradient-spectral",
         group_features=np.asarray(gradients_active[:, :DEFAULT_K], dtype=np.float32),
         support_mask=support_mask,
         adjacency_full=adjacency,
         k=DEFAULT_K,
         seed=int(config.cluster_seed),
-        surface_affinity=str(config.surface_affinity),
     )
     labels_full = core.reorder_labels_by_long_axis(
         labels_full.astype(np.int32),
         long_axis_order(surface_path),
     ).astype(np.int32)
     support_indices = np.flatnonzero(support_mask)
-    affinity_graph = build_surface_affinity(
+    affinity_graph = build_gradient_spectral_affinity(
         np.asarray(gradients_active[:, :DEFAULT_K], dtype=np.float32),
         adjacency[support_indices][:, support_indices],
-        mode=str(config.surface_affinity),
     )
     graph_diagnostics = affinity_graph_diagnostics(
         affinity_graph,
@@ -957,10 +945,8 @@ def fit_fold_template(
         "n_components": int(config.n_components),
         "gradient_random_state": int(config.gradient_random_state),
         "cluster_seed": int(config.cluster_seed),
-        "surface_affinity": str(config.surface_affinity),
-        "affinity_description": surface_affinity_description(
-            str(config.surface_affinity)
-        ),
+        "surface_affinity": GRADIENT_SPECTRAL_AFFINITY,
+        "affinity_description": GRADIENT_SPECTRAL_AFFINITY_DESCRIPTION,
         "affinity_graph_diagnostics": graph_diagnostics,
         "k_final": DEFAULT_K,
         "cluster_label_semantics": {"1": "Anterior", "2": "Body", "3": "Posterior"},
@@ -1502,7 +1488,7 @@ def run_config_payload(
         "n_components": int(args.n_components),
         "gradient_random_state": int(args.gradient_random_state),
         "cluster_seed": int(args.cluster_seed),
-        "surface_affinity": str(args.surface_affinity),
+        "surface_affinity": GRADIENT_SPECTRAL_AFFINITY,
         "k_final": DEFAULT_K,
     }
 
@@ -1587,7 +1573,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         n_components=int(args.n_components),
         gradient_random_state=int(args.gradient_random_state),
         cluster_seed=int(args.cluster_seed),
-        surface_affinity=str(args.surface_affinity),
     )
     template_fits = 0
     mapping_outputs: list[dict[str, str]] = []
@@ -1626,7 +1611,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         "n_components": int(args.n_components),
         "gradient_random_state": int(args.gradient_random_state),
         "cluster_seed": int(args.cluster_seed),
-        "surface_affinity": str(args.surface_affinity),
+        "surface_affinity": GRADIENT_SPECTRAL_AFFINITY,
         "k_final": DEFAULT_K,
         "template_fits_completed": int(template_fits),
         "subject_combo_mappings_completed": len(mapping_outputs),

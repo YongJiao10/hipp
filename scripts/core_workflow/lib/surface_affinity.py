@@ -5,32 +5,20 @@ from scipy import sparse
 from scipy.sparse.csgraph import connected_components
 
 
-DEFAULT_SURFACE_AFFINITY = "shifted-cosine"
-SURFACE_AFFINITY_CHOICES = (DEFAULT_SURFACE_AFFINITY, "relu-cosine")
-
-_DESCRIPTIONS = {
-    "shifted-cosine": "((1+cosine_similarity)/2)_hadamard_surface_adjacency_diag0",
-    "relu-cosine": "max(cosine_similarity,0)_hadamard_surface_adjacency_diag0",
-}
-
-
-def surface_affinity_description(mode: str) -> str:
-    key = str(mode)
-    if key not in SURFACE_AFFINITY_CHOICES:
-        raise ValueError(
-            f"Unsupported surface affinity: {key!r}; expected {SURFACE_AFFINITY_CHOICES}"
-        )
-    return _DESCRIPTIONS[key]
+GRADIENT_SPECTRAL_AFFINITY = "shifted-cosine"
+GRADIENT_SPECTRAL_AFFINITY_DESCRIPTION = (
+    "((1+cosine_similarity)/2)_hadamard_surface_adjacency_diag0"
+)
+POSITIVE_COSINE_AFFINITY = "relu-cosine"
+POSITIVE_COSINE_AFFINITY_DESCRIPTION = (
+    "max(cosine_similarity,0)_hadamard_surface_adjacency_diag0"
+)
 
 
-def build_surface_affinity(
+def _cosine_on_surface_edges(
     features: np.ndarray,
     adjacency: sparse.spmatrix,
-    *,
-    mode: str = DEFAULT_SURFACE_AFFINITY,
-) -> sparse.csr_matrix:
-    key = str(mode)
-    surface_affinity_description(key)
+) -> tuple[np.ndarray, sparse.csr_matrix]:
     x = np.asarray(features, dtype=np.float32)
     if x.ndim != 2:
         raise ValueError(f"features must be 2D, got shape={x.shape}")
@@ -43,15 +31,37 @@ def build_surface_affinity(
     norms = np.linalg.norm(x, axis=1, keepdims=True)
     normalized = x / np.clip(norms, 1e-12, None)
     cosine = np.clip(normalized @ normalized.T, -1.0, 1.0)
-    if key == "shifted-cosine":
-        dense_affinity = (cosine + np.float32(1.0)) / np.float32(2.0)
-    else:
-        dense_affinity = np.maximum(cosine, np.float32(0.0))
-    fused = sparse.csr_matrix(dense_affinity).multiply(adj).tocsr()
+    return cosine, adj
+
+
+def _fuse_with_surface(
+    dense_affinity: np.ndarray,
+    adjacency: sparse.csr_matrix,
+) -> sparse.csr_matrix:
+    fused = sparse.csr_matrix(dense_affinity).multiply(adjacency).tocsr()
     fused = fused.maximum(fused.T).tocsr()
     fused.setdiag(0.0)
     fused.eliminate_zeros()
     return fused.astype(np.float32)
+
+
+def build_gradient_spectral_affinity(
+    features: np.ndarray,
+    adjacency: sparse.spmatrix,
+) -> sparse.csr_matrix:
+    cosine, adj = _cosine_on_surface_edges(features, adjacency)
+    shifted = (cosine + np.float32(1.0)) / np.float32(2.0)
+    return _fuse_with_surface(shifted, adj)
+
+
+def build_positive_cosine_surface_affinity(
+    features: np.ndarray,
+    adjacency: sparse.spmatrix,
+) -> sparse.csr_matrix:
+    """Build the established affinity used by non-gradient spectral methods."""
+    cosine, adj = _cosine_on_surface_edges(features, adjacency)
+    positive = np.maximum(cosine, np.float32(0.0))
+    return _fuse_with_surface(positive, adj)
 
 
 def affinity_graph_diagnostics(

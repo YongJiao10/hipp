@@ -317,13 +317,13 @@ def test_individual_k_selection_rows_cover_full_fixed_k_curve():
         smoothing="2mm",
         hemi="L",
         n_support=512,
-        redundancy_by_k={2: (0.25, 0), 3: (0.40, 0), 10: (0.90, 2)},
+        redundancy_by_k={2: (0.25, 0), 3: (0.40, 0), 8: (0.90, 2)},
     )
 
-    assert [int(row["k"]) for row in rows] == list(range(2, 11))
+    assert [int(row["k"]) for row in rows] == list(range(2, 9))
     assert [int(row["selected_final"]) for row in rows].count(1) == 1
     assert next(row for row in rows if int(row["selected_final"]) == 1)["k"] == 3
-    assert [float(row["group_ari_mean"]) for row in rows] == [1.0] * 9
+    assert [float(row["group_ari_mean"]) for row in rows] == [1.0] * 7
     assert float(rows[0]["max_profile_similarity"]) == 0.25
     assert int(rows[-1]["redundant_pair_count"]) == 2
 
@@ -523,4 +523,3 @@ def test_weighted_gradient_recompute_is_not_limited_to_family17() -> None:
     source = (REPO_ROOT / "scripts" / "individual_workflow" / "02_build_individual_overviews.py").read_text(encoding="utf-8")
 
     assert "assignment_variant == \"weighted_fisherz\" and network_column != \"canonical8\"" not in source
-

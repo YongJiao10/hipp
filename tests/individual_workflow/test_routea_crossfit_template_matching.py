@@ -179,16 +179,15 @@ def test_hcp_family_map_is_required_without_explicit_waiver(tmp_path: Path):
         workflow.resolve_family_map(args, ["01", "02"])
 
 
-def test_crossfit_defaults_to_shifted_cosine_and_accepts_legacy_mode():
+def test_crossfit_uses_fixed_gradient_spectral_affinity_without_cli_mode():
     workflow = load_module()
 
     default_args = workflow.build_arg_parser().parse_args([])
-    legacy_args = workflow.build_arg_parser().parse_args(
-        ["--surface-affinity", "relu-cosine"]
-    )
-
-    assert default_args.surface_affinity == "shifted-cosine"
-    assert legacy_args.surface_affinity == "relu-cosine"
+    assert not hasattr(default_args, "surface_affinity")
+    with pytest.raises(SystemExit):
+        workflow.build_arg_parser().parse_args(
+            ["--surface-affinity", "relu-cosine"]
+        )
 
 
 def test_subject_only_family_map_requires_and_records_explicit_waiver(tmp_path: Path):

@@ -26,7 +26,7 @@ outputs_hcp/present/overviews/individual/
   wta/sub-<id>_wta_overview.png
 ```
 
-Gradient overview adapter rows cover K=2..10 for the K-selection and redundancy diagnostic panels, but final individual gradient labels remain fixed at K=3.
+Gradient overview adapter rows cover K=2..8 for the K-selection and redundancy diagnostic panels, but final individual gradient labels remain fixed at K=3.
 
 Run and handoff metadata for the computation stage live under:
 
@@ -100,10 +100,9 @@ training-only group templates and AP-ordered FC profiles; each held-out subject
 is then matched using their full concat FC. HCP production requires an external
 `subject,family_id` family map. The explicit `--allow-subject-only-folds`
 waiver is recorded and is not the preferred HCP definition.
-Template clustering shares the core workflow's default `shifted-cosine`
-surface affinity. Historical reproduction can pass
-`--surface-affinity relu-cosine`; the selected mode is resume-locked and saved
-with graph-connectivity diagnostics.
+Template clustering shares the core workflow's fixed `shifted-cosine`
+surface affinity. No affinity compatibility switch is exposed; the fixed
+definition is resume-locked and saved with graph-connectivity diagnostics.
 The maintained source `data/HCP_YA_subjects_2026_04_09_16_01_42.csv` can be
 passed directly; its native `Subject` and `Family_ID` headings are accepted
 without creating a derived restricted-data file.

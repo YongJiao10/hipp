@@ -69,12 +69,12 @@ All commands accept explicit root overrides. Run `--help` for the complete
 interface. The default production combinations are 2 mm and 4 mm smoothing,
 left and right hemispheres, fixed K=3, and five folds.
 
-Fold-template gradient-spectral clustering uses the same surface affinity as
-the group-atlas workflow. The maintained default is `shifted-cosine`, defined
-as `(1 + cosine_similarity) / 2` on surface-adjacent vertex pairs. The explicit
-`--surface-affinity relu-cosine` option reproduces the historical zero-clipped
-definition. The selected mode and graph-connectivity diagnostics are recorded
-in every template and run manifest and are locked during resume.
+Fold-template gradient-spectral clustering uses the same fixed affinity as the
+group-atlas workflow: `shifted-cosine`, defined as
+`(1 + cosine_similarity) / 2` on surface-adjacent vertex pairs. There is no
+runtime affinity selector or compatibility mode. The fixed definition and
+graph-connectivity diagnostics are recorded in every template and run manifest
+and are locked during resume.
 
 ## Outputs and provenance
 

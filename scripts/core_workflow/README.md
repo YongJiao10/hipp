@@ -29,7 +29,7 @@ For the RouteA cortex-drop branch, run `04_01_materialize_kong2022_roi_fc.py --c
 
 For the RouteA 17-net taxonomy branch, do not create a new input root or gradient root. Reuse `outputs_hcp/inputs/hcp/kong2022/shared_inputs/routea` and run `05_02_run_group_atlas.py` with `--route-tag routea_17net --network-taxonomy family17 --out-root outputs_hcp/work/group_atlas/routea_17net_full_k3_fisherz`. `05_02` reads RouteA gradients from `outputs_hcp/work/hippomaps_gradients/routea` for `gradient-spectral`, so `05_01` should not be run as `routea_17net`. Because this branch intentionally reuses the RouteA input root, `--route-tag auto` refuses `--network-taxonomy family17`; pass `--route-tag routea_17net` explicitly.
 
-For the Lynch2024 FASTANS/PFM comparison branches, first run `02_03_build_lynch2024_nsi_manifest.py` against the QC-pass subject manifest and an NSI TSV/CSV with `subject,nsi`. The default gate is `nsi >= 0.43` with `--expected-count 78`, and the script stops on count mismatch unless `--allow-count-mismatch` is explicit. External FASTANS priors are local assets under `external/FASTANS/resources/PFM/priors/Lynch2024/`; `03_04_run_lynch2024_fastans_pfm.py` generates official per-subject hard-label PFM dlabel/dscalar assets and hard-label component time series under `outputs_hcp/work/cortex_pfm/sub-<id>/lynch2024/`; maintained shared inputs live under `outputs_hcp/inputs/hcp/lynch2024_fast_pfm_t1only/shared_inputs/pfm_nsi043_78/`. `03_03_build_lynch2024_reference.py` consumes those hard-label component assets and writes both `reference/lynch2024_21net/` for original Lynch parent networks excluding `Noise` and `reference/lynch2024_8net/` for canonical merged networks from `config/cross_atlas_network_merge.json`. `04_01_materialize_kong2022_roi_fc.py --atlas lynch2024_21net` reads `cortex_roi_parcel_timeseries.npy` / `cortex_roi_parcels.tsv`; `--atlas lynch2024_8net` reads `cortex_canonical_network_timeseries.npy` / `cortex_canonical_networks.tsv`, so canonical8 FC caches are 8-column outputs rather than duplicated 20-component FC. Maintained downstream scope is `gradient-spectral` and `wta-top` only, with fixed final `K=3` after evaluating `K=2..10`; `05_01` computes one non-Noise Lynch21 component gradient bank using full-graph BrainSpace affinity (`brainspace_sparsity=0.0`), and the `lynch2024_8net` route reuses that bank for `gradient-spectral` while using canonical8 references for WTA and label assignment. In `05_02`, pass `--profile-surface-root outputs_hcp/inputs/hcp/kong2022/shared_inputs/routea_ctxreg` so cluster-network profiles use the same cluster-mean hippocampal time-series correlation as Kong RouteA while masks, FC caches, and references still come from the Lynch shared root. Fixed-K Lynch gradient diagnostics skip and count failed BrainSpace resample fits instead of aborting the atlas build, no-valid-resample ARI fields are recorded/rendered as unavailable rather than zero, and the legacy vertex-FC profile redundancy gate is not applied to Lynch (`redundancy_profile_status=not_applicable_for_lynch2024`). Group roots are `outputs_hcp/work/group_atlas/lynch2024_21net_nsi043_full_k3_normalized_wta/` and `outputs_hcp/work/group_atlas/lynch2024_8net_nsi043_full_k3_normalized_wta/`.
+For the Lynch2024 FASTANS/PFM comparison branches, first run `02_03_build_lynch2024_nsi_manifest.py` against the QC-pass subject manifest and an NSI TSV/CSV with `subject,nsi`. The default gate is `nsi >= 0.43` with `--expected-count 78`, and the script stops on count mismatch unless `--allow-count-mismatch` is explicit. External FASTANS priors are local assets under `external/FASTANS/resources/PFM/priors/Lynch2024/`; `03_04_run_lynch2024_fastans_pfm.py` generates official per-subject hard-label PFM dlabel/dscalar assets and hard-label component time series under `outputs_hcp/work/cortex_pfm/sub-<id>/lynch2024/`; maintained shared inputs live under `outputs_hcp/inputs/hcp/lynch2024_fast_pfm_t1only/shared_inputs/pfm_nsi043_78/`. `03_03_build_lynch2024_reference.py` consumes those hard-label component assets and writes both `reference/lynch2024_21net/` for original Lynch parent networks excluding `Noise` and `reference/lynch2024_8net/` for canonical merged networks from `config/cross_atlas_network_merge.json`. `04_01_materialize_kong2022_roi_fc.py --atlas lynch2024_21net` reads `cortex_roi_parcel_timeseries.npy` / `cortex_roi_parcels.tsv`; `--atlas lynch2024_8net` reads `cortex_canonical_network_timeseries.npy` / `cortex_canonical_networks.tsv`, so canonical8 FC caches are 8-column outputs rather than duplicated 20-component FC. Maintained downstream scope is `gradient-spectral` and `wta-top` only, with fixed final `K=3` after evaluating `K=2..8`; `05_01` computes one non-Noise Lynch21 component gradient bank using full-graph BrainSpace affinity (`brainspace_sparsity=0.0`), and the `lynch2024_8net` route reuses that bank for `gradient-spectral` while using canonical8 references for WTA and label assignment. In `05_02`, pass `--profile-surface-root outputs_hcp/inputs/hcp/kong2022/shared_inputs/routea_ctxreg` so cluster-network profiles use the same cluster-mean hippocampal time-series correlation as Kong RouteA while masks, FC caches, and references still come from the Lynch shared root. Fixed-K Lynch gradient diagnostics skip and count failed BrainSpace resample fits instead of aborting the atlas build, no-valid-resample ARI fields are recorded/rendered as unavailable rather than zero, and the legacy vertex-FC profile redundancy gate is not applied to Lynch (`redundancy_profile_status=not_applicable_for_lynch2024`). Group roots are `outputs_hcp/work/group_atlas/lynch2024_21net_nsi043_full_k3_normalized_wta/` and `outputs_hcp/work/group_atlas/lynch2024_8net_nsi043_full_k3_normalized_wta/`.
 
 For the Kong2022 `gradient-spectral` branch, run
 `05_01_compute_hippomaps_gradients.py` first. `05_01` writes aligned
@@ -38,15 +38,33 @@ within each route to the `4mm/hemi_L` anchor when available, and only aligned
 arrays are saved. `05_02_run_group_atlas.py` loads those aligned artifacts from
 `--gradient-root` and clusters the selected columns. The default gradient set is
 `G1,G2,G3`; valid overrides are `--gradient-components 1`, `2`, `3`, `1,2`, and
-`1,2,3`. The maintained default evaluates the full diagnostic curve `K=2..10`
-while fixing the final presentation atlas at `K=3` (`--k-min 2 --k-max 10
+`1,2,3`. The maintained default evaluates the diagnostic curve `K=2..8`
+while fixing the final presentation atlas at `K=3` (`--k-min 2 --k-max 8
 --force-final-k 3`); `--auto-k` remains available only as legacy diagnostics.
 
-The maintained gradient-spectral surface affinity is `shifted-cosine`,
-`(1 + cosine_similarity) / 2` on surface-adjacent vertices. Use
-`--surface-affinity relu-cosine` only to reproduce the historical zero-clipped
-affinity. Group and cross-fit workflows share this implementation and record
-the selected mode plus graph diagnostics in their manifests.
+The formal gradient-spectral surface affinity is fixed to `shifted-cosine`,
+`(1 + cosine_similarity) / 2` on surface-adjacent vertices. There is no
+runtime affinity selector or compatibility mode. Group and cross-fit workflows
+share this implementation and record the fixed definition plus graph diagnostics
+in their manifests.
+
+To retire pre-formalization gradient-spectral products, write and review a
+signed inventory with `retire_legacy_gradient_spectral_outputs.py --write-plan
+_archive/gradient_spectral_relu_cosine_20260713/reviewed_plan.json`, then apply
+that exact inventory with `--apply-plan <reviewed-plan>`. The resumable archive preserves repository-relative paths
+under `_archive/gradient_spectral_relu_cosine_20260713/`; continuous HippoMaps
+gradients, non-gradient methods, smoke runs, and shifted-cosine reruns are
+excluded. Promote the already validated family-aware cross-fit with
+`scripts/individual_workflow/promote_crossfit_template_matching.py` after the
+old canonical cross-fit root has been archived.
+
+For the canonical HCP RouteA canonical8/family17 refresh, launch
+`run_hcp_routea_gradient_spectral_background.py --launch --jobs 1`. The runner
+rejects every other job count and unsafe run IDs. The worker
+runs only G1-G3 gradient-spectral, evaluates K=2..8 with final K=3, renders both
+Fisher-z and count overviews, and writes PID/log/status files directly under
+`outputs_hcp/work/group_atlas/logs/`. A failed stage stops the sequence; rerun
+with a fresh run ID and the maintained `--resume` behavior reuses valid combos.
 
 HippoMaps-style continuous gradients are computed by
 `05_01_compute_hippomaps_gradients.py` and rendered by

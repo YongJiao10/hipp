@@ -638,6 +638,7 @@ def cluster_individual_k3(
     coords, faces = core.load_surface(Path(surface_path))
     adjacency = core.build_surface_adjacency(faces, int(coords.shape[0]))
     labels_active, labels_full = core.cluster_from_precomputed_group_features(
+        method="gradient-spectral",
         group_features=np.asarray(gradients_active[:, :3], dtype=np.float32),
         support_mask=np.asarray(valid_mask, dtype=bool),
         adjacency_full=adjacency,

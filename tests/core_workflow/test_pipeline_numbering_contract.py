@@ -37,7 +37,6 @@ EXPECTED_NUMBERED_SCRIPTS = [
     "06_08_render_hcp_subfield_composition.py",
     "06_09_plot_cortex_kong2022_mshbm.py",
     "06_10_render_cluster_roi_strength_panels.py",
-    "06_11_compare_gradient_spectral_affinities.py",
     "07_01_build_group_matrix.py",
 ]
 

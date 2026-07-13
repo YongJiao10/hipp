@@ -107,9 +107,10 @@ def test_summary_averages_subject_normalized_proportions_and_reports_sem() -> No
     assert by_subfield["CA1"]["n_subjects"] == 2
 
 
-def test_default_group_root_uses_weighted_fisherz_branch() -> None:
+def test_default_group_root_uses_formal_routea_branch() -> None:
     args = mod.parse_args([])
-    assert "routea_weighted_fisherz_full_k3" in str(args.group_root)
+    assert "routea_full_k3_fisherz" in str(args.group_root)
+    assert "weighted_fisherz" not in str(args.group_root)
     assert args.smoothings == ["2mm", "4mm"]
     assert args.hemis == ["L", "R"]
 
@@ -122,4 +123,3 @@ def test_active_subfield_indices_omit_zero_contribution_subfields_from_plot() ->
     ]
 
     assert mod.active_subfield_indices(rows) == [1, 2]
-

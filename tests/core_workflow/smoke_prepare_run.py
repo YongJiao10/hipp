@@ -299,7 +299,7 @@ def build_command_plan(*, subjects: list[str], layout: dict[str, Path], python_e
                         "--k-min",
                         "2",
                         "--k-max",
-                        "10",
+                        "8",
                         "--force-final-k",
                         "3",
                         "--instability-resamples",
