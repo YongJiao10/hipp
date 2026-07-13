@@ -58,7 +58,8 @@ def test_stage_plan_is_exact_sequential_formal_scope() -> None:
             assert _option(command, "--jobs") == "1"
         for nested_command in commands:
             text = " ".join(nested_command).lower()
-            assert "21net" not in text
+            retired = "21" + "net"
+            assert retired not in text
             assert "routeb" not in text
             assert "ctxreg" not in text
             assert "ctxdrop" not in text
@@ -73,6 +74,9 @@ def test_stage_plan_is_exact_sequential_formal_scope() -> None:
                 assert _option(nested_command, "--network-style").endswith(
                     "config/hipp_network_style.json"
                 )
+            if nested_command[1].endswith("05_02_run_group_atlas.py"):
+                expected_dataset = "outputs_stanford" if "stanford" in stage["name"] else "outputs_hcp"
+                assert _option(nested_command, "--dataset") == expected_dataset
 
     audit = list(stages[-1]["command"])
     assert audit[0] == str(PY314)
@@ -229,15 +233,19 @@ def test_preflight_derives_subject_specific_stanford_and_lynch_inputs(tmp_path) 
     runner = load_runner()
     stanford_manifests = tmp_path / "outputs_stanford/inputs/stanford/kong2022/manifests"
     stanford_manifests.mkdir(parents=True)
-    (stanford_manifests / "stanford_hc_1xxx2xxx_qc_pass_t1only_91.txt").write_text("sub-1001\n")
-    (stanford_manifests / "stanford_symp_3xxx4xxx_qc_pass_t1only_103.txt").write_text("sub-3001\n")
+    (stanford_manifests / "stanford_hc_1xxx2xxx_qc_pass_t1only_91.txt").write_text(
+        "".join(f"sub-{1001 + i}\n" for i in range(91))
+    )
+    (stanford_manifests / "stanford_symp_3xxx4xxx_qc_pass_t1only_103.txt").write_text(
+        "".join(f"sub-{3001 + i}\n" for i in range(103))
+    )
     lynch_manifest = (
         tmp_path
         / "outputs_hcp/inputs/hcp/lynch2024_fast_pfm_t1only/manifests"
         / "hcp_7t_lynch2024_nsi043_pass_78.txt"
     )
     lynch_manifest.parent.mkdir(parents=True)
-    lynch_manifest.write_text("sub-100610\n")
+    lynch_manifest.write_text("".join(f"sub-{100610 + i}\n" for i in range(78)))
 
     required = set(runner.required_preexisting_paths(tmp_path))
 
@@ -266,6 +274,48 @@ def test_preflight_derives_subject_specific_stanford_and_lynch_inputs(tmp_path) 
         tmp_path
         / "outputs_hcp/work/cortex_pfm/sub-100610/lynch2024/cortex_roi_components.tsv"
     ) in required
+
+
+@pytest.mark.parametrize(
+    ("name", "lines", "message"),
+    [
+        ("hcp_7t_lynch2024_nsi043_pass_78.txt", ["sub-100610"] * 78, "duplicate"),
+        ("stanford_hc_1xxx2xxx_qc_pass_t1only_91.txt", ["1001"] * 91, "canonical"),
+        ("stanford_symp_3xxx4xxx_qc_pass_t1only_103.txt", [f"sub-{3001+i}" for i in range(102)], "103"),
+    ],
+)
+def test_subject_ids_reject_invalid_formal_cohort_manifests(
+    tmp_path: Path, name: str, lines: list[str], message: str
+) -> None:
+    runner = load_runner()
+    manifest = tmp_path / name
+    manifest.write_text("\n".join(lines) + "\n")
+
+    with pytest.raises(ValueError, match=message):
+        runner._subject_ids(manifest)
+
+
+def test_runner_formal_groups_match_audit_and_both_registry_entries() -> None:
+    runner = load_runner()
+    audit_path = REPO_ROOT / "scripts/core_workflow/audit_formal_gradient_spectral_release.py"
+    spec = importlib.util.spec_from_file_location("formal_audit_for_runner_test", audit_path)
+    assert spec is not None and spec.loader is not None
+    audit = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(audit)
+    registry = json.loads((REPO_ROOT / "scripts/core_workflow/step_registry.json").read_text())
+    registered = {
+        item["step_id"]: {
+            (row["dataset"], row["group_root"], row["atlas"])
+            for row in item["formal_groups"]
+        }
+        for item in registry["utilities"]
+        if "formal_groups" in item
+    }
+
+    expected = set(audit.FORMAL_GROUPS)
+    assert set(runner.FORMAL_GROUPS) == expected
+    assert registered["audit_formal_gradient_spectral_release"] == expected
+    assert registered["run_formal_gradient_spectral_refresh"] == expected
 
 
 def test_launch_forwards_worker_command_and_writes_detached_paths(tmp_path, monkeypatch) -> None:

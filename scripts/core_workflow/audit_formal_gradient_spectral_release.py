@@ -74,8 +74,11 @@ _GROUP_SETTINGS: dict[str, tuple[str, str]] = {
 _SOURCE_PATH_FIELDS = (
     "shared_root",
     "surface_root",
+    "profile_surface_root",
     "reference_root",
     "group_gradient_features_active",
+    "template_left_or_right_surface",
+    "template_spec_path",
 )
 _ARCHIVE_PARTS = {"archive", "archives", "archived"}
 
@@ -111,6 +114,33 @@ def _resolve(repo_root: Path, value: object) -> Path:
     if not path.is_absolute():
         path = repo_root / path
     return path.resolve()
+
+
+def _is_within(path: Path, root: Path) -> bool:
+    try:
+        path.relative_to(root)
+    except ValueError:
+        return False
+    return True
+
+
+def _audit_source_path(
+    *, value: object, field: str, manifest_path: Path, expected_root: Path,
+    failures: list[str],
+) -> None:
+    if not isinstance(value, str) or not value.strip():
+        failures.append(f"invalid: {manifest_path}: missing source path {field}")
+        return
+    source = _resolve(manifest_path.parent, value)
+    if not source.exists():
+        failures.append(f"incomplete: {manifest_path}: {field} does not exist: {source}")
+    if not _is_within(source, expected_root):
+        failures.append(
+            f"invalid: {manifest_path}: {field} outside expected source root "
+            f"{expected_root}: {source}"
+        )
+    if _is_archived(source):
+        failures.append(f"invalid: {manifest_path}: archived source path in {field}: {source}")
 
 
 def _read_json(path: Path, failures: list[str]) -> dict[str, object] | None:
@@ -213,6 +243,11 @@ def _audit_group_manifest(
     hemi: str,
     failures: list[str],
 ) -> None:
+    expected_root = path.parents[9].resolve()
+    _require_equal(manifest, "dataset", group["output_root"], path, failures)
+    _require_equal(
+        manifest, "expected_source_root", str(expected_root), path, failures
+    )
     _require_equal(manifest, "status", "ok", path, failures)
     _require_equal(manifest, "method", "gradient-spectral", path, failures)
     _require_equal(manifest, "atlas", group["atlas"], path, failures)
@@ -246,21 +281,24 @@ def _audit_group_manifest(
         )
 
     for field in _SOURCE_PATH_FIELDS:
-        value = manifest.get(field)
-        if not isinstance(value, str) or not value.strip():
-            failures.append(f"invalid: {path}: missing source path {field}")
-            continue
-        source = _resolve(path.parent, value)
-        if _is_archived(source):
-            failures.append(f"invalid: {path}: archived source path in {field}: {source}")
+        _audit_source_path(
+            value=manifest.get(field), field=field, manifest_path=path,
+            expected_root=expected_root, failures=failures,
+        )
 
     gradient_root = _resume_source(manifest, "gradient_root")
     if not isinstance(gradient_root, str) or not gradient_root.strip():
         failures.append(f"invalid: {path}: missing source path gradient_root")
-    elif _is_archived(_resolve(path.parent, gradient_root)):
-        failures.append(
-            f"invalid: {path}: archived source path in gradient_root: {gradient_root}"
+    else:
+        _audit_source_path(
+            value=gradient_root, field="gradient_root", manifest_path=path,
+            expected_root=expected_root, failures=failures,
         )
+    subjects_manifest = _resume_source(manifest, "subjects_manifest")
+    _audit_source_path(
+        value=subjects_manifest, field="subjects_manifest", manifest_path=path,
+        expected_root=expected_root, failures=failures,
+    )
     consumed = manifest.get("actual_consumed_input_paths")
     if not isinstance(consumed, dict) or not consumed or not all(
         isinstance(value, str) and value.strip() for value in consumed.values()
@@ -268,10 +306,12 @@ def _audit_group_manifest(
         failures.append(
             f"invalid: {path}: actual_consumed_input_paths must contain source paths"
         )
-    elif any(_is_archived(_resolve(path.parent, value)) for value in consumed.values()):
-        failures.append(
-            f"invalid: {path}: actual_consumed_input_paths references an archive"
-        )
+    else:
+        for name, value in consumed.items():
+            _audit_source_path(
+                value=value, field=f"actual_consumed_input_paths[{name!r}]",
+                manifest_path=path, expected_root=expected_root, failures=failures,
+            )
 
     expected_variant = str(group["assignment_variant"])
     _require_equal(
@@ -385,6 +425,30 @@ def _audit_group_overview(
                     f"invalid: {context}: {field}={item.get(field)!r}, expected {expected!r}"
                 )
                 item_failed = True
+        overview_png = item.get("overview_png")
+        expected_present = (
+            repo_root / str(group["output_root"]) / "present"
+        ).resolve()
+        if not isinstance(overview_png, str) or not overview_png.strip():
+            failures.append(f"invalid: {context}: missing overview_png")
+            item_failed = True
+        else:
+            png = _resolve(repo_root, overview_png)
+            if not _is_within(png, expected_present):
+                failures.append(
+                    f"invalid: {context}: overview_png outside expected formal "
+                    f"presentation directory {expected_present}: {png}"
+                )
+                item_failed = True
+            if not png.is_file() or png.stat().st_size == 0:
+                failures.append(f"incomplete: {context}: missing or empty overview_png: {png}")
+                item_failed = True
+        title = item.get("rendered_title")
+        if not isinstance(title, str) or SHIFTED_COSINE not in title:
+            failures.append(
+                f"invalid: {context}: rendered_title must visibly contain {SHIFTED_COSINE!r}"
+            )
+            item_failed = True
         sources = item.get("source_group_manifests")
         if not isinstance(sources, list):
             failures.append(f"invalid: {context}: source_group_manifests must be a list")

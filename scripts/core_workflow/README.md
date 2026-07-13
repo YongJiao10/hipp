@@ -54,6 +54,14 @@ Audit the formal group release without modifying workflow outputs with:
 /home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/audit_formal_gradient_spectral_release.py --repo-root "$PWD"
 ```
 
+Formal `05_02` runs record `dataset` (`outputs_hcp` or `outputs_stanford`) and
+the resolved `expected_source_root`; the formal launcher passes the dataset
+explicitly. The release audit requires every declared upstream root and every
+actually consumed leaf to exist below that exact dataset root and outside
+archive directories. Each formal overview PNG must also be nonempty below the
+matching dataset's `present/` directory, with a recorded visible title that
+contains `shifted-cosine`.
+
 The audit accepts exactly these nine group branches under each dataset's
 `work/group_atlas/` directory; an empty, partial, duplicated, additional, or
 substituted group contract is invalid:

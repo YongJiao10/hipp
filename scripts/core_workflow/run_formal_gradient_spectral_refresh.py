@@ -21,6 +21,22 @@ THREAD_ENV = {
     "NUMEXPR_NUM_THREADS": "1",
     "VECLIB_MAXIMUM_THREADS": "1",
 }
+FORMAL_GROUPS = (
+    ("outputs_hcp", "routea_full_k3_fisherz", "kong2022"),
+    ("outputs_hcp", "routea_17net_full_k3_fisherz", "kong2022"),
+    ("outputs_hcp", "routea_weighted_fisherz_full_k3", "kong2022"),
+    ("outputs_hcp", "lynch2024_20net_nsi043_full_k3_normalized_wta", "lynch2024_20net"),
+    ("outputs_hcp", "lynch2024_8net_nsi043_full_k3_normalized_wta", "lynch2024_8net"),
+    ("outputs_stanford", "routea_hc_full_k3_fisherz", "kong2022"),
+    ("outputs_stanford", "routea_symp_full_k3_fisherz", "kong2022"),
+    ("outputs_stanford", "routea_hc_weighted_fisherz_full_k3", "kong2022"),
+    ("outputs_stanford", "routea_symp_weighted_fisherz_full_k3", "kong2022"),
+)
+_COHORT_CONTRACTS = {
+    "hcp_7t_lynch2024_nsi043_pass_78.txt": (78, re.compile(r"sub-\d{6}")),
+    "stanford_hc_1xxx2xxx_qc_pass_t1only_91.txt": (91, re.compile(r"sub-[12]\d{3}")),
+    "stanford_symp_3xxx4xxx_qc_pass_t1only_103.txt": (103, re.compile(r"sub-[34]\d{3}")),
+}
 
 
 def validate_release_settings(*, run_id: str, jobs: int) -> None:
@@ -78,7 +94,7 @@ def build_stage_plan(
     def group_command(
         *, shared: Path, surface: Path, reference: Path, gradients: Path,
         out: Path, route: str, taxonomy: str, atlas: str, manifest: Path,
-        batch: Path, template: Path,
+        batch: Path, template: Path, dataset: str,
     ) -> list[str]:
         return command(
             "05_02_run_group_atlas.py",
@@ -87,6 +103,7 @@ def build_stage_plan(
             "--reference-root", reference,
             "--gradient-root", gradients,
             "--out-root", out,
+            "--dataset", dataset,
             "--route-tag", route,
             "--network-taxonomy", taxonomy,
             "--subjects-manifest", manifest,
@@ -165,6 +182,7 @@ def build_stage_plan(
                     out=source, route="routea", taxonomy="canonical8", atlas="kong2022",
                     manifest=subgroup_manifests[subgroup], batch=stanford_batch,
                     template=stanford_template,
+                    dataset="outputs_stanford",
                 ),
             },
             {
@@ -247,6 +265,7 @@ def build_stage_plan(
                 gradients=hcp_gradient, out=lynch20_group, route="lynch2024_20net",
                 taxonomy="lynch20", atlas="lynch2024_20net", manifest=lynch_manifest,
                 batch=hcp_batch, template=hcp_template,
+                dataset="outputs_hcp",
             ),
         },
         {
@@ -265,6 +284,7 @@ def build_stage_plan(
                 gradients=hcp_gradient, out=lynch8_group, route="lynch2024_8net",
                 taxonomy="lynch8", atlas="lynch2024_8net", manifest=lynch_manifest,
                 batch=hcp_batch, template=hcp_template,
+                dataset="outputs_hcp",
             ),
         },
         {
@@ -356,11 +376,22 @@ def _stage_commands(stage: dict[str, object]) -> list[list[str]]:
 def _subject_ids(manifest: Path) -> list[str]:
     if not manifest.is_file():
         return []
-    return [
-        line.strip().removeprefix("sub-")
-        for line in manifest.read_text(encoding="utf-8").splitlines()
-        if line.strip()
-    ]
+    raw = [line.strip() for line in manifest.read_text(encoding="utf-8").splitlines() if line.strip()]
+    contract = _COHORT_CONTRACTS.get(manifest.name)
+    if contract is not None:
+        expected_size, syntax = contract
+        malformed = [subject for subject in raw if syntax.fullmatch(subject) is None]
+        if malformed:
+            raise ValueError(
+                f"Formal cohort {manifest} has non-canonical subject syntax: {malformed[:3]}"
+            )
+        if len(set(raw)) != len(raw):
+            raise ValueError(f"Formal cohort {manifest} contains duplicate subjects")
+        if len(raw) != expected_size:
+            raise ValueError(
+                f"Formal cohort {manifest} must contain exactly {expected_size} subjects, got {len(raw)}"
+            )
+    return [subject.removeprefix("sub-") for subject in raw]
 
 
 def _group_manifest_path(group_root: Path, smoothing: str, hemi: str) -> Path:

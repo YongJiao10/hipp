@@ -415,7 +415,7 @@
     {
       "step_id": "audit_formal_gradient_spectral_release",
       "stage": "utility_release_audit",
-      "purpose": "Read-only validation of the exact nine-group formal gradient-spectral release and overview affinity lineage.",
+      "purpose": "Read-only validation of the exact nine-group formal gradient-spectral release, dataset-root source provenance, and overview PNG/title lineage.",
       "branches": [
         "kong2022_routea",
         "kong2022_routea_17net",
@@ -440,7 +440,7 @@
     {
       "step_id": "run_formal_gradient_spectral_refresh",
       "stage": "utility_release_runner",
-      "purpose": "Preflight and run the fixed jobs=1 sequential 19-stage formal refresh with stop-on-first-failure status.",
+      "purpose": "Validate exact formal cohort manifests, expose the nine-group identity contract, and run the fixed jobs=1 sequential 19-stage formal refresh with stop-on-first-failure status.",
       "branches": [
         "kong2022_routea",
         "kong2022_routea_17net",

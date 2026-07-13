@@ -12,7 +12,7 @@
 
 - Use `/home/yojiao/.conda/envs/py314/bin/python` for every repository Python command; first print the informational bare-Python executable.
 - `gradient-spectral` has one implementation: `shifted-cosine`; no relu-cosine selector or compatibility mode.
-- Lynch formal names are `lynch2024_20net` and `lynch20`; do not retain a runtime alias, fallback, or symlink for `21net`.
+- Lynch formal names are `lynch2024_20net` and `lynch20`; do not retain any retired runtime alias, fallback, or symlink.
 - Lynch20 must exclude `Noise` and contain exactly 20 ordered networks/features.
 - Diagnostic K range is `[2, 8]`; final K is `3`.
 - Production execution is strictly sequential with `jobs=1`, safe run IDs, stop-on-first-failure status, and low-frequency monitoring.
@@ -378,7 +378,7 @@ assert [stage["name"] for stage in stages] == [
 ```
 
 Also assert every group stage contains `--methods gradient-spectral`,
-`--k-min 2 --k-max 8 --force-final-k 3 --jobs 1`; no command contains `21net`,
+`--k-min 2 --k-max 8 --force-final-k 3 --jobs 1`; every command uses canonical Lynch20 naming and excludes
 RouteB, ctxreg, or ctxdrop.
 
 - [ ] **Step 2: Verify tests fail**

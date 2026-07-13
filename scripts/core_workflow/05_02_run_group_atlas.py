@@ -3222,6 +3222,10 @@ def build_arg_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument("--out-root", default=str(DEFAULT_OUT_ROOT))
+    parser.add_argument(
+        "--dataset", choices=["auto", "outputs_hcp", "outputs_stanford"], default="auto",
+        help="Dataset provenance recorded in generated manifests; auto infers it from --out-root.",
+    )
     parser.add_argument("--reference-root", default=None, help="Read cortex reference metadata/time series from this root; defaults to --shared-root.")
     parser.add_argument("--gradient-root", default=str(DEFAULT_GRADIENT_ROOT))
     parser.add_argument("--hippomaps-root", default=str(DEFAULT_HIPPOMAPS_ROOT))
@@ -3337,6 +3341,26 @@ def main() -> int:
     if out_root_adjusted:
         print(f"[info] Automatically adjusted --out-root to matching route directory: {out_root}", flush=True)
     validate_group_atlas_root_for_route(out_root, route_tag)
+    dataset_roots = {
+        name: (REPO_ROOT / name).resolve()
+        for name in ("outputs_hcp", "outputs_stanford")
+    }
+    inferred_datasets = [
+        name for name, root in dataset_roots.items()
+        if out_root == root or root in out_root.parents
+    ]
+    dataset = str(args.dataset)
+    if dataset == "auto":
+        if len(inferred_datasets) != 1:
+            raise ValueError(
+                "Cannot infer --dataset from --out-root; pass outputs_hcp or outputs_stanford explicitly"
+            )
+        dataset = inferred_datasets[0]
+    expected_source_root = dataset_roots[dataset]
+    if out_root != expected_source_root and expected_source_root not in out_root.parents:
+        raise ValueError(
+            f"--out-root {out_root} is outside the declared dataset root {expected_source_root}"
+        )
 
     out_root.mkdir(parents=True, exist_ok=True)
     reference_root = Path(args.reference_root).resolve() if args.reference_root else shared_root
@@ -3503,6 +3527,8 @@ def main() -> int:
                             },
                             "subjects_manifest": str(subjects_manifest_path),
                             "subjects": [f"sub-{s}" for s in subjects],
+                            "dataset": dataset,
+                            "expected_source_root": str(expected_source_root),
                             "k_selection_mode": str(args.k_selection_mode),
                             "force_final_k": int(args.force_final_k) if args.force_final_k is not None else None,
                             "candidate_k_values": [int(k) for k in k_values],
@@ -3662,6 +3688,8 @@ def main() -> int:
 
                             manifest = {
                                 "status": "ok",
+                                "dataset": dataset,
+                                "expected_source_root": str(expected_source_root),
                                 "method": method,
                                 "atlas": atlas,
                                 "smoothing": smoothing,
@@ -4355,6 +4383,8 @@ def main() -> int:
 
                         manifest = {
                             "status": "ok",
+                            "dataset": dataset,
+                            "expected_source_root": str(expected_source_root),
                             "method": method,
                             "atlas": atlas,
                             "smoothing": smoothing,

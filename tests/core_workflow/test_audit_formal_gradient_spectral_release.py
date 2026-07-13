@@ -58,6 +58,19 @@ def build_formal_fixture(
         group_root = (
             repo_root / identity[0] / "work/group_atlas" / identity[1]
         )
+        expected_root = (repo_root / identity[0]).resolve()
+        shared = expected_root / "inputs/shared"
+        surface = expected_root / "inputs/surface"
+        reference = expected_root / "inputs/reference"
+        gradients = expected_root / "work/hippomaps_gradients"
+        subjects_manifest = expected_root / "inputs/manifests/subjects.txt"
+        template_surface = expected_root / "inputs/templates/template.surf.gii"
+        template_spec = expected_root / "inputs/templates/template.spec"
+        for directory in (shared, surface, reference, gradients):
+            directory.mkdir(parents=True, exist_ok=True)
+        for leaf in (subjects_manifest, template_surface, template_spec):
+            leaf.parent.mkdir(parents=True, exist_ok=True)
+            leaf.write_bytes(b"fixture")
         group_paths: list[Path] = []
         for smoothing in ("2mm", "4mm"):
             for hemi in ("L", "R"):
@@ -83,25 +96,34 @@ def build_formal_fixture(
                     ),
                     "candidate_k_range_requested": [2, 8],
                     "chosen_k_final": 3,
+                    "dataset": identity[0],
+                    "expected_source_root": str(expected_root),
                     "affinity_graph_diagnostics": {"n_connected_components": 1},
-                    "shared_root": str((repo_root / "inputs/shared").resolve()),
-                    "surface_root": str((repo_root / "inputs/surface").resolve()),
-                    "reference_root": str((repo_root / "inputs/reference").resolve()),
+                    "shared_root": str(shared.resolve()),
+                    "surface_root": str(surface.resolve()),
+                    "profile_surface_root": str(surface.resolve()),
+                    "reference_root": str(reference.resolve()),
                     "group_gradient_features_active": str(
                         (manifest.parent / "group_gradient_features_active.npy").resolve()
                     ),
                     "actual_consumed_input_paths": {
-                        "sub-001": str((repo_root / "inputs/features.npy").resolve())
+                        "sub-001": str((expected_root / "inputs/features.npy").resolve())
                     },
+                    "template_left_or_right_surface": str(template_surface.resolve()),
+                    "template_spec_path": str(template_spec.resolve()),
                     "default_assignment_variant": group["assignment_variant"],
                     "assignment_variants": {
                         str(group["assignment_variant"]): {"status": "ok"}
                     },
                     "resume_input_signature_payload": {
                         "route_tag": group["route_tag"],
-                        "gradient_root": str((repo_root / "inputs/gradients").resolve()),
+                        "gradient_root": str(gradients.resolve()),
+                        "subjects_manifest": str(subjects_manifest.resolve()),
                     },
                 }
+                Path(str(payload["group_gradient_features_active"])).parent.mkdir(parents=True, exist_ok=True)
+                Path(str(payload["group_gradient_features_active"])).write_bytes(b"features")
+                Path(str(payload["actual_consumed_input_paths"]["sub-001"])).write_bytes(b"input")
                 if group["assignment_variant"] == "weighted_fisherz":
                     payload.update(
                         {
@@ -116,6 +138,14 @@ def build_formal_fixture(
                 manifest_paths.append(manifest.resolve())
                 group_paths.append(manifest.resolve())
         group_manifests[identity] = tuple(group_paths)
+        overview_png = (
+            repo_root / identity[0] / "present/overviews/formal" / f"{identity[1]}.png"
+        ).resolve()
+        overview_png.parent.mkdir(parents=True, exist_ok=True)
+        overview_png.write_bytes(bytes.fromhex(
+            "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489"
+            "0000000d49444154789c6360000000020001e221bc330000000049454e44ae426082"
+        ))
         overview_items.append(
             {
                 "atlas": identity[2],
@@ -125,14 +155,8 @@ def build_formal_fixture(
                 "surface_affinity": surface_affinity,
                 "affinity_description": module.SHIFTED_COSINE_DESCRIPTION,
                 "source_group_manifests": [str(path) for path in group_paths],
-                "overview_png": str(
-                    (
-                        repo_root
-                        / identity[0]
-                        / "present/overviews/formal"
-                        / f"{identity[1]}.png"
-                    ).resolve()
-                ),
+                "overview_png": str(overview_png),
+                "rendered_title": f"{identity[1]} | shifted-cosine",
             }
         )
 
@@ -321,6 +345,70 @@ def test_audit_rejects_missing_upstream_gradient_source(tmp_path: Path) -> None:
 
     assert report["status"] == "failed"
     assert any("gradient_root" in item for item in report["failures"])
+
+
+def test_audit_rejects_nonexistent_consumed_source(tmp_path: Path) -> None:
+    fixture = build_formal_fixture(tmp_path, surface_affinity="shifted-cosine")
+    payload = json.loads(fixture.manifests[0].read_text(encoding="utf-8"))
+    missing = tmp_path / "outputs_hcp/inputs/missing.npy"
+    payload["actual_consumed_input_paths"]["sub-001"] = str(missing)
+    _write_json(fixture.manifests[0], payload)
+
+    report = module.audit_release(tmp_path, fixture.contract)
+
+    assert report["status"] == "failed"
+    assert any("does not exist" in item and str(missing) in item for item in report["failures"])
+
+
+def test_audit_rejects_cross_dataset_source_root(tmp_path: Path) -> None:
+    fixture = build_formal_fixture(tmp_path, surface_affinity="shifted-cosine")
+    payload = json.loads(fixture.manifests[0].read_text(encoding="utf-8"))
+    wrong = tmp_path / "outputs_stanford/inputs/shared"
+    wrong.mkdir(parents=True, exist_ok=True)
+    payload["shared_root"] = str(wrong)
+    _write_json(fixture.manifests[0], payload)
+
+    report = module.audit_release(tmp_path, fixture.contract)
+
+    assert report["status"] == "failed"
+    assert any("outside expected source root" in item for item in report["failures"])
+
+
+def test_audit_rejects_wrong_dataset_provenance(tmp_path: Path) -> None:
+    fixture = build_formal_fixture(tmp_path, surface_affinity="shifted-cosine")
+    payload = json.loads(fixture.manifests[0].read_text(encoding="utf-8"))
+    payload["dataset"] = "outputs_stanford"
+    payload["expected_source_root"] = str((tmp_path / "outputs_stanford").resolve())
+    _write_json(fixture.manifests[0], payload)
+
+    report = module.audit_release(tmp_path, fixture.contract)
+
+    assert report["status"] == "failed"
+    assert any("dataset=" in item for item in report["failures"])
+    assert any("expected_source_root=" in item for item in report["failures"])
+
+
+def test_audit_rejects_missing_overview_png(tmp_path: Path) -> None:
+    fixture = build_formal_fixture(tmp_path, surface_affinity="shifted-cosine")
+    payload = json.loads(fixture.overview_manifest.read_text(encoding="utf-8"))
+    Path(payload["items"][0]["overview_png"]).unlink()
+
+    report = module.audit_release(tmp_path, fixture.contract)
+
+    assert report["status"] == "failed"
+    assert any("overview_png" in item and "missing" in item for item in report["failures"])
+
+
+def test_audit_rejects_overview_without_visible_affinity_title(tmp_path: Path) -> None:
+    fixture = build_formal_fixture(tmp_path, surface_affinity="shifted-cosine")
+    payload = json.loads(fixture.overview_manifest.read_text(encoding="utf-8"))
+    payload["items"][0]["rendered_title"] = "Gradient overview"
+    _write_json(fixture.overview_manifest, payload)
+
+    report = module.audit_release(tmp_path, fixture.contract)
+
+    assert report["status"] == "failed"
+    assert any("rendered_title" in item for item in report["failures"])
 
 
 def test_allow_incomplete_only_changes_cli_exit_status(tmp_path: Path) -> None:
