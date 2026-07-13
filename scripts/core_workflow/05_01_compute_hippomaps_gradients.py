@@ -125,6 +125,7 @@ class GradientComboResult:
     hippomaps_root: Path
     n_components: int
     gradient_random_state: int | None
+    network_order: list[str] | None
 
 
 def finite_pearson_corr(a: np.ndarray, b: np.ndarray) -> float:
@@ -272,6 +273,34 @@ def subject_fc_path(shared_root: Path, subject: str, atlas: str, smoothing: str,
     return Path(shared_root) / f"sub-{subject}" / "fc" / str(atlas) / smoothing / f"hemi_{hemi}" / "hipp_vertex_to_network_fc.npy"
 
 
+def load_lynch20_fc_network_order(fc_path: Path) -> list[str]:
+    manifest_path = Path(fc_path).parent / "stage_manifest.json"
+    if not manifest_path.exists():
+        raise FileNotFoundError(f"Missing Lynch2024 formal FC provenance manifest: {manifest_path}")
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    order = [str(name) for name in payload.get("network_order", [])]
+    if (
+        payload.get("network_taxonomy") != "lynch20"
+        or payload.get("network_count") != 20
+        or payload.get("noise_excluded") is not True
+        or len(order) != 20
+        or len(set(order)) != 20
+        or "Noise" in order
+    ):
+        raise ValueError(
+            f"Invalid Lynch2024 formal FC provenance manifest: {manifest_path} "
+            f"taxonomy={payload.get('network_taxonomy')!r} count={payload.get('network_count')!r} "
+            f"noise_excluded={payload.get('noise_excluded')!r} order={order}"
+        )
+    expected = lynch2024_20net_order(DEFAULT_LYNCH2024_MERGE_CONFIG)
+    if order != expected:
+        raise ValueError(
+            f"Lynch2024 formal FC network order mismatch: {manifest_path} "
+            f"consumed={order} expected={expected}"
+        )
+    return order
+
+
 def load_subject_fc(shared_root: Path, subject: str, atlas: str, smoothing: str, hemi: str, valid_mask: np.ndarray) -> tuple[np.ndarray, Path]:
     fc_path = subject_fc_path(shared_root, subject, atlas, smoothing, hemi)
     if not fc_path.exists():
@@ -283,6 +312,8 @@ def load_subject_fc(shared_root: Path, subject: str, atlas: str, smoothing: str,
         raise ValueError(
             f"Lynch2024 formal FC must contain exactly 20 networks: {fc_path} shape={arr.shape}"
         )
+    if str(atlas) == "lynch2024_20net":
+        load_lynch20_fc_network_order(fc_path)
     if arr.shape[0] == valid_mask.size:
         return arr, fc_path
     if arr.shape[0] == int(np.sum(valid_mask)):
@@ -342,8 +373,17 @@ def compute_combo(
 
     feature_bank: dict[str, np.ndarray] = {}
     fc_paths: dict[str, str] = {}
+    network_order: list[str] | None = None
     for subject in subjects:
         fc, fc_path = load_subject_fc(shared_root, subject, atlas, smoothing, hemi, valid_masks[subject])
+        if atlas == "lynch2024_20net":
+            consumed_order = load_lynch20_fc_network_order(fc_path)
+            if network_order is not None and consumed_order != network_order:
+                raise ValueError(
+                    f"Lynch2024 formal FC network order differs across subjects: {fc_path} "
+                    f"consumed={consumed_order} first={network_order}"
+                )
+            network_order = consumed_order
         feature_bank[subject] = fc
         fc_paths[f"sub-{subject}"] = str(fc_path.resolve())
 
@@ -389,6 +429,7 @@ def compute_combo(
         hippomaps_root=hippomaps_root,
         n_components=int(n_components),
         gradient_random_state=gradient_random_state,
+        network_order=network_order,
     )
 
 
@@ -431,12 +472,14 @@ def write_aligned_combo_outputs(
         np.save(run_dir / f"hippomaps_gradient_G{comp}_full.npy", gradients_full[:, comp_idx].astype(np.float32))
 
     selected_labels = [f"G{c}" for c in selected_components]
+    if result.route == "lynch2024_20net" and result.network_order is None:
+        raise ValueError("Lynch2024 formal gradient result is missing consumed FC network-order provenance")
     taxonomy_evidence = (
         {
             "network_taxonomy": "lynch20",
             "network_count": 20,
             "noise_excluded": True,
-            "network_order": lynch2024_20net_order(DEFAULT_LYNCH2024_MERGE_CONFIG),
+            "network_order": result.network_order,
         }
         if result.route == "lynch2024_20net"
         else {}

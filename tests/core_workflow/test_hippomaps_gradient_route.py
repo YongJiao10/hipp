@@ -114,6 +114,34 @@ def test_group_mean_fc_applies_fisher_z_before_averaging() -> None:
     assert np.allclose(got, expected.astype(np.float32), atol=1e-6), (got, expected)
 
 
+def test_lynch20_fc_rejects_permuted_consumed_network_order(tmp_path: Path) -> None:
+    order = compute_mod.lynch2024_20net_order(compute_mod.DEFAULT_LYNCH2024_MERGE_CONFIG)
+    fc_dir = tmp_path / "sub-1001" / "fc" / "lynch2024_20net" / "2mm" / "hemi_L"
+    fc_dir.mkdir(parents=True)
+    np.save(fc_dir / "hipp_vertex_to_network_fc.npy", np.ones((3, 20), dtype=np.float32))
+    (fc_dir / "stage_manifest.json").write_text(
+        compute_mod.json.dumps(
+            {
+                "network_taxonomy": "lynch20",
+                "network_count": 20,
+                "noise_excluded": True,
+                "network_order": [order[1], order[0], *order[2:]],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="network order mismatch"):
+        compute_mod.load_subject_fc(
+            tmp_path,
+            "1001",
+            "lynch2024_20net",
+            "2mm",
+            "L",
+            np.ones((3,), dtype=bool),
+        )
+
+
 def test_gradientmaps_called_with_official_pearson_kernel_and_full_lambda_ev() -> None:
     calls: list[dict[str, object]] = []
 

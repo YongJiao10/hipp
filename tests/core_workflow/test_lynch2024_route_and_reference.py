@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import csv
 import importlib.util
+import json
 import sys
 from pathlib import Path
 
@@ -67,6 +68,19 @@ def test_lynch20_order_is_exactly_twenty_and_excludes_noise() -> None:
     assert len(set(order)) == 20
 
 
+def test_lynch20_order_excludes_noise_even_when_exclude_labels_is_empty(tmp_path: Path) -> None:
+    source = REPO_ROOT / "config/cross_atlas_network_merge.json"
+    payload = json.loads(source.read_text(encoding="utf-8"))
+    payload["exclude_labels"] = []
+    config = tmp_path / "merge.json"
+    config.write_text(json.dumps(payload), encoding="utf-8")
+
+    order = lynch2024_20net_order(config)
+
+    assert len(order) == 20
+    assert "Noise" not in order
+
+
 def test_lynch20_runtime_names_are_removed() -> None:
     retired_route = f"lynch2024_{20 + 1}net"
     retired_taxonomy = f"lynch{20 + 1}"
@@ -81,17 +95,36 @@ def test_lynch8_reuses_lynch20_gradient_bank() -> None:
 
 
 def test_lynch_reference_orders_exclude_noise_and_merge_to_canonical8(tmp_path: Path) -> None:
+    formal_order = lynch2024_20net_order(REPO_ROOT / "config/cross_atlas_network_merge.json")
     component_ts = np.asarray(
-        [
-            [1.0, 3.0, 5.0],
-            [100.0, 100.0, 100.0],
-            [2.0, 4.0, 6.0],
-            [10.0, 20.0, 30.0],
-        ],
+        [[float(i), float(i + 1), float(i + 2)] for i in range(20)]
+        + [[100.0, 100.0, 100.0]],
         dtype=np.float32,
     )
     component_tsv = tmp_path / "components.tsv"
-    _write_component_tsv(component_tsv)
+    rows = [
+        {
+            "component_id": str(i + 1),
+            "component_name": f"{network}_component",
+            "network": network,
+            "hemisphere": "L",
+            "n_grayordinates_used": "1",
+        }
+        for i, network in enumerate(formal_order)
+    ]
+    rows.append(
+        {
+            "component_id": "21",
+            "component_name": "Noise_component",
+            "network": "Noise",
+            "hemisphere": "L",
+            "n_grayordinates_used": "1",
+        }
+    )
+    with component_tsv.open("w", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=list(rows[0]), delimiter="\t")
+        writer.writeheader()
+        writer.writerows(rows)
     outputs = build_lynch_network_references(
         component_timeseries=component_ts,
         component_tsv=component_tsv,
@@ -110,12 +143,29 @@ def test_lynch_reference_orders_exclude_noise_and_merge_to_canonical8(tmp_path: 
         "Auditory",
         "Language",
     ]
-    assert outputs["lynch20_order"] == ["Default_Parietal", "Visual_V1", "Frontoparietal"]
-    assert outputs["lynch8_order"] == ["Default", "Visual", "Control"]
-    np.testing.assert_allclose(np.load(outputs["lynch20_timeseries"]), component_ts[[0, 2, 3]])
-    np.testing.assert_allclose(np.load(outputs["lynch8_timeseries"]), component_ts[[0, 2, 3]])
+    assert outputs["lynch20_order"] == formal_order
+    assert outputs["lynch8_order"] == lynch2024_8net_order(
+        REPO_ROOT / "config" / "cross_atlas_network_merge.json"
+    )
+    np.testing.assert_allclose(np.load(outputs["lynch20_timeseries"]), component_ts[:20])
     assert "Noise" not in outputs["lynch20_tsv"].read_text(encoding="utf-8")
     assert "Noise" not in outputs["lynch8_tsv"].read_text(encoding="utf-8")
+
+
+def test_lynch_reference_rejects_incomplete_formal_network_coverage(tmp_path: Path) -> None:
+    component_tsv = tmp_path / "components.tsv"
+    _write_component_tsv(component_tsv)
+    out_dir = tmp_path / "reference"
+
+    with pytest.raises(ValueError, match="exactly the 20 formal networks"):
+        build_lynch_network_references(
+            component_timeseries=np.ones((4, 3), dtype=np.float32),
+            component_tsv=component_tsv,
+            out_dir=out_dir,
+            merge_config=REPO_ROOT / "config" / "cross_atlas_network_merge.json",
+        )
+
+    assert not out_dir.exists()
 
 
 def test_lynch_routes_and_roots_are_distinct_from_kong_routea() -> None:

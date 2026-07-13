@@ -42,7 +42,14 @@ def lynch2024_exclude_labels(merge_config: Path) -> set[str]:
 def lynch2024_20net_order(merge_config: Path) -> list[str]:
     mapping = lynch2024_mapping(merge_config)
     excluded = lynch2024_exclude_labels(merge_config)
-    names = [network for network in mapping if network not in excluded and mapping[network] not in excluded]
+    names = [
+        network
+        for network in mapping
+        if network != "Noise"
+        and mapping[network] != "Noise"
+        and network not in excluded
+        and mapping[network] not in excluded
+    ]
     if len(names) != 20 or len(set(names)) != 20:
         raise ValueError(
             "Lynch2024 formal taxonomy must contain exactly 20 unique non-Noise networks: "
@@ -129,13 +136,21 @@ def build_lynch_network_references(
     if not kept:
         raise RuntimeError("No Lynch2024 components remained after excluding Noise")
 
+    kept_sorted = sorted(kept, key=lambda item: (order20.index(str(item[1]["network"])), item[0]))
+    present_order = list(dict.fromkeys(str(row["network"]) for _idx, row in kept_sorted))
+    if present_order != order20:
+        missing = [name for name in order20 if name not in present_order]
+        raise ValueError(
+            "Lynch2024 component table must cover exactly the 20 formal networks in canonical order: "
+            f"path={component_tsv} missing={missing} present={present_order}"
+        )
+
     out_root = Path(out_dir)
     lynch20_dir = out_root / LYNCH2024_20NET_ATLAS
     lynch8_dir = out_root / LYNCH2024_8NET_ATLAS
     lynch20_dir.mkdir(parents=True, exist_ok=True)
     lynch8_dir.mkdir(parents=True, exist_ok=True)
 
-    kept_sorted = sorted(kept, key=lambda item: (order20.index(str(item[1]["network"])), item[0]))
     kept_idx = [idx for idx, _row in kept_sorted]
     kept_rows = [row for _idx, row in kept_sorted]
     lynch20_ts = arr[np.asarray(kept_idx, dtype=np.int32), :].astype(np.float32)
