@@ -77,7 +77,7 @@ METHODS_DEFAULT = [
     "network-spectral",
     "wta-top",
 ]
-ATLASES = ["kong2019", "kong2019_8net", "kong2022", "lynch2024_21net", "lynch2024_8net"]
+ATLASES = ["kong2019", "kong2019_8net", "kong2022", "lynch2024_20net", "lynch2024_8net"]
 DEFAULT_ATLASES = ["kong2019", "kong2019_8net", "kong2022"]
 SMOOTHINGS = ["2mm", "4mm"]
 FS_TITLE = 11

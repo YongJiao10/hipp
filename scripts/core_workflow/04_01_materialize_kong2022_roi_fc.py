@@ -354,6 +354,12 @@ def read_roi_names(path: Path) -> list[str]:
 
 def reference_fc_target_files(atlas_slug: str) -> tuple[str, str, str]:
     """Return TSV/NPY targets for vertex-to-reference FC materialization."""
+    if str(atlas_slug) == "lynch2024_20net":
+        return (
+            "cortex_lynch20_networks.tsv",
+            "cortex_lynch20_network_timeseries.npy",
+            "lynch20_network",
+        )
     if str(atlas_slug) == "lynch2024_8net":
         return (
             "cortex_canonical_networks.tsv",
@@ -618,7 +624,13 @@ def materialize_fc(
     pearson_valid = corrcoef_rows(ts[valid_mask, :], roi_ts)
     pearson_full = np.full((ts.shape[0], roi_ts.shape[0]), np.nan, dtype=np.float32)
     pearson_full[valid_mask, :] = pearson_valid
-    np.save(fc_dir / "hipp_vertex_to_network_fc.npy", pearson_full.astype(np.float32))
+    full_fc_path = fc_dir / "hipp_vertex_to_network_fc.npy"
+    if atlas_slug == "lynch2024_20net" and pearson_full.shape[-1] != 20:
+        raise ValueError(
+            f"Lynch2024 formal FC must contain exactly 20 networks: {full_fc_path} "
+            f"shape={pearson_full.shape}"
+        )
+    np.save(full_fc_path, pearson_full.astype(np.float32))
     np.save(fc_dir / "hipp_vertex_to_network_fc_active.npy", compact_active_vertices(pearson_full, valid_mask))
 
     run_labels: list[str] = []
@@ -657,6 +669,16 @@ def materialize_fc(
             f"{total_run_len} vs {ts.shape[1]}"
         )
 
+    taxonomy_evidence = (
+        {
+            "network_taxonomy": "lynch20",
+            "network_count": 20,
+            "noise_excluded": True,
+            "network_order": roi_names,
+        }
+        if atlas_slug == "lynch2024_20net"
+        else {}
+    )
     write_json(
         fc_dir / "fc_summary.json",
         {
@@ -675,6 +697,7 @@ def materialize_fc(
             "run_labels": run_labels,
             "run_lengths": run_lengths,
             "fc_definition": f"pearson_vertex_to_{atlas_slug}_roi_timeseries",
+            **taxonomy_evidence,
         },
     )
     write_json(
@@ -683,6 +706,7 @@ def materialize_fc(
             "stage": "shared_fc",
             "status": "done",
             "timestamp_utc": utc_now_iso(),
+            **taxonomy_evidence,
             "params": {
                 "subject": subject,
                 "atlas_slug": atlas_slug,

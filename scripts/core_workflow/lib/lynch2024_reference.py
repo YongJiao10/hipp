@@ -10,7 +10,7 @@ from .io_utils import write_tsv
 
 
 LYNCH2024_ATLAS_KEY = "lynch2024"
-LYNCH2024_21NET_ATLAS = "lynch2024_21net"
+LYNCH2024_20NET_ATLAS = "lynch2024_20net"
 LYNCH2024_8NET_ATLAS = "lynch2024_8net"
 LYNCH2024_CANONICAL8_ORDER = [
     "Default",
@@ -39,10 +39,16 @@ def lynch2024_exclude_labels(merge_config: Path) -> set[str]:
     return {str(x) for x in payload.get("exclude_labels", [])}
 
 
-def lynch2024_21net_order(merge_config: Path) -> list[str]:
+def lynch2024_20net_order(merge_config: Path) -> list[str]:
     mapping = lynch2024_mapping(merge_config)
     excluded = lynch2024_exclude_labels(merge_config)
-    return [network for network in mapping.keys() if network not in excluded and mapping[network] not in excluded]
+    names = [network for network in mapping if network not in excluded and mapping[network] not in excluded]
+    if len(names) != 20 or len(set(names)) != 20:
+        raise ValueError(
+            "Lynch2024 formal taxonomy must contain exactly 20 unique non-Noise networks: "
+            f"count={len(names)} names={names}"
+        )
+    return names
 
 
 def lynch2024_8net_order(merge_config: Path) -> list[str]:
@@ -61,13 +67,13 @@ def read_component_rows(path: Path) -> list[dict[str, object]]:
         row.setdefault("component_id", str(idx + 1))
         row.setdefault("component_name", row.get("name", row["component_id"]))
         if "network" not in row:
-            if "lynch21_network" in row:
-                row["network"] = row["lynch21_network"]
+            if "lynch20_network" in row:
+                row["network"] = row["lynch20_network"]
             elif "parent_network" in row:
                 row["network"] = row["parent_network"]
             else:
                 raise RuntimeError(
-                    f"Lynch component TSV requires a network/lynch21_network/parent_network column: {path}"
+                    f"Lynch component TSV requires a network/lynch20_network/parent_network column: {path}"
                 )
         row.setdefault("hemisphere", "")
         row.setdefault("n_grayordinates_used", "")
@@ -108,39 +114,39 @@ def build_lynch_network_references(
         )
     mapping = lynch2024_mapping(merge_config)
     excluded = lynch2024_exclude_labels(merge_config)
-    order21 = lynch2024_21net_order(merge_config)
+    order20 = lynch2024_20net_order(merge_config)
     order8 = lynch2024_8net_order(merge_config)
-    order21_set = set(order21)
+    order20_set = set(order20)
 
     kept: list[tuple[int, dict[str, object]]] = []
     for idx, row in enumerate(rows_all):
         net = str(row["network"])
         if net in excluded or mapping.get(net) in excluded:
             continue
-        if net not in order21_set:
+        if net not in order20_set:
             raise KeyError(f"Unknown Lynch2024 network {net!r} in {component_tsv}")
         kept.append((idx, row))
     if not kept:
         raise RuntimeError("No Lynch2024 components remained after excluding Noise")
 
     out_root = Path(out_dir)
-    lynch21_dir = out_root / LYNCH2024_21NET_ATLAS
+    lynch20_dir = out_root / LYNCH2024_20NET_ATLAS
     lynch8_dir = out_root / LYNCH2024_8NET_ATLAS
-    lynch21_dir.mkdir(parents=True, exist_ok=True)
+    lynch20_dir.mkdir(parents=True, exist_ok=True)
     lynch8_dir.mkdir(parents=True, exist_ok=True)
 
-    kept_sorted = sorted(kept, key=lambda item: (order21.index(str(item[1]["network"])), item[0]))
+    kept_sorted = sorted(kept, key=lambda item: (order20.index(str(item[1]["network"])), item[0]))
     kept_idx = [idx for idx, _row in kept_sorted]
     kept_rows = [row for _idx, row in kept_sorted]
-    lynch21_ts = arr[np.asarray(kept_idx, dtype=np.int32), :].astype(np.float32)
-    lynch21_rows: list[dict[str, object]] = []
+    lynch20_ts = arr[np.asarray(kept_idx, dtype=np.int32), :].astype(np.float32)
+    lynch20_rows: list[dict[str, object]] = []
     for out_idx, (src_idx, row) in enumerate(kept_sorted, start=1):
         net = str(row["network"])
-        lynch21_rows.append(
+        lynch20_rows.append(
             {
                 "parcel_id": _component_id(row, src_idx + 1),
                 "parcel_name": str(row.get("component_name", f"component_{src_idx + 1}")),
-                "lynch21_network": net,
+                "lynch20_network": net,
                 "canonical8": mapping[net],
                 "hemisphere": str(row.get("hemisphere", "")),
                 "component_order": int(out_idx),
@@ -148,42 +154,42 @@ def build_lynch_network_references(
             }
         )
 
-    np.save(lynch21_dir / "cortex_roi_parcel_timeseries.npy", lynch21_ts)
+    np.save(lynch20_dir / "cortex_roi_parcel_timeseries.npy", lynch20_ts)
     write_tsv(
-        lynch21_dir / "cortex_roi_parcels.tsv",
-        lynch21_rows,
+        lynch20_dir / "cortex_roi_parcels.tsv",
+        lynch20_rows,
         [
             "parcel_id",
             "parcel_name",
-            "lynch21_network",
+            "lynch20_network",
             "canonical8",
             "hemisphere",
             "component_order",
             "n_grayordinates_used",
         ],
     )
-    network21_rows: list[dict[str, object]] = []
-    network21_ts: list[np.ndarray] = []
-    for network in order21:
+    network20_rows: list[dict[str, object]] = []
+    network20_ts: list[np.ndarray] = []
+    for network in order20:
         idx = [i for i, row in enumerate(kept_rows) if str(row["network"]) == network]
         if not idx:
             continue
         weights = np.asarray([_component_weight(kept_rows[i]) for i in idx], dtype=np.float64)
-        ts = np.average(lynch21_ts[np.asarray(idx, dtype=np.int32), :], axis=0, weights=weights).astype(np.float32)
-        network21_ts.append(ts)
-        network21_rows.append(
+        ts = np.average(lynch20_ts[np.asarray(idx, dtype=np.int32), :], axis=0, weights=weights).astype(np.float32)
+        network20_ts.append(ts)
+        network20_rows.append(
             {
-                "lynch21_network": network,
+                "lynch20_network": network,
                 "canonical8": mapping[network],
                 "n_components_merged": int(len(idx)),
                 "n_grayordinates_used_total": float(np.sum(weights)),
             }
         )
-    np.save(lynch21_dir / "cortex_lynch21_network_timeseries.npy", np.asarray(network21_ts, dtype=np.float32))
+    np.save(lynch20_dir / "cortex_lynch20_network_timeseries.npy", np.asarray(network20_ts, dtype=np.float32))
     write_tsv(
-        lynch21_dir / "cortex_lynch21_networks.tsv",
-        network21_rows,
-        ["lynch21_network", "canonical8", "n_components_merged", "n_grayordinates_used_total"],
+        lynch20_dir / "cortex_lynch20_networks.tsv",
+        network20_rows,
+        ["lynch20_network", "canonical8", "n_components_merged", "n_grayordinates_used_total"],
     )
 
     network8_rows: list[dict[str, object]] = []
@@ -193,7 +199,7 @@ def build_lynch_network_references(
         if not idx:
             continue
         weights = np.asarray([_component_weight(kept_rows[i]) for i in idx], dtype=np.float64)
-        ts = np.average(lynch21_ts[np.asarray(idx, dtype=np.int32), :], axis=0, weights=weights).astype(np.float32)
+        ts = np.average(lynch20_ts[np.asarray(idx, dtype=np.int32), :], axis=0, weights=weights).astype(np.float32)
         network8_ts.append(ts)
         parents = [str(kept_rows[i]["network"]) for i in idx]
         network8_rows.append(
@@ -210,14 +216,14 @@ def build_lynch_network_references(
         network8_rows,
         ["canonical_network", "n_components_merged", "original_parent_networks", "n_grayordinates_used_total"],
     )
-    np.save(lynch8_dir / "cortex_roi_parcel_timeseries.npy", lynch21_ts)
+    np.save(lynch8_dir / "cortex_roi_parcel_timeseries.npy", lynch20_ts)
     write_tsv(
         lynch8_dir / "cortex_roi_parcels.tsv",
-        lynch21_rows,
+        lynch20_rows,
         [
             "parcel_id",
             "parcel_name",
-            "lynch21_network",
+            "lynch20_network",
             "canonical8",
             "hemisphere",
             "component_order",
@@ -226,12 +232,12 @@ def build_lynch_network_references(
     )
 
     return {
-        "lynch21_order": [str(row["lynch21_network"]) for row in network21_rows],
+        "lynch20_order": [str(row["lynch20_network"]) for row in network20_rows],
         "lynch8_order": [str(row["canonical_network"]) for row in network8_rows],
-        "lynch21_timeseries": lynch21_dir / "cortex_roi_parcel_timeseries.npy",
-        "lynch21_tsv": lynch21_dir / "cortex_roi_parcels.tsv",
-        "lynch21_network_timeseries": lynch21_dir / "cortex_lynch21_network_timeseries.npy",
-        "lynch21_network_tsv": lynch21_dir / "cortex_lynch21_networks.tsv",
+        "lynch20_timeseries": lynch20_dir / "cortex_roi_parcel_timeseries.npy",
+        "lynch20_tsv": lynch20_dir / "cortex_roi_parcels.tsv",
+        "lynch20_network_timeseries": lynch20_dir / "cortex_lynch20_network_timeseries.npy",
+        "lynch20_network_tsv": lynch20_dir / "cortex_lynch20_networks.tsv",
         "lynch8_timeseries": lynch8_dir / "cortex_canonical_network_timeseries.npy",
         "lynch8_tsv": lynch8_dir / "cortex_canonical_networks.tsv",
         "lynch8_roi_timeseries": lynch8_dir / "cortex_roi_parcel_timeseries.npy",

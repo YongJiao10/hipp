@@ -331,8 +331,8 @@ def resolve_routeb_group_atlas_root(dataset: str = DEFAULT_DATASET) -> Path:
     return resolve_group_atlas_root(dataset) / "routeb_full_k3_fisherz"
 
 
-def resolve_lynch2024_21net_group_atlas_root(dataset: str = DEFAULT_DATASET) -> Path:
-    return resolve_group_atlas_root(dataset) / "lynch2024_21net_nsi043_full_k3_normalized_wta"
+def resolve_lynch2024_20net_group_atlas_root(dataset: str = DEFAULT_DATASET) -> Path:
+    return resolve_group_atlas_root(dataset) / "lynch2024_20net_nsi043_full_k3_normalized_wta"
 
 
 def resolve_lynch2024_8net_group_atlas_root(dataset: str = DEFAULT_DATASET) -> Path:
@@ -402,7 +402,7 @@ DEFAULT_ROUTEA_17NET_GROUP_ATLAS_ROOT = resolve_routea_17net_group_atlas_root()
 DEFAULT_ROUTEA_CTXREG_GROUP_ATLAS_ROOT = resolve_routea_ctxreg_group_atlas_root()
 DEFAULT_ROUTEA_CTXDROP_GROUP_ATLAS_ROOT = resolve_routea_ctxdrop_group_atlas_root()
 DEFAULT_ROUTEB_GROUP_ATLAS_ROOT = resolve_routeb_group_atlas_root()
-DEFAULT_LYNCH2024_21NET_GROUP_ATLAS_ROOT = resolve_lynch2024_21net_group_atlas_root()
+DEFAULT_LYNCH2024_20NET_GROUP_ATLAS_ROOT = resolve_lynch2024_20net_group_atlas_root()
 DEFAULT_LYNCH2024_8NET_GROUP_ATLAS_ROOT = resolve_lynch2024_8net_group_atlas_root()
 DEFAULT_HIPPOMAPS_GRADIENT_ROOT = resolve_hippomaps_gradient_root()
 DEFAULT_CORTEX_ASSETS_ROOT = resolve_cortex_assets_root()

@@ -159,7 +159,7 @@ METHODS_DEFAULT = [
     "network-spectral",
     "wta-top",
 ]
-ATLASES = ["kong2019", "kong2019_8net", "kong2022", "lynch2024_21net", "lynch2024_8net"]
+ATLASES = ["kong2019", "kong2019_8net", "kong2022", "lynch2024_20net", "lynch2024_8net"]
 DEFAULT_ATLASES = ["kong2019", "kong2019_8net", "kong2022"]
 SMOOTHINGS = ["2mm", "4mm"]
 HEMIS = ["L", "R"]
@@ -174,7 +174,7 @@ SUBJECT_FC_MODE_CHOICES = ["full", "top-percent"]
 DEFAULT_GRADIENT_COMPONENTS = (1, 2, 3)
 GRADIENT_N_COMPONENTS_COMPUTED = 5
 GRADIENT_BRAINSPACE_KERNEL = "pearson"
-NETWORK_TAXONOMIES = ("canonical8", "family17", "lynch21", "lynch8")
+NETWORK_TAXONOMIES = ("canonical8", "family17", "lynch20", "lynch8")
 MAX_K_EVAL_JOBS = 10
 RESUME_SIGNATURE_VERSION = 1
 MAX_DIAGNOSTIC_FAILURE_EXAMPLES = 5
@@ -391,8 +391,8 @@ def parse_network_names(tsv: Path) -> list[str]:
                 out.append(str(row["canonical_network"]))
             elif "family17_network" in row:
                 out.append(str(row["family17_network"]))
-            elif "lynch21_network" in row:
-                out.append(str(row["lynch21_network"]))
+            elif "lynch20_network" in row:
+                out.append(str(row["lynch20_network"]))
             else:
                 out.append(str(next(iter(row.values()))))
     if not out:
@@ -406,8 +406,8 @@ def resolve_kong2022_network_registry_column(network_taxonomy: str) -> str:
         return "canonical8"
     if taxonomy == "family17":
         return "family17"
-    if taxonomy == "lynch21":
-        return "lynch21_network"
+    if taxonomy == "lynch20":
+        return "lynch20_network"
     raise ValueError(f"Unsupported network taxonomy: {network_taxonomy!r}")
 
 
@@ -417,8 +417,8 @@ def network_reference_filenames(network_taxonomy: str) -> tuple[str, str]:
         return "cortex_canonical_networks.tsv", "cortex_canonical_network_timeseries.npy"
     if taxonomy == "family17":
         return "cortex_family17_networks.tsv", "cortex_family17_network_timeseries.npy"
-    if taxonomy == "lynch21":
-        return "cortex_lynch21_networks.tsv", "cortex_lynch21_network_timeseries.npy"
+    if taxonomy == "lynch20":
+        return "cortex_lynch20_networks.tsv", "cortex_lynch20_network_timeseries.npy"
     raise ValueError(f"Unsupported network taxonomy: {network_taxonomy!r}")
 
 
@@ -427,7 +427,7 @@ def gradient_route_for_route_tag(route_tag: str) -> str:
     if route == "routea_17net":
         return "routea"
     if route == "lynch2024_8net":
-        return "lynch2024_21net"
+        return "lynch2024_20net"
     return route
 
 
@@ -2265,7 +2265,7 @@ def read_roi_registry_for_atlas(reference_root: Path, subject: str, atlas: str) 
                     "roi_name": network,
                     "hemi": str(row.get("hemi", row.get("hemisphere", ""))),
                     "family17": str(row.get("family17", "")),
-                    "lynch21_network": str(row.get("lynch21_network", "")),
+                    "lynch20_network": str(row.get("lynch20_network", "")),
                     "canonical8": network,
                     "subregion": str(row.get("subregion", "")),
                     "rank": int(row.get("rank", idx + 1) or idx + 1),
@@ -2285,14 +2285,14 @@ def read_roi_registry_for_atlas(reference_root: Path, subject: str, atlas: str) 
         roi_name = str(row.get("parcel_name", row.get("roi_name", row.get("component_name", roi_id))))
         canonical8 = str(row.get("canonical8", row.get("canonical_network", "")))
         family17 = str(row.get("family17", ""))
-        lynch21 = str(row.get("lynch21_network", row.get("network", "")))
+        lynch20 = str(row.get("lynch20_network", row.get("network", "")))
         out.append(
             {
                 "roi_id": roi_id,
                 "roi_name": roi_name,
                 "hemi": str(row.get("hemi", row.get("hemisphere", ""))),
                 "family17": family17,
-                "lynch21_network": lynch21,
+                "lynch20_network": lynch20,
                 "canonical8": canonical8,
                 "subregion": str(row.get("subregion", "")),
                 "rank": int(row.get("rank", row.get("component_order", idx + 1)) or idx + 1),
@@ -3717,7 +3717,7 @@ def main() -> int:
                             write_tsv(
                                 run_dir / "cluster_roi_registry.tsv",
                                 roi_registry,
-                                ["roi_id", "roi_name", "hemi", "family17", "lynch21_network", "subregion", "rank", "canonical8"],
+                                ["roi_id", "roi_name", "hemi", "family17", "lynch20_network", "subregion", "rank", "canonical8"],
                             )
                             write_json(run_dir / "group_feature_summary.json", {"network_names": network_names, "N_ref": int(len(network_names))})
                             write_json(manifest_path, manifest)

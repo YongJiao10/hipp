@@ -11,7 +11,7 @@ Main Flow Path:
 
 Inputs:
 - Command-line arguments:
-  - --routes: Workflow branches to process (choices include routea, routea_ctxreg, routea_ctxdrop, routeb, lynch2024_21net, lynch2024_8net; default: routea and routeb).
+  - --routes: Workflow branches to process (choices include routea, routea_ctxreg, routea_ctxdrop, routeb, lynch2024_20net, lynch2024_8net; default: routea and routeb).
   - --shared-inputs-root: Directory containing route-specific shared reference inputs (default: `outputs_hcp/inputs/hcp/kong2022/shared_inputs`).
   - --surface-root: Path to BOLD surfaces root directory (default: `outputs_hcp/inputs/hcp/kong2022/shared_inputs/surface`).
   - --subjects-manifest: Path to QC-passed subject list manifest (default: `outputs_hcp/inputs/hcp/kong2022/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt`).
@@ -68,6 +68,7 @@ from lib.output_layout import (
 from lib.workflow_utils import write_json
 from lib.io_utils import load_subject_ids
 from lib.fc_math import fisher_z_transform_fc
+from lib.lynch2024_reference import lynch2024_20net_order
 from lib.surface_utils import read_surface_vertex_count
 
 
@@ -78,12 +79,13 @@ DEFAULT_SURFACE_ROOT = DEFAULT_KONG2022_SURFACE_ROOT
 DEFAULT_SUBJECTS = DEFAULT_KONG2022_MANIFEST_ROOT / "hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt"
 DEFAULT_GROUP_AVG_SURFACES_DIR = DEFAULT_KONG2022_TEMPLATE_ROOT / "group_average_surfaces"
 DEFAULT_OUT_ROOT = DEFAULT_HIPPOMAPS_GRADIENT_ROOT
+DEFAULT_LYNCH2024_MERGE_CONFIG = REPO_ROOT / "config" / "cross_atlas_network_merge.json"
 ROUTE_TO_SHARED_DIR = {
     "routea": "routea",
     "routea_ctxreg": "routea_ctxreg",
     "routea_ctxdrop": "routea_ctxdrop",
     "routeb": "routeb",
-    "lynch2024_21net": "pfm_nsi043_78",
+    "lynch2024_20net": "pfm_nsi043_78",
     "lynch2024_8net": "pfm_nsi043_78",
 }
 ROUTE_TO_ATLAS = {
@@ -91,7 +93,7 @@ ROUTE_TO_ATLAS = {
     "routea_ctxreg": "kong2022",
     "routea_ctxdrop": "kong2022",
     "routeb": "kong2022",
-    "lynch2024_21net": "lynch2024_21net",
+    "lynch2024_20net": "lynch2024_20net",
     "lynch2024_8net": "lynch2024_8net",
 }
 SMOOTHINGS = ("2mm", "4mm")
@@ -277,6 +279,10 @@ def load_subject_fc(shared_root: Path, subject: str, atlas: str, smoothing: str,
     arr = np.load(fc_path).astype(np.float32)
     if arr.ndim != 2:
         raise ValueError(f"Expected 2D FC cache: {fc_path} shape={arr.shape}")
+    if str(atlas) == "lynch2024_20net" and arr.shape[-1] != 20:
+        raise ValueError(
+            f"Lynch2024 formal FC must contain exactly 20 networks: {fc_path} shape={arr.shape}"
+        )
     if arr.shape[0] == valid_mask.size:
         return arr, fc_path
     if arr.shape[0] == int(np.sum(valid_mask)):
@@ -425,6 +431,16 @@ def write_aligned_combo_outputs(
         np.save(run_dir / f"hippomaps_gradient_G{comp}_full.npy", gradients_full[:, comp_idx].astype(np.float32))
 
     selected_labels = [f"G{c}" for c in selected_components]
+    taxonomy_evidence = (
+        {
+            "network_taxonomy": "lynch20",
+            "network_count": 20,
+            "noise_excluded": True,
+            "network_order": lynch2024_20net_order(DEFAULT_LYNCH2024_MERGE_CONFIG),
+        }
+        if result.route == "lynch2024_20net"
+        else {}
+    )
     manifest = {
         "status": "ok",
         "route": result.route,
@@ -459,6 +475,7 @@ def write_aligned_combo_outputs(
         "lambdas": [float(x) for x in lambdas],
         "ev_fractions": [float(x) for x in ev_fractions],
         "gradient_alignment": alignment_meta,
+        **taxonomy_evidence,
         "hippomaps_repo": str(Path(result.hippomaps_root).resolve()),
         "hippomaps_import_path": hippomaps_import_path(result.hippomaps_root),
         "hippomaps_commit": hippomaps_commit(result.hippomaps_root),

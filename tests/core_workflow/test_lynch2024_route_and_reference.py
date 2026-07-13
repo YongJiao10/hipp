@@ -33,14 +33,15 @@ overview_mod = _load_numbered_module("06_01_build_group_overview.py", "core_06_0
 fc_mod = _load_numbered_module("04_01_materialize_kong2022_roi_fc.py", "core_04_01_lynch_route")
 
 from lib import route_tags  # noqa: E402
+from lib import lynch2024_reference as reference_mod  # noqa: E402
 from lib.output_layout import (  # noqa: E402
     resolve_lynch2024_8net_group_atlas_root,
-    resolve_lynch2024_21net_group_atlas_root,
+    resolve_lynch2024_20net_group_atlas_root,
     resolve_lynch2024_shared_inputs_root,
 )
 from lib.lynch2024_reference import (  # noqa: E402
     build_lynch_network_references,
-    lynch2024_21net_order,
+    lynch2024_20net_order,
     lynch2024_8net_order,
 )
 
@@ -56,6 +57,27 @@ def _write_component_tsv(path: Path) -> None:
         writer = csv.DictWriter(f, fieldnames=list(rows[0]), delimiter="\t")
         writer.writeheader()
         writer.writerows(rows)
+
+
+def test_lynch20_order_is_exactly_twenty_and_excludes_noise() -> None:
+    assert hasattr(reference_mod, "lynch2024_20net_order")
+    order = reference_mod.lynch2024_20net_order(REPO_ROOT / "config/cross_atlas_network_merge.json")
+    assert len(order) == 20
+    assert "Noise" not in order
+    assert len(set(order)) == 20
+
+
+def test_lynch20_runtime_names_are_removed() -> None:
+    retired_route = f"lynch2024_{20 + 1}net"
+    retired_taxonomy = f"lynch{20 + 1}"
+    assert "lynch2024_20net" in route_tags.ROUTE_TAG_CHOICES
+    assert retired_route not in route_tags.ROUTE_TAG_CHOICES
+    assert "lynch20" in route_tags.NETWORK_TAXONOMY_CHOICES
+    assert retired_taxonomy not in route_tags.NETWORK_TAXONOMY_CHOICES
+
+
+def test_lynch8_reuses_lynch20_gradient_bank() -> None:
+    assert atlas_mod.gradient_route_for_route_tag("lynch2024_8net") == "lynch2024_20net"
 
 
 def test_lynch_reference_orders_exclude_noise_and_merge_to_canonical8(tmp_path: Path) -> None:
@@ -77,7 +99,7 @@ def test_lynch_reference_orders_exclude_noise_and_merge_to_canonical8(tmp_path: 
         merge_config=REPO_ROOT / "config" / "cross_atlas_network_merge.json",
     )
 
-    assert "Noise" not in lynch2024_21net_order(REPO_ROOT / "config" / "cross_atlas_network_merge.json")
+    assert "Noise" not in lynch2024_20net_order(REPO_ROOT / "config" / "cross_atlas_network_merge.json")
     assert lynch2024_8net_order(REPO_ROOT / "config" / "cross_atlas_network_merge.json") == [
         "Default",
         "Visual",
@@ -88,19 +110,19 @@ def test_lynch_reference_orders_exclude_noise_and_merge_to_canonical8(tmp_path: 
         "Auditory",
         "Language",
     ]
-    assert outputs["lynch21_order"] == ["Default_Parietal", "Visual_V1", "Frontoparietal"]
+    assert outputs["lynch20_order"] == ["Default_Parietal", "Visual_V1", "Frontoparietal"]
     assert outputs["lynch8_order"] == ["Default", "Visual", "Control"]
-    np.testing.assert_allclose(np.load(outputs["lynch21_timeseries"]), component_ts[[0, 2, 3]])
+    np.testing.assert_allclose(np.load(outputs["lynch20_timeseries"]), component_ts[[0, 2, 3]])
     np.testing.assert_allclose(np.load(outputs["lynch8_timeseries"]), component_ts[[0, 2, 3]])
-    assert "Noise" not in outputs["lynch21_tsv"].read_text(encoding="utf-8")
+    assert "Noise" not in outputs["lynch20_tsv"].read_text(encoding="utf-8")
     assert "Noise" not in outputs["lynch8_tsv"].read_text(encoding="utf-8")
 
 
 def test_lynch_routes_and_roots_are_distinct_from_kong_routea() -> None:
     shared = resolve_lynch2024_shared_inputs_root()
     assert shared.parts[-3:] == ("lynch2024_fast_pfm_t1only", "shared_inputs", "pfm_nsi043_78")
-    assert route_tags.infer_route_tag_from_shared_root(shared) == "lynch2024_21net"
-    assert route_tags.infer_route_tag_from_group_root(resolve_lynch2024_21net_group_atlas_root()) == "lynch2024_21net"
+    assert route_tags.infer_route_tag_from_shared_root(shared) == "lynch2024_20net"
+    assert route_tags.infer_route_tag_from_group_root(resolve_lynch2024_20net_group_atlas_root()) == "lynch2024_20net"
     assert route_tags.infer_route_tag_from_group_root(resolve_lynch2024_8net_group_atlas_root()) == "lynch2024_8net"
     route_tags.validate_group_atlas_root_for_route(resolve_lynch2024_8net_group_atlas_root(), "lynch2024_8net")
     with pytest.raises(ValueError, match="Provenance discrepancy"):
@@ -111,10 +133,18 @@ def test_05_01_resolves_lynch_shared_fc_roots_and_atlas_slug() -> None:
     shared_root = Path("/tmp/shared_inputs")
     route_shared = compute_mod.resolve_gradient_shared_root(shared_root, "lynch2024_8net")
     assert route_shared == shared_root / "pfm_nsi043_78"
-    assert compute_mod.atlas_for_gradient_route("lynch2024_21net") == "lynch2024_21net"
+    assert compute_mod.atlas_for_gradient_route("lynch2024_20net") == "lynch2024_20net"
     fc_path = compute_mod.subject_fc_path(route_shared, "1001", "lynch2024_8net", "2mm", "L")
     assert fc_path.as_posix().endswith(
         "/pfm_nsi043_78/sub-1001/fc/lynch2024_8net/2mm/hemi_L/hipp_vertex_to_network_fc.npy"
+    )
+
+
+def test_04_01_lynch20_fc_targets_formal_network_timeseries() -> None:
+    assert fc_mod.reference_fc_target_files("lynch2024_20net") == (
+        "cortex_lynch20_networks.tsv",
+        "cortex_lynch20_network_timeseries.npy",
+        "lynch20_network",
     )
 
 
@@ -144,7 +174,7 @@ def test_05_02_accepts_lynch_gradient_and_wta_only() -> None:
     assert atlas_mod.method_allowed_for_atlas("gradient-spectral", "lynch2024_8net") is True
     assert atlas_mod.method_allowed_for_atlas("wta-top", "lynch2024_8net") is True
     assert atlas_mod.method_allowed_for_atlas("network-spectral", "lynch2024_8net") is False
-    assert atlas_mod.method_allowed_for_atlas("intrinsic-spectral", "lynch2024_21net") is False
+    assert atlas_mod.method_allowed_for_atlas("intrinsic-spectral", "lynch2024_20net") is False
     assert atlas_mod.method_allowed_for_atlas("wta-top", "kong2019") is True
     assert atlas_mod.method_allowed_for_atlas("gradient-spectral", "kong2019") is False
     assert overview_mod.resolve_render_assignment_variants("wta-top", "both") == ("normalized_top20_count",)
@@ -153,7 +183,7 @@ def test_05_02_accepts_lynch_gradient_and_wta_only() -> None:
 
 
 def test_lynch_does_not_use_vertex_fc_profile_redundancy_branch() -> None:
-    assert atlas_mod.redundancy_profile_applicable("lynch2024_21net") is False
+    assert atlas_mod.redundancy_profile_applicable("lynch2024_20net") is False
     assert atlas_mod.redundancy_profile_applicable("lynch2024_8net") is False
     assert atlas_mod.redundancy_profile_applicable("kong2022") is True
     legacy_name = "_".join(["cluster", "roi", "profile", "from", "fc", "bank"])
@@ -217,9 +247,9 @@ def test_lynch8_cluster_annotation_collapses_component_profile_by_registry() -> 
         dtype=np.float32,
     )
     roi_registry = [
-        {"roi_id": 1, "roi_name": "default_a", "canonical8": "Default", "lynch21_network": "Default_A"},
-        {"roi_id": 2, "roi_name": "default_b", "canonical8": "Default", "lynch21_network": "Default_B"},
-        {"roi_id": 3, "roi_name": "visual_a", "canonical8": "Visual", "lynch21_network": "Visual_A"},
+        {"roi_id": 1, "roi_name": "default_a", "canonical8": "Default", "lynch20_network": "Default_A"},
+        {"roi_id": 2, "roi_name": "default_b", "canonical8": "Default", "lynch20_network": "Default_B"},
+        {"roi_id": 3, "roi_name": "visual_a", "canonical8": "Visual", "lynch20_network": "Visual_A"},
     ]
 
     profile, status_rows, dominant = atlas_mod.assignment_status_from_kong2022_roi_profile(
@@ -330,6 +360,6 @@ def test_05_02_lynch8_roi_registry_reads_canonical8_rows(tmp_path: Path) -> None
     assert [row["canonical8"] for row in registry] == ["Default", "Visual"]
 
 
-def test_05_02_lynch8_gradient_uses_shared_lynch21_component_bank() -> None:
-    assert atlas_mod.gradient_route_for_route_tag("lynch2024_8net") == "lynch2024_21net"
-    assert atlas_mod.gradient_route_for_route_tag("lynch2024_21net") == "lynch2024_21net"
+def test_05_02_lynch8_gradient_uses_shared_lynch20_component_bank() -> None:
+    assert atlas_mod.gradient_route_for_route_tag("lynch2024_8net") == "lynch2024_20net"
+    assert atlas_mod.gradient_route_for_route_tag("lynch2024_20net") == "lynch2024_20net"

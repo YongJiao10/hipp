@@ -337,7 +337,7 @@ def test_gradient_split_diagnostic_failures_are_counted_when_allowed() -> None:
 def test_evaluate_k_candidate_records_no_valid_gradient_diagnostic_status() -> None:
     combo = atlas_mod.Combo(
         method="gradient-spectral",
-        atlas="lynch2024_21net",
+        atlas="lynch2024_20net",
         smoothing="2mm",
         hemi="L",
         coverage_threshold=0.8,

@@ -36,12 +36,12 @@ def test_normalized_topn_wta_prefers_fraction_over_raw_count() -> None:
         dtype=np.float32,
     )
     roi_registry = [
-        {"roi_id": 1, "roi_name": "default1", "canonical8": "Default", "family17": "DefaultA", "lynch21_network": "Default"},
-        {"roi_id": 2, "roi_name": "default2", "canonical8": "Default", "family17": "DefaultA", "lynch21_network": "Default"},
-        {"roi_id": 3, "roi_name": "default3", "canonical8": "Default", "family17": "DefaultA", "lynch21_network": "Default"},
-        {"roi_id": 4, "roi_name": "default4", "canonical8": "Default", "family17": "DefaultA", "lynch21_network": "Default"},
-        {"roi_id": 5, "roi_name": "visual1", "canonical8": "Visual", "family17": "VisualA", "lynch21_network": "Visual"},
-        {"roi_id": 6, "roi_name": "visual2", "canonical8": "Visual", "family17": "VisualA", "lynch21_network": "Visual"},
+        {"roi_id": 1, "roi_name": "default1", "canonical8": "Default", "family17": "DefaultA", "lynch20_network": "Default"},
+        {"roi_id": 2, "roi_name": "default2", "canonical8": "Default", "family17": "DefaultA", "lynch20_network": "Default"},
+        {"roi_id": 3, "roi_name": "default3", "canonical8": "Default", "family17": "DefaultA", "lynch20_network": "Default"},
+        {"roi_id": 4, "roi_name": "default4", "canonical8": "Default", "family17": "DefaultA", "lynch20_network": "Default"},
+        {"roi_id": 5, "roi_name": "visual1", "canonical8": "Visual", "family17": "VisualA", "lynch20_network": "Visual"},
+        {"roi_id": 6, "roi_name": "visual2", "canonical8": "Visual", "family17": "VisualA", "lynch20_network": "Visual"},
     ]
 
     rows = atlas_mod.build_normalized_topn_count_vertex_rows(
@@ -65,10 +65,10 @@ def test_normalized_topn_wta_prefers_fraction_over_raw_count() -> None:
         support_indices=np.asarray([42], dtype=np.int32),
         roi_registry=roi_registry,
         top_n_cap=5,
-        network_column="lynch21",
+        network_column="lynch20",
     )
     assert lynch_rows[0]["top1_network"] == "Visual"
-    assert lynch_rows[0]["network_column"] == "lynch21_network"
+    assert lynch_rows[0]["network_column"] == "lynch20_network"
 
 
 def test_normalized_wta_variant_is_default_when_roi_registry_is_available() -> None:

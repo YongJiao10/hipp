@@ -8,7 +8,7 @@ This maintained entrypoint consumes per-subject Lynch2024 component time series
 and component metadata produced by external FASTANS/PFM assets, then writes the
 two maintained atlas references:
 
-- ``reference/lynch2024_21net``: original Lynch parent networks, excluding Noise.
+- ``reference/lynch2024_20net``: original Lynch parent networks, excluding Noise.
 - ``reference/lynch2024_8net``: merged canonical networks from
   ``config/cross_atlas_network_merge.json``.
 """
@@ -21,7 +21,7 @@ from pathlib import Path
 import numpy as np
 
 from lib.io_utils import load_subject_ids, parse_run_segments
-from lib.lynch2024_reference import build_lynch_network_references
+from lib.lynch2024_reference import build_lynch_network_references, lynch2024_20net_order
 from lib.output_layout import (
     DEFAULT_CORTEX_ASSETS_ROOT,
     DEFAULT_LYNCH2024_SHARED_INPUTS_ROOT,
@@ -134,15 +134,30 @@ def process_subject(
         "run_lengths": [int(seg["run_length"]) for seg in segments],
         "outputs": {k: str(v) for k, v in outputs.items() if isinstance(v, Path)},
     }
-    for atlas_slug in ("lynch2024_21net", "lynch2024_8net"):
+    network_order = lynch2024_20net_order(merge_config)
+    for atlas_slug in ("lynch2024_20net", "lynch2024_8net"):
         atlas_dir = reference_root / atlas_slug
-        write_json(atlas_dir / "reference_summary.json", {**summary, "atlas_slug": atlas_slug})
+        taxonomy_evidence = (
+            {
+                "network_taxonomy": "lynch20",
+                "network_count": 20,
+                "noise_excluded": True,
+                "network_order": network_order,
+            }
+            if atlas_slug == "lynch2024_20net"
+            else {}
+        )
+        write_json(
+            atlas_dir / "reference_summary.json",
+            {**summary, "atlas_slug": atlas_slug, **taxonomy_evidence},
+        )
         write_json(
             atlas_dir / "stage_manifest.json",
             {
                 "stage": "reference",
                 "status": "done",
                 "timestamp_utc": utc_now_iso(),
+                **taxonomy_evidence,
                 "params": {
                     "subject": subject,
                     "atlas_slug": atlas_slug,
