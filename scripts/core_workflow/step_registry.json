@@ -422,6 +422,17 @@
         "lynch2024_20net",
         "lynch2024_8net"
       ],
+      "formal_groups": [
+        {"dataset": "outputs_hcp", "group_root": "routea_full_k3_fisherz", "atlas": "kong2022"},
+        {"dataset": "outputs_hcp", "group_root": "routea_17net_full_k3_fisherz", "atlas": "kong2022"},
+        {"dataset": "outputs_hcp", "group_root": "routea_weighted_fisherz_full_k3", "atlas": "kong2022"},
+        {"dataset": "outputs_hcp", "group_root": "lynch2024_20net_nsi043_full_k3_normalized_wta", "atlas": "lynch2024_20net"},
+        {"dataset": "outputs_hcp", "group_root": "lynch2024_8net_nsi043_full_k3_normalized_wta", "atlas": "lynch2024_8net"},
+        {"dataset": "outputs_stanford", "group_root": "routea_hc_full_k3_fisherz", "atlas": "kong2022"},
+        {"dataset": "outputs_stanford", "group_root": "routea_symp_full_k3_fisherz", "atlas": "kong2022"},
+        {"dataset": "outputs_stanford", "group_root": "routea_hc_weighted_fisherz_full_k3", "atlas": "kong2022"},
+        {"dataset": "outputs_stanford", "group_root": "routea_symp_weighted_fisherz_full_k3", "atlas": "kong2022"}
+      ],
       "entry_script": "scripts/core_workflow/audit_formal_gradient_spectral_release.py",
       "implementation_script": "scripts/core_workflow/audit_formal_gradient_spectral_release.py",
       "recommended_manifest": "outputs_hcp/work/group_atlas/logs/<run_id>.audit.json"
@@ -435,6 +446,17 @@
         "kong2022_routea_17net",
         "lynch2024_20net",
         "lynch2024_8net"
+      ],
+      "formal_groups": [
+        {"dataset": "outputs_hcp", "group_root": "routea_full_k3_fisherz", "atlas": "kong2022"},
+        {"dataset": "outputs_hcp", "group_root": "routea_17net_full_k3_fisherz", "atlas": "kong2022"},
+        {"dataset": "outputs_hcp", "group_root": "routea_weighted_fisherz_full_k3", "atlas": "kong2022"},
+        {"dataset": "outputs_hcp", "group_root": "lynch2024_20net_nsi043_full_k3_normalized_wta", "atlas": "lynch2024_20net"},
+        {"dataset": "outputs_hcp", "group_root": "lynch2024_8net_nsi043_full_k3_normalized_wta", "atlas": "lynch2024_8net"},
+        {"dataset": "outputs_stanford", "group_root": "routea_hc_full_k3_fisherz", "atlas": "kong2022"},
+        {"dataset": "outputs_stanford", "group_root": "routea_symp_full_k3_fisherz", "atlas": "kong2022"},
+        {"dataset": "outputs_stanford", "group_root": "routea_hc_weighted_fisherz_full_k3", "atlas": "kong2022"},
+        {"dataset": "outputs_stanford", "group_root": "routea_symp_weighted_fisherz_full_k3", "atlas": "kong2022"}
       ],
       "entry_script": "scripts/core_workflow/run_formal_gradient_spectral_refresh.py",
       "implementation_script": "scripts/core_workflow/run_formal_gradient_spectral_refresh.py",

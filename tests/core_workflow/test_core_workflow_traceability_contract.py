@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import importlib.util
 import json
 import subprocess
 import sys
@@ -31,6 +32,15 @@ def _load_registry() -> dict:
     return json.loads(STEP_REGISTRY.read_text(encoding="utf-8"))
 
 
+def _load_audit_module():
+    path = CORE_ROOT / "audit_formal_gradient_spectral_release.py"
+    spec = importlib.util.spec_from_file_location("audit_formal_gradient_spectral_release", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def test_step_registry_references_existing_paths_and_modules() -> None:
     payload = _load_registry()
     steps = payload["steps"]
@@ -42,6 +52,21 @@ def test_step_registry_references_existing_paths_and_modules() -> None:
         assert impl_path.exists(), f"missing implementation module file: {impl_path}"
     for doc in ACTIVE_CANONICAL_DOCS:
         assert doc.exists(), f"missing canonical doc: {doc}"
+
+
+def test_release_utilities_register_exact_audit_formal_groups() -> None:
+    registry = _load_registry()
+    audit = _load_audit_module()
+    expected = [
+        {"dataset": dataset, "group_root": group_root, "atlas": atlas}
+        for dataset, group_root, atlas in audit.FORMAL_GROUPS
+    ]
+    utilities = {item["step_id"]: item for item in registry["utilities"]}
+    for utility_id in (
+        "audit_formal_gradient_spectral_release",
+        "run_formal_gradient_spectral_refresh",
+    ):
+        assert utilities[utility_id]["formal_groups"] == expected
 
 
 def test_every_numbered_step_help_succeeds() -> None:
@@ -124,6 +149,7 @@ def test_active_core_workflow_has_no_legacy_wrapper_or_runtime_refs() -> None:
 
 def main() -> int:
     test_step_registry_references_existing_paths_and_modules()
+    test_release_utilities_register_exact_audit_formal_groups()
     test_every_numbered_step_help_succeeds()
     test_every_numbered_step_emits_traceability_manifest_fields()
     test_active_core_workflow_has_no_legacy_wrapper_or_runtime_refs()

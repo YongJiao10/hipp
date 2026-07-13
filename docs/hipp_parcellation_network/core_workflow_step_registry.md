@@ -40,6 +40,21 @@ Canonical public entrypoints are under `scripts/core_workflow/`. The numeric pre
 | `audit_formal_gradient_spectral_release` | Read-only exact nine-group release audit | `scripts/core_workflow/audit_formal_gradient_spectral_release.py` | JSON on stdout and optional `--output-json` path |
 | `run_formal_gradient_spectral_refresh` | Fixed `jobs=1`, preflighted, sequential 19-stage formal refresh launcher | `scripts/core_workflow/run_formal_gradient_spectral_refresh.py` | Status, PID, stdout, stderr, and audit JSON under `outputs_hcp/work/group_atlas/logs/` |
 
+The two formal-release utilities keep route applicability in `branches` and
+encode their exact shared release scope separately in the machine registry's
+`formal_groups` field. The nine ordered `dataset / group_root / atlas`
+identities are:
+
+- `outputs_hcp / routea_full_k3_fisherz / kong2022`
+- `outputs_hcp / routea_17net_full_k3_fisherz / kong2022`
+- `outputs_hcp / routea_weighted_fisherz_full_k3 / kong2022`
+- `outputs_hcp / lynch2024_20net_nsi043_full_k3_normalized_wta / lynch2024_20net`
+- `outputs_hcp / lynch2024_8net_nsi043_full_k3_normalized_wta / lynch2024_8net`
+- `outputs_stanford / routea_hc_full_k3_fisherz / kong2022`
+- `outputs_stanford / routea_symp_full_k3_fisherz / kong2022`
+- `outputs_stanford / routea_hc_weighted_fisherz_full_k3 / kong2022`
+- `outputs_stanford / routea_symp_weighted_fisherz_full_k3 / kong2022`
+
 Machine-readable source of truth: `scripts/core_workflow/step_registry.json`.
 Artifact-level provenance and required evidence are maintained in
 `docs/hipp_parcellation_network/core_workflow_artifact_lineage.md`.
