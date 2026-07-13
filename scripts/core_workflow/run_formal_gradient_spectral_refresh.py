@@ -353,38 +353,299 @@ def _stage_commands(stage: dict[str, object]) -> list[list[str]]:
     return commands
 
 
+def _subject_ids(manifest: Path) -> list[str]:
+    if not manifest.is_file():
+        return []
+    return [
+        line.strip().removeprefix("sub-")
+        for line in manifest.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+
+
+def _group_manifest_path(group_root: Path, smoothing: str, hemi: str) -> Path:
+    return (
+        group_root
+        / "gradient-spectral/kong2022"
+        / smoothing
+        / "cov_0p80/g1g2g3"
+        / f"hemi_{hemi}"
+        / "group_atlas_manifest.json"
+    )
+
+
+def _group_manifest_subjects(manifest: Path) -> list[str]:
+    if not manifest.is_file():
+        return []
+    try:
+        payload = json.loads(manifest.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    subjects = payload.get("subjects", []) if isinstance(payload, dict) else []
+    return [str(subject).removeprefix("sub-") for subject in subjects]
+
+
+def _recorded_path(repo_root: Path, raw: object) -> Path:
+    path = Path(str(raw)).expanduser()
+    return path.resolve() if path.is_absolute() else (repo_root / path).resolve()
+
+
+def _existing_group_run_inputs(repo_root: Path, manifest: Path) -> set[Path]:
+    """Enumerate exact leaves read by weighted refreshes and overview rendering."""
+    run_dir = manifest.parent
+    paths = {
+        manifest,
+        run_dir / "cluster_network_profile.npy",
+        run_dir / "group_feature_summary.json",
+        run_dir / "group_labels_final.npy",
+        run_dir / "k_selection_summary.tsv",
+    }
+    if not manifest.is_file():
+        return paths
+    try:
+        payload = json.loads(manifest.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return paths
+    if not isinstance(payload, dict):
+        return paths
+    for key in ("template_left_or_right_surface", "template_spec_path"):
+        raw = payload.get(key)
+        if raw not in (None, "", "none", "null"):
+            paths.add(_recorded_path(repo_root, raw))
+    variants = payload.get("assignment_variants", {})
+    if isinstance(variants, dict):
+        for variant in ("fisherz", "count"):
+            row = variants.get(variant)
+            if not isinstance(row, dict):
+                continue
+            for key in (
+                "cluster_assignment_status",
+                "template_functional_atlas_label",
+                "template_functional_atlas_label_variant",
+                "group_functional_atlas_labels",
+                "group_functional_atlas_label_map",
+            ):
+                raw = row.get(key)
+                if raw:
+                    paths.add(_recorded_path(repo_root, raw))
+    return paths
+
+
+def _subject_surface_inputs(
+    *, surface_root: Path, subject: str, include_masks: bool = True
+) -> set[Path]:
+    paths: set[Path] = set()
+    for smoothing in ("2mm", "4mm"):
+        for hemi in ("L", "R"):
+            paths.add(
+                surface_root
+                / f"sub-{subject}/surface/{smoothing}"
+                / f"sub-{subject}_hemi-{hemi}_timeseries.npy"
+            )
+    if include_masks:
+        for hemi in ("L", "R"):
+            paths.add(
+                surface_root
+                / f"sub-{subject}/surface/tsnr_gate"
+                / f"sub-{subject}_hemi-{hemi}_valid_mask.npy"
+            )
+    return paths
+
+
+def _hippunfold_surface_inputs(batch_root: Path, subjects: list[str]) -> set[Path]:
+    paths: set[Path] = set()
+    for subject in subjects:
+        surface_dir = batch_root / f"sub-{subject}/hippunfold/sub-{subject}/surf"
+        for hemi in ("L", "R"):
+            paths.add(
+                surface_dir
+                / f"sub-{subject}_hemi-{hemi}_space-corobl_den-512_label-hipp_midthickness.surf.gii"
+            )
+    if subjects:
+        first = subjects[0]
+        paths.add(
+            batch_root
+            / f"sub-{first}/hippunfold/sub-{first}/surf"
+            / f"sub-{first}_den-512_label-hipp_surfaces.spec"
+        )
+    return paths
+
+
+def required_preexisting_paths(repo_root: Path) -> list[Path]:
+    """Return exact leaf inputs that must exist before the 19-stage worker starts."""
+    root = Path(repo_root).resolve()
+    hcp = root / "outputs_hcp"
+    stanford = root / "outputs_stanford"
+    required: set[Path] = {
+        PY314,
+        root / "config/cross_atlas_network_merge.json",
+        root / "config/hipp_network_style.json",
+        root / "config/wb_locked_native_view_lateral_medial.scene",
+        root / "external/hippomaps/hippomaps/__init__.py",
+    }
+    wb_override = os.environ.get("CORE_WORKFLOW_WB_COMMAND", "").strip()
+    required.add(
+        Path(wb_override).expanduser().resolve()
+        if wb_override
+        else root / "software/workbench/bin_linux64/wb_command"
+    )
+
+    hcp_template = (
+        hcp
+        / "inputs/hcp/kong2022/templates/hipp_group_average_t1only_151"
+        / "group_average_surfaces"
+    )
+    for hemi in ("L", "R"):
+        required.add(
+            hcp_template
+            / f"group-average_hemi-{hemi}_space-corobl_den-512_label-hipp_midthickness.surf.gii"
+        )
+    hcp_batch = hcp / "inputs/hcp/hippunfold/dense_corobl_batch"
+    required.add(
+        hcp_batch
+        / "sub-100610/hippunfold/sub-100610/surf"
+        / "sub-100610_den-512_label-hipp_surfaces.spec"
+    )
+
+    hcp_group = hcp / "work/group_atlas"
+    hcp_routea_group = hcp_group / "routea_full_k3_fisherz"
+    hcp_family17_group = hcp_group / "routea_17net_full_k3_fisherz"
+    hcp_weighted_subjects: set[str] = set()
+    for group_root in (hcp_routea_group, hcp_family17_group):
+        for smoothing in ("2mm", "4mm"):
+            for hemi in ("L", "R"):
+                manifest = _group_manifest_path(group_root, smoothing, hemi)
+                required.update(_existing_group_run_inputs(root, manifest))
+                if group_root == hcp_routea_group:
+                    run_dir = manifest.parent
+                    required.update(
+                        {
+                            run_dir / "group_support_mask.npy",
+                            run_dir / "group_functional_atlas_labels_fisherz.npy",
+                        }
+                    )
+                    hcp_weighted_subjects.update(_group_manifest_subjects(manifest))
+    hcp_weighted_surface = (
+        hcp / "inputs/hcp/kong2019_fast_pfm_t1only/shared_inputs/pfm_151"
+    )
+    hcp_routea = hcp / "inputs/hcp/kong2022/shared_inputs/routea"
+    for subject in hcp_weighted_subjects:
+        required.update(
+            _subject_surface_inputs(
+                surface_root=hcp_weighted_surface,
+                subject=subject,
+                include_masks=False,
+            )
+        )
+        reference = hcp_routea / f"sub-{subject}/reference/kong2022"
+        required.update(
+            {
+                reference / "cortex_roi_parcel_timeseries.npy",
+                reference / "cortex_roi_parcels.tsv",
+            }
+        )
+
+    lynch_manifest = (
+        hcp
+        / "inputs/hcp/lynch2024_fast_pfm_t1only/manifests"
+        / "hcp_7t_lynch2024_nsi043_pass_78.txt"
+    )
+    required.add(lynch_manifest)
+    lynch_subjects = _subject_ids(lynch_manifest)
+    lynch_shared = (
+        hcp
+        / "inputs/hcp/lynch2024_fast_pfm_t1only/shared_inputs/pfm_nsi043_78"
+    )
+    hcp_surface = hcp / "inputs/hcp/kong2022/shared_inputs/surface"
+    for subject in lynch_subjects:
+        cortex_pfm = hcp / f"work/cortex_pfm/sub-{subject}/lynch2024"
+        required.update(
+            {
+                cortex_pfm / "cortex_roi_component_timeseries.npy",
+                cortex_pfm / "cortex_roi_components.tsv",
+            }
+        )
+        required.update(
+            _subject_surface_inputs(surface_root=hcp_surface, subject=subject)
+        )
+        required.update(
+            _subject_surface_inputs(surface_root=lynch_shared, subject=subject)
+        )
+    required.update(_hippunfold_surface_inputs(hcp_batch, lynch_subjects))
+
+    stanford_inputs = stanford / "inputs/stanford/kong2022"
+    stanford_routea = stanford_inputs / "shared_inputs/routea"
+    stanford_surface = stanford_inputs / "shared_inputs/surface"
+    stanford_template = (
+        stanford_inputs
+        / "templates/hipp_group_average_t1only_151/group_average_surfaces"
+    )
+    for hemi in ("L", "R"):
+        required.add(
+            stanford_template
+            / f"group-average_hemi-{hemi}_space-corobl_den-512_label-hipp_midthickness.surf.gii"
+        )
+    stanford_gradient = stanford / "work/hippomaps_gradients/routea"
+    for smoothing in ("2mm", "4mm"):
+        for hemi in ("L", "R"):
+            gradient_run = stanford_gradient / smoothing / f"hemi_{hemi}"
+            required.update(
+                {
+                    gradient_run / "hippomaps_gradient_manifest.json",
+                    gradient_run / "hippomaps_gradients_full.npy",
+                }
+            )
+    stanford_batch = stanford / "inputs/stanford/hippunfold/dense_corobl_batch"
+    required.add(
+        stanford_batch
+        / "sub-1001/hippunfold/sub-1001/surf"
+        / "sub-1001_den-512_label-hipp_surfaces.spec"
+    )
+    stanford_manifests = (
+        stanford_inputs / "manifests/stanford_hc_1xxx2xxx_qc_pass_t1only_91.txt",
+        stanford_inputs / "manifests/stanford_symp_3xxx4xxx_qc_pass_t1only_103.txt",
+    )
+    for manifest in stanford_manifests:
+        required.add(manifest)
+        subjects = _subject_ids(manifest)
+        required.update(_hippunfold_surface_inputs(stanford_batch, subjects))
+        for subject in subjects:
+            required.update(
+                _subject_surface_inputs(
+                    surface_root=stanford_surface,
+                    subject=subject,
+                )
+            )
+            reference = stanford_routea / f"sub-{subject}/reference/kong2022"
+            required.update(
+                {
+                    reference / "cortex_roi_parcel_timeseries.npy",
+                    reference / "cortex_roi_parcels.tsv",
+                    reference / "cortex_canonical_network_timeseries.npy",
+                    reference / "cortex_canonical_networks.tsv",
+                }
+            )
+            for smoothing in ("2mm", "4mm"):
+                for hemi in ("L", "R"):
+                    fc_run = (
+                        stanford_routea
+                        / f"sub-{subject}/fc/kong2022/{smoothing}/hemi_{hemi}"
+                    )
+                    required.add(fc_run / "hipp_vertex_to_network_fc.npy")
+                    for run_id in (1, 2, 3, 4):
+                        required.add(
+                            fc_run
+                            / f"runs/run-{run_id}/hipp_vertex_to_network_fc_active.npy"
+                        )
+    return sorted(required, key=str)
+
+
 def preflight(repo_root: Path, stages: list[dict[str, object]]) -> None:
     root = Path(repo_root).resolve()
-    required = {PY314}
+    required = set(required_preexisting_paths(root))
     for stage in stages:
         for command in _stage_commands(stage):
             required.add(Path(command[1]))
-    required.update(
-        {
-            root / "config/cross_atlas_network_merge.json",
-            root / "config/hipp_network_style.json",
-            root / "config/wb_locked_native_view_lateral_medial.scene",
-            root / "outputs_hcp/inputs/hcp/kong2022/shared_inputs/routea",
-            root / "outputs_hcp/inputs/hcp/kong2022/shared_inputs/surface",
-            root / "outputs_hcp/inputs/hcp/kong2022/templates/hipp_group_average_t1only_151/group_average_surfaces",
-            root / "outputs_hcp/inputs/hcp/lynch2024_fast_pfm_t1only/shared_inputs/pfm_nsi043_78",
-            root / "outputs_hcp/inputs/hcp/lynch2024_fast_pfm_t1only/manifests/hcp_7t_lynch2024_nsi043_pass_78.txt",
-            root / "outputs_hcp/work/cortex_pfm",
-            root / "outputs_hcp/inputs/hcp/kong2019_fast_pfm_t1only/shared_inputs/pfm_151",
-            root / "outputs_hcp/inputs/hcp/hippunfold/dense_corobl_batch",
-            root / "outputs_hcp/inputs/hcp/hippunfold/dense_corobl_batch/sub-100610/hippunfold/sub-100610/surf/sub-100610_den-512_label-hipp_surfaces.spec",
-            root / "outputs_hcp/work/group_atlas/routea_full_k3_fisherz",
-            root / "outputs_hcp/work/group_atlas/routea_17net_full_k3_fisherz",
-            root / "outputs_stanford/inputs/stanford/kong2022/shared_inputs/routea",
-            root / "outputs_stanford/inputs/stanford/kong2022/shared_inputs/surface",
-            root / "outputs_stanford/inputs/stanford/kong2022/templates/hipp_group_average_t1only_151/group_average_surfaces",
-            root / "outputs_stanford/inputs/stanford/kong2022/manifests/stanford_hc_1xxx2xxx_qc_pass_t1only_91.txt",
-            root / "outputs_stanford/inputs/stanford/kong2022/manifests/stanford_symp_3xxx4xxx_qc_pass_t1only_103.txt",
-            root / "outputs_stanford/inputs/stanford/hippunfold/dense_corobl_batch",
-            root / "outputs_stanford/inputs/stanford/hippunfold/dense_corobl_batch/sub-1001/hippunfold/sub-1001/surf/sub-1001_den-512_label-hipp_surfaces.spec",
-            root / "outputs_stanford/work/hippomaps_gradients/routea",
-        }
-    )
     missing = sorted(str(path) for path in required if not path.exists())
     if missing:
         raise FileNotFoundError("Missing formal refresh inputs:\n" + "\n".join(missing))
@@ -480,7 +741,7 @@ def launch(*, repo_root: Path, run_id: str, jobs: int) -> dict[str, object]:
         "status": "launched",
         "run_id": run_id,
         "pid": process.pid,
-        **{key: str(path) for key, path in paths.items()},
+        **{f"{key}_path": str(path) for key, path in paths.items()},
     }
 
 

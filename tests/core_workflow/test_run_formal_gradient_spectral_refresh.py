@@ -192,3 +192,139 @@ def test_status_paths_preserve_dotted_run_id(tmp_path) -> None:
     paths = runner.run_paths(tmp_path, "formal.v1")
     assert paths["status"].name == "formal.v1.status.json"
     assert paths["audit"].name == "formal.v1.audit.json"
+
+
+def test_preflight_rejects_missing_exact_hcp_group_manifest(tmp_path, monkeypatch) -> None:
+    runner = load_runner()
+    missing = (
+        tmp_path
+        / "outputs_hcp/work/group_atlas/routea_full_k3_fisherz"
+        / "gradient-spectral/kong2022/2mm/cov_0p80/g1g2g3/hemi_L"
+        / "group_atlas_manifest.json"
+    )
+    missing.parent.mkdir(parents=True)
+    required = set(runner.required_preexisting_paths(tmp_path))
+    for branch in ("routea_full_k3_fisherz", "routea_17net_full_k3_fisherz"):
+        for smoothing in ("2mm", "4mm"):
+            for hemi in ("L", "R"):
+                assert (
+                    tmp_path
+                    / "outputs_hcp/work/group_atlas"
+                    / branch
+                    / "gradient-spectral/kong2022"
+                    / smoothing
+                    / "cov_0p80/g1g2g3"
+                    / f"hemi_{hemi}/group_atlas_manifest.json"
+                ) in required
+
+    monkeypatch.setattr(runner, "required_preexisting_paths", lambda _root: [missing])
+
+    with pytest.raises(FileNotFoundError) as exc_info:
+        runner.preflight(tmp_path, [])
+
+    assert str(exc_info.value) == f"Missing formal refresh inputs:\n{missing}"
+
+
+def test_preflight_derives_subject_specific_stanford_and_lynch_inputs(tmp_path) -> None:
+    runner = load_runner()
+    stanford_manifests = tmp_path / "outputs_stanford/inputs/stanford/kong2022/manifests"
+    stanford_manifests.mkdir(parents=True)
+    (stanford_manifests / "stanford_hc_1xxx2xxx_qc_pass_t1only_91.txt").write_text("sub-1001\n")
+    (stanford_manifests / "stanford_symp_3xxx4xxx_qc_pass_t1only_103.txt").write_text("sub-3001\n")
+    lynch_manifest = (
+        tmp_path
+        / "outputs_hcp/inputs/hcp/lynch2024_fast_pfm_t1only/manifests"
+        / "hcp_7t_lynch2024_nsi043_pass_78.txt"
+    )
+    lynch_manifest.parent.mkdir(parents=True)
+    lynch_manifest.write_text("sub-100610\n")
+
+    required = set(runner.required_preexisting_paths(tmp_path))
+
+    assert (
+        tmp_path
+        / "outputs_stanford/inputs/stanford/kong2022/shared_inputs/routea"
+        / "sub-1001/fc/kong2022/2mm/hemi_L/hipp_vertex_to_network_fc.npy"
+    ) in required
+    assert (
+        tmp_path
+        / "outputs_stanford/work/hippomaps_gradients/routea/4mm/hemi_R"
+        / "hippomaps_gradient_manifest.json"
+    ) in required
+    assert (
+        tmp_path
+        / "outputs_stanford/inputs/stanford/kong2022/templates"
+        / "hipp_group_average_t1only_151/group_average_surfaces"
+        / "group-average_hemi-L_space-corobl_den-512_label-hipp_midthickness.surf.gii"
+    ) in required
+    assert (
+        tmp_path
+        / "outputs_hcp/work/cortex_pfm/sub-100610/lynch2024"
+        / "cortex_roi_component_timeseries.npy"
+    ) in required
+    assert (
+        tmp_path
+        / "outputs_hcp/work/cortex_pfm/sub-100610/lynch2024/cortex_roi_components.tsv"
+    ) in required
+
+
+def test_launch_forwards_worker_command_and_writes_detached_paths(tmp_path, monkeypatch) -> None:
+    runner = load_runner()
+    observed: dict[str, object] = {}
+
+    monkeypatch.setattr(runner, "preflight", lambda *_args: None)
+
+    class Process:
+        pid = 24680
+
+    def fake_popen(command, **kwargs):
+        observed["command"] = list(command)
+        observed["kwargs"] = kwargs
+        return Process()
+
+    monkeypatch.setattr(runner.subprocess, "Popen", fake_popen)
+
+    result = runner.launch(repo_root=tmp_path, run_id="formal.v1", jobs=1)
+
+    command = observed["command"]
+    assert _option(command, "--repo-root") == str(tmp_path.resolve())
+    assert _option(command, "--run-id") == "formal.v1"
+    assert observed["kwargs"]["cwd"] == tmp_path.resolve()
+    assert all(observed["kwargs"]["env"][name] == "1" for name in runner.THREAD_ENV)
+    assert result["status"] == "launched"
+    paths = runner.run_paths(tmp_path, "formal.v1")
+    assert command == runner.build_worker_command(
+        script_path=SCRIPT,
+        repo_root=tmp_path,
+        run_id="formal.v1",
+        jobs=1,
+    )
+    for key, path in paths.items():
+        assert result[f"{key}_path"] == str(path)
+    assert json.loads(paths["status"].read_text())["status"] == "launching"
+    assert paths["pid"].read_text() == "24680\n"
+
+
+@pytest.mark.parametrize("collision_key", ["status", "stdout", "stderr", "pid", "audit"])
+def test_launch_rejects_any_detached_record_collision(
+    tmp_path, monkeypatch, collision_key: str
+) -> None:
+    runner = load_runner()
+    monkeypatch.setattr(runner, "preflight", lambda *_args: None)
+    paths = runner.run_paths(tmp_path, "formal")
+    collision = paths[collision_key]
+    collision.parent.mkdir(parents=True)
+    collision.write_text("existing\n")
+    called = False
+
+    def fake_popen(*_args, **_kwargs):
+        nonlocal called
+        called = True
+
+    monkeypatch.setattr(runner.subprocess, "Popen", fake_popen)
+
+    with pytest.raises(FileExistsError, match="Run record collision") as exc_info:
+        runner.launch(repo_root=tmp_path, run_id="formal", jobs=1)
+
+    assert str(collision) in str(exc_info.value)
+    assert called is False

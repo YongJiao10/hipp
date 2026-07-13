@@ -87,6 +87,18 @@ stdout, stderr, and audit JSON files are written under
 after the audit stage exits successfully. Existing valid group combinations are
 reused through the numbered group runner's `--resume` contract.
 
+Launch preflight validates exact leaf inputs before detaching. This includes
+all 2mm/4mm by L/R shifted-cosine manifests and weighted-branch run files from
+the pre-existing HCP RouteA groups; Stanford gradients, templates, and each
+subgroup subject's FC, reference, surface, mask, and HippUnfold inputs; and each
+Lynch cohort subject's cortex PFM components, surface/mask inputs, and
+HippUnfold surfaces. Inputs are derived from the pinned cohort manifests, so a
+present parent directory cannot hide a missing subject file. Products created
+by an earlier stage of the same 19-stage plan are deliberately excluded from
+preflight. Missing-input errors list the exact absent paths. Successful launch
+JSON uses `status: launched` and reports detached records as `status_path`,
+`pid_path`, `stdout_path`, `stderr_path`, and `audit_path`.
+
 To retire pre-formalization gradient-spectral products, write and review a
 signed inventory with `retire_legacy_gradient_spectral_outputs.py --write-plan
 _archive/gradient_spectral_relu_cosine_20260713/reviewed_plan.json`, then apply
