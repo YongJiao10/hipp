@@ -40,6 +40,17 @@ def _write_json(path: Path, payload: object) -> None:
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 
+def _cohort_subjects(group: dict[str, object]) -> list[str]:
+    branch = str(group["branch"])
+    if branch.startswith("lynch"):
+        return [f"sub-{100000 + index}" for index in range(78)]
+    if branch.startswith("routea_hc"):
+        return [f"sub-{1001 + index}" for index in range(91)]
+    if branch.startswith("routea_symp"):
+        return [f"sub-{3001 + index}" for index in range(103)]
+    return [f"sub-{100000 + index}" for index in range(151)]
+
+
 def build_formal_fixture(
     repo_root: Path,
     *,
@@ -63,14 +74,17 @@ def build_formal_fixture(
         surface = expected_root / "inputs/surface"
         reference = expected_root / "inputs/reference"
         gradients = expected_root / "work/hippomaps_gradients"
-        subjects_manifest = expected_root / "inputs/manifests/subjects.txt"
+        subjects_manifest = expected_root / "inputs/manifests" / f"{identity[1]}_subjects.txt"
         template_surface = expected_root / "inputs/templates/template.surf.gii"
         template_spec = expected_root / "inputs/templates/template.spec"
         for directory in (shared, surface, reference, gradients):
             directory.mkdir(parents=True, exist_ok=True)
-        for leaf in (subjects_manifest, template_surface, template_spec):
+        subjects = _cohort_subjects(group)
+        for leaf in (template_surface, template_spec):
             leaf.parent.mkdir(parents=True, exist_ok=True)
             leaf.write_bytes(b"fixture")
+        subjects_manifest.parent.mkdir(parents=True, exist_ok=True)
+        subjects_manifest.write_text("\n".join(subjects) + "\n", encoding="utf-8")
         group_paths: list[Path] = []
         for smoothing in ("2mm", "4mm"):
             for hemi in ("L", "R"):
@@ -109,6 +123,8 @@ def build_formal_fixture(
                     "actual_consumed_input_paths": {
                         "sub-001": str((expected_root / "inputs/features.npy").resolve())
                     },
+                    "subjects": subjects,
+                    "n_subjects": len(subjects),
                     "template_left_or_right_surface": str(template_surface.resolve()),
                     "template_spec_path": str(template_spec.resolve()),
                     "default_assignment_variant": group["assignment_variant"],
@@ -125,6 +141,12 @@ def build_formal_fixture(
                 Path(str(payload["group_gradient_features_active"])).write_bytes(b"features")
                 Path(str(payload["actual_consumed_input_paths"]["sub-001"])).write_bytes(b"input")
                 if group["assignment_variant"] == "weighted_fisherz":
+                    source_branch = identity[1].replace("_weighted_fisherz_full_k3", "_full_k3_fisherz")
+                    source_manifest = (
+                        repo_root / identity[0] / "work/group_atlas" / source_branch
+                        / "gradient-spectral" / identity[2] / smoothing
+                        / "cov_0p80/g1g2g3" / f"hemi_{hemi}/group_atlas_manifest.json"
+                    ).resolve()
                     payload.update(
                         {
                             "clustering_surface_affinity": "shifted-cosine",
@@ -132,6 +154,13 @@ def build_formal_fixture(
                                 module.SHIFTED_COSINE_DESCRIPTION
                             ),
                             "weighted_assignment_only": True,
+                            "weighted_fisherz_source_provenance": {
+                                "dataset": identity[0],
+                                "expected_source_root": str(expected_root),
+                                "source_group_manifest": str(source_manifest),
+                                "subjects_manifest": str(subjects_manifest.resolve()),
+                                "n_subjects": len(subjects),
+                            },
                         }
                     )
                 _write_json(manifest, payload)
@@ -386,6 +415,41 @@ def test_audit_rejects_wrong_dataset_provenance(tmp_path: Path) -> None:
     assert report["status"] == "failed"
     assert any("dataset=" in item for item in report["failures"])
     assert any("expected_source_root=" in item for item in report["failures"])
+
+
+@pytest.mark.parametrize("fault", ["truncated", "duplicate", "manifest-mismatch"])
+def test_audit_rejects_invalid_or_mismatched_formal_cohort(tmp_path: Path, fault: str) -> None:
+    fixture = build_formal_fixture(tmp_path, surface_affinity="shifted-cosine")
+    payload = json.loads(fixture.manifests[0].read_text(encoding="utf-8"))
+    subjects_manifest = Path(payload["resume_input_signature_payload"]["subjects_manifest"])
+    subjects = subjects_manifest.read_text().splitlines()
+    if fault == "truncated":
+        subjects_manifest.write_text("\n".join(subjects[:-1]) + "\n")
+    elif fault == "duplicate":
+        subjects[-1] = subjects[0]
+        subjects_manifest.write_text("\n".join(subjects) + "\n")
+    else:
+        payload["subjects"] = [*payload["subjects"][:-1], "sub-999999"]
+        _write_json(fixture.manifests[0], payload)
+
+    report = module.audit_release(tmp_path, fixture.contract)
+
+    assert report["status"] == "failed"
+    assert any("cohort" in item or "subjects" in item for item in report["failures"])
+
+
+def test_audit_rejects_weighted_source_subject_mismatch(tmp_path: Path) -> None:
+    fixture = build_formal_fixture(tmp_path, surface_affinity="shifted-cosine")
+    identity = ("outputs_hcp", "routea_weighted_fisherz_full_k3", "kong2022")
+    manifest = fixture.group_manifests[identity][0]
+    payload = json.loads(manifest.read_text())
+    payload["weighted_fisherz_source_provenance"]["n_subjects"] = 150
+    _write_json(manifest, payload)
+
+    report = module.audit_release(tmp_path, fixture.contract)
+
+    assert report["status"] == "failed"
+    assert any("n_subjects" in item for item in report["failures"])
 
 
 def test_audit_rejects_missing_overview_png(tmp_path: Path) -> None:

@@ -62,6 +62,17 @@ archive directories. Each formal overview PNG must also be nonempty below the
 matching dataset's `present/` directory, with a recorded visible title that
 contains `shifted-cosine`.
 
+The formal runner first invokes
+`upgrade_retained_hcp_formal_provenance.py` inside its existing
+`hcp_weighted_branch` stage. This non-computational utility validates all eight
+retained RouteA canonical8/family17 manifests, the exact 151-subject cohort,
+canonical HCP roots, stored resume fingerprints, and assignment/binary assets
+before atomically adding JSON provenance to every manifest. Validation failure
+occurs before the first write; labels and other binary outputs are never changed.
+Weighted branch manifests explicitly carry the dataset/root and exact source
+manifest/cohort provenance. The audit independently revalidates each formal
+manifest's cohort against its recorded subjects and subject count.
+
 The audit accepts exactly these nine group branches under each dataset's
 `work/group_atlas/` directory; an empty, partial, duplicated, additional, or
 substituted group contract is invalid:
@@ -96,6 +107,9 @@ after the audit stage exits successfully. Existing valid group combinations are
 reused through the numbered group runner's `--resume` contract.
 
 Launch preflight validates exact leaf inputs before detaching. This includes
+the unique canonical 151-subject retained HCP cohort, the 78-subject Lynch
+cohort, and Stanford HC/Symp cohorts of 91/103 subjects; manifest subjects and
+counts must match those pinned lists. It also includes
 all 2mm/4mm by L/R shifted-cosine manifests and weighted-branch run files from
 the pre-existing HCP RouteA groups; Stanford gradients, templates, and each
 subgroup subject's FC, reference, surface, mask, and HippUnfold inputs; and each

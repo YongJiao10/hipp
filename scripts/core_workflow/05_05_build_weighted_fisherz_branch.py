@@ -65,6 +65,34 @@ COVERAGE_TAG = "cov_0p80"
 WEIGHTED_VARIANT = "weighted_fisherz"
 
 
+def weighted_dataset_provenance(out_root: Path) -> tuple[str, Path]:
+    resolved = Path(out_root).resolve()
+    for dataset in ("outputs_hcp", "outputs_stanford"):
+        expected = (REPO_ROOT / dataset).resolve()
+        if resolved == expected or expected in resolved.parents:
+            return dataset, expected
+    raise ValueError(f"Weighted output root is outside a canonical dataset root: {resolved}")
+
+
+def apply_weighted_source_provenance(
+    manifest: dict[str, object], *, dst_run: Path, source_manifest: Path
+) -> None:
+    dataset, expected_root = weighted_dataset_provenance(dst_run)
+    signature = manifest.get("resume_input_signature_payload")
+    subjects_manifest = signature.get("subjects_manifest") if isinstance(signature, dict) else None
+    if not isinstance(subjects_manifest, str) or not subjects_manifest.strip():
+        raise ValueError("Weighted source manifest lacks subjects_manifest provenance")
+    manifest["dataset"] = dataset
+    manifest["expected_source_root"] = str(expected_root)
+    manifest["weighted_fisherz_source_provenance"] = {
+        "dataset": dataset,
+        "expected_source_root": str(expected_root),
+        "source_group_manifest": str(Path(source_manifest).resolve()),
+        "subjects_manifest": str(Path(subjects_manifest).resolve()),
+        "n_subjects": manifest.get("n_subjects"),
+    }
+
+
 def weighted_gradient_provenance(manifest: dict[str, object]) -> dict[str, object]:
     provenance = validate_gradient_spectral_affinity_provenance([manifest])
     return {
@@ -235,6 +263,7 @@ def recompute_gradient_weighted_run(
     color_map: dict[str, tuple[int, int, int, int]],
     template_surface_dir: Path,
     template_spec: Path,
+    source_manifest: Path,
 ) -> dict[str, object]:
     manifest_path = dst_run / "group_atlas_manifest.json"
     manifest = normalize_copied_manifest_paths(
@@ -312,6 +341,9 @@ def recompute_gradient_weighted_run(
         "network_profile_weighting": "network_timeseries_weighted_by_roi_n_grayordinates_used_then_fisherz_fc",
     }
     manifest.update(clustering_provenance)
+    apply_weighted_source_provenance(
+        manifest, dst_run=dst_run, source_manifest=source_manifest
+    )
     write_json(manifest_path, manifest)
     if not materialize_combo(manifest_path, color_map):
         raise RuntimeError(f"Failed to materialize weighted_fisherz labels: {manifest_path}")
@@ -326,6 +358,7 @@ def recompute_wta_weighted_run(
     color_map: dict[str, tuple[int, int, int, int]],
     template_surface_dir: Path,
     template_spec: Path,
+    source_manifest: Path,
 ) -> dict[str, object]:
     manifest_path = dst_run / "group_atlas_manifest.json"
     manifest = load_json(manifest_path)
@@ -396,6 +429,9 @@ def recompute_wta_weighted_run(
                 "network_profile_weighting": "network_timeseries_weighted_by_roi_n_grayordinates_used_then_fisherz_fc",
             },
         }
+    )
+    apply_weighted_source_provenance(
+        manifest, dst_run=dst_run, source_manifest=source_manifest
     )
     write_json(manifest_path, manifest)
     return {"run_dir": str(dst_run), "status": "ok", "method": "wta-top"}
@@ -525,6 +561,7 @@ def build_branch(args: argparse.Namespace) -> dict[str, object]:
                         color_map=color_map,
                         template_surface_dir=template_surface_dir,
                         template_spec=template_spec,
+                        source_manifest=src_run / "group_atlas_manifest.json",
                     )
                 )
             else:
@@ -536,6 +573,7 @@ def build_branch(args: argparse.Namespace) -> dict[str, object]:
                         color_map=color_map,
                         template_surface_dir=template_surface_dir,
                         template_spec=template_spec,
+                        source_manifest=src_run / "group_atlas_manifest.json",
                     )
                 )
     write_comparison_summary(source_root, out_root, present_dir)

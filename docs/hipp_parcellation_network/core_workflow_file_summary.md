@@ -35,6 +35,8 @@ for those details:
 | `scripts/core_workflow/05_03_run_spectral_fast_rerun.py` | Optional rerun orchestration after primary group-atlas construction |
 | `scripts/core_workflow/05_04_compute_confidence_maps.py` | Compute vertex-level gradient-spectral confidence maps |
 | `scripts/core_workflow/05_05_build_weighted_fisherz_branch.py` | Build the post-hoc RouteA `weighted_fisherz` comparison branch for gradient-spectral and WTA labels |
+| `scripts/core_workflow/upgrade_retained_hcp_formal_provenance.py` | Validate all eight retained HCP RouteA formal manifests and atomically enrich their JSON provenance without changing binary outputs |
+| `scripts/core_workflow/lib/formal_cohorts.py` | Shared exact-size, canonical-syntax, unique-subject contracts for formal HCP, Lynch, and Stanford cohorts |
 | `scripts/core_workflow/06_01_build_group_overview.py` | Render per-method group overview figures |
 | `scripts/core_workflow/06_02_materialize_group_labels.py` | Materialize functional-atlas label arrays |
 | `scripts/core_workflow/06_03_build_cluster_cortex_panels.py` | Render cluster-based cortex and hippocampal significance panels |

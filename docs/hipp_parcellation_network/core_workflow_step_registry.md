@@ -37,6 +37,7 @@ Canonical public entrypoints are under `scripts/core_workflow/`. The numeric pre
 | Utility ID | Purpose | Entrypoint | Output Root |
 |---|---|---|---|
 | `smoke_prepare_run` | Prepare an isolated smoke-run command plan; not a numbered pipeline step | `tests/core_workflow/smoke_prepare_run.py` | `outputs_hcp/smoke_runs/<run_id>/` |
+| `upgrade_retained_hcp_formal_provenance` | Validate and atomically enrich only the eight retained HCP RouteA formal manifests; never recompute or rewrite binary assets | `scripts/core_workflow/upgrade_retained_hcp_formal_provenance.py` | In-place JSON provenance fields after all-manifest validation |
 | `audit_formal_gradient_spectral_release` | Read-only exact nine-group release audit | `scripts/core_workflow/audit_formal_gradient_spectral_release.py` | JSON on stdout and optional `--output-json` path |
 | `run_formal_gradient_spectral_refresh` | Fixed `jobs=1`, preflighted, sequential 19-stage formal refresh launcher | `scripts/core_workflow/run_formal_gradient_spectral_refresh.py` | Status, PID, stdout, stderr, and audit JSON under `outputs_hcp/work/group_atlas/logs/` |
 
@@ -62,5 +63,11 @@ Formal cohort preflight accepts only unique canonical IDs at the exact sizes
 Lynch 78, Stanford HC 91, and Stanford Symp 103. Formal group manifests bind
 source provenance to the declared HCP or Stanford root; the audit verifies
 source existence/root containment and presentation PNG/title integrity.
+The HCP retained-manifest upgrader validates the canonical 151-subject cohort,
+shifted-cosine/K/graph contract, exact RouteA roots, assignment assets, and
+artifact fingerprints before any atomic JSON replacement. It runs as the first
+command inside the existing `hcp_weighted_branch` stage, preserving the approved
+19 top-level stage names while preceding weighted copying and all later HCP
+overview/audit consumers.
 Artifact-level provenance and required evidence are maintained in
 `docs/hipp_parcellation_network/core_workflow_artifact_lineage.md`.

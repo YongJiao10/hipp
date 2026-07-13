@@ -413,6 +413,29 @@ def test_weighted_gradient_branch_preserves_shifted_cosine_clustering_provenance
     }
 
 
+def test_weighted_branch_explicitly_propagates_dataset_and_source_provenance(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(weighted_branch_mod, "REPO_ROOT", tmp_path)
+    dst_run = tmp_path / "outputs_hcp/work/group_atlas/weighted/gradient-spectral/run"
+    source = tmp_path / "outputs_hcp/work/group_atlas/source/gradient-spectral/run/group_atlas_manifest.json"
+    source.parent.mkdir(parents=True)
+    source.write_text("{}")
+    subjects_manifest = tmp_path / "outputs_hcp/inputs/manifests/subjects.txt"
+    subjects_manifest.parent.mkdir(parents=True)
+    subjects_manifest.write_text("sub-100000\n")
+    manifest: dict[str, object] = {
+        "n_subjects": 151,
+        "resume_input_signature_payload": {"subjects_manifest": str(subjects_manifest)},
+    }
+
+    weighted_branch_mod.apply_weighted_source_provenance(
+        manifest, dst_run=dst_run, source_manifest=source
+    )
+
+    assert manifest["dataset"] == "outputs_hcp"
+    assert manifest["expected_source_root"] == str((tmp_path / "outputs_hcp").resolve())
+    assert manifest["weighted_fisherz_source_provenance"]["source_group_manifest"] == str(source.resolve())
+
+
 def test_weighted_gradient_branch_rejects_nonformal_clustering_provenance() -> None:
     for manifest in (
         {

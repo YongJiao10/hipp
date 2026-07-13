@@ -413,6 +413,18 @@
       "recommended_manifest": "outputs_hcp/smoke_runs/<run_id>/manifests/smoke_command_manifest.json"
     },
     {
+      "step_id": "upgrade_retained_hcp_formal_provenance",
+      "stage": "utility_provenance_upgrade",
+      "purpose": "Validate all eight retained HCP RouteA shifted-cosine manifests and atomically add dataset/root plus immutable-artifact fingerprint provenance without recomputation.",
+      "branches": [
+        "kong2022_routea",
+        "kong2022_routea_17net"
+      ],
+      "entry_script": "scripts/core_workflow/upgrade_retained_hcp_formal_provenance.py",
+      "implementation_script": "scripts/core_workflow/upgrade_retained_hcp_formal_provenance.py",
+      "recommended_manifest": "in-place retained group_atlas_manifest.json provenance fields"
+    },
+    {
       "step_id": "audit_formal_gradient_spectral_release",
       "stage": "utility_release_audit",
       "purpose": "Read-only validation of the exact nine-group formal gradient-spectral release, dataset-root source provenance, and overview PNG/title lineage.",

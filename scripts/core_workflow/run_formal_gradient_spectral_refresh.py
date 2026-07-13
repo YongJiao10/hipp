@@ -8,8 +8,15 @@ import json
 import os
 import re
 import subprocess
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
+
+CORE_WORKFLOW_DIR = Path(__file__).resolve().parent
+if str(CORE_WORKFLOW_DIR) not in sys.path:
+    sys.path.insert(0, str(CORE_WORKFLOW_DIR))
+
+from lib.formal_cohorts import cohort_key_for_manifest, load_formal_subjects
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -32,11 +39,6 @@ FORMAL_GROUPS = (
     ("outputs_stanford", "routea_hc_weighted_fisherz_full_k3", "kong2022"),
     ("outputs_stanford", "routea_symp_weighted_fisherz_full_k3", "kong2022"),
 )
-_COHORT_CONTRACTS = {
-    "hcp_7t_lynch2024_nsi043_pass_78.txt": (78, re.compile(r"sub-\d{6}")),
-    "stanford_hc_1xxx2xxx_qc_pass_t1only_91.txt": (91, re.compile(r"sub-[12]\d{3}")),
-    "stanford_symp_3xxx4xxx_qc_pass_t1only_103.txt": (103, re.compile(r"sub-[34]\d{3}")),
-}
 
 
 def validate_release_settings(*, run_id: str, jobs: int) -> None:
@@ -298,12 +300,20 @@ def build_stage_plan(
         },
         {
             "name": "hcp_weighted_branch",
-            "command": weighted_command(
-                source=hcp_group / "routea_full_k3_fisherz", out=hcp_weighted,
-                surface=hcp / "inputs/hcp/kong2019_fast_pfm_t1only/shared_inputs/pfm_151",
-                reference=hcp_routea, present=hcp_weighted_present,
-                template=hcp_template, template_spec=hcp_template_spec,
+            "command": command(
+                "upgrade_retained_hcp_formal_provenance.py",
+                "--repo-root", root,
+                "--subjects-manifest",
+                hcp / "inputs/hcp/kong2022/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt",
             ),
+            "additional_commands": [
+                weighted_command(
+                    source=hcp_group / "routea_full_k3_fisherz", out=hcp_weighted,
+                    surface=hcp / "inputs/hcp/kong2019_fast_pfm_t1only/shared_inputs/pfm_151",
+                    reference=hcp_routea, present=hcp_weighted_present,
+                    template=hcp_template, template_spec=hcp_template_spec,
+                )
+            ],
         },
         {
             "name": "hcp_weighted_overview",
@@ -376,22 +386,38 @@ def _stage_commands(stage: dict[str, object]) -> list[list[str]]:
 def _subject_ids(manifest: Path) -> list[str]:
     if not manifest.is_file():
         return []
-    raw = [line.strip() for line in manifest.read_text(encoding="utf-8").splitlines() if line.strip()]
-    contract = _COHORT_CONTRACTS.get(manifest.name)
-    if contract is not None:
-        expected_size, syntax = contract
-        malformed = [subject for subject in raw if syntax.fullmatch(subject) is None]
-        if malformed:
-            raise ValueError(
-                f"Formal cohort {manifest} has non-canonical subject syntax: {malformed[:3]}"
-            )
-        if len(set(raw)) != len(raw):
-            raise ValueError(f"Formal cohort {manifest} contains duplicate subjects")
-        if len(raw) != expected_size:
-            raise ValueError(
-                f"Formal cohort {manifest} must contain exactly {expected_size} subjects, got {len(raw)}"
-            )
-    return [subject.removeprefix("sub-") for subject in raw]
+    return [
+        subject.removeprefix("sub-")
+        for subject in load_formal_subjects(manifest, cohort_key_for_manifest(manifest))
+    ]
+
+
+def derive_formal_group_identities(
+    stages: list[dict[str, object]], repo_root: Path
+) -> tuple[tuple[str, str, str], ...]:
+    """Derive formal identities from actual consumer/producer commands."""
+    root = Path(repo_root).resolve()
+    identities: set[tuple[str, str, str]] = set()
+    for stage in stages:
+        for command in _stage_commands(stage):
+            script = Path(command[1]).name
+            if script == "05_02_run_group_atlas.py":
+                group_root = Path(command[command.index("--out-root") + 1]).resolve()
+                atlas = command[command.index("--atlases") + 1]
+                dataset = command[command.index("--dataset") + 1]
+            elif script == "05_05_build_weighted_fisherz_branch.py":
+                group_root = Path(command[command.index("--out-root") + 1]).resolve()
+                atlas = "kong2022"
+                dataset = group_root.relative_to(root).parts[0]
+            elif script == "06_01_build_group_overview.py":
+                group_root = Path(command[command.index("--group-root") + 1]).resolve()
+                atlas = command[command.index("--atlases") + 1]
+                dataset = group_root.relative_to(root).parts[0]
+            else:
+                continue
+            branch = group_root.relative_to(root / dataset / "work/group_atlas").parts[0]
+            identities.add((dataset, branch, atlas))
+    return tuple(identity for identity in FORMAL_GROUPS if identity in identities)
 
 
 def _group_manifest_path(group_root: Path, smoothing: str, hemi: str) -> Path:
@@ -539,6 +565,12 @@ def required_preexisting_paths(repo_root: Path) -> list[Path]:
     )
 
     hcp_group = hcp / "work/group_atlas"
+    hcp_151_manifest = (
+        hcp / "inputs/hcp/kong2022/manifests"
+        / "hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt"
+    )
+    required.add(hcp_151_manifest)
+    hcp_151_subjects = _subject_ids(hcp_151_manifest)
     hcp_routea_group = hcp_group / "routea_full_k3_fisherz"
     hcp_family17_group = hcp_group / "routea_17net_full_k3_fisherz"
     hcp_weighted_subjects: set[str] = set()
@@ -556,6 +588,10 @@ def required_preexisting_paths(repo_root: Path) -> list[Path]:
                         }
                     )
                     hcp_weighted_subjects.update(_group_manifest_subjects(manifest))
+    if hcp_weighted_subjects and hcp_weighted_subjects != set(hcp_151_subjects):
+        raise ValueError(
+            "Retained HCP RouteA group manifests do not match the canonical 151-subject cohort"
+        )
     hcp_weighted_surface = (
         hcp / "inputs/hcp/kong2019_fast_pfm_t1only/shared_inputs/pfm_151"
     )

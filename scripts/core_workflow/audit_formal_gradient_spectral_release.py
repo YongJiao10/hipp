@@ -11,6 +11,16 @@ import uuid
 from pathlib import Path
 from typing import Iterable
 
+CORE_WORKFLOW_DIR = Path(__file__).resolve().parent
+if str(CORE_WORKFLOW_DIR) not in sys.path:
+    sys.path.insert(0, str(CORE_WORKFLOW_DIR))
+
+from lib.formal_cohorts import (
+    cohort_key_for_group,
+    load_formal_subjects,
+    validate_recorded_subjects,
+)
+
 
 SHIFTED_COSINE = "shifted-cosine"
 SHIFTED_COSINE_DESCRIPTION = (
@@ -295,10 +305,24 @@ def _audit_group_manifest(
             expected_root=expected_root, failures=failures,
         )
     subjects_manifest = _resume_source(manifest, "subjects_manifest")
+    cohort_path = (
+        _resolve(path.parent, subjects_manifest)
+        if isinstance(subjects_manifest, str) and subjects_manifest.strip()
+        else None
+    )
     _audit_source_path(
         value=subjects_manifest, field="subjects_manifest", manifest_path=path,
         expected_root=expected_root, failures=failures,
     )
+    if cohort_path is not None:
+        try:
+            cohort_subjects = load_formal_subjects(
+                cohort_path,
+                cohort_key_for_group(str(group["output_root"]), str(group["branch"])),
+            )
+            validate_recorded_subjects(manifest, cohort_subjects, source=path)
+        except (ValueError, FileNotFoundError) as exc:
+            failures.append(f"invalid: {path}: formal cohort validation failed: {exc}")
     consumed = manifest.get("actual_consumed_input_paths")
     if not isinstance(consumed, dict) or not consumed or not all(
         isinstance(value, str) and value.strip() for value in consumed.values()
@@ -343,6 +367,36 @@ def _audit_group_manifest(
             failures,
         )
         _require_equal(manifest, "weighted_assignment_only", True, path, failures)
+        source = manifest.get("weighted_fisherz_source_provenance")
+        if not isinstance(source, dict):
+            failures.append(
+                f"invalid: {path}: missing weighted_fisherz_source_provenance"
+            )
+        else:
+            _require_equal(source, "dataset", group["output_root"], path, failures)
+            _require_equal(
+                source, "expected_source_root", str(expected_root), path, failures
+            )
+            _require_equal(
+                source, "subjects_manifest",
+                str(cohort_path) if cohort_path is not None else None,
+                path, failures,
+            )
+            _require_equal(
+                source, "n_subjects", manifest.get("n_subjects"), path, failures
+            )
+            source_manifest = source.get("source_group_manifest")
+            _audit_source_path(
+                value=source_manifest, field="weighted source_group_manifest",
+                manifest_path=path, expected_root=expected_root, failures=failures,
+            )
+            if isinstance(source_manifest, str) and source_manifest.strip():
+                source_path = _resolve(path.parent, source_manifest)
+                source_payload = _read_json(source_path, failures) if source_path.is_file() else None
+                if source_payload is not None and source_payload.get("subjects") != manifest.get("subjects"):
+                    failures.append(
+                        f"invalid: {path}: weighted source subjects differ from weighted manifest"
+                    )
 
 
 def _overview_items(

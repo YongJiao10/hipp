@@ -318,6 +318,33 @@ def test_runner_formal_groups_match_audit_and_both_registry_entries() -> None:
     assert registered["run_formal_gradient_spectral_refresh"] == expected
 
 
+def test_stage_plan_derived_groups_match_audit_and_upgrade_precedes_weighted() -> None:
+    runner = load_runner()
+    stages = runner.build_stage_plan(repo_root=REPO_ROOT, python_exe=PY314, jobs=1)
+    audit_path = REPO_ROOT / "scripts/core_workflow/audit_formal_gradient_spectral_release.py"
+    spec = importlib.util.spec_from_file_location("formal_audit_for_stage_derivation", audit_path)
+    assert spec is not None and spec.loader is not None
+    audit = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(audit)
+
+    assert set(runner.derive_formal_group_identities(stages, REPO_ROOT)) == set(audit.FORMAL_GROUPS)
+    registry = json.loads((REPO_ROOT / "scripts/core_workflow/step_registry.json").read_text())
+    derived = set(runner.derive_formal_group_identities(stages, REPO_ROOT))
+    for utility in registry["utilities"]:
+        if utility["step_id"] in {
+            "audit_formal_gradient_spectral_release",
+            "run_formal_gradient_spectral_refresh",
+        }:
+            assert {
+                (row["dataset"], row["group_root"], row["atlas"])
+                for row in utility["formal_groups"]
+            } == derived
+    weighted = next(stage for stage in stages if stage["name"] == "hcp_weighted_branch")
+    commands = runner._stage_commands(weighted)
+    assert commands[0][1].endswith("upgrade_retained_hcp_formal_provenance.py")
+    assert commands[1][1].endswith("05_05_build_weighted_fisherz_branch.py")
+
+
 def test_launch_forwards_worker_command_and_writes_detached_paths(tmp_path, monkeypatch) -> None:
     runner = load_runner()
     observed: dict[str, object] = {}
