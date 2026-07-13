@@ -5,7 +5,7 @@ Both CLI entrypoints and stage implementation modules live under `scripts/core_w
 
 - Naming scheme: `NN_MM_<semantic_name>.py`
 - Numbering reflects global pipeline order, not branch identity.
-- Active branches: `kong2019`, `kong2022_routea`, `kong2022_routea_17net`, `kong2022_routea_ctxreg`, `kong2022_routea_ctxdrop`, `kong2022_routeb`, `lynch2024_21net`, `lynch2024_8net`
+- Active branches: `kong2019`, `kong2022_routea`, `kong2022_routea_17net`, `kong2022_routea_ctxreg`, `kong2022_routea_ctxdrop`, `kong2022_routeb`, `lynch2024_20net`, `lynch2024_8net`
 
 Each entrypoint executes local implementation code and can emit a standardized traceability manifest:
 
@@ -29,7 +29,7 @@ For the RouteA cortex-drop branch, run `04_01_materialize_kong2022_roi_fc.py --c
 
 For the RouteA 17-net taxonomy branch, do not create a new input root or gradient root. Reuse `outputs_hcp/inputs/hcp/kong2022/shared_inputs/routea` and run `05_02_run_group_atlas.py` with `--route-tag routea_17net --network-taxonomy family17 --out-root outputs_hcp/work/group_atlas/routea_17net_full_k3_fisherz`. `05_02` reads RouteA gradients from `outputs_hcp/work/hippomaps_gradients/routea` for `gradient-spectral`, so `05_01` should not be run as `routea_17net`. Because this branch intentionally reuses the RouteA input root, `--route-tag auto` refuses `--network-taxonomy family17`; pass `--route-tag routea_17net` explicitly.
 
-For the Lynch2024 FASTANS/PFM comparison branches, first run `02_03_build_lynch2024_nsi_manifest.py` against the QC-pass subject manifest and an NSI TSV/CSV with `subject,nsi`. The default gate is `nsi >= 0.43` with `--expected-count 78`, and the script stops on count mismatch unless `--allow-count-mismatch` is explicit. External FASTANS priors are local assets under `external/FASTANS/resources/PFM/priors/Lynch2024/`; `03_04_run_lynch2024_fastans_pfm.py` generates official per-subject hard-label PFM dlabel/dscalar assets and hard-label component time series under `outputs_hcp/work/cortex_pfm/sub-<id>/lynch2024/`; maintained shared inputs live under `outputs_hcp/inputs/hcp/lynch2024_fast_pfm_t1only/shared_inputs/pfm_nsi043_78/`. `03_03_build_lynch2024_reference.py` consumes those hard-label component assets and writes both `reference/lynch2024_21net/` for original Lynch parent networks excluding `Noise` and `reference/lynch2024_8net/` for canonical merged networks from `config/cross_atlas_network_merge.json`. `04_01_materialize_kong2022_roi_fc.py --atlas lynch2024_21net` reads `cortex_roi_parcel_timeseries.npy` / `cortex_roi_parcels.tsv`; `--atlas lynch2024_8net` reads `cortex_canonical_network_timeseries.npy` / `cortex_canonical_networks.tsv`, so canonical8 FC caches are 8-column outputs rather than duplicated 20-component FC. Maintained downstream scope is `gradient-spectral` and `wta-top` only, with fixed final `K=3` after evaluating `K=2..8`; `05_01` computes one non-Noise Lynch21 component gradient bank using full-graph BrainSpace affinity (`brainspace_sparsity=0.0`), and the `lynch2024_8net` route reuses that bank for `gradient-spectral` while using canonical8 references for WTA and label assignment. In `05_02`, pass `--profile-surface-root outputs_hcp/inputs/hcp/kong2022/shared_inputs/routea_ctxreg` so cluster-network profiles use the same cluster-mean hippocampal time-series correlation as Kong RouteA while masks, FC caches, and references still come from the Lynch shared root. Fixed-K Lynch gradient diagnostics skip and count failed BrainSpace resample fits instead of aborting the atlas build, no-valid-resample ARI fields are recorded/rendered as unavailable rather than zero, and the legacy vertex-FC profile redundancy gate is not applied to Lynch (`redundancy_profile_status=not_applicable_for_lynch2024`). Group roots are `outputs_hcp/work/group_atlas/lynch2024_21net_nsi043_full_k3_normalized_wta/` and `outputs_hcp/work/group_atlas/lynch2024_8net_nsi043_full_k3_normalized_wta/`.
+For the Lynch2024 FASTANS/PFM comparison branches, first run `02_03_build_lynch2024_nsi_manifest.py` against the QC-pass subject manifest and an NSI TSV/CSV with `subject,nsi`. The default gate is `nsi >= 0.43` with `--expected-count 78`, and the script stops on count mismatch unless `--allow-count-mismatch` is explicit. External FASTANS priors are local assets under `external/FASTANS/resources/PFM/priors/Lynch2024/`; `03_04_run_lynch2024_fastans_pfm.py` generates official per-subject hard-label PFM dlabel/dscalar assets and hard-label component time series under `outputs_hcp/work/cortex_pfm/sub-<id>/lynch2024/`; maintained shared inputs live under `outputs_hcp/inputs/hcp/lynch2024_fast_pfm_t1only/shared_inputs/pfm_nsi043_78/`. `03_03_build_lynch2024_reference.py` consumes those hard-label component assets and writes both `reference/lynch2024_20net/` for original Lynch parent networks excluding `Noise` and `reference/lynch2024_8net/` for canonical merged networks from `config/cross_atlas_network_merge.json`. `04_01_materialize_kong2022_roi_fc.py --atlas lynch2024_20net` reads `cortex_roi_parcel_timeseries.npy` / `cortex_roi_parcels.tsv`; `--atlas lynch2024_8net` reads `cortex_canonical_network_timeseries.npy` / `cortex_canonical_networks.tsv`, so canonical8 FC caches are 8-column outputs rather than duplicated 20-component FC. Maintained downstream scope is `gradient-spectral` and `wta-top` only, with fixed final `K=3` after evaluating `K=2..8`; `05_01` computes one non-Noise Lynch20 component gradient bank using full-graph BrainSpace affinity (`brainspace_sparsity=0.0`), and the `lynch2024_8net` route reuses that bank for `gradient-spectral` while using canonical8 references for WTA and label assignment. Fixed-K Lynch gradient diagnostics skip and count failed BrainSpace resample fits instead of aborting the atlas build, no-valid-resample ARI fields are recorded/rendered as unavailable rather than zero, and the legacy vertex-FC profile redundancy gate is not applied to Lynch (`redundancy_profile_status=not_applicable_for_lynch2024`). Group roots are `outputs_hcp/work/group_atlas/lynch2024_20net_nsi043_full_k3_normalized_wta/` and `outputs_hcp/work/group_atlas/lynch2024_8net_nsi043_full_k3_normalized_wta/`.
 
 For the Kong2022 `gradient-spectral` branch, run
 `05_01_compute_hippomaps_gradients.py` first. `05_01` writes aligned
@@ -73,6 +73,19 @@ is 0 only for a complete `status=ok` release; missing or invalid provenance
 exits 1. `--allow-incomplete` changes the exit code only when every failure is
 a missing artifact, and never accepts invalid or legacy provenance. Pass
 `--output-json PATH` to atomically write the same JSON report printed to stdout.
+
+Run the complete formal refresh with
+`/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/run_formal_gradient_spectral_refresh.py --launch --repo-root "$PWD" --jobs 1`.
+This detached launcher has a fixed 19-stage plan covering the canonical
+Lynch20/Lynch8 inputs and groups, HCP weighted-fisherz, Stanford HC/Symp plain
+and weighted groups, all corresponding gradient-spectral overviews, and the
+final nine-group audit. It rejects parallel jobs and unsafe run IDs, forces all
+BLAS/OpenMP thread settings to one, forwards the explicit repository root to a
+single sequential worker, and stops at the first failed command. Status, PID,
+stdout, stderr, and audit JSON files are written under
+`outputs_hcp/work/group_atlas/logs/<run-id>.*`; `status=ok` is recorded only
+after the audit stage exits successfully. Existing valid group combinations are
+reused through the numbered group runner's `--resume` contract.
 
 To retire pre-formalization gradient-spectral products, write and review a
 signed inventory with `retire_legacy_gradient_spectral_outputs.py --write-plan
@@ -123,7 +136,7 @@ The same entrypoint renders normalized WTA pseudo-cluster templates with `--meth
 Official full-cohort group-atlas intermediates generated by `05_02` live under
 `outputs_hcp/work/group_atlas/`. The maintained RouteA full-FC, fixed-K=3,
 fisher-z assignment root is
-`outputs_hcp/work/group_atlas/routea_full_k3_fisherz/`. The shallow RouteA 17-net taxonomy root is `outputs_hcp/work/group_atlas/routea_17net_full_k3_fisherz/`. RouteB uses the parallel official root `outputs_hcp/work/group_atlas/routeb_full_k3_fisherz/`. The isolated cortex-control branch uses `outputs_hcp/work/group_atlas/routea_ctxreg_full_k3_fisherz/`; the cortex-drop branch uses `outputs_hcp/work/group_atlas/routea_ctxdrop_full_k3_fisherz/`. Lynch2024 writes comparison roots `outputs_hcp/work/group_atlas/lynch2024_21net_nsi043_full_k3_normalized_wta/` and `outputs_hcp/work/group_atlas/lynch2024_8net_nsi043_full_k3_normalized_wta/`. For Kong2022
+`outputs_hcp/work/group_atlas/routea_full_k3_fisherz/`. The shallow RouteA 17-net taxonomy root is `outputs_hcp/work/group_atlas/routea_17net_full_k3_fisherz/`. RouteB uses the parallel official root `outputs_hcp/work/group_atlas/routeb_full_k3_fisherz/`. The isolated cortex-control branch uses `outputs_hcp/work/group_atlas/routea_ctxreg_full_k3_fisherz/`; the cortex-drop branch uses `outputs_hcp/work/group_atlas/routea_ctxdrop_full_k3_fisherz/`. Lynch2024 writes comparison roots `outputs_hcp/work/group_atlas/lynch2024_20net_nsi043_full_k3_normalized_wta/` and `outputs_hcp/work/group_atlas/lynch2024_8net_nsi043_full_k3_normalized_wta/`. For Kong2022
 `intrinsic-spectral`, `network-spectral`, and `gradient-spectral`, the workflow
 keeps two official cluster-to-network assignment variants: `fisherz`
 (`top1_fisher_z` from the mean network profile) and `count`
@@ -205,7 +218,7 @@ Path template arguments for non-HCP datasets:
   additional entrypoints when needed.
 - `iowa_hcp500` represents the Iowa 7T dataset preprocessed via the HCP pipeline (source data under `/home/yojiao/hpchome/HCPpipeline500`). It maps outputs to the independent `/home/yojiao/hpchome/hipp/outputs_iowa_hcp500/` directory.
 
-- `--workflow-branch`: one of `kong2019`, `kong2022_routea`, `kong2022_routea_17net`, `kong2022_routea_ctxreg`, `kong2022_routea_ctxdrop`, `kong2022_routeb`, `lynch2024_21net`, `lynch2024_8net`
+- `--workflow-branch`: one of `kong2019`, `kong2022_routea`, `kong2022_routea_17net`, `kong2022_routea_ctxreg`, `kong2022_routea_ctxdrop`, `kong2022_routeb`, `lynch2024_20net`, `lynch2024_8net`
 - `--upstream-step-id` (repeatable)
 - `--input-artifact` (repeatable)
 - `--output-artifact` (repeatable)
