@@ -231,7 +231,11 @@ def _signature(path: Path) -> str:
         stat = entry.stat()
         digest.update(f"{relative}\0{entry.is_dir()}\0{stat.st_size}\0{stat.st_mtime_ns}\n".encode())
         if entry.is_file():
-            digest.update(hashlib.sha256(entry.read_bytes()).digest())
+            content_digest = hashlib.sha256()
+            with entry.open("rb") as handle:
+                while chunk := handle.read(1024 * 1024):
+                    content_digest.update(chunk)
+            digest.update(content_digest.digest())
     return digest.hexdigest()
 
 
