@@ -67,10 +67,16 @@ def _text_contains(path: Path, needle: str) -> bool:
         return False
 
 
-def _artifact_branch(name: str, dataset: str) -> str:
+def _artifact_branch(name: str, dataset: str, discovered_branches: set[str]) -> str:
     lowered = name.lower()
-    if "lynch2024_21net" in lowered:
-        return "lynch2024_21net_nsi043_full_k3_normalized_wta"
+    # Prefer exact names discovered from proven legacy group trees.  This keeps
+    # retirement taxonomy-agnostic and also catches artifacts whose branch name
+    # no longer belongs to the active route registry.
+    for branch in sorted(discovered_branches, key=len, reverse=True):
+        branch_lower = branch.lower()
+        taxonomy_prefix = branch_lower.split("_nsi", 1)[0]
+        if branch_lower in lowered or taxonomy_prefix in lowered:
+            return branch
     if "lynch2024_8net" in lowered:
         return "lynch2024_8net_nsi043_full_k3_normalized_wta"
     if "ctxdrop" in lowered:
@@ -146,7 +152,7 @@ def collect_candidates(repo_root: Path) -> list[Path]:
                 lowered = log_path.name.lower()
                 if log_path.is_file() and (
                     "gradient_spectral" in lowered or "routea_17net_overview" in lowered
-                ) and _artifact_branch(log_path.name, dataset) in legacy_branches[dataset] and not _text_contains(log_path, "shifted-cosine"):
+                ) and _artifact_branch(log_path.name, dataset, legacy_branches[dataset]) in legacy_branches[dataset] and not _text_contains(log_path, "shifted-cosine"):
                     candidates.add(log_path.absolute())
 
     canonical_crossfit = root / "outputs_hcp/work/crossfit_template_matching"
@@ -201,7 +207,7 @@ def collect_candidates(repo_root: Path) -> list[Path]:
                         or "gradient_spectral" in item.name.lower()
                         or _text_mentions_gradient(item)
                     ) and (
-                        _artifact_branch(item.name, dataset) in legacy_branches[dataset]
+                        _artifact_branch(item.name, dataset, legacy_branches[dataset]) in legacy_branches[dataset]
                         or (all_gradient_legacy[dataset] and "manifest" in item.name.lower())
                     ):
                         candidates.add(item.absolute())

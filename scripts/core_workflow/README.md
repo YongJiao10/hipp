@@ -101,8 +101,9 @@ JSON uses `status: launched` and reports detached records as `status_path`,
 
 To retire pre-formalization gradient-spectral products, write and review a
 signed inventory with `retire_legacy_gradient_spectral_outputs.py --write-plan
-_archive/gradient_spectral_relu_cosine_20260713/reviewed_plan.json`, then apply
-that exact inventory with `--apply-plan <reviewed-plan>`. The resumable archive preserves repository-relative paths
+_archive/gradient_spectral_relu_cosine_20260713/reviewed_plan.json`. Present the
+exact source list and destination to the user and wait for explicit confirmation
+before applying that inventory with `--apply-plan <reviewed-plan>`. The resumable archive preserves repository-relative paths
 under `_archive/gradient_spectral_relu_cosine_20260713/`; continuous HippoMaps
 gradients, non-gradient methods, smoke runs, and shifted-cosine reruns are
 excluded. Promote the already validated family-aware cross-fit with

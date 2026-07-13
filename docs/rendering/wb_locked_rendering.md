@@ -12,6 +12,15 @@ For active core-workflow RouteA gradient presentation, use:
 
 When this repository refers to an unqualified `gradient` group-atlas result, use the formal shifted-cosine branch: `outputs_hcp/work/group_atlas/routea_full_k3_fisherz/gradient-spectral/`. Retired weighted-fisherz/relu-cosine products are archival provenance, not active defaults.
 
+Gradient overview manifests preserve `surface_affinity=shifted-cosine`, the
+exact `affinity_description`, and `source_group_manifests`. Canonical PNG
+filenames remain stable, while the visible title identifies shifted-cosine.
+`audit_formal_gradient_spectral_release.py` validates this presentation lineage
+for the exact nine-group release. Use the fixed `--jobs 1` 19-stage runner only
+when production execution is explicitly requested; repository verification must
+not launch it. Archive movement remains gated on an exact inventory and explicit
+user confirmation.
+
 - Hippocampal overview renderer: `scripts/core_workflow/06_01_build_group_overview.py`
 - Cluster significance panel renderer: `scripts/core_workflow/06_03_build_cluster_cortex_panels.py`
 - Full 400-ROI template renderer (gradient-spectral and normalized WTA): `scripts/core_workflow/06_10_render_cluster_roi_strength_panels.py`

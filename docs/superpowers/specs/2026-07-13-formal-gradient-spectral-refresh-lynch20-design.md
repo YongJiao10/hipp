@@ -28,29 +28,29 @@ The maintained active result set is:
 RouteB, ctxreg, ctxdrop, and other experimental gradient-spectral branches stay
 archived and are not recomputed. Continuous HippoMaps gradient products are not
 affected by the affinity change, except that the Lynch gradient-bank route is
-renamed from `lynch2024_21net` to `lynch2024_20net`.
+renamed from a misnamed taxonomy to `lynch2024_20net`.
 
 ## Lynch20 breaking correction
 
 The current workflow excludes the `Noise` label before building the Lynch
 reference bank, so the functional taxonomy has 20 networks even though the
-route, atlas, taxonomy, paths, functions, and documentation say `21net` or
-`lynch21`. The correction is deliberately breaking:
+route, atlas, taxonomy, paths, functions, and documentation use a misnamed
+taxonomy. The correction is deliberately breaking:
 
 - canonical route and atlas slug: `lynch2024_20net`;
 - canonical taxonomy name: `lynch20`;
 - canonical group root prefix: `lynch2024_20net_nsi043_`;
-- no `21net` runtime choice, alias, symlink, or compatibility fallback;
+- no retired runtime choice, alias, symlink, or compatibility fallback;
 - the canonical8 Lynch route reuses the `lynch2024_20net` gradient bank;
 - reference and FC materialization fail unless `Noise` is absent and the
   ordered non-Noise network count is exactly 20;
 - gradient/group manifests record the 20-column input evidence and explicit
   Noise exclusion.
 
-Correctly computed but misleadingly named `21net` inputs and results are not
+Correctly computed but misleadingly named inputs and results are not
 silently reused as formal provenance. New `20net` references, FC caches,
 gradient bank, group results, and presentation artifacts are generated under
-canonical paths. The old active `21net` paths are moved to a dedicated archive
+canonical paths. The old active misnamed-taxonomy paths are moved to a dedicated archive
 only after the new chain validates. The exact move inventory must be shown to
 the user and explicitly confirmed before execution.
 
@@ -100,7 +100,7 @@ The sequence is:
 6. Re-render the already valid HCP RouteA canonical8/family17 overviews with the
    strengthened presentation provenance.
 7. Run the global formal-output audit.
-8. After all new products pass, present the exact old Lynch21 active-path
+8. After all new products pass, present the exact old misnamed-taxonomy active-path
    archive inventory for user confirmation; archive only after approval.
 
 No high-frequency polling is used. A root handoff records the run ID, stage
@@ -119,7 +119,7 @@ complete.
 
 Tests cover:
 
-- removal of all `lynch2024_21net` and `lynch21` runtime choices;
+- removal of all retired taxonomy runtime choices and tracked spellings;
 - exact 20-network order with `Noise` excluded;
 - Lynch8 reuse of the Lynch20 gradient route;
 - shifted-cosine group and weighted-branch provenance propagation;

@@ -249,7 +249,7 @@
     {
       "step_id": "06_01_build_group_overview",
       "stage": "06_presentation_products",
-      "purpose": "Render canonical fixed-K=3 group overview products into outputs_hcp/present/overviews, including normalized WTA-top overviews for ROI-registry atlases.",
+      "purpose": "Render canonical fixed-K=3 group overview products with stable filenames, visible shifted-cosine titles, source group manifests, and affinity provenance for gradient items.",
       "branches": [
         "kong2019",
         "kong2022_routea",
@@ -411,6 +411,34 @@
       "entry_script": "tests/core_workflow/smoke_prepare_run.py",
       "implementation_script": "tests/core_workflow/smoke_prepare_run.py",
       "recommended_manifest": "outputs_hcp/smoke_runs/<run_id>/manifests/smoke_command_manifest.json"
+    },
+    {
+      "step_id": "audit_formal_gradient_spectral_release",
+      "stage": "utility_release_audit",
+      "purpose": "Read-only validation of the exact nine-group formal gradient-spectral release and overview affinity lineage.",
+      "branches": [
+        "kong2022_routea",
+        "kong2022_routea_17net",
+        "lynch2024_20net",
+        "lynch2024_8net"
+      ],
+      "entry_script": "scripts/core_workflow/audit_formal_gradient_spectral_release.py",
+      "implementation_script": "scripts/core_workflow/audit_formal_gradient_spectral_release.py",
+      "recommended_manifest": "outputs_hcp/work/group_atlas/logs/<run_id>.audit.json"
+    },
+    {
+      "step_id": "run_formal_gradient_spectral_refresh",
+      "stage": "utility_release_runner",
+      "purpose": "Preflight and run the fixed jobs=1 sequential 19-stage formal refresh with stop-on-first-failure status.",
+      "branches": [
+        "kong2022_routea",
+        "kong2022_routea_17net",
+        "lynch2024_20net",
+        "lynch2024_8net"
+      ],
+      "entry_script": "scripts/core_workflow/run_formal_gradient_spectral_refresh.py",
+      "implementation_script": "scripts/core_workflow/run_formal_gradient_spectral_refresh.py",
+      "recommended_manifest": "outputs_hcp/work/group_atlas/logs/<run_id>.status.json"
     }
   ]
 }

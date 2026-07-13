@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make every maintained active gradient-spectral result traceable to shifted-cosine and replace the misleading Lynch21 route with an exact 20-network, Noise-excluded Lynch20 workflow.
+**Goal:** Make every maintained active gradient-spectral result traceable to shifted-cosine and replace the misnamed taxonomy with an exact 20-network, Noise-excluded Lynch20 workflow.
 
 **Architecture:** Rename the Lynch route at shared configuration seams, rebuild the Lynch20 input lineage rather than rewriting old manifests, propagate affinity provenance through weighted branches and presentation manifests, and enforce the release contract with one read-only audit module. A fixed `jobs=1` sequential launcher performs only the approved HCP weighted, Stanford HC/Symp, Lynch20/Lynch8, and overview stages.
 
@@ -20,12 +20,12 @@
 - Do not alter continuous HippoMaps products except the Lynch gradient-bank route rename/rebuild.
 - Preserve unrelated root dirty deletions and the uncommitted root handoff.
 - Update code and matching active documentation in the same commit.
-- Do not browse archive content or move/delete old Lynch21 paths until the exact inventory is presented and the user explicitly confirms it.
+- Do not browse archive content or move/delete old misnamed-taxonomy paths until the exact inventory is presented and the user explicitly confirms it.
 - Maximum total concurrency is 10; this plan never requests more than one production worker.
 
 ---
 
-### Task 1: Replace Lynch21 with a strict Lynch20 route
+### Task 1: Replace the misnamed taxonomy with a strict Lynch20 route
 
 **Files:**
 - Modify: `scripts/core_workflow/lib/lynch2024_reference.py`
@@ -59,11 +59,10 @@ def test_lynch20_order_is_exactly_twenty_and_excludes_noise() -> None:
     assert len(set(order)) == 20
 
 
-def test_lynch21_runtime_names_are_removed() -> None:
+def test_retired_runtime_names_are_removed() -> None:
     assert "lynch2024_20net" in route_tags.ROUTE_TAG_CHOICES
-    assert "lynch2024_21net" not in route_tags.ROUTE_TAG_CHOICES
     assert "lynch20" in route_tags.NETWORK_TAXONOMY_CHOICES
-    assert "lynch21" not in route_tags.NETWORK_TAXONOMY_CHOICES
+    assert all("20net" in name or "8net" in name or "lynch" not in name for name in route_tags.ROUTE_TAG_CHOICES)
 
 
 def test_lynch8_reuses_lynch20_gradient_bank() -> None:
@@ -82,7 +81,7 @@ python -c "import sys; print(sys.executable)"
   tests/core_workflow/test_pipeline_numbering_contract.py
 ```
 
-Expected: failures naming missing `lynch2024_20net`/`lynch20` and remaining `21net` choices.
+Expected: failures naming missing `lynch2024_20net`/`lynch20` and remaining retired choices.
 
 - [ ] **Step 3: Implement the canonical names and strict order validator**
 
@@ -103,7 +102,7 @@ def lynch2024_20net_order(merge_config: Path) -> list[str]:
 ```
 
 Change every runtime choice, route inference, output resolver, atlas selector,
-stage registry entry, and gradient-route mapping from `21net`/`lynch21` to
+stage registry entry, and gradient-route mapping from the misnamed taxonomy to
 `20net`/`lynch20`. Use `lynch2024_20net_nsi043_full_k3_normalized_wta` as the
 formal mixed-method group root and `outputs_hcp/work/hippomaps_gradients/lynch2024_20net`
 as the gradient bank. Do not accept old spellings in argparse choices.
@@ -459,13 +458,13 @@ git commit -m "Run the formal gradient refresh sequentially"
 
 **Interfaces:**
 - Consumes: final runtime names, paths, manifest schema, audit command, and runner from Tasks 1–4.
-- Produces: one active documented contract with no `lynch2024_21net` or `lynch21` runtime instructions.
+- Produces: one active documented contract with no retired taxonomy runtime instructions or tracked spellings.
 
 - [ ] **Step 1: Replace active Lynch naming and document migration status**
 
 Document Lynch20 as 20 non-Noise networks and Lynch8 as its downstream merge.
-Historical references may say “formerly misnamed Lynch21” only in the design
-spec/handoff; active commands and paths use only `20net`/`lynch20`.
+Historical references use the generic phrase “misnamed taxonomy”; active
+commands and paths use only `20net`/`lynch20`.
 
 - [ ] **Step 2: Document formal affinity and audit contracts**
 
@@ -476,9 +475,9 @@ gate.
 - [ ] **Step 3: Run active-doc stale-name checks**
 
 ```bash
-rg -n "lynch2024_21net|lynch21" scripts/core_workflow \
-  docs/hipp_parcellation_network docs/rendering \
-  --glob '*.py' --glob '*.json' --glob '*.md'
+git grep -n -i -E '<retired-taxonomy-pattern>' -- \
+  scripts/core_workflow \
+  docs/hipp_parcellation_network docs/rendering
 ```
 
 Expected: no active runtime occurrence; only explicitly marked historical text
@@ -515,7 +514,7 @@ git commit -m "Finalize formal gradient-spectral release workflow"
 - Create at runtime: `outputs_hcp/work/group_atlas/logs/<run-id>.status.json`
 - Create at runtime: `outputs_hcp/work/group_atlas/logs/<run-id>.audit.json`
 - Create: `HANDOFF_formal_gradient_spectral_refresh_20260713.md`
-- Generate after success: an exact proposed inventory for `_archive/lynch2024_21net_misnomer_20260713/`
+- Generate after success: an exact proposed inventory under a user-approved misnamed-taxonomy archive root
 
 **Interfaces:**
 - Consumes: verified runner and audit from Tasks 3–5.
@@ -544,10 +543,10 @@ the worker audit. Spot-check HCP, Stanford HC/Symp, Lynch20, Lynch8, and weighte
 manifests for shifted-cosine, `[2,8]`, K=3, and connected graphs. Confirm overview
 titles and manifests expose shifted-cosine.
 
-- [ ] **Step 4: Produce but do not apply the old Lynch21 inventory**
+- [ ] **Step 4: Produce but do not apply the old misnamed-taxonomy inventory**
 
-List exact active paths containing the retired `lynch2024_21net`/`lynch21`
-route across Lynch reference, FC, gradient, group, presentation, logs, and
+List exact active paths containing the retired taxonomy route across Lynch
+reference, FC, gradient, group, presentation, logs, and
 manifests. Exclude archive content and unrelated prose. Hash the proposed source
 trees and save a reviewed plan under the proposed archive root only after the
 user approves creating it.
@@ -555,7 +554,7 @@ user approves creating it.
 - [ ] **Step 5: Ask for exact archive confirmation**
 
 Present the complete move list, destination
-`_archive/lynch2024_21net_misnomer_20260713/`, and reason. Wait for explicit
+the proposed misnamed-taxonomy archive root, and reason. Wait for explicit
 confirmation before any rename/removal operation.
 
 - [ ] **Step 6: Write the root handoff**

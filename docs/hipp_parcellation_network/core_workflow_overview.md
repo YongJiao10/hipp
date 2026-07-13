@@ -17,7 +17,7 @@ Branch mainlines:
 - `kong2022_routea_ctxreg`
 - `kong2022_routea_ctxdrop`
 - `kong2022_routeb`
-- `lynch2024_21net`
+- `lynch2024_20net`
 - `lynch2024_8net`
 
 Within `kong2022`, RouteA, RouteA 17-net, RouteA cortex-regression, RouteA cortex-drop, and RouteB are treated as parallel mainlines. The Lynch2024 branches are NSI-filtered FASTANS/PFM comparison branches against Kong2022 RouteA, with separate shared inputs and group roots.
@@ -94,7 +94,35 @@ RouteA reference construction has an explicit upstream label-generation dependen
 
 The `kong2022_routea_17net` branch uses the original Kong2022 17 network families for cluster annotation and network profiles. It reuses `shared_inputs/routea`, `surface`, 400-ROI FC caches, and RouteA gradients, then writes only taxonomy-dependent group outputs under `outputs_hcp/work/group_atlas/routea_17net_full_k3_fisherz/`. Run `05_02_run_group_atlas.py` with `--route-tag routea_17net --network-taxonomy family17`; do not run `05_01` for a separate `routea_17net` gradient tree.
 
-The `lynch2024_21net` and `lynch2024_8net` branches use the NSI-filtered FASTANS/PFM cohort from `02_03_build_lynch2024_nsi_manifest.py` (`nsi >= 0.43`, expected `n=78`). External priors live under `external/FASTANS/resources/PFM/priors/Lynch2024/`; `03_04_run_lynch2024_fastans_pfm.py` generates official per-subject hard-label PFM dlabel/dscalar assets and hard-label component time series under `outputs_hcp/work/cortex_pfm/sub-<id>/lynch2024/`; shared inputs live under `outputs_hcp/inputs/hcp/lynch2024_fast_pfm_t1only/shared_inputs/pfm_nsi043_78/`. `03_03_build_lynch2024_reference.py` writes original Lynch21 references excluding `Noise` and canonical8 merged references from `config/cross_atlas_network_merge.json`. The maintained downstream scope is `gradient-spectral` and `wta-top` only. For `gradient-spectral`, only the non-Noise Lynch21 component bank is used; BrainSpace receives the low-dimensional Lynch feature matrix as a full graph (`brainspace_sparsity=0.0`), and `lynch2024_8net` reuses that gradient bank while applying the merged canonical8 taxonomy downstream. In `05_02`, Lynch runs use `--profile-surface-root outputs_hcp/inputs/hcp/kong2022/shared_inputs/routea_ctxreg` so cluster profiles are computed with the same cluster-mean hippocampal time-series correlation used by Kong RouteA; this does not change the Lynch PFM FC, masks, references, or gradient inputs.
+The `lynch2024_20net` and `lynch2024_8net` branches use the NSI-filtered FASTANS/PFM cohort from `02_03_build_lynch2024_nsi_manifest.py` (`nsi >= 0.43`, expected `n=78`). External priors live under `external/FASTANS/resources/PFM/priors/Lynch2024/`; `03_04_run_lynch2024_fastans_pfm.py` generates official per-subject hard-label PFM dlabel/dscalar assets and hard-label component time series under `outputs_hcp/work/cortex_pfm/sub-<id>/lynch2024/`; shared inputs live under `outputs_hcp/inputs/hcp/lynch2024_fast_pfm_t1only/shared_inputs/pfm_nsi043_78/`. `03_03_build_lynch2024_reference.py` writes an exact ordered Lynch20 reference containing 20 unique networks after excluding `Noise`, plus canonical8 merged references from `config/cross_atlas_network_merge.json`. The maintained downstream scope is `gradient-spectral` and `wta-top` only. For `gradient-spectral`, only the non-Noise Lynch20 component bank is used; BrainSpace receives the low-dimensional Lynch feature matrix as a full graph (`brainspace_sparsity=0.0`), and `lynch2024_8net` reuses that gradient bank while applying the merged canonical8 taxonomy downstream. In `05_02`, Lynch runs use `--profile-surface-root outputs_hcp/inputs/hcp/kong2022/shared_inputs/routea_ctxreg` so cluster profiles are computed with the same cluster-mean hippocampal time-series correlation used by Kong RouteA; this does not change the Lynch PFM FC, masks, references, or gradient inputs.
+
+The formal `gradient-spectral` clustering affinity is `shifted-cosine`, defined
+as `(1 + cosine_similarity) / 2` on surface-adjacent vertices. Group manifests
+record `surface_affinity`, `affinity_description`, and connected-graph
+diagnostics. Overview items record `surface_affinity`,
+`affinity_description`, and `source_group_manifests`; filenames remain stable,
+while the visible title identifies shifted-cosine.
+
+The read-only release audit accepts exactly nine formal group branches: HCP
+RouteA canonical8, RouteA family17, RouteA weighted-fisherz, Lynch20, and
+Lynch8; plus Stanford HC, Stanford Symp, and their two weighted-fisherz
+derivatives. Run it with:
+
+```bash
+/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/audit_formal_gradient_spectral_release.py --repo-root "$PWD"
+```
+
+The formal refresh launcher is fixed at `--jobs 1` and preflights exact leaf
+inputs before starting its sequential 19-stage worker:
+
+```bash
+/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/run_formal_gradient_spectral_refresh.py --launch --repo-root "$PWD" --jobs 1
+```
+
+Do not execute that production launcher as part of code or documentation
+verification. Any archive move for outputs using the misnamed taxonomy remains
+blocked until the exact inventory and destination are shown to the user and the
+user explicitly confirms them.
 
 Network display colors are centralized in `config/hipp_network_style.json`. Group-atlas label materialization, hippocampal overviews, WTA long-axis profiles, and cortex panels load network colors from that single file; `config/cross_atlas_network_merge.json` is mapping-only and must not carry color overrides. Missing colors are treated as errors, not gray/blue fallback display colors. For the RouteA 17-net taxonomy, same-family A/B/C subnetworks use deliberately separated lightness and saturation levels so overview bars, profiles, and label-table colors remain distinguishable while preserving the parent family hue.
 

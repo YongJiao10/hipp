@@ -42,7 +42,7 @@ was removed after the migration at the user's direction.
 - RouteA ArealMSHBM individualized cortex label generation on Argon; this is an external-backend artifact prerequisite documented in `core_workflow_artifact_lineage.md`, not a local numbered entrypoint
 - `03_02_build_kong2022_routea_reference.py` for RouteA-specific reference source, including compact 17-net summaries used by `kong2022_routea_17net`, consuming the generated RouteA label files above
 - `03_04_run_lynch2024_fastans_pfm.py` for official FASTANS Lynch2024 hard-label PFM generation from local FASTANS priors and Workbench
-- `03_03_build_lynch2024_reference.py` for hard-label Lynch2024 component references, Lynch21 summaries excluding `Noise`, and canonical8 merged summaries from `config/cross_atlas_network_merge.json`
+- `03_03_build_lynch2024_reference.py` for hard-label Lynch2024 component references, exact Lynch20 summaries containing 20 unique networks after excluding `Noise`, and canonical8 merged summaries from `config/cross_atlas_network_merge.json`
 
 ```bash
 /home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/03_04_run_lynch2024_fastans_pfm.py --subjects-manifest outputs_hcp/inputs/hcp/lynch2024_fast_pfm_t1only/manifests/hcp_7t_lynch2024_nsi043_pass_78.txt --wb-command /home/yojiao/FASTANS/workbench/bin_linux64/wb_command --jobs 6
@@ -54,7 +54,7 @@ was removed after the migration at the user's direction.
 1. `04_00_materialize_cortex_regressed_surface_timeseries.py` for the isolated `kong2022_routea_ctxreg` branch
 2. `04_01_materialize_kong2022_roi_fc.py --ctxdrop` for the isolated `kong2022_routea_ctxdrop` branch
 3. `04_01_materialize_kong2022_roi_fc.py`
-4. `04_01_materialize_kong2022_roi_fc.py --atlas lynch2024_21net` and `--atlas lynch2024_8net` for Lynch2024 ROI/component FC caches
+4. `04_01_materialize_kong2022_roi_fc.py --atlas lynch2024_20net` and `--atlas lynch2024_8net` for Lynch2024 ROI/component FC caches
 5. `04_02_materialize_intrinsic_fc.py`
 6. `04_03_materialize_kong2019_fc.py` (Kong2019 branch only)
 
@@ -65,7 +65,7 @@ was removed after the migration at the user's direction.
 Lynch2024 FC materialization reuses the existing `04_01` implementation with `--atlas`; run it once per Lynch atlas slug so downstream route validators never fall back to Kong2022 paths:
 
 ```bash
-/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/04_01_materialize_kong2022_roi_fc.py --shared-root outputs_hcp/inputs/hcp/lynch2024_fast_pfm_t1only/shared_inputs/pfm_nsi043_78 --surface-root outputs_hcp/inputs/hcp/kong2022/shared_inputs/surface --reference-root outputs_hcp/inputs/hcp/lynch2024_fast_pfm_t1only/shared_inputs/pfm_nsi043_78 --subjects-manifest outputs_hcp/inputs/hcp/lynch2024_fast_pfm_t1only/manifests/hcp_7t_lynch2024_nsi043_pass_78.txt --atlas lynch2024_21net
+/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/04_01_materialize_kong2022_roi_fc.py --shared-root outputs_hcp/inputs/hcp/lynch2024_fast_pfm_t1only/shared_inputs/pfm_nsi043_78 --surface-root outputs_hcp/inputs/hcp/kong2022/shared_inputs/surface --reference-root outputs_hcp/inputs/hcp/lynch2024_fast_pfm_t1only/shared_inputs/pfm_nsi043_78 --subjects-manifest outputs_hcp/inputs/hcp/lynch2024_fast_pfm_t1only/manifests/hcp_7t_lynch2024_nsi043_pass_78.txt --atlas lynch2024_20net
 /home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/04_01_materialize_kong2022_roi_fc.py --shared-root outputs_hcp/inputs/hcp/lynch2024_fast_pfm_t1only/shared_inputs/pfm_nsi043_78 --surface-root outputs_hcp/inputs/hcp/kong2022/shared_inputs/surface --reference-root outputs_hcp/inputs/hcp/lynch2024_fast_pfm_t1only/shared_inputs/pfm_nsi043_78 --subjects-manifest outputs_hcp/inputs/hcp/lynch2024_fast_pfm_t1only/manifests/hcp_7t_lynch2024_nsi043_pass_78.txt --atlas lynch2024_8net
 ```
 
@@ -92,22 +92,46 @@ Kong2022 RouteA cortex-control group clustering example:
 /home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/06_07_render_ctxdrop_neighbor_counts.py --shared-root outputs_hcp/inputs/hcp/kong2022/shared_inputs/routea_ctxdrop --source-branch routea_ctxdrop
 ```
 
-Lynch2024 group-atlas commands use the NSI-filtered shared root, route-specific atlas slug, and matching taxonomy. `05_01` generates one shared Lynch21 non-Noise component gradient bank with BrainSpace full-graph affinity (`brainspace_sparsity=0.0`); `lynch2024_8net` gradient-spectral reads that bank while WTA reads canonical8 references. Maintained methods are `gradient-spectral` and `wta-top`; WTA defaults to normalized top20-count labeling. For fixed-K Lynch gradient diagnostics, invalid BrainSpace resample fits are skipped and counted in the K-summary diagnostic fields instead of aborting the finished K=3 atlas build; when no valid subject-split resample remains, the ARI mean/SE are recorded and rendered as unavailable/NaN rather than zero.
+Lynch2024 group-atlas commands use the NSI-filtered shared root, route-specific atlas slug, and matching taxonomy. `05_01` generates one shared Lynch20 non-Noise component gradient bank with BrainSpace full-graph affinity (`brainspace_sparsity=0.0`); `lynch2024_8net` gradient-spectral reads that bank while WTA reads canonical8 references. Maintained methods are `gradient-spectral` and `wta-top`; WTA defaults to normalized top20-count labeling. For fixed-K Lynch gradient diagnostics, invalid BrainSpace resample fits are skipped and counted in the K-summary diagnostic fields instead of aborting the finished K=3 atlas build; when no valid subject-split resample remains, the ARI mean/SE are recorded and rendered as unavailable/NaN rather than zero.
 
 ```bash
-/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/05_01_compute_hippomaps_gradients.py --routes lynch2024_21net --shared-inputs-root outputs_hcp/inputs/hcp/lynch2024_fast_pfm_t1only/shared_inputs --surface-root outputs_hcp/inputs/hcp/lynch2024_fast_pfm_t1only/shared_inputs/pfm_nsi043_78 --subjects-manifest outputs_hcp/inputs/hcp/lynch2024_fast_pfm_t1only/manifests/hcp_7t_lynch2024_nsi043_pass_78.txt --smoothings 2mm 4mm --hemis L R --group-average-surfaces-dir outputs_hcp/inputs/hcp/kong2022/templates/hipp_group_average_t1only_151/group_average_surfaces --n-components 5 --gradient-random-state 0 --selected-components 1,2,3 --force
-/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/05_02_run_group_atlas.py --shared-root outputs_hcp/inputs/hcp/lynch2024_fast_pfm_t1only/shared_inputs/pfm_nsi043_78 --surface-root outputs_hcp/inputs/hcp/lynch2024_fast_pfm_t1only/shared_inputs/pfm_nsi043_78 --profile-surface-root outputs_hcp/inputs/hcp/kong2022/shared_inputs/routea_ctxreg --reference-root outputs_hcp/inputs/hcp/lynch2024_fast_pfm_t1only/shared_inputs/pfm_nsi043_78 --out-root outputs_hcp/work/group_atlas/lynch2024_21net_nsi043_full_k3_normalized_wta --methods gradient-spectral wta-top --atlases lynch2024_21net --gradient-root outputs_hcp/work/hippomaps_gradients --route-tag lynch2024_21net --network-taxonomy lynch21 --subjects-manifest outputs_hcp/inputs/hcp/lynch2024_fast_pfm_t1only/manifests/hcp_7t_lynch2024_nsi043_pass_78.txt --k-min 2 --k-max 8 --force-final-k 3 --jobs 8 --group-average-surfaces-dir outputs_hcp/inputs/hcp/kong2022/templates/hipp_group_average_t1only_151/group_average_surfaces
-/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/05_02_run_group_atlas.py --shared-root outputs_hcp/inputs/hcp/lynch2024_fast_pfm_t1only/shared_inputs/pfm_nsi043_78 --surface-root outputs_hcp/inputs/hcp/lynch2024_fast_pfm_t1only/shared_inputs/pfm_nsi043_78 --profile-surface-root outputs_hcp/inputs/hcp/kong2022/shared_inputs/routea_ctxreg --reference-root outputs_hcp/inputs/hcp/lynch2024_fast_pfm_t1only/shared_inputs/pfm_nsi043_78 --out-root outputs_hcp/work/group_atlas/lynch2024_8net_nsi043_full_k3_normalized_wta --methods gradient-spectral wta-top --atlases lynch2024_8net --gradient-root outputs_hcp/work/hippomaps_gradients --route-tag lynch2024_8net --network-taxonomy lynch8 --subjects-manifest outputs_hcp/inputs/hcp/lynch2024_fast_pfm_t1only/manifests/hcp_7t_lynch2024_nsi043_pass_78.txt --k-min 2 --k-max 8 --force-final-k 3 --jobs 8 --group-average-surfaces-dir outputs_hcp/inputs/hcp/kong2022/templates/hipp_group_average_t1only_151/group_average_surfaces
+/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/05_01_compute_hippomaps_gradients.py --routes lynch2024_20net --shared-inputs-root outputs_hcp/inputs/hcp/lynch2024_fast_pfm_t1only/shared_inputs --surface-root outputs_hcp/inputs/hcp/lynch2024_fast_pfm_t1only/shared_inputs/pfm_nsi043_78 --subjects-manifest outputs_hcp/inputs/hcp/lynch2024_fast_pfm_t1only/manifests/hcp_7t_lynch2024_nsi043_pass_78.txt --smoothings 2mm 4mm --hemis L R --group-average-surfaces-dir outputs_hcp/inputs/hcp/kong2022/templates/hipp_group_average_t1only_151/group_average_surfaces --n-components 5 --gradient-random-state 0 --selected-components 1,2,3 --force
+/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/05_02_run_group_atlas.py --shared-root outputs_hcp/inputs/hcp/lynch2024_fast_pfm_t1only/shared_inputs/pfm_nsi043_78 --surface-root outputs_hcp/inputs/hcp/lynch2024_fast_pfm_t1only/shared_inputs/pfm_nsi043_78 --profile-surface-root outputs_hcp/inputs/hcp/kong2022/shared_inputs/routea_ctxreg --reference-root outputs_hcp/inputs/hcp/lynch2024_fast_pfm_t1only/shared_inputs/pfm_nsi043_78 --out-root outputs_hcp/work/group_atlas/lynch2024_20net_nsi043_full_k3_normalized_wta --methods gradient-spectral wta-top --atlases lynch2024_20net --gradient-root outputs_hcp/work/hippomaps_gradients --route-tag lynch2024_20net --network-taxonomy lynch20 --subjects-manifest outputs_hcp/inputs/hcp/lynch2024_fast_pfm_t1only/manifests/hcp_7t_lynch2024_nsi043_pass_78.txt --k-min 2 --k-max 8 --force-final-k 3 --jobs 1 --group-average-surfaces-dir outputs_hcp/inputs/hcp/kong2022/templates/hipp_group_average_t1only_151/group_average_surfaces
+/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/05_02_run_group_atlas.py --shared-root outputs_hcp/inputs/hcp/lynch2024_fast_pfm_t1only/shared_inputs/pfm_nsi043_78 --surface-root outputs_hcp/inputs/hcp/lynch2024_fast_pfm_t1only/shared_inputs/pfm_nsi043_78 --profile-surface-root outputs_hcp/inputs/hcp/kong2022/shared_inputs/routea_ctxreg --reference-root outputs_hcp/inputs/hcp/lynch2024_fast_pfm_t1only/shared_inputs/pfm_nsi043_78 --out-root outputs_hcp/work/group_atlas/lynch2024_8net_nsi043_full_k3_normalized_wta --methods gradient-spectral wta-top --atlases lynch2024_8net --gradient-root outputs_hcp/work/hippomaps_gradients --route-tag lynch2024_8net --network-taxonomy lynch8 --subjects-manifest outputs_hcp/inputs/hcp/lynch2024_fast_pfm_t1only/manifests/hcp_7t_lynch2024_nsi043_pass_78.txt --k-min 2 --k-max 8 --force-final-k 3 --jobs 1 --group-average-surfaces-dir outputs_hcp/inputs/hcp/kong2022/templates/hipp_group_average_t1only_151/group_average_surfaces
 ```
 
-For all ROI-registry `wta-top` runs, normalized top20-count is the default assignment. Normalized means top-20 positive ROI/component counts divided by finite available ROI/component counts in each network, not Fisher-z averaging. Lynch gradient overviews use the manifest default `fisherz` cluster labels; Lynch WTA overviews use `normalized_top20_count`. Render them from their isolated group roots with filenames containing `lynch2024_21net` or `lynch2024_8net`:
+For all ROI-registry `wta-top` runs, normalized top20-count is the default assignment. Normalized means top-20 positive ROI/component counts divided by finite available ROI/component counts in each network, not Fisher-z averaging. Lynch gradient overviews use the manifest default `fisherz` cluster labels; Lynch WTA overviews use `normalized_top20_count`. Render them from their isolated group roots with stable filenames containing `lynch2024_20net` or `lynch2024_8net`; the visible gradient title identifies shifted-cosine and the manifest records `surface_affinity`, `affinity_description`, and `source_group_manifests`:
 
 ```bash
-/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/06_01_build_group_overview.py --group-root outputs_hcp/work/group_atlas/lynch2024_21net_nsi043_full_k3_normalized_wta --route-tag lynch2024_21net --methods gradient-spectral --atlases lynch2024_21net --assignment-variant fisherz
-/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/06_01_build_group_overview.py --group-root outputs_hcp/work/group_atlas/lynch2024_21net_nsi043_full_k3_normalized_wta --route-tag lynch2024_21net --methods wta-top --atlases lynch2024_21net --assignment-variant normalized_top20_count
+/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/06_01_build_group_overview.py --group-root outputs_hcp/work/group_atlas/lynch2024_20net_nsi043_full_k3_normalized_wta --route-tag lynch2024_20net --methods gradient-spectral --atlases lynch2024_20net --assignment-variant fisherz
+/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/06_01_build_group_overview.py --group-root outputs_hcp/work/group_atlas/lynch2024_20net_nsi043_full_k3_normalized_wta --route-tag lynch2024_20net --methods wta-top --atlases lynch2024_20net --assignment-variant normalized_top20_count
 /home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/06_01_build_group_overview.py --group-root outputs_hcp/work/group_atlas/lynch2024_8net_nsi043_full_k3_normalized_wta --route-tag lynch2024_8net --methods gradient-spectral --atlases lynch2024_8net --assignment-variant fisherz
 /home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/06_01_build_group_overview.py --group-root outputs_hcp/work/group_atlas/lynch2024_8net_nsi043_full_k3_normalized_wta --route-tag lynch2024_8net --methods wta-top --atlases lynch2024_8net --assignment-variant normalized_top20_count
 ```
+
+## Formal Gradient-Spectral Release
+
+The formal release comprises exactly nine audited groups: five HCP groups
+(RouteA canonical8, RouteA family17, RouteA weighted-fisherz, Lynch20, and
+Lynch8) and four Stanford groups (HC, Symp, and both weighted-fisherz
+derivatives). Audit the complete set without modifying it:
+
+```bash
+/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/audit_formal_gradient_spectral_release.py --repo-root "$PWD"
+```
+
+The supported refresh orchestration is a fixed 19-stage, stop-on-first-failure
+worker. Its launch path accepts only one job and preflights exact input leaves
+before detaching:
+
+```bash
+/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/run_formal_gradient_spectral_refresh.py --launch --repo-root "$PWD" --jobs 1
+```
+
+That production command is not part of repository verification and must not be
+run without a separate request. Likewise, do not move or archive products under
+the misnamed taxonomy until the exact inventory and destination have been shown
+to the user and explicitly confirmed.
 
 ## 6. Presentation Products
 

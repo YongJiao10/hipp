@@ -1530,17 +1530,17 @@ def main() -> int:
                         else "missing"
                     )
                     item: dict[str, object] = {
-                            "atlas": atlas,
-                            "method": method,
-                            "gradient_comp_tag": comp_tag or None,
-                            "overview_png": meta["overview_png"],
-                            "smoothings": [r["smoothing"] for r in row_meta],
-                            "metric_summary": metric,
-                            "route_tag": args.route_tag,
-                            "mode_tag": effective_overview_mode_tag(method, args.mode_tag, assignment_variant),
-                            "assignment_variant": assignment_variant,
-                            "source_group_root": str(group_root),
-                        }
+                        "atlas": atlas,
+                        "method": method,
+                        "gradient_comp_tag": comp_tag or None,
+                        "overview_png": meta["overview_png"],
+                        "smoothings": [r["smoothing"] for r in row_meta],
+                        "metric_summary": metric,
+                        "route_tag": args.route_tag,
+                        "mode_tag": effective_overview_mode_tag(method, args.mode_tag, assignment_variant),
+                        "assignment_variant": assignment_variant,
+                        "source_group_root": str(group_root),
+                    }
                     for key in (
                         "source_group_manifests",
                         "surface_affinity",

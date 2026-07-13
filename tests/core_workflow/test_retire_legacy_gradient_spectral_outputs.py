@@ -79,6 +79,17 @@ def test_collect_candidates_rejects_shifted_and_unproven_gradient_trees(tmp_path
     assert module.collect_candidates(tmp_path) == []
 
 
+def test_artifact_branch_prefers_discovered_taxonomy_mismatch() -> None:
+    module = load_module()
+    discovered = {"obsolete_taxonomy_nsi043_full_k3_normalized_wta"}
+
+    assert module._artifact_branch(
+        "obsolete_taxonomy_gradient_spectral.log",
+        "outputs_hcp",
+        discovered,
+    ) == "obsolete_taxonomy_nsi043_full_k3_normalized_wta"
+
+
 def test_collect_candidates_accepts_explicit_relu_crossfit(tmp_path: Path) -> None:
     module = load_module()
     crossfit = tmp_path / "outputs_hcp/work/crossfit_template_matching"
