@@ -23,3 +23,4 @@
 - [ ] Run full verification and commit the implementation branch.
 - [ ] Run isolated HCP cross-fit and evaluate the gate.
 - [ ] If the gate passes, rebuild and compare HCP, Stanford HC, and Stanford Symp group overviews.
+- [ ] Derive and render HCP, Stanford HC, and Stanford Symp weighted-fisherz branches from the accepted fixed-K3 shifted-cosine roots.

@@ -16,3 +16,9 @@ The comparison stage reuses saved gradients and FC inputs for HCP, Stanford HC,
 and Stanford Symp. It rebuilds only the default RouteA G1-G3, K=3, coverage 0.80
 group products and fisherz/count overviews. Existing results remain read-only;
 replacement and archival are separate decisions.
+
+After visual review, derive weighted-fisherz products from the accepted fixed
+K=3 shifted-cosine group roots for HCP 151, Stanford HC, and Stanford Symp.
+Use the maintained `05_05` weighted branch builder and `06_01` renderer with
+dataset-explicit roots. This stage reuses labels and subject surface time series
+and does not refit FC gradients or K selection.
