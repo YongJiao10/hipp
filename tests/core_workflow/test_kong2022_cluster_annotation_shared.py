@@ -388,6 +388,16 @@ def test_weighted_branch_parser_accepts_dataset_template_overrides(tmp_path: Pat
     assert args.template_spec == str(tmp_path / "hippunfold" / "sub-1001_den-512_label-hipp_surfaces.spec")
 
 
+def test_weighted_branch_methods_default_is_backward_compatible_and_selectable() -> None:
+    parser = weighted_branch_mod.build_arg_parser()
+
+    defaults = parser.parse_args([])
+    gradient_only = parser.parse_args(["--methods", "gradient-spectral"])
+
+    assert tuple(defaults.methods) == ("gradient-spectral", "wta-top")
+    assert tuple(gradient_only.methods) == ("gradient-spectral",)
+
+
 def test_weighted_branch_normalizes_template_paths_from_explicit_dataset_roots(tmp_path: Path) -> None:
     surface_dir = tmp_path / "templates" / "group_average_surfaces"
     surface_dir.mkdir(parents=True)

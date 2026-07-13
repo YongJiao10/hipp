@@ -491,9 +491,10 @@ def build_branch(args: argparse.Namespace) -> dict[str, object]:
     template_surface_dir = Path(args.template_surface_dir).resolve()
     template_spec = Path(args.template_spec).resolve()
     color_map = load_network_colors(Path(args.network_style).resolve())
+    methods = tuple(str(method) for method in args.methods)
 
     results: list[dict[str, object]] = []
-    for method in METHODS:
+    for method in methods:
         for src_run in run_dirs_for_method(source_root, method):
             if not src_run.exists():
                 continue
@@ -533,6 +534,7 @@ def build_branch(args: argparse.Namespace) -> dict[str, object]:
         "present_dir": str(present_dir),
         "template_surface_dir": str(template_surface_dir),
         "template_spec": str(template_spec),
+        "methods": list(methods),
         "runs": results,
     }
     write_json(out_root / "weighted_fisherz_branch_manifest.json", manifest)
@@ -547,6 +549,16 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--reference-root", default=str(DEFAULT_REFERENCE_ROOT))
     parser.add_argument("--present-dir", default=str(DEFAULT_PRESENT_DIR))
     parser.add_argument("--network-style", default=str(DEFAULT_STYLE))
+    parser.add_argument(
+        "--methods",
+        nargs="+",
+        choices=METHODS,
+        default=list(METHODS),
+        help=(
+            "Weighted branches to derive. Defaults to both gradient-spectral "
+            "and wta-top for backward compatibility."
+        ),
+    )
     parser.add_argument("--template-surface-dir", default=str(DEFAULT_TEMPLATE_SURFACE_DIR), help="Directory containing group-average hemi-L/R midthickness surfaces used in copied manifests.")
     parser.add_argument("--template-spec", default=str(DEFAULT_TEMPLATE_SPEC), help="Template subject HippUnfold spec path used in copied manifests.")
     return parser
