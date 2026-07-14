@@ -62,7 +62,11 @@ def test_stage_plan_is_exact_sequential_formal_scope() -> None:
             retired = "21" + "net"
             assert retired not in text
             assert "routeb" not in text
-            assert "ctxreg" not in text
+            if "ctxreg" in text:
+                assert stage["name"] in {"lynch20_group", "lynch8_group"}
+                assert _option(nested_command, "--profile-surface-root").endswith(
+                    "outputs_hcp/inputs/hcp/kong2022/shared_inputs/routea_ctxreg"
+                )
             assert "ctxdrop" not in text
             if nested_command[1].endswith("06_01_build_group_overview.py"):
                 assert _option(nested_command, "--manifest-name").endswith(
@@ -278,10 +282,40 @@ def test_preflight_derives_subject_specific_stanford_and_lynch_inputs(tmp_path) 
 
 
 @pytest.mark.parametrize(
+    ("name", "lines", "expected"),
+    [
+        (
+            "hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt",
+            [f"{100000 + index:06d}" for index in range(151)],
+            ["sub-100000", "sub-100001", "sub-100002"],
+        ),
+        (
+            "stanford_hc_1xxx2xxx_qc_pass_t1only_91.txt",
+            [str(1001 + index) for index in range(91)],
+            ["sub-1001", "sub-1002", "sub-1003"],
+        ),
+        (
+            "stanford_symp_3xxx4xxx_qc_pass_t1only_103.txt",
+            [str(3001 + index) for index in range(103)],
+            ["sub-3001", "sub-3002", "sub-3003"],
+        ),
+    ],
+)
+def test_formal_cohort_parser_normalizes_approved_bare_manifest_ids(
+    tmp_path: Path, name: str, lines: list[str], expected: list[str]
+) -> None:
+    runner = load_runner()
+    manifest = tmp_path / name
+    manifest.write_text("\n".join(lines) + "\n")
+
+    assert runner.load_formal_subjects(manifest, runner.cohort_key_for_manifest(manifest))[:3] == expected
+
+
+@pytest.mark.parametrize(
     ("name", "lines", "message"),
     [
         ("hcp_7t_lynch2024_nsi043_pass_78.txt", ["sub-100610"] * 78, "duplicate"),
-        ("stanford_hc_1xxx2xxx_qc_pass_t1only_91.txt", ["1001"] * 91, "canonical"),
+        ("stanford_hc_1xxx2xxx_qc_pass_t1only_91.txt", ["1001"] * 91, "duplicate"),
         ("stanford_symp_3xxx4xxx_qc_pass_t1only_103.txt", [f"sub-{3001+i}" for i in range(102)], "103"),
     ],
 )
@@ -294,6 +328,37 @@ def test_subject_ids_reject_invalid_formal_cohort_manifests(
 
     with pytest.raises(ValueError, match=message):
         runner._subject_ids(manifest)
+
+
+def test_lynch_stage_uses_branch_masks_and_routea_ctxreg_profiles() -> None:
+    runner = load_runner()
+    stages = runner.build_stage_plan(repo_root=REPO_ROOT, python_exe=PY314, jobs=1)
+    gradient = next(stage for stage in stages if stage["name"] == "lynch20_gradient_bank")
+    expected_mask_root = REPO_ROOT / "outputs_hcp/inputs/hcp/lynch2024_fast_pfm_t1only/shared_inputs/pfm_nsi043_78"
+    assert _option(list(gradient["command"]), "--surface-root") == str(expected_mask_root)
+    expected_profile_root = REPO_ROOT / "outputs_hcp/inputs/hcp/kong2022/shared_inputs/routea_ctxreg"
+    for stage_name in ("lynch20_group", "lynch8_group"):
+        command = list(next(stage for stage in stages if stage["name"] == stage_name)["command"])
+        assert _option(command, "--surface-root") == str(expected_mask_root)
+        assert _option(command, "--profile-surface-root") == str(expected_profile_root)
+
+
+def test_lynch_preflight_requires_masks_and_ctxreg_profiles(tmp_path: Path, monkeypatch) -> None:
+    runner = load_runner()
+    monkeypatch.setattr(runner, "_subject_ids", lambda _manifest: ["100610"])
+
+    required = set(runner.required_preexisting_paths(tmp_path))
+    lynch_root = tmp_path / "outputs_hcp/inputs/hcp/lynch2024_fast_pfm_t1only/shared_inputs/pfm_nsi043_78"
+    ctxreg_root = tmp_path / "outputs_hcp/inputs/hcp/kong2022/shared_inputs/routea_ctxreg"
+    assert (
+        lynch_root / "sub-100610/surface/tsnr_gate/sub-100610_hemi-L_valid_mask.npy"
+    ) in required
+    assert (
+        ctxreg_root / "sub-100610/surface/2mm/sub-100610_hemi-L_timeseries.npy"
+    ) in required
+    assert (
+        lynch_root / "sub-100610/surface/2mm/sub-100610_hemi-L_timeseries.npy"
+    ) not in required
 
 
 def test_runner_formal_groups_match_audit_and_both_registry_entries() -> None:

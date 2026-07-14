@@ -116,8 +116,7 @@ counts must match those pinned lists. It also includes
 all 2mm/4mm by L/R shifted-cosine manifests and weighted-branch run files from
 the pre-existing HCP RouteA groups; Stanford gradients, templates, and each
 subgroup subject's FC, reference, surface, mask, and HippUnfold inputs; and each
-Lynch cohort subject's cortex PFM components, surface/mask inputs, and
-HippUnfold surfaces. Inputs are derived from the pinned cohort manifests, so a
+Lynch cohort subject's cortex PFM components, branch valid masks, RouteA-ctxreg profile time series, and HippUnfold surfaces. Inputs are derived from the pinned cohort manifests, so a
 present parent directory cannot hide a missing subject file. Products created
 by an earlier stage of the same 19-stage plan are deliberately excluded from
 preflight. Missing-input errors list the exact absent paths. Successful launch

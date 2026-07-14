@@ -60,6 +60,7 @@ def build_stage_plan(
     hcp = root / "outputs_hcp"
     hcp_routea = hcp / "inputs/hcp/kong2022/shared_inputs/routea"
     hcp_surface = hcp / "inputs/hcp/kong2022/shared_inputs/surface"
+    hcp_routea_ctxreg = hcp / "inputs/hcp/kong2022/shared_inputs/routea_ctxreg"
     hcp_template = hcp / "inputs/hcp/kong2022/templates/hipp_group_average_t1only_151/group_average_surfaces"
     hcp_batch = hcp / "inputs/hcp/hippunfold/dense_corobl_batch"
     hcp_gradient = hcp / "work/hippomaps_gradients"
@@ -97,12 +98,13 @@ def build_stage_plan(
     def group_command(
         *, shared: Path, surface: Path, reference: Path, gradients: Path,
         out: Path, route: str, taxonomy: str, atlas: str, manifest: Path,
-        batch: Path, template: Path, dataset: str,
+        batch: Path, template: Path, dataset: str, profile_surface: Path | None = None,
     ) -> list[str]:
         return command(
             "05_02_run_group_atlas.py",
             "--shared-root", shared,
             "--surface-root", surface,
+            "--profile-surface-root", profile_surface or surface,
             "--reference-root", reference,
             "--gradient-root", gradients,
             "--out-root", out,
@@ -265,7 +267,7 @@ def build_stage_plan(
             "name": "lynch20_group",
             "command": group_command(
                 shared=lynch_shared, surface=lynch_shared, reference=lynch_shared,
-                gradients=hcp_gradient, out=lynch20_group, route="lynch2024_20net",
+                profile_surface=hcp_routea_ctxreg, gradients=hcp_gradient, out=lynch20_group, route="lynch2024_20net",
                 taxonomy="lynch20", atlas="lynch2024_20net", manifest=lynch_manifest,
                 batch=hcp_batch, template=hcp_template,
                 dataset="outputs_hcp",
@@ -284,7 +286,7 @@ def build_stage_plan(
             "name": "lynch8_group",
             "command": group_command(
                 shared=lynch_shared, surface=lynch_shared, reference=lynch_shared,
-                gradients=hcp_gradient, out=lynch8_group, route="lynch2024_8net",
+                profile_surface=hcp_routea_ctxreg, gradients=hcp_gradient, out=lynch8_group, route="lynch2024_8net",
                 taxonomy="lynch8", atlas="lynch2024_8net", manifest=lynch_manifest,
                 batch=hcp_batch, template=hcp_template,
                 dataset="outputs_hcp",
@@ -516,16 +518,17 @@ def _existing_group_run_inputs(repo_root: Path, manifest: Path) -> set[Path]:
 
 
 def _subject_surface_inputs(
-    *, surface_root: Path, subject: str, include_masks: bool = True
+    *, surface_root: Path, subject: str, include_masks: bool = True, include_timeseries: bool = True
 ) -> set[Path]:
     paths: set[Path] = set()
-    for smoothing in ("2mm", "4mm"):
-        for hemi in ("L", "R"):
-            paths.add(
-                surface_root
-                / f"sub-{subject}/surface/{smoothing}"
-                / f"sub-{subject}_hemi-{hemi}_timeseries.npy"
-            )
+    if include_timeseries:
+        for smoothing in ("2mm", "4mm"):
+            for hemi in ("L", "R"):
+                paths.add(
+                    surface_root
+                    / f"sub-{subject}/surface/{smoothing}"
+                    / f"sub-{subject}_hemi-{hemi}_timeseries.npy"
+                )
     if include_masks:
         for hemi in ("L", "R"):
             paths.add(
@@ -651,6 +654,7 @@ def required_preexisting_paths(repo_root: Path) -> list[Path]:
         / "inputs/hcp/lynch2024_fast_pfm_t1only/shared_inputs/pfm_nsi043_78"
     )
     hcp_surface = hcp / "inputs/hcp/kong2022/shared_inputs/surface"
+    hcp_routea_ctxreg = hcp / "inputs/hcp/kong2022/shared_inputs/routea_ctxreg"
     for subject in lynch_subjects:
         cortex_pfm = hcp / f"work/cortex_pfm/sub-{subject}/lynch2024"
         required.update(
@@ -663,7 +667,14 @@ def required_preexisting_paths(repo_root: Path) -> list[Path]:
             _subject_surface_inputs(surface_root=hcp_surface, subject=subject)
         )
         required.update(
-            _subject_surface_inputs(surface_root=lynch_shared, subject=subject)
+            _subject_surface_inputs(
+                surface_root=lynch_shared, subject=subject, include_timeseries=False
+            )
+        )
+        required.update(
+            _subject_surface_inputs(
+                surface_root=hcp_routea_ctxreg, subject=subject, include_masks=False
+            )
         )
     required.update(_hippunfold_surface_inputs(hcp_batch, lynch_subjects))
 

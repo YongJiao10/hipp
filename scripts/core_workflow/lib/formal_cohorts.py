@@ -10,14 +10,14 @@ from pathlib import Path
 class CohortContract:
     key: str
     expected_size: int
-    subject_pattern: re.Pattern[str]
+    bare_id_pattern: re.Pattern[str]
 
 
 CONTRACTS = {
-    "hcp151": CohortContract("hcp151", 151, re.compile(r"sub-\d{6}")),
-    "lynch78": CohortContract("lynch78", 78, re.compile(r"sub-\d{6}")),
-    "stanford_hc91": CohortContract("stanford_hc91", 91, re.compile(r"sub-[12]\d{3}")),
-    "stanford_symp103": CohortContract("stanford_symp103", 103, re.compile(r"sub-[34]\d{3}")),
+    "hcp151": CohortContract("hcp151", 151, re.compile(r"\d{6}")),
+    "lynch78": CohortContract("lynch78", 78, re.compile(r"\d{6}")),
+    "stanford_hc91": CohortContract("stanford_hc91", 91, re.compile(r"[12]\d{3}")),
+    "stanford_symp103": CohortContract("stanford_symp103", 103, re.compile(r"[34]\d{3}")),
 }
 MANIFEST_NAME_CONTRACTS = {
     "hcp_7t_hippocampus_fmri_qc_pass_t1only_151.txt": "hcp151",
@@ -49,10 +49,15 @@ def cohort_key_for_manifest(path: Path) -> str:
 
 def validate_subject_lines(lines: list[str], cohort_key: str, *, source: object) -> list[str]:
     contract = CONTRACTS[cohort_key]
-    subjects = [str(line).strip() for line in lines if str(line).strip()]
-    malformed = [subject for subject in subjects if contract.subject_pattern.fullmatch(subject) is None]
+    raw_subjects = [str(line).strip() for line in lines if str(line).strip()]
+    malformed = [
+        subject
+        for subject in raw_subjects
+        if contract.bare_id_pattern.fullmatch(subject.removeprefix("sub-")) is None
+    ]
     if malformed:
-        raise ValueError(f"Formal cohort {source} has non-canonical subject syntax: {malformed[:3]}")
+        raise ValueError(f"Formal cohort {source} has invalid subject syntax: {malformed[:3]}")
+    subjects = [f"sub-{subject.removeprefix('sub-')}" for subject in raw_subjects]
     if len(set(subjects)) != len(subjects):
         raise ValueError(f"Formal cohort {source} contains duplicate subjects")
     if len(subjects) != contract.expected_size:

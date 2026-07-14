@@ -59,8 +59,7 @@ identities are:
 Machine-readable source of truth: `scripts/core_workflow/step_registry.json`.
 
 The runner, audit, and both registry entries expose these same exact identities.
-Formal cohort preflight accepts only unique canonical IDs at the exact sizes
-Lynch 78, Stanford HC 91, and Stanford Symp 103. Formal group manifests bind
+Formal cohort preflight validates unique cohort-specific raw IDs at the exact sizes HCP 151, Lynch 78, Stanford HC 91, and Stanford Symp 103, then normalizes them to canonical `sub-` IDs for provenance comparison. Formal group manifests bind
 source provenance to the declared HCP or Stanford root; the audit verifies
 source existence/root containment and presentation PNG/title integrity.
 The HCP retained-manifest upgrader validates the canonical 151-subject cohort,
