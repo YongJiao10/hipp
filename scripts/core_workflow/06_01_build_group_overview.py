@@ -126,6 +126,21 @@ def overview_source_provenance(
     return provenance
 
 
+def overview_manifest_item(
+    *, base: dict[str, object], meta: dict[str, object]
+) -> dict[str, object]:
+    item = dict(base)
+    for key in (
+        "rendered_title",
+        "source_group_manifests",
+        "surface_affinity",
+        "affinity_description",
+    ):
+        if key in meta:
+            item[key] = meta[key]
+    return item
+
+
 def overview_title(
     *,
     atlas: str,
@@ -1529,25 +1544,21 @@ def main() -> int:
                         if row_meta
                         else "missing"
                     )
-                    item: dict[str, object] = {
-                        "atlas": atlas,
-                        "method": method,
-                        "gradient_comp_tag": comp_tag or None,
-                        "overview_png": meta["overview_png"],
-                        "smoothings": [r["smoothing"] for r in row_meta],
-                        "metric_summary": metric,
-                        "route_tag": args.route_tag,
-                        "mode_tag": effective_overview_mode_tag(method, args.mode_tag, assignment_variant),
-                        "assignment_variant": assignment_variant,
-                        "source_group_root": str(group_root),
-                    }
-                    for key in (
-                        "source_group_manifests",
-                        "surface_affinity",
-                        "affinity_description",
-                    ):
-                        if key in meta:
-                            item[key] = meta[key]
+                    item = overview_manifest_item(
+                        base={
+                            "atlas": atlas,
+                            "method": method,
+                            "gradient_comp_tag": comp_tag or None,
+                            "overview_png": meta["overview_png"],
+                            "smoothings": [r["smoothing"] for r in row_meta],
+                            "metric_summary": metric,
+                            "route_tag": args.route_tag,
+                            "mode_tag": effective_overview_mode_tag(method, args.mode_tag, assignment_variant),
+                            "assignment_variant": assignment_variant,
+                            "source_group_root": str(group_root),
+                        },
+                        meta=meta,
+                    )
                     items.append(item)
 
     manifest = {"present_dir": str(present_dir), "count": len(items), "items": items}

@@ -59,6 +59,22 @@ def test_gradient_overview_item_records_four_shifted_cosine_sources() -> None:
     assert "shifted-cosine" in rendered_title
 
 
+def test_overview_manifest_item_preserves_rendered_title() -> None:
+    title = "Group Overview | kong2022 | gradient-spectral | shifted-cosine"
+    item = overview_mod.overview_manifest_item(
+        base={"atlas": "kong2022", "method": "gradient-spectral"},
+        meta={
+            "rendered_title": title,
+            "source_group_manifests": ["/group/manifest.json"],
+            "surface_affinity": "shifted-cosine",
+            "affinity_description": overview_mod.GRADIENT_SPECTRAL_AFFINITY_DESCRIPTION,
+        },
+    )
+
+    assert item["rendered_title"] == title
+    assert item["source_group_manifests"] == ["/group/manifest.json"]
+
+
 @pytest.mark.parametrize("invalid_affinity", ["relu-cosine", None])
 def test_gradient_overview_rejects_inconsistent_affinity_provenance(
     invalid_affinity: str | None,

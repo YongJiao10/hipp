@@ -197,12 +197,29 @@ def build_formal_fixture(
             "items": overview_items,
         },
     )
+    contract["overview_manifests"] = [str(overview_manifest)]
     return FormalFixture(
         contract,
         tuple(manifest_paths),
         group_manifests,
         overview_manifest,
     )
+
+
+def test_default_contract_pins_exact_formal_overview_manifests() -> None:
+    contract = module.default_contract()
+
+    assert contract["overview_manifests"] == [
+        "outputs_hcp/present/overviews/routea_group_overview_manifest.json",
+        "outputs_hcp/present/overviews/routea_17net_group_overview_manifest.json",
+        "outputs_hcp/present/overviews/weighted_fisherz/weighted_fisherz_group_overview_manifest.json",
+        "outputs_hcp/present/overviews/lynch2024_20net/fisherz_group_overview_manifest.json",
+        "outputs_hcp/present/overviews/lynch2024_8net/fisherz_group_overview_manifest.json",
+        "outputs_stanford/present/overviews/routea_hc/fisherz_group_overview_manifest.json",
+        "outputs_stanford/present/overviews/routea_symp/fisherz_group_overview_manifest.json",
+        "outputs_stanford/present/overviews/routea_hc_weighted_fisherz/weighted_fisherz_group_overview_manifest.json",
+        "outputs_stanford/present/overviews/routea_symp_weighted_fisherz/weighted_fisherz_group_overview_manifest.json",
+    ]
 
 
 def test_audit_rejects_legacy_group_manifest(tmp_path: Path) -> None:

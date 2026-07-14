@@ -119,7 +119,7 @@ subgroup subject's FC, reference, surface, mask, and HippUnfold inputs; and each
 Lynch cohort subject's cortex PFM components, branch valid masks, RouteA-ctxreg profile time series, and HippUnfold surfaces. Inputs are derived from the pinned cohort manifests, so a
 present parent directory cannot hide a missing subject file. Products created
 by an earlier stage of the same 19-stage plan are deliberately excluded from
-preflight. Missing-input errors list the exact absent paths. Successful launch
+preflight. The final audit pins the nine formal presentation manifests rather than recursively treating historical generic manifests as release lineage. Missing-input errors list the exact absent paths. Successful launch
 JSON uses `status: launched` and reports detached records as `status_path`,
 `pid_path`, `stdout_path`, `stderr_path`, and `audit_path`.
 Preflight calls the retained upgrader's complete read-only prepare/validation

@@ -57,6 +57,18 @@ FORMAL_GROUPS = (
     ),
 )
 
+FORMAL_OVERVIEW_MANIFESTS = (
+    "outputs_hcp/present/overviews/routea_group_overview_manifest.json",
+    "outputs_hcp/present/overviews/routea_17net_group_overview_manifest.json",
+    "outputs_hcp/present/overviews/weighted_fisherz/weighted_fisherz_group_overview_manifest.json",
+    "outputs_hcp/present/overviews/lynch2024_20net/fisherz_group_overview_manifest.json",
+    "outputs_hcp/present/overviews/lynch2024_8net/fisherz_group_overview_manifest.json",
+    "outputs_stanford/present/overviews/routea_hc/fisherz_group_overview_manifest.json",
+    "outputs_stanford/present/overviews/routea_symp/fisherz_group_overview_manifest.json",
+    "outputs_stanford/present/overviews/routea_hc_weighted_fisherz/weighted_fisherz_group_overview_manifest.json",
+    "outputs_stanford/present/overviews/routea_symp_weighted_fisherz/weighted_fisherz_group_overview_manifest.json",
+)
+
 _GROUP_SETTINGS: dict[str, tuple[str, str]] = {
     "routea_full_k3_fisherz": ("routea", "fisherz"),
     "routea_17net_full_k3_fisherz": ("routea_17net", "fisherz"),
@@ -108,10 +120,7 @@ def default_contract() -> dict[str, object]:
         )
     return {
         "groups": groups,
-        "overview_roots": [
-            "outputs_hcp/present",
-            "outputs_stanford/present",
-        ],
+        "overview_manifests": list(FORMAL_OVERVIEW_MANIFESTS),
     }
 
 
