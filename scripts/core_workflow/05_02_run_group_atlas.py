@@ -28,7 +28,8 @@ Inputs:
   - --coverage-thresholds: Minimum coverage fraction values to evaluate (default: [0.80]).
   - --k-min: Minimum number of clusters to evaluate (default: 2).
   - --k-max: Maximum number of clusters to evaluate (default: 8).
-  - --force-final-k: Fixed K value for final presentation labels (default: 3).
+  - --default-k: Primary K value for rendered labels (default: 3); candidate K evaluation and automatic selection remain recorded diagnostics.
+  - --force-final-k: Explicit primary-K override only.
   - --instability-resamples: Number of split-half resamples for cluster instability (default: 100).
   - --null-resamples: Number of random spin tests for cortical mapping null distribution (default: 100).
   - --seed: Random seed for repeatability (default: 20260420).
@@ -464,7 +465,43 @@ def method_allowed_for_atlas(method: str, atlas: str) -> bool:
 
 
 def redundancy_profile_applicable(atlas: str) -> bool:
-    return not is_lynch2024_atlas(atlas)
+    # Kong2022 and both Lynch2024 route registries use the same full-sample
+    # cluster-to-network FC redundancy diagnostic.
+    return True
+
+
+def resolve_primary_k(
+    *,
+    force_final_k: int | None,
+    default_k: int | None,
+    automatic_k_final: int | None,
+) -> tuple[int | None, str]:
+    """Choose rendered/exported K without overwriting automatic selection evidence."""
+    if force_final_k is not None:
+        return int(force_final_k), "force_final_k"
+    if default_k is not None:
+        return int(default_k), "default_k"
+    if automatic_k_final is not None:
+        return int(automatic_k_final), "automatic_k"
+    return None, "none"
+
+
+def primary_k_provenance(
+    *,
+    force_final_k: int | None,
+    default_k: int | None,
+    automatic_k_final: int | None,
+) -> dict[str, int | str | None]:
+    chosen_k_final, primary_k_source = resolve_primary_k(
+        force_final_k=force_final_k,
+        default_k=default_k,
+        automatic_k_final=automatic_k_final,
+    )
+    return {
+        "chosen_k_final": chosen_k_final,
+        "automatic_k_final": automatic_k_final,
+        "primary_k_source": primary_k_source,
+    }
 
 
 def is_clusterless_method(method: str) -> bool:
@@ -1838,18 +1875,15 @@ def evaluate_k_candidate(
     redundant_pair_count = -1
     redundancy_profile_status = "not_requested"
     if k_selection_mode == "redundancy-aware" and roi_fc_bank_for_redundancy is not None:
-        if redundancy_profile_applicable(combo.atlas):
-            redundancy_profile = _cluster_vertex_fc_profile_for_redundancy_diagnostic(
-                labels_full=labels_full,
-                support_mask=support_mask,
-                subjects=subjects,
-                roi_fc_bank=roi_fc_bank_for_redundancy,
-                valid_masks_by_subject=valid_masks,
-            )
-            max_profile_similarity, redundant_pair_count = profile_redundancy_metrics(redundancy_profile)
-            redundancy_profile_status = "ok"
-        else:
-            redundancy_profile_status = "not_applicable_for_lynch2024"
+        redundancy_profile = _cluster_vertex_fc_profile_for_redundancy_diagnostic(
+            labels_full=labels_full,
+            support_mask=support_mask,
+            subjects=subjects,
+            roi_fc_bank=roi_fc_bank_for_redundancy,
+            valid_masks_by_subject=valid_masks,
+        )
+        max_profile_similarity, redundant_pair_count = profile_redundancy_metrics(redundancy_profile)
+        redundancy_profile_status = "ok"
 
     row = {
         "method": method,
@@ -1895,7 +1929,6 @@ def evaluate_k_candidate(
         "redundancy_profile_status": redundancy_profile_status,
         "nonredundant_ok": int(
             k_selection_mode != "redundancy-aware"
-            or redundancy_profile_status == "not_applicable_for_lynch2024"
             or (
                 np.isfinite(max_profile_similarity)
                 and max_profile_similarity <= float(PROFILE_REDUNDANCY_MAX_SIM)
@@ -3244,15 +3277,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--force-final-k",
         type=int,
-        default=3,
-        help="Force chosen_k_final to this K after evaluating candidate K rows; default is the maintained fixed K=3 display policy.",
+        default=None,
+        help="Explicitly override the primary output K after candidate K evaluation.",
     )
     parser.add_argument(
-        "--auto-k",
-        dest="force_final_k",
-        action="store_const",
-        const=None,
-        help="Re-enable legacy automatic K selection; fixed K=3 remains the default.",
+        "--default-k",
+        type=int,
+        default=3,
+        help="Primary K for rendered and exported labels; automatic K selection remains diagnostic evidence.",
     )
     parser.add_argument("--instability-resamples", type=int, default=100)
     parser.add_argument("--null-resamples", type=int, default=100)
@@ -3380,6 +3412,11 @@ def main() -> int:
         raise ValueError(
             f"--force-final-k must be within requested K range [{min(k_values)}, {max(k_values)}], "
             f"got {args.force_final_k}"
+        )
+    if args.default_k is not None and int(args.default_k) not in k_values:
+        raise ValueError(
+            f"--default-k must be within requested K range [{min(k_values)}, {max(k_values)}], "
+            f"got {args.default_k}"
         )
     rng = np.random.RandomState(int(args.seed))
     split_seeds = [int(x) for x in rng.randint(1, 2_000_000_000, size=int(args.instability_resamples))]
@@ -3531,6 +3568,7 @@ def main() -> int:
                             "expected_source_root": str(expected_source_root),
                             "k_selection_mode": str(args.k_selection_mode),
                             "force_final_k": int(args.force_final_k) if args.force_final_k is not None else None,
+                            "default_k": int(args.default_k) if args.default_k is not None else None,
                             "candidate_k_values": [int(k) for k in k_values],
                             "seed": int(args.seed),
                             "instability_resamples": int(args.instability_resamples),
@@ -3777,6 +3815,7 @@ def main() -> int:
                                 "hemi": hemi,
                                 "k_selection_mode": str(args.k_selection_mode),
                                 "force_final_k": int(args.force_final_k) if args.force_final_k is not None else None,
+                            "default_k": int(args.default_k) if args.default_k is not None else None,
                                 "coverage_threshold": float(tau),
                                 "V_min_fraction": float(args.v_min_fraction),
                                 "V_min_effective": int(v_min),
@@ -4000,8 +4039,7 @@ def main() -> int:
                             for row in rows:
                                 redundancy_status = str(row.get("redundancy_profile_status", "ok"))
                                 row["nonredundant_ok"] = int(
-                                    redundancy_status == "not_applicable_for_lynch2024"
-                                    or (
+                                    (
                                         np.isfinite(float(row["max_profile_similarity"]))
                                         and float(row["max_profile_similarity"]) <= float(PROFILE_REDUNDANCY_MAX_SIM)
                                         and int(row["redundant_pair_count"]) == 0
@@ -4075,6 +4113,7 @@ def main() -> int:
                                 "hemi": hemi,
                                 "k_selection_mode": str(args.k_selection_mode),
                                 "force_final_k": int(args.force_final_k) if args.force_final_k is not None else None,
+                            "default_k": int(args.default_k) if args.default_k is not None else None,
                                 "coverage_threshold": float(tau),
                                 "V_min_fraction": float(args.v_min_fraction),
                                 "V_min_effective": int(v_min),
@@ -4166,6 +4205,20 @@ def main() -> int:
                                 )
                             k_final = int(selected_rows[0]["k"])
                             decision_path = str(selected_rows[0]["k_final_decision_path"])
+                        automatic_k_final = None if forced_fixed_k else int(k_final)
+                        primary_k = primary_k_provenance(
+                            force_final_k=args.force_final_k,
+                            default_k=args.default_k,
+                            automatic_k_final=automatic_k_final,
+                        )
+                        if primary_k["chosen_k_final"] is None:
+                            raise RuntimeError(f"No primary K available for combo={combo}")
+                        k_final = int(primary_k["chosen_k_final"])
+                        if k_final not in labels_by_k:
+                            raise RuntimeError(
+                                f"Primary K={k_final} was not evaluated for combo={combo}; "
+                                f"evaluated={sorted(labels_by_k)}"
+                            )
                         labels_final = reorder_labels_by_long_axis(
                             labels_by_k[k_final],
                             long_axis_order_by_hemi[hemi],
@@ -4339,7 +4392,10 @@ def main() -> int:
                             rows,
                             k_selection_fields,
                         )
-                        write_json(run_dir / "k_selection_summary.json", {"rows": rows, "k_final": int(k_final)})
+                        write_json(
+                            run_dir / "k_selection_summary.json",
+                            {"rows": rows, "k_final": int(k_final), **primary_k},
+                        )
 
                         # Template label for downstream overview rendering.
                         lbl = make_cluster_label_gifti(labels_final.astype(np.int32), int(k_final), colors)
@@ -4398,6 +4454,7 @@ def main() -> int:
                             ),
                             "k_selection_mode": str(args.k_selection_mode),
                             "force_final_k": int(args.force_final_k) if args.force_final_k is not None else None,
+                            "default_k": int(args.default_k) if args.default_k is not None else None,
                             "coverage_threshold": float(tau),
                             "V_min_fraction": float(args.v_min_fraction),
                             "V_min_effective": int(v_min),
@@ -4440,6 +4497,8 @@ def main() -> int:
                             "candidate_k_values_evaluated": [int(r["k"]) for r in rows],
                             "redundancy_early_stop_enabled": bool(redundancy_early_stop_enabled),
                             "chosen_k_final": int(k_final),
+                            "automatic_k_final": primary_k["automatic_k_final"],
+                            "primary_k_source": str(primary_k["primary_k_source"]),
                             "subject_split_seeds": split_seeds,
                             "null_seeds": null_seeds,
                             "strong_null_network_permutation_scope": "subject_specific",

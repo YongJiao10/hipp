@@ -478,12 +478,13 @@ def test_group_atlas_public_methods_drop_partial_corr_branches() -> None:
     assert not atlas_mod.is_network_method("group-network-partial-spectral")
 
 
-def test_group_atlas_parser_defaults_to_fixed_k3() -> None:
+def test_group_atlas_parser_defaults_to_primary_k3_without_forcing_selection() -> None:
     parser = atlas_mod.build_arg_parser()
     args = parser.parse_args([])
     assert int(args.k_min) == 2
     assert int(args.k_max) == 8
-    assert int(args.force_final_k) == 3
+    assert args.force_final_k is None
+    assert int(args.default_k) == 3
     assert not hasattr(args, "surface_affinity")
 
 
@@ -642,7 +643,8 @@ def test_smoke_command_plan_uses_isolated_fixedk_full_layout() -> None:
     assert "present_group" not in joined
     assert "present_fixedk" not in joined
     assert "10perc" not in joined
-    assert "--force-final-k 3" in joined
+    assert "--default-k 3" in joined
+    assert "--force-final-k 3" not in joined
     assert "--k-min 2 --k-max 8" in joined
     assert str(layout["overviews"]) in joined
     assert "group-network-partial-spectral" not in joined

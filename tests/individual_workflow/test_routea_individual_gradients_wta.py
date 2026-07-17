@@ -323,9 +323,62 @@ def test_individual_k_selection_rows_cover_full_fixed_k_curve():
     assert [int(row["k"]) for row in rows] == list(range(2, 9))
     assert [int(row["selected_final"]) for row in rows].count(1) == 1
     assert next(row for row in rows if int(row["selected_final"]) == 1)["k"] == 3
-    assert [float(row["group_ari_mean"]) for row in rows] == [1.0] * 7
+    assert [row["group_ari_mean"] for row in rows] == [""] * 7
+    assert [row["ARI_null_5pct"] for row in rows] == [""] * 7
     assert float(rows[0]["max_profile_similarity"]) == 0.25
     assert int(rows[-1]["redundant_pair_count"]) == 2
+
+
+def test_individual_k_selection_cache_requires_exact_current_range_and_no_fake_ari(tmp_path):
+    import sys
+    path = REPO_ROOT / "scripts" / "individual_workflow" / "02_build_individual_overviews.py"
+    if str(path.parent) not in sys.path:
+        sys.path.insert(0, str(path.parent))
+    spec = importlib.util.spec_from_file_location("build_individual_overviews_k_cache", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    legacy = tmp_path / "legacy_k_selection_summary.tsv"
+    legacy.write_text(
+        "k\tgroup_ari_mean\n" + "\n".join(f"{k}\t1.0" for k in range(2, 11)) + "\n",
+        encoding="utf-8",
+    )
+    assert module.k_selection_summary_has_full_range(legacy) is False
+
+    current = tmp_path / "current_k_selection_summary.tsv"
+    current.write_text(
+        "k\tgroup_ari_mean\tARI_null_5pct\n"
+        + "\n".join(f"{k}\t\t" for k in range(2, 9))
+        + "\n",
+        encoding="utf-8",
+    )
+    assert module.k_selection_summary_has_full_range(current) is True
+
+
+def test_individual_overview_jobs_one_uses_serial_worker_path():
+    import sys
+    path = REPO_ROOT / "scripts" / "individual_workflow" / "02_build_individual_overviews.py"
+    if str(path.parent) not in sys.path:
+        sys.path.insert(0, str(path.parent))
+    spec = importlib.util.spec_from_file_location("build_individual_overviews_serial", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    class PoolMustNotBeConstructed:
+        def __init__(self, *args, **kwargs):
+            raise AssertionError("jobs=1 must not construct a multiprocessing pool")
+
+    module.ProcessPoolExecutor = PoolMustNotBeConstructed
+    task = {"subject": "100610", "method": "gradient_spectral_k3"}
+    rows = module.run_overview_tasks(
+        [task],
+        jobs=1,
+        worker=lambda payload: {"status": "ok", "subject": payload["subject"]},
+    )
+
+    assert rows == [{"status": "ok", "subject": "100610"}]
 
 
 

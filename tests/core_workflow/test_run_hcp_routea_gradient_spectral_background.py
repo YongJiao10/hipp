@@ -32,7 +32,7 @@ def test_stage_plan_runs_only_routea_8_and_17net_gradient_outputs() -> None:
     ]
     joined = "\n".join(" ".join(stage["command"]) for stage in stages)
     assert joined.count("--methods gradient-spectral") == 4
-    assert joined.count("--k-min 2 --k-max 8 --force-final-k 3") == 2
+    assert joined.count("--k-min 2 --k-max 8 --default-k 3") == 2
     assert joined.count("--assignment-variant both") == 2
     assert "--network-taxonomy canonical8" in joined
     assert "--network-taxonomy family17" in joined

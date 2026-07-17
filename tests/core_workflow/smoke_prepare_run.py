@@ -300,7 +300,7 @@ def build_command_plan(*, subjects: list[str], layout: dict[str, Path], python_e
                         "2",
                         "--k-max",
                         "8",
-                        "--force-final-k",
+                        "--default-k",
                         "3",
                         "--instability-resamples",
                         "5",

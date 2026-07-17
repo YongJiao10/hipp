@@ -232,12 +232,30 @@ def test_05_02_accepts_lynch_gradient_and_wta_only() -> None:
 
 
 
-def test_lynch_does_not_use_vertex_fc_profile_redundancy_branch() -> None:
-    assert atlas_mod.redundancy_profile_applicable("lynch2024_20net") is False
-    assert atlas_mod.redundancy_profile_applicable("lynch2024_8net") is False
+def test_lynch_uses_same_vertex_fc_profile_redundancy_branch_as_kong() -> None:
+    assert atlas_mod.redundancy_profile_applicable("lynch2024_20net") is True
+    assert atlas_mod.redundancy_profile_applicable("lynch2024_8net") is True
     assert atlas_mod.redundancy_profile_applicable("kong2022") is True
     legacy_name = "_".join(["cluster", "roi", "profile", "from", "fc", "bank"])
     assert not hasattr(atlas_mod, legacy_name)
+
+
+def test_default_k_is_separate_from_forced_final_k() -> None:
+    args = atlas_mod.build_arg_parser().parse_args([])
+    assert args.force_final_k is None
+    assert args.default_k == 3
+    assert hasattr(atlas_mod, "resolve_primary_k")
+
+
+def test_primary_k_provenance_preserves_automatic_selection() -> None:
+    assert hasattr(atlas_mod, "primary_k_provenance")
+    assert atlas_mod.primary_k_provenance(
+        force_final_k=None, default_k=3, automatic_k_final=5
+    ) == {
+        "chosen_k_final": 3,
+        "automatic_k_final": 5,
+        "primary_k_source": "default_k",
+    }
 
 
 def test_lynch_cluster_profile_uses_cluster_time_series_correlation(tmp_path: Path) -> None:

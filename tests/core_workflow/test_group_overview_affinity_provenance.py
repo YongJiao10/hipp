@@ -5,6 +5,7 @@ import importlib.util
 import sys
 from pathlib import Path
 
+import matplotlib.pyplot as plt
 import pytest
 
 
@@ -73,6 +74,35 @@ def test_overview_manifest_item_preserves_rendered_title() -> None:
 
     assert item["rendered_title"] == title
     assert item["source_group_manifests"] == ["/group/manifest.json"]
+
+
+def test_individual_overview_title_is_not_labeled_as_group() -> None:
+    title = overview_mod.overview_title(
+        atlas="kong2022",
+        method="gradient-spectral",
+        route_tag="routea",
+        mode_tag=None,
+        assignment_variant="fisherz",
+        surface_affinity="shifted-cosine",
+        overview_scope="Individual",
+    )
+
+    assert title.startswith("Individual Overview | ")
+    assert "Group Overview" not in title
+
+
+def test_individual_ari_skip_preserves_panel_scaffold_without_lines() -> None:
+    fig, ax = plt.subplots()
+    try:
+        overview_mod.plot_subject_split_ari_skipped(ax, smoothing="2mm")
+
+        assert ax.axison is True
+        assert ax.get_xlim() == (1.5, 8.5)
+        assert ax.get_ylim() == (-0.02, 1.02)
+        assert list(ax.lines) == []
+        assert "ARI skipped" in ax.get_title()
+    finally:
+        plt.close(fig)
 
 
 @pytest.mark.parametrize("invalid_affinity", ["relu-cosine", None])

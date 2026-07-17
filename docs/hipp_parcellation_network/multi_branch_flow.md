@@ -56,9 +56,9 @@ Use numbered public entrypoints in `scripts/core_workflow/`:
   - start from the `02_03` NSI manifest (`nsi >= 0.43`, expected `n=78`) and external local FASTANS priors under `external/FASTANS/resources/PFM/priors/Lynch2024/`
   - run `03_04_run_lynch2024_fastans_pfm.py` to create official per-subject hard-label PFM dlabel/dscalar assets and hard-label component time series under `outputs_hcp/work/cortex_pfm/sub-<id>/lynch2024/`, then write shared inputs under `outputs_hcp/inputs/hcp/lynch2024_fast_pfm_t1only/shared_inputs/pfm_nsi043_78/`
   - `lynch2024_20net` keeps exactly 20 unique Lynch parent networks after excluding `Noise`; `lynch2024_8net` uses the canonical merge from `config/cross_atlas_network_merge.json`
-  - `gradient-spectral` uses one shared non-Noise Lynch20 component gradient bank with full-graph BrainSpace affinity (`brainspace_sparsity=0.0`); `lynch2024_8net` does not keep a separate 8-column gradient bank
+  - `gradient-spectral` uses one shared non-Noise Lynch20 component gradient bank with shifted-cosine surface affinity; `lynch2024_8net` does not keep a separate 8-column gradient bank
   - `05_02` passes `--profile-surface-root outputs_hcp/inputs/hcp/kong2022/shared_inputs/routea_ctxreg` for cluster-network profile annotation, matching Kong RouteA's cluster-mean hippocampal time-series correlation while leaving Lynch masks, FC caches, references, and gradient inputs under the Lynch shared root
-  - Lynch K diagnostics do not apply the legacy vertex-FC profile redundancy gate; summaries record `redundancy_profile_status=not_applicable_for_lynch2024`
+  - Lynch K diagnostics use the same full-sample cluster-to-network FC redundancy gate as Kong2022; summaries record finite maximum profile similarity and redundant-pair counts
   - maintained downstream outputs are `gradient-spectral` and `wta-top` only, with group roots `outputs_hcp/work/group_atlas/lynch2024_20net_nsi043_full_k3_normalized_wta/` and `outputs_hcp/work/group_atlas/lynch2024_8net_nsi043_full_k3_normalized_wta/`
 - Kong2022 RouteB branch:
   - uses shared Kong2022 reference build (`03_01`) and standard FC stages
@@ -70,7 +70,7 @@ Use numbered public entrypoints in `scripts/core_workflow/`:
 
 `gradient-spectral` is maintained for Kong2022 and Lynch2024 ROI-registry routes. `05_01` first computes HippoMaps/BrainSpace continuous gradients from vertex-to-ROI/component FC caches from `04_01`: Fisher-z per subject, group mean, column-wise feature z-score across vertices, then `GradientMaps(n_components=N, kernel="pearson", random_state=0)` by default. Kong400 keeps BrainSpace high-dimensional sparsity (`0.9`); low-dimensional Lynch component banks use full-graph affinity (`0.0`). The default computes raw G1-G5 with a fixed diffusion initialization seed, aligns component order and sign within each route to `4mm/hemi_L` when that combo is present, writes only aligned gradient arrays, and records lambdas/EV fractions plus `gradient_random_state` in aligned component order.
 
-`05_02_run_group_atlas.py` consumes those aligned saved artifacts from `--gradient-root` for `gradient-spectral` and clusters selected gradient columns (`G1,G2,G3` by default). Output paths encode selected components as a `g{components}` subdirectory under the coverage threshold so separate component experiments do not overwrite each other. The maintained default evaluates the `K=2..8` diagnostic curve while fixing final presentation labels at `K=3`.
+`05_02_run_group_atlas.py` consumes those aligned saved artifacts from `--gradient-root` for `gradient-spectral` and clusters selected gradient columns (`G1,G2,G3` by default). Output paths encode selected components as a `g{components}` subdirectory under the coverage threshold so separate component experiments do not overwrite each other. The maintained default evaluates K=2..8, records automatic K selection, and uses explicit default K=3 only for primary labels and overview display.
 
 ## Confidence And Presentation
 

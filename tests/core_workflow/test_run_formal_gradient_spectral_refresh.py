@@ -55,7 +55,8 @@ def test_stage_plan_is_exact_sequential_formal_scope() -> None:
             assert _option(command, "--methods") == "gradient-spectral"
             assert _option(command, "--k-min") == "2"
             assert _option(command, "--k-max") == "8"
-            assert _option(command, "--force-final-k") == "3"
+            assert "--force-final-k" not in command
+            assert _option(command, "--default-k") == "3"
             assert _option(command, "--jobs") == "1"
         for nested_command in commands:
             text = " ".join(nested_command).lower()

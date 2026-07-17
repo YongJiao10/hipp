@@ -78,7 +78,7 @@ def build_stage_plan(*, repo_root: Path, python_exe: Path, jobs: int) -> list[di
             "--smoothings", "2mm", "4mm",
             "--hemis", "L", "R",
             "--coverage-thresholds", "0.80",
-            "--k-min", "2", "--k-max", "8", "--force-final-k", "3",
+            "--k-min", "2", "--k-max", "8", "--default-k", "3",
             "--jobs", str(int(jobs)),
             "--resume",
         ]

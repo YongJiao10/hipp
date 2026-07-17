@@ -118,7 +118,7 @@ def build_stage_plan(
             "--atlases", atlas,
             "--k-min", 2,
             "--k-max", 8,
-            "--force-final-k", 3,
+            "--default-k", 3,
             "--jobs", jobs,
             "--resume",
         )

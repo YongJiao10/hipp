@@ -132,6 +132,8 @@ def overview_manifest_item(
     item = dict(base)
     for key in (
         "rendered_title",
+        "overview_scope",
+        "subject_split_ari",
         "source_group_manifests",
         "surface_affinity",
         "affinity_description",
@@ -149,9 +151,10 @@ def overview_title(
     mode_tag: str | None,
     assignment_variant: str | None,
     surface_affinity: object = None,
+    overview_scope: str = "Group",
 ) -> str:
     return (
-        f"Group Overview | {atlas} | {method}"
+        f"{str(overview_scope).strip() or 'Group'} Overview | {atlas} | {method}"
         + (f" | {route_tag}" if route_tag else "")
         + (f" | {mode_tag}" if mode_tag else "")
         + (f" | {assignment_variant}" if assignment_variant else "")
@@ -787,6 +790,36 @@ def annotate_missing_ari_curves(ax, missing_hemis: list[str]) -> None:
     )
 
 
+def plot_subject_split_ari_skipped(ax, *, smoothing: str) -> None:
+    """Keep the ARI panel scaffold while omitting non-estimable curves.
+
+    A single subject cannot support a subject-split ARI estimate.  The panel
+    therefore retains the same limits, labels, and footprint as the group
+    overview, but deliberately contains no curves or reference lines.
+    """
+    # Individual overviews use the fixed K=2..8 evaluation range.  Keeping
+    # those limits preserves the original 2x2 layout instead of collapsing the
+    # panel when the subject-split statistic is skipped.
+    ax.set_xlim(1.5, 8.5)
+    ax.set_ylim(-0.02, 1.02)
+    ax.set_xticks(np.arange(2, 9, dtype=int))
+    ax.set_yticks(np.linspace(0.0, 1.0, 6))
+    ax.set_xlabel("K", fontsize=FS_LABEL)
+    ax.set_ylabel("Subject-split ARI", fontsize=FS_LABEL)
+    ax.set_title(f"{smoothing} | K selection (ARI skipped)", fontsize=FS_TITLE)
+    ax.tick_params(labelsize=FS_TICK)
+    ax.text(
+        0.03,
+        0.04,
+        "ARI skipped (single subject)",
+        transform=ax.transAxes,
+        ha="left",
+        va="bottom",
+        fontsize=FS_SMALL,
+        color="#666666",
+    )
+
+
 def plot_k_gate_panel(
     ax,
     *,
@@ -1005,6 +1038,8 @@ def render_combo(
     assignment_variant: str = "fisherz",
     gradient_comp_tag: str = "",
     output_name: str | None = None,
+    overview_scope: str = "Group",
+    skip_subject_split_ari: bool = False,
 ) -> dict[str, object]:
     effective_mode_tag = effective_overview_mode_tag(method, mode_tag, assignment_variant)
     effective_assignment_variant = (
@@ -1113,7 +1148,7 @@ def render_combo(
                         scene=scene,
                         outdir=Path(tmp),
                         name=f"merged_group_vertex_wta_{method}_{atlas}_{smoothing}",
-                        title=f"Group functional atlas {method} {atlas} {smoothing} {effective_assignment_variant}",
+                        title=f"{str(overview_scope).strip() or 'Group'} functional atlas {method} {atlas} {smoothing} {effective_assignment_variant}",
                         left_labels=left_label,
                         right_labels=right_label,
                         left_surface=surf_l,
@@ -1151,10 +1186,13 @@ def render_combo(
                 ax0.axvline(int(k_l_raw), color="#1f77b4", ls="--", lw=1.0)
             if k_r_raw is not None:
                 ax0.axvline(int(k_r_raw), color="#d62728", ls="--", lw=1.0)
-            ax0.set_title(f"{smoothing} | K selection (ARI)", fontsize=FS_TITLE)
+            ax0.set_title(f"{smoothing} | K diagnostics (ARI)", fontsize=FS_TITLE)
             ax0.set_xlabel("K", fontsize=FS_LABEL)
             ax0.set_ylabel("Subject-split ARI", fontsize=FS_LABEL)
             ax0.tick_params(labelsize=FS_TICK)
+            if skip_subject_split_ari:
+                ax0.clear()
+                plot_subject_split_ari_skipped(ax0, smoothing=smoothing)
             ax0.legend(
                 handles=[
                     Line2D([0], [0], color="#1f77b4", lw=1.6, marker="o", label="Left hemisphere"),
@@ -1169,6 +1207,9 @@ def render_combo(
                 labelspacing=0.28,
                 handlelength=2.1,
             )
+            if skip_subject_split_ari:
+                ax0.clear()
+                plot_subject_split_ari_skipped(ax0, smoothing=smoothing)
             diag_lines: list[str] = []
             for hemi_lbl, k_raw, d_hemi, tsv_rows in [
                 ("L", k_l_raw, d_l, rows_l_tsv),
@@ -1231,20 +1272,35 @@ def render_combo(
         ax0 = fig.add_subplot(sub[0, 0])
         rows_l = read_tsv(d_l / "k_selection_summary.tsv")
         rows_r = read_tsv(d_r / "k_selection_summary.tsv")
-        missing_ari_hemis: list[str] = []
-        for hemi, rows, color in [("L", rows_l, "#1f77b4"), ("R", rows_r, "#d62728")]:
-            if not plot_ari_summary_curve(ax0, rows, hemi=hemi, color=color):
-                missing_ari_hemis.append(hemi)
-        annotate_missing_ari_curves(ax0, missing_ari_hemis)
+        if skip_subject_split_ari:
+            plot_subject_split_ari_skipped(ax0, smoothing=smoothing)
+        else:
+            missing_ari_hemis: list[str] = []
+            for hemi, rows, color in [("L", rows_l, "#1f77b4"), ("R", rows_r, "#d62728")]:
+                if not plot_ari_summary_curve(ax0, rows, hemi=hemi, color=color):
+                    missing_ari_hemis.append(hemi)
+            annotate_missing_ari_curves(ax0, missing_ari_hemis)
+        primary_sources = {str(m_l.get("primary_k_source", "automatic_k")), str(m_r.get("primary_k_source", "automatic_k"))}
+        primary_label = "Default K" if primary_sources == {"default_k"} else "Primary K"
         ax0.axvline(k_l, color="#1f77b4", ls="--", lw=1.0)
         ax0.axvline(k_r, color="#d62728", ls="--", lw=1.0)
+        automatic_k_l = m_l.get("automatic_k_final")
+        automatic_k_r = m_r.get("automatic_k_final")
+        automatic_marker = False
+        for automatic_k, primary_k, color in [(automatic_k_l, k_l, "#1f77b4"), (automatic_k_r, k_r, "#d62728")]:
+            if automatic_k is not None and int(automatic_k) != int(primary_k):
+                ax0.axvline(int(automatic_k), color=color, ls=":", lw=1.0)
+                automatic_marker = True
+        legend_handles = [
+            Line2D([0], [0], color="#1f77b4", lw=1.6, marker="o", label="Left hemisphere"),
+            Line2D([0], [0], color="#d62728", lw=1.6, marker="o", label="Right hemisphere"),
+            Line2D([0], [0], color="#555555", lw=1.2, ls=":", label="Null baseline"),
+            Line2D([0], [0], color="#555555", lw=1.2, ls="--", label=primary_label),
+        ]
+        if automatic_marker:
+            legend_handles.append(Line2D([0], [0], color="#555555", lw=1.2, ls=":", label="Automatic K"))
         ax0.legend(
-            handles=[
-                Line2D([0], [0], color="#1f77b4", lw=1.6, marker="o", label="Left hemisphere"),
-                Line2D([0], [0], color="#d62728", lw=1.6, marker="o", label="Right hemisphere"),
-                Line2D([0], [0], color="#555555", lw=1.2, ls=":", label="Null baseline"),
-                Line2D([0], [0], color="#555555", lw=1.2, ls="--", label="Selected K*"),
-            ],
+            handles=legend_handles,
             loc="center",
             fontsize=FS_LEGEND_SMALL,
             framealpha=0.9,
@@ -1253,10 +1309,14 @@ def render_combo(
             labelspacing=0.28,
             handlelength=2.1,
         )
-        ax0.set_title(f"{smoothing} | K selection (ARI)", fontsize=FS_TITLE)
+        if not skip_subject_split_ari:
+            ax0.set_title(f"{smoothing} | K selection (ARI)", fontsize=FS_TITLE)
         ax0.set_xlabel("K", fontsize=FS_LABEL)
         ax0.set_ylabel("Subject-split ARI", fontsize=FS_LABEL)
         ax0.tick_params(labelsize=FS_TICK)
+        if skip_subject_split_ari:
+            ax0.clear()
+            plot_subject_split_ari_skipped(ax0, smoothing=smoothing)
 
         ax1 = fig.add_subplot(sub[0, 1])
         nets = [str(x) for x in load_json(d_l / "group_feature_summary.json")["network_names"]]
@@ -1351,7 +1411,7 @@ def render_combo(
                     scene=scene,
                     outdir=Path(tmp),
                     name=f"merged_group_cluster_wta_{method}_{atlas}_{smoothing}",
-                    title=f"Group functional atlas {method} {atlas} {smoothing} {effective_assignment_variant}",
+                    title=f"{str(overview_scope).strip() or 'Group'} functional atlas {method} {atlas} {smoothing} {effective_assignment_variant}",
                     left_labels=left_label,
                     right_labels=right_label,
                     left_surface=surf_l,
@@ -1389,6 +1449,7 @@ def render_combo(
         mode_tag=effective_mode_tag,
         assignment_variant=effective_assignment_variant,
         surface_affinity=source_provenance.get("surface_affinity"),
+        overview_scope=overview_scope,
     )
     fig.suptitle(rendered_title, fontsize=FS_SUPTITLE)
     out_png.parent.mkdir(parents=True, exist_ok=True)
@@ -1398,6 +1459,8 @@ def render_combo(
         "overview_png": str(out_png),
         "rows": rows_meta,
         "rendered_title": rendered_title,
+        "overview_scope": str(overview_scope).strip() or "Group",
+        "subject_split_ari": "skipped" if skip_subject_split_ari else "rendered",
         **source_provenance,
     }
 

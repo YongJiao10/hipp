@@ -53,6 +53,10 @@ from lib.weighted_fisherz import (
     assignment_status_from_weighted_network_profile,
     weighted_cluster_network_fisherz_profile_from_timeseries,
 )
+from lib.surface_affinity import (
+    GRADIENT_SPECTRAL_AFFINITY,
+    GRADIENT_SPECTRAL_AFFINITY_DESCRIPTION,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_ADAPTER_ROOT = DEFAULT_OUT_ROOT / "_overview_core_adapter"
@@ -165,8 +169,8 @@ def fixed_k_selection_rows(
                 "n_subjects": 1,
                 "n_support_vertices": int(n_support),
                 "V_min_effective": 1,
-                "group_ari_mean": 1.0,
-                "group_ari_se": 0.0,
+                "group_ari_mean": "",
+                "group_ari_se": "",
                 "subject_split_requested": 0,
                 "subject_split_used": 0,
                 "subject_split_skipped_overlap": 0,
@@ -175,9 +179,9 @@ def fixed_k_selection_rows(
                 "run_aware_ari_se": "",
                 "run_aware_n_pairs": 0,
                 "run_aware_n_used": 0,
-                "ARI_null_mean": 0.0,
-                "ARI_null_5pct": 0.0,
-                "ARI_weak_null_mean": 0.0,
+                "ARI_null_mean": "",
+                "ARI_null_5pct": "",
+                "ARI_weak_null_mean": "",
                 "B_null_requested": 0,
                 "B_null_used_strong": 0,
                 "B_null_used_weak": 0,
@@ -216,7 +220,12 @@ def k_selection_summary_has_full_range(path: Path, *, k_values: range = range(2,
     header = lines[0].split("	")
     if "k" not in header:
         return False
+    for field in ("group_ari_mean", "ARI_null_5pct"):
+        if field not in header:
+            return False
     k_idx = header.index("k")
+    ari_idx = header.index("group_ari_mean")
+    null_idx = header.index("ARI_null_5pct")
     got: set[int] = set()
     for line in lines[1:]:
         parts = line.split("	")
@@ -226,7 +235,11 @@ def k_selection_summary_has_full_range(path: Path, *, k_values: range = range(2,
             got.add(int(parts[k_idx]))
         except ValueError:
             continue
-    return set(int(k) for k in k_values).issubset(got)
+        if ari_idx >= len(parts) or null_idx >= len(parts):
+            return False
+        if parts[ari_idx].strip() or parts[null_idx].strip():
+            return False
+    return got == set(int(k) for k in k_values)
 
 
 def individual_gradient_redundancy_by_k(
@@ -473,6 +486,19 @@ def materialize_gradient_core_inputs(*, subject: str, work_root: Path, adapter_r
             write_json(dst / "group_feature_summary.json", {"network_names": network_names, "N_ref": int(len(network_names)), "network_column": network_column})
             for variant_name, variant_spec in assignment_variants.items():
                 variant_rows = [dict(x) for x in variant_spec["status_rows"]]
+                if variant_name == "count":
+                    # Count rendering reconstructs the profile from selected ROI items.
+                    # For an individual subject the q-thresholded list can be empty,
+                    # while top-N counts are still defined; encode the complete top-N
+                    # taxonomy list so the renderer sees the same count profile.
+                    for row_idx, row in enumerate(variant_rows):
+                        selected = []
+                        for net_idx, count in enumerate(count_profile[row_idx]):
+                            selected.extend(
+                                [{network_column: network_names[net_idx]}]
+                                * int(round(float(count)))
+                            )
+                        row["top_positive_selected"] = selected
                 functional_labels, functional_meta, label_items = core.functional_atlas_from_clusters(
                     group_labels_final=labels,
                     status_rows=variant_rows,
@@ -566,6 +592,8 @@ def materialize_gradient_core_inputs(*, subject: str, work_root: Path, adapter_r
                 "template_spec_path": str(subject_spec_path(surf, subject).resolve()),
                 "assignment_mode": "cluster_level",
                 "network_column": network_column,
+                "surface_affinity": GRADIENT_SPECTRAL_AFFINITY,
+                "affinity_description": GRADIENT_SPECTRAL_AFFINITY_DESCRIPTION,
                 "default_assignment_variant": default_variant,
                 "group_functional_atlas_labels": functional_variant_payloads[default_variant]["group_functional_atlas_labels"],
                 "group_functional_atlas_label_map": functional_variant_payloads[default_variant]["group_functional_atlas_label_map"],
@@ -670,6 +698,8 @@ def render_via_core(*, subject: str, method: str, work_root: Path, overview_root
             mode_tag=("weighted_fisherz" if method_key == "gradient_weighted_fisherz" else None),
             assignment_variant=("weighted_fisherz" if method_key == "gradient_weighted_fisherz" else ("count" if method_key == "gradient_count" else "fisherz")),
             gradient_comp_tag=GRADIENT_COMP_TAG,
+            overview_scope="Individual",
+            skip_subject_split_ari=True,
         )
     else:
         wta_variant_by_method = {
@@ -691,6 +721,8 @@ def render_via_core(*, subject: str, method: str, work_root: Path, overview_root
             mode_tag=mode_tag,
             assignment_variant=("weighted_fisherz" if mode_tag else "fisherz"),
             gradient_comp_tag="",
+            overview_scope="Individual",
+            skip_subject_split_ari=True,
         )
     final = overview_output_path(overview_root, method_key, subject, network_column=network_column)
     final.parent.mkdir(parents=True, exist_ok=True)
@@ -730,6 +762,25 @@ def write_status_tsv(path: Path, rows: list[dict[str, object]]) -> None:
     for row in rows:
         lines.append("\t".join(str(row.get(field, "")).replace("\t", " ").replace("\n", " ") for field in fields))
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def run_overview_tasks(
+    tasks: list[dict[str, object]],
+    *,
+    jobs: int,
+    worker=overview_worker,
+) -> list[dict[str, object]]:
+    """Run overview workers without spawning a pool for the single-job path."""
+    if not tasks:
+        return []
+    if int(jobs) == 1:
+        return [worker(task) for task in tasks]
+    rows: list[dict[str, object]] = []
+    with ProcessPoolExecutor(max_workers=int(jobs)) as executor:
+        future_to_task = {executor.submit(worker, task): task for task in tasks}
+        for future in as_completed(future_to_task):
+            rows.append(future.result())
+    return rows
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
@@ -776,11 +827,8 @@ def main(argv: list[str] | None = None) -> int:
     jobs = max(1, min(int(args.jobs), 10, len(tasks) if tasks else 1))
     started = time.time()
     if tasks:
-        with ProcessPoolExecutor(max_workers=jobs) as executor:
-            future_to_task = {executor.submit(overview_worker, task): task for task in tasks}
-            for future in as_completed(future_to_task):
-                rows.append(future.result())
-                write_status_tsv(overview_root / "overview_status.tsv", sorted(rows, key=lambda x: (str(x.get("method", "")), str(x.get("subject", "")))))
+        rows.extend(run_overview_tasks(tasks, jobs=jobs))
+        write_status_tsv(overview_root / "overview_status.tsv", sorted(rows, key=lambda x: (str(x.get("method", "")), str(x.get("subject", "")))))
     rows = sorted(rows, key=lambda x: (str(x.get("method", "")), str(x.get("subject", ""))))
     write_status_tsv(overview_root / "overview_status.tsv", rows)
     summary = {"status": "failed" if any(str(row.get("status")) == "failed" for row in rows) else "ok", "workflow": "individual_core_06_01_overview_adapter", "work_root": str(work_root), "adapter_root": str(adapter_root), "overview_root": str(overview_root), "subjects": len(subjects), "methods": methods, "total": len(rows), "ok": sum(1 for row in rows if str(row.get("status")) == "ok"), "failed": sum(1 for row in rows if str(row.get("status")) == "failed"), "jobs": jobs, "elapsed_seconds": time.time() - started, "git_commit": git_commit(short=True), "updated_at": utc_now_iso(zulu=True), "status_tsv": str((overview_root / "overview_status.tsv").resolve())}
