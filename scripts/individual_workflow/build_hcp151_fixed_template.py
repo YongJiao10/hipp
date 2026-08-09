@@ -10,6 +10,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
+import nibabel as nib
 import numpy as np
 
 
@@ -39,6 +40,24 @@ DEFAULT_GRADIENT_ROOT = (
     REPO_ROOT / "outputs_hcp" / "work" / "hippomaps_gradients" / "routea"
 )
 DEFAULT_OUT_ROOT = REPO_ROOT / "outputs_hcp" / "templates" / TEMPLATE_ID
+
+
+def _normalized_subjects(raw: object, *, manifest_path: Path) -> tuple[str, ...]:
+    if not isinstance(raw, list) or len(raw) != N_SUBJECTS:
+        raise ValueError(f"Expected exactly 151 subjects in {manifest_path}")
+    subjects = tuple(str(value).strip().removeprefix("sub-") for value in raw)
+    if any(not subject or not subject.isdigit() for subject in subjects):
+        raise ValueError(f"Invalid subject ID in {manifest_path}")
+    if len(set(subjects)) != N_SUBJECTS:
+        raise ValueError(f"Expected 151 unique subjects in {manifest_path}")
+    return subjects
+
+
+def _surface_vertex_count(path: Path) -> int:
+    points = np.asarray(nib.load(str(path)).agg_data("pointset"))
+    if points.ndim != 2 or points.shape[1] != 3:
+        raise ValueError(f"Consumed surface lacks one pointset: {path} ({points.shape})")
+    return int(points.shape[0])
 
 
 @dataclass(frozen=True)
@@ -161,9 +180,7 @@ def _validate_source_combo(
         _require_manifest_value(manifest, "smoothing", smoothing, path)
         _require_manifest_value(manifest, "hemi", hemi, path)
         _require_manifest_value(manifest, "n_subjects", N_SUBJECTS, path)
-        subjects = manifest.get("subjects")
-        if not isinstance(subjects, list) or len(subjects) != N_SUBJECTS:
-            raise ValueError(f"Expected exactly 151 subjects in {path}")
+        _normalized_subjects(manifest.get("subjects"), manifest_path=path)
 
     _require_manifest_value(group_manifest, "method", "gradient-spectral", group_manifest_path)
     _require_manifest_value(group_manifest, "atlas", "kong2022", group_manifest_path)
@@ -174,8 +191,12 @@ def _validate_source_combo(
         "long_axis_head_to_tail",
         group_manifest_path,
     )
-    group_subjects = tuple(str(value) for value in group_manifest["subjects"])
-    gradient_subjects = tuple(str(value) for value in gradient_manifest["subjects"])
+    group_subjects = _normalized_subjects(
+        group_manifest["subjects"], manifest_path=group_manifest_path
+    )
+    gradient_subjects = _normalized_subjects(
+        gradient_manifest["subjects"], manifest_path=gradient_manifest_path
+    )
     if group_subjects != gradient_subjects:
         raise ValueError(
             f"Group/gradient subject mismatch for {smoothing} hemi-{hemi}"
@@ -243,6 +264,11 @@ def _validate_source_combo(
     )
     if "_den-512_" not in surface.name or not surface.is_file():
         raise ValueError(f"Consumed surface is not an existing den-512 asset: {surface}")
+    surface_vertices = _surface_vertex_count(surface)
+    if surface_vertices != N_VERTICES:
+        raise ValueError(
+            f"Consumed surface point count is not 512: {surface} ({surface_vertices})"
+        )
 
     registry_raw = group_manifest.get("cluster_roi_registry")
     if not isinstance(registry_raw, str) or not registry_raw.strip():
@@ -473,6 +499,28 @@ def validate_template(*, out_root: Path) -> dict[str, object]:
             _validate_fingerprint(
                 recorded,
                 context=f"{smoothing} hemi-{hemi} source {name}",
+            )
+        surface_record = sources.get("consumed_surface")
+        density = row.get("density_evidence")
+        if not isinstance(surface_record, Mapping) or not isinstance(density, Mapping):
+            raise ValueError(
+                f"Missing consumed-surface density evidence for {smoothing} hemi-{hemi}"
+            )
+        surface_path = Path(str(surface_record.get("path"))).resolve()
+        if (
+            Path(str(density.get("consumed_asset"))).resolve() != surface_path
+            or int(density.get("n_vertices", -1)) != N_VERTICES
+            or density.get("evidence_source")
+            != "group_atlas_manifest.density_evidence"
+        ):
+            raise ValueError(
+                f"Consumed-surface density evidence mismatch for {smoothing} hemi-{hemi}"
+            )
+        surface_vertices = _surface_vertex_count(surface_path)
+        if surface_vertices != N_VERTICES:
+            raise ValueError(
+                f"Consumed surface point count is not 512: {surface_path} "
+                f"({surface_vertices})"
             )
     _validate_fingerprint(manifest.get("roi_registry"), context="ROI registry")
     return manifest

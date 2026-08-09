@@ -140,10 +140,13 @@ and publishes per-combination AP labels, three correlations, margins, GIFTIs,
 and fingerprinted manifests under
 `outputs_iowa_jj_tms/work/hcp151_fixed_template_matching/`. The CLI is limited
 to `preflight|run|validate`, defaults to two workers, has no overwrite mode,
-and permits resume only after exact artifact and run-contract validation. A
-failed partial may restart only when it is the subject directory's sole entry,
-has exact inputs and parameters, and records no retained outputs; its original
-bytes are first preserved as an exclusive attempt-history manifest.
+and independently validates the exact output schema and four combinations
+before resume. The fixed 3-subject smoke validation is a fingerprinted hard
+gate for full-roster launches. Failed subject/run/validation partials are preserved as
+versioned attempt histories; completed run and validation manifests are reused
+without rewrite. Validation TSV/JSON publish from exclusive partials. Consumed
+surface pointsets are counted directly, and all nested native threads are pinned
+to one so `--jobs <= 10` remains the total concurrency bound.
 
 See
 `docs/hipp_parcellation_network/jj_tms_hcp151_fixed_template_matching.md` for

@@ -41,8 +41,9 @@ definition.
   --out-root /home/yojiao/hpchome/hipp/outputs_hcp/templates/hcp151_routea_full_k3_fisherz
 ```
 
-The builder requires 151 identical subject IDs across all four combinations,
-consumed `den-512` surface evidence, ordered AP labels `1..3`, a fixed ordered
+The builder requires the same 151 unique normalized subject IDs across all four
+combinations, consumed `den-512` surface evidence whose GIFTI pointset is
+actually counted as 512 vertices, ordered AP labels `1..3`, a fixed ordered
 Kong2022 registry `1..400`, and `float32[512,400]`
 `group_mean_fisherz_fc_full.npy`. The flat output directory contains four sets
 of:
@@ -93,7 +94,9 @@ evidence.
 The adapter CLI is fixed to `--mode preflight|run|validate`. It supports
 `--subjects`, the fixed roster manifest, `--run-id`, `--jobs` (default 2,
 maximum 10), `--resume`, and explicit path overrides. It intentionally has no
-`--overwrite` option.
+`--overwrite` option. Workbench, BLAS, NumExpr, and ITK nested-thread
+environment variables are pinned to one before numerical-library import, so
+`--jobs` is also the total worker/thread concurrency bound.
 
 Canonical outputs are:
 
@@ -103,17 +106,24 @@ outputs_iowa_jj_tms/work/hcp151_fixed_template_matching/
   runs/<run_id>/
 ```
 
-Publishing is exclusive. Failed subject `.partial` manifests and run-level
-intermediates are retained. `--resume` reuses only completed subject outputs
-whose input fingerprints, parameters, shapes, dtypes, and output fingerprints
-all still match. An existing `run-id` must also match its immutable roster,
-paths, template, ROI registry, and parameters. Inconsistent or partial output
-is never replaced automatically. The only failed-subject restart exception is
-an otherwise empty subject directory containing one `status=failed` partial
-manifest with exact inputs and parameters and an empty `retained_outputs` map.
-Before restarting, the adapter exclusively preserves those exact bytes as the
-next `subject_manifest.attempt-NNN.failed.json` history record. Extra files,
-retained intermediates, fingerprint drift, or parameter drift all fail closed.
+Publishing is exclusive. `--resume` reuses a completed subject only when its
+independently constructed canonical output set, four unique smoothing/hemi
+combinations, paths, fingerprints, shapes, dtypes, parameters, and per-valid-
+vertex score/margin contracts all still match. A completed run manifest is
+immutable and returned without rewrite after its roster, paths, template, ROI
+registry, and parameters validate. An interrupted/failed run partial is copied
+verbatim to the next versioned run-attempt history before the active partial is
+reused; failed runs keep a `status=failed` partial and never publish a final.
+
+A failed subject may restart only when the active partial has exact inputs and
+parameters, `retained_outputs` is empty, and the directory otherwise contains
+only prior `subject_manifest.attempt-NNN.failed.json` histories. Its exact bytes
+are saved as the next history record. Extra files, retained intermediates,
+fingerprint drift, or parameter drift fail closed. Validation writes
+`validation_items.partial.tsv` and `validation_manifest.partial.json`, then
+exclusively publishes each final. `--resume` fingerprint-reuses completed
+validation; interrupted tables/manifests are moved to versioned attempt history
+without deletion before recomputation.
 
 ## Fixed Launch Sequence
 
@@ -136,8 +146,11 @@ Smoke run and validation:
   --run-id jj_tms_hcp151_smoke_20260809
 ```
 
-Only after the smoke validation is `status=complete`, with 3/3 subjects and
-12/12 subject-combinations passing, launch the fixed full roster:
+The full-run code enforces this hard gate before its own preflight: the fixed
+`jj_tms_hcp151_smoke_20260809` validation must be `status=complete`, contain
+1001/1002/1003 and exactly 12 unique combinations with all labels represented,
+and retain matching template, ROI-registry, run-manifest, and validation-table
+fingerprints. Only then launch the fixed full roster:
 
 ```bash
 /home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/jj_tms_hcp151_fixed_template_matching.py \
@@ -152,9 +165,10 @@ Only after the smoke validation is `status=complete`, with 3/3 subjects and
 ```
 
 Validation rechecks every input/output fingerprint and array contract, requires
-all valid vertices to have nonzero labels and all three labels to occur in each
-combination, verifies the consumed den-512 asset, and writes label counts,
-margin summaries, and label SHA-256 values. A full run is complete only when
-the manifest contains the exact fixed roster, 70/70 subjects, and 280/280
+all valid vertices to have nonzero labels, three finite in-range prototype
+correlations and a finite in-range margin, and all three labels to occur in each
+combination. It verifies the consumed GIFTI pointset is actually 512 vertices
+and writes label counts, margin summaries, and label SHA-256 values. A full run
+is complete only when the manifest contains the exact fixed roster, 70/70 subjects, and 280/280
 validated combinations. Any failure remains `failed` rather than being
 reported as complete.

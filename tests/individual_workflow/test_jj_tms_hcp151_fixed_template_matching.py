@@ -436,28 +436,14 @@ def test_resume_reuses_only_exact_fingerprints_shapes_dtypes_and_parameters(
     drift: str,
 ):
     workflow = load_module()
-    subject_dir = tmp_path / "subjects" / "sub-1001"
-    subject_dir.mkdir(parents=True)
-    source = tmp_path / "source.txt"
-    source.write_text("source-v1", encoding="utf-8")
-    output = subject_dir / "labels.npy"
-    np.save(output, np.asarray([1, 2, 3], dtype=np.int32))
-    parameters = {"threshold": 25.0, "smoothings": ["2mm", "4mm"]}
-    manifest = workflow.build_subject_manifest(
-        subject="1001",
-        inputs={"source": source},
-        parameters=parameters,
-        outputs={"labels": output},
-        combinations=[],
-    )
-    (subject_dir / "subject_manifest.json").write_text(
-        json.dumps(manifest),
-        encoding="utf-8",
+    subject_dir, source, parameters, outputs, labels_path = (
+        _write_exact_reusable_subject_fixture(workflow, tmp_path)
     )
     exact = workflow.validate_reusable_subject(
         subject_dir=subject_dir,
         expected_inputs={"source": source},
         expected_parameters=parameters,
+        expected_outputs=outputs,
     )
     assert exact["status"] == "ok"
     expected_parameters = dict(parameters)
@@ -466,17 +452,17 @@ def test_resume_reuses_only_exact_fingerprints_shapes_dtypes_and_parameters(
     elif drift == "parameter":
         expected_parameters["threshold"] = 30.0
     elif drift == "shape":
-        np.save(output, np.asarray([1, 2], dtype=np.int32))
+        np.save(labels_path, np.asarray([1, 2], dtype=np.int32))
     else:
-        np.save(output, np.asarray([1, 2, 3], dtype=np.int16))
+        np.save(labels_path, np.zeros(512, dtype=np.int16))
 
-    if drift:
-        with pytest.raises(ValueError, match="fingerprint|parameter|shape|dtype"):
-            workflow.validate_reusable_subject(
-                subject_dir=subject_dir,
-                expected_inputs={"source": source},
-                expected_parameters=expected_parameters,
-            )
+    with pytest.raises(ValueError, match="fingerprint|parameter|shape|dtype"):
+        workflow.validate_reusable_subject(
+            subject_dir=subject_dir,
+            expected_inputs={"source": source},
+            expected_parameters=expected_parameters,
+            expected_outputs=outputs,
+        )
 
 
 @pytest.mark.parametrize(
@@ -517,3 +503,525 @@ def test_cli_is_fixed_to_three_modes_and_has_no_overwrite_option():
     assert not hasattr(args, "overwrite")
     with pytest.raises(SystemExit):
         parser.parse_args(["--mode", "run", "--overwrite"])
+
+
+def test_combo_validation_rejects_any_nonfinite_valid_score_or_margin():
+    workflow = load_module()
+    valid = np.zeros(512, dtype=bool)
+    valid[:3] = True
+    labels = np.zeros(512, dtype=np.int32)
+    labels[:3] = [1, 2, 3]
+    scores = np.full((512, 3), np.nan, dtype=np.float32)
+    scores[:3] = np.asarray(
+        [[0.9, 0.1, -0.2], [0.1, 0.8, 0.2], [-0.1, 0.3, 0.7]],
+        dtype=np.float32,
+    )
+    margin = np.full(512, np.nan, dtype=np.float32)
+    margin[:3] = [0.8, 0.6, 0.4]
+
+    nonfinite_scores = scores.copy()
+    nonfinite_scores[1, 2] = np.nan
+    with pytest.raises(ValueError, match="finite"):
+        workflow.validate_combo_arrays(
+            labels=labels,
+            scores=nonfinite_scores,
+            margin=margin,
+            valid_mask=valid,
+        )
+
+    nonfinite_margin = margin.copy()
+    nonfinite_margin[2] = np.nan
+    with pytest.raises(ValueError, match="finite"):
+        workflow.validate_combo_arrays(
+            labels=labels,
+            scores=scores,
+            margin=nonfinite_margin,
+            valid_mask=valid,
+        )
+
+
+def test_consumed_surface_density_contract_counts_actual_gifti_points(tmp_path: Path):
+    workflow = load_module()
+    surface = tmp_path / "group-average_hemi-L_space-corobl_den-512_surface.surf.gii"
+    nib.save(
+        nib.gifti.GiftiImage(
+            darrays=[
+                nib.gifti.GiftiDataArray(
+                    data=np.zeros((511, 3), dtype=np.float32),
+                    intent="NIFTI_INTENT_POINTSET",
+                )
+            ]
+        ),
+        str(surface),
+    )
+    source = workflow.fingerprint(surface)
+    density = {
+        "consumed_asset": str(surface.resolve()),
+        "n_vertices": 512,
+        "evidence_source": "group_atlas_manifest.density_evidence",
+    }
+
+    with pytest.raises(ValueError, match="512"):
+        workflow.validate_consumed_surface_density(
+            density=density,
+            source_record=source,
+            context="2mm hemi-L",
+        )
+
+
+def test_adapter_pins_all_nested_worker_threads_to_one(monkeypatch: pytest.MonkeyPatch):
+    thread_keys = (
+        "CORE_WORKFLOW_WB_THREADS",
+        "OMP_NUM_THREADS",
+        "OPENBLAS_NUM_THREADS",
+        "MKL_NUM_THREADS",
+        "NUMEXPR_NUM_THREADS",
+        "VECLIB_MAXIMUM_THREADS",
+        "ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS",
+    )
+    for key in thread_keys:
+        monkeypatch.setenv(key, "7")
+
+    workflow = load_module()
+    child_env = workflow.workbench_env()
+
+    assert all(child_env[key] == "1" for key in thread_keys)
+
+
+def test_resume_rejects_self_declared_incomplete_ok_manifest(tmp_path: Path):
+    workflow = load_module()
+    subject_dir = tmp_path / "subjects" / "sub-1001"
+    subject_dir.mkdir(parents=True)
+    source = tmp_path / "source.txt"
+    source.write_text("source-v1", encoding="utf-8")
+    output = subject_dir / "labels.npy"
+    np.save(output, np.asarray([1, 2, 3], dtype=np.int32))
+    parameters = {"threshold": 25.0}
+    manifest = workflow.build_subject_manifest(
+        subject="1001",
+        inputs={"source": source},
+        parameters=parameters,
+        outputs={"labels": output},
+        combinations=[],
+    )
+    (subject_dir / "subject_manifest.json").write_text(
+        json.dumps(manifest),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="combination|output set"):
+        workflow.validate_reusable_subject(
+            subject_dir=subject_dir,
+            expected_inputs={"source": source},
+            expected_parameters=parameters,
+            expected_outputs={"labels": output},
+        )
+
+
+def _write_exact_reusable_subject_fixture(workflow, root: Path):
+    subject_dir = root / "subjects" / "sub-1001"
+    subject_dir.mkdir(parents=True)
+    source = root / "source.txt"
+    source.write_text("source-v1", encoding="utf-8")
+    parameters = {"threshold": 25.0, "smoothings": ["2mm", "4mm"]}
+    outputs = {}
+    valid = np.zeros(512, dtype=bool)
+    valid[:3] = True
+    for hemi in ("L", "R"):
+        valid_path = subject_dir / f"hemi-{hemi}_valid_mask.npy"
+        np.save(valid_path, valid)
+        outputs[f"valid_mask_hemi-{hemi}"] = valid_path
+    combinations = []
+    first_labels = None
+    for smoothing in ("2mm", "4mm"):
+        for hemi in ("L", "R"):
+            prefix = f"{smoothing}_hemi-{hemi}"
+            combo_dir = subject_dir / "matching" / smoothing / f"hemi-{hemi}"
+            combo_dir.mkdir(parents=True)
+            labels = np.zeros(512, dtype=np.int32)
+            labels[:3] = [1, 2, 3]
+            scores = np.full((512, 3), np.nan, dtype=np.float32)
+            scores[:3] = np.asarray(
+                [[0.9, 0.1, -0.2], [0.1, 0.8, 0.2], [-0.1, 0.3, 0.7]],
+                dtype=np.float32,
+            )
+            margin = np.full(512, np.nan, dtype=np.float32)
+            margin[:3] = [0.8, 0.6, 0.4]
+            labels_path = combo_dir / "labels.npy"
+            scores_path = combo_dir / "scores.npy"
+            margin_path = combo_dir / "margin.npy"
+            np.save(labels_path, labels)
+            np.save(scores_path, scores)
+            np.save(margin_path, margin)
+            if first_labels is None:
+                first_labels = labels_path
+            outputs[prefix + "_labels"] = labels_path
+            outputs[prefix + "_scores"] = scores_path
+            outputs[prefix + "_margin"] = margin_path
+            summary = workflow.validate_combo_arrays(
+                labels=labels,
+                scores=scores,
+                margin=margin,
+                valid_mask=valid,
+            )
+            combo_manifest_path = combo_dir / "combo_manifest.json"
+            combo_manifest = {
+                "status": "ok",
+                "subject": "sub-1001",
+                "smoothing": smoothing,
+                "hemi": hemi,
+                **summary,
+                "outputs": {
+                    "labels": workflow.artifact_record(labels_path),
+                    "scores": workflow.artifact_record(scores_path),
+                    "margin": workflow.artifact_record(margin_path),
+                },
+            }
+            combo_manifest_path.write_text(
+                json.dumps(combo_manifest),
+                encoding="utf-8",
+            )
+            outputs[prefix + "_combo_manifest"] = combo_manifest_path
+            combinations.append(
+                {
+                    "status": "ok",
+                    "smoothing": smoothing,
+                    "hemi": hemi,
+                    "manifest": str(combo_manifest_path.resolve()),
+                    **summary,
+                }
+            )
+    manifest = workflow.build_subject_manifest(
+        subject="1001",
+        inputs={"source": source},
+        parameters=parameters,
+        outputs=outputs,
+        combinations=combinations,
+    )
+    (subject_dir / "subject_manifest.json").write_text(
+        json.dumps(manifest),
+        encoding="utf-8",
+    )
+    return subject_dir, source, parameters, outputs, first_labels
+
+
+def test_empty_failed_subject_resume_allocates_next_attempt_number(tmp_path: Path):
+    workflow = load_module()
+    subject_dir = tmp_path / "subjects" / "sub-1001"
+    subject_dir.mkdir(parents=True)
+    source = tmp_path / "source.txt"
+    source.write_text("source-v1", encoding="utf-8")
+    parameters = {"threshold": 25.0}
+    prior = subject_dir / "subject_manifest.attempt-001.failed.json"
+    prior.write_text("prior failure\n", encoding="utf-8")
+    partial = subject_dir / "subject_manifest.partial.json"
+    partial.write_text(
+        json.dumps(
+            {
+                "status": "failed",
+                "parameters": parameters,
+                "inputs": {"source": workflow.fingerprint(source)},
+                "retained_outputs": {},
+                "error": "RuntimeError: failed again",
+            }
+        ),
+        encoding="utf-8",
+    )
+    original = partial.read_bytes()
+
+    history = workflow.prepare_empty_failed_subject_resume(
+        subject_dir=subject_dir,
+        expected_inputs={"source": source},
+        expected_parameters=parameters,
+    )
+
+    history_path = Path(history["path"])
+    assert history_path.name == "subject_manifest.attempt-002.failed.json"
+    assert history_path.read_bytes() == original
+    assert prior.read_text(encoding="utf-8") == "prior failure\n"
+
+
+def _run_resume_base() -> dict[str, object]:
+    return {
+        "workflow": "jj_tms_hcp151_fixed_template_matching",
+        "run_id": "run-1",
+        "scope": "subset",
+        "subjects": ["sub-1001"],
+        "subject_count": 1,
+        "canonical_roster_count": 70,
+        "template_manifest": {"sha256": "template"},
+        "roi_registry": {"sha256": "registry"},
+        "parameters": {"threshold": 25.0},
+        "path_roots": {"out_root": "/tmp/out"},
+    }
+
+
+def test_run_resume_preserves_interrupted_partial_as_next_attempt(tmp_path: Path):
+    workflow = load_module()
+    run_dir = tmp_path / "runs" / "run-1"
+    run_dir.mkdir(parents=True)
+    prior = run_dir / "run_manifest.attempt-001.failed.json"
+    prior.write_text("prior\n", encoding="utf-8")
+    partial = run_dir / "run_manifest.partial.json"
+    payload = {**_run_resume_base(), "status": "in_progress", "items": []}
+    partial.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+    original = partial.read_bytes()
+
+    reusable = workflow.prepare_run_resume_state(
+        run_dir=run_dir,
+        expected=_run_resume_base(),
+        resume=True,
+    )
+
+    assert reusable is None
+    history = run_dir / "run_manifest.attempt-002.interrupted.json"
+    assert history.read_bytes() == original
+    assert partial.read_bytes() == original
+    assert prior.read_text(encoding="utf-8") == "prior\n"
+
+
+def test_completed_run_resume_is_immutable_and_reused(tmp_path: Path):
+    workflow = load_module()
+    run_dir = tmp_path / "runs" / "run-1"
+    run_dir.mkdir(parents=True)
+    final = run_dir / "run_manifest.json"
+    payload = {
+        **_run_resume_base(),
+        "status": "complete",
+        "complete_count": 1,
+        "failed_count": 0,
+        "items": [
+            {
+                "subject": "sub-1001",
+                "status": "ok",
+                "combinations": [
+                    {"status": "ok", "smoothing": smoothing, "hemi": hemi}
+                    for smoothing in ("2mm", "4mm")
+                    for hemi in ("L", "R")
+                ],
+            }
+        ],
+    }
+    final.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+    original = final.read_bytes()
+
+    reusable = workflow.prepare_run_resume_state(
+        run_dir=run_dir,
+        expected=_run_resume_base(),
+        resume=True,
+    )
+
+    assert reusable == payload
+    assert final.read_bytes() == original
+    assert not (run_dir / "run_manifest.partial.json").exists()
+
+
+def test_full_run_smoke_gate_requires_complete_fingerprinted_canonical_smoke(
+    tmp_path: Path,
+):
+    workflow = load_module()
+    template_file = tmp_path / "template.json"
+    registry_file = tmp_path / "registry.tsv"
+    template_file.write_text("template\n", encoding="utf-8")
+    registry_file.write_text("registry\n", encoding="utf-8")
+    template_record = workflow.fingerprint(template_file)
+    registry_record = workflow.fingerprint(registry_file)
+
+    with pytest.raises(FileNotFoundError, match="smoke"):
+        workflow.validate_full_run_smoke_gate(
+            out_root=tmp_path / "outputs",
+            template_fingerprint=template_record,
+            roi_registry_fingerprint=registry_record,
+        )
+
+    run_dir = (
+        tmp_path
+        / "outputs"
+        / "runs"
+        / "jj_tms_hcp151_smoke_20260809"
+    )
+    run_dir.mkdir(parents=True)
+    run_manifest = run_dir / "run_manifest.json"
+    run_manifest.write_text(
+        json.dumps(
+            {
+                "status": "complete",
+                "run_id": "jj_tms_hcp151_smoke_20260809",
+                "scope": "subset",
+                "subjects": ["sub-1001", "sub-1002", "sub-1003"],
+                "subject_count": 3,
+                "complete_count": 3,
+                "failed_count": 0,
+                "template_manifest": template_record,
+                "roi_registry": registry_record,
+            }
+        ),
+        encoding="utf-8",
+    )
+    table = run_dir / "validation_items.tsv"
+    table.write_text("validated\n", encoding="utf-8")
+    items = [
+        {
+            "status": "ok",
+            "subject": f"sub-{subject}",
+            "smoothing": smoothing,
+            "hemi": hemi,
+            "label_counts": {"1": 1, "2": 1, "3": 1},
+        }
+        for subject in ("1001", "1002", "1003")
+        for smoothing in ("2mm", "4mm")
+        for hemi in ("L", "R")
+    ]
+    validation_manifest = run_dir / "validation_manifest.json"
+    validation_manifest.write_text(
+        json.dumps(
+            {
+                "status": "complete",
+                "run_id": "jj_tms_hcp151_smoke_20260809",
+                "scope": "subset",
+                "subject_count": 3,
+                "complete_subject_count": 3,
+                "combination_count": 12,
+                "template_manifest": template_record,
+                "roi_registry": registry_record,
+                "run_manifest": workflow.fingerprint(run_manifest),
+                "validation_items": workflow.fingerprint(table),
+                "items": items,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    gate = workflow.validate_full_run_smoke_gate(
+        out_root=tmp_path / "outputs",
+        template_fingerprint=template_record,
+        roi_registry_fingerprint=registry_record,
+    )
+    assert gate["sha256"] == workflow.fingerprint(validation_manifest)["sha256"]
+
+    table.write_text("drift\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="fingerprint"):
+        workflow.validate_full_run_smoke_gate(
+            out_root=tmp_path / "outputs",
+            template_fingerprint=template_record,
+            roi_registry_fingerprint=registry_record,
+        )
+
+
+def _validation_row() -> dict[str, object]:
+    return {
+        "subject": "sub-1001",
+        "smoothing": "2mm",
+        "hemi": "L",
+        "status": "ok",
+        "label_counts": {"1": 1, "2": 1, "3": 1},
+        "margin_summary": {"min": 0.1, "median": 0.2, "mean": 0.2, "max": 0.3},
+        "labels_sha256": "a" * 64,
+        "density_evidence": {"consumed_asset": "/tmp/surface.surf.gii"},
+    }
+
+
+def test_validation_resume_versions_interrupted_partial_without_deletion(tmp_path: Path):
+    workflow = load_module()
+    run_dir = tmp_path / "runs" / "run-1"
+    run_dir.mkdir(parents=True)
+    prior = run_dir / "validation_items.attempt-001.interrupted.tsv"
+    prior.write_text("prior\n", encoding="utf-8")
+    partial = run_dir / "validation_items.partial.tsv"
+    partial.write_text("partial bytes\n", encoding="utf-8")
+    original = partial.read_bytes()
+
+    reusable = workflow.prepare_validation_resume_state(
+        run_dir=run_dir,
+        expected_run_manifest={"path": "/tmp/run.json", "sha256": "x", "size_bytes": 1},
+        template_fingerprint={},
+        roi_registry_fingerprint={},
+        resume=True,
+    )
+
+    assert reusable is None
+    history = run_dir / "validation_items.attempt-002.interrupted.tsv"
+    assert history.read_bytes() == original
+    assert not partial.exists()
+    assert prior.read_text(encoding="utf-8") == "prior\n"
+
+
+def test_validation_artifacts_publish_via_exclusive_partials(tmp_path: Path):
+    workflow = load_module()
+    run_dir = tmp_path / "runs" / "run-1"
+    run_dir.mkdir(parents=True)
+    payload = workflow.publish_validation_artifacts(
+        run_dir=run_dir,
+        rows=[_validation_row()],
+        payload_base={"status": "complete", "run_id": "run-1"},
+    )
+
+    table = run_dir / "validation_items.tsv"
+    manifest = run_dir / "validation_manifest.json"
+    assert table.is_file() and manifest.is_file()
+    assert not (run_dir / "validation_items.partial.tsv").exists()
+    assert not (run_dir / "validation_manifest.partial.json").exists()
+    assert payload["validation_items"] == workflow.fingerprint(table)
+    assert json.loads(manifest.read_text(encoding="utf-8")) == payload
+
+
+def test_completed_validation_resume_is_immutable_and_fingerprint_checked(tmp_path: Path):
+    workflow = load_module()
+    run_dir = tmp_path / "runs" / "run-1"
+    run_dir.mkdir(parents=True)
+    run_manifest = run_dir / "run_manifest.json"
+    run_manifest.write_text("run\n", encoding="utf-8")
+    table = run_dir / "validation_items.tsv"
+    table.write_text("table\n", encoding="utf-8")
+    template_file = tmp_path / "template.json"
+    registry_file = tmp_path / "registry.tsv"
+    template_file.write_text("template\n", encoding="utf-8")
+    registry_file.write_text("registry\n", encoding="utf-8")
+    template_record = workflow.fingerprint(template_file)
+    registry_record = workflow.fingerprint(registry_file)
+    payload = {
+        "status": "complete",
+        "run_id": "run-1",
+        "template_manifest": template_record,
+        "roi_registry": registry_record,
+        "run_manifest": workflow.fingerprint(run_manifest),
+        "validation_items": workflow.fingerprint(table),
+    }
+    manifest = run_dir / "validation_manifest.json"
+    manifest.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+    original = manifest.read_bytes()
+
+    reusable = workflow.prepare_validation_resume_state(
+        run_dir=run_dir,
+        expected_run_manifest=workflow.fingerprint(run_manifest),
+        template_fingerprint=template_record,
+        roi_registry_fingerprint=registry_record,
+        resume=True,
+    )
+
+    assert reusable == payload
+    assert manifest.read_bytes() == original
+
+
+def test_completed_run_resume_rejects_inconsistent_item_status(tmp_path: Path):
+    workflow = load_module()
+    run_dir = tmp_path / "runs" / "run-1"
+    run_dir.mkdir(parents=True)
+    payload = {
+        **_run_resume_base(),
+        "status": "complete",
+        "complete_count": 1,
+        "failed_count": 0,
+        "items": [{"subject": "sub-1001", "status": "failed"}],
+    }
+    (run_dir / "run_manifest.json").write_text(
+        json.dumps(payload),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="reusable complete"):
+        workflow.prepare_run_resume_state(
+            run_dir=run_dir,
+            expected=_run_resume_base(),
+            resume=True,
+        )

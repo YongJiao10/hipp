@@ -5,8 +5,10 @@ import json
 import sys
 from pathlib import Path
 
+import nibabel as nib
 import numpy as np
 import pytest
+from nibabel.gifti import GiftiDataArray, GiftiImage
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -51,6 +53,7 @@ def _write_sources(
     n_vertices: int = 512,
     manifest_smoothing_override: str | None = None,
     manifest_hemi_override: str | None = None,
+    surface_vertices: int = 512,
 ) -> tuple[Path, Path]:
     group_root = root / "group_atlas" / "routea_full_k3_fisherz"
     gradient_root = root / "hippomaps_gradients" / "routea"
@@ -62,10 +65,21 @@ def _write_sources(
     template_surfaces = root / "template_surfaces"
     template_surfaces.mkdir(parents=True)
     for hemi in ("L", "R"):
-        (template_surfaces / (
+        surface_path = template_surfaces / (
             f"group-average_hemi-{hemi}_space-corobl_den-512_"
             "label-hipp_midthickness.surf.gii"
-        )).write_bytes(b"surface")
+        )
+        nib.save(
+            GiftiImage(
+                darrays=[
+                    GiftiDataArray(
+                        data=np.zeros((surface_vertices, 3), dtype=np.float32),
+                        intent="NIFTI_INTENT_POINTSET",
+                    )
+                ]
+            ),
+            str(surface_path),
+        )
 
     labels = np.zeros(n_vertices, dtype=np.int32)
     for vertex_index in range(n_vertices):
@@ -259,3 +273,82 @@ def test_preflight_mode_does_not_create_output_directory(tmp_path: Path):
 
     assert exit_code == 0
     assert not out_root.exists()
+
+
+def test_preflight_rejects_duplicate_subject_ids_even_with_151_entries(tmp_path: Path):
+    workflow = load_module()
+    group_root, gradient_root = _write_sources(tmp_path / "sources")
+    manifest_paths = []
+    for smoothing in ("2mm", "4mm"):
+        for hemi in ("L", "R"):
+            manifest_paths.extend(
+                [
+                    _combo_dir(group_root, smoothing, hemi)
+                    / "group_atlas_manifest.json",
+                    gradient_root
+                    / smoothing
+                    / f"hemi_{hemi}"
+                    / "hippomaps_gradient_manifest.json",
+                ]
+            )
+    for path in manifest_paths:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        payload["subjects"][-1] = payload["subjects"][0]
+        path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="unique"):
+        workflow.preflight_sources(
+            group_root=group_root,
+            gradient_root=gradient_root,
+        )
+
+
+def test_preflight_counts_consumed_surface_points_instead_of_trusting_manifest(
+    tmp_path: Path,
+):
+    workflow = load_module()
+    group_root, gradient_root = _write_sources(
+        tmp_path / "sources",
+        surface_vertices=511,
+    )
+
+    with pytest.raises(ValueError, match="point count|512 vertices"):
+        workflow.preflight_sources(
+            group_root=group_root,
+            gradient_root=gradient_root,
+        )
+
+
+def test_validate_rechecks_consumed_surface_geometry_and_density_record(tmp_path: Path):
+    workflow = load_module()
+    group_root, gradient_root = _write_sources(tmp_path / "sources")
+    out_root = tmp_path / "template"
+    workflow.build_template(
+        group_root=group_root,
+        gradient_root=gradient_root,
+        out_root=out_root,
+    )
+    manifest_path = out_root / "template_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    row = manifest["combinations"][0]
+    surface_path = Path(row["source_files"]["consumed_surface"]["path"])
+    nib.save(
+        GiftiImage(
+            darrays=[
+                GiftiDataArray(
+                    data=np.zeros((511, 3), dtype=np.float32),
+                    intent="NIFTI_INTENT_POINTSET",
+                )
+            ]
+        ),
+        str(surface_path),
+    )
+    replacement_fingerprint = workflow._fingerprint(surface_path)
+    for combination in manifest["combinations"]:
+        recorded_surface = combination["source_files"]["consumed_surface"]
+        if Path(recorded_surface["path"]) == surface_path:
+            combination["source_files"]["consumed_surface"] = replacement_fingerprint
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="point count|density evidence"):
+        workflow.validate_template(out_root=out_root)

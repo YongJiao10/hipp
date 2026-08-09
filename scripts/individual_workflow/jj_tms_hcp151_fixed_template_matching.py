@@ -14,6 +14,20 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 
+
+NATIVE_THREAD_ENV_KEYS = (
+    "CORE_WORKFLOW_WB_THREADS",
+    "OMP_NUM_THREADS",
+    "OPENBLAS_NUM_THREADS",
+    "MKL_NUM_THREADS",
+    "NUMEXPR_NUM_THREADS",
+    "VECLIB_MAXIMUM_THREADS",
+    "ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS",
+)
+for _thread_env_key in NATIVE_THREAD_ENV_KEYS:
+    os.environ[_thread_env_key] = "1"
+del _thread_env_key
+
 import nibabel as nib
 import numpy as np
 from nibabel.gifti import GiftiDataArray, GiftiImage
@@ -47,6 +61,8 @@ DEFAULT_JOBS = 2
 EXPECTED_SUBJECT_COUNT = 70
 TWO_RUN_SUBJECT = "1016"
 TEMPLATE_ID = "hcp151_routea_full_k3_fisherz"
+SMOKE_RUN_ID = "jj_tms_hcp151_smoke_20260809"
+SMOKE_SUBJECTS = ("1001", "1002", "1003")
 DEFAULT_DATA_ROOT = Path(
     "/home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_JJ_TMS"
 )
@@ -434,12 +450,20 @@ def validate_combo_arrays(
         raise ValueError("All three AP labels must appear among valid vertices")
     if np.any(label_array[~valid] != 0):
         raise ValueError("Invalid vertices must retain null label 0")
-    finite_scores = score_array[valid][np.isfinite(score_array[valid])]
-    if finite_scores.size == 0 or np.any((finite_scores < -1.0) | (finite_scores > 1.0)):
-        raise ValueError("Template correlations must contain finite values in [-1, 1]")
-    finite_margin = margin_array[valid][np.isfinite(margin_array[valid])]
-    if finite_margin.size == 0 or np.any((finite_margin < 0.0) | (finite_margin > 2.0)):
-        raise ValueError("Correlation margins must contain finite values in [0, 2]")
+    valid_scores = score_array[valid]
+    if not np.all(np.isfinite(valid_scores)) or np.any(
+        (valid_scores < -1.0) | (valid_scores > 1.0)
+    ):
+        raise ValueError(
+            "Every valid vertex must have three finite template correlations in [-1, 1]"
+        )
+    valid_margin = margin_array[valid]
+    if not np.all(np.isfinite(valid_margin)) or np.any(
+        (valid_margin < 0.0) | (valid_margin > 2.0)
+    ):
+        raise ValueError(
+            "Every valid vertex must have a finite correlation margin in [0, 2]"
+        )
     counts = {
         str(code): int(np.sum(label_array[valid] == code)) for code in range(1, K + 1)
     }
@@ -447,10 +471,10 @@ def validate_combo_arrays(
         "valid_vertices": int(np.sum(valid)),
         "label_counts": counts,
         "margin_summary": {
-            "min": float(np.min(finite_margin)),
-            "median": float(np.median(finite_margin)),
-            "mean": float(np.mean(finite_margin)),
-            "max": float(np.max(finite_margin)),
+            "min": float(np.min(valid_margin)),
+            "median": float(np.median(valid_margin)),
+            "mean": float(np.mean(valid_margin)),
+            "max": float(np.max(valid_margin)),
         },
     }
 
@@ -511,11 +535,15 @@ def validate_reusable_subject(
     subject_dir: Path,
     expected_inputs: Mapping[str, Path],
     expected_parameters: Mapping[str, object],
+    expected_outputs: Mapping[str, Path],
 ) -> dict[str, object]:
-    manifest_path = Path(subject_dir) / "subject_manifest.json"
+    directory = Path(subject_dir)
+    manifest_path = directory / "subject_manifest.json"
     payload = json.loads(manifest_path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict) or payload.get("status") != "ok":
         raise ValueError(f"Reusable subject manifest is not status=ok: {manifest_path}")
+    if payload.get("subject") != directory.name:
+        raise ValueError(f"Resume subject identity mismatch: {manifest_path}")
     if payload.get("parameters") != dict(expected_parameters):
         raise ValueError("Resume parameter mismatch")
     recorded_inputs = payload.get("inputs")
@@ -523,16 +551,27 @@ def validate_reusable_subject(
         raise ValueError("Resume input set mismatch")
     for key, path in expected_inputs.items():
         recorded = recorded_inputs[key]
-        if not isinstance(recorded, Mapping) or Path(str(recorded.get("path"))).resolve() != Path(path).resolve():
+        if (
+            not isinstance(recorded, Mapping)
+            or Path(str(recorded.get("path"))).resolve() != Path(path).resolve()
+        ):
             raise ValueError(f"Resume input path mismatch for {key}")
         _validate_fingerprint(recorded, context=f"resume input {key}")
     recorded_outputs = payload.get("outputs")
-    if not isinstance(recorded_outputs, Mapping) or not recorded_outputs:
+    if not isinstance(recorded_outputs, Mapping):
         raise ValueError("Resume output metadata is missing")
-    for key, raw in recorded_outputs.items():
+    if set(recorded_outputs) != set(expected_outputs):
+        raise ValueError(
+            "Resume output set mismatch: "
+            f"recorded={sorted(recorded_outputs)} expected={sorted(expected_outputs)}"
+        )
+    for key, expected_path in expected_outputs.items():
+        raw = recorded_outputs[key]
         if not isinstance(raw, Mapping) or not isinstance(raw.get("path"), str):
             raise ValueError(f"Resume output metadata is invalid for {key}")
         output_path = Path(str(raw["path"]))
+        if output_path.resolve() != Path(expected_path).resolve():
+            raise ValueError(f"Resume output path mismatch for {key}")
         if "shape" in raw or "dtype" in raw:
             array = np.load(output_path, mmap_mode="r", allow_pickle=False)
             if list(array.shape) != raw.get("shape"):
@@ -540,6 +579,53 @@ def validate_reusable_subject(
             if str(array.dtype) != raw.get("dtype"):
                 raise ValueError(f"Resume output dtype mismatch for {key}")
         _validate_fingerprint(raw, context=f"resume output {key}")
+    combinations = payload.get("combinations")
+    if not isinstance(combinations, list) or len(combinations) != 4:
+        raise ValueError("Resume combination set must contain exactly four rows")
+    by_key: dict[tuple[str, str], Mapping[str, object]] = {}
+    for row in combinations:
+        if not isinstance(row, Mapping) or row.get("status") != "ok":
+            raise ValueError("Resume combination row is not status=ok")
+        key = (str(row.get("smoothing")), str(row.get("hemi")))
+        if key in by_key:
+            raise ValueError(f"Duplicate resume combination: {key}")
+        by_key[key] = row
+    expected_keys = {(smoothing, hemi) for smoothing in SMOOTHINGS for hemi in HEMIS}
+    if set(by_key) != expected_keys:
+        raise ValueError(f"Resume combination set mismatch: {sorted(by_key)}")
+    for smoothing, hemi in sorted(expected_keys):
+        prefix = f"{smoothing}_hemi-{hemi}"
+        row = by_key[(smoothing, hemi)]
+        combo_manifest_path = Path(expected_outputs[prefix + "_combo_manifest"]).resolve()
+        if Path(str(row.get("manifest"))).resolve() != combo_manifest_path:
+            raise ValueError(f"Resume combo manifest path mismatch: {prefix}")
+        combo_payload = json.loads(combo_manifest_path.read_text(encoding="utf-8"))
+        if (
+            combo_payload.get("status") != "ok"
+            or combo_payload.get("subject") != directory.name
+            or combo_payload.get("smoothing") != smoothing
+            or combo_payload.get("hemi") != hemi
+        ):
+            raise ValueError(f"Resume combo identity mismatch: {prefix}")
+        combo_outputs = combo_payload.get("outputs")
+        if not isinstance(combo_outputs, Mapping):
+            raise ValueError(f"Resume combo outputs are missing: {prefix}")
+        for name in ("labels", "scores", "margin"):
+            subject_key = prefix + f"_{name}"
+            if combo_outputs.get(name) != recorded_outputs[subject_key]:
+                raise ValueError(f"Resume combo output fingerprint mismatch: {subject_key}")
+        labels = np.load(expected_outputs[prefix + "_labels"], allow_pickle=False)
+        scores = np.load(expected_outputs[prefix + "_scores"], allow_pickle=False)
+        margin = np.load(expected_outputs[prefix + "_margin"], allow_pickle=False)
+        valid = np.load(
+            expected_outputs[f"valid_mask_hemi-{hemi}"], allow_pickle=False
+        )
+        summary = validate_combo_arrays(
+            labels=labels, scores=scores, margin=margin, valid_mask=valid
+        )
+        for key in ("valid_vertices", "label_counts", "margin_summary"):
+            if row.get(key) != summary[key] or combo_payload.get(key) != summary[key]:
+                raise ValueError(f"Resume combo summary mismatch for {prefix} {key}")
     return payload
 
 
@@ -552,10 +638,23 @@ def prepare_empty_failed_subject_resume(
     directory = Path(subject_dir)
     partial = directory / "subject_manifest.partial.json"
     entries = list(directory.iterdir())
-    if entries != [partial]:
+    attempt_pattern = re.compile(
+        r"subject_manifest\.attempt-(?P<number>[0-9]{3,})\.failed\.json"
+    )
+    attempts: list[int] = []
+    unexpected: list[Path] = []
+    for entry in entries:
+        if entry == partial:
+            continue
+        match = attempt_pattern.fullmatch(entry.name)
+        if match is None or not entry.is_file():
+            unexpected.append(entry)
+        else:
+            attempts.append(int(match.group("number")))
+    if not partial.is_file() or unexpected:
         raise ValueError(
-            "Failed subject resume requires the partial manifest to be the only "
-            f"directory entry: {directory}"
+            "Failed subject resume requires only the active partial and versioned "
+            f"failed histories; unexpected={unexpected}"
         )
     original = partial.read_bytes()
     payload = json.loads(original)
@@ -579,7 +678,10 @@ def prepare_empty_failed_subject_resume(
     retained = payload.get("retained_outputs")
     if not isinstance(retained, Mapping) or retained:
         raise ValueError("Failed subject resume retained outputs are not empty")
-    history = directory / "subject_manifest.attempt-001.failed.json"
+    attempt_number = max(attempts, default=0) + 1
+    history = directory / (
+        f"subject_manifest.attempt-{attempt_number:03d}.failed.json"
+    )
     with history.open("xb") as stream:
         stream.write(original)
     record = fingerprint(history)
@@ -625,6 +727,11 @@ def _load_template_contract(template_root: Path) -> TemplateContract:
             raise ValueError("HCP template combination lacks provenance records")
         for name, record in sources.items():
             _validate_fingerprint(record, context=f"HCP template source {name}")
+        validate_consumed_surface_density(
+            density=raw.get("density_evidence"),
+            source_record=sources.get("consumed_surface"),
+            context=f"HCP template {smoothing} hemi-{hemi}",
+        )
         for name, record in outputs.items():
             _validate_fingerprint(record, context=f"HCP template output {name}")
         prototype_record = outputs.get("prototypes")
@@ -668,6 +775,34 @@ def _surface_vertex_count(path: Path) -> int:
     image = nib.load(str(path))
     points = np.asarray(image.agg_data("pointset"))
     return int(points.shape[0])
+
+
+def validate_consumed_surface_density(
+    *,
+    density: object,
+    source_record: object,
+    context: str,
+) -> dict[str, object]:
+    if not isinstance(density, Mapping) or not isinstance(source_record, Mapping):
+        raise ValueError(f"Missing consumed-surface density evidence: {context}")
+    _validate_fingerprint(source_record, context=f"{context} consumed surface")
+    surface = Path(str(source_record.get("path"))).resolve()
+    if Path(str(density.get("consumed_asset"))).resolve() != surface:
+        raise ValueError(f"Consumed-surface density path mismatch: {context}")
+    recorded_vertices = int(density.get("n_vertices", -1))
+    actual_vertices = _surface_vertex_count(surface)
+    if recorded_vertices != N_VERTICES or actual_vertices != N_VERTICES:
+        raise ValueError(
+            f"Consumed surface is not 512 vertices: {context} "
+            f"(recorded={recorded_vertices}, actual={actual_vertices})"
+        )
+    evidence_source = density.get("evidence_source")
+    if evidence_source not in {
+        "group_atlas_manifest.density_evidence",
+        "consumed_surface_path_and_gifti_point_count",
+    }:
+        raise ValueError(f"Unexpected density evidence source: {context}")
+    return dict(density)
 
 
 def _validate_surfaces(
@@ -717,6 +852,91 @@ def _expected_subject_inputs(
                 (smoothing, hemi)
             ]
     return {key: Path(path).resolve() for key, path in paths.items()}
+
+
+def _expected_subject_output_paths(
+    *,
+    functional: SubjectInputs,
+    subject_dir: Path,
+) -> dict[str, Path]:
+    subject = functional.subject
+    directory = Path(subject_dir)
+    paths: dict[str, Path] = {}
+    for run in functional.runs:
+        for hemi in HEMIS:
+            paths[f"run-{run.run_id:02d}_hemi-{hemi}_gifti"] = (
+                directory
+                / "runs"
+                / f"run-{run.run_id:02d}"
+                / (
+                    f"sub-{subject}_task-rest_run-{run.run_id:02d}_hemi-{hemi}_"
+                    "space-corobl_den-512_label-hipp_bold.func.gii"
+                )
+            )
+    for hemi in HEMIS:
+        paths[f"raw_hemi-{hemi}_timeseries"] = (
+            directory / "surface" / "raw" / f"hemi-{hemi}_timeseries.npy"
+        )
+        paths[f"raw_hemi-{hemi}_gifti"] = directory / "surface" / "raw" / (
+            f"sub-{subject}_hemi-{hemi}_space-corobl_den-512_"
+            "label-hipp_bold.func.gii"
+        )
+        paths[f"tsnr_hemi-{hemi}"] = (
+            directory / "surface" / "tsnr_gate" / f"hemi-{hemi}_tsnr.npy"
+        )
+        paths[f"valid_mask_hemi-{hemi}"] = (
+            directory / "surface" / "tsnr_gate" / f"hemi-{hemi}_valid_mask.npy"
+        )
+        paths[f"valid_roi_hemi-{hemi}"] = directory / "surface" / "tsnr_gate" / (
+            f"hemi-{hemi}_valid_roi.shape.gii"
+        )
+        paths[f"cortex_tsnr_hemi-{hemi}"] = (
+            directory / "cortex" / f"hemi-{hemi}_tsnr.npy"
+        )
+        paths[f"cortex_valid_mask_hemi-{hemi}"] = (
+            directory / "cortex" / f"hemi-{hemi}_valid_mask.npy"
+        )
+        for smoothing in SMOOTHINGS:
+            paths[f"{smoothing}_hemi-{hemi}_gifti"] = (
+                directory
+                / "surface"
+                / smoothing
+                / (
+                    f"sub-{subject}_hemi-{hemi}_space-corobl_den-512_"
+                    f"label-hipp_bold_{smoothing}.func.gii"
+                )
+            )
+            paths[f"{smoothing}_hemi-{hemi}_timeseries"] = (
+                directory / "surface" / smoothing / f"hemi-{hemi}_timeseries.npy"
+            )
+            combo_dir = directory / "matching" / smoothing / f"hemi-{hemi}"
+            paths[f"{smoothing}_hemi-{hemi}_pearson_fc"] = (
+                combo_dir / "vertex_to_roi_pearson_fc.npy"
+            )
+            paths[f"{smoothing}_hemi-{hemi}_fisherz_fc"] = (
+                combo_dir / "vertex_to_roi_fisherz_fc.npy"
+            )
+            paths[f"{smoothing}_hemi-{hemi}_labels"] = combo_dir / "labels.npy"
+            paths[f"{smoothing}_hemi-{hemi}_scores"] = (
+                combo_dir / "template_correlations.npy"
+            )
+            paths[f"{smoothing}_hemi-{hemi}_margin"] = (
+                combo_dir / "correlation_margin.npy"
+            )
+            paths[f"{smoothing}_hemi-{hemi}_label_gifti"] = combo_dir / (
+                f"sub-{subject}_hemi-{hemi}_space-corobl_den-512_"
+                f"label-hcp151_fixed_template_k3_{smoothing}.label.gii"
+            )
+            paths[f"{smoothing}_hemi-{hemi}_combo_manifest"] = (
+                combo_dir / "combo_manifest.json"
+            )
+    paths["cortex_roi_timeseries"] = (
+        directory / "cortex" / "kong2022_roi_timeseries.npy"
+    )
+    paths["cortex_roi_vertex_counts"] = (
+        directory / "cortex" / "kong2022_roi_vertex_counts.npy"
+    )
+    return {key: path.resolve() for key, path in paths.items()}
 
 
 def _parameters(*, wb_command: Path) -> dict[str, object]:
@@ -1139,6 +1359,9 @@ def _run_subject(
         hippunfold_root=hippunfold_root,
     )
     subject_dir = Path(out_root) / "subjects" / f"sub-{subject}"
+    expected_outputs = _expected_subject_output_paths(
+        functional=functional, subject_dir=subject_dir
+    )
     expected_inputs = _expected_subject_inputs(
         functional=functional,
         label_root=label_root,
@@ -1156,6 +1379,7 @@ def _run_subject(
             subject_dir=subject_dir,
             expected_inputs=expected_inputs,
             expected_parameters=parameters,
+            expected_outputs=expected_outputs,
         )
         return {
             "subject": f"sub-{subject}",
@@ -1350,6 +1574,106 @@ def validate_run_resume_contract(
             raise ValueError(f"Run resume contract mismatch for {key}")
 
 
+def prepare_run_resume_state(
+    *,
+    run_dir: Path,
+    expected: Mapping[str, object],
+    resume: bool,
+) -> dict[str, object] | None:
+    directory = Path(run_dir)
+    final = directory / "run_manifest.json"
+    partial = directory / "run_manifest.partial.json"
+    if not directory.exists():
+        directory.mkdir(parents=True)
+        return None
+    entries = list(directory.iterdir())
+    if not entries:
+        return None
+    if not resume:
+        raise FileExistsError(f"Run directory is nonempty; use --resume: {directory}")
+    if final.exists() and partial.exists():
+        raise FileExistsError(f"Run has both final and partial manifests: {directory}")
+    if final.exists():
+        recorded = json.loads(final.read_text(encoding="utf-8"))
+        if not isinstance(recorded, dict):
+            raise ValueError(f"Invalid existing run manifest: {final}")
+        validate_run_resume_contract(recorded, expected)
+        items = recorded.get("items")
+        expected_subjects = recorded.get("subjects")
+        items_complete = (
+            isinstance(items, list)
+            and isinstance(expected_subjects, list)
+            and len(items) == len(expected_subjects)
+        )
+        if items_complete:
+            for item, expected_subject in zip(items, expected_subjects, strict=True):
+                combinations = item.get("combinations") if isinstance(item, Mapping) else None
+                combo_keys = (
+                    {
+                        (str(row.get("smoothing")), str(row.get("hemi")))
+                        for row in combinations
+                        if isinstance(row, Mapping) and row.get("status") == "ok"
+                    }
+                    if isinstance(combinations, list)
+                    else set()
+                )
+                if (
+                    item.get("subject") != expected_subject
+                    or item.get("status") != "ok"
+                    or len(combinations or []) != 4
+                    or combo_keys
+                    != {
+                        (smoothing, hemi)
+                        for smoothing in SMOOTHINGS
+                        for hemi in HEMIS
+                    }
+                ):
+                    items_complete = False
+                    break
+        if (
+            recorded.get("status") != "complete"
+            or recorded.get("complete_count") != recorded.get("subject_count")
+            or recorded.get("failed_count") != 0
+            or not items_complete
+        ):
+            raise ValueError(f"Published run manifest is not reusable complete output: {final}")
+        return recorded
+    attempt_pattern = re.compile(
+        r"run_manifest\.attempt-(?P<number>[0-9]{3,})\."
+        r"(?:failed|interrupted)\.json"
+    )
+    attempts: list[int] = []
+    unexpected: list[Path] = []
+    for entry in entries:
+        if entry == partial:
+            continue
+        match = attempt_pattern.fullmatch(entry.name)
+        if match is None or not entry.is_file():
+            unexpected.append(entry)
+        else:
+            attempts.append(int(match.group("number")))
+    if not partial.is_file() or unexpected:
+        raise FileExistsError(
+            f"Run resume has unexpected retained state: {unexpected or entries}"
+        )
+    original = partial.read_bytes()
+    recorded = json.loads(original)
+    if not isinstance(recorded, dict) or recorded.get("status") not in {
+        "in_progress",
+        "failed",
+    }:
+        raise ValueError(f"Run partial has invalid status: {partial}")
+    validate_run_resume_contract(recorded, expected)
+    attempt_number = max(attempts, default=0) + 1
+    suffix = "failed" if recorded["status"] == "failed" else "interrupted"
+    history = directory / (
+        f"run_manifest.attempt-{attempt_number:03d}.{suffix}.json"
+    )
+    with history.open("xb") as stream:
+        stream.write(original)
+    return None
+
+
 def _run_batch(
     *,
     subjects: Sequence[str],
@@ -1366,6 +1690,12 @@ def _run_batch(
     template: TemplateContract,
     wb_command: Path,
 ) -> dict[str, object]:
+    if list(subjects) == list(canonical_roster):
+        validate_full_run_smoke_gate(
+            out_root=out_root,
+            template_fingerprint=template.manifest_fingerprint,
+            roi_registry_fingerprint=template.roi_registry_fingerprint,
+        )
     _preflight_batch(
         subjects=subjects,
         volume_root=volume_root,
@@ -1379,9 +1709,6 @@ def _run_batch(
     run_dir = _run_dir(out_root, run_id)
     final_manifest = run_dir / "run_manifest.json"
     partial_manifest = run_dir / "run_manifest.partial.json"
-    if run_dir.exists() and any(run_dir.iterdir()) and not resume:
-        raise FileExistsError(f"Run directory is nonempty; use --resume: {run_dir}")
-    run_dir.mkdir(parents=True, exist_ok=True)
     base = {
         "workflow": "jj_tms_hcp151_fixed_template_matching",
         "run_id": run_id,
@@ -1404,19 +1731,11 @@ def _run_batch(
             "out_root": str(Path(out_root).resolve()),
         },
     }
-    if partial_manifest.exists():
-        raise FileExistsError(
-            f"Retained run partial manifest will not be overwritten: {partial_manifest}"
-        )
-    if final_manifest.exists():
-        recorded_run = json.loads(final_manifest.read_text(encoding="utf-8"))
-        if not isinstance(recorded_run, Mapping):
-            raise ValueError(f"Invalid existing run manifest: {final_manifest}")
-        validate_run_resume_contract(recorded_run, base)
-    elif resume and any(run_dir.iterdir()):
-        raise FileExistsError(
-            f"Resume run directory lacks a validated run manifest: {run_dir}"
-        )
+    reusable_run = prepare_run_resume_state(
+        run_dir=run_dir, expected=base, resume=resume
+    )
+    if reusable_run is not None:
+        return reusable_run
     _write_json(partial_manifest, {**base, "status": "in_progress", "items": []})
     items: list[dict[str, object]] = []
     with ThreadPoolExecutor(max_workers=min(int(jobs), len(subjects))) as pool:
@@ -1462,9 +1781,7 @@ def _run_batch(
         "items": items,
     }
     _write_json(partial_manifest, payload)
-    if final_manifest.exists():
-        os.replace(partial_manifest, final_manifest)
-    else:
+    if status == "complete":
         _publish_partial(partial_manifest, final_manifest)
     return payload
 
@@ -1491,10 +1808,14 @@ def _validate_subject_for_run(
         template=template,
     )
     subject_dir = Path(out_root) / "subjects" / f"sub-{subject}"
+    expected_outputs = _expected_subject_output_paths(
+        functional=functional, subject_dir=subject_dir
+    )
     manifest = validate_reusable_subject(
         subject_dir=subject_dir,
         expected_inputs=expected_inputs,
         expected_parameters=parameters,
+        expected_outputs=expected_outputs,
     )
     rows: list[dict[str, object]] = []
     combinations = manifest.get("combinations")
@@ -1521,10 +1842,11 @@ def _validate_subject_for_run(
             margin=margin,
             valid_mask=valid,
         )
-        surface = _surface_path(Path(str(roots["hippunfold_root"])), subject, hemi)
-        density = combo_payload.get("density_evidence")
-        if not isinstance(density, Mapping) or Path(str(density.get("consumed_asset"))).resolve() != surface:
-            raise ValueError(f"Consumed-surface density evidence drift: sub-{subject} {smoothing} {hemi}")
+        density = validate_consumed_surface_density(
+            density=combo_payload.get("density_evidence"),
+            source_record=manifest["inputs"].get(f"surface_hemi-{hemi}"),
+            context=f"sub-{subject} {smoothing} hemi-{hemi}",
+        )
         rows.append(
             {
                 "subject": f"sub-{subject}",
@@ -1533,7 +1855,7 @@ def _validate_subject_for_run(
                 "status": "ok",
                 "label_counts": summary["label_counts"],
                 "margin_summary": summary["margin_summary"],
-                "density_evidence": dict(density),
+                "density_evidence": density,
                 "labels_sha256": outputs["labels"]["sha256"],
             }
         )
@@ -1592,6 +1914,7 @@ def _validate_run(
     template: TemplateContract,
     selected_subjects: Sequence[str] | None,
     canonical_roster: Sequence[str],
+    resume: bool,
 ) -> dict[str, object]:
     run_dir = _run_dir(out_root, run_id)
     run_manifest_path = run_dir / "run_manifest.json"
@@ -1612,6 +1935,16 @@ def _validate_run(
     parameters = run_manifest.get("parameters")
     if not isinstance(roots, Mapping) or not isinstance(parameters, Mapping):
         raise ValueError("Run path/parameter metadata is missing")
+    run_manifest_fingerprint = fingerprint(run_manifest_path)
+    reusable_validation = prepare_validation_resume_state(
+        run_dir=run_dir,
+        expected_run_manifest=run_manifest_fingerprint,
+        template_fingerprint=template.manifest_fingerprint,
+        roi_registry_fingerprint=template.roi_registry_fingerprint,
+        resume=resume,
+    )
+    if reusable_validation is not None:
+        return reusable_validation
     rows: list[dict[str, object]] = []
     subject_manifests: list[str] = []
     for subject in subjects:
@@ -1623,15 +1956,13 @@ def _validate_run(
             parameters=parameters,
         )
         rows.extend(subject_rows)
-        subject_manifests.append(
-            str((Path(out_root) / "subjects" / f"sub-{subject}" / "subject_manifest.json").resolve())
-        )
+        subject_manifest_path = (
+            Path(out_root) / "subjects" / f"sub-{subject}" / "subject_manifest.json"
+        ).resolve()
+        subject_manifests.append(str(subject_manifest_path))
     if len(rows) != len(subjects) * 4:
         raise ValueError("Validation did not produce four combinations per subject")
-    table_path = run_dir / "validation_items.tsv"
-    manifest_path = run_dir / "validation_manifest.json"
-    _write_validation_tsv(table_path, rows)
-    payload = {
+    payload_base = {
         "status": "complete",
         "workflow": "validate_jj_tms_hcp151_fixed_template_matching",
         "run_id": run_id,
@@ -1641,15 +1972,13 @@ def _validate_run(
         "combination_count": len(rows),
         "template_manifest": dict(template.manifest_fingerprint),
         "roi_registry": dict(template.roi_registry_fingerprint),
-        "run_manifest": fingerprint(run_manifest_path),
+        "run_manifest": run_manifest_fingerprint,
         "subject_manifests": subject_manifests,
-        "validation_items": fingerprint(table_path),
         "items": rows,
     }
-    if manifest_path.exists():
-        raise FileExistsError(f"Refusing to overwrite validation manifest: {manifest_path}")
-    _write_json(manifest_path, payload)
-    return payload
+    return publish_validation_artifacts(
+        run_dir=run_dir, rows=rows, payload_base=payload_base
+    )
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
@@ -1728,9 +2057,176 @@ def main(argv: Sequence[str] | None = None) -> int:
                 else None
             ),
             canonical_roster=canonical,
+            resume=bool(args.resume),
         )
     print(json.dumps(payload, indent=2, sort_keys=True))
     return 0 if payload.get("status") in {"ok", "complete"} else 1
+
+
+def validate_full_run_smoke_gate(
+    *,
+    out_root: Path,
+    template_fingerprint: Mapping[str, object],
+    roi_registry_fingerprint: Mapping[str, object],
+) -> dict[str, object]:
+    run_dir = _run_dir(out_root, SMOKE_RUN_ID)
+    manifest_path = run_dir / "validation_manifest.json"
+    if not manifest_path.is_file():
+        raise FileNotFoundError(
+            f"Canonical smoke validation is required before a full run: {manifest_path}"
+        )
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    expected_summary = {
+        "status": "complete",
+        "run_id": SMOKE_RUN_ID,
+        "scope": "subset",
+        "subject_count": len(SMOKE_SUBJECTS),
+        "complete_subject_count": len(SMOKE_SUBJECTS),
+        "combination_count": len(SMOKE_SUBJECTS) * len(SMOOTHINGS) * len(HEMIS),
+    }
+    for key, expected_value in expected_summary.items():
+        if payload.get(key) != expected_value:
+            raise ValueError(
+                f"Canonical smoke validation {key} mismatch: "
+                f"{payload.get(key)!r} != {expected_value!r}"
+            )
+    if payload.get("template_manifest") != dict(template_fingerprint):
+        raise ValueError("Canonical smoke template fingerprint drift")
+    if payload.get("roi_registry") != dict(roi_registry_fingerprint):
+        raise ValueError("Canonical smoke ROI registry fingerprint drift")
+    _validate_fingerprint(payload.get("template_manifest"), context="smoke template")
+    _validate_fingerprint(payload.get("roi_registry"), context="smoke ROI registry")
+    _validate_fingerprint(payload.get("run_manifest"), context="smoke run manifest")
+    _validate_fingerprint(payload.get("validation_items"), context="smoke validation table")
+    run_record = payload["run_manifest"]
+    run_payload = json.loads(Path(str(run_record["path"])).read_text(encoding="utf-8"))
+    if (
+        run_payload.get("status") != "complete"
+        or run_payload.get("run_id") != SMOKE_RUN_ID
+        or run_payload.get("scope") != "subset"
+        or run_payload.get("subjects")
+        != [f"sub-{subject}" for subject in SMOKE_SUBJECTS]
+        or run_payload.get("subject_count") != len(SMOKE_SUBJECTS)
+        or run_payload.get("complete_count") != len(SMOKE_SUBJECTS)
+        or run_payload.get("failed_count") != 0
+        or run_payload.get("template_manifest") != dict(template_fingerprint)
+        or run_payload.get("roi_registry") != dict(roi_registry_fingerprint)
+    ):
+        raise ValueError("Canonical smoke run manifest contract mismatch")
+    items = payload.get("items")
+    if not isinstance(items, list):
+        raise ValueError("Canonical smoke validation items are missing")
+    actual_keys: set[tuple[str, str, str]] = set()
+    for row in items:
+        if not isinstance(row, Mapping) or row.get("status") != "ok":
+            raise ValueError("Canonical smoke contains a non-ok combination")
+        key = (
+            str(row.get("subject")),
+            str(row.get("smoothing")),
+            str(row.get("hemi")),
+        )
+        if key in actual_keys:
+            raise ValueError(f"Duplicate canonical smoke combination: {key}")
+        actual_keys.add(key)
+        counts = row.get("label_counts")
+        if not isinstance(counts, Mapping) or any(
+            int(counts.get(str(label), 0)) <= 0 for label in range(1, K + 1)
+        ):
+            raise ValueError(f"Canonical smoke label coverage failed: {key}")
+    expected_keys = {
+        (f"sub-{subject}", smoothing, hemi)
+        for subject in SMOKE_SUBJECTS
+        for smoothing in SMOOTHINGS
+        for hemi in HEMIS
+    }
+    if actual_keys != expected_keys:
+        raise ValueError("Canonical smoke subject/combination set mismatch")
+    return fingerprint(manifest_path)
+
+
+def prepare_validation_resume_state(
+    *,
+    run_dir: Path,
+    expected_run_manifest: Mapping[str, object],
+    template_fingerprint: Mapping[str, object],
+    roi_registry_fingerprint: Mapping[str, object],
+    resume: bool,
+) -> dict[str, object] | None:
+    directory = Path(run_dir)
+    manifest = directory / "validation_manifest.json"
+    if manifest.exists():
+        if not resume:
+            raise FileExistsError(
+                f"Validation output exists; use --resume for exact reuse: {manifest}"
+            )
+        payload = json.loads(manifest.read_text(encoding="utf-8"))
+        if not isinstance(payload, dict) or payload.get("status") != "complete":
+            raise ValueError(f"Validation manifest is not reusable complete output: {manifest}")
+        if payload.get("run_manifest") != dict(expected_run_manifest):
+            raise ValueError("Validation run-manifest fingerprint drift")
+        if payload.get("template_manifest") != dict(template_fingerprint):
+            raise ValueError("Validation template fingerprint drift")
+        if payload.get("roi_registry") != dict(roi_registry_fingerprint):
+            raise ValueError("Validation ROI registry fingerprint drift")
+        _validate_fingerprint(payload.get("run_manifest"), context="validation run manifest")
+        _validate_fingerprint(payload.get("template_manifest"), context="validation template")
+        _validate_fingerprint(payload.get("roi_registry"), context="validation ROI registry")
+        _validate_fingerprint(payload.get("validation_items"), context="validation table")
+        return payload
+    table_partial = directory / "validation_items.partial.tsv"
+    manifest_partial = directory / "validation_manifest.partial.json"
+    orphan_table = directory / "validation_items.tsv"
+    active = [path for path in (table_partial, manifest_partial, orphan_table) if path.exists()]
+    if not active:
+        return None
+    if not resume:
+        raise FileExistsError(
+            f"Interrupted validation artifacts are retained; use --resume: {active}"
+        )
+    if table_partial in active and orphan_table in active:
+        raise FileExistsError("Validation has both partial and orphan final tables")
+    attempt_pattern = re.compile(
+        r"validation_(?:items|manifest)\.attempt-(?P<number>[0-9]{3,})"
+        r"\.interrupted\.(?:tsv|json)"
+    )
+    attempts = []
+    for path in directory.iterdir():
+        match = attempt_pattern.fullmatch(path.name)
+        if match is not None:
+            attempts.append(int(match.group("number")))
+    attempt_number = max(attempts, default=0) + 1
+    for source in active:
+        stem = "validation_items" if source.suffix == ".tsv" else "validation_manifest"
+        history = directory / (
+            f"{stem}.attempt-{attempt_number:03d}.interrupted{source.suffix}"
+        )
+        if history.exists():
+            raise FileExistsError(f"Validation attempt history already exists: {history}")
+        source.rename(history)
+    return None
+
+
+def publish_validation_artifacts(
+    *,
+    run_dir: Path,
+    rows: Sequence[Mapping[str, object]],
+    payload_base: Mapping[str, object],
+) -> dict[str, object]:
+    directory = Path(run_dir)
+    table_partial = directory / "validation_items.partial.tsv"
+    table_final = directory / "validation_items.tsv"
+    manifest_partial = directory / "validation_manifest.partial.json"
+    manifest_final = directory / "validation_manifest.json"
+    for path in (table_partial, table_final, manifest_partial, manifest_final):
+        if path.exists():
+            raise FileExistsError(f"Refusing to overwrite validation artifact: {path}")
+    _write_validation_tsv(table_partial, rows)
+    _publish_partial(table_partial, table_final)
+    payload = {**dict(payload_base), "validation_items": fingerprint(table_final)}
+    with manifest_partial.open("x", encoding="utf-8") as stream:
+        stream.write(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+    _publish_partial(manifest_partial, manifest_final)
+    return payload
 
 
 if __name__ == "__main__":
