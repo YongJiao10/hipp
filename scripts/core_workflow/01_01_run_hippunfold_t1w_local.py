@@ -14,6 +14,7 @@ Inputs:
   - subject: Subject ID without the "sub-" prefix (required).
   - input_dir (optional, default: "data/hippunfold_input"): Root directory containing raw structural BIDS folders.
   - out_dir: Subject-specific output directory where HippUnfold results will be written (required).
+  - --model-path (optional): Canonical local nnUNet model tar; the remote model-download rule is always omitted.
 - Physical inputs:
   - Raw T1w anatomical MRI files under `{input_dir}/sub-<subject>/anat/`.
 
@@ -28,6 +29,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 RUN_T1W_SCRIPT = REPO_ROOT / "scripts" / "core_workflow" / "lib" / "hippunfold_shell" / "run_hippunfold_local_t1w_isolated_cache.sh"
+DEFAULT_MODEL_PATH = Path("/home/yojiao/hpchome/hipp/runtime/hippunfold_asset_store_shared/hippunfold_assets/model/trained_model.3d_fullres.Task101_hcp1200_T1w.nnUNetTrainerV2.model_best.tar")
 
 
 def run_t1w_local(argv: list[str] | None = None) -> int:
@@ -35,8 +37,9 @@ def run_t1w_local(argv: list[str] | None = None) -> int:
     parser.add_argument("subject", help="Subject ID without sub- prefix.")
     parser.add_argument("input_dir", nargs="?", default="data/hippunfold_input", help="Input root containing sub-*/anat.")
     parser.add_argument("out_dir", help="Output directory for this subject.")
+    parser.add_argument("--model-path", type=Path, default=DEFAULT_MODEL_PATH, help="Canonical local HippUnfold nnUNet model tar; remote model retrieval is disabled.")
     args = parser.parse_args(argv)
-    cmd = ["bash", str(RUN_T1W_SCRIPT), str(args.subject), str(args.input_dir), str(args.out_dir)]
+    cmd = ["bash", str(RUN_T1W_SCRIPT), str(args.subject), str(args.input_dir), str(args.out_dir), str(args.model_path)]
     proc = subprocess.run(cmd, cwd=str(REPO_ROOT), check=False)
     return int(proc.returncode)
 

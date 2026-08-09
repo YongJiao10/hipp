@@ -320,8 +320,10 @@ Route A MATLAB label generation.
 Setting / Path                                 Purpose
 --------------------------------------------  -------------------------------------------
 `HIPPUNFOLD_CACHE_ROOT`                      Per-run scratch root; safe to isolate by run
+`HIPPUNFOLD_CLEANUP_RUNTIME`                 Defaults to `0` (retain scratch); set to `1` only for an explicitly approved cleanup
 `runtime/hippunfold_asset_store_shared`       Hardcoded shared asset store for reusable template/model downloads
 `runtime/hippunfold_asset_store_shared/hippunfold_assets`       Canonical `HIPPUNFOLD_CACHE_DIR`; noncanonical overrides are rejected
+`hippunfold_assets/model/trained_model.3d_fullres.Task101_hcp1200_T1w.nnUNetTrainerV2.model_best.tar`  Canonical local T1w nnUNet model; required before a run
 `runtime/hippunfold_asset_store_shared/runtime_source_assets`   Canonical `HIPPUNFOLD_RUNTIME_SOURCE_CACHE`; noncanonical overrides are rejected
 `snakemake_conda`                             Optional local conda prefix for rule envs
 `conda_pkgs`                                  Local conda package cache
@@ -353,6 +355,21 @@ hardcode `HIPPUNFOLD_CACHE_DIR` and `HIPPUNFOLD_RUNTIME_SOURCE_CACHE` to the
 shared asset store under `/home/yojiao/hpchome/hipp/runtime/hippunfold_asset_store_shared`
 and reject caller-provided noncanonical values. Only `HIPPUNFOLD_CACHE_ROOT` is
 allowed to vary for per-run scratch.
+Runtime scratch is retained by default; the wrapper only removes it when `HIPPUNFOLD_CLEANUP_RUNTIME=1` is explicitly supplied.
+
+The active public T1w launcher `scripts/core_workflow/01_01_run_hippunfold_t1w_local.py`
+accepts `--model-path` and defaults to the canonical local model tar listed above.
+The wrapper prints the resolved model path, fails fast if that file is missing, and
+always appends `--omit-from download_nnunet_model` after caller-supplied Snakemake
+arguments. A new output directory therefore cannot trigger HippUnfold's remote
+nnUNet model-download rule; it must consume the shared local model.
+For JJ_TMS raw anatomical inputs, the batch launcher sets
+`HIPPUNFOLD_T1W_FILTER=extension=.nii`; the generic wrapper leaves this filter empty so existing `.nii.gz` HCP inputs remain supported.
+
+The output checker `scripts/core_workflow/01_02_check_hippunfold_outputs.py`
+accepts legacy success markers, HippUnfold 2.x `N of N steps (100%) done`
+markers, and no-op logs. When a 2.x log has no `localrule all` input list, it
+derives the expected manifest from the successful subject output tree.
 
 For persistent conda installs outside the launcher, `~/.condarc` is set to keep
 `pkgs_dirs` and `envs_dirs` under the repo-local `.cache/` tree so package

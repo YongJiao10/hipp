@@ -8,7 +8,7 @@ from .workflow_utils import utc_timestamp_for_filename
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
-DATASET_KEYS = ("hcp", "iowa", "stanford", "iowa_hcp500")
+DATASET_KEYS = ("hcp", "iowa", "iowa_estt", "iowa_jj_tms", "stanford", "iowa_hcp500")
 DEFAULT_DATASET = "hcp"
 
 IOWA7T_BRANCHES = ("multiband", "multi_echo")
@@ -196,6 +196,8 @@ def iowa7t_branch_layout(
 def _validate_dataset(dataset: str) -> str:
     """Normalize and validate a dataset key."""
     key = str(dataset).strip().lower()
+    if key == "iowa":
+        key = "iowa_estt"
     if key not in DATASET_KEYS:
         raise ValueError(
             f"Unknown dataset: {dataset!r}; expected one of {DATASET_KEYS}"
@@ -371,6 +373,13 @@ def resolve_local_cortex_neighbors_dir(dataset: str = DEFAULT_DATASET) -> Path:
 
 def resolve_crossfit_template_matching_overview_root(dataset: str = DEFAULT_DATASET) -> Path:
     return resolve_overviews_dir(dataset) / "crossfit_template_matching"
+
+
+def resolve_crossfit_template_matching_individual_overview_root(
+    dataset: str = DEFAULT_DATASET,
+) -> Path:
+    """Return the canonical per-subject cross-fit overview directory."""
+    return resolve_crossfit_template_matching_overview_root(dataset) / "individual"
 
 
 # ── backward-compatible module-level constants (resolved for DEFAULT_DATASET) ──

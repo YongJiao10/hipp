@@ -10,6 +10,7 @@ HIPPUNFOLD_ENV_NAME="${HIPPUNFOLD_ENV_NAME:-hippo2}"
 HIPPUNFOLD_MODALITY="${HIPPUNFOLD_MODALITY:-T1w}"
 HIPPUNFOLD_USE_T1_REG_TEMPLATE="${HIPPUNFOLD_USE_T1_REG_TEMPLATE:-0}"
 HIPPUNFOLD_OUTPUT_DENSITY="${HIPPUNFOLD_OUTPUT_DENSITY:-512}"
+HIPPUNFOLD_T1W_FILTER="${HIPPUNFOLD_T1W_FILTER:-}"
 HIPPUNFOLD_USE_GPU="${HIPPUNFOLD_USE_GPU:-1}"
 HIPPUNFOLD_USE_CONDA="${HIPPUNFOLD_USE_CONDA:-0}"
 HIPPUNFOLD_CORES="${HIPPUNFOLD_CORES:-1}"
@@ -17,9 +18,11 @@ HIPPUNFOLD_WORKFLOW_PROFILE="${HIPPUNFOLD_WORKFLOW_PROFILE:-none}"
 HIPPUNFOLD_SDM="${HIPPUNFOLD_SDM:-env-modules}"
 HIPPUNFOLD_EXTERNAL_BIN_DIR="${HIPPUNFOLD_EXTERNAL_BIN_DIR:-/Applications/ITK-SNAP.app/Contents/bin}"
 CACHE_ROOT="${HIPPUNFOLD_CACHE_ROOT:-${BUNDLE_ROOT}/runtime/hippunfold_cache}"
+HIPPUNFOLD_CLEANUP_RUNTIME="${HIPPUNFOLD_CLEANUP_RUNTIME:-0}"
 CANONICAL_HIPPUNFOLD_ASSET_ROOT="/home/yojiao/hpchome/hipp/runtime/hippunfold_asset_store_shared"
 CANONICAL_HIPPUNFOLD_CACHE_DIR="/home/yojiao/hpchome/hipp/runtime/hippunfold_asset_store_shared/hippunfold_assets"
 CANONICAL_HIPPUNFOLD_RUNTIME_SOURCE_CACHE="/home/yojiao/hpchome/hipp/runtime/hippunfold_asset_store_shared/runtime_source_assets"
+CANONICAL_HIPPUNFOLD_MODEL_PATH="/home/yojiao/hpchome/hipp/runtime/hippunfold_asset_store_shared/hippunfold_assets/model/trained_model.3d_fullres.Task101_hcp1200_T1w.nnUNetTrainerV2.model_best.tar"
 
 if [[ -n "${HIPPUNFOLD_CACHE_DIR:-}" && "${HIPPUNFOLD_CACHE_DIR}" != "${CANONICAL_HIPPUNFOLD_CACHE_DIR}" ]]; then
   echo "run_hippunfold_local.sh: Refusing noncanonical HIPPUNFOLD_CACHE_DIR=${HIPPUNFOLD_CACHE_DIR}; expected ${CANONICAL_HIPPUNFOLD_CACHE_DIR}" >&2
@@ -32,6 +35,21 @@ if [[ -n "${HIPPUNFOLD_RUNTIME_SOURCE_CACHE:-}" && "${HIPPUNFOLD_RUNTIME_SOURCE_
 fi
 
 export HIPPUNFOLD_CACHE_DIR="${CANONICAL_HIPPUNFOLD_CACHE_DIR}"
+MODEL_PATH="${4:-${HIPPUNFOLD_MODEL_PATH:-${CANONICAL_HIPPUNFOLD_MODEL_PATH}}}"
+
+if [[ "${MODEL_PATH}" != "${CANONICAL_HIPPUNFOLD_MODEL_PATH}" ]]; then
+  echo "run_hippunfold_local.sh: Refusing noncanonical HIPPUNFOLD_MODEL_PATH=${MODEL_PATH}; expected ${CANONICAL_HIPPUNFOLD_MODEL_PATH}" >&2
+  exit 2
+fi
+
+export HIPPUNFOLD_MODEL_PATH="${MODEL_PATH}"
+if [[ ! -f "${HIPPUNFOLD_MODEL_PATH}" ]]; then
+  echo "run_hippunfold_local.sh: Local HippUnfold model is missing: ${MODEL_PATH}" >&2
+  exit 2
+fi
+
+echo "HippUnfold model path: ${HIPPUNFOLD_MODEL_PATH}"
+echo "HippUnfold model download rule: omitted (--omit-from download_nnunet_model)"
 export HIPPUNFOLD_RUNTIME_SOURCE_CACHE="${CANONICAL_HIPPUNFOLD_RUNTIME_SOURCE_CACHE}"
 
 CONDA_SH=""
@@ -49,11 +67,15 @@ source "${CONDA_SH}" >/dev/null 2>&1
 conda activate "${HIPPUNFOLD_ENV_NAME}"
 
 cleanup_runtime_dirs() {
-  local home_cache="${CACHE_ROOT}/home"
-  if [[ -d "${home_cache}" ]]; then
-    find "${home_cache}" -type d -empty -delete 2>/dev/null || true
+  if [[ "${HIPPUNFOLD_CLEANUP_RUNTIME}" == "1" ]]; then
+    local home_cache="${CACHE_ROOT}/home"
+    if [[ -d "${home_cache}" ]]; then
+      find "${home_cache}" -type d -empty -delete 2>/dev/null || true
+    fi
+    rm -rf "${CACHE_ROOT}"
+  else
+    echo "run_hippunfold_local.sh: Retaining runtime cache: ${CACHE_ROOT}" >&2
   fi
-  rm -rf "${CACHE_ROOT}"
 }
 trap cleanup_runtime_dirs EXIT
 
@@ -120,6 +142,10 @@ cmd=(
   --notemp
 )
 
+if [[ -n "${HIPPUNFOLD_T1W_FILTER}" ]]; then
+  cmd+=(--filter-T1w "${HIPPUNFOLD_T1W_FILTER}")
+fi
+
 if [[ "${HIPPUNFOLD_USE_T1_REG_TEMPLATE}" == "1" ]]; then
   cmd+=(--t1-reg-template)
 fi
@@ -143,7 +169,15 @@ fi
 
 # Append any caller-supplied extra snakemake args (e.g. --forcerun <rule>).
 if [[ -n "${HIPPUNFOLD_EXTRA_ARGS:-}" ]]; then
+  if [[ "${HIPPUNFOLD_EXTRA_ARGS}" == *download_nnunet_model* ]]; then
+    echo "run_hippunfold_local.sh: HIPPUNFOLD_EXTRA_ARGS cannot reference download_nnunet_model; the remote model rule is disabled." >&2
+    exit 2
+  fi
   cmd+=(${=HIPPUNFOLD_EXTRA_ARGS})
 fi
+
+# This invariant must remain after caller extras: every new output DAG skips
+# the remote model-storage rule and consumes the validated local model tar.
+cmd+=(--omit-from download_nnunet_model)
 
 "${cmd[@]}"

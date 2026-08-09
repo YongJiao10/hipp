@@ -41,6 +41,22 @@ from lib.output_layout import (
 
 SUCCESS_MARKER = "Finished jobid: 0 (Rule: all)"
 FAIL_MARKER = "At least one job did not complete successfully."
+COMPLETE_STEPS_PATTERN = re.compile(
+    r"\b(?P<completed>\d+) of (?P<total>\d+) steps \(100%\) done\b"
+)
+NOOP_MARKER = "Nothing to be done (all requested files are present and up to date)."
+
+
+def is_successful_log(log_text: str) -> bool:
+    """Accept legacy and HippUnfold 2.x Snakemake success log formats."""
+    if FAIL_MARKER in log_text:
+        return False
+    if SUCCESS_MARKER in log_text or NOOP_MARKER in log_text:
+        return True
+    return any(
+        match.group("completed") == match.group("total")
+        for match in COMPLETE_STEPS_PATTERN.finditer(log_text)
+    )
 
 
 def parse_args() -> argparse.Namespace:
@@ -115,7 +131,7 @@ def latest_log_info(batch_root: Path, sid: str) -> dict[str, Any]:
     text = logs[0].read_text(encoding="utf-8", errors="ignore")
     return {
         "path": str(logs[0]),
-        "has_success_marker": SUCCESS_MARKER in text,
+        "has_success_marker": is_successful_log(text),
         "has_fail_marker": FAIL_MARKER in text,
     }
 
@@ -150,10 +166,17 @@ def build_manifest_from_success_logs(
     for sid in subjects:
         for log_path in get_subject_log_paths(batch_root, sid):
             text = log_path.read_text(encoding="utf-8", errors="ignore")
-            if SUCCESS_MARKER not in text or FAIL_MARKER in text:
+            if not is_successful_log(text):
                 continue
             paths = parse_all_rule_inputs(text)
             subject_paths = [p for p in paths if p.startswith(f"sub-{sid}/")]
+            if not subject_paths:
+                subject_root = batch_root / f"sub-{sid}" / "hippunfold"
+                subject_paths = [
+                    p.relative_to(subject_root).as_posix()
+                    for p in subject_root.rglob("*")
+                    if p.is_file() and ".snakemake" not in p.parts and "logs" not in p.parts
+                ]
             if not subject_paths:
                 continue
             templates = []

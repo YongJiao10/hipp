@@ -16,7 +16,7 @@ Rules:
 - Iowa7T means the Jianglab fMRIPrep Iowa7T trees, not HCPpipeline500.
 - `36p` remains the default workflow variant for backward compatibility.
 - `0p`, `32p`, and `noxcpd` use parallel `DataOrg_PFM_*` trees and must not write into the 36P output root.
-- `outputs_iowa/` in the repository is not a production output root.
+- `outputs_iowa_estt/` and `outputs_iowa_jj_tms/` in the repository are derived-output roots for ESTT (3T) and JJ_TMS (3T) respectively, not Iowa 7T production output roots.
 - Subject structural HippUnfold output is shared at `subjects/sub-<ID>/hippunfold/`.
 - Functional branches are direct siblings: `multiband/` and `multi_echo/`.
 - There is no `variants/` wrapper.

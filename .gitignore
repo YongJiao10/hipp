@@ -43,4 +43,8 @@ K_selection_plan.md
 *.gz
 outputs_hcp/
 outputs_iowa/
+outputs_iowa_estt/
+outputs_iowa_jj_tms/
 outputs_stanford/
+docs/presentations/
+

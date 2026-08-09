@@ -124,6 +124,46 @@ overview and `robustness_summary.tsv` live under
 non-circularity argument, artifacts, and interpretation.
 
 
+### Cross-Fit Individual Surface Overviews
+
+Render a compact subject-level comparison of the cross-fitted labels. To
+replace the prior AP-labelled PNGs with the Fisher-z network legend, run:
+
+    /home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/04_build_crossfit_individual_overviews.py --jobs 4 --resume --refresh-visuals
+
+The immutable source codes remain AP-ordered (`1=Anterior`, `2=Body`,
+`3=Posterior`) in cross-fit labels and source manifests. Only the display layer
+changes: the renderer fingerprint-validates all five fold × two smoothing × L/R
+`template_profiles.npy` artifacts, averages each code’s 400-ROI Fisher-z profile
+within the canonical Kong2022 networks, and requires a stable unique winner. In
+the current HCP run this gives `1=VAN`, `2=SMN`, and `3=DMN` in every one of the
+20 templates. The legend keeps the short names but uses canonical Kong2022 style
+keys: VAN/VentralAttention `(220,92,255,255)`, SMN/Somatomotor
+`(99,150,194,255)`, and DMN/Default `(216,92,107,255)` from
+`config/hipp_network_style.json`.
+
+The command preserves the standard locked Workbench hippocampal rendering used
+by core overviews. Each subject PNG has the fixed 2 mm row above the fixed 4 mm
+row, with left/right hemisphere surfaces and the Fisher-z network legend; the
+composite header wraps before the subject identifier when needed, so the full
+`sub-…` title remains visible. Alternative subsets or row orders are rejected. It
+validates the held-out combo
+manifest, AP source-label semantics, label-GIFTI SHA-256 fingerprint, the exact
+subject/hemi den-512 consumed surface, its recorded input fingerprint, its point
+count, the locked Workbench scene SHA-256, all template-profile fingerprints,
+and the display-contract fingerprint before rendering. A completed PNG is
+atomically published. Plain `--resume` only reuses a PNG with matching source,
+scene, image, and visual-label contract fingerprints; a legacy AP-labelled PNG
+requires the explicit `--resume --refresh-visuals` replacement request. The
+aggregate items list preserves the last validated subject records, while the
+status TSV and `attempt_items` log the current invocation, so a failed retry
+cannot erase valid provenance. Outputs are kept in the canonical
+`outputs_hcp/present/overviews/crossfit_template_matching/individual/` subtree
+with `individual_overview_status.tsv`, `individual_overview_manifest.json`, and
+`network_label_mapping.json`. The default uses four workers and is capped at the
+repository-wide limit of ten.
+
+
 ## Family17 Gradient Overview Rendering
 
 The individual overview adapter accepts `--network-column family17` for
