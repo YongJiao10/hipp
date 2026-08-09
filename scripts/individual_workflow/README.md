@@ -113,8 +113,14 @@ numbered attempt history before a retry. The renderer invokes the matcher's
 strict subject validator when run context is available, requires the exact
 unique subject x smoothing x hemisphere validation closure and matching label
 SHA values, fingerprints the status TSV on reuse, and atomically stages
-aggregate status/manifest files. Subsets require --allow-subset and are
-reported with scope=subset, never production ok.
+aggregate status/manifest files. It also stages an in-progress aggregate and
+one atomic item record per subject so an orphan PNG can only be recovered
+after strict provenance validation. Validation-backed production rendering is
+full scope only: 70 subjects, 280 unique rows, complete roots/parameters, and
+the matcher dependency closure; subsets require --allow-subset and are
+reported with scope=subset, never production ok. Renderer jobs are capped at
+5 because each worker may launch one Workbench child (2 x jobs <= 10 total
+processes).
 
 ## Method Notes
 

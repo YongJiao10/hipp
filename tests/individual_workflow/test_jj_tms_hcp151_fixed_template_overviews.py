@@ -66,6 +66,7 @@ def _write_fixed_subject(root: Path, subject: str = "1001") -> None:
         )
 
     subject_inputs = {}
+    subject_outputs = {}
     combinations = []
     for smoothing in ("2mm", "4mm"):
         for hemi in ("L", "R"):
@@ -121,6 +122,14 @@ def _write_fixed_subject(root: Path, subject: str = "1001") -> None:
                 ),
                 encoding="utf-8",
             )
+            combo_payload = json.loads(combo_manifest.read_text(encoding="utf-8"))
+            subject_outputs[f"{smoothing}_hemi-{hemi}_combo_manifest"] = {
+                "path": str(combo_manifest.resolve()),
+                **_fingerprint(combo_manifest),
+            }
+            subject_outputs[f"{smoothing}_hemi-{hemi}_label_gifti"] = (
+                combo_payload["outputs"]["label_gifti"]
+            )
             combinations.append(
                 {
                     "status": "ok",
@@ -137,6 +146,7 @@ def _write_fixed_subject(root: Path, subject: str = "1001") -> None:
                 "status": "ok",
                 "subject": f"sub-{subject}",
                 "inputs": subject_inputs,
+                "outputs": subject_outputs,
                 "combinations": combinations,
             }
         ),
@@ -355,12 +365,167 @@ def test_fixed_overview_rejects_combo_label_metadata_drift(tmp_path: Path):
     payload["outputs"]["label_gifti"]["shape"] = [511]
     combo.write_text(json.dumps(payload), encoding="utf-8")
 
-    with pytest.raises(ValueError, match="shape|metadata"):
+    with pytest.raises(ValueError, match="shape|metadata|provenance"):
         workflow.load_subject_sources(
             matching_root=matching_root,
             subject="1001",
         )
 
+
+def test_fixed_overview_fallback_rejects_subject_output_record_drift(
+    tmp_path: Path,
+):
+    workflow = load_module()
+    matching_root = tmp_path / "matching"
+    _write_fixed_subject(matching_root)
+    manifest = matching_root / "subjects" / "sub-1001" / "subject_manifest.json"
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    payload["outputs"]["2mm_hemi-L_label_gifti"]["sha256"] = "f" * 64
+    manifest.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="subject.*output|provenance|fingerprint"):
+        workflow.load_subject_sources(
+            matching_root=matching_root,
+            subject="1001",
+        )
+
+
+def test_validation_backed_renderer_requires_full_roster_and_dependencies(
+    tmp_path: Path,
+):
+    workflow = load_module()
+    matching_root = tmp_path / "matching"
+    _write_fixed_subject(matching_root)
+    subject_dir = matching_root / "subjects" / "sub-1001"
+    subject_payload = json.loads(
+        (subject_dir / "subject_manifest.json").read_text(encoding="utf-8")
+    )
+    header = (
+        "subject\tsmoothing\themi\tstatus\tlabel_1_count\tlabel_2_count\t"
+        "label_3_count\tmargin_min\tmargin_median\tmargin_mean\tmargin_max\t"
+        "labels_sha256\tconsumed_surface\n"
+    )
+    table_rows = []
+    items = []
+    for smoothing in ("2mm", "4mm"):
+        for hemi in ("L", "R"):
+            combo_path = (
+                subject_dir
+                / "matching"
+                / smoothing
+                / f"hemi-{hemi}"
+                / "combo_manifest.json"
+            )
+            combo = json.loads(combo_path.read_text(encoding="utf-8"))
+            label = combo["outputs"]["label_gifti"]
+            surface = subject_payload["inputs"][f"surface_hemi-{hemi}"]["path"]
+            label_sha = workflow.fingerprint(Path(label["path"]))["sha256"]
+            table_rows.append(
+                f"sub-1001\t{smoothing}\t{hemi}\tok\t1\t1\t1\t0.1\t0.2\t0.2\t0.3\t"
+                f"{label_sha}\t{surface}\n"
+            )
+            items.append(
+                {
+                    "status": "ok",
+                    "subject": "sub-1001",
+                    "smoothing": smoothing,
+                    "hemi": hemi,
+                    "label_counts": {"1": 1, "2": 1, "3": 1},
+                    "margin_summary": {
+                        "min": 0.1,
+                        "median": 0.2,
+                        "mean": 0.2,
+                        "max": 0.3,
+                    },
+                    "labels_sha256": label_sha,
+                    "density_evidence": {"consumed_asset": surface},
+                }
+            )
+    table = tmp_path / "validation_items.tsv"
+    table.write_text(header + "".join(table_rows), encoding="utf-8")
+    run_manifest = tmp_path / "run.json"
+    run_manifest.write_text(
+        json.dumps(
+            {
+                "status": "complete",
+                "subjects": ["sub-1001"],
+                "scope": "subset",
+            }
+        ),
+        encoding="utf-8",
+    )
+    validation = tmp_path / "validation.json"
+    validation.write_text(
+        json.dumps(
+            {
+                "status": "complete",
+                "subject_manifests": [
+                    str((subject_dir / "subject_manifest.json").resolve())
+                ],
+                "run_manifest": {
+                    "path": str(run_manifest.resolve()),
+                    **workflow.fingerprint(run_manifest),
+                },
+                "validation_items": {
+                    "path": str(table.resolve()),
+                    **workflow.fingerprint(table),
+                },
+                "items": items,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="full|70|root|parameter"):
+        workflow.load_source_manifest(
+            matching_root=matching_root,
+            subjects=["1001"],
+            validation_manifest=validation,
+        )
+
+
+def test_fixed_overview_rejects_worker_budget_above_process_cap(tmp_path: Path):
+    workflow = load_module()
+
+    with pytest.raises(ValueError, match="5"):
+        workflow.render_fixed_template_overviews(
+            matching_root=tmp_path / "matching",
+            output_dir=tmp_path / "present",
+            scene=tmp_path / "scene.scene",
+            subjects=[],
+            jobs=6,
+            allow_subset=True,
+        )
+
+
+def test_fixed_overview_writes_in_progress_contract_before_workers(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    workflow = load_module()
+    matching_root = tmp_path / "matching"
+    _write_fixed_subject(matching_root)
+    scene = tmp_path / "scene.scene"
+    scene.write_text("scene-v1\n", encoding="utf-8")
+
+    def crash_workers(**kwargs):
+        manifest = Path(kwargs["output_dir"]) / (
+            "fixed_template_overview_manifest.partial.json"
+        )
+        assert manifest.is_file()
+        payload = json.loads(manifest.read_text(encoding="utf-8"))
+        assert payload["summary"]["status"] == "in_progress"
+        raise RuntimeError("simulated worker crash")
+
+    monkeypatch.setattr(workflow, "_run_workers", crash_workers)
+    with pytest.raises(RuntimeError, match="simulated worker crash"):
+        workflow.render_fixed_template_overviews(
+            matching_root=matching_root,
+            output_dir=tmp_path / "present",
+            scene=scene,
+            subjects=["1001"],
+            jobs=1,
+            allow_subset=True,
+        )
 
 def test_fixed_overview_resume_validates_status_tsv_fingerprint(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch

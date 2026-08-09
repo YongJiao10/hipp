@@ -845,7 +845,7 @@ def test_completed_run_resume_is_immutable_and_reused(tmp_path: Path):
 
 
 def test_full_run_smoke_gate_requires_complete_fingerprinted_canonical_smoke(
-    tmp_path: Path,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ):
     workflow = load_module()
     template_file = tmp_path / "template.json"
@@ -880,8 +880,10 @@ def test_full_run_smoke_gate_requires_complete_fingerprinted_canonical_smoke(
                 "subject_count": 3,
                 "complete_count": 3,
                 "failed_count": 0,
-                "template_manifest": template_record,
-                "roi_registry": registry_record,
+                    "template_manifest": template_record,
+                    "roi_registry": registry_record,
+                    "path_roots": {"template_root": str(template_file)},
+                    "parameters": {},
             }
         ),
         encoding="utf-8",
@@ -914,11 +916,17 @@ def test_full_run_smoke_gate_requires_complete_fingerprinted_canonical_smoke(
                 "roi_registry": registry_record,
                 "run_manifest": workflow.fingerprint(run_manifest),
                 "validation_items": workflow.fingerprint(table),
-                "items": items,
-            }
-        ),
-        encoding="utf-8",
+                    "items": items,
+                }
+            ),
+            encoding="utf-8",
+        )
+    monkeypatch.setattr(
+        workflow,
+        "_validate_validation_payload_dependencies",
+        lambda **_: None,
     )
+    monkeypatch.setattr(workflow, "_load_template_contract", lambda _: object())
 
     gate = workflow.validate_full_run_smoke_gate(
         out_root=tmp_path / "outputs",
@@ -1331,6 +1339,7 @@ def test_validation_rejects_self_consistent_rewritten_items(
     workflow._write_validation_tsv(table, rows)
     payload = {
         "status": "complete",
+        "artifact_contract_schema_version": workflow.ARTIFACT_CONTRACT_SCHEMA_VERSION,
         "run_manifest": workflow.fingerprint(run_manifest),
         "template_manifest": workflow.fingerprint(template),
         "roi_registry": workflow.fingerprint(registry),
@@ -1380,7 +1389,8 @@ def test_smoke_gate_always_runs_dependency_closure_for_legacy_call_shape(
                 "failed_count": 0,
                 "template_manifest": workflow.fingerprint(template_file),
                 "roi_registry": workflow.fingerprint(registry_file),
-                "path_roots": {"template_root": str(template_file)},
+                    "path_roots": {"template_root": str(template_file)},
+                    "parameters": {},
             }
         ),
         encoding="utf-8",
@@ -1506,3 +1516,60 @@ def test_malformed_validation_partial_is_archived_for_recovery(tmp_path: Path):
     histories = list(run_dir.glob("validation_manifest.attempt-*.interrupted.json"))
     assert len(histories) == 1
     assert histories[0].read_bytes() == original
+
+
+def test_new_complete_run_requires_anchor_fields(tmp_path: Path):
+    workflow = load_module()
+    payload = {
+        "artifact_contract_schema_version": workflow.ARTIFACT_CONTRACT_SCHEMA_VERSION,
+        "run_id": "new-run",
+        "status": "complete",
+        "subjects": ["sub-1001"],
+        "subject_count": 1,
+        "complete_count": 1,
+        "failed_count": 0,
+        "items": [
+            {
+                "subject": "sub-1001",
+                "status": "ok",
+                "manifest": str((tmp_path / "subject_manifest.json").resolve()),
+                "combinations": [
+                    {"status": "ok", "smoothing": smoothing, "hemi": hemi}
+                    for smoothing in ("2mm", "4mm")
+                    for hemi in ("L", "R")
+                ],
+            }
+        ],
+    }
+
+    with pytest.raises(ValueError, match="anchor|fingerprint"):
+        workflow._validate_complete_run_payload(
+            payload,
+            context="new run",
+        )
+
+
+def test_malformed_validation_partial_with_final_is_untouched_without_resume(
+    tmp_path: Path,
+):
+    workflow = load_module()
+    run_dir = tmp_path / "runs" / "run-1"
+    run_dir.mkdir(parents=True)
+    partial = run_dir / "validation_manifest.partial.json"
+    partial.write_bytes(b'{"status": "complete"')
+    original = partial.read_bytes()
+    (run_dir / "validation_manifest.json").write_text(
+        json.dumps({"status": "complete"}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(FileExistsError):
+        workflow.prepare_validation_resume_state(
+            run_dir=run_dir,
+            expected_run_manifest={},
+            template_fingerprint={},
+            roi_registry_fingerprint={},
+            resume=False,
+        )
+
+    assert partial.read_bytes() == original

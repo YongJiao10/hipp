@@ -106,7 +106,13 @@ outputs_iowa_jj_tms/work/hcp151_fixed_template_matching/
   runs/<run_id>/
 ```
 
-Publishing is exclusive. `--resume` reuses a completed subject only when its
+Publishing is exclusive. New run and validation manifests carry
+`artifact_contract_schema_version=2`; new complete run items must contain both
+the exact subject-manifest fingerprint and all four combo-manifest fingerprints.
+Missing schema/anchors are not inferred as legacy: only the two explicitly
+published pre-schema run IDs (`jj_tms_hcp151_smoke_20260809` and
+`jj_tms_hcp151_full_20260809`) receive legacy compatibility, with the same
+fresh dependency closure. `--resume` reuses a completed subject only when its
 independently constructed canonical output set, four unique smoothing/hemi
 combinations, paths, fingerprints, shapes, dtypes, parameters, and per-valid-
 vertex score/margin contracts all still match. A completed run manifest is
@@ -139,7 +145,9 @@ fingerprint-reuses completed validation and reruns the same closure checks,
 including the canonical smoke gate. Fresh validation rows must exactly match
 the recorded anchored items; malformed/truncated JSON partials are retained as
 versioned interrupted history before recomputation. Interrupted tables/manifests
-are moved to versioned attempt history without deletion before recomputation.
+are moved to versioned attempt history without deletion only after resume and
+final-coexistence checks; `resume=false` never changes retained state. The smoke
+gate always requires dependency roots/parameters and runs its full closure.
 
 ## Fixed Launch Sequence
 
@@ -219,10 +227,18 @@ outputs_iowa_jj_tms/present/overviews/hcp151_fixed_template_matching/
 
 The renderer validates the complete run/validation manifest when present (or
 the 70 completed subject manifests otherwise), records source, scene, visual
-contract, and PNG fingerprints, and caps Workbench/process concurrency at ten.
+contract, and PNG fingerprints, and caps renderer workers at five so the
+worker plus one Workbench child per worker stays within ten processes.
+Validation-backed rendering is production-only full scope: exactly 70 subjects,
+280 unique TSV/items, complete run roots/parameters, and matcher dependency
+closure are required. Subsets require --allow-subset and cannot use a
+production validation manifest.
 It refuses to overwrite an existing PNG or provenance file. `--resume` only
 reuses an item after revalidating every source fingerprint and output PNG; a
-complete manifest/status pair is byte-stable on reuse. Failed aggregate
+complete manifest/status pair is byte-stable on reuse. Each subject also gets
+an atomic item provenance record beside its PNG, and an in-progress aggregate
+partial is published before workers start so orphan PNGs can be recovered only
+after strict item validation. Failed aggregate
 provenance is retained as numbered `.attempt-NNN.failed.*` history before a
 resume retry, without deletion.
 

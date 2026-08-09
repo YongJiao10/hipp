@@ -59,6 +59,12 @@ HEMIS = ("L", "R")
 N_VERTICES = 512
 N_SURFACE_VERTICES_32K = 32492
 ARTIFACT_CONTRACT_SCHEMA_VERSION = 2
+LEGACY_PUBLISHED_RUN_IDS = frozenset(
+    {
+        "jj_tms_hcp151_smoke_20260809",
+        "jj_tms_hcp151_full_20260809",
+    }
+)
 N_ROIS = 400
 K = 3
 TSNR_THRESHOLD = 25.0
@@ -2057,6 +2063,20 @@ def _validate_complete_run_payload(
         or recorded.get("failed_count") != 0
     ):
         raise ValueError(f"{context} is not reusable complete output")
+    schema_version = recorded.get("artifact_contract_schema_version")
+    explicit_legacy = (
+        schema_version is None
+        and recorded.get("run_id") in LEGACY_PUBLISHED_RUN_IDS
+    )
+    if schema_version not in {None, ARTIFACT_CONTRACT_SCHEMA_VERSION}:
+        raise ValueError(f"{context} artifact contract schema is unsupported")
+    if schema_version is None and not explicit_legacy:
+        roots = recorded.get("path_roots")
+        if isinstance(roots, Mapping) and len(roots) >= 4:
+            raise ValueError(
+                f"{context} missing artifact contract schema for anchored output"
+            )
+    require_anchors = schema_version == ARTIFACT_CONTRACT_SCHEMA_VERSION
     expected_keys = {
         (smoothing, hemi) for smoothing in SMOOTHINGS for hemi in HEMIS
     }
@@ -2070,6 +2090,11 @@ def _validate_complete_run_payload(
             or len(combinations) != 4
         ):
             raise ValueError(f"{context} is not reusable complete: subject item is incomplete")
+        if require_anchors and any(
+            field not in item
+            for field in ("subject_manifest_fingerprint", "combination_fingerprints")
+        ):
+            raise ValueError(f"{context} subject artifact anchors are missing")
         keys = {
             (str(row.get("smoothing")), str(row.get("hemi")))
             for row in combinations
@@ -2162,6 +2187,10 @@ def _validate_complete_run_dependencies(
     items = recorded.get("items")
     if not isinstance(roots, Mapping) or not isinstance(subjects, list) or not isinstance(items, list):
         raise ValueError("Complete run dependency closure metadata is missing")
+    require_anchors = (
+        recorded.get("artifact_contract_schema_version")
+        == ARTIFACT_CONTRACT_SCHEMA_VERSION
+    )
     fresh_rows: list[dict[str, object]] = []
     for subject, item in zip(subjects, items, strict=True):
         normalized = normalize_subject(subject)
@@ -2179,6 +2208,8 @@ def _validate_complete_run_dependencies(
             raise ValueError(f"Run subject manifest path mismatch: sub-{normalized}")
         current_anchor = _subject_artifact_anchor(expected_manifest_path)
         for field in ("subject_manifest_fingerprint", "combination_fingerprints"):
+            if require_anchors and field not in item:
+                raise ValueError(f"Run subject artifact anchor is missing: sub-{normalized}")
             if field in item and item.get(field) != current_anchor[field]:
                 raise ValueError(f"Run subject artifact fingerprint drift: sub-{normalized}")
         item_rows = item.get("combinations")
@@ -2235,6 +2266,7 @@ def _run_batch(
     partial_manifest = run_dir / "run_manifest.partial.json"
     base = {
         "workflow": "jj_tms_hcp151_fixed_template_matching",
+        "artifact_contract_schema_version": ARTIFACT_CONTRACT_SCHEMA_VERSION,
         "run_id": run_id,
         "scope": "full" if list(subjects) == list(canonical_roster) else "subset",
         "subjects": [f"sub-{subject}" for subject in subjects],
@@ -2435,7 +2467,8 @@ def _write_validation_tsv(path: Path, rows: Sequence[Mapping[str, object]]) -> N
         "consumed_surface",
     )
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("x", encoding="utf-8", newline="") as stream:
+    temporary = path.with_name(f".{path.name}.tmp-{os.getpid()}")
+    with temporary.open("x", encoding="utf-8", newline="") as stream:
         writer = csv.DictWriter(stream, fieldnames=fields, delimiter="\t")
         writer.writeheader()
         for row in rows:
@@ -2459,6 +2492,7 @@ def _write_validation_tsv(path: Path, rows: Sequence[Mapping[str, object]]) -> N
                     "consumed_surface": density["consumed_asset"],
                 }
             )
+    os.replace(temporary, path)
 
 
 def _read_validation_table(path: Path) -> list[dict[str, str]]:
@@ -2498,6 +2532,15 @@ def _validate_validation_payload_dependencies(
 ) -> None:
     if payload.get("status") != "complete":
         raise ValueError("Validation manifest is not complete")
+    schema_version = payload.get("artifact_contract_schema_version")
+    explicit_legacy = (
+        schema_version is None
+        and payload.get("run_id") in LEGACY_PUBLISHED_RUN_IDS
+    )
+    if schema_version not in {None, ARTIFACT_CONTRACT_SCHEMA_VERSION}:
+        raise ValueError("Validation artifact contract schema is unsupported")
+    if schema_version is None and not explicit_legacy:
+        raise ValueError("Validation artifact contract schema is missing")
     if payload.get("run_manifest") != dict(expected_run_manifest):
         raise ValueError("Validation run-manifest fingerprint drift")
     if payload.get("template_manifest") != dict(template_fingerprint):
@@ -2671,6 +2714,7 @@ def _validate_run(
     payload_base = {
         "status": "complete",
         "workflow": "validate_jj_tms_hcp151_fixed_template_matching",
+        "artifact_contract_schema_version": ARTIFACT_CONTRACT_SCHEMA_VERSION,
         "run_id": run_id,
         "scope": run_manifest.get("scope"),
         "subject_count": len(subjects),
@@ -2820,6 +2864,10 @@ def validate_full_run_smoke_gate(
         or run_payload.get("roi_registry") != dict(roi_registry_fingerprint)
     ):
         raise ValueError("Canonical smoke run manifest contract mismatch")
+    path_roots = run_payload.get("path_roots")
+    parameters = run_payload.get("parameters")
+    if not isinstance(path_roots, Mapping) or not isinstance(parameters, Mapping):
+        raise ValueError("Canonical smoke dependency roots/parameters are missing")
     items = payload.get("items")
     if not isinstance(items, list):
         raise ValueError("Canonical smoke validation items are missing")
@@ -2848,22 +2896,20 @@ def validate_full_run_smoke_gate(
     }
     if actual_keys != expected_keys:
         raise ValueError("Canonical smoke subject/combination set mismatch")
-    path_roots = run_payload.get("path_roots")
-    if isinstance(path_roots, Mapping):
-        dependency_template = template
-        if dependency_template is None:
-            template_root = path_roots.get("template_root")
-            if not isinstance(template_root, str):
-                raise ValueError("Canonical smoke template dependency is missing")
-            dependency_template = _load_template_contract(Path(template_root))
-        _validate_validation_payload_dependencies(
-            payload=payload,
-            expected_run_manifest=run_record,
-            template_fingerprint=template_fingerprint,
-            roi_registry_fingerprint=roi_registry_fingerprint,
-            out_root=out_root,
-            template=dependency_template,
-        )
+    dependency_template = template
+    if dependency_template is None:
+        template_root = path_roots.get("template_root")
+        if not isinstance(template_root, str):
+            raise ValueError("Canonical smoke template dependency is missing")
+        dependency_template = _load_template_contract(Path(template_root))
+    _validate_validation_payload_dependencies(
+        payload=payload,
+        expected_run_manifest=run_record,
+        template_fingerprint=template_fingerprint,
+        roi_registry_fingerprint=roi_registry_fingerprint,
+        out_root=out_root,
+        template=dependency_template,
+    )
     return fingerprint(manifest_path)
 
 
@@ -2890,6 +2936,11 @@ def _archive_validation_interrupted_paths(
         history = directory / (
             f"{stem}.attempt-{attempt_number:03d}.interrupted{suffix}"
         )
+        while history.exists():
+            attempt_number += 1
+            history = directory / (
+                f"{stem}.attempt-{attempt_number:03d}.interrupted{suffix}"
+            )
         path.rename(history)
 
 
@@ -2908,19 +2959,24 @@ def prepare_validation_resume_state(
     manifest_partial = directory / "validation_manifest.partial.json"
     table_final = directory / "validation_items.tsv"
     partial_payload: dict[str, object] | None = None
-    if manifest_partial.exists():
+    active = [path for path in (table_partial, manifest_partial, table_final, manifest) if path.exists()]
+    if active and not resume:
+        raise FileExistsError(
+            f"Retained validation artifacts require --resume: {active}"
+        )
+    if manifest_partial.exists() and not manifest.exists():
         try:
             raw_partial = json.loads(manifest_partial.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, UnicodeDecodeError):
             _archive_validation_interrupted_paths(
                 directory,
-                [table_partial, manifest_partial, table_final],
+                [table_partial, manifest_partial],
             )
             return None
         if not isinstance(raw_partial, dict):
             _archive_validation_interrupted_paths(
                 directory,
-                [table_partial, manifest_partial, table_final],
+                [table_partial, manifest_partial],
             )
             return None
         partial_payload = raw_partial
@@ -2944,21 +3000,10 @@ def prepare_validation_resume_state(
         _validate_fingerprint(payload.get("validation_items"), context="validation table")
         if complete_validator is not None:
             complete_validator(payload)
-        if table_partial.exists():
-            attempts = [
-                int(match.group("number"))
-                for path in directory.iterdir()
-                if (
-                    match := re.fullmatch(
-                        r"validation_items\.attempt-(?P<number>[0-9]{3,})\.interrupted\.tsv",
-                        path.name,
-                    )
-                )
-            ]
-            history = directory / (
-                f"validation_items.attempt-{max(attempts, default=0) + 1:03d}.interrupted.tsv"
-            )
-            table_partial.rename(history)
+        _archive_validation_interrupted_paths(
+            directory,
+            [table_partial, manifest_partial],
+        )
         return payload
     active = [path for path in (table_partial, manifest_partial, table_final) if path.exists()]
     if not active:

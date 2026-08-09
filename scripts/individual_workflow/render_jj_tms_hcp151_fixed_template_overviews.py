@@ -72,7 +72,7 @@ DEFAULT_SUBJECTS_MANIFEST = (
 DEFAULT_SCENE = PRODUCTION_ROOT / "config" / "wb_locked_native_view_lateral_medial.scene"
 DEFAULT_RUN_ID = "jj_tms_hcp151_full_20260809"
 DEFAULT_JOBS = 2
-MAX_JOBS = 10
+MAX_JOBS = 5
 SMOOTHINGS = ("2mm", "4mm")
 HEMIS = ("L", "R")
 N_VERTICES = 512
@@ -153,8 +153,10 @@ def _load_json(path: Path) -> dict[str, Any]:
 def _write_json_exclusive(path: Path, payload: Mapping[str, object]) -> None:
     destination = Path(path)
     destination.parent.mkdir(parents=True, exist_ok=True)
-    with destination.open("x", encoding="utf-8") as stream:
+    temporary = destination.with_name(f".{destination.name}.tmp-{os.getpid()}")
+    with temporary.open("x", encoding="utf-8") as stream:
         stream.write(json.dumps(dict(payload), indent=2, sort_keys=True) + "\n")
+    os.replace(temporary, destination)
 
 
 def fingerprint(path: Path) -> dict[str, object]:
@@ -332,6 +334,26 @@ def _combo_rows(
         outputs = combo.get("outputs")
         if not isinstance(outputs, Mapping):
             raise ValueError(f"Subject combo outputs are missing: {manifest_path}")
+        subject_outputs = subject_manifest.get("outputs")
+        if not isinstance(subject_outputs, Mapping):
+            raise ValueError(f"Subject manifest outputs are missing: sub-{subject}")
+        prefix = f"{smoothing}_hemi-{hemi}"
+        expected_combo_record = subject_outputs.get(f"{prefix}_combo_manifest")
+        actual_combo_record = {
+            "path": str(manifest_path),
+            **fingerprint(manifest_path),
+        }
+        if expected_combo_record != actual_combo_record:
+            raise ValueError(
+                f"Subject combo provenance drift: sub-{subject} {smoothing} {hemi}"
+            )
+        for output_name, output_record in outputs.items():
+            expected_record = subject_outputs.get(f"{prefix}_{output_name}")
+            if expected_record != output_record:
+                raise ValueError(
+                    f"Subject output provenance drift: "
+                    f"sub-{subject} {smoothing} {hemi} {output_name}"
+                )
         label_path = _source_output_path(
             outputs.get("label_gifti"),
             context=f"sub-{subject} {smoothing} hemi-{hemi} label GIFTI",
@@ -485,6 +507,8 @@ def _validate_full_validation_manifest(
     payload = _load_json(path)
     if payload.get("status") != "complete":
         raise ValueError(f"Validation source is not complete: {path}")
+    if len(subjects) != 70 or len(set(subjects)) != 70:
+        raise ValueError(f"Validation source must cover the full 70-subject roster: {path}")
     expected_subjects = [f"sub-{subject}" for subject in subjects]
     recorded_subjects = payload.get("subject_manifests")
     expected_manifests = [
@@ -507,10 +531,23 @@ def _validate_full_validation_manifest(
         raise ValueError(f"Validation run manifest record is missing: {path}")
     run_path = _source_output_path(run_record, context="validation run manifest")
     run_payload = _load_json(run_path)
-    if run_payload.get("status") != "complete":
+    if (
+        run_payload.get("status") != "complete"
+        or run_payload.get("scope") != "full"
+        or run_payload.get("subject_count") != 70
+        or run_payload.get("complete_count") != 70
+        or run_payload.get("failed_count") != 0
+        or len(run_payload.get("subjects", [])) != 70
+    ):
         raise ValueError(f"Validation run dependency is not complete: {run_path}")
     if [str(value) for value in run_payload.get("subjects", [])] != expected_subjects:
         raise ValueError(f"Validation run subject roster mismatch: {run_path}")
+    path_roots = run_payload.get("path_roots")
+    parameters = run_payload.get("parameters")
+    if not isinstance(path_roots, Mapping) or not isinstance(parameters, Mapping):
+        raise ValueError(f"Validation run roots/parameters are missing: {run_path}")
+    if Path(str(path_roots.get("out_root"))).resolve() != Path(matching_root).resolve():
+        raise ValueError(f"Validation run output root mismatch: {run_path}")
     table_path = _source_output_path(
         payload.get("validation_items"),
         context="validation table",
@@ -532,10 +569,12 @@ def _validate_full_validation_manifest(
     }
     with table_path.open("r", encoding="utf-8", newline="") as stream:
         table_rows = list(csv.DictReader(stream, delimiter="\t"))
+    if len(table_rows) != 280:
+        raise ValueError(f"Validation table must contain 280 rows: {table_path}")
     if any(set(row) != expected_fields for row in table_rows):
         raise ValueError(f"Validation table schema drift: {table_path}")
     items = payload.get("items")
-    if not isinstance(items, list) or len(items) != len(subjects) * 4:
+    if not isinstance(items, list) or len(items) != 280:
         raise ValueError(f"Validation item closure is incomplete: {path}")
     if any(not isinstance(row, Mapping) or row.get("status") != "ok" for row in items):
         raise ValueError(f"Validation contains non-ok item: {path}")
@@ -553,6 +592,8 @@ def _validate_full_validation_manifest(
         (row["subject"], row["smoothing"], row["hemi"])
         for row in table_rows
     }
+    if len(item_keys) != len(items) or len(table_keys) != len(table_rows):
+        raise ValueError(f"Validation contains duplicate subject/combo rows: {path}")
     if item_keys != expected_keys or table_keys != expected_keys:
         raise ValueError(f"Validation item key closure drift: {path}")
     label_fingerprints: dict[tuple[str, str, str], str] = {}
@@ -592,14 +633,23 @@ def _validate_full_validation_manifest(
             raise ValueError(f"Validation label fingerprint drift: {key}")
         if str(Path(row["consumed_surface"]).resolve()) != consumed_surfaces[key]:
             raise ValueError(f"Validation consumed surface drift: {key}")
-    matcher_context: dict[str, object] = {}
-    if isinstance(run_payload.get("path_roots"), Mapping) and isinstance(
-        run_payload.get("parameters"), Mapping
-    ):
-        matcher_context = {
-            "path_roots": dict(run_payload["path_roots"]),
-            "parameters": dict(run_payload["parameters"]),
-        }
+    matcher = _load_matcher_module()
+    template_root = path_roots.get("template_root")
+    if not isinstance(template_root, str):
+        raise ValueError(f"Validation template root is missing: {run_path}")
+    dependency_template = matcher._load_template_contract(Path(template_root))
+    matcher._validate_validation_payload_dependencies(
+        payload=payload,
+        expected_run_manifest=run_record,
+        template_fingerprint=payload["template_manifest"],
+        roi_registry_fingerprint=payload["roi_registry"],
+        out_root=Path(str(path_roots["out_root"])),
+        template=dependency_template,
+    )
+    matcher_context: dict[str, object] = {
+        "path_roots": dict(path_roots),
+        "parameters": dict(parameters),
+    }
     return {
         "mode": "validation_manifest",
         "path": str(Path(path).resolve()),
@@ -720,6 +770,20 @@ def overview_png_path(output_dir: Path, subject: str) -> Path:
     )
 
 
+def overview_item_record_path(output_dir: Path, subject: str) -> Path:
+    return (
+        Path(output_dir).resolve()
+        / f"fixed_template_overview_item_sub-{normalize_subject(subject)}.json"
+    )
+
+
+def _publish_item_record(output_dir: Path, item: Mapping[str, object]) -> None:
+    path = overview_item_record_path(output_dir, str(item["subject"]))
+    if path.exists():
+        return
+    _write_json_exclusive(path, item)
+
+
 def _item(
     *,
     source: Mapping[str, object],
@@ -807,7 +871,7 @@ def render_subject_overview(
             )
         if previous_item is None:
             raise ValueError(f"Existing overview has no manifest item: sub-{subject}")
-        return _validate_existing_item(
+        item = _validate_existing_item(
             source=source,
             item=previous_item,
             output=output,
@@ -815,6 +879,8 @@ def render_subject_overview(
             scene_fingerprint=scene_fingerprint,
             visual_contract=visual_contract,
         )
+        _publish_item_record(output_dir, item)
+        return item
 
     with tempfile.TemporaryDirectory(prefix="jj_tms_hcp151_overview_") as scratch:
         scratch_root = Path(scratch)
@@ -856,7 +922,7 @@ def render_subject_overview(
             rows=rendered_rows,
             output_path=output,
         )
-    return _item(
+    item = _item(
         source=source,
         output=output,
         scene=scene_path,
@@ -865,6 +931,8 @@ def render_subject_overview(
         resumed=False,
         started=started,
     )
+    _publish_item_record(output_dir, item)
+    return item
 
 
 def _worker(payload: Mapping[str, object]) -> dict[str, object]:
@@ -1039,10 +1107,43 @@ def _source_validation_compatible(
     return recorded_without_context == expected_without_context
 
 
+def _load_item_records(
+    *,
+    destination: Path,
+    sources: Sequence[Mapping[str, object]],
+    scene: Path,
+    scene_fingerprint: Mapping[str, object],
+    visual_contract: Mapping[str, object],
+) -> dict[str, Mapping[str, object]]:
+    source_by_subject = {
+        normalize_subject(str(source["subject"])): source for source in sources
+    }
+    records: dict[str, Mapping[str, object]] = {}
+    for path in sorted(destination.glob("fixed_template_overview_item_sub-*.json")):
+        match = re.fullmatch(r"fixed_template_overview_item_sub-(\d+)\.json", path.name)
+        if match is None or match.group(1) not in source_by_subject:
+            raise ValueError(f"Unexpected overview item record: {path}")
+        subject = match.group(1)
+        item = _load_json(path)
+        _validate_existing_item(
+            source=source_by_subject[subject],
+            item=item,
+            output=overview_png_path(destination, subject),
+            scene=scene,
+            scene_fingerprint=scene_fingerprint,
+            visual_contract=visual_contract,
+        )
+        records[subject] = item
+    return records
+
+
 def _write_status_exclusive(path: Path, rows: Sequence[Mapping[str, object]]) -> None:
     destination = Path(path)
     destination.parent.mkdir(parents=True, exist_ok=True)
-    with destination.open("x", encoding="utf-8", newline="") as stream:
+    if destination.exists():
+        raise FileExistsError(f"Refusing to overwrite overview status: {destination}")
+    temporary = destination.with_name(f".{destination.name}.tmp-{os.getpid()}")
+    with temporary.open("x", encoding="utf-8", newline="") as stream:
         writer = csv.DictWriter(
             stream,
             fieldnames=STATUS_FIELDS,
@@ -1057,6 +1158,7 @@ def _write_status_exclusive(path: Path, rows: Sequence[Mapping[str, object]]) ->
                     for field in STATUS_FIELDS
                 }
             )
+    os.replace(temporary, destination)
 
 
 def render_fixed_template_overviews(
@@ -1132,6 +1234,13 @@ def render_fixed_template_overviews(
         raise FileExistsError(
             f"Overview provenance already exists under {destination}; use --resume"
         )
+    item_records = _load_item_records(
+        destination=destination,
+        sources=sources,
+        scene=scene_path,
+        scene_fingerprint=scene_fingerprint,
+        visual_contract=visual_contract,
+    )
 
     previous_items: dict[str, Mapping[str, object]] = {}
     manifest_source = (
@@ -1143,70 +1252,94 @@ def render_fixed_template_overviews(
     )
     prior_summary: Mapping[str, object] | None = None
     if manifest_source is not None:
-        prior = _load_json(manifest_source)
-        summary = prior.get("summary")
-        items = prior.get("items")
-        if (
-            not isinstance(summary, Mapping)
-            or summary.get("workflow") != WORKFLOW_NAME
-            or summary.get("subjects") != [f"sub-{subject}" for subject in selected]
-            or summary.get("scope", "full" if full_scope else "subset") != scope
-            or summary.get("scene") != str(scene_path)
-            or summary.get("scene_fingerprint") != scene_fingerprint
-            or not _source_validation_compatible(
-                summary.get("source_validation"),
-                source_validation,
-            )
-            or summary.get("visual_label_contract_fingerprint")
-            != visual_contract["contract_fingerprint"]
-            or not isinstance(items, list)
-        ):
-            raise ValueError("Existing fixed-template overview manifest contract drift")
-        for item in items:
-            if not isinstance(item, Mapping):
-                raise ValueError("Existing fixed-template overview item is invalid")
-            subject = normalize_subject(str(item.get("subject", "")))
-            if subject in previous_items:
-                raise ValueError(f"Existing overview manifest has duplicate subject: {subject}")
-            previous_items[subject] = dict(item)
-        prior_summary = summary
-        status_source = (
-            status_path
-            if status_path.exists()
-            else status_partial_path
-            if status_partial_path.exists()
-            else None
-        )
-        if (
-            summary.get("status") in {"ok", "subset"}
-            and len(previous_items) == len(selected)
-            and status_source is not None
-        ):
-            _validate_existing_status_tsv(
-                status_path=status_source,
-                summary=summary,
-                items=[dict(item) for item in items],
-            )
-        if (
-            manifest_source == manifest_path
-            and status_source == status_path
-            and summary.get("status") in {"ok", "subset"}
-            and len(previous_items) == len(selected)
-        ):
-            for source in sources:
-                subject = str(source["subject"])
-                _validate_existing_item(
-                    source=source,
-                    item=previous_items[normalize_subject(subject)],
-                    output=overview_png_path(destination, subject),
-                    scene=scene_path,
-                    scene_fingerprint=scene_fingerprint,
-                    visual_contract=visual_contract,
+        try:
+            prior = _load_json(manifest_source)
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            if not resume:
+                raise FileExistsError(
+                    f"Overview provenance is malformed; use --resume: {manifest_source}"
                 )
-            return {
-                "status_tsv": status_path,
-                "manifest": manifest_path,
-            }
+            _archive_interrupted_provenance(
+                manifest_path=manifest_path,
+                status_path=status_path,
+                manifest_partial_path=manifest_partial_path,
+                status_partial_path=status_partial_path,
+            )
+            manifest_source = None
+            prior = None
+        if prior is None:
+            prior_summary = None
+        else:
+            summary = prior.get("summary")
+            items = prior.get("items")
+            if (
+                not isinstance(summary, Mapping)
+                or summary.get("workflow") != WORKFLOW_NAME
+                or summary.get("subjects") != [f"sub-{subject}" for subject in selected]
+                or summary.get("scope", "full" if full_scope else "subset") != scope
+                or summary.get("scene") != str(scene_path)
+                or summary.get("scene_fingerprint") != scene_fingerprint
+                or not _source_validation_compatible(
+                    summary.get("source_validation"),
+                    source_validation,
+                )
+                or summary.get("visual_label_contract_fingerprint")
+                != visual_contract["contract_fingerprint"]
+                or not isinstance(items, list)
+            ):
+                raise ValueError("Existing fixed-template overview manifest contract drift")
+            for item in items:
+                if not isinstance(item, Mapping):
+                    raise ValueError("Existing fixed-template overview item is invalid")
+                subject = normalize_subject(str(item.get("subject", "")))
+                if subject in previous_items:
+                    raise ValueError(f"Existing overview manifest has duplicate subject: {subject}")
+                previous_items[subject] = dict(item)
+            for subject, item in item_records.items():
+                if subject in previous_items and previous_items[subject] != item:
+                    raise ValueError(f"Overview item record drift: sub-{subject}")
+                previous_items[subject] = item
+            prior_summary = summary
+            status_source = (
+                status_path
+                if status_path.exists()
+                else status_partial_path
+                if status_partial_path.exists()
+                else None
+            )
+            if (
+                summary.get("status") in {"ok", "subset"}
+                and len(previous_items) == len(selected)
+                and status_source is not None
+            ):
+                _validate_existing_status_tsv(
+                    status_path=status_source,
+                    summary=summary,
+                    items=[
+                        dict(previous_items[subject])
+                        for subject in sorted(previous_items)
+                    ],
+                )
+            if (
+                manifest_source == manifest_path
+                and status_source == status_path
+                and summary.get("status") in {"ok", "subset"}
+                and len(previous_items) == len(selected)
+            ):
+                for source in sources:
+                    subject = str(source["subject"])
+                    _validate_existing_item(
+                        source=source,
+                        item=previous_items[normalize_subject(subject)],
+                        output=overview_png_path(destination, subject),
+                        scene=scene_path,
+                        scene_fingerprint=scene_fingerprint,
+                        visual_contract=visual_contract,
+                    )
+                return {
+                    "status_tsv": status_path,
+                    "manifest": manifest_path,
+                }
 
     if any(path.exists() for path in aggregate_paths):
         if (
@@ -1226,6 +1359,37 @@ def render_fixed_template_overviews(
                 status_partial_path=status_partial_path,
             )
 
+    in_progress_summary = {
+        "status": "in_progress",
+        "scope": scope,
+        "workflow": WORKFLOW_NAME,
+        "matching_root": str(matching),
+        "output_dir": str(destination),
+        "subjects": [f"sub-{subject}" for subject in selected],
+        "requested_subject_count": len(selected),
+        "total": len(previous_items),
+        "ok": len(previous_items),
+        "failed": 0,
+        "scene": str(scene_path),
+        "scene_fingerprint": scene_fingerprint,
+        "source_validation": source_validation,
+        "visual_label_contract": visual_contract,
+        "visual_label_contract_fingerprint": visual_contract["contract_fingerprint"],
+        "smoothings": list(SMOOTHINGS),
+        "hemis": list(HEMIS),
+        "jobs": int(jobs),
+        "updated_at": _now(),
+    }
+    _write_json_exclusive(
+        manifest_partial_path,
+        {
+            "summary": in_progress_summary,
+            "items": [
+                previous_items[subject]
+                for subject in sorted(previous_items)
+            ],
+        },
+    )
     effective_jobs = max(1, min(int(jobs), MAX_JOBS, len(sources) or 1))
     rows = sorted(
         _run_workers(
