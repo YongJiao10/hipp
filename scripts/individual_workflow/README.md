@@ -83,6 +83,34 @@ outputs_hcp/work/individual_atlas/_runs/handoff/<run_id>_handoff.md
 
 The overview builder reads completed label arrays from `outputs_hcp/work/individual_atlas/` and writes quicklook PNGs plus `overview_status.tsv` and `overview_manifest.json` under `outputs_hcp/present/overviews/individual/`. For `gradient_fisherz`, the cluster-network heatmap and confidence bars are both derived from the same Kong2022 ROI-mean Fisher-z network profile; the direct cluster-to-network timeseries profile is not used for that rendered variant.
 
+## JJ_TMS HCP151 Fixed-template Overviews
+
+The fixed 70-subject JJ_TMS mapping renderer reuses the cross-fit
+HCP-style locked Workbench grid/composition and the canonical network colors.
+It reads the completed mapping GIFTIs and consumed den-512 surfaces as
+fingerprinted, read-only inputs:
+
+```bash
+scripts/individual_workflow/run_jj_tms_hcp151_fixed_template_overviews.sh --jobs 2
+```
+
+Outputs are written to
+`outputs_iowa_jj_tms/present/overviews/hcp151_fixed_template_matching/`:
+
+```text
+sub-<id>_hcp151_fixed_template_matching_overview.png
+fixed_template_overview_status.tsv
+fixed_template_overview_manifest.json
+```
+
+Each PNG contains the fixed 2mm-over-4mm rows with L/R surfaces and
+`Anterior/VAN`, `Body/SMN`, and `Posterior/DMN` display colors. The renderer
+validates the complete run/validation closure when available, otherwise all
+70 subject manifests, plus every label/surface fingerprint and logical GIFTI
+contract. It refuses overwrite; `--resume` revalidates and byte-reuses a
+complete manifest/status pair. Failed aggregate provenance is retained as
+numbered attempt history before a retry.
+
 ## Method Notes
 
 - Route: RouteA only, from `shared_inputs/routea`.

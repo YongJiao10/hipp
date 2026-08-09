@@ -1,0 +1,272 @@
+from __future__ import annotations
+
+import importlib.util
+import json
+import sys
+from pathlib import Path
+
+import nibabel as nib
+import numpy as np
+import pytest
+from PIL import Image
+from nibabel.gifti import GiftiDataArray, GiftiImage
+
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+MODULE_PATH = (
+    REPO_ROOT
+    / "scripts"
+    / "individual_workflow"
+    / "render_jj_tms_hcp151_fixed_template_overviews.py"
+)
+
+
+def load_module():
+    spec = importlib.util.spec_from_file_location(
+        "render_jj_tms_hcp151_fixed_template_overviews",
+        MODULE_PATH,
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def _fingerprint(path: Path) -> dict[str, object]:
+    import hashlib
+
+    data = path.read_bytes()
+    return {"sha256": hashlib.sha256(data).hexdigest(), "size_bytes": len(data)}
+
+
+def _write_fixed_subject(root: Path, subject: str = "1001") -> None:
+    subject_dir = root / "subjects" / f"sub-{subject}"
+    surface_dir = root / "source_surfaces" / subject
+    surface_dir.mkdir(parents=True)
+    for hemi in ("L", "R"):
+        surface = surface_dir / (
+            f"sub-{subject}_hemi-{hemi}_space-corobl_den-512_"
+            "label-hipp_midthickness.surf.gii"
+        )
+        nib.save(
+            GiftiImage(
+                darrays=[
+                    GiftiDataArray(
+                        data=np.zeros((512, 3), dtype=np.float32),
+                        intent="NIFTI_INTENT_POINTSET",
+                    )
+                ]
+            ),
+            str(surface),
+        )
+        (surface_dir / f"sub-{subject}_den-512_label-hipp_surfaces.spec").write_text(
+            "spec\n", encoding="utf-8"
+        )
+
+    subject_inputs = {}
+    combinations = []
+    for smoothing in ("2mm", "4mm"):
+        for hemi in ("L", "R"):
+            combo_dir = subject_dir / "matching" / smoothing / f"hemi-{hemi}"
+            combo_dir.mkdir(parents=True)
+            labels_path = combo_dir / (
+                f"sub-{subject}_hemi-{hemi}_space-corobl_den-512_"
+                f"label-hcp151_fixed_template_k3_{smoothing}.label.gii"
+            )
+            labels = (np.arange(512, dtype=np.int32) % 3) + 1
+            nib.save(
+                GiftiImage(
+                    darrays=[
+                        GiftiDataArray(data=labels, intent="NIFTI_INTENT_LABEL")
+                    ]
+                ),
+                str(labels_path),
+            )
+            surface = surface_dir / (
+                f"sub-{subject}_hemi-{hemi}_space-corobl_den-512_"
+                "label-hipp_midthickness.surf.gii"
+            )
+            subject_inputs[f"surface_hemi-{hemi}"] = {
+                "path": str(surface.resolve()),
+                **_fingerprint(surface),
+            }
+            combo_manifest = combo_dir / "combo_manifest.json"
+            combo_manifest.write_text(
+                json.dumps(
+                    {
+                        "status": "ok",
+                        "subject": f"sub-{subject}",
+                        "smoothing": smoothing,
+                        "hemi": hemi,
+                        "label_semantics": {
+                            "1": "Anterior/VAN",
+                            "2": "Body/SMN",
+                            "3": "Posterior/DMN",
+                        },
+                        "outputs": {
+                            "label_gifti": {
+                                "path": str(labels_path.resolve()),
+                                **_fingerprint(labels_path),
+                                "shape": [512],
+                                "dtype": "int32",
+                            }
+                        },
+                        "density_evidence": {
+                            "consumed_asset": str(surface.resolve()),
+                            "n_vertices": 512,
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            combinations.append(
+                {
+                    "status": "ok",
+                    "subject": f"sub-{subject}",
+                    "smoothing": smoothing,
+                    "hemi": hemi,
+                    "manifest": str(combo_manifest.resolve()),
+                }
+            )
+    (subject_dir / "subject_manifest.json").parent.mkdir(parents=True, exist_ok=True)
+    (subject_dir / "subject_manifest.json").write_text(
+        json.dumps(
+            {
+                "status": "ok",
+                "subject": f"sub-{subject}",
+                "inputs": subject_inputs,
+                "combinations": combinations,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_fixed_overview_renderer_writes_two_rows_and_provenance(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    workflow = load_module()
+    matching_root = tmp_path / "matching"
+    _write_fixed_subject(matching_root)
+    scene = tmp_path / "scene.scene"
+    scene.write_text("scene-v1\n", encoding="utf-8")
+
+    def fake_render_locked_grid(**kwargs):
+        output = Path(kwargs["outdir"]) / "fake.png"
+        output.parent.mkdir(parents=True, exist_ok=True)
+        Image.new("RGB", (120, 60), (20, 30, 40)).save(output, format="PNG")
+        return {"biglegend_png": str(output)}
+
+    monkeypatch.setattr(workflow, "render_locked_grid", fake_render_locked_grid)
+    outputs = workflow.render_fixed_template_overviews(
+        matching_root=matching_root,
+        output_dir=tmp_path / "present",
+        scene=scene,
+        subjects=["1001"],
+        jobs=1,
+    )
+
+    pngs = list((tmp_path / "present").glob("*.png"))
+    assert len(pngs) == 1
+    payload = json.loads(outputs["manifest"].read_text(encoding="utf-8"))
+    assert payload["summary"]["ok"] == 1
+    assert payload["summary"]["total"] == 1
+    assert payload["items"][0]["source_rows"][0]["smoothing"] == "2mm"
+    assert payload["items"][0]["source_rows"][1]["smoothing"] == "4mm"
+    assert outputs["status_tsv"].is_file()
+
+
+def test_fixed_overview_resume_is_immutable_and_detects_input_drift(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    workflow = load_module()
+    matching_root = tmp_path / "matching"
+    _write_fixed_subject(matching_root)
+    scene = tmp_path / "scene.scene"
+    scene.write_text("scene-v1\n", encoding="utf-8")
+    calls = {"count": 0}
+
+    def fake_render_locked_grid(**kwargs):
+        calls["count"] += 1
+        output = Path(kwargs["outdir"]) / "fake.png"
+        output.parent.mkdir(parents=True, exist_ok=True)
+        Image.new("RGB", (120, 60), (20, 30, 40)).save(output, format="PNG")
+        return {"biglegend_png": str(output)}
+
+    monkeypatch.setattr(workflow, "render_locked_grid", fake_render_locked_grid)
+    output_dir = tmp_path / "present"
+    outputs = workflow.render_fixed_template_overviews(
+        matching_root=matching_root,
+        output_dir=output_dir,
+        scene=scene,
+        subjects=["1001"],
+        jobs=1,
+    )
+    manifest_bytes = outputs["manifest"].read_bytes()
+    png = next(output_dir.glob("*.png"))
+    png_bytes = png.read_bytes()
+    monkeypatch.setattr(
+        workflow,
+        "render_locked_grid",
+        lambda **kwargs: (_ for _ in ()).throw(AssertionError("rendered on resume")),
+    )
+
+    workflow.render_fixed_template_overviews(
+        matching_root=matching_root,
+        output_dir=output_dir,
+        scene=scene,
+        subjects=["1001"],
+        jobs=1,
+        resume=True,
+    )
+    assert calls["count"] == 2
+    assert outputs["manifest"].read_bytes() == manifest_bytes
+    assert png.read_bytes() == png_bytes
+
+    label = next(
+        (matching_root / "subjects" / "sub-1001" / "matching").glob(
+            "2mm/hemi-L/*.label.gii"
+        )
+    )
+    label.write_bytes(label.read_bytes() + b"drift")
+    with pytest.raises(ValueError, match="fingerprint"):
+        workflow.render_fixed_template_overviews(
+            matching_root=matching_root,
+            output_dir=output_dir,
+            scene=scene,
+            subjects=["1001"],
+            jobs=1,
+            resume=True,
+        )
+
+
+def test_fixed_overview_rejects_duplicate_subject_request(tmp_path: Path):
+    workflow = load_module()
+    with pytest.raises(ValueError, match="duplicate"):
+        workflow.normalize_subjects(["1001", "sub-1001"])
+
+
+
+def test_fixed_overview_rejects_orphan_png_without_manifest(tmp_path: Path):
+    workflow = load_module()
+    matching_root = tmp_path / "matching"
+    _write_fixed_subject(matching_root)
+    scene = tmp_path / "scene.scene"
+    scene.write_text("scene-v1\\n", encoding="utf-8")
+    output_dir = tmp_path / "present"
+    output_dir.mkdir()
+    Image.new("RGB", (20, 20), (1, 2, 3)).save(
+        output_dir / "sub-1001_hcp151_fixed_template_matching_overview.png",
+        format="PNG",
+    )
+
+    with pytest.raises(ValueError, match="provenance"):
+        workflow.render_fixed_template_overviews(
+            matching_root=matching_root,
+            output_dir=output_dir,
+            scene=scene,
+            subjects=["1001"],
+            jobs=1,
+            resume=True,
+        )

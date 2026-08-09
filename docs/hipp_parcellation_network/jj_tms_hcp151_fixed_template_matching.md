@@ -117,13 +117,20 @@ reused; failed runs keep a `status=failed` partial and never publish a final.
 
 A failed subject may restart only when the active partial has exact inputs and
 parameters, `retained_outputs` is empty, and the directory otherwise contains
-only prior `subject_manifest.attempt-NNN.failed.json` histories. Its exact bytes
-are saved as the next history record. Extra files, retained intermediates,
-fingerprint drift, or parameter drift fail closed. Validation writes
-`validation_items.partial.tsv` and `validation_manifest.partial.json`, then
-exclusively publishes each final. `--resume` fingerprint-reuses completed
-validation; interrupted tables/manifests are moved to versioned attempt history
-without deletion before recomputation.
+only prior `subject_manifest.attempt-NNN.failed.json` histories. An empty
+`in_progress` partial is first retained verbatim as an
+`subject_manifest.attempt-NNN.interrupted.json` history. A complete `ok` subject
+partial is independently validated and exclusively promoted; it is never
+trusted from its self-declared status. Extra files, retained intermediates,
+fingerprint drift, or parameter drift fail closed. Complete run partials are
+promoted only after every subject manifest and four-combination dependency has
+been revalidated. Validation writes `validation_items.partial.tsv` and
+`validation_manifest.partial.json`, then exclusively publishes each final; a
+complete validation partial with a final table is promoted only after the
+table, run, subject, and combination closure is revalidated. `--resume`
+fingerprint-reuses completed validation and reruns the same closure checks,
+including the canonical smoke gate. Interrupted tables/manifests are moved to
+versioned attempt history without deletion before recomputation.
 
 ## Fixed Launch Sequence
 
@@ -172,3 +179,40 @@ and writes label counts, margin summaries, and label SHA-256 values. A full run
 is complete only when the manifest contains the exact fixed roster, 70/70 subjects, and 280/280
 validated combinations. Any failure remains `failed` rather than being
 reported as complete.
+
+## Fixed-template Static Subject Overviews
+
+After a complete fixed-roster validation, render one presentation PNG per
+subject with the shared locked Workbench layout:
+
+```bash
+scripts/individual_workflow/run_jj_tms_hcp151_fixed_template_overviews.sh \
+  --jobs 2
+```
+
+The launcher uses
+`/home/yojiao/.conda/envs/py314/bin/python` and the repository Workbench
+executable. It reads the completed mapping GIFTIs and consumed
+`den-512` surfaces, never rewrites those inputs, and validates their subject
+and combination manifest fingerprints before rendering. The display layer
+retains the established HCP style: canonical network colors
+`1=Anterior/VAN`, `2=Body/SMN`, `3=Posterior/DMN`, left/right hemispheres, and
+the fixed two-row order `2mm` above `4mm`.
+
+The canonical output is:
+
+```text
+outputs_iowa_jj_tms/present/overviews/hcp151_fixed_template_matching/
+  sub-<id>_hcp151_fixed_template_matching_overview.png
+  fixed_template_overview_status.tsv
+  fixed_template_overview_manifest.json
+```
+
+The renderer validates the complete run/validation manifest when present (or
+the 70 completed subject manifests otherwise), records source, scene, visual
+contract, and PNG fingerprints, and caps Workbench/process concurrency at ten.
+It refuses to overwrite an existing PNG or provenance file. `--resume` only
+reuses an item after revalidating every source fingerprint and output PNG; a
+complete manifest/status pair is byte-stable on reuse. Failed aggregate
+provenance is retained as numbered `.attempt-NNN.failed.*` history before a
+resume retry, without deletion.

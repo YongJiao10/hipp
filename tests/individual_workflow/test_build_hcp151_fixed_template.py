@@ -191,6 +191,24 @@ def test_build_writes_four_strict_templates_from_group_mean_fisherz_fc(tmp_path:
     assert workflow.validate_template(out_root=out_root)["status"] == "complete"
 
 
+def test_validate_rejects_direct_duplicate_template_roster(tmp_path: Path):
+    workflow = load_module()
+    group_root, gradient_root = _write_sources(tmp_path / "sources")
+    out_root = tmp_path / "template"
+    workflow.build_template(
+        group_root=group_root,
+        gradient_root=gradient_root,
+        out_root=out_root,
+    )
+    manifest_path = out_root / "template_manifest.json"
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    payload["subjects"][-1] = payload["subjects"][0]
+    manifest_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="unique"):
+        workflow.validate_template(out_root=out_root)
+
+
 @pytest.mark.parametrize(
     ("fixture_kwargs", "message"),
     [

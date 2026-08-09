@@ -20,6 +20,7 @@ if str(CORE_WORKFLOW_DIR) not in sys.path:
     sys.path.insert(0, str(CORE_WORKFLOW_DIR))
 
 from lib.template_matching import build_cluster_prototypes
+from lib.gifti_contracts import validate_gifti_pointset
 
 
 TEMPLATE_ID = "hcp151_routea_full_k3_fisherz"
@@ -54,9 +55,7 @@ def _normalized_subjects(raw: object, *, manifest_path: Path) -> tuple[str, ...]
 
 
 def _surface_vertex_count(path: Path) -> int:
-    points = np.asarray(nib.load(str(path)).agg_data("pointset"))
-    if points.ndim != 2 or points.shape[1] != 3:
-        raise ValueError(f"Consumed surface lacks one pointset: {path} ({points.shape})")
+    points = validate_gifti_pointset(path)
     return int(points.shape[0])
 
 
@@ -410,6 +409,7 @@ def build_template(
         "source_group_root": str(Path(group_root).resolve()),
         "source_gradient_root": str(Path(gradient_root).resolve()),
         "roi_registry": registry,
+        "subjects": list(rows[0].subjects),
         "combinations": combinations,
     }
     _write_json_exclusive(output_root / "template_manifest.json", manifest)
@@ -427,6 +427,54 @@ def _validate_fingerprint(recorded: object, *, context: str) -> None:
         raise ValueError(
             f"{context} fingerprint mismatch: recorded={dict(recorded)!r} actual={actual!r}"
         )
+
+
+def _source_roster_from_record(
+    recorded: object,
+    *,
+    context: str,
+) -> tuple[str, ...]:
+    if not isinstance(recorded, Mapping):
+        raise ValueError(f"Missing source manifest fingerprint for {context}")
+    _validate_fingerprint(recorded, context=context)
+    path = Path(str(recorded["path"]))
+    payload = _read_json(path)
+    return _normalized_subjects(payload.get("subjects"), manifest_path=path)
+
+
+def _validate_template_roster(
+    *,
+    manifest: Mapping[str, object],
+    combinations: Sequence[Mapping[str, object]],
+    manifest_path: Path,
+) -> tuple[str, ...]:
+    source_rosters: list[tuple[str, ...]] = []
+    for row in combinations:
+        sources = row.get("source_files")
+        if not isinstance(sources, Mapping):
+            raise ValueError("Template combination lacks source files for roster recovery")
+        source_rosters.extend(
+            [
+                _source_roster_from_record(
+                    sources.get("group_manifest"),
+                    context="template group source manifest",
+                ),
+                _source_roster_from_record(
+                    sources.get("gradient_manifest"),
+                    context="template gradient source manifest",
+                ),
+            ]
+        )
+    expected = source_rosters[0]
+    if any(roster != expected for roster in source_rosters[1:]):
+        raise ValueError("Template source manifests do not share one exact 151-subject roster")
+    recorded = manifest.get("subjects")
+    if recorded is None:
+        return expected
+    normalized = _normalized_subjects(recorded, manifest_path=manifest_path)
+    if normalized != expected:
+        raise ValueError("Template manifest roster differs from fingerprinted source roster")
+    return normalized
 
 
 def validate_template(*, out_root: Path) -> dict[str, object]:
@@ -459,6 +507,11 @@ def validate_template(*, out_root: Path) -> dict[str, object]:
     expected_keys = {(smoothing, hemi) for smoothing in SMOOTHINGS for hemi in HEMIS}
     if set(by_key) != expected_keys:
         raise ValueError(f"Template combination mismatch: {sorted(by_key)}")
+    _validate_template_roster(
+        manifest=manifest,
+        combinations=list(by_key.values()),
+        manifest_path=manifest_path,
+    )
 
     expected_contracts = {
         "labels": ((N_VERTICES,), np.dtype(np.int32)),
@@ -480,6 +533,16 @@ def validate_template(*, out_root: Path) -> dict[str, object]:
             if Path(str(recorded.get("path"))).resolve() != expected_path:
                 raise ValueError(f"Unexpected output path for {smoothing} hemi-{hemi} {name}")
             array = np.load(expected_path, allow_pickle=False)
+            if list(recorded.get("shape", [])) != list(shape):
+                raise ValueError(
+                    f"Missing or incorrect shape metadata for {expected_path}: "
+                    f"{recorded.get('shape')!r} != {list(shape)!r}"
+                )
+            if recorded.get("dtype") != str(dtype):
+                raise ValueError(
+                    f"Missing or incorrect dtype metadata for {expected_path}: "
+                    f"{recorded.get('dtype')!r} != {str(dtype)!r}"
+                )
             if array.shape != shape:
                 raise ValueError(
                     f"Unexpected shape for {expected_path}: {array.shape} != {shape}"

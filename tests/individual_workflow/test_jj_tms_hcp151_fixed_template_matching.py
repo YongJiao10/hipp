@@ -1025,3 +1025,172 @@ def test_completed_run_resume_rejects_inconsistent_item_status(tmp_path: Path):
             expected=_run_resume_base(),
             resume=True,
         )
+
+
+def test_in_progress_subject_partial_is_versioned_before_restart(tmp_path: Path):
+    workflow = load_module()
+    subject_dir = tmp_path / "subjects" / "sub-1001"
+    subject_dir.mkdir(parents=True)
+    source = tmp_path / "source.txt"
+    source.write_text("source-v1", encoding="utf-8")
+    parameters = {"threshold": 25.0}
+    partial = subject_dir / "subject_manifest.partial.json"
+    payload = {
+        "status": "in_progress",
+        "subject": "sub-1001",
+        "parameters": parameters,
+        "inputs": {"source": workflow.fingerprint(source)},
+        "retained_outputs": {},
+    }
+    partial.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+    original = partial.read_bytes()
+
+    history = workflow.prepare_subject_resume_state(
+        subject_dir=subject_dir,
+        expected_inputs={"source": source},
+        expected_parameters=parameters,
+        expected_outputs={},
+        resume=True,
+    )
+
+    history_path = Path(history["path"])
+    assert history_path.name == "subject_manifest.attempt-001.interrupted.json"
+    assert history_path.read_bytes() == original
+    assert not partial.exists()
+
+
+def test_ok_subject_partial_is_strictly_validated_then_promoted(tmp_path: Path):
+    workflow = load_module()
+    subject_dir, source, parameters, outputs, _ = _write_exact_reusable_subject_fixture(
+        workflow, tmp_path
+    )
+    final = subject_dir / "subject_manifest.json"
+    partial = subject_dir / "subject_manifest.partial.json"
+    final.rename(partial)
+
+    recovered = workflow.promote_subject_partial(
+        subject_dir=subject_dir,
+        expected_inputs={"source": source},
+        expected_parameters=parameters,
+        expected_outputs=outputs,
+    )
+
+    assert recovered["status"] == "ok"
+    assert final.is_file()
+    assert not partial.exists()
+
+
+def test_complete_run_partial_is_dependency_validated_before_promotion(tmp_path: Path):
+    workflow = load_module()
+    run_dir = tmp_path / "runs" / "run-1"
+    run_dir.mkdir(parents=True)
+    expected = _run_resume_base()
+    payload = {
+        **expected,
+        "status": "complete",
+        "complete_count": 1,
+        "failed_count": 0,
+        "items": [
+            {
+                "subject": "sub-1001",
+                "status": "ok",
+                "combinations": [
+                    {"status": "ok", "smoothing": smoothing, "hemi": hemi}
+                    for smoothing in ("2mm", "4mm")
+                    for hemi in ("L", "R")
+                ],
+            }
+        ],
+    }
+    partial = run_dir / "run_manifest.partial.json"
+    partial.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+    original = partial.read_bytes()
+    called: list[dict[str, object]] = []
+
+    reused = workflow.prepare_run_resume_state(
+        run_dir=run_dir,
+        expected=expected,
+        resume=True,
+        complete_validator=lambda value: called.append(dict(value)),
+    )
+
+    assert reused == payload
+    assert called and called[0]["status"] == "complete"
+    assert (run_dir / "run_manifest.json").read_bytes() == original
+
+
+def test_complete_validation_manifest_partial_with_final_table_is_promoted(
+    tmp_path: Path,
+):
+    workflow = load_module()
+    run_dir = tmp_path / "runs" / "run-1"
+    run_dir.mkdir(parents=True)
+    table = run_dir / "validation_items.tsv"
+    table.write_text("validated\n", encoding="utf-8")
+    template = tmp_path / "template.json"
+    registry = tmp_path / "registry.tsv"
+    run_manifest = tmp_path / "run.json"
+    for path, text_value in (
+        (template, "template\n"),
+        (registry, "registry\n"),
+        (run_manifest, "run\n"),
+    ):
+        path.write_text(text_value, encoding="utf-8")
+    payload = {
+        "status": "complete",
+        "run_id": "run-1",
+        "template_manifest": workflow.fingerprint(template),
+        "roi_registry": workflow.fingerprint(registry),
+        "run_manifest": workflow.fingerprint(run_manifest),
+        "validation_items": workflow.fingerprint(table),
+    }
+    partial = run_dir / "validation_manifest.partial.json"
+    partial.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+    called: list[dict[str, object]] = []
+
+    reused = workflow.prepare_validation_resume_state(
+        run_dir=run_dir,
+        expected_run_manifest=payload["run_manifest"],
+        template_fingerprint=payload["template_manifest"],
+        roi_registry_fingerprint=payload["roi_registry"],
+        resume=True,
+        complete_validator=lambda value: called.append(dict(value)),
+    )
+
+    assert reused == payload
+    assert called and called[0]["status"] == "complete"
+    assert (run_dir / "validation_manifest.json").is_file()
+    assert not partial.exists()
+
+
+def test_resume_rejects_missing_npy_shape_or_dtype_metadata(tmp_path: Path):
+    workflow = load_module()
+    subject_dir, source, parameters, outputs, _ = _write_exact_reusable_subject_fixture(
+        workflow, tmp_path
+    )
+    manifest_path = subject_dir / "subject_manifest.json"
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    payload["outputs"]["2mm_hemi-L_labels"].pop("shape")
+    payload["outputs"]["2mm_hemi-L_labels"].pop("dtype")
+    manifest_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="shape|dtype|metadata"):
+        workflow.validate_reusable_subject(
+            subject_dir=subject_dir,
+            expected_inputs={"source": source},
+            expected_parameters=parameters,
+            expected_outputs=outputs,
+        )
+
+
+def test_shared_gifti_validator_rejects_wrong_logical_time_series_shape(
+    tmp_path: Path,
+):
+    workflow = load_module()
+    path = tmp_path / "wrong.func.gii"
+    workflow._write_func_gifti_exclusive(
+        path, np.zeros((512, 2), dtype=np.float32)
+    )
+
+    with pytest.raises(ValueError, match="timepoint|shape"):
+        workflow.load_func_gifti(path, expected_vertices=512, expected_timepoints=3)
