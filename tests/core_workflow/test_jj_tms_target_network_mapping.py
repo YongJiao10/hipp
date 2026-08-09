@@ -312,3 +312,110 @@ def test_load_surface_rejects_non_32k_vertex_count(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="expected 32492 vertices, found 2"):
         module._load_surface_xyz(path, expected_hemi="L")
+
+
+def test_build_dense_group_labels_restores_full_surface_vertex_indexing() -> None:
+    labels = module.build_dense_group_parcel_labels(
+        {
+            "L": (np.array([0, 2]), np.array([11, 12])),
+            "R": (np.array([1, 3]), np.array([211, 212])),
+        },
+        vertex_count=4,
+    )
+
+    assert labels["L"].tolist() == [11, 0, 12, 0]
+    assert labels["R"].tolist() == [0, 211, 0, 212]
+
+
+def test_build_dense_group_labels_preserves_explicit_medial_wall_zero() -> None:
+    labels = module.build_dense_group_parcel_labels(
+        {
+            "L": (np.array([0, 1]), np.array([11, 0])),
+            "R": (np.array([0, 1]), np.array([0, 211])),
+        },
+        vertex_count=2,
+    )
+
+    assert labels["L"].tolist() == [11, 0]
+    assert labels["R"].tolist() == [0, 211]
+
+
+def test_compare_group_atlas_reports_parcel_and_network_agreement() -> None:
+    registry = _registry()
+    registry[13] = {
+        "roi_id": 13,
+        "roi_name": "left-control-b",
+        "hemi": "L",
+        "family17": "ContB",
+        "canonical8": "Control",
+    }
+    rows = [
+        {
+            "subject": "sub-1001",
+            "mapping_status": "mapped",
+            "hemi": "L",
+            "vertex_index": 0,
+            "parcel_id": 11,
+            "family17": "DefaultA",
+            "canonical8": "Default",
+        },
+        {
+            "subject": "sub-1002",
+            "mapping_status": "mapped",
+            "hemi": "L",
+            "vertex_index": 1,
+            "parcel_id": 12,
+            "family17": "ContA",
+            "canonical8": "Control",
+        },
+        {
+            "subject": "sub-1003",
+            "mapping_status": "mapped",
+            "hemi": "L",
+            "vertex_index": 2,
+            "parcel_id": 12,
+            "family17": "ContA",
+            "canonical8": "Control",
+        },
+        {
+            "subject": "sub-3003",
+            "mapping_status": "missing_workbook_record",
+        },
+    ]
+
+    compared_rows, comparison = module.compare_with_group_atlas(
+        rows,
+        group_parcel_labels={"L": np.array([11, 13, 11])},
+        roi_registry=list(registry.values()),
+    )
+
+    assert compared_rows[0]["group_parcel_id"] == 11
+    assert compared_rows[0]["individual_vs_group_same_family17"] is True
+    assert compared_rows[1]["group_family17"] == "ContB"
+    assert compared_rows[1]["individual_vs_group_same_parcel"] is False
+    assert compared_rows[1]["individual_vs_group_same_family17"] is False
+    assert compared_rows[1]["individual_vs_group_same_canonical8"] is True
+    assert compared_rows[2]["group_canonical8"] == "Default"
+    assert compared_rows[2]["individual_vs_group_same_canonical8"] is False
+    assert compared_rows[3] == rows[3]
+    assert comparison == {
+        "n_compared_subjects": 3,
+        "parcel": {
+            "n_same": 1,
+            "n_different": 2,
+            "agreement_fraction": pytest.approx(1 / 3),
+            "different_subjects": ["sub-1002", "sub-1003"],
+        },
+        "family17": {
+            "n_same": 1,
+            "n_different": 2,
+            "agreement_fraction": pytest.approx(1 / 3),
+            "different_subjects": ["sub-1002", "sub-1003"],
+        },
+        "canonical8": {
+            "n_same": 2,
+            "n_different": 1,
+            "agreement_fraction": pytest.approx(2 / 3),
+            "different_subjects": ["sub-1003"],
+        },
+    }

@@ -47,6 +47,10 @@ DEFAULT_LABEL_ROOT = DEFAULT_JJ_TMS_ROOT / "ArealMSHBM_Kong2022"
 DEFAULT_OUTPUT_DIR = REPO_ROOT / "outputs_iowa_jj_tms" / "present" / "tms_site_networks"
 CSV_NAME = "jj_tms_kong2022_tms_site_networks.csv"
 SUMMARY_NAME = "jj_tms_kong2022_tms_site_networks_summary.json"
+COMPARISON_CSV_NAME = "jj_tms_kong2022_individual_vs_group_atlas.csv"
+COMPARISON_SUMMARY_NAME = (
+    "jj_tms_kong2022_individual_vs_group_atlas_summary.json"
+)
 FSLR_32K_VERTICES_PER_HEMISPHERE = 32492
 REQUIRED_WORKBOOK_HEADERS = frozenset(
     {
@@ -371,8 +375,155 @@ def _load_parcel_labels(path: Path) -> np.ndarray:
     return np.asarray(np.loadtxt(path, dtype=np.int32), dtype=np.int32).reshape(-1)
 
 
+def build_dense_group_parcel_labels(
+    vertex_arrays: dict[str, tuple[np.ndarray, np.ndarray]],
+    *,
+    vertex_count: int = FSLR_32K_VERTICES_PER_HEMISPHERE,
+) -> dict[str, np.ndarray]:
+    """Restore group dlabel cortex data to full fsLR vertex indexing."""
+
+    if vertex_count <= 0:
+        raise ValueError("vertex_count must be positive")
+    result: dict[str, np.ndarray] = {}
+    for hemi in ("L", "R"):
+        if hemi not in vertex_arrays:
+            raise KeyError(f"Group Kong2022 dlabel is missing hemisphere {hemi}")
+        raw_indices, raw_parcels = vertex_arrays[hemi]
+        indices = np.asarray(raw_indices, dtype=np.int64).reshape(-1)
+        parcels = np.asarray(raw_parcels, dtype=np.int32).reshape(-1)
+        if indices.shape[0] != parcels.shape[0]:
+            raise ValueError(
+                f"Group {hemi} vertex indices ({indices.shape[0]}) and "
+                f"parcel labels ({parcels.shape[0]}) differ"
+            )
+        if np.any(indices < 0) or np.any(indices >= vertex_count):
+            raise ValueError(
+                f"Group {hemi} dlabel contains a vertex outside 0..{vertex_count - 1}"
+            )
+        if np.unique(indices).shape[0] != indices.shape[0]:
+            raise ValueError(f"Group {hemi} dlabel contains duplicate vertex indices")
+        if np.any(parcels < 0):
+            raise ValueError(f"Group {hemi} dlabel contains negative parcel IDs")
+        dense = np.zeros(vertex_count, dtype=np.int32)
+        dense[indices] = parcels
+        result[hemi] = dense
+    return result
+
+
+def _agreement_summary(
+    rows: list[dict[str, object]],
+    field: str,
+) -> dict[str, object]:
+    different_subjects = [
+        str(row["subject"])
+        for row in rows
+        if not bool(row[field])
+    ]
+    n_compared = len(rows)
+    n_different = len(different_subjects)
+    n_same = n_compared - n_different
+    return {
+        "n_same": n_same,
+        "n_different": n_different,
+        "agreement_fraction": n_same / n_compared if n_compared else None,
+        "different_subjects": different_subjects,
+    }
+
+
+def compare_with_group_atlas(
+    rows: list[dict[str, object]],
+    *,
+    group_parcel_labels: dict[str, np.ndarray],
+    roi_registry: list[dict[str, object]],
+) -> tuple[list[dict[str, object]], dict[str, object]]:
+    """Annotate mapped rows from the common atlas at the identical fsLR vertex."""
+
+    roi_by_id = {int(row["roi_id"]): row for row in roi_registry}
+    if len(roi_by_id) != len(roi_registry):
+        raise ValueError("Kong2022 ROI registry contains duplicate parcel IDs")
+
+    compared_rows: list[dict[str, object]] = []
+    successful_rows: list[dict[str, object]] = []
+    for source_row in rows:
+        row = dict(source_row)
+        if row.get("mapping_status") != "mapped":
+            compared_rows.append(row)
+            continue
+        hemi = str(row["hemi"])
+        if hemi not in group_parcel_labels:
+            raise KeyError(f"Group Kong2022 labels are missing hemisphere {hemi}")
+        labels = np.asarray(group_parcel_labels[hemi], dtype=np.int32).reshape(-1)
+        vertex_index = int(row["vertex_index"])
+        if vertex_index < 0 or vertex_index >= labels.shape[0]:
+            raise IndexError(
+                f"{row['subject']} vertex {vertex_index} is outside group {hemi} labels"
+            )
+        group_parcel_id = int(labels[vertex_index])
+        if group_parcel_id == 0:
+            raise ValueError(
+                f"{row['subject']} group atlas vertex {vertex_index} is medial wall"
+            )
+        if group_parcel_id not in roi_by_id:
+            raise ValueError(
+                f"{row['subject']} group atlas has unknown Kong2022 parcel "
+                f"{group_parcel_id}"
+            )
+        group_roi = roi_by_id[group_parcel_id]
+        group_hemi = str(group_roi["hemi"])
+        if group_hemi != hemi:
+            raise ValueError(
+                f"{row['subject']} group parcel {group_parcel_id} belongs to "
+                f"hemisphere {group_hemi}, expected {hemi}"
+            )
+
+        same_parcel = int(row["parcel_id"]) == group_parcel_id
+        same_family17 = str(row["family17"]) == str(group_roi["family17"])
+        same_canonical8 = str(row["canonical8"]) == str(group_roi["canonical8"])
+        row.update(
+            {
+                "group_parcel_id": group_parcel_id,
+                "group_parcel_name": str(group_roi["roi_name"]),
+                "group_family17": str(group_roi["family17"]),
+                "group_canonical8": str(group_roi["canonical8"]),
+                "individual_vs_group_same_parcel": same_parcel,
+                "individual_vs_group_same_family17": same_family17,
+                "individual_vs_group_same_canonical8": same_canonical8,
+            }
+        )
+        compared_rows.append(row)
+        successful_rows.append(row)
+
+    comparison = {
+        "n_compared_subjects": len(successful_rows),
+        "parcel": _agreement_summary(
+            successful_rows,
+            "individual_vs_group_same_parcel",
+        ),
+        "family17": _agreement_summary(
+            successful_rows,
+            "individual_vs_group_same_family17",
+        ),
+        "canonical8": _agreement_summary(
+            successful_rows,
+            "individual_vs_group_same_canonical8",
+        ),
+    }
+    return compared_rows, comparison
+
+
 def _count_strings(rows: list[dict[str, object]], field: str) -> dict[str, int]:
     counts = Counter(str(row[field]) for row in rows)
+    return dict(sorted(counts.items()))
+
+
+def _count_transitions(
+    rows: list[dict[str, object]],
+    individual_field: str,
+    group_field: str,
+) -> dict[str, int]:
+    counts = Counter(
+        f"{row[individual_field]} -> {row[group_field]}" for row in rows
+    )
     return dict(sorted(counts.items()))
 
 
@@ -572,15 +723,96 @@ def map_cohort(
     return mapped_rows, summary
 
 
+def compare_existing_mapping_results(
+    *,
+    individual_results_csv: Path,
+    group_vertex_arrays: dict[str, tuple[np.ndarray, np.ndarray]],
+    roi_registry: list[dict[str, object]],
+    group_atlas_path: Path,
+    vertex_count: int = FSLR_32K_VERTICES_PER_HEMISPHERE,
+) -> tuple[list[dict[str, object]], dict[str, object]]:
+    """Compare saved individual assignments with the group atlas at the same vertex."""
+
+    required_headers = {
+        "subject",
+        "mapping_status",
+        "hemi",
+        "vertex_index",
+        "parcel_id",
+        "family17",
+        "canonical8",
+    }
+    with individual_results_csv.open(newline="", encoding="utf-8") as stream:
+        reader = csv.DictReader(stream)
+        headers = set(reader.fieldnames or [])
+        missing_headers = sorted(required_headers - headers)
+        if missing_headers:
+            raise KeyError(
+                "Individual mapping CSV is missing required columns: "
+                + ",".join(missing_headers)
+            )
+        source_rows: list[dict[str, object]] = [dict(row) for row in reader]
+    if not source_rows:
+        raise ValueError(f"Individual mapping CSV is empty: {individual_results_csv}")
+
+    dense_group_labels = build_dense_group_parcel_labels(
+        group_vertex_arrays,
+        vertex_count=vertex_count,
+    )
+    compared_rows, agreement = compare_with_group_atlas(
+        source_rows,
+        group_parcel_labels=dense_group_labels,
+        roi_registry=roi_registry,
+    )
+    successful_rows = [
+        row for row in compared_rows if row["mapping_status"] == "mapped"
+    ]
+    summary: dict[str, object] = {
+        "schema_version": "1.0",
+        "comparison_method": (
+            "reuse saved individualized fsLR-32k vertex_index; no target reprojection"
+        ),
+        "individual_results_csv": str(individual_results_csv.resolve()),
+        "group_atlas_dlabel_path": str(group_atlas_path.resolve()),
+        "n_output_rows": len(compared_rows),
+        "n_compared_subjects": len(successful_rows),
+        "n_unmapped_subjects": len(compared_rows) - len(successful_rows),
+        "group_family17_counts": _count_strings(successful_rows, "group_family17"),
+        "group_canonical8_counts": _count_strings(successful_rows, "group_canonical8"),
+        "family17_transition_counts": _count_transitions(
+            successful_rows,
+            "family17",
+            "group_family17",
+        ),
+        "canonical8_transition_counts": _count_transitions(
+            successful_rows,
+            "canonical8",
+            "group_canonical8",
+        ),
+        "agreement": agreement,
+    }
+    return compared_rows, summary
+
+
+def _validate_output_filename(name: str, label: str) -> None:
+    if not name or Path(name).name != name or name in {".", ".."}:
+        raise ValueError(f"{label} must be a plain filename, got {name!r}")
+
+
 def write_outputs(
     rows: list[dict[str, object]],
     summary: dict[str, object],
     output_dir: Path,
+    *,
+    csv_name: str = CSV_NAME,
+    summary_name: str = SUMMARY_NAME,
 ) -> tuple[Path, Path]:
     if not rows:
         raise ValueError("Cannot write an empty site-to-network result table")
-    csv_path = output_dir / CSV_NAME
-    json_path = output_dir / SUMMARY_NAME
+    _validate_output_filename(csv_name, "csv_name")
+    _validate_output_filename(summary_name, "summary_name")
+    csv_path = output_dir / csv_name
+    json_path = output_dir / summary_name
     existing = [path for path in (csv_path, json_path) if path.exists()]
     if existing:
         raise FileExistsError(f"Output already exists: {existing[0]}")
@@ -590,7 +822,7 @@ def write_outputs(
         mode="w",
         encoding="utf-8",
         newline="",
-        prefix=f".{CSV_NAME}.",
+        prefix=f".{csv_name}.",
         suffix=".tmp",
         dir=output_dir,
         delete=False,
@@ -607,7 +839,7 @@ def write_outputs(
     with tempfile.NamedTemporaryFile(
         mode="w",
         encoding="utf-8",
-        prefix=f".{SUMMARY_NAME}.",
+        prefix=f".{summary_name}.",
         suffix=".tmp",
         dir=output_dir,
         delete=False,
@@ -643,6 +875,19 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--label-root", type=Path, default=DEFAULT_LABEL_ROOT)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--neighborhood-radius-mm", type=float, default=5.0)
+    parser.add_argument(
+        "--compare-existing-individual-results",
+        action="store_true",
+        help=(
+            "Reuse saved hemi/vertex_index assignments and compare the common "
+            "Kong2022 atlas without repeating target-to-surface projection."
+        ),
+    )
+    parser.add_argument(
+        "--individual-results-csv",
+        type=Path,
+        default=DEFAULT_OUTPUT_DIR / CSV_NAME,
+    )
     return parser.parse_args(argv)
 
 
@@ -664,6 +909,27 @@ def completion_lines(
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     bundle = load_kong2022_bundle()
+    if args.compare_existing_individual_results:
+        rows, summary = compare_existing_mapping_results(
+            individual_results_csv=args.individual_results_csv,
+            group_vertex_arrays=bundle["vertex_arrays"],
+            roi_registry=bundle["roi_registry"],
+            group_atlas_path=KONG2022_DLABEL_PATH,
+        )
+        summary["kong2022_merge_config_path"] = str(KONG2022_MERGE_CONFIG.resolve())
+        csv_path, json_path = write_outputs(
+            rows,
+            summary,
+            args.output_dir,
+            csv_name=COMPARISON_CSV_NAME,
+            summary_name=COMPARISON_SUMMARY_NAME,
+        )
+        print(f"Output rows: {len(rows)}")
+        print(f"Compared subjects: {int(summary['n_compared_subjects'])}")
+        print(f"CSV: {csv_path}")
+        print(f"Summary: {json_path}")
+        return 0
+
     rows, summary = map_cohort(
         workbook_path=args.workbook,
         subjects=read_subjects_file(args.subjects_file),

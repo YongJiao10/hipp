@@ -401,3 +401,159 @@ def test_write_outputs_supports_unmapped_first_row_with_mapped_fields(
     ]
     assert output_rows[0]["parcel_id"] == ""
     assert output_rows[1]["parcel_id"] == "11"
+
+def test_compare_existing_mapping_results_reuses_saved_vertex_indices(
+    tmp_path: Path,
+) -> None:
+    individual_csv = tmp_path / "individual.csv"
+    with individual_csv.open("w", newline="", encoding="utf-8") as stream:
+        writer = csv.DictWriter(
+            stream,
+            fieldnames=[
+                "subject",
+                "mapping_status",
+                "hemi",
+                "vertex_index",
+                "parcel_id",
+                "family17",
+                "canonical8",
+            ],
+        )
+        writer.writeheader()
+        writer.writerows(
+            [
+                {
+                    "subject": "sub-1001",
+                    "mapping_status": "mapped",
+                    "hemi": "L",
+                    "vertex_index": 0,
+                    "parcel_id": 11,
+                    "family17": "DefaultA",
+                    "canonical8": "Default",
+                },
+                {
+                    "subject": "sub-3003",
+                    "mapping_status": "missing_workbook_record",
+                    "hemi": "",
+                    "vertex_index": "",
+                    "parcel_id": "",
+                    "family17": "",
+                    "canonical8": "",
+                },
+            ]
+        )
+
+    rows, summary = module.compare_existing_mapping_results(
+        individual_results_csv=individual_csv,
+        group_vertex_arrays={
+            "L": (np.array([0]), np.array([11])),
+            "R": (np.array([1]), np.array([211])),
+        },
+        roi_registry=_registry(),
+        group_atlas_path=tmp_path / "group_atlas.dlabel.nii",
+        vertex_count=2,
+    )
+
+    assert len(rows) == 2
+    assert rows[0]["group_parcel_id"] == 11
+    assert rows[0]["individual_vs_group_same_family17"] is True
+    assert rows[1]["mapping_status"] == "missing_workbook_record"
+    assert "group_parcel_id" not in rows[1]
+    assert summary["comparison_method"] == (
+        "reuse saved individualized fsLR-32k vertex_index; no target reprojection"
+    )
+    assert summary["n_output_rows"] == 2
+    assert summary["n_compared_subjects"] == 1
+    assert summary["n_unmapped_subjects"] == 1
+    assert summary["group_family17_counts"] == {"DefaultA": 1}
+    assert summary["group_canonical8_counts"] == {"Default": 1}
+    assert summary["family17_transition_counts"] == {
+        "DefaultA -> DefaultA": 1,
+    }
+    assert summary["canonical8_transition_counts"] == {
+        "Default -> Default": 1,
+    }
+    assert summary["agreement"]["family17"]["n_same"] == 1
+    assert summary["individual_results_csv"] == str(individual_csv.resolve())
+
+
+def test_write_outputs_accepts_separate_group_comparison_names(
+    tmp_path: Path,
+) -> None:
+    csv_path, json_path = module.write_outputs(
+        [{"subject": "sub-1001", "mapping_status": "mapped"}],
+        {"n_compared_subjects": 1},
+        tmp_path,
+        csv_name="individual_vs_group.csv",
+        summary_name="individual_vs_group_summary.json",
+    )
+
+    assert csv_path.name == "individual_vs_group.csv"
+    assert json_path.name == "individual_vs_group_summary.json"
+    assert csv_path.is_file()
+    assert json_path.is_file()
+
+def test_main_comparison_mode_does_not_reproject_targets(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    individual_csv = tmp_path / "individual.csv"
+    with individual_csv.open("w", newline="", encoding="utf-8") as stream:
+        writer = csv.DictWriter(
+            stream,
+            fieldnames=[
+                "subject",
+                "mapping_status",
+                "hemi",
+                "vertex_index",
+                "parcel_id",
+                "family17",
+                "canonical8",
+            ],
+        )
+        writer.writeheader()
+        writer.writerow(
+            {
+                "subject": "sub-1001",
+                "mapping_status": "mapped",
+                "hemi": "L",
+                "vertex_index": 0,
+                "parcel_id": 11,
+                "family17": "DefaultA",
+                "canonical8": "Default",
+            }
+        )
+
+    monkeypatch.setattr(
+        module,
+        "load_kong2022_bundle",
+        lambda: {
+            "vertex_arrays": {
+                "L": (np.array([0]), np.array([11])),
+                "R": (np.array([1]), np.array([211])),
+            },
+            "roi_registry": _registry(),
+        },
+    )
+
+    def fail_if_reprojected(**kwargs):
+        raise AssertionError("comparison mode must not call map_cohort")
+
+    monkeypatch.setattr(module, "map_cohort", fail_if_reprojected)
+
+    exit_code = module.main(
+        [
+            "--compare-existing-individual-results",
+            "--individual-results-csv",
+            str(individual_csv),
+            "--output-dir",
+            str(tmp_path / "results"),
+        ]
+    )
+
+    assert exit_code == 0
+    assert (tmp_path / "results" / module.COMPARISON_CSV_NAME).is_file()
+    summary_path = tmp_path / "results" / module.COMPARISON_SUMMARY_NAME
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    assert summary["n_compared_subjects"] == 1
+    assert summary["comparison_method"].endswith("no target reprojection")

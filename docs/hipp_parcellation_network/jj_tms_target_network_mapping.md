@@ -74,6 +74,40 @@ analysis, 12 subjects have primary-family fraction below 0.5, and 13 have a
 neighborhood majority that differs from the closest-vertex family. The exact
 subject lists are stored in the JSON summary.
 
+## Common-atlas comparison without reprojection
+
+The individualized result CSV already records each target's selected
+hemisphere and full-surface fsLR-32k `vertex_index`. The common-atlas
+comparison reuses that saved index directly; it does not reread subject
+surfaces and does not repeat the native-coordinate nearest-vertex search.
+At the identical topology vertex, it reads the group/common Kong2022 dlabel
+and reports:
+
+- `group_parcel_id`, `group_parcel_name`
+- `group_family17`, `group_canonical8`
+- `individual_vs_group_same_parcel`
+- `individual_vs_group_same_family17`
+- `individual_vs_group_same_canonical8`
+
+The comparison preserves the two unmapped roster rows without imputing group
+labels. For the 68 mapped subjects, the common atlas agrees with the
+individualized assignment in 44/68 cases (64.7%) at `family17` level and
+47/68 cases (69.1%) at `canonical8` level. Exact disagreement subject lists
+and individual-to-group transition counts are stored in the comparison JSON.
+
+Run the comparison only after the individualized result exists:
+
+```bash
+/home/yojiao/.conda/envs/py314/bin/python \
+  scripts/core_workflow/map_jj_tms_sites_to_kong2022.py \
+  --compare-existing-individual-results
+```
+
+This creates separate artifacts and leaves the individualized outputs intact:
+
+- `outputs_iowa_jj_tms/present/tms_site_networks/jj_tms_kong2022_individual_vs_group_atlas.csv`
+- `outputs_iowa_jj_tms/present/tms_site_networks/jj_tms_kong2022_individual_vs_group_atlas_summary.json`
+
 ## Inputs
 
 - Workbook:
