@@ -124,6 +124,32 @@ overview and `robustness_summary.tsv` live under
 non-circularity argument, artifacts, and interpretation.
 
 
+## HCP151 Fixed Template for JJ_TMS
+
+`build_hcp151_fixed_template.py` converts the formal HCP151 RouteA
+`group_labels_final.npy`, `group_support_mask.npy`, and full-cohort
+`group_mean_fisherz_fc_full.npy` into one immutable AP-ordered `3 x 400`
+prototype set for each `2mm|4mm x L|R` combination. The shared template lives
+under `outputs_hcp/templates/hcp151_routea_full_k3_fisherz/`; it is referenced
+by SHA-256 from JJ_TMS rather than copied downstream.
+
+`jj_tms_hcp151_fixed_template_matching.py` applies that template to the fixed
+70-subject JJ_TMS rest roster. It retains numeric run-level surface GIFTIs,
+uses consumed corobl den-512 surfaces, preserves missing Kong2022 ROIs as NaN,
+and publishes per-combination AP labels, three correlations, margins, GIFTIs,
+and fingerprinted manifests under
+`outputs_iowa_jj_tms/work/hcp151_fixed_template_matching/`. The CLI is limited
+to `preflight|run|validate`, defaults to two workers, has no overwrite mode,
+and permits resume only after exact artifact and run-contract validation. A
+failed partial may restart only when it is the subject directory's sole entry,
+has exact inputs and parameters, and records no retained outputs; its original
+bytes are first preserved as an exclusive attempt-history manifest.
+
+See
+`docs/hipp_parcellation_network/jj_tms_hcp151_fixed_template_matching.md` for
+the method, fixed launch sequence, smoke gate, and 70-subject completion
+contract.
+
 ### Cross-Fit Individual Surface Overviews
 
 Render a compact subject-level comparison of the cross-fitted labels. To

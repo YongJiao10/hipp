@@ -1,0 +1,160 @@
+# JJ_TMS × HCP151 Fixed-Template Matching
+
+## Scope
+
+This workflow builds one immutable HCP151 RouteA template and applies it to the
+fixed 70-subject JJ_TMS roster. It uses only XCP-D `task-rest` denoised runs.
+Runs are ordered by numeric run ID: `sub-1016` has the expected two runs and
+the other 69 subjects have three. The HCP template is shared by reference and
+is not copied into JJ_TMS outputs.
+
+All repository Python commands use:
+
+```bash
+/home/yojiao/.conda/envs/py314/bin/python
+```
+
+The implementation has no new dependency or runtime-stack requirement.
+
+## HCP151 Template Contract
+
+Build the template from the formal HCP RouteA group labels/support and the
+matching full-cohort group mean Fisher-z FC bank. Do not substitute
+`cluster_roi_profile.npy`; that artifact has a different aggregation
+definition.
+
+```bash
+/home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/build_hcp151_fixed_template.py \
+  --mode preflight \
+  --group-root /home/yojiao/hpchome/hipp/outputs_hcp/work/group_atlas/routea_full_k3_fisherz \
+  --gradient-root /home/yojiao/hpchome/hipp/outputs_hcp/work/hippomaps_gradients/routea \
+  --out-root /home/yojiao/hpchome/hipp/outputs_hcp/templates/hcp151_routea_full_k3_fisherz
+
+/home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/build_hcp151_fixed_template.py \
+  --mode build \
+  --group-root /home/yojiao/hpchome/hipp/outputs_hcp/work/group_atlas/routea_full_k3_fisherz \
+  --gradient-root /home/yojiao/hpchome/hipp/outputs_hcp/work/hippomaps_gradients/routea \
+  --out-root /home/yojiao/hpchome/hipp/outputs_hcp/templates/hcp151_routea_full_k3_fisherz
+
+/home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/build_hcp151_fixed_template.py \
+  --mode validate \
+  --out-root /home/yojiao/hpchome/hipp/outputs_hcp/templates/hcp151_routea_full_k3_fisherz
+```
+
+The builder requires 151 identical subject IDs across all four combinations,
+consumed `den-512` surface evidence, ordered AP labels `1..3`, a fixed ordered
+Kong2022 registry `1..400`, and `float32[512,400]`
+`group_mean_fisherz_fc_full.npy`. The flat output directory contains four sets
+of:
+
+```text
+hcp151_<2mm|4mm>_hemi-<L|R>_labels.npy       int32[512]
+hcp151_<2mm|4mm>_hemi-<L|R>_support.npy      uint8[512]
+hcp151_<2mm|4mm>_hemi-<L|R>_prototypes.npy   float32[3,400]
+```
+
+`template_manifest.json` records the 151-subject, den-512, K=3, 400-ROI
+contract plus SHA-256 fingerprints for every source and output. Prototype row
+`k` is the finite feature-wise mean of
+`group_mean_fisherz_fc_full[group_support_mask & (group_labels_final == k)]`.
+
+## JJ_TMS Method
+
+For each subject and numeric rest run, Workbench samples the MNI XCP-D volume
+onto the subject's actually consumed HippUnfold corobl `den-512` midthickness
+surface. Each run-level GIFTI is retained. The workflow concatenates sampled
+surface arrays along time and does not create a duplicate concatenated NIfTI.
+The volume grid/affine, volume-versus-run-dtseries time points, and summed
+run-versus-91k-concat time points must agree before computation.
+
+The subject's 32k ArealMSHBM labels must have exactly 32,492 entries per
+hemisphere and use fixed global Kong2022 IDs (`1..200` left, `201..400`
+right, with `0` allowed). Cortex vertices use the same `10000/std >= 25` gate
+as the RouteA reference construction, then fixed registry order `1..400` is
+used to extract ROI time series. Missing ROIs remain all-NaN columns.
+
+Hippocampal vertices use `10000/std >= 25`, followed by 2 mm and 4 mm FWHM
+surface smoothing within the valid-vertex ROI. Each valid vertex is correlated
+with the 400 ROI time series, Fisher-z transformed, and matched to the
+corresponding HCP prototype using Pearson correlation over jointly finite ROI
+features. Outputs use:
+
+- `1 = Anterior/VAN`
+- `2 = Body/SMN`
+- `3 = Posterior/DMN`
+
+Each combination retains Pearson FC, Fisher-z FC, three prototype
+correlations, top1-minus-top2 margin, integer labels, label GIFTI, a combo
+manifest, source/output SHA-256 fingerprints, and consumed-surface density
+evidence.
+
+## CLI and Output Contract
+
+The adapter CLI is fixed to `--mode preflight|run|validate`. It supports
+`--subjects`, the fixed roster manifest, `--run-id`, `--jobs` (default 2,
+maximum 10), `--resume`, and explicit path overrides. It intentionally has no
+`--overwrite` option.
+
+Canonical outputs are:
+
+```text
+outputs_iowa_jj_tms/work/hcp151_fixed_template_matching/
+  subjects/sub-<id>/
+  runs/<run_id>/
+```
+
+Publishing is exclusive. Failed subject `.partial` manifests and run-level
+intermediates are retained. `--resume` reuses only completed subject outputs
+whose input fingerprints, parameters, shapes, dtypes, and output fingerprints
+all still match. An existing `run-id` must also match its immutable roster,
+paths, template, ROI registry, and parameters. Inconsistent or partial output
+is never replaced automatically. The only failed-subject restart exception is
+an otherwise empty subject directory containing one `status=failed` partial
+manifest with exact inputs and parameters and an empty `retained_outputs` map.
+Before restarting, the adapter exclusively preserves those exact bytes as the
+next `subject_manifest.attempt-NNN.failed.json` history record. Extra files,
+retained intermediates, fingerprint drift, or parameter drift all fail closed.
+
+## Fixed Launch Sequence
+
+Smoke preflight:
+
+```bash
+/home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/jj_tms_hcp151_fixed_template_matching.py \
+  --mode preflight --subjects 1001 1002 1003
+```
+
+Smoke run and validation:
+
+```bash
+/home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/jj_tms_hcp151_fixed_template_matching.py \
+  --mode run --subjects 1001 1002 1003 --jobs 2 \
+  --run-id jj_tms_hcp151_smoke_20260809
+
+/home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/jj_tms_hcp151_fixed_template_matching.py \
+  --mode validate --subjects 1001 1002 1003 \
+  --run-id jj_tms_hcp151_smoke_20260809
+```
+
+Only after the smoke validation is `status=complete`, with 3/3 subjects and
+12/12 subject-combinations passing, launch the fixed full roster:
+
+```bash
+/home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/jj_tms_hcp151_fixed_template_matching.py \
+  --mode run --jobs 2 --resume \
+  --subjects-manifest manifests/jj_tms_hcp151_fixed_template_subjects.txt \
+  --run-id jj_tms_hcp151_full_20260809
+
+/home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/jj_tms_hcp151_fixed_template_matching.py \
+  --mode validate \
+  --subjects-manifest manifests/jj_tms_hcp151_fixed_template_subjects.txt \
+  --run-id jj_tms_hcp151_full_20260809
+```
+
+Validation rechecks every input/output fingerprint and array contract, requires
+all valid vertices to have nonzero labels and all three labels to occur in each
+combination, verifies the consumed den-512 asset, and writes label counts,
+margin summaries, and label SHA-256 values. A full run is complete only when
+the manifest contains the exact fixed roster, 70/70 subjects, and 280/280
+validated combinations. Any failure remains `failed` rather than being
+reported as complete.
