@@ -465,6 +465,34 @@ def test_resume_reuses_only_exact_fingerprints_shapes_dtypes_and_parameters(
         )
 
 
+def test_subject_resume_rejects_combo_manifest_output_rewrite(tmp_path: Path):
+    workflow = load_module()
+    subject_dir, source, parameters, outputs, _ = (
+        _write_exact_reusable_subject_fixture(workflow, tmp_path)
+    )
+    combo_path = outputs["2mm_hemi-L_combo_manifest"]
+    combo = json.loads(combo_path.read_text(encoding="utf-8"))
+    combo["outputs"]["labels"]["sha256"] = "f" * 64
+    combo_path.write_text(json.dumps(combo), encoding="utf-8")
+    subject_manifest_path = subject_dir / "subject_manifest.json"
+    subject_manifest = json.loads(subject_manifest_path.read_text(encoding="utf-8"))
+    subject_manifest["outputs"]["2mm_hemi-L_combo_manifest"] = (
+        workflow.artifact_record(combo_path)
+    )
+    subject_manifest_path.write_text(
+        json.dumps(subject_manifest),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="fingerprint"):
+        workflow.validate_reusable_subject(
+            subject_dir=subject_dir,
+            expected_inputs={"source": source},
+            expected_parameters=parameters,
+            expected_outputs=outputs,
+        )
+
+
 @pytest.mark.parametrize(
     "field", ["subjects", "path_roots", "template_manifest", "parameters"]
 )
@@ -1056,7 +1084,8 @@ def test_in_progress_subject_partial_is_versioned_before_restart(tmp_path: Path)
     history_path = Path(history["path"])
     assert history_path.name == "subject_manifest.attempt-001.interrupted.json"
     assert history_path.read_bytes() == original
-    assert not partial.exists()
+    assert partial.is_file()
+    assert partial.read_bytes() == original
 
 
 def test_ok_subject_partial_is_strictly_validated_then_promoted(tmp_path: Path):
@@ -1194,3 +1223,286 @@ def test_shared_gifti_validator_rejects_wrong_logical_time_series_shape(
 
     with pytest.raises(ValueError, match="timepoint|shape"):
         workflow.load_func_gifti(path, expected_vertices=512, expected_timepoints=3)
+
+
+def test_complete_run_rejects_subject_artifact_rewrite_after_publish(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    workflow = load_module()
+    out_root = tmp_path / "outputs"
+    subject_dir = out_root / "subjects" / "sub-1001"
+    subject_dir.mkdir(parents=True)
+    subject_manifest = subject_dir / "subject_manifest.json"
+    subject_manifest.write_text("subject-v1\n", encoding="utf-8")
+    combo_rows = []
+    combo_fingerprints = {}
+    for smoothing in ("2mm", "4mm"):
+        for hemi in ("L", "R"):
+            key = f"{smoothing}/{hemi}"
+            combo = subject_dir / "matching" / smoothing / f"hemi-{hemi}" / "combo_manifest.json"
+            combo.parent.mkdir(parents=True, exist_ok=True)
+            combo.write_text(f"{key}-v1\n", encoding="utf-8")
+            combo_fingerprints[key] = workflow.fingerprint(combo)
+            combo_rows.append(
+                {
+                    "status": "ok",
+                    "smoothing": smoothing,
+                    "hemi": hemi,
+                    "manifest": str(combo.resolve()),
+                }
+            )
+    run_record = {
+        "status": "complete",
+        "subject_count": 1,
+        "complete_count": 1,
+        "failed_count": 0,
+        "subjects": ["sub-1001"],
+        "items": [
+            {
+                "subject": "sub-1001",
+                "status": "ok",
+                "manifest": str(subject_manifest.resolve()),
+                "subject_manifest_fingerprint": workflow.fingerprint(subject_manifest),
+                "combination_fingerprints": combo_fingerprints,
+                "combinations": combo_rows,
+            }
+        ],
+        "path_roots": {"out_root": str(out_root.resolve())},
+    }
+    monkeypatch.setattr(
+        workflow,
+        "_validate_subject_for_run",
+        lambda **_: ({"status": "ok"}, combo_rows),
+    )
+    subject_manifest.write_text(
+        json.dumps({"status": "ok", "rewrite": True}) + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="subject.*fingerprint|artifact|combination"):
+        workflow._validate_complete_run_dependencies(
+            recorded=run_record,
+            out_root=out_root,
+            template=object(),
+            parameters={},
+        )
+
+
+def test_validation_rejects_self_consistent_rewritten_items(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    workflow = load_module()
+    out_root = tmp_path / "outputs"
+    run_dir = out_root / "runs" / "run-1"
+    run_dir.mkdir(parents=True)
+    run_manifest = run_dir / "run_manifest.json"
+    subject_manifest = out_root / "subjects" / "sub-1001" / "subject_manifest.json"
+    subject_manifest.parent.mkdir(parents=True)
+    subject_manifest.write_text("subject\n", encoding="utf-8")
+    run_manifest.write_text(
+        json.dumps({"status": "complete", "subjects": ["sub-1001"], "parameters": {}}),
+        encoding="utf-8",
+    )
+    template = tmp_path / "template.json"
+    registry = tmp_path / "registry.tsv"
+    template.write_text("template\n", encoding="utf-8")
+    registry.write_text("registry\n", encoding="utf-8")
+    rows = []
+    for smoothing in ("2mm", "4mm"):
+        for hemi in ("L", "R"):
+            rows.append(
+                {
+                    "subject": "sub-1001",
+                    "smoothing": smoothing,
+                    "hemi": hemi,
+                    "status": "ok",
+                    "label_counts": {"1": 1, "2": 1, "3": 1},
+                    "margin_summary": {
+                        "min": 0.1,
+                        "median": 0.2,
+                        "mean": 0.2,
+                        "max": 0.3,
+                    },
+                    "labels_sha256": "rewritten",
+                    "density_evidence": {"consumed_asset": "/tmp/surface.surf.gii"},
+                }
+            )
+    table = run_dir / "validation_items.tsv"
+    workflow._write_validation_tsv(table, rows)
+    payload = {
+        "status": "complete",
+        "run_manifest": workflow.fingerprint(run_manifest),
+        "template_manifest": workflow.fingerprint(template),
+        "roi_registry": workflow.fingerprint(registry),
+        "validation_items": workflow.fingerprint(table),
+        "subject_manifests": [str(subject_manifest.resolve())],
+        "items": rows,
+    }
+    fresh_rows = [{**row, "labels_sha256": "original"} for row in rows]
+    monkeypatch.setattr(
+        workflow,
+        "_validate_complete_run_dependencies",
+        lambda **_: fresh_rows,
+    )
+
+    with pytest.raises(ValueError, match="validation item"):
+        workflow._validate_validation_payload_dependencies(
+            payload=payload,
+            expected_run_manifest=payload["run_manifest"],
+            template_fingerprint=payload["template_manifest"],
+            roi_registry_fingerprint=payload["roi_registry"],
+            out_root=out_root,
+            template=object(),
+        )
+
+
+def test_smoke_gate_always_runs_dependency_closure_for_legacy_call_shape(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    workflow = load_module()
+    template_file = tmp_path / "template.json"
+    registry_file = tmp_path / "registry.tsv"
+    template_file.write_text("template\n", encoding="utf-8")
+    registry_file.write_text("registry\n", encoding="utf-8")
+    out_root = tmp_path / "outputs"
+    run_dir = out_root / "runs" / workflow.SMOKE_RUN_ID
+    run_dir.mkdir(parents=True)
+    run_manifest = run_dir / "run_manifest.json"
+    run_manifest.write_text(
+        json.dumps(
+            {
+                "status": "complete",
+                "run_id": workflow.SMOKE_RUN_ID,
+                "scope": "subset",
+                "subjects": [f"sub-{subject}" for subject in workflow.SMOKE_SUBJECTS],
+                "subject_count": 3,
+                "complete_count": 3,
+                "failed_count": 0,
+                "template_manifest": workflow.fingerprint(template_file),
+                "roi_registry": workflow.fingerprint(registry_file),
+                "path_roots": {"template_root": str(template_file)},
+            }
+        ),
+        encoding="utf-8",
+    )
+    table = run_dir / "validation_items.tsv"
+    table.write_text("validated\n", encoding="utf-8")
+    items = [
+        {
+            "status": "ok",
+            "subject": f"sub-{subject}",
+            "smoothing": smoothing,
+            "hemi": hemi,
+            "label_counts": {"1": 1, "2": 1, "3": 1},
+        }
+        for subject in workflow.SMOKE_SUBJECTS
+        for smoothing in workflow.SMOOTHINGS
+        for hemi in workflow.HEMIS
+    ]
+    validation_manifest = run_dir / "validation_manifest.json"
+    validation_manifest.write_text(
+        json.dumps(
+            {
+                "status": "complete",
+                "run_id": workflow.SMOKE_RUN_ID,
+                "scope": "subset",
+                "subject_count": 3,
+                "complete_subject_count": 3,
+                "combination_count": 12,
+                "template_manifest": workflow.fingerprint(template_file),
+                "roi_registry": workflow.fingerprint(registry_file),
+                "run_manifest": workflow.fingerprint(run_manifest),
+                "validation_items": workflow.fingerprint(table),
+                "items": items,
+            }
+        ),
+        encoding="utf-8",
+    )
+    called: list[dict[str, object]] = []
+    monkeypatch.setattr(workflow, "_load_template_contract", lambda _: object())
+    monkeypatch.setattr(
+        workflow,
+        "_validate_validation_payload_dependencies",
+        lambda **kwargs: called.append(kwargs),
+    )
+
+    workflow.validate_full_run_smoke_gate(
+        out_root=out_root,
+        template_fingerprint=workflow.fingerprint(template_file),
+        roi_registry_fingerprint=workflow.fingerprint(registry_file),
+    )
+
+    assert called
+
+
+def test_canonical_resume_contracts_cover_every_gifti_output(tmp_path: Path):
+    workflow = load_module()
+    volume_root, dtseries_root, concat_root = _write_functional_inputs(
+        tmp_path, subject="1001", run_lengths=[3, 3, 3]
+    )
+    functional = workflow.resolve_subject_runs(
+        subject="1001",
+        volume_root=volume_root,
+        dtseries_root=dtseries_root,
+        concat_dtseries_root=concat_root,
+    )
+    contracts = workflow.canonical_output_contracts(functional)
+
+    assert contracts["run-01_hemi-L_gifti"] == ((512, 3), np.dtype(np.float32))
+    assert contracts["raw_hemi-L_gifti"] == ((512, 9), np.dtype(np.float32))
+    assert contracts["2mm_hemi-R_gifti"] == ((512, 9), np.dtype(np.float32))
+    assert contracts["valid_roi_hemi-L"] == ((512,), np.dtype(np.float32))
+    assert contracts["2mm_hemi-R_label_gifti"] == ((512,), np.dtype(np.int32))
+
+
+def test_failed_subject_resume_accepts_interrupted_history(tmp_path: Path):
+    workflow = load_module()
+    subject_dir = tmp_path / "subjects" / "sub-1001"
+    subject_dir.mkdir(parents=True)
+    source = tmp_path / "source.txt"
+    source.write_text("source-v1", encoding="utf-8")
+    parameters = {"threshold": 25.0}
+    prior = subject_dir / "subject_manifest.attempt-001.interrupted.json"
+    prior.write_text("interrupted\n", encoding="utf-8")
+    partial = subject_dir / "subject_manifest.partial.json"
+    partial.write_text(
+        json.dumps(
+            {
+                "status": "failed",
+                "parameters": parameters,
+                "inputs": {"source": workflow.fingerprint(source)},
+                "retained_outputs": {},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    history = workflow.prepare_empty_failed_subject_resume(
+        subject_dir=subject_dir,
+        expected_inputs={"source": source},
+        expected_parameters=parameters,
+    )
+
+    assert Path(history["path"]).name == "subject_manifest.attempt-002.failed.json"
+
+
+def test_malformed_validation_partial_is_archived_for_recovery(tmp_path: Path):
+    workflow = load_module()
+    run_dir = tmp_path / "runs" / "run-1"
+    run_dir.mkdir(parents=True)
+    partial = run_dir / "validation_manifest.partial.json"
+    partial.write_bytes(b'{"status": "complete"')
+    original = partial.read_bytes()
+
+    reusable = workflow.prepare_validation_resume_state(
+        run_dir=run_dir,
+        expected_run_manifest={},
+        template_fingerprint={},
+        roi_registry_fingerprint={},
+        resume=True,
+    )
+
+    assert reusable is None
+    histories = list(run_dir.glob("validation_manifest.attempt-*.interrupted.json"))
+    assert len(histories) == 1
+    assert histories[0].read_bytes() == original

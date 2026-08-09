@@ -109,7 +109,12 @@ validates the complete run/validation closure when available, otherwise all
 70 subject manifests, plus every label/surface fingerprint and logical GIFTI
 contract. It refuses overwrite; `--resume` revalidates and byte-reuses a
 complete manifest/status pair. Failed aggregate provenance is retained as
-numbered attempt history before a retry.
+numbered attempt history before a retry. The renderer invokes the matcher's
+strict subject validator when run context is available, requires the exact
+unique subject x smoothing x hemisphere validation closure and matching label
+SHA values, fingerprints the status TSV on reuse, and atomically stages
+aggregate status/manifest files. Subsets require --allow-subset and are
+reported with scope=subset, never production ok.
 
 ## Method Notes
 

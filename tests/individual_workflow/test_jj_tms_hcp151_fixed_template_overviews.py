@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -165,11 +166,14 @@ def test_fixed_overview_renderer_writes_two_rows_and_provenance(
         scene=scene,
         subjects=["1001"],
         jobs=1,
+        allow_subset=True,
     )
 
     pngs = list((tmp_path / "present").glob("*.png"))
     assert len(pngs) == 1
     payload = json.loads(outputs["manifest"].read_text(encoding="utf-8"))
+    assert payload["summary"]["status"] == "subset"
+    assert payload["summary"]["scope"] == "subset"
     assert payload["summary"]["ok"] == 1
     assert payload["summary"]["total"] == 1
     assert payload["items"][0]["source_rows"][0]["smoothing"] == "2mm"
@@ -202,6 +206,7 @@ def test_fixed_overview_resume_is_immutable_and_detects_input_drift(
         scene=scene,
         subjects=["1001"],
         jobs=1,
+        allow_subset=True,
     )
     manifest_bytes = outputs["manifest"].read_bytes()
     png = next(output_dir.glob("*.png"))
@@ -219,6 +224,7 @@ def test_fixed_overview_resume_is_immutable_and_detects_input_drift(
         subjects=["1001"],
         jobs=1,
         resume=True,
+        allow_subset=True,
     )
     assert calls["count"] == 2
     assert outputs["manifest"].read_bytes() == manifest_bytes
@@ -238,6 +244,7 @@ def test_fixed_overview_resume_is_immutable_and_detects_input_drift(
             subjects=["1001"],
             jobs=1,
             resume=True,
+            allow_subset=True,
         )
 
 
@@ -269,4 +276,194 @@ def test_fixed_overview_rejects_orphan_png_without_manifest(tmp_path: Path):
             subjects=["1001"],
             jobs=1,
             resume=True,
+            allow_subset=True,
         )
+
+
+def test_fixed_overview_rejects_validation_label_sha_drift(tmp_path: Path):
+    workflow = load_module()
+    matching_root = tmp_path / "matching"
+    _write_fixed_subject(matching_root)
+    run_manifest = tmp_path / "run.json"
+    run_manifest.write_text(
+        json.dumps({"status": "complete", "subjects": ["sub-1001"]}),
+        encoding="utf-8",
+    )
+    table = tmp_path / "validation_items.tsv"
+    header = (
+        "subject\tsmoothing\themi\tstatus\tlabel_1_count\tlabel_2_count\t"
+        "label_3_count\tmargin_min\tmargin_median\tmargin_mean\tmargin_max\t"
+        "labels_sha256\tconsumed_surface\n"
+    )
+    rows = "".join(
+        f"sub-1001\t{smoothing}\t{hemi}\tok\t1\t1\t1\t0.1\t0.2\t0.2\t0.3\t"
+        f"{'bad' * 16}\t/tmp/surface.surf.gii\n"
+        for smoothing in ("2mm", "4mm")
+        for hemi in ("L", "R")
+    )
+    table.write_text(header + rows, encoding="utf-8")
+    validation = tmp_path / "validation.json"
+    validation.write_text(
+        json.dumps(
+            {
+                "status": "complete",
+                "subject_manifests": [
+                    str(
+                        (
+                            matching_root
+                            / "subjects"
+                            / "sub-1001"
+                            / "subject_manifest.json"
+                        ).resolve()
+                    )
+                ],
+                "run_manifest": workflow.fingerprint(run_manifest),
+                "validation_items": workflow.fingerprint(table),
+                "items": [
+                    {
+                        "status": "ok",
+                        "subject": "sub-1001",
+                        "smoothing": smoothing,
+                        "hemi": hemi,
+                    }
+                    for smoothing in ("2mm", "4mm")
+                    for hemi in ("L", "R")
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="label|validation"):
+        workflow.load_source_manifest(
+            matching_root=matching_root,
+            subjects=["1001"],
+            validation_manifest=validation,
+        )
+
+
+def test_fixed_overview_rejects_combo_label_metadata_drift(tmp_path: Path):
+    workflow = load_module()
+    matching_root = tmp_path / "matching"
+    _write_fixed_subject(matching_root)
+    combo = next(
+        (matching_root / "subjects" / "sub-1001" / "matching").glob(
+            "2mm/hemi-L/combo_manifest.json"
+        )
+    )
+    payload = json.loads(combo.read_text(encoding="utf-8"))
+    payload["outputs"]["label_gifti"]["shape"] = [511]
+    combo.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="shape|metadata"):
+        workflow.load_subject_sources(
+            matching_root=matching_root,
+            subject="1001",
+        )
+
+
+def test_fixed_overview_resume_validates_status_tsv_fingerprint(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    workflow = load_module()
+    matching_root = tmp_path / "matching"
+    _write_fixed_subject(matching_root)
+    scene = tmp_path / "scene.scene"
+    scene.write_text("scene-v1\n", encoding="utf-8")
+
+    def fake_render_locked_grid(**kwargs):
+        output = Path(kwargs["outdir"]) / "fake.png"
+        output.parent.mkdir(parents=True, exist_ok=True)
+        Image.new("RGB", (120, 60), (20, 30, 40)).save(output, format="PNG")
+        return {"biglegend_png": str(output)}
+
+    monkeypatch.setattr(workflow, "render_locked_grid", fake_render_locked_grid)
+    output_dir = tmp_path / "present"
+    workflow.render_fixed_template_overviews(
+        matching_root=matching_root,
+        output_dir=output_dir,
+        scene=scene,
+        subjects=["1001"],
+        jobs=1,
+        allow_subset=True,
+    )
+    status = output_dir / "fixed_template_overview_status.tsv"
+    status.write_text(status.read_text(encoding="utf-8") + "drift\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="status|fingerprint"):
+        workflow.render_fixed_template_overviews(
+            matching_root=matching_root,
+            output_dir=output_dir,
+            scene=scene,
+            subjects=["1001"],
+            jobs=1,
+            resume=True,
+            allow_subset=True,
+        )
+
+
+def test_fixed_overview_recovers_atomic_aggregate_partials(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    workflow = load_module()
+    matching_root = tmp_path / "matching"
+    _write_fixed_subject(matching_root)
+    scene = tmp_path / "scene.scene"
+    scene.write_text("scene-v1\n", encoding="utf-8")
+
+    def fake_render_locked_grid(**kwargs):
+        output = Path(kwargs["outdir"]) / "fake.png"
+        output.parent.mkdir(parents=True, exist_ok=True)
+        Image.new("RGB", (120, 60), (20, 30, 40)).save(output, format="PNG")
+        return {"biglegend_png": str(output)}
+
+    monkeypatch.setattr(workflow, "render_locked_grid", fake_render_locked_grid)
+    output_dir = tmp_path / "present"
+    workflow.render_fixed_template_overviews(
+        matching_root=matching_root,
+        output_dir=output_dir,
+        scene=scene,
+        subjects=["1001"],
+        jobs=1,
+        allow_subset=True,
+    )
+    (output_dir / "fixed_template_overview_manifest.json").rename(
+        output_dir / "fixed_template_overview_manifest.partial.json"
+    )
+    (output_dir / "fixed_template_overview_status.tsv").rename(
+        output_dir / "fixed_template_overview_status.partial.tsv"
+    )
+
+    outputs = workflow.render_fixed_template_overviews(
+        matching_root=matching_root,
+        output_dir=output_dir,
+        scene=scene,
+        subjects=["1001"],
+        jobs=1,
+        resume=True,
+        allow_subset=True,
+    )
+
+    assert outputs["manifest"].is_file()
+    assert outputs["status_tsv"].is_file()
+
+
+def test_fixed_overview_pins_native_thread_environment_before_native_import(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    for key in workflow_thread_keys():
+        monkeypatch.delenv(key, raising=False)
+    workflow = load_module()
+    assert all(os.environ.get(key) == "1" for key in workflow_thread_keys())
+
+
+def workflow_thread_keys() -> tuple[str, ...]:
+    return (
+        "CORE_WORKFLOW_WB_THREADS",
+        "OMP_NUM_THREADS",
+        "OPENBLAS_NUM_THREADS",
+        "MKL_NUM_THREADS",
+        "NUMEXPR_NUM_THREADS",
+        "VECLIB_MAXIMUM_THREADS",
+        "ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS",
+    )

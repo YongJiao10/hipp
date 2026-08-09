@@ -111,7 +111,12 @@ independently constructed canonical output set, four unique smoothing/hemi
 combinations, paths, fingerprints, shapes, dtypes, parameters, and per-valid-
 vertex score/margin contracts all still match. A completed run manifest is
 immutable and returned without rewrite after its roster, paths, template, ROI
-registry, and parameters validate. An interrupted/failed run partial is copied
+registry, and parameters validate. New run items anchor the exact subject
+manifest and all four combo-manifest fingerprints; legacy run manifests are
+accepted only after the current strict dependency closure passes. Every
+functional GIFTI is validated as float32 [512,T], ROI-shape GIFTI as float32
+[512], and label GIFTI as int32 [512], independently of self-declared
+metadata. An interrupted/failed run partial is copied
 verbatim to the next versioned run-attempt history before the active partial is
 reused; failed runs keep a `status=failed` partial and never publish a final.
 
@@ -121,7 +126,9 @@ only prior `subject_manifest.attempt-NNN.failed.json` histories. An empty
 `in_progress` partial is first retained verbatim as an
 `subject_manifest.attempt-NNN.interrupted.json` history. A complete `ok` subject
 partial is independently validated and exclusively promoted; it is never
-trusted from its self-declared status. Extra files, retained intermediates,
+trusted from its self-declared status. The interrupted history is copied while
+the active partial remains available, and prior failed or interrupted histories
+are accepted. Extra files, retained intermediates,
 fingerprint drift, or parameter drift fail closed. Complete run partials are
 promoted only after every subject manifest and four-combination dependency has
 been revalidated. Validation writes `validation_items.partial.tsv` and
@@ -129,8 +136,10 @@ been revalidated. Validation writes `validation_items.partial.tsv` and
 complete validation partial with a final table is promoted only after the
 table, run, subject, and combination closure is revalidated. `--resume`
 fingerprint-reuses completed validation and reruns the same closure checks,
-including the canonical smoke gate. Interrupted tables/manifests are moved to
-versioned attempt history without deletion before recomputation.
+including the canonical smoke gate. Fresh validation rows must exactly match
+the recorded anchored items; malformed/truncated JSON partials are retained as
+versioned interrupted history before recomputation. Interrupted tables/manifests
+are moved to versioned attempt history without deletion before recomputation.
 
 ## Fixed Launch Sequence
 
@@ -216,3 +225,11 @@ reuses an item after revalidating every source fingerprint and output PNG; a
 complete manifest/status pair is byte-stable on reuse. Failed aggregate
 provenance is retained as numbered `.attempt-NNN.failed.*` history before a
 resume retry, without deletion.
+
+When a completed validation manifest is available, the renderer invokes the
+matcher's full subject validator against its dependency roots. Validation
+items must be the exact unique subject x smoothing x hemisphere closure and
+their label SHA must match the matcher output. Aggregate status and manifest
+files use partial staging and atomic publication, and completed reuse checks
+the status TSV fingerprint. A subset requires explicit --allow-subset and is
+reported with scope=subset rather than production ok.

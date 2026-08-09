@@ -9,6 +9,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import re
 import sys
 import tempfile
 import time
@@ -19,6 +20,19 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+NATIVE_THREAD_ENV_OVERRIDES = {
+    "CORE_WORKFLOW_WB_THREADS": "1",
+    "OMP_NUM_THREADS": "1",
+    "OPENBLAS_NUM_THREADS": "1",
+    "MKL_NUM_THREADS": "1",
+    "NUMEXPR_NUM_THREADS": "1",
+    "VECLIB_MAXIMUM_THREADS": "1",
+    "ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS": "1",
+}
+for _thread_env_key, _thread_env_value in NATIVE_THREAD_ENV_OVERRIDES.items():
+    os.environ[_thread_env_key] = _thread_env_value
+del _thread_env_key, _thread_env_value
+
 import nibabel as nib
 import numpy as np
 from PIL import Image
@@ -28,7 +42,11 @@ CORE_WORKFLOW_DIR = REPO_ROOT / "scripts" / "core_workflow"
 if str(CORE_WORKFLOW_DIR) not in sys.path:
     sys.path.insert(0, str(CORE_WORKFLOW_DIR))
 
-from lib.gifti_contracts import validate_gifti_pointset, validate_gifti_vector  # noqa: E402
+from lib.gifti_contracts import (  # noqa: E402
+    gifti_logical_shape_dtype,
+    validate_gifti_pointset,
+    validate_gifti_vector,
+)
 from lib.network_colors import require_network_colors  # noqa: E402
 from lib.surface_utils import infer_spec_path, render_locked_grid  # noqa: E402
 
@@ -78,12 +96,7 @@ NETWORK_DISPLAY = {
     "2": ("Somatomotor", "SMN"),
     "3": ("Default", "DMN"),
 }
-THREAD_ENV_OVERRIDES = {
-    "OMP_NUM_THREADS": "1",
-    "OPENBLAS_NUM_THREADS": "1",
-    "MKL_NUM_THREADS": "1",
-    "NUMEXPR_NUM_THREADS": "1",
-}
+THREAD_ENV_OVERRIDES = dict(NATIVE_THREAD_ENV_OVERRIDES)
 
 # These helpers are the canonical cross-fit presentation implementation.  The
 # fixed-template adapter supplies a different, strictly validated source
@@ -100,6 +113,30 @@ sys.modules[_CROSSFIT_SPEC.name] = _CROSSFIT
 _CROSSFIT_SPEC.loader.exec_module(_CROSSFIT)
 compose_stacked_rows = _CROSSFIT.compose_stacked_rows
 write_network_display_label_gifti = _CROSSFIT.write_network_display_label_gifti
+
+_MATCHER_PATH = (
+    REPO_ROOT
+    / "scripts"
+    / "individual_workflow"
+    / "jj_tms_hcp151_fixed_template_matching.py"
+)
+_MATCHER_MODULE: Any | None = None
+
+
+def _load_matcher_module() -> Any:
+    global _MATCHER_MODULE
+    if _MATCHER_MODULE is None:
+        spec = importlib.util.spec_from_file_location(
+            "_fixed_template_matcher_for_overview_validation",
+            _MATCHER_PATH,
+        )
+        if spec is None or spec.loader is None:
+            raise ImportError(f"Unable to load matcher validator: {_MATCHER_PATH}")
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = module
+        spec.loader.exec_module(module)
+        _MATCHER_MODULE = module
+    return _MATCHER_MODULE
 
 
 def _now() -> str:
@@ -191,6 +228,12 @@ def _source_output_path(recorded: object, *, context: str) -> Path:
         raise ValueError(
             f"{context} fingerprint mismatch: recorded={expected!r} actual={actual!r}"
         )
+    if path.suffix == ".gii" and (
+        "shape" in recorded or "dtype" in recorded
+    ):
+        shape, dtype = gifti_logical_shape_dtype(path)
+        if recorded.get("shape") != list(shape) or recorded.get("dtype") != str(dtype):
+            raise ValueError(f"{context} logical GIFTI metadata drift")
     return path
 
 
@@ -332,6 +375,7 @@ def load_subject_sources(
     *,
     matching_root: Path,
     subject: str,
+    matcher_context: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
     subject_id = normalize_subject(subject)
     subject_dir = Path(matching_root).resolve() / "subjects" / f"sub-{subject_id}"
@@ -339,6 +383,12 @@ def load_subject_sources(
     payload = _load_json(manifest_path)
     if payload.get("status") != "ok" or payload.get("subject") != f"sub-{subject_id}":
         raise ValueError(f"Subject mapping manifest is not complete: {manifest_path}")
+    if matcher_context:
+        _validate_subject_with_matcher(
+            matching_root=Path(matching_root),
+            subject=subject_id,
+            matcher_context=matcher_context,
+        )
     surfaces = {
         hemi: _validate_surface(
             subject=subject_id,
@@ -377,6 +427,55 @@ def load_subject_sources(
     }
 
 
+def _validate_subject_with_matcher(
+    *,
+    matching_root: Path,
+    subject: str,
+    matcher_context: Mapping[str, object],
+) -> None:
+    matcher = _load_matcher_module()
+    roots = matcher_context.get("path_roots")
+    parameters = matcher_context.get("parameters")
+    if not isinstance(roots, Mapping) or not isinstance(parameters, Mapping):
+        raise ValueError("Matcher validation context is incomplete")
+    if Path(str(roots["out_root"])).resolve() != Path(matching_root).resolve():
+        raise ValueError("Matcher and overview output roots differ")
+    functional = matcher.resolve_subject_runs(
+        subject=subject,
+        volume_root=Path(str(roots["volume_root"])),
+        dtseries_root=Path(str(roots["dtseries_root"])),
+        concat_dtseries_root=Path(str(roots["concat_dtseries_root"])),
+    )
+    matcher.validate_functional_headers(functional)
+    matcher.load_areal_labels(
+        label_root=Path(str(roots["label_root"])),
+        subject=subject,
+    )
+    matcher._validate_surfaces(
+        hippunfold_root=Path(str(roots["hippunfold_root"])),
+        subject=subject,
+    )
+    template = matcher._load_template_contract(Path(str(roots["template_root"])))
+    subject_dir = Path(matching_root).resolve() / "subjects" / f"sub-{subject}"
+    expected_inputs = matcher._expected_subject_inputs(
+        functional=functional,
+        label_root=Path(str(roots["label_root"])),
+        hippunfold_root=Path(str(roots["hippunfold_root"])),
+        template=template,
+    )
+    expected_outputs = matcher._expected_subject_output_paths(
+        functional=functional,
+        subject_dir=subject_dir,
+    )
+    matcher.validate_reusable_subject(
+        subject_dir=subject_dir,
+        expected_inputs=expected_inputs,
+        expected_parameters=parameters,
+        expected_outputs=expected_outputs,
+        functional=functional,
+    )
+
+
 def _validate_full_validation_manifest(
     *,
     path: Path,
@@ -412,19 +511,100 @@ def _validate_full_validation_manifest(
         raise ValueError(f"Validation run dependency is not complete: {run_path}")
     if [str(value) for value in run_payload.get("subjects", [])] != expected_subjects:
         raise ValueError(f"Validation run subject roster mismatch: {run_path}")
-    _source_output_path(
+    table_path = _source_output_path(
         payload.get("validation_items"),
         context="validation table",
     )
+    expected_fields = {
+        "subject",
+        "smoothing",
+        "hemi",
+        "status",
+        "label_1_count",
+        "label_2_count",
+        "label_3_count",
+        "margin_min",
+        "margin_median",
+        "margin_mean",
+        "margin_max",
+        "labels_sha256",
+        "consumed_surface",
+    }
+    with table_path.open("r", encoding="utf-8", newline="") as stream:
+        table_rows = list(csv.DictReader(stream, delimiter="\t"))
+    if any(set(row) != expected_fields for row in table_rows):
+        raise ValueError(f"Validation table schema drift: {table_path}")
     items = payload.get("items")
     if not isinstance(items, list) or len(items) != len(subjects) * 4:
         raise ValueError(f"Validation item closure is incomplete: {path}")
     if any(not isinstance(row, Mapping) or row.get("status") != "ok" for row in items):
         raise ValueError(f"Validation contains non-ok item: {path}")
+    expected_keys = {
+        (subject, smoothing, hemi)
+        for subject in expected_subjects
+        for smoothing in SMOOTHINGS
+        for hemi in HEMIS
+    }
+    item_keys = {
+        (str(row.get("subject")), str(row.get("smoothing")), str(row.get("hemi")))
+        for row in items
+    }
+    table_keys = {
+        (row["subject"], row["smoothing"], row["hemi"])
+        for row in table_rows
+    }
+    if item_keys != expected_keys or table_keys != expected_keys:
+        raise ValueError(f"Validation item key closure drift: {path}")
+    label_fingerprints: dict[tuple[str, str, str], str] = {}
+    consumed_surfaces: dict[tuple[str, str, str], str] = {}
+    for subject in expected_subjects:
+        subject_dir = Path(matching_root).resolve() / "subjects" / subject
+        subject_payload = _load_json(subject_dir / "subject_manifest.json")
+        combos = _combo_rows(
+            subject=normalize_subject(subject),
+            subject_dir=subject_dir,
+            subject_manifest=subject_payload,
+        )
+        for (smoothing, hemi), combo_row in combos.items():
+            combo_payload = _load_json(Path(str(combo_row["manifest"])))
+            combo_outputs = combo_payload.get("outputs")
+            if not isinstance(combo_outputs, Mapping):
+                raise ValueError(f"Validation combo outputs are missing: {combo_row['manifest']}")
+            label_path = _source_output_path(
+                combo_outputs.get("label_gifti"),
+                context=f"Validation source label {subject} {smoothing} {hemi}",
+            )
+            labels_record = combo_outputs.get("labels", combo_outputs.get("label_gifti"))
+            labels_path = _source_output_path(
+                labels_record,
+                context=f"Validation source labels {subject} {smoothing} {hemi}",
+            )
+            key = (subject, smoothing, hemi)
+            label_fingerprints[key] = fingerprint(labels_path)["sha256"]
+            consumed_surfaces[key] = str(
+                Path(
+                    str(subject_payload["inputs"][f"surface_hemi-{hemi}"]["path"])
+                ).resolve()
+            )
+    for row in table_rows:
+        key = (row["subject"], row["smoothing"], row["hemi"])
+        if row["labels_sha256"] != label_fingerprints[key]:
+            raise ValueError(f"Validation label fingerprint drift: {key}")
+        if str(Path(row["consumed_surface"]).resolve()) != consumed_surfaces[key]:
+            raise ValueError(f"Validation consumed surface drift: {key}")
+    matcher_context: dict[str, object] = {}
+    if isinstance(run_payload.get("path_roots"), Mapping) and isinstance(
+        run_payload.get("parameters"), Mapping
+    ):
+        matcher_context = {
+            "path_roots": dict(run_payload["path_roots"]),
+            "parameters": dict(run_payload["parameters"]),
+        }
     return {
         "mode": "validation_manifest",
         "path": str(Path(path).resolve()),
         "fingerprint": fingerprint(path),
+        "matcher_context": matcher_context,
     }
 
 
@@ -460,7 +640,19 @@ def load_source_manifest(
             ],
             "fingerprints": [],
         }
-    sources = [load_subject_sources(matching_root=matching, subject=subject) for subject in subject_ids]
+    matcher_context = (
+        source_validation.get("matcher_context")
+        if isinstance(source_validation.get("matcher_context"), Mapping)
+        else None
+    )
+    sources = [
+        load_subject_sources(
+            matching_root=matching,
+            subject=subject,
+            matcher_context=matcher_context,
+        )
+        for subject in subject_ids
+    ]
     source_validation["fingerprints"] = [
         {
             "path": source["subject_manifest"],
@@ -766,6 +958,87 @@ def _archive_failed_provenance(
         )
 
 
+def _archive_interrupted_provenance(
+    *,
+    manifest_path: Path,
+    status_path: Path,
+    manifest_partial_path: Path,
+    status_partial_path: Path,
+) -> None:
+    existing = [
+        path
+        for path in (
+            manifest_path,
+            status_path,
+            manifest_partial_path,
+            status_partial_path,
+        )
+        if path.exists()
+    ]
+    if not existing:
+        return
+    attempts: list[int] = []
+    for path in manifest_path.parent.iterdir():
+        match = re.fullmatch(
+            r"fixed_template_overview_(?:manifest|status)\.attempt-"
+            r"(?P<number>[0-9]{3,})\.interrupted\.(?:json|tsv)",
+            path.name,
+        )
+        if match is not None:
+            attempts.append(int(match.group("number")))
+    attempt = max(attempts, default=0) + 1
+    for path in existing:
+        stem = (
+            "fixed_template_overview_manifest"
+            if path.suffix == ".json"
+            else "fixed_template_overview_status"
+        )
+        history = manifest_path.parent / (
+            f"{stem}.attempt-{attempt:03d}.interrupted{path.suffix}"
+        )
+        while history.exists():
+            attempt += 1
+            history = manifest_path.parent / (
+                f"{stem}.attempt-{attempt:03d}.interrupted{path.suffix}"
+            )
+        path.rename(history)
+
+
+def _validate_existing_status_tsv(
+    *,
+    status_path: Path,
+    summary: Mapping[str, object],
+    items: Sequence[Mapping[str, object]],
+) -> None:
+    recorded = summary.get("status_tsv_fingerprint")
+    if recorded is not None and recorded != fingerprint(status_path):
+        raise ValueError("Existing overview status TSV fingerprint drift")
+    with status_path.open("r", encoding="utf-8", newline="") as stream:
+        rows = list(csv.DictReader(stream, delimiter="\t"))
+    if len(rows) != len(items):
+        raise ValueError("Existing overview status TSV row count drift")
+    expected_subjects = [str(item.get("subject")) for item in items]
+    if [row.get("subject") for row in rows] != expected_subjects:
+        raise ValueError("Existing overview status TSV subject drift")
+    if any(row.get("status") != "ok" for row in rows):
+        raise ValueError("Existing overview status TSV contains non-ok rows")
+
+
+def _source_validation_compatible(
+    recorded: object,
+    expected: Mapping[str, object],
+) -> bool:
+    if recorded == expected:
+        return True
+    if not isinstance(recorded, Mapping):
+        return False
+    recorded_without_context = dict(recorded)
+    expected_without_context = dict(expected)
+    recorded_without_context.pop("matcher_context", None)
+    expected_without_context.pop("matcher_context", None)
+    return recorded_without_context == expected_without_context
+
+
 def _write_status_exclusive(path: Path, rows: Sequence[Mapping[str, object]]) -> None:
     destination = Path(path)
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -797,6 +1070,7 @@ def render_fixed_template_overviews(
     validation_manifest: Path | None = None,
     jobs: int = DEFAULT_JOBS,
     resume: bool = False,
+    allow_subset: bool = False,
 ) -> dict[str, Path]:
     if not 1 <= int(jobs) <= MAX_JOBS:
         raise ValueError(f"jobs must be in [1, {MAX_JOBS}]")
@@ -805,6 +1079,13 @@ def render_fixed_template_overviews(
         if subjects is not None
         else load_subject_roster(Path(subjects_manifest))
     )
+    canonical_subjects = load_subject_roster(Path(subjects_manifest))
+    full_scope = selected == canonical_subjects
+    if not full_scope and not allow_subset:
+        raise ValueError(
+            "Subset overview rendering requires explicit --allow-subset"
+        )
+    scope = "full" if full_scope else "subset"
     matching = Path(matching_root).resolve()
     candidate_validation = (
         Path(validation_manifest).resolve()
@@ -829,29 +1110,53 @@ def render_fixed_template_overviews(
     destination.mkdir(parents=True, exist_ok=True)
     manifest_path = destination / "fixed_template_overview_manifest.json"
     status_path = destination / "fixed_template_overview_status.tsv"
+    manifest_partial_path = (
+        destination / "fixed_template_overview_manifest.partial.json"
+    )
+    status_partial_path = (
+        destination / "fixed_template_overview_status.partial.tsv"
+    )
+    aggregate_paths = (
+        manifest_path,
+        status_path,
+        manifest_partial_path,
+        status_partial_path,
+    )
     existing_pngs = list(destination.glob("*_hcp151_fixed_template_matching_overview.png"))
-    if existing_pngs and not manifest_path.exists():
+    if existing_pngs and not (manifest_path.exists() or manifest_partial_path.exists()):
         raise ValueError(
             "Existing fixed-template overview PNGs have no provenance manifest; "
             "refuse resume reuse"
         )
-    if (manifest_path.exists() or status_path.exists()) and not resume:
+    if any(path.exists() for path in aggregate_paths) and not resume:
         raise FileExistsError(
             f"Overview provenance already exists under {destination}; use --resume"
         )
 
     previous_items: dict[str, Mapping[str, object]] = {}
-    if manifest_path.exists():
-        prior = _load_json(manifest_path)
+    manifest_source = (
+        manifest_path
+        if manifest_path.exists()
+        else manifest_partial_path
+        if manifest_partial_path.exists()
+        else None
+    )
+    prior_summary: Mapping[str, object] | None = None
+    if manifest_source is not None:
+        prior = _load_json(manifest_source)
         summary = prior.get("summary")
         items = prior.get("items")
         if (
             not isinstance(summary, Mapping)
             or summary.get("workflow") != WORKFLOW_NAME
             or summary.get("subjects") != [f"sub-{subject}" for subject in selected]
+            or summary.get("scope", "full" if full_scope else "subset") != scope
             or summary.get("scene") != str(scene_path)
             or summary.get("scene_fingerprint") != scene_fingerprint
-            or summary.get("source_validation") != source_validation
+            or not _source_validation_compatible(
+                summary.get("source_validation"),
+                source_validation,
+            )
             or summary.get("visual_label_contract_fingerprint")
             != visual_contract["contract_fingerprint"]
             or not isinstance(items, list)
@@ -864,7 +1169,30 @@ def render_fixed_template_overviews(
             if subject in previous_items:
                 raise ValueError(f"Existing overview manifest has duplicate subject: {subject}")
             previous_items[subject] = dict(item)
-        if summary.get("status") == "ok" and len(previous_items) == len(selected):
+        prior_summary = summary
+        status_source = (
+            status_path
+            if status_path.exists()
+            else status_partial_path
+            if status_partial_path.exists()
+            else None
+        )
+        if (
+            summary.get("status") in {"ok", "subset"}
+            and len(previous_items) == len(selected)
+            and status_source is not None
+        ):
+            _validate_existing_status_tsv(
+                status_path=status_source,
+                summary=summary,
+                items=[dict(item) for item in items],
+            )
+        if (
+            manifest_source == manifest_path
+            and status_source == status_path
+            and summary.get("status") in {"ok", "subset"}
+            and len(previous_items) == len(selected)
+        ):
             for source in sources:
                 subject = str(source["subject"])
                 _validate_existing_item(
@@ -880,17 +1208,23 @@ def render_fixed_template_overviews(
                 "manifest": manifest_path,
             }
 
-    if manifest_path.exists() and resume:
-        prior_summary = _load_json(manifest_path).get("summary")
-        if isinstance(prior_summary, Mapping) and prior_summary.get("status") != "ok":
+    if any(path.exists() for path in aggregate_paths):
+        if (
+            manifest_path.exists()
+            and isinstance(prior_summary, Mapping)
+            and prior_summary.get("status") == "failed"
+        ):
             _archive_failed_provenance(
                 manifest_path=manifest_path,
                 status_path=status_path,
             )
-    elif status_path.exists() and not manifest_path.exists():
-        raise ValueError(
-            f"Existing overview status has no matching manifest: {status_path}"
-        )
+        else:
+            _archive_interrupted_provenance(
+                manifest_path=manifest_path,
+                status_path=status_path,
+                manifest_partial_path=manifest_partial_path,
+                status_partial_path=status_partial_path,
+            )
 
     effective_jobs = max(1, min(int(jobs), MAX_JOBS, len(sources) or 1))
     rows = sorted(
@@ -907,7 +1241,8 @@ def render_fixed_template_overviews(
     )
     failed = [row for row in rows if row.get("status") != "ok"]
     summary = {
-        "status": "failed" if failed else "ok",
+        "status": "failed" if failed else ("ok" if full_scope else "subset"),
+        "scope": scope,
         "workflow": WORKFLOW_NAME,
         "matching_root": str(matching),
         "output_dir": str(destination),
@@ -926,14 +1261,18 @@ def render_fixed_template_overviews(
         "jobs": effective_jobs,
         "updated_at": _now(),
     }
-    _write_status_exclusive(status_path, rows)
+    _write_status_exclusive(status_partial_path, rows)
+    summary["status_tsv"] = str(status_path)
+    summary["status_tsv_fingerprint"] = fingerprint(status_partial_path)
     _write_json_exclusive(
-        manifest_path,
+        manifest_partial_path,
         {
             "summary": summary,
             "items": rows,
         },
     )
+    status_partial_path.rename(status_path)
+    manifest_partial_path.rename(manifest_path)
     if failed:
         raise RuntimeError(f"Fixed-template overview rendering failed for {len(failed)} subjects")
     return {
@@ -955,6 +1294,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--validation-manifest", type=Path)
     parser.add_argument("--jobs", type=int, default=DEFAULT_JOBS)
     parser.add_argument("--resume", action="store_true")
+    parser.add_argument("--allow-subset", action="store_true")
     return parser
 
 
@@ -970,6 +1310,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         validation_manifest=args.validation_manifest,
         jobs=args.jobs,
         resume=args.resume,
+        allow_subset=args.allow_subset,
     )
     print(f"status_tsv={outputs['status_tsv']}")
     print(f"manifest={outputs['manifest']}")
