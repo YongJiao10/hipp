@@ -14,7 +14,7 @@ Inputs:
   - subject: Subject ID without the "sub-" prefix (required).
   - input_dir (optional, default: "data/hippunfold_input"): Root directory containing raw structural BIDS folders.
   - out_dir: Subject-specific output directory where HippUnfold results will be written (required).
-  - --model-path (optional): Canonical local nnUNet model tar; the remote model-download rule is always omitted.
+  - --model-path (optional): Canonical local nnUNet model tar; the validated local-model overlay removes the remote rule and binds the canonical tar explicitly.
 - Physical inputs:
   - Raw T1w anatomical MRI files under `{input_dir}/sub-<subject>/anat/`.
 

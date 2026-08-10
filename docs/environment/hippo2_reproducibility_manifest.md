@@ -324,6 +324,7 @@ Setting / Path                                 Purpose
 `runtime/hippunfold_asset_store_shared`       Hardcoded shared asset store for reusable template/model downloads
 `runtime/hippunfold_asset_store_shared/hippunfold_assets`       Canonical `HIPPUNFOLD_CACHE_DIR`; noncanonical overrides are rejected
 `hippunfold_assets/model/trained_model.3d_fullres.Task101_hcp1200_T1w.nnUNetTrainerV2.model_best.tar`  Canonical local T1w nnUNet model; required before a run
+`hippunfold_assets/model/trained_model.3d_fullres.Task101_hcp1200_T1w.nnUNetTrainerV2.model_best`  Canonical unpacked model directory; must exist and be nonempty before parallel launch
 `runtime/hippunfold_asset_store_shared/runtime_source_assets`   Canonical `HIPPUNFOLD_RUNTIME_SOURCE_CACHE`; noncanonical overrides are rejected
 `snakemake_conda`                             Optional local conda prefix for rule envs
 `conda_pkgs`                                  Local conda package cache
@@ -359,17 +360,22 @@ Runtime scratch is retained by default; the wrapper only removes it when `HIPPUN
 
 The active public T1w launcher `scripts/core_workflow/01_01_run_hippunfold_t1w_local.py`
 accepts `--model-path` and defaults to the canonical local model tar listed above.
-The wrapper prints the resolved model path, fails fast if that file is missing, and
-always appends `--omit-from download_nnunet_model` after caller-supplied Snakemake
-arguments. A new output directory therefore cannot trigger HippUnfold's remote
-nnUNet model-download rule; it must consume the shared local model.
+The wrapper validates that tar, creates a retained local-model-only workflow
+overlay, binds `get_model_tar()` to the canonical path, retains local model
+unpacking, and runs the overlay with `--snakefile`.
+`local_model_overlay.json` records source/overlay hashes, Snakefile, and model
+path for strict acceptance. Only the two non-executing fresh-DAG diagnostic
+arguments are accepted. JJ_TMS production repeats the unique-output DAG gate
+before creating workers and records the 4/12/4 rule evidence in run manifests.
 For JJ_TMS raw anatomical inputs, the batch launcher sets
-`HIPPUNFOLD_T1W_FILTER=extension=.nii`; the generic wrapper leaves this filter empty so existing `.nii.gz` HCP inputs remain supported.
+`HIPPUNFOLD_T1W_FILTER=extension=.nii`; the generic wrapper leaves this filter
+empty so existing `.nii.gz` HCP inputs remain supported.
 
-The output checker `scripts/core_workflow/01_02_check_hippunfold_outputs.py`
-accepts legacy success markers, HippUnfold 2.x `N of N steps (100%) done`
-markers, and no-op logs. When a 2.x log has no `localrule all` input list, it
-derives the expected manifest from the successful subject output tree.
+The generic checker `scripts/core_workflow/01_02_check_hippunfold_outputs.py` is
+not sufficient for JJ_TMS acceptance. A no-op log or an expected manifest
+derived from current outputs cannot prove the full DAG. JJ_TMS must use the
+fixed 70-ID manifest, fresh-DAG preflight, and strict checker documented in
+`docs/hipp_parcellation_network/jj_tms_hippunfold_full_corobl.md`.
 
 For persistent conda installs outside the launcher, `~/.condarc` is set to keep
 `pkgs_dirs` and `envs_dirs` under the repo-local `.cache/` tree so package
@@ -430,20 +436,16 @@ From scratch, a future agent should:
 
 1. Create or activate the repo-local `hippo2` prefix at `/home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2`.
 2. Install the conda snapshot from `manifests/hippo2/conda-explicit.txt`.
-3. Verify `conda list -p /home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2` reports `hippunfold 2.0.0`.
-4. Verify `hippunfold --version` reports `2.0.0`.
-5. Ignore `importlib.metadata.version("hippunfold")` if it still reports `1.5.2rc2`.
-6. Build or update the server environment from `environment/hippo2_server.yml` before first run.
-7. Use `_archive/deprecated_2026-05-20/scripts_pre_core_workflow/bootstrap_hippo2_server.sh` if you want a one-shot verifier after install.
-8. Make sure `_archive/deprecated_2026-05-20/scripts_pre_core_workflow/run_hippunfold_local.sh` is the only launcher used for local runs.
-9. Make sure required wrappers/binaries are resolvable at runtime. `LN2_LAYERS` still depends on `scripts/` PATH precedence; core workflow Workbench calls do not.
-10. Make sure `c3d`, `greedy`, `LN2_LAYERS`, and `N4BiasFieldCorrection` resolve from the conda env or explicit binary paths.
-11. `_archive/deprecated_2026-05-20/scripts_pre_core_workflow/run_hippunfold_local.sh` cleans up `runtime/hippunfold_cache` on exit by design.
-    This is safe for single-subject/single-process runs, but for parallel subject runs you must isolate cache roots per worker (or otherwise avoid a shared disposable cache root), or workers may delete each other's runtime artifacts.
-    The active public launcher surface is now `scripts/core_workflow/01_01_run_hippunfold_t1w_local.py`.
-    The legacy T2-specific launcher `_archive/deprecated_2026-05-11/scripts/run_hippunfold_local_t2w_t1reg_isolated_cache.sh` was archived under
-    `_archive/deprecated_2026-05-11/scripts/`.
-12. Use `data/hippunfold_input` as the input root and `outputs_hcp/inputs/hcp/hippunfold/dense_corobl_batch/sub-<id>/hippunfold` as the output root.
+3. Activate with `source /opt/conda/bin/activate hippo2`.
+4. Require `which hippunfold` to resolve to `/home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2/bin/hippunfold`.
+5. Require `hippunfold --version` to report `2.0.0` and `hippunfold --modality T1w --output_density 512 --help` to show `512`. Do not use `conda list` or package metadata as the authoritative gate.
+6. Treat the validated CLI gate above as authoritative; package metadata is informational only.
+7. Use `scripts/core_workflow/01_01_run_hippunfold_t1w_local.py`; it delegates to the active wrapper in `scripts/core_workflow/lib/hippunfold_shell/`.
+8. Verify the canonical shared model, template cache, and runtime-source cache before a run.
+9. Require the validated local-model overlay and its `local_model_overlay.json`.
+10. Make sure required wrappers/binaries are resolvable at runtime. `LN2_LAYERS` still depends on `scripts/` PATH precedence; core workflow Workbench calls do not.
+11. Keep one isolated `HIPPUNFOLD_CACHE_ROOT` per concurrent subject. Runtime scratch is retained by default; do not enable cleanup in a parallel batch.
+12. Use dataset-specific paths; for JJ_TMS follow `docs/hipp_parcellation_network/jj_tms_hippunfold_full_corobl.md`.
 
 ## Activation Path Guardrail
 

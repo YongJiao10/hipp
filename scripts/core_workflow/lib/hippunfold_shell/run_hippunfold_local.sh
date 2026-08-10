@@ -6,6 +6,7 @@ INPUT_DIR="${2:-data/hippunfold_input}"
 OUT_DIR="${3:-outputs_hcp/inputs/hcp/hippunfold/dense_corobl_batch/sub-${SUBJECT}/hippunfold}"
 AUTOTOP_LABELS="${HIPPUNFOLD_AUTOTOP_LABELS:-hipp dentate}"
 BUNDLE_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 HIPPUNFOLD_ENV_NAME="${HIPPUNFOLD_ENV_NAME:-hippo2}"
 HIPPUNFOLD_MODALITY="${HIPPUNFOLD_MODALITY:-T1w}"
 HIPPUNFOLD_USE_T1_REG_TEMPLATE="${HIPPUNFOLD_USE_T1_REG_TEMPLATE:-0}"
@@ -23,6 +24,9 @@ CANONICAL_HIPPUNFOLD_ASSET_ROOT="/home/yojiao/hpchome/hipp/runtime/hippunfold_as
 CANONICAL_HIPPUNFOLD_CACHE_DIR="/home/yojiao/hpchome/hipp/runtime/hippunfold_asset_store_shared/hippunfold_assets"
 CANONICAL_HIPPUNFOLD_RUNTIME_SOURCE_CACHE="/home/yojiao/hpchome/hipp/runtime/hippunfold_asset_store_shared/runtime_source_assets"
 CANONICAL_HIPPUNFOLD_MODEL_PATH="/home/yojiao/hpchome/hipp/runtime/hippunfold_asset_store_shared/hippunfold_assets/model/trained_model.3d_fullres.Task101_hcp1200_T1w.nnUNetTrainerV2.model_best.tar"
+CANONICAL_HIPPO2_PYTHON="/home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2/bin/python"
+CANONICAL_HIPPO2_HIPPUNFOLD="/home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2/bin/hippunfold"
+PREPARE_LOCAL_MODEL_WORKFLOW="${SCRIPT_DIR}/prepare_local_model_workflow.py"
 
 if [[ -n "${HIPPUNFOLD_CACHE_DIR:-}" && "${HIPPUNFOLD_CACHE_DIR}" != "${CANONICAL_HIPPUNFOLD_CACHE_DIR}" ]]; then
   echo "run_hippunfold_local.sh: Refusing noncanonical HIPPUNFOLD_CACHE_DIR=${HIPPUNFOLD_CACHE_DIR}; expected ${CANONICAL_HIPPUNFOLD_CACHE_DIR}" >&2
@@ -49,7 +53,7 @@ if [[ ! -f "${HIPPUNFOLD_MODEL_PATH}" ]]; then
 fi
 
 echo "HippUnfold model path: ${HIPPUNFOLD_MODEL_PATH}"
-echo "HippUnfold model download rule: omitted (--omit-from download_nnunet_model)"
+echo "HippUnfold model download rule: absent from validated local-model overlay"
 export HIPPUNFOLD_RUNTIME_SOURCE_CACHE="${CANONICAL_HIPPUNFOLD_RUNTIME_SOURCE_CACHE}"
 
 CONDA_SH=""
@@ -65,6 +69,31 @@ if [[ -z "${CONDA_SH}" ]]; then
 fi
 source "${CONDA_SH}" >/dev/null 2>&1
 conda activate "${HIPPUNFOLD_ENV_NAME}"
+
+if [[ "$(command -v hippunfold)" != "${CANONICAL_HIPPO2_HIPPUNFOLD}" ]]; then
+  echo "run_hippunfold_local.sh: hippo2 gate failed: expected ${CANONICAL_HIPPO2_HIPPUNFOLD}, got $(command -v hippunfold)" >&2
+  exit 2
+fi
+HIPPUNFOLD_CLI_VERSION="$(hippunfold --version 2>&1)"
+if [[ "${HIPPUNFOLD_CLI_VERSION}" != "2.0.0" ]]; then
+  echo "run_hippunfold_local.sh: hippo2 gate failed: expected version 2.0.0, got ${HIPPUNFOLD_CLI_VERSION}" >&2
+  exit 2
+fi
+if ! hippunfold --modality T1w --output_density 512 --help 2>&1 | grep -q "512"; then
+  echo "run_hippunfold_local.sh: hippo2 gate failed: output_density=512 is unavailable" >&2
+  exit 2
+fi
+
+HIPPUNFOLD_WORKFLOW_OVERLAY="${CACHE_ROOT}/hippunfold_local_model_overlay"
+LOCAL_MODEL_SNAKEFILE="$("${CANONICAL_HIPPO2_PYTHON}" "${PREPARE_LOCAL_MODEL_WORKFLOW}" \
+  --overlay-root "${HIPPUNFOLD_WORKFLOW_OVERLAY}" \
+  --model-path "${HIPPUNFOLD_MODEL_PATH}")"
+if [[ ! -f "${LOCAL_MODEL_SNAKEFILE}" ]]; then
+  echo "run_hippunfold_local.sh: local-model workflow overlay was not created: ${LOCAL_MODEL_SNAKEFILE}" >&2
+  exit 2
+fi
+export HIPPUNFOLD_WORKFLOW_OVERLAY
+echo "HippUnfold local-model workflow: ${LOCAL_MODEL_SNAKEFILE}"
 
 cleanup_runtime_dirs() {
   if [[ "${HIPPUNFOLD_CLEANUP_RUNTIME}" == "1" ]]; then
@@ -167,17 +196,21 @@ if [[ "${HIPPUNFOLD_USE_CONDA}" == "1" ]]; then
   )
 fi
 
-# Append any caller-supplied extra snakemake args (e.g. --forcerun <rule>).
+# Only the two non-executing diagnostics used by the fresh-DAG preflight are accepted.
 if [[ -n "${HIPPUNFOLD_EXTRA_ARGS:-}" ]]; then
-  if [[ "${HIPPUNFOLD_EXTRA_ARGS}" == *download_nnunet_model* ]]; then
-    echo "run_hippunfold_local.sh: HIPPUNFOLD_EXTRA_ARGS cannot reference download_nnunet_model; the remote model rule is disabled." >&2
-    exit 2
-  fi
+  for extra_arg in ${=HIPPUNFOLD_EXTRA_ARGS}; do
+    case "${extra_arg}" in
+      --dry-run|--printshellcmds) ;;
+      *)
+        echo "run_hippunfold_local.sh: unsupported extra workflow argument: ${extra_arg}; only dry-run diagnostics are accepted." >&2
+        exit 2
+        ;;
+    esac
+  done
   cmd+=(${=HIPPUNFOLD_EXTRA_ARGS})
 fi
 
-# This invariant must remain after caller extras: every new output DAG skips
-# the remote model-storage rule and consumes the validated local model tar.
-cmd+=(--omit-from download_nnunet_model)
+# Run the complete participant/all DAG with the validated local-model workflow.
+cmd+=(--snakefile "${LOCAL_MODEL_SNAKEFILE}")
 
 "${cmd[@]}"

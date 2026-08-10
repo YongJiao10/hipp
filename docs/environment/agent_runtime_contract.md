@@ -18,12 +18,13 @@ Use exactly one of these based on task type.
 2. Direct HippUnfold CLI execution:
 - activate `hippo2` with `source /opt/conda/bin/activate hippo2` and pass the HippUnfold gate from `AGENTS.md`
 - expected CLI path after activation: `/home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2/bin/hippunfold`
+- JJ_TMS full-run procedure: `docs/hipp_parcellation_network/jj_tms_hippunfold_full_corobl.md`
 
 ## One-Shot Preflight (Run First)
 
 ```bash
 /home/yojiao/.conda/envs/py314/bin/python -c "import sys,nibabel,brainspace; print(sys.executable); print(nibabel.__version__); print(brainspace.__version__)"
-python -c "import sys; print(sys.executable)"
+command -v python
 ```
 
 Interpretation:

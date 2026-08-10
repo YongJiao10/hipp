@@ -55,17 +55,36 @@ def test_t1w_wrapper_passes_and_reports_model_path() -> None:
     assert 'export HIPPUNFOLD_MODEL_PATH="${MODEL_PATH}"' in text
 
 
-def test_base_wrapper_requires_local_model_and_omits_remote_model_rule() -> None:
+def test_base_wrapper_requires_local_model_and_complete_target() -> None:
     text = BASE_WRAPPER.read_text(encoding="utf-8")
 
     assert f'CANONICAL_HIPPUNFOLD_MODEL_PATH="{CANONICAL_MODEL_PATH}"' in text
     assert 'if [[ ! -f "${HIPPUNFOLD_MODEL_PATH}" ]]' in text
     assert 'HippUnfold model path:' in text
-    assert '--omit-from' in text
-    assert 'download_nnunet_model' in text
+    assert text.count('cmd+=(--snakefile "${LOCAL_MODEL_SNAKEFILE}")') == 1
     assert 'HIPPUNFOLD_T1W_FILTER="${HIPPUNFOLD_T1W_FILTER:-}"' in text
     assert 'cmd+=(--filter-T1w "${HIPPUNFOLD_T1W_FILTER}")' in text
     assert '--filter-T1w extension=.nii' not in text
+
+
+
+def test_base_wrapper_uses_local_model_workflow_overlay() -> None:
+    text = BASE_WRAPPER.read_text(encoding="utf-8")
+
+    assert "prepare_local_model_workflow.py" in text
+    assert "--snakefile" in text
+    assert "HIPPUNFOLD_WORKFLOW_OVERLAY" in text
+    assert 'HIPPUNFOLD_CLI_VERSION="$(hippunfold --version 2>&1)"' in text
+    assert '[[ "${HIPPUNFOLD_CLI_VERSION}" != "2.0.0" ]]' in text
+
+
+def test_local_model_workflow_overlay_removes_only_remote_model_rule() -> None:
+    helper = REPO_ROOT / "scripts/core_workflow/lib/hippunfold_shell/prepare_local_model_workflow.py"
+
+    assert helper.is_file()
+    text = helper.read_text(encoding="utf-8")
+    assert "unpack_nnunet_model" in text
+    assert "copytree" in text
 
 
 def test_base_wrapper_retains_runtime_cache_by_default() -> None:

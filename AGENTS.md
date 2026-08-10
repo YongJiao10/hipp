@@ -49,13 +49,22 @@ CONDA_SAFETY_CHECKS=disabled conda install -y -p /home/yojiao/hpchome/hipp/.cach
 - Do not treat `bioconda::hippunfold` as sufficient evidence of native `512` support.
 - Avoid forbidden workflow version labels for this project: `1.5.2`, `1.5.2-pre.2`, `1.5.2rc2`.
 
+## HippUnfold Full-DAG Local-Model Guardrail (Hard)
+
+- Standard local runs must use `run_hippunfold_local.sh`; its validated workflow overlay binds `get_model_tar()` explicitly to the canonical local tar.
+- `HIPPUNFOLD_EXTRA_ARGS` is restricted to the two non-executing diagnostics used by the fresh-DAG preflight.
+- Before any JJ_TMS production launch, run the fixed roster/input preflight and fresh-output DAG preflight; production repeats and records the DAG gate before creating workers. Required counts are `gen_native_mesh=4`, `resample_native_surf_to_atlas_density=12`, and `create_spec_file=4`.
+- A dry-run against existing outputs or `Nothing to be done` is not valid full-DAG evidence.
+- JJ_TMS runbook: `docs/hipp_parcellation_network/jj_tms_hippunfold_full_corobl.md`.
+
+
 ## Agent Runtime Environment Contract (Hard)
 
 - Do not use bare `python` for repository tasks.
 - Always use an explicit interpreter path based on task type:
   - Core workflow scripts/tests/doc-contract checks: `/home/yojiao/.conda/envs/py314/bin/python`
   - Direct HippUnfold CLI runs: `hippo2` gate above (`/home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2/bin/hippunfold` after `/opt/conda` activation)
-- Before running any Python-based repo task, run `python -c "import sys; print(sys.executable)"` for informational context only; do not use this interpreter for repo tasks unless it exactly matches py314.
+- Before running a Python-based repo task, record `command -v python` for informational context and run `/home/yojiao/.conda/envs/py314/bin/python -c "import sys; print(sys.executable)"`; use only the explicit task-appropriate interpreter.
 - If command examples in docs use `python`, agents must rewrite them to the explicit interpreter path at execution time.
 - If an agent accidentally runs with the wrong interpreter, stop and rerun with the correct one; do not continue mixed-environment execution.
 
