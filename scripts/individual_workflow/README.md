@@ -83,6 +83,45 @@ outputs_hcp/work/individual_atlas/_runs/handoff/<run_id>_handoff.md
 
 The overview builder reads completed label arrays from `outputs_hcp/work/individual_atlas/` and writes quicklook PNGs plus `overview_status.tsv` and `overview_manifest.json` under `outputs_hcp/present/overviews/individual/`. For `gradient_fisherz`, the cluster-network heatmap and confidence bars are both derived from the same Kong2022 ROI-mean Fisher-z network profile; the direct cluster-to-network timeseries profile is not used for that rendered variant.
 
+## JJ_TMS HCP151 Fixed-template Overviews
+
+The fixed 70-subject JJ_TMS mapping renderer reuses the cross-fit
+HCP-style locked Workbench grid/composition and the canonical network colors.
+It reads the completed mapping GIFTIs and consumed den-512 surfaces as
+fingerprinted, read-only inputs:
+
+```bash
+scripts/individual_workflow/run_jj_tms_hcp151_fixed_template_overviews.sh --jobs 2
+```
+
+Outputs are written to
+`outputs_iowa_jj_tms/present/overviews/hcp151_fixed_template_matching/`:
+
+```text
+sub-<id>_hcp151_fixed_template_matching_overview.png
+fixed_template_overview_status.tsv
+fixed_template_overview_manifest.json
+```
+
+Each PNG contains the fixed 2mm-over-4mm rows with L/R surfaces and
+`Anterior/VAN`, `Body/SMN`, and `Posterior/DMN` display colors. The renderer
+validates the complete run/validation closure when available, otherwise all
+70 subject manifests, plus every label/surface fingerprint and logical GIFTI
+contract. It refuses overwrite; `--resume` revalidates and byte-reuses a
+complete manifest/status pair. Failed aggregate provenance is retained as
+numbered attempt history before a retry. The renderer invokes the matcher's
+strict subject validator when run context is available, requires the exact
+unique subject x smoothing x hemisphere validation closure and matching label
+SHA values, fingerprints the status TSV on reuse, and atomically stages
+aggregate status/manifest files. It also stages an in-progress aggregate and
+one atomic item record per subject so an orphan PNG can only be recovered
+after strict provenance validation. Validation-backed production rendering is
+full scope only: 70 subjects, 280 unique rows, complete roots/parameters, and
+the matcher dependency closure; subsets require --allow-subset and are
+reported with scope=subset, never production ok. Renderer jobs are capped at
+5 because each worker may launch one Workbench child (2 x jobs <= 10 total
+processes).
+
 ## Method Notes
 
 - Route: RouteA only, from `shared_inputs/routea`.
@@ -123,6 +162,35 @@ overview and `robustness_summary.tsv` live under
 `docs/hipp_parcellation_network/crossfit_template_matching.md` for the
 non-circularity argument, artifacts, and interpretation.
 
+
+## HCP151 Fixed Template for JJ_TMS
+
+`build_hcp151_fixed_template.py` converts the formal HCP151 RouteA
+`group_labels_final.npy`, `group_support_mask.npy`, and full-cohort
+`group_mean_fisherz_fc_full.npy` into one immutable AP-ordered `3 x 400`
+prototype set for each `2mm|4mm x L|R` combination. The shared template lives
+under `outputs_hcp/templates/hcp151_routea_full_k3_fisherz/`; it is referenced
+by SHA-256 from JJ_TMS rather than copied downstream.
+
+`jj_tms_hcp151_fixed_template_matching.py` applies that template to the fixed
+70-subject JJ_TMS rest roster. It retains numeric run-level surface GIFTIs,
+uses consumed corobl den-512 surfaces, preserves missing Kong2022 ROIs as NaN,
+and publishes per-combination AP labels, three correlations, margins, GIFTIs,
+and fingerprinted manifests under
+`outputs_iowa_jj_tms/work/hcp151_fixed_template_matching/`. The CLI is limited
+to `preflight|run|validate`, defaults to two workers, has no overwrite mode,
+and independently validates the exact output schema and four combinations
+before resume. The fixed 3-subject smoke validation is a fingerprinted hard
+gate for full-roster launches. Failed subject/run/validation partials are preserved as
+versioned attempt histories; completed run and validation manifests are reused
+without rewrite. Validation TSV/JSON publish from exclusive partials. Consumed
+surface pointsets are counted directly, and all nested native threads are pinned
+to one so `--jobs <= 10` remains the total concurrency bound.
+
+See
+`docs/hipp_parcellation_network/jj_tms_hcp151_fixed_template_matching.md` for
+the method, fixed launch sequence, smoke gate, and 70-subject completion
+contract.
 
 ### Cross-Fit Individual Surface Overviews
 
