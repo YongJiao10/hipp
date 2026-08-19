@@ -10,6 +10,9 @@ This directory is organized by layer.
 - `individual_workflow/`: subject-level RouteA workflows, including the
   family-aware five-fold cross-fitted template-matching labels and their
   quantitative robustness overview
+- `exploratory_beta/`: non-numbered Stanford and JJ_TMS Native-space beta
+  extraction, models, and figures; these remain exploratory and are not formal
+  workflow steps
 
 The active workflow should be launched from `scripts/core_workflow/` and resolved within `scripts/core_workflow/lib/`.
 Active numbered core steps must stay self-contained in that tree and must not call legacy helper code

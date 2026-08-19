@@ -4,6 +4,10 @@ This directory runs subject-level RouteA hippocampal products for the 151-subjec
 
 It reuses `scripts/core_workflow` helpers but stays outside the group-level workflow.
 
+Native-space beta extraction, modeling, and figures remain exploratory and
+live in `scripts/exploratory_beta/`. Do not add beta entry points to this
+formal individual-workflow surface until that analysis is explicitly promoted.
+
 ## Output Layout
 
 Intermediate and per-combo computation products live under:
