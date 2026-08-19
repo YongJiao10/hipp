@@ -24,6 +24,22 @@ was removed after the migration at the user's direction.
 1. `01_01_run_hippunfold_t1w_local.py`
 2. `01_02_check_hippunfold_outputs.py`
 
+`01_02` first validates every file in the cached full HippUnfold output
+contract. A complete subject is then automatically trimmed by removing only
+`sub-<id>/hippunfold/sub-<id>/{anat,coords,warps,cifti}`. The checker writes
+`sub-<id>/hippunfold/core_workflow_cleanup_receipt.json`, bound to the SHA-256
+of that full contract. Later checks require the receipt and validate all
+retained outputs, so approved trimming is not reported as missing. `surf/`,
+`metric/`, and `qc/` remain required because maintained downstream workflows
+consume the den-512 surfaces, subfield labels, and Dice TSVs. Use
+`--no-cleanup` only for a validation-only diagnostic run.
+If a dataset has complete outputs but no retained Snakemake log or local cache,
+`--contract-source-cache <validated-cache.json>` seeds its dataset-local cache
+before validation; the seed path and contract SHA-256 are recorded.
+For an existing multi-dataset batch cleanup, `--subjects-from-batch` enumerates
+only `sub-<id>/hippunfold/sub-<id>` payloads in the explicitly selected
+`--batch-root`; malformed placeholder directories are ignored.
+
 ## 2. Group Inputs and QC Cohort
 
 1. `02_01_prepare_group_inputs.py`

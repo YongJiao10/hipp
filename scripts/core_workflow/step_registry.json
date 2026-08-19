@@ -29,7 +29,7 @@
     {
       "step_id": "01_02_check_hippunfold_outputs",
       "stage": "01_hippunfold",
-      "purpose": "Check HippUnfold output integrity before group input and QC stages.",
+      "purpose": "Check the full HippUnfold output contract, then receipt and trim core-unconsumed anat, coords, warps, and cifti directories before group input and QC stages.",
       "branches": [
         "kong2019",
         "kong2022_routea",

@@ -371,6 +371,20 @@ accepts legacy success markers, HippUnfold 2.x `N of N steps (100%) done`
 markers, and no-op logs. When a 2.x log has no `localrule all` input list, it
 derives the expected manifest from the successful subject output tree.
 
+After dataset-appropriate full-DAG acceptance exists, the generic checker uses
+its cached full-output contract for a one-time complete subject validation and
+then removes `sub-<id>/{anat,coords,warps,cifti}` from the subject payload.
+It retains `surf/`, `metric/`, and `qc/` for the maintained core workflow and
+writes `core_workflow_cleanup_receipt.json` beside the payload. The receipt is
+bound to the full contract SHA-256; subsequent checks accept the trimmed state
+only while that receipt matches and every retained expected output remains.
+`--no-cleanup` performs validation without pruning. The removed directories
+cannot be used for HippUnfold resume, volumetric structural analysis, or CIFTI
+derivative reuse and must be regenerated from the original inputs if needed.
+`--contract-source-cache` may seed a missing dataset-local cache from a
+validated compatible full-output contract; the local cache records the source
+path and contract SHA-256 before any subject is checked or cleaned.
+
 For persistent conda installs outside the launcher, `~/.condarc` is set to keep
 `pkgs_dirs` and `envs_dirs` under the repo-local `.cache/` tree so package
 downloads and future env creation stop consuming `/home/yojiao`.

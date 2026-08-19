@@ -21,7 +21,7 @@ for those details:
 | File | Purpose |
 |---|---|
 | `scripts/core_workflow/01_01_run_hippunfold_t1w_local.py` | Run local T1w HippUnfold workflow |
-| `scripts/core_workflow/01_02_check_hippunfold_outputs.py` | Validate HippUnfold outputs |
+| `scripts/core_workflow/01_02_check_hippunfold_outputs.py` | Validate the full HippUnfold output contract, then receipt and trim `anat/`, `coords/`, `warps/`, and `cifti/` while retaining core-consumed surface, metric, and QC assets |
 | `scripts/core_workflow/02_01_prepare_group_inputs.py` | Prepare shared surfaces, tSNR metadata, and group templates |
 | `scripts/core_workflow/02_02_build_qc_manifest.py` | Build QC-pass and excluded-subject manifests |
 | `scripts/core_workflow/03_01_build_kong2022_reference.py` | Build shared Kong2022 cortex references |
