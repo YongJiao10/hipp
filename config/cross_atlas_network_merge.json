@@ -1,0 +1,145 @@
+{
+  "version": "2026-04-07",
+  "description": "Canonical cross-atlas cortical network merge scheme for Kong2019, Hermosillo2024, and Lynch2024. Network colors are intentionally excluded; all display colors are loaded from config/hipp_network_style.json. Noise is excluded from functional summaries.",
+  "canonical_network_order": [
+    "Default",
+    "TemporalParietal",
+    "Visual",
+    "Somatomotor",
+    "DorsalAttention",
+    "VentralAttention",
+    "Control",
+    "Auditory",
+    "Language",
+    "Limbic"
+  ],
+  "exclude_labels": [
+    "Noise"
+  ],
+  "atlases": {
+    "kong2019": {
+      "display_name": "Kong2019",
+      "original_network_count": 17,
+      "merged_functional_network_count": 7,
+      "mapping": {
+        "VentralAttentionB": "VentralAttention",
+        "ControlA": "Control",
+        "VisualA": "Visual",
+        "TemporalParietal": "Default",
+        "DorsalAttentionA": "DorsalAttention",
+        "ControlC": "Control",
+        "DefaultA": "Default",
+        "ControlB": "Control",
+        "VentralAttentionA": "VentralAttention",
+        "VisualB": "Visual",
+        "SomatomotorA": "Somatomotor",
+        "DefaultB": "Default",
+        "DefaultC": "Default",
+        "SomatomotorB": "Somatomotor",
+        "DorsalAttentionB": "DorsalAttention",
+        "Auditory": "Auditory",
+        "VisualC": "Visual"
+      }
+    },
+    "kong2019_8net": {
+      "display_name": "Kong2019 8net",
+      "original_network_count": 17,
+      "merged_functional_network_count": 8,
+      "mapping": {
+        "VentralAttentionB": "VentralAttention",
+        "ControlA": "Control",
+        "VisualA": "Visual",
+        "TemporalParietal": "TemporalParietal",
+        "DorsalAttentionA": "DorsalAttention",
+        "ControlC": "Control",
+        "DefaultA": "Default",
+        "ControlB": "Control",
+        "VentralAttentionA": "VentralAttention",
+        "VisualB": "Visual",
+        "SomatomotorA": "Somatomotor",
+        "DefaultB": "Default",
+        "DefaultC": "Default",
+        "SomatomotorB": "Somatomotor",
+        "DorsalAttentionB": "DorsalAttention",
+        "Auditory": "Auditory",
+        "VisualC": "Visual"
+      }
+    },
+    "hermosillo2024": {
+      "display_name": "Hermosillo2024",
+      "original_network_count": 14,
+      "merged_functional_network_count": 8,
+      "mapping": {
+        "Aud": "Auditory",
+        "CO": "Control",
+        "DAN": "DorsalAttention",
+        "DMN": "Default",
+        "FP": "Control",
+        "MTL": "Limbic",
+        "PMN": "Default",
+        "PON": "Default",
+        "SMd": "Somatomotor",
+        "SMl": "Somatomotor",
+        "Sal": "VentralAttention",
+        "Tpole": "Limbic",
+        "VAN": "VentralAttention",
+        "Vis": "Visual"
+      }
+    },
+    "lynch2024": {
+      "display_name": "Lynch2024",
+      "original_network_count": 21,
+      "merged_functional_network_count": 7,
+      "mapping": {
+        "Default_Parietal": "Default",
+        "Default_Anterolateral": "Default",
+        "Default_Dorsolateral": "Default",
+        "Default_Retrosplenial": "Default",
+        "Visual_Lateral": "Visual",
+        "Visual_Dorsal/VentralStream": "Visual",
+        "Visual_V5": "Visual",
+        "Visual_V1": "Visual",
+        "Frontoparietal": "Control",
+        "DorsalAttention": "DorsalAttention",
+        "Premotor/DorsalAttentionII": "DorsalAttention",
+        "Language": "Language",
+        "Salience": "VentralAttention",
+        "CinguloOpercular/Action-mode": "Control",
+        "MedialParietal": "Default",
+        "Somatomotor_Hand": "Somatomotor",
+        "Somatomotor_Face": "Somatomotor",
+        "Somatomotor_Foot": "Somatomotor",
+        "Auditory": "Somatomotor",
+        "SomatoCognitiveAction": "Somatomotor",
+        "Noise": "Noise"
+      }
+    },
+    "kong2022": {
+      "display_name": "Kong2022",
+      "original_network_count": 17,
+      "merged_functional_network_count": 8,
+      "roi_count": 400,
+      "source_dlabel_relpath": "external/Schaefer2018_Kong2022/Schaefer2018_400Parcels_Kong2022_17Networks_order.dlabel.nii",
+      "source_info_relpath": "external/Schaefer2018_Kong2022/Schaefer2018_400Parcels_Kong2022_17Networks_order_info.txt",
+      "mapping": {
+        "DefaultA": "Default",
+        "DefaultB": "Default",
+        "DefaultC": "Default",
+        "ContA": "Control",
+        "ContB": "Control",
+        "ContC": "Control",
+        "SalVenAttnA": "VentralAttention",
+        "SalVenAttnB": "VentralAttention",
+        "DorsAttnA": "DorsalAttention",
+        "DorsAttnB": "DorsalAttention",
+        "SomMotA": "Somatomotor",
+        "SomMotB": "Somatomotor",
+        "VisualA": "Visual",
+        "VisualB": "Visual",
+        "VisualC": "Visual",
+        "Aud": "Auditory",
+        "Language": "Language"
+      }
+    }
+  }
+}

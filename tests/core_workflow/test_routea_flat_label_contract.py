@@ -1,0 +1,479 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import importlib
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+CORE_DIR = REPO_ROOT / "scripts" / "core_workflow"
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+if str(CORE_DIR) not in sys.path:
+    sys.path.insert(0, str(CORE_DIR))
+
+
+extract_mod = importlib.import_module("scripts.core_workflow.lib.extract_cortex_kong2022_route_a_roi_timeseries")
+roi_fc_mod = importlib.import_module("scripts.core_workflow.04_01_materialize_kong2022_roi_fc")
+
+
+def test_routea_label_paths_are_direct_flat_paths(tmp_path: Path) -> None:
+    root = tmp_path / "routea_areal_mshbm"
+    subject_dir = root / "sub-100610"
+    subject_dir.mkdir(parents=True)
+    (subject_dir / "lh_labels.txt").write_text("1\n", encoding="utf-8")
+    (subject_dir / "rh_labels.txt").write_text("201\n", encoding="utf-8")
+
+    lh, rh = extract_mod.route_a_label_paths(root, "sub-100610")
+
+    assert lh == subject_dir / "lh_labels.txt"
+    assert rh == subject_dir / "rh_labels.txt"
+
+
+def test_routea_label_paths_reject_nested_only_outputs(tmp_path: Path) -> None:
+    root = tmp_path / "routea_areal_mshbm"
+    nested = root / "sub-100610" / "kong2022_areal_mshbm" / "project_dir" / "route_a_outputs"
+    nested.mkdir(parents=True)
+    (nested / "lh_labels.txt").write_text("1\n", encoding="utf-8")
+    (nested / "rh_labels.txt").write_text("201\n", encoding="utf-8")
+
+    try:
+        extract_mod.route_a_label_paths(root, "100610")
+    except FileNotFoundError as exc:
+        msg = str(exc)
+        assert "sub-100610/lh_labels.txt" in msg
+        assert "nested" not in msg.lower()
+        assert "fallback" not in msg.lower()
+    else:
+        raise AssertionError("nested-only RouteA outputs must not be accepted")
+
+
+def test_routea_modules_no_longer_export_discovery_or_label_dir_override() -> None:
+    assert not hasattr(extract_mod, "discover_route_a_outputs_dir")
+    assert not hasattr(roi_fc_mod, "discover_route_a_outputs_dir")
+
+    extract_parser = extract_mod.build_arg_parser()
+    roi_parser = roi_fc_mod.build_arg_parser()
+    assert "--route-a-label-dir" not in {opt for action in extract_parser._actions for opt in action.option_strings}
+    assert "--route-a-label-dir" not in {opt for action in roi_parser._actions for opt in action.option_strings}
+
+
+def test_routea_backend_no_longer_emits_mat_sidecar() -> None:
+    checked = [
+        REPO_ROOT / "scripts" / "ArealMSHBM_Kong2022" / "run_kong2022_areal_mshbm_subject.m",
+        REPO_ROOT / "docs" / "hipp_parcellation_network" / "core_workflow_artifact_lineage.md",
+    ]
+    offenders = []
+    for path in checked:
+        if "route_a_outputs.mat" in path.read_text(encoding="utf-8"):
+            offenders.append(path.relative_to(REPO_ROOT).as_posix())
+    assert offenders == []
+
+def test_standard_launcher_exposes_one_contract_for_all_datasets() -> None:
+    checked = [
+        REPO_ROOT / "scripts" / "ArealMSHBM_Kong2022" / "README.md",
+        REPO_ROOT / "scripts" / "ArealMSHBM_Kong2022" / "submit_kong2022_areal_mshbm.sh",
+        REPO_ROOT / "scripts" / "ArealMSHBM_Kong2022" / "run_kong2022_areal_mshbm_subject_sge.sh",
+    ]
+    required = [
+        "DATASET=jj_tms",
+        "DATASET=stanford",
+        "DATASET=iowa7t",
+        "DATASET=estt",
+        "DATASET=iowa_hcp500",
+        "scripts/ArealMSHBM_Kong2022/run_kong2022_areal_mshbm_subject_sge.sh",
+    ]
+    combined = "\n".join(path.read_text(encoding="utf-8") for path in checked)
+    for token in required:
+        assert token in combined, f"canonical interface missing {token}"
+
+    task_text = checked[2].read_text(encoding="utf-8")
+    assert 'if [ "${dataset}" = "estt" ]; then' in task_text
+    assert "--materialize-label-assets" in task_text
+
+
+def test_stanford_22p_launcher_isolated_from_36p(tmp_path: Path) -> None:
+    script_dir = REPO_ROOT / "scripts" / "ArealMSHBM_Kong2022"
+    submit = script_dir / "submit_kong2022_areal_mshbm.sh"
+    task = script_dir / "run_kong2022_areal_mshbm_subject_sge.sh"
+    combined = "\n".join(path.read_text(encoding="utf-8") for path in [submit, task])
+
+    for token in [
+        "STANFORD_VARIANT=22p|36p",
+        "DataOrg_PFM_22P",
+        "ArealMSHBM_Kong2022_22P",
+        "export STANFORD_VARIANT=%s",
+        "stanford_22p_kong2022",
+    ]:
+        assert token in combined, f"Stanford 22P isolation missing {token}"
+
+    env = os.environ.copy()
+    env.update(
+        {
+            "DATASET": "stanford",
+            "STANFORD_VARIANT": "22p",
+            "SYSTEM_NAME": "argon",
+            "REPO_ROOT": str(REPO_ROOT),
+            "DATA_ROOT": "/Shared/jianglab/3_Data_Working/fmriprep_processed_CausalConnectome/rest_fmriprep/DataOrg_PFM_22P",
+            "OUT_ROOT": str(tmp_path / "ArealMSHBM_Kong2022_22P"),
+            "SUBJECT_IDS_CSV": "1001",
+            "SMOKE_N": "1",
+            "KEEP_TMP": "1",
+            "DRY_RUN": "1",
+        }
+    )
+    result = subprocess.run(
+        [str(submit)],
+        cwd=REPO_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    output = result.stdout + result.stderr
+    assert "data_root=/Shared/jianglab/3_Data_Working/fmriprep_processed_CausalConnectome/rest_fmriprep/DataOrg_PFM_22P" in output
+    assert f"out_root={tmp_path / 'ArealMSHBM_Kong2022_22P'}" in output
+
+
+def test_stanford_variant_rejects_known_data_root_conflict(tmp_path: Path) -> None:
+    submit = REPO_ROOT / "scripts" / "ArealMSHBM_Kong2022" / "submit_kong2022_areal_mshbm.sh"
+    env = os.environ.copy()
+    env.update(
+        {
+            "DATASET": "stanford",
+            "STANFORD_VARIANT": "22p",
+            "SYSTEM_NAME": "argon",
+            "REPO_ROOT": str(REPO_ROOT),
+            "DATA_ROOT": "/Shared/jianglab/3_Data_Working/fmriprep_processed_CausalConnectome/rest_fmriprep/DataOrg_PFM_36P",
+            "OUT_ROOT": str(tmp_path / "out"),
+            "SUBJECT_IDS_CSV": "1001",
+            "DRY_RUN": "1",
+        }
+    )
+    result = subprocess.run(
+        [str(submit)],
+        cwd=REPO_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 2
+    assert "conflicts with DATA_ROOT" in result.stderr
+
+
+def test_estt_22p_launcher_isolated_from_36p(tmp_path: Path) -> None:
+    script_dir = REPO_ROOT / "scripts" / "ArealMSHBM_Kong2022"
+    submit = script_dir / "submit_kong2022_areal_mshbm.sh"
+    task = script_dir / "run_kong2022_areal_mshbm_subject_sge.sh"
+    provenance = script_dir / "write_kong2022_areal_mshbm_provenance.py"
+    combined = "\n".join(path.read_text(encoding="utf-8") for path in [submit, task, provenance])
+
+    for token in [
+        "ESTT_VARIANT=22p|23p|36p",
+        "/Shared/jianglab/3_Data_Working/fmriprep_processed_esTT/DataOrg_PFM_22P",
+        "/DataOrg_PFM_22P/hipp_outputs/cortex_kong2022_areal_mshbm",
+        "export ESTT_VARIANT=%s",
+        "estt_22p_kong2022",
+        '"variant": manifest["variant"]',
+    ]:
+        assert token in combined, f"ESTT 22P isolation missing {token}"
+
+    env = os.environ.copy()
+    env.update(
+        {
+            "DATASET": "estt",
+            "ESTT_VARIANT": "22p",
+            "SYSTEM_NAME": "argon",
+            "REPO_ROOT": str(REPO_ROOT),
+            "DATA_ROOT": "/Shared/jianglab/3_Data_Working/fmriprep_processed_esTT/DataOrg_PFM_22P",
+            "OUT_ROOT": str(tmp_path / "cortex_kong2022_areal_mshbm_22P"),
+            "SUBJECT_IDS_CSV": "369",
+            "SMOKE_N": "1",
+            "KEEP_TMP": "1",
+            "DRY_RUN": "1",
+            "MANIFEST_DIR": str(tmp_path / "manifests"),
+            "LOG_ROOT": str(tmp_path / "logs"),
+        }
+    )
+    result = subprocess.run(
+        [str(submit)],
+        cwd=REPO_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    output = result.stdout + result.stderr
+    assert "ESTTVariant=22p" in output
+    assert "data_root=/Shared/jianglab/3_Data_Working/fmriprep_processed_esTT/DataOrg_PFM_22P" in output
+    assert f"out_root={tmp_path / 'cortex_kong2022_areal_mshbm_22P'}" in output
+
+
+def test_estt_23p_launcher_isolated_from_22p_and_36p(tmp_path: Path) -> None:
+    script_dir = REPO_ROOT / "scripts" / "ArealMSHBM_Kong2022"
+    submit = script_dir / "submit_kong2022_areal_mshbm.sh"
+    task = script_dir / "run_kong2022_areal_mshbm_subject_sge.sh"
+    report = script_dir / "report_kong2022_areal_mshbm_status.sh"
+    readme = script_dir / "README.md"
+    combined = "\n".join(path.read_text(encoding="utf-8") for path in [submit, task, report, readme])
+
+    for token in [
+        "ESTT_VARIANT=22p|23p|36p",
+        "DataOrg_PFM_23P",
+        "ESTT_VARIANT=23p",
+        "estt_kong2022_23p_full_20260908",
+    ]:
+        assert token in combined, f"ESTT 23P isolation missing {token}"
+
+    env = os.environ.copy()
+    env.update(
+        {
+            "DATASET": "estt",
+            "ESTT_VARIANT": "23p",
+            "SYSTEM_NAME": "argon",
+            "REPO_ROOT": str(REPO_ROOT),
+            "DATA_ROOT": "/Shared/jianglab/3_Data_Working/fmriprep_processed_esTT/DataOrg_PFM_23P",
+            "OUT_ROOT": str(tmp_path / "cortex_kong2022_areal_mshbm_23P"),
+            "SUBJECT_IDS_CSV": "369",
+            "SMOKE_N": "1",
+            "KEEP_TMP": "1",
+            "DRY_RUN": "1",
+            "MANIFEST_DIR": str(tmp_path / "manifests"),
+            "LOG_ROOT": str(tmp_path / "logs"),
+        }
+    )
+    result = subprocess.run(
+        [str(submit)],
+        cwd=REPO_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    output = result.stdout + result.stderr
+    assert "ESTTVariant=23p" in output
+    assert "data_root=/Shared/jianglab/3_Data_Working/fmriprep_processed_esTT/DataOrg_PFM_23P" in output
+    assert f"out_root={tmp_path / 'cortex_kong2022_areal_mshbm_23P'}" in output
+
+
+def test_estt_variant_rejects_known_data_root_conflict(tmp_path: Path) -> None:
+    submit = REPO_ROOT / "scripts" / "ArealMSHBM_Kong2022" / "submit_kong2022_areal_mshbm.sh"
+    env = os.environ.copy()
+    env.update(
+        {
+            "DATASET": "estt",
+            "ESTT_VARIANT": "22p",
+            "SYSTEM_NAME": "argon",
+            "REPO_ROOT": str(REPO_ROOT),
+            "DATA_ROOT": "/Shared/jianglab/3_Data_Working/fmriprep_processed_esTT/DataOrg_PFM_36P",
+            "OUT_ROOT": str(tmp_path / "out"),
+            "SUBJECT_IDS_CSV": "369",
+            "DRY_RUN": "1",
+            "MANIFEST_DIR": str(tmp_path / "manifests"),
+            "LOG_ROOT": str(tmp_path / "logs"),
+        }
+    )
+    result = subprocess.run(
+        [str(submit)],
+        cwd=REPO_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 2
+    assert "conflicts with DATA_ROOT" in result.stderr
+
+
+def test_estt_23p_variant_rejects_known_data_root_conflict(tmp_path: Path) -> None:
+    submit = REPO_ROOT / "scripts" / "ArealMSHBM_Kong2022" / "submit_kong2022_areal_mshbm.sh"
+    env = os.environ.copy()
+    env.update(
+        {
+            "DATASET": "estt",
+            "ESTT_VARIANT": "23p",
+            "SYSTEM_NAME": "argon",
+            "REPO_ROOT": str(REPO_ROOT),
+            "DATA_ROOT": "/Shared/jianglab/3_Data_Working/fmriprep_processed_esTT/DataOrg_PFM_22P",
+            "OUT_ROOT": str(tmp_path / "out"),
+            "SUBJECT_IDS_CSV": "369",
+            "DRY_RUN": "1",
+            "MANIFEST_DIR": str(tmp_path / "manifests"),
+            "LOG_ROOT": str(tmp_path / "logs"),
+        }
+    )
+    result = subprocess.run(
+        [str(submit)],
+        cwd=REPO_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 2
+    assert "conflicts with DATA_ROOT" in result.stderr
+
+def test_subject_output_contract_keeps_flat_labels_and_estt_assets() -> None:
+    wrapper = REPO_ROOT / "scripts" / "ArealMSHBM_Kong2022" / "run_kong2022_areal_mshbm_subject_sge.sh"
+    report = REPO_ROOT / "scripts" / "ArealMSHBM_Kong2022" / "report_kong2022_areal_mshbm_status.sh"
+    readme = REPO_ROOT / "scripts" / "ArealMSHBM_Kong2022" / "README.md"
+    matlab = REPO_ROOT / "scripts" / "ArealMSHBM_Kong2022" / "run_kong2022_areal_mshbm_subject.m"
+
+    wrapper_text = wrapper.read_text(encoding="utf-8")
+    assert "${subject_out}/lh_labels.txt" in wrapper_text
+    assert "${subject_out}/rh_labels.txt" in wrapper_text
+    assert "project_dir/route_a_outputs" not in wrapper_text
+    assert "${subject_out}/inputs" not in wrapper_text
+    assert "matlab_wrapper.log" in wrapper_text
+    assert "--materialize-label-assets" in wrapper_text
+
+    for path in [report, readme, matlab]:
+        text = path.read_text(encoding="utf-8")
+        assert "project_dir/route_a_outputs" not in text
+        assert "route_a_outputs" not in text
+
+def test_jj_tms_temp_workdir_is_cleaned_with_tmp_prefix_guard() -> None:
+    wrapper = REPO_ROOT / "scripts" / "ArealMSHBM_Kong2022" / "run_kong2022_areal_mshbm_subject_sge.sh"
+    text = wrapper.read_text(encoding="utf-8")
+    assert "cleanup_tmp_root()" in text
+    assert "trap cleanup_tmp_root EXIT" in text
+    assert "/tmp/jj_tms_kong2022_*" in text
+    assert "rm -rf -- \"${tmp_root}\"" in text
+
+def test_jj_tms_launcher_does_not_write_runtime_state_under_script_dir() -> None:
+    submit = REPO_ROOT / "scripts" / "ArealMSHBM_Kong2022" / "submit_kong2022_areal_mshbm.sh"
+    report = REPO_ROOT / "scripts" / "ArealMSHBM_Kong2022" / "report_kong2022_areal_mshbm_status.sh"
+    task = REPO_ROOT / "scripts" / "ArealMSHBM_Kong2022" / "run_kong2022_areal_mshbm_subject_sge.sh"
+
+    submit_text = submit.read_text(encoding="utf-8")
+    assert "${script_dir}/manifests" not in submit_text
+    assert "${script_dir}/logs" not in submit_text
+    assert "${out_root}/_manifests" in submit_text
+    assert "${out_root}/_sge_logs" in submit_text
+
+    report_text = report.read_text(encoding="utf-8")
+    assert "${script_dir}/logs" not in report_text
+    assert "${out_root}/_sge_logs" in report_text
+
+    task_text = task.read_text(encoding="utf-8")
+    assert "${script_dir}/logs" not in task_text
+
+
+def test_iowa_hcp500_argon_preset_contract() -> None:
+    script_dir = REPO_ROOT / "scripts" / "ArealMSHBM_Kong2022"
+    checked = [
+        script_dir / "submit_kong2022_areal_mshbm.sh",
+        script_dir / "run_kong2022_areal_mshbm_subject_sge.sh",
+        script_dir / "report_kong2022_areal_mshbm_status.sh",
+    ]
+    required = [
+        "iowa_hcp500",
+        "/old_Users/yojiao/HCPpipeline500/work/qunex_iowa7t_hcppipeline500/sessions",
+        "outputs_iowa_hcp500/inputs/iowa_hcp500/kong2022/cortex_references/routea_areal_mshbm",
+    ]
+    for path in checked:
+        text = path.read_text(encoding="utf-8")
+        for token in required:
+            assert token in text, f"{path.name} missing {token}"
+
+    task_text = checked[1].read_text(encoding="utf-8")
+    assert "/tmp/iowa_hcp500_kong2022_*" in task_text
+    assert 'KEEP_TMP=1: retaining ${tmp_root}' in task_text
+    assert '-file-information "${dtseries}" -only-number-of-maps' in task_text
+    assert 'if [ "${dataset}" != "iowa_hcp500" ] && [ "${dataset}" != "iowa7t" ]; then' in task_text
+
+    submit_text = checked[0].read_text(encoding="utf-8")
+    assert "SYSTEM_NAME=idas|argon" in submit_text
+    assert "max_concurrency=10" in submit_text
+    assert "max_concurrency=20" in submit_text
+    assert "default_ui_tc=5" in submit_text
+    assert "default_pinc_tc=15" in submit_text
+
+
+def test_iowa7t_argon_preset_contract_uses_subject_first_36p_layout() -> None:
+    script_dir = REPO_ROOT / "scripts" / "ArealMSHBM_Kong2022"
+    checked = {
+        script_dir / "submit_kong2022_areal_mshbm.sh",
+        script_dir / "run_kong2022_areal_mshbm_subject_sge.sh",
+        script_dir / "report_kong2022_areal_mshbm_status.sh",
+        script_dir / "README.md",
+    }
+    combined = "\n".join(path.read_text(encoding="utf-8") for path in checked)
+    required = [
+        "DATASET=iowa7t",
+        "IOWA7T_BRANCH",
+        "/Shared/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_36P",
+        "hipp_outputs",
+        "subjects/${subject}/${iowa7t_branch}/cortex/areal_mshbm",
+        "runs/logs",
+        "provenance.json",
+    ]
+    forbidden = [
+        "outputs_iowa/inputs/iowa",
+        "outputs_iowa_hcp500/inputs/iowa_hcp500/kong2022/cortex_references/routea_areal_mshbm",
+    ]
+    for token in required:
+        assert token in combined, f"missing {token}"
+
+    iowa7t_text = "\n".join(
+        line for line in combined.splitlines()
+        if ("iowa7t" in line.lower() or "Iowa7T" in line)
+        and "iowa_hcp500" not in line
+        and "qunex_iowa7t" not in line
+    )
+    for token in forbidden:
+        assert token not in iowa7t_text, f"Iowa7T contract contains forbidden {token}"
+
+    task_text = (script_dir / "run_kong2022_areal_mshbm_subject_sge.sh").read_text(
+        encoding="utf-8"
+    )
+    assert '[ "${dataset}" != "iowa_hcp500" ] && [ "${dataset}" != "iowa7t" ]' in task_text
+    assert 'Prepared Iowa7T ${iowa7t_branch} dtseries=' in task_text
+    assert 'wb_command": "$(json_escape "${wb_command}")"' in task_text
+
+
+def test_iowa7t_argon_preset_contract_supports_noxcpd_variant() -> None:
+    script_dir = REPO_ROOT / "scripts" / "ArealMSHBM_Kong2022"
+    checked = [
+        script_dir / "submit_kong2022_areal_mshbm.sh",
+        script_dir / "run_kong2022_areal_mshbm_subject_sge.sh",
+        script_dir / "report_kong2022_areal_mshbm_status.sh",
+        script_dir / "README.md",
+    ]
+    combined = "\n".join(path.read_text(encoding="utf-8") for path in checked)
+    required = [
+        "IOWA7T_VARIANT",
+        "DataOrg_PFM_NoXCPD",
+        "desc-NoXCPD_bold.dtseries.nii",
+        "desc-MEICA_NoXCPD_bold.dtseries.nii",
+        '"variant": "$(json_escape "${iowa7t_variant}")"',
+    ]
+    for token in required:
+        assert token in combined, f"missing {token}"
+ 
+
+def test_iowa7t_argon_preset_contract_supports_0p_32p_variants() -> None:
+    script_dir = REPO_ROOT / "scripts" / "ArealMSHBM_Kong2022"
+    checked = [
+        script_dir / "submit_kong2022_areal_mshbm.sh",
+        script_dir / "run_kong2022_areal_mshbm_subject_sge.sh",
+        script_dir / "report_kong2022_areal_mshbm_status.sh",
+        script_dir / "README.md",
+    ]
+    combined = "\n".join(path.read_text(encoding="utf-8") for path in checked)
+    required = [
+        "DataOrg_PFM_0P",
+        "DataOrg_PFM_32P",
+        "MEICA_XCPD0P_denoised",
+        "MEICA_XCPD32P_denoised",
+        "0p|22p|32p|36p|noxcpd",
+    ]
+    for token in required:
+        assert token in combined, f"missing {token}"

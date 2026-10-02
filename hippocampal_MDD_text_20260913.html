@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hippocampal functional differentiation in MDD</title>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" async></script>
+<style>
+body{margin:0;background:#fff;color:#111;font-family:-apple-system,"Helvetica Neue",Arial,sans-serif;line-height:1.65}
+.wrap{max-width:800px;margin:0 auto;padding:32px 20px 80px}
+p{margin:0 0 1em}
+h2{font-size:1.5em;margin:1.5em 0 .5em}
+h3{font-size:1.15em;margin:1.5em 0 .4em}
+.math{text-align:center;margin:1em 0;font-size:1.15em}
+blockquote{margin:1em 0;padding-left:16px;border-left:4px solid #ddd;color:#222}
+em{font-style:italic}
+table{width:100%;border-collapse:collapse;margin:1em 0}
+th{text-align:left;padding:8px;border-bottom:2px solid #ddd}
+td{padding:10px 8px;border-bottom:1px solid #eee}
+.badge{display:inline-block;background:#f1f1f1;border-radius:10px;padding:0 8px;font-size:.8em;margin-left:6px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<p>Yes. I would take this one step beyond “which parcel does the vertex belong to?” and turn the <b>template-similarity structure into a quantitative measure of hippocampal functional differentiation</b>. That would let you ask whether MDD alters the <em>organization</em> of the hippocampus, rather than merely shifting parcel boundaries.</p>
+
+<p>Kember's implementation already gives you the essential starting point: each hippocampal vertex has a connectivity profile to cortex, and each vertex is correlated with each normative hippocampal-system template. <span class="badge">ⓝ Nature</span></p>
+
+<h2>1. Keep the three continuous similarity values</h2>
+<p>For every hippocampal vertex \(v\), don't retain only:</p>
+<div class="math">\[ \mathrm{label}(v) = \arg\max_k r_{vk} \]</div>
+<p>Instead retain:</p>
+<div class="math">\[ r_{v,A},\quad r_{v,B},\quad r_{v,P} \]</div>
+<p>for anterior, body, and posterior templates.</p>
+<p>These three numbers contain much more information than the categorical assignment.</p>
+<p>I would derive at least three vertex-level quantities.</p>
+
+<h3>A. Maximum template similarity</h3>
+<div class="math">\[ S_{\max}(v) = \max(r_{v,A}, r_{v,B}, r_{v,P}) \]</div>
+<p>This asks:</p>
+<blockquote>How strongly does this hippocampal location express <em>any</em> canonical hippocampal functional identity?</blockquote>
+<p>A reduction in MDD would indicate that hippocampal locations are less well represented by the normative functional organization.</p>
+
+<h3>B. Template separability / margin</h3>
+<p>For each vertex:</p>
+<div class="math">\[ M(v) = r_{\mathrm{highest}} - r_{\mathrm{second\;highest}} \]</div>
+<p>This is probably the measure I would be most excited about.</p>
+<p>A healthy vertex might be strongly anterior-like and poorly body-like:</p>
+<div class="math">\[ 0.65,\; 0.25,\; 0.10 \]</div>
+<p>giving a large margin.</p>
+<p>An MDD vertex might be:</p>
+<div class="math">\[ 0.39,\; 0.36,\; 0.27 \]</div>
+<p>giving a small margin.</p>
+<p>Both get the same categorical label, but the second vertex has <b>much less distinct functional identity</b>.</p>
+<p>That is exactly the phenomenon you identified.</p>
+
+<h3>C. Assignment uncertainty</h3>
+<p>You can convert the three similarity values into normalized probabilities and calculate entropy:</p>
+<div class="math">\[ H(v) = -\sum_k p_{vk} \log p_{vk} \]</div>
+<p>Higher entropy means that the vertex resembles multiple systems similarly; lower entropy means a more specific functional identity.</p>
+<p>I would consider this a useful secondary analysis, but I would make <b>margin or similarity contrast primary</b>, because entropy introduces another transformation and is somewhat less immediately interpretable.</p>
+
+<h2>2. Move from vertices to the whole hippocampal organization</h2>
+<p>Once you have those maps, the next question is:</p>
+<blockquote><b>Is the hippocampus less functionally differentiated in MDD?</b></blockquote>
+<p>Calculate subject-level summaries within each hippocampus.</p>
+<p>For example:</p>
+<h3>Overall differentiation</h3>
+<p>Mean \(M(v)\) across hippocampal vertices.</p>
+<p>Prediction:</p>
+<p><b>MDD &lt; HC</b></p>
+<p>This is a very clean test of reduced functional specialization.</p>
+<h3>System-specific differentiation</h3>
+<p>Within vertices assigned to each system, calculate:</p>
+<div class="math">\[ r_{\mathrm{own}} - r_{\mathrm{best\;alternative}} \]</div>
+<p>For example, does the anterior system in MDD become less distinctly anterior-like?</p>
+<p>This lets you distinguish:</p>
+<p><b>global dedifferentiation</b></p>
+<p>from</p>
+<p><b>selective disruption of one hippocampal system.</b></p>
+
+<h2>3. Then examine the spatial organization itself</h2>
+<p>This is where your hard maps become useful again.</p>
+<p>For every participant, calculate:</p>
+<h3>System surface area / proportion</h3>
+<div class="math">\[ P_A,\; P_B,\; P_P \]</div>
+<p>Does MDD have a different proportion of hippocampus assigned to the three systems?</p>
+<p>This is analogous to Kember's developmental analysis of system surface area. <span class="badge">ⓝ Nature</span></p>
+<p>But I would <b>not stop here</b>, because area can change while the underlying functional organization remains very strong.</p>
+<h3>Boundary location</h3>
+<p>You can calculate the anterior–body and body–posterior boundary positions along your unfolded hippocampal surface.</p>
+<p>Then ask whether the boundaries are systematically displaced in MDD.</p>
+<p>This gives you:</p>
+<blockquote><b>topographic reorganization</b></blockquote>
+<p>rather than just:</p>
+<blockquote><b>reduced functional differentiation.</b></blockquote>
+<p>Those are different biological hypotheses.</p>
+
+<h2>4. I would add a particularly powerful analysis: longitudinal-axis organization</h2>
+<p>Because your atlas emerged from a gradient analysis, you have a natural continuous axis underlying the three clusters.</p>
+<p>Rather than forcing the hippocampus into only three categories, calculate for each individual's hippocampus a <b>continuous functional gradient score</b> based on the same connectivity representation.</p>
+<p>Then ask:</p>
+<p><b>Is the HC gradient preserved in MDD?</b></p>
+<p>For example:</p>
+<div class="math">\[ \mathrm{anterior\text{-}like} \rightarrow \mathrm{body\text{-}like} \rightarrow \mathrm{posterior\text{-}like} \]</div>
+<p>In HC, you might see a smooth transition.</p>
+<p>In MDD, several possibilities become testable:</p>
+<p><b>1. Reduced gradient strength</b> — the anterior/posterior functional distinction is weaker.</p>
+<p><b>2. Boundary displacement</b> — the transition occurs at a different anatomical location.</p>
+<p><b>3. Gradient compression</b> — large portions of hippocampus become functionally intermediate.</p>
+<p><b>4. Noncanonical organization</b> — some regions deviate from the expected longitudinal trajectory.</p>
+<p>I think this is more mechanistically informative than simply reporting “MDD had a different hippocampal parcellation.”</p>
+
+<h2>5. Then ask whether the <em>specific functional identities</em> are altered</h2>
+<p>Your three templates aren't arbitrary parcels—they have distinct cortical-network fingerprints.</p>
+<p>So for every subject/system, calculate its connectivity to the canonical cortical networks.</p>
+<p>For example:</p>
+<div class="math">\[ HC_A \rightarrow \mathrm{salience/VAN} \]</div>
+<div class="math">\[ HC_B \rightarrow \mathrm{SMN/auditory/etc.} \]</div>
+<div class="math">\[ HC_P \rightarrow \mathrm{DMN} \]</div>
+<p>Then ask:</p>
+<blockquote>Does an MDD individual's anterior hippocampal system still preferentially express the anterior template's cortical-network connectivity fingerprint?</blockquote>
+<p>This separates two possibilities:</p>
+<h3>Spatial disruption</h3>
+<p>The three systems retain their functional identities but occupy different locations.</p>
+<p>versus</p>
+<h3>Functional identity disruption</h3>
+<p>The hippocampal system itself becomes less connected to the networks that normally define it.</p>
+<p>That distinction is extremely valuable.</p>
+
+<h2>6. I would combine these into a “canonicality” framework</h2>
+<p>This may be the strongest overall analysis.</p>
+<p>For each participant, quantify:</p>
+<p><b>Canonicality</b><br>→ how well the individual's hippocampal vertices match the normative templates.</p>
+<p><b>Differentiation</b><br>→ how strongly one template dominates over competing templates.</p>
+<p><b>Topographic organization</b><br>→ whether the systems occupy the expected anterior–posterior locations.</p>
+<p><b>Network specificity</b><br>→ whether each system retains its characteristic cortical-network connectivity.</p>
+<p>You could end up with something conceptually like:</p>
+<table>
+<tr><th>Phenotype</th><th>HC</th><th>MDD hypothesis</th></tr>
+<tr><td>Template similarity</td><td>High</td><td>↓</td></tr>
+<tr><td>Template margin</td><td>High</td><td>↓</td></tr>
+<tr><td>Entropy</td><td>Low</td><td>↑</td></tr>
+<tr><td>System surface area</td><td>Stable</td><td>altered</td></tr>
+<tr><td>Boundary location</td><td>canonical</td><td>shifted</td></tr>
+<tr><td>Long-axis gradient strength</td><td>High</td><td>↓</td></tr>
+<tr><td>Network specificity</td><td>high</td><td>↓</td></tr>
+</table>
+<p>That tells a much richer story than “MDD differs in hippocampal connectivity.”</p>
+
+</div>
+</body>
+</html>

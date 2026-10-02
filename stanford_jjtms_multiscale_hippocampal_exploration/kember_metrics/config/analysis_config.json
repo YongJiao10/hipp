@@ -1,0 +1,93 @@
+{
+  "workflow": "unified_kember_metrics",
+  "scope": "Stanford rest-fMRI direct contrasts with HCP 7T descriptive reference",
+  "dataset": "stanford",
+  "representative_subject": "sub-1001",
+  "density": 512,
+  "n_rois": 400,
+  "k": 3,
+  "smoothings_mm": [2, 4],
+  "hemispheres": ["L", "R"],
+  "methods": ["hcp151_template_matching", "hcp151_fixed"],
+  "expected_roster_counts": {
+    "NTHC": 51,
+    "TEHC": 40,
+    "NTS": 56,
+    "TIS": 47
+  },
+  "rosters": {
+    "all_subjects": "outputs_stanford/inputs/stanford/kong2022/manifests/stanford_all_subjects.txt",
+    "healthy": "outputs_stanford/inputs/stanford/kong2022/manifests/stanford_hc_1xxx2xxx_qc_pass_t1only_91.txt",
+    "nontrauma": "outputs_stanford/inputs/stanford/kong2022/manifests/stanford_nontrauma_1xxx3xxx_qc_pass_t1only_107.txt",
+    "symptomatic": "outputs_stanford/inputs/stanford/kong2022/manifests/stanford_symp_3xxx4xxx_qc_pass_t1only_103.txt",
+    "trauma": "outputs_stanford/inputs/stanford/kong2022/manifests/stanford_trauma_2xxx4xxx_qc_pass_t1only_87.txt"
+  },
+  "paths": {
+    "routea_fc_root": "outputs_stanford/inputs/stanford/kong2022/shared_inputs/routea",
+    "routea_surface_root": "outputs_stanford/inputs/stanford/kong2022/shared_inputs/surface",
+    "hippunfold_root": "outputs_stanford/inputs/stanford/hippunfold/dense_corobl_batch",
+    "template_matching_root": "outputs_stanford/work/hcp151_fixed_template_matching",
+    "template_matching_run_manifest": "outputs_stanford/work/hcp151_fixed_template_matching/runs/stanford_hcp151_full_20260815/run_manifest.json",
+    "template_matching_validation_manifest": "outputs_stanford/work/hcp151_fixed_template_matching/runs/stanford_hcp151_full_20260815/validation_manifest.json",
+    "hcp151_template_root": "outputs_hcp/templates/hcp151_routea_full_k3_fisherz",
+    "hcp151_template_manifest": "outputs_hcp/templates/hcp151_routea_full_k3_fisherz/template_manifest.json",
+    "network_registry": "outputs_hcp/work/group_atlas/routea_full_k3_fisherz/gradient-spectral/kong2022/2mm/cov_0p80/g1g2g3/hemi_L/cluster_roi_registry.tsv"
+  },
+  "reference_hcp7t": {
+    "enabled": true,
+    "name": "HCP 7T",
+    "expected_n": 151,
+    "smoothing_mm": 2,
+    "crossfit_root": "outputs_hcp/work/crossfit_template_matching",
+    "crossfit_manifest": "outputs_hcp/work/crossfit_template_matching/crossfit_manifest.json",
+    "hippunfold_root": "outputs_hcp/inputs/hcp/hippunfold/dense_corobl_batch",
+    "shared_surface_root": "outputs_hcp/inputs/hcp/kong2022/shared_inputs/surface",
+    "derived_output_root": "stanford_jjtms_multiscale_hippocampal_exploration/kember_metrics/work/reference_hcp7t_crossfit_area"
+  },
+  "native_assets": {
+    "source_surface_filename_pattern": "{subject}_hemi-{hemisphere}_space-corobl_den-512_label-hipp_midthickness.surf.gii",
+    "native_surface_filename_pattern": "{subject}_hemi-{hemisphere}_space-corobl_den-native_label-hipp_midthickness.surf.gii",
+    "source_unfold_surface_filename_pattern": "{subject}_hemi-{hemisphere}_space-unfold_den-512_label-hipp_midthickness.surf.gii",
+    "native_unfold_surface_filename_pattern": "{subject}_hemi-{hemisphere}_space-unfold_den-native_label-hipp_midthickness.surf.gii",
+    "native_metric_filename_pattern": "{subject}_hemi-{hemisphere}_den-native_label-hipp_surfareacorobl.shape.gii",
+    "label_transfer_method": "ADAP_BARY_AREA"
+  },
+  "outputs": {
+    "features": "stanford_jjtms_multiscale_hippocampal_exploration/kember_metrics/work/features",
+    "direct_contrasts": "stanford_jjtms_multiscale_hippocampal_exploration/kember_metrics/results/direct_contrasts",
+    "figures": "stanford_jjtms_multiscale_hippocampal_exploration/kember_metrics/figures/direct_contrasts",
+    "reports": "stanford_jjtms_multiscale_hippocampal_exploration/kember_metrics/reports/direct_contrasts"
+  },
+  "feature_table": "stanford_jjtms_multiscale_hippocampal_exploration/kember_metrics/work/features/subject_features.tsv",
+  "reference_group": "NTHC",
+  "cohort_order": ["NTHC", "TEHC", "NTS", "NTS Any MDD", "NTS Pure MDD", "TIS", "TIS PTSD"],
+  "cohorts": {
+    "NTHC": {"manifest": "outputs_stanford/inputs/stanford/kong2022/manifests/stanford_nthc_1xxx_qc_pass_t1only_51.txt", "expected_n": 51},
+    "TEHC": {"manifest": "outputs_stanford/inputs/stanford/kong2022/manifests/stanford_tehc_2xxx_qc_pass_t1only_40.txt", "expected_n": 40},
+    "NTS": {"manifest": "outputs_stanford/inputs/stanford/kong2022/manifests/stanford_nts_3xxx_qc_pass_t1only_56.txt", "expected_n": 56},
+    "NTS Any MDD": {"manifest": "outputs_stanford/inputs/stanford/kong2022/manifests/stanford_nts_any_mdd_3xxx_qc_pass_t1only_43.txt", "expected_n": 43},
+    "NTS Pure MDD": {"manifest": "outputs_stanford/inputs/stanford/kong2022/manifests/stanford_nts_pure_mdd_3xxx_qc_pass_t1only_11.txt", "expected_n": 11},
+    "TIS": {"manifest": "outputs_stanford/inputs/stanford/kong2022/manifests/stanford_tis_4xxx_qc_pass_t1only_47.txt", "expected_n": 47},
+    "TIS PTSD": {"manifest": "outputs_stanford/inputs/stanford/kong2022/manifests/stanford_tis_ptsd_4xxx_current_ptsd_qc_pass_t1only_35.txt", "expected_n": 35}
+  },
+  "contrasts": [
+    {"contrast": "TEHC−NTHC", "case_group": "TEHC", "reference_group": "NTHC"},
+    {"contrast": "NTS−NTHC", "case_group": "NTS", "reference_group": "NTHC"},
+    {"contrast": "NTS Any MDD−NTHC", "case_group": "NTS Any MDD", "reference_group": "NTHC"},
+    {"contrast": "NTS Pure MDD−NTHC", "case_group": "NTS Pure MDD", "reference_group": "NTHC"},
+    {"contrast": "TIS−NTHC", "case_group": "TIS", "reference_group": "NTHC"},
+    {"contrast": "TIS PTSD−NTHC", "case_group": "TIS PTSD", "reference_group": "NTHC"}
+  ],
+  "endpoint_definition": {
+    "paper_metrics": ["surface_area_mm2", "functional_segregation_d", "boundary_sharpness_d"],
+    "systems": ["anterior", "body", "posterior"],
+    "surface_area_fraction": "context only",
+    "boundary_radius_mm": 4.0,
+    "boundary_distance_convention": "source_512_midthickness_euclidean_radius_mm"
+  },
+  "fdr": {
+    "method": "Benjamini-Hochberg",
+    "family": "metric_family",
+    "pool": "both methods, all six contrasts, both hemispheres, and both smoothing levels within each family"
+  }
+}

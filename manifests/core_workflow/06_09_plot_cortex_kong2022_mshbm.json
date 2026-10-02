@@ -1,0 +1,15 @@
+{
+  "command": "/home/yojiao/.conda/envs/py314/bin/python /home/yojiao/hpchome/hipp/scripts/core_workflow/06_09_plot_cortex_kong2022_mshbm.py --subject 100610",
+  "git_commit": "3ef4cd211b73fc1db93324c4a12d0118c0ce9ff2",
+  "input_artifacts": [],
+  "output_artifacts": [],
+  "purpose": "Render subject-level Kong2022 MSHBM cortical brain maps.",
+  "returncode": 0,
+  "status": "ok",
+  "step_id": "06_09_plot_cortex_kong2022_mshbm",
+  "timestamp_utc": "2026-07-09T19:15:02Z",
+  "upstream_step_ids": [
+    "03_02_build_kong2022_routea_reference"
+  ],
+  "workflow_branch": "kong2022_routea"
+}

@@ -1,0 +1,9 @@
+# Iowa3T pure MDD group (n=7): current MDD only or current MDD with clinical anxiety below MINI-confirmed GAD threshold.
+# Source: /home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_JJ_TMS/subject_infomation.xlsx, Sheet1, QC == "Yes".
+3010
+3011
+3015
+3017
+3018
+3020
+3023

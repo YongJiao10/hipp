@@ -1,0 +1,21 @@
+# Iowa3T comorbid MDD group (n=19): current MDD with confirmed GAD and/or PTSD comorbidity.
+# Source: /home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_JJ_TMS/subject_infomation.xlsx, Sheet1, QC == "Yes".
+3001
+3002
+3004
+3005
+3006
+3007
+3008
+3009
+3012
+3013
+3014
+3016
+3019
+3022
+3024
+3025
+3026
+3027
+3028

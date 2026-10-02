@@ -1,0 +1,26 @@
+subject = "102311"
+remote_host = "yojiao@192.168.0.113"
+remote_root = "/Volumes/Elements/HCP-YA-2025"
+local_input_dir = "data/hippunfold_input"
+atlas_dir = "data/atlas/schaefer400"
+output_dir = "outputs_migration/102311"
+log_dir = "logs"
+surface_density = "512"
+toolchain_mode = "hippunfold_2_0_0"
+hippunfold_modality = "T2w"
+t1_reg_template = false
+allow_volume_reference_fallback = false
+functional_input_mode = "cifti"
+
+[paths]
+struct_zip = "/Volumes/Elements/HCP-YA-2025/Structural Preprocessed Recommended for 3T and 7T/100610_StructuralRecommended.zip"
+struct_t1_member = "100610/T1w/T1w_acpc_dc_restore.nii.gz"
+struct_t2_member = "100610/T1w/T2w_acpc_dc_restore.nii.gz"
+rest_archive_zip = "/Volumes/Elements/HCP-YA-2025/Resting State fMRI 7T Preprocessed Recommended archive/100610_Rest7TRecommended.zip"
+rsfmri_dtseries_member = "100610/MNINonLinear/Results/rfMRI_REST_7T/rfMRI_REST_7T_Atlas_MSMAll_hp2000_clean_rclean_tclean.dtseries.nii"
+rsfmri_volume_member = "100610/MNINonLinear/Results/rfMRI_REST_7T/rfMRI_REST_7T_hp2000_clean_rclean_tclean.nii.gz"
+rsfmri_mask_member = "100610/MNINonLinear/Results/rfMRI_REST_7T/rfMRI_REST_7T_brain_mask.nii.gz"
+
+[atlas]
+surface_dlabel = "Schaefer2018_400Parcels_7Networks_order.dlabel.nii"
+volume_2mm = "Schaefer2018_400Parcels_7Networks_order_FSLMNI152_2mm.nii.gz"

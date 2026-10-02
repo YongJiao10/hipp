@@ -1,0 +1,12 @@
+{
+  "vertical_axis": "z",
+  "elev": 10,
+  "azim": -100,
+  "roll": 70,
+  "zoom": 6.3,
+  "pad": 1.02,
+  "dpi": 300,
+  "fig_width": 10.6,
+  "fig_height": 6.8,
+  "background": "black"
+}

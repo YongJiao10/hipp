@@ -1,0 +1,23 @@
+{
+  "command": "/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/05_01_compute_hippomaps_gradients.py --routes routea --shared-inputs-root /tmp/iowa3t_pure_mdd_36p_gradient_parent --surface-root outputs_iowa_jj_tms/inputs/iowa_jj_tms/kong2022/shared_inputs/surface --subjects-manifest manifests/jj_tms_pure_mdd_7_subjects.txt --smoothings 2mm 4mm --hemis L R --group-average-surfaces-dir outputs_iowa_jj_tms/inputs/iowa_jj_tms/kong2022/templates/hipp_group_average_t1only_151/group_average_surfaces --out-root outputs_iowa_jj_tms/work/hippomaps_gradients/routea_pure_mdd --n-components 5 --gradient-random-state 0 --selected-components 1,2,3",
+  "git_commit": "55fbe439555d7256db432bda837cd59d9c6a46a9",
+  "input_artifacts": [
+    "/home/yojiao/hpchome/hipp/outputs_iowa_jj_tms/inputs/iowa_jj_tms/kong2022/shared_inputs/routea_pure_mdd",
+    "/home/yojiao/hpchome/hipp/outputs_iowa_jj_tms/inputs/iowa_jj_tms/kong2022/shared_inputs/surface",
+    "/home/yojiao/hpchome/hipp/manifests/jj_tms_pure_mdd_7_subjects.txt"
+  ],
+  "output_artifacts": [
+    "/home/yojiao/hpchome/hipp/outputs_iowa_jj_tms/work/hippomaps_gradients/routea_pure_mdd"
+  ],
+  "purpose": "Compute HippoMaps-style continuous gradients from 36P Iowa3T subgroup FC.",
+  "returncode": 0,
+  "status": "ok",
+  "step_id": "05_01_compute_hippomaps_gradients",
+  "timestamp_utc": "2026-09-04T03:42:58.298158Z",
+  "upstream_step_ids": [
+    "04_01_materialize_kong2022_roi_fc"
+  ],
+  "workflow_branch": "kong2022_routea_36p",
+  "source_variant": "36p",
+  "n_subjects": 7
+}

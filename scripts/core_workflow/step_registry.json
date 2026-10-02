@@ -1,0 +1,439 @@
+{
+  "schema_version": "2.0",
+  "active_workflow": "hippocampal_core_t1w",
+  "architecture": "self_contained_core_workflow",
+  "branch_mainlines": [
+    "kong2022_routea",
+    "kong2022_routea_17net",
+    "kong2022_routea_ctxreg",
+    "kong2022_routea_ctxdrop",
+    "kong2022_routeb",
+    "lynch2024_20net",
+    "lynch2024_7net"
+  ],
+  "steps": [
+    {
+      "step_id": "01_01_run_hippunfold_t1w_local",
+      "stage": "01_hippunfold",
+      "purpose": "Run HippUnfold 2.0 through the closed HCP/Stanford/JJ-TMS T1w preset contract (density 512, corobl plus unfolded registration, canonical local cache/model; no free-form overrides).",
+      "branches": [
+        "kong2022_routea",
+        "kong2022_routeb"
+      ],
+      "entry_script": "scripts/core_workflow/01_01_run_hippunfold_t1w_local.py",
+      "implementation_script": "scripts/core_workflow/01_01_run_hippunfold_t1w_local.py",
+      "recommended_manifest": "manifests/core_workflow/01_01_run_hippunfold_t1w_local.json"
+    },
+    {
+      "step_id": "01_02_check_hippunfold_outputs",
+      "stage": "01_hippunfold",
+      "purpose": "Require fixed L/R den-512 midthickness anchors in corobl, T1w, and unfold plus surface-spec/Dice QC outputs, then receipt and trim core-unconsumed anat, coords, warps, and cifti directories before group input and QC stages.",
+      "branches": [
+        "kong2022_routea",
+        "kong2022_routeb"
+      ],
+      "entry_script": "scripts/core_workflow/01_02_check_hippunfold_outputs.py",
+      "implementation_script": "scripts/core_workflow/01_02_check_hippunfold_outputs.py",
+      "recommended_manifest": "manifests/core_workflow/01_02_check_hippunfold_outputs.json"
+    },
+    {
+      "step_id": "02_01_prepare_group_inputs",
+      "stage": "02_inputs_qc",
+      "purpose": "Prepare shared surfaces, tSNR metadata, and group-average templates from validated HippUnfold outputs; full denoised run-level volumes pair to the CIFTI run roster and concatenate only in memory.",
+      "branches": [
+        "kong2022_routea",
+        "kong2022_routeb"
+      ],
+      "entry_script": "scripts/core_workflow/02_01_prepare_group_inputs.py",
+      "implementation_script": "scripts/core_workflow/02_01_prepare_group_inputs.py",
+      "recommended_manifest": "manifests/core_workflow/02_01_prepare_group_inputs.json"
+    },
+    {
+      "step_id": "02_02_build_qc_manifest",
+      "stage": "02_inputs_qc",
+      "purpose": "Build QC-pass cohort manifest from HippUnfold Dice and hippocampal tSNR gate summaries.",
+      "branches": [
+        "kong2022_routea",
+        "kong2022_routeb"
+      ],
+      "entry_script": "scripts/core_workflow/02_02_build_qc_manifest.py",
+      "implementation_script": "scripts/core_workflow/02_02_build_qc_manifest.py",
+      "recommended_manifest": "manifests/core_workflow/02_02_build_qc_manifest.json"
+    },
+    {
+      "step_id": "02_03_build_lynch2024_nsi_manifest",
+      "stage": "02_inputs_qc",
+      "purpose": "Build the all-base-subject Lynch2024 FASTANS/PFM cohort manifest and NSI audit table.",
+      "branches": [
+        "lynch2024_20net",
+        "lynch2024_7net"
+      ],
+      "entry_script": "scripts/core_workflow/02_03_build_lynch2024_nsi_manifest.py",
+      "implementation_script": "scripts/core_workflow/02_03_build_lynch2024_nsi_manifest.py",
+      "recommended_manifest": "outputs_hcp/inputs/hcp/lynch2024_fast_pfm_t1only/manifests/hcp_7t_lynch2024_manifest.json"
+    },
+    {
+      "step_id": "03_01_build_kong2022_reference",
+      "stage": "03_cortex_reference",
+      "purpose": "Build Kong2022 cortex references for shared processing; run-level mode concatenates only in memory and preserves numeric run IDs.",
+      "branches": [
+        "kong2022_routea",
+        "kong2022_routeb"
+      ],
+      "entry_script": "scripts/core_workflow/03_01_build_kong2022_reference.py",
+      "implementation_script": "scripts/core_workflow/03_01_build_kong2022_reference.py",
+      "recommended_manifest": "manifests/core_workflow/03_01_build_kong2022_reference.json"
+    },
+    {
+      "step_id": "03_02_build_kong2022_routea_reference",
+      "stage": "03_cortex_reference",
+      "purpose": "Build RouteA-specific cortex references while preserving run-level numeric IDs and source-file metadata; the unsuffixed kong2022 branch writes direct canonical7 artifacts.",
+      "branches": [
+        "kong2022_routea",
+        "kong2022_routea_17net"
+      ],
+      "entry_script": "scripts/core_workflow/03_02_build_kong2022_routea_reference.py",
+      "implementation_script": "scripts/core_workflow/03_02_build_kong2022_routea_reference.py",
+      "recommended_manifest": "manifests/core_workflow/03_02_build_kong2022_routea_reference.json"
+    },
+    {
+      "step_id": "03_03_build_lynch2024_reference",
+      "stage": "03_cortex_reference",
+      "purpose": "Build Lynch2024 hard-label cortex PFM component references plus Lynch20 and canonical7 summaries.",
+      "branches": [
+        "lynch2024_20net",
+        "lynch2024_7net"
+      ],
+      "entry_script": "scripts/core_workflow/03_03_build_lynch2024_reference.py",
+      "implementation_script": "scripts/core_workflow/03_03_build_lynch2024_reference.py",
+      "recommended_manifest": "outputs_hcp/inputs/hcp/lynch2024_fast_pfm_t1only/shared_inputs/pfm_hcp151/sub-<id>/reference/lynch2024_20net/stage_manifest.json"
+    },
+    {
+      "step_id": "03_04_run_lynch2024_fastans_pfm",
+      "stage": "03_cortex_reference",
+      "purpose": "Generate official FASTANS Lynch2024 hard-label PFM assets and hard-label component time series.",
+      "branches": [
+        "lynch2024_20net",
+        "lynch2024_7net"
+      ],
+      "entry_script": "scripts/core_workflow/03_04_run_lynch2024_fastans_pfm.py",
+      "implementation_script": "scripts/core_workflow/03_04_run_lynch2024_fastans_pfm.py",
+      "recommended_manifest": "outputs_hcp/work/cortex_pfm/sub-<id>/lynch2024/fastans_pfm_manifest.json"
+    },
+    {
+      "step_id": "04_00_materialize_cortex_regressed_surface_timeseries",
+      "stage": "04_hipp_fc",
+      "purpose": "Materialize RouteA hippocampal surface time series after local cortex regression for the isolated cortex-control branch.",
+      "branches": [
+        "kong2022_routea_ctxreg"
+      ],
+      "entry_script": "scripts/core_workflow/04_00_materialize_cortex_regressed_surface_timeseries.py",
+      "implementation_script": "scripts/core_workflow/04_00_materialize_cortex_regressed_surface_timeseries.py",
+      "recommended_manifest": "manifests/core_workflow/04_00_materialize_cortex_regressed_surface_timeseries.json"
+    },
+    {
+      "step_id": "04_01_materialize_kong2022_roi_fc",
+      "stage": "04_hipp_fc",
+      "purpose": "Materialize hippocampal ROI/component/reference FC caches; lynch2024_7net consumes the canonical7 reference time series.",
+      "branches": [
+        "kong2022_routea",
+        "kong2022_routea_ctxreg",
+        "kong2022_routea_ctxdrop",
+        "kong2022_routeb",
+        "lynch2024_20net",
+        "lynch2024_7net"
+      ],
+      "entry_script": "scripts/core_workflow/04_01_materialize_kong2022_roi_fc.py",
+      "implementation_script": "scripts/core_workflow/04_01_materialize_kong2022_roi_fc.py",
+      "recommended_manifest": "manifests/core_workflow/04_01_materialize_kong2022_roi_fc.json"
+    },
+    {
+      "step_id": "04_02_materialize_intrinsic_fc",
+      "stage": "04_hipp_fc",
+      "purpose": "Materialize intrinsic vertex-to-vertex FC caches.",
+      "branches": [
+        "kong2022_routea",
+        "kong2022_routea_ctxreg",
+        "kong2022_routeb"
+      ],
+      "entry_script": "scripts/core_workflow/04_02_materialize_intrinsic_fc.py",
+      "implementation_script": "scripts/core_workflow/04_02_materialize_intrinsic_fc.py",
+      "recommended_manifest": "manifests/core_workflow/04_02_materialize_intrinsic_fc.json"
+    },
+    {
+      "step_id": "04_03_materialize_task_activation",
+      "stage": "04_hipp_fc",
+      "purpose": "Materialize HCP 3T task first-level activation: per-vertex OLS GLM on task-sampled hippocampal surfaces with HRF-convolved FSL EV plus 12-column movement nuisance; writes run-averaged betas and maintained contrasts (faces>shapes, 2bk>0bk, rel>match). Cached series trusted only when the sampling receipt matches the manifest run ids/lengths/sources entry-by-entry.",
+      "branches": [
+        "kong2022_routea"
+      ],
+      "entry_script": "scripts/core_workflow/04_03_materialize_task_activation.py",
+      "implementation_script": "scripts/core_workflow/04_03_materialize_task_activation.py",
+      "recommended_manifest": "manifests/core_workflow/04_03_materialize_task_activation.json"
+    },
+    {
+      "step_id": "04_04_materialize_background_fc",
+      "stage": "04_hipp_fc",
+      "purpose": "Materialize HCP 3T task background FC (exploratory): bilateral design regression from hippocampal and cortex parcel timeseries with NaN-propagating correlations and surface+cortex receipt verification. Not wired into the 05_01 gradient contract.",
+      "branches": [
+        "kong2022_routea"
+      ],
+      "entry_script": "scripts/core_workflow/04_04_materialize_background_fc.py",
+      "implementation_script": "scripts/core_workflow/04_04_materialize_background_fc.py",
+      "recommended_manifest": "manifests/core_workflow/04_04_materialize_background_fc.json"
+    },
+    {
+      "step_id": "05_01_compute_hippomaps_gradients",
+      "stage": "05_group_atlas",
+      "purpose": "Compute HippoMaps-style continuous gradients consumed by 05_02 gradient-spectral. The unsuffixed Kong2022 RouteA branch consumes direct canonical7 FC. Lynch2024 computes only the non-Noise Lynch20 component bank with full-graph BrainSpace affinity; lynch2024_7net reuses that bank downstream.",
+      "branches": [
+        "kong2022_routea",
+        "kong2022_routea_ctxreg",
+        "kong2022_routea_ctxdrop",
+        "kong2022_routeb",
+        "lynch2024_20net",
+        "lynch2024_7net"
+      ],
+      "entry_script": "scripts/core_workflow/05_01_compute_hippomaps_gradients.py",
+      "implementation_script": "scripts/core_workflow/05_01_compute_hippomaps_gradients.py",
+      "recommended_manifest": "manifests/core_workflow/05_01_compute_hippomaps_gradients.json"
+    },
+    {
+      "step_id": "05_02_run_group_atlas",
+      "stage": "05_group_atlas",
+      "purpose": "Build group atlas outputs; defaults evaluate K=2..8 while fixing maintained final presentation K=3. Cluster-level Kong2022 defaults to fisherz, with normalized_top20_count retained as an explicit comparison. Lynch2024 defaults to gradient-spectral plus direct-network wta-top, with --profile-surface-root used for cluster time-series profile annotation when needed. Lynch WTA uses top-1 network Fisher-z assignments; Kong2022 wta-top is emitted only as normalized_top20_count.",
+      "branches": [
+        "kong2022_routea",
+        "kong2022_routea_17net",
+        "kong2022_routea_ctxreg",
+        "kong2022_routea_ctxdrop",
+        "kong2022_routeb",
+        "lynch2024_20net",
+        "lynch2024_7net"
+      ],
+      "entry_script": "scripts/core_workflow/05_02_run_group_atlas.py",
+      "implementation_script": "scripts/core_workflow/05_02_run_group_atlas.py",
+      "recommended_manifest": "manifests/core_workflow/05_02_run_group_atlas.json"
+    },
+    {
+      "step_id": "05_03_run_spectral_fast_rerun",
+      "stage": "05_group_atlas",
+      "purpose": "Run urgent intrinsic/network spectral rerun orchestration after the primary group-atlas step.",
+      "branches": [
+        "kong2022_routea",
+        "kong2022_routeb"
+      ],
+      "entry_script": "scripts/core_workflow/05_03_run_spectral_fast_rerun.py",
+      "implementation_script": "scripts/core_workflow/05_03_run_spectral_fast_rerun.py",
+      "recommended_manifest": "manifests/core_workflow/05_03_run_spectral_fast_rerun.json"
+    },
+    {
+      "step_id": "05_04_compute_confidence_maps",
+      "stage": "05_group_atlas",
+      "purpose": "Compute gradient-spectral silhouette confidence maps.",
+      "branches": [
+        "kong2022_routea",
+        "kong2022_routea_ctxreg",
+        "kong2022_routea_ctxdrop"
+      ],
+      "entry_script": "scripts/core_workflow/05_04_compute_confidence_maps.py",
+      "implementation_script": "scripts/core_workflow/05_04_compute_confidence_maps.py",
+      "recommended_manifest": "manifests/core_workflow/05_04_compute_confidence_maps.json"
+    },
+    {
+      "step_id": "05_05_build_weighted_fisherz_branch",
+      "stage": "05_group_atlas",
+      "purpose": "Build RouteA weighted_fisherz comparison branch using the canonical7 network-timeseries Fisher-z FC by default.",
+      "branches": [
+        "kong2022_routea"
+      ],
+      "entry_script": "scripts/core_workflow/05_05_build_weighted_fisherz_branch.py",
+      "implementation_script": "scripts/core_workflow/05_05_build_weighted_fisherz_branch.py",
+      "recommended_manifest": "outputs_hcp/work/group_atlas/routea_weighted_fisherz_full_k3/weighted_fisherz_branch_manifest.json"
+    },
+    {
+      "step_id": "05_06_build_task_activation_group",
+      "stage": "05_group_atlas",
+      "purpose": "Build group-level task-activation products: roster-resolved stacking of per-subject contrasts/betas into group mean/t/d maps, per-subject and group cluster tables across hcp151_atlas/template_matching zones with native-area weighting, BH-FDR correction, explicit-roster fail-closed, --min-valid-area-fraction coverage gate with exclusion report. Stable out-root refreshed on rerun; roster recorded for increments.",
+      "branches": [
+        "kong2022_routea"
+      ],
+      "entry_script": "scripts/core_workflow/05_06_build_task_activation_group.py",
+      "implementation_script": "scripts/core_workflow/05_06_build_task_activation_group.py",
+      "recommended_manifest": "outputs_hcp/work/task_activation/task-<task>/group/group_build_manifest.json"
+    },
+    {
+      "step_id": "06_01_build_group_overview",
+      "stage": "06_presentation_products",
+      "purpose": "Render canonical fixed-K=3 group overview products with stable filenames, branch-specific WTA assignments, visible shifted-cosine titles, source group manifests, and affinity provenance for gradient items.",
+      "branches": [
+        "kong2022_routea",
+        "kong2022_routea_17net",
+        "kong2022_routea_ctxreg",
+        "kong2022_routea_ctxdrop",
+        "kong2022_routeb",
+        "lynch2024_20net",
+        "lynch2024_7net"
+      ],
+      "entry_script": "scripts/core_workflow/06_01_build_group_overview.py",
+      "implementation_script": "scripts/core_workflow/06_01_build_group_overview.py",
+      "recommended_manifest": "manifests/core_workflow/06_01_build_group_overview.json"
+    },
+    {
+      "step_id": "06_02_materialize_group_labels",
+      "stage": "06_presentation_products",
+      "purpose": "Materialize group functional-atlas label arrays.",
+      "branches": [
+        "kong2022_routea",
+        "kong2022_routea_17net",
+        "kong2022_routeb"
+      ],
+      "entry_script": "scripts/core_workflow/06_02_materialize_group_labels.py",
+      "implementation_script": "scripts/core_workflow/06_02_materialize_group_labels.py",
+      "recommended_manifest": "manifests/core_workflow/06_02_materialize_group_labels.json"
+    },
+    {
+      "step_id": "06_03_build_cluster_cortex_panels",
+      "stage": "06_presentation_products",
+      "purpose": "Generate cluster-based cortex/hippocampal significance panels.",
+      "branches": [
+        "kong2022_routea",
+        "kong2022_routea_17net",
+        "kong2022_routea_ctxreg",
+        "kong2022_routea_ctxdrop",
+        "kong2022_routeb"
+      ],
+      "entry_script": "scripts/core_workflow/06_03_build_cluster_cortex_panels.py",
+      "implementation_script": "scripts/core_workflow/06_03_build_cluster_cortex_panels.py",
+      "recommended_manifest": "manifests/core_workflow/06_03_build_cluster_cortex_panels.json"
+    },
+    {
+      "step_id": "06_04_render_hippomaps_gradient_products",
+      "stage": "06_presentation_products",
+      "purpose": "Render HippoMaps folded/unfolded continuous gradients with hemisphere-specific EV labels and colorbars, EV plots, and endpoint FC contrasts.",
+      "branches": [
+        "kong2022_routea",
+        "kong2022_routea_ctxreg",
+        "kong2022_routea_ctxdrop",
+        "kong2022_routeb"
+      ],
+      "entry_script": "scripts/core_workflow/06_04_render_hippomaps_gradient_products.py",
+      "implementation_script": "scripts/core_workflow/06_04_render_hippomaps_gradient_products.py",
+      "recommended_manifest": "manifests/core_workflow/06_04_render_hippomaps_gradient_products.json"
+    },
+    {
+      "step_id": "06_05_render_group_gradient_heatmaps",
+      "stage": "06_presentation_products",
+      "purpose": "Deprecated retired legacy locked-scene heatmap entrypoint; preserved only to emit deprecation guidance.",
+      "branches": [
+        "kong2022_routea",
+        "kong2022_routeb"
+      ],
+      "entry_script": "scripts/core_workflow/06_05_render_group_gradient_heatmaps.py",
+      "implementation_script": "scripts/core_workflow/06_05_render_group_gradient_heatmaps.py",
+      "recommended_manifest": "manifests/core_workflow/06_05_render_group_gradient_heatmaps.json"
+    },
+    {
+      "step_id": "06_06_render_confidence_maps",
+      "stage": "06_presentation_products",
+      "purpose": "Render gradient-spectral silhouette confidence maps on folded and unfolded hippocampal surfaces.",
+      "branches": [
+        "kong2022_routea",
+        "kong2022_routea_ctxreg",
+        "kong2022_routea_ctxdrop"
+      ],
+      "entry_script": "scripts/core_workflow/06_06_render_confidence_maps.py",
+      "implementation_script": "scripts/core_workflow/06_06_render_confidence_maps.py",
+      "recommended_manifest": "manifests/core_workflow/06_06_render_confidence_maps.json"
+    },
+    {
+      "step_id": "06_07_render_ctxdrop_neighbor_counts",
+      "stage": "06_presentation_products",
+      "purpose": "Render group-average RouteA 20 mm local cortex-neighbor count summaries shared by ctxreg and ctxdrop.",
+      "branches": [
+        "kong2022_routea_ctxreg",
+        "kong2022_routea_ctxdrop"
+      ],
+      "entry_script": "scripts/core_workflow/06_07_render_ctxdrop_neighbor_counts.py",
+      "implementation_script": "scripts/core_workflow/06_07_render_ctxdrop_neighbor_counts.py",
+      "recommended_manifest": "outputs_hcp/present/local_cortex_neighbors/kong2022_routea_local_cortex_neighbors_mean20mm_manifest.json"
+    },
+    {
+      "step_id": "06_08_render_hcp_subfield_composition",
+      "stage": "06_presentation_products",
+      "purpose": "Render HCP 151-subject weighted_fisherz gradient cluster subfield composition bars.",
+      "branches": [
+        "kong2022_routea"
+      ],
+      "entry_script": "scripts/core_workflow/06_08_render_hcp_subfield_composition.py",
+      "implementation_script": "scripts/core_workflow/06_08_render_hcp_subfield_composition.py",
+      "recommended_manifest": "outputs_hcp/present/subfield_composition/hcp151_routea_weighted-fisherz_gradient-spectral_k3_g1g2g3_subfield_composition_manifest.json"
+    },
+    {
+      "step_id": "06_09_plot_cortex_kong2022_mshbm",
+      "stage": "06_presentation_products",
+      "purpose": "Render subject-level Kong2022 MSHBM cortical brain maps.",
+      "branches": [
+        "kong2022_routea"
+      ],
+      "entry_script": "scripts/core_workflow/06_09_plot_cortex_kong2022_mshbm.py",
+      "implementation_script": "scripts/core_workflow/06_09_plot_cortex_kong2022_mshbm.py",
+      "recommended_manifest": "manifests/core_workflow/06_09_plot_cortex_kong2022_mshbm.json"
+    },
+    {
+      "step_id": "06_10_render_cluster_roi_strength_panels",
+      "stage": "06_presentation_products",
+      "purpose": "Render full 400-ROI gradient-spectral and normalized WTA cortex templates with shared diverging colorbars.",
+      "branches": [
+        "kong2022_routea",
+        "kong2022_routea_17net",
+        "kong2022_routea_ctxreg",
+        "kong2022_routea_ctxdrop",
+        "kong2022_routeb"
+      ],
+      "entry_script": "scripts/core_workflow/06_10_render_cluster_roi_strength_panels.py",
+      "implementation_script": "scripts/core_workflow/06_10_render_cluster_roi_strength_panels.py",
+      "recommended_manifest": "outputs_hcp/present/cortex_panels/cortex_kong2022_gradient-spectral_2mm4mm_template_strength_overview_manifest.json"
+    },
+    {
+      "step_id": "06_11_render_task_activation_products",
+      "stage": "06_presentation_products",
+      "purpose": "Render task-activation group products: one PNG per task (profile/bars rows with paired-subregion brackets), GIFTI overlays on group-average surfaces, weight-faithful beta sides, long-axis bins numbered 1-20, BH-FDR markers with fail-closed adjusted-p handling. Stable out-root refreshed on rerun.",
+      "branches": [
+        "kong2022_routea"
+      ],
+      "entry_script": "scripts/core_workflow/06_11_render_task_activation_products.py",
+      "implementation_script": "scripts/core_workflow/06_11_render_task_activation_products.py",
+      "recommended_manifest": "outputs_hcp/present/task_activation/task-<task>/task_activation_products_manifest.json"
+    },
+    {
+      "step_id": "07_01_build_group_matrix",
+      "stage": "07_presentation_index",
+      "purpose": "Build the maintained overview index after 06_01 overview outputs are refreshed.",
+      "branches": [
+        "kong2022_routea",
+        "kong2022_routea_17net",
+        "kong2022_routea_ctxreg",
+        "kong2022_routea_ctxdrop",
+        "kong2022_routeb"
+      ],
+      "entry_script": "scripts/core_workflow/07_01_build_group_matrix.py",
+      "implementation_script": "scripts/core_workflow/07_01_build_group_matrix.py",
+      "recommended_manifest": "outputs_hcp/present/overviews/group_overview_matrix_manifest.json"
+    }
+  ],
+  "utilities": [
+    {
+      "step_id": "smoke_prepare_run",
+      "stage": "utility_smoke_test",
+      "purpose": "Prepare an isolated 5-subject smoke run directory, subject manifest, and command manifest under outputs_hcp/smoke_runs/<run_id>.",
+      "branches": [
+        "kong2022_routea",
+        "kong2022_routeb"
+      ],
+      "entry_script": "tests/core_workflow/smoke_prepare_run.py",
+      "implementation_script": "tests/core_workflow/smoke_prepare_run.py",
+      "recommended_manifest": "outputs_hcp/smoke_runs/<run_id>/manifests/smoke_command_manifest.json"
+    }
+  ]
+}

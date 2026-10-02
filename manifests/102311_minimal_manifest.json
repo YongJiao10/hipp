@@ -1,0 +1,31 @@
+{
+  "subject": "102311",
+  "remote_host": "yojiao@192.168.0.113",
+  "remote_root": "/Volumes/Elements/HCP-YA-2025",
+  "files": [
+    {
+      "kind": "structural_t1w",
+      "remote_source": "/Volumes/Elements/HCP-YA-2025/Structural Preprocessed Recommended for 3T and 7T/102311_StructuralRecommended.zip::102311/T1w/T1w_acpc_dc_restore.nii.gz",
+      "local_path": "data/raw/102311/sub-102311_T1w_acpc_dc_restore.nii.gz",
+      "bytes": 69259288
+    },
+    {
+      "kind": "structural_t2w",
+      "remote_source": "/Volumes/Elements/HCP-YA-2025/Structural Preprocessed Recommended for 3T and 7T/102311_StructuralRecommended.zip::102311/T1w/T2w_acpc_dc_restore.nii.gz",
+      "local_path": "data/raw/102311/sub-102311_T2w_acpc_dc_restore.nii.gz",
+      "bytes": 68898057
+    },
+    {
+      "kind": "rsfmri_volume",
+      "remote_source": "/Volumes/Elements/HCP-YA-2025/Resting State fMRI 7T Preprocessed Recommended/102311/rfMRI_REST_7T_hp2000_clean_rclean_tclean.nii.gz",
+      "local_path": "data/raw/102311/sub-102311_rfMRI_REST_7T_hp2000_clean_rclean_tclean.nii.gz",
+      "bytes": 6164590503
+    },
+    {
+      "kind": "brain_mask",
+      "remote_source": "/Volumes/Elements/HCP-YA-2025/Resting State fMRI 7T Preprocessed Recommended/102311/rfMRI_REST_7T_brain_mask.nii.gz",
+      "local_path": "data/raw/102311/sub-102311_rfMRI_REST_7T_brain_mask.nii.gz",
+      "bytes": 42277
+    }
+  ]
+}

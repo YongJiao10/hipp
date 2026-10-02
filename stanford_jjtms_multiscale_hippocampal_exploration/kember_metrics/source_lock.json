@@ -1,0 +1,101 @@
+{
+  "schema_version": 4,
+  "repository": "https://github.com/JonahKember/posterior_hippocampus_development.git",
+  "tag": "v1",
+  "commit": "5fd2858ca8979891216f518b45751d4517e037a0",
+  "zenodo_release_doi": "10.5281/zenodo.20086216",
+  "zenodo_concept_doi": "10.5281/zenodo.20086215",
+  "license": "CC-BY-4.0",
+  "retrieved_at_utc": "2026-08-26",
+  "checkout": {
+    "path": "external/posterior_hippocampus_development",
+    "sparse_checkout": [
+      "REPRODUCING.md",
+      "manuscript_analyses.ipynb",
+      "environment/",
+      "metadata/",
+      "data/supplementary_data.csv",
+      "data/cluster_colors.json",
+      "data/Figure 4.zip"
+    ]
+  },
+  "required_files": [
+    "REPRODUCING.md",
+    "manuscript_analyses.ipynb",
+    "data/supplementary_data.csv"
+  ],
+  "archive_access": "authorized_and_audited",
+  "authorized_archives": [
+    {
+      "path": "data/Figure 4.zip",
+      "authorized_at_utc": "2026-08-26",
+      "sha256": "b5cf4050225c410a0f7d2a36496f3710d8d229abbcb740372142e93e8c6bc666",
+      "size_bytes": 29696,
+      "internal_entries": [
+        "Figure 4/",
+        "Figure 4/.DS_Store",
+        "__MACOSX/Figure 4/._.DS_Store",
+        "Figure 4/Figure_4_source_data.csv"
+      ],
+      "extraction_path": "external/posterior_hippocampus_development/.authorized_figure4",
+      "extracted_source_data_sha256": "0561b50eb907d2562a6156640d44dac4931ee75a67371cbe9eae205f1043f61b"
+    }
+  ],
+  "excluded_archive_paths": [
+    "data/Figure 1.zip",
+    "data/Figure 2.zip",
+    "data/Figure 3.zip",
+    "data/Figure 5.zip"
+  ],
+  "kember_method_area_implementation": {
+    "status": "KEMBER_METHOD_NATIVE_AREA_WORKFLOW_READY",
+    "evidence": "The complete tracked v1 tree has no code directory, raw surface, or label input. Its notebook loads precomputed ant_mm, body_mm, and post_mm fields. The local Kember method therefore records its adaptation explicitly: it sums actual HippUnfold native per-vertex surface-area values in mm^2 after a separately auditable label transfer.",
+    "metric_roles": {
+      "primary": "absolute system surface area in mm^2",
+      "secondary": "system surface-area fraction",
+      "secondary_formula": "system_area_mm2 / total_valid_surface_area_mm2",
+      "secondary_denominator": "total native surface area within the valid native ROI",
+      "secondary_aggregation": "arithmetic mean of left and right hemisphere fractions",
+      "interpretation": "Absolute area aligns with the Kember surface-area endpoint; relative area is a secondary measure of within-hippocampus spatial allocation."
+    },
+    "known_output_contract": {
+      "notebook_axis_label": "Surface area [mm^2]",
+      "positions": [
+        "ant",
+        "body",
+        "post"
+      ],
+      "per_hemisphere_fields": [
+        "ant_L_mm",
+        "body_L_mm",
+        "post_L_mm",
+        "ant_R_mm",
+        "body_R_mm",
+        "post_R_mm"
+      ],
+      "combined_fields": [
+        "ant_mm",
+        "body_mm",
+        "post_mm"
+      ],
+      "relative_area_fields": [
+        "anterior_fraction",
+        "body_fraction",
+        "posterior_fraction"
+      ],
+      "relative_area_denominator_field": "total_valid_surface_area_mm2",
+      "hemisphere_aggregation": "combined fields equal the arithmetic mean of their L/R fields within at most 0.000101 mm^2, consistent with CSV rounding"
+    },
+    "label_transfer": {
+      "source_density": "512",
+      "target_density": "native",
+      "registration_space": "HippUnfold unfolded midthickness",
+      "method": "ADAP_BARY_AREA",
+      "area_weighting_scope": "coronal midthickness surfaces are supplied only for categorical-label transfer",
+      "area_measurement": "sum the actual native HippUnfold surfareacorobl per-vertex metric in mm^2"
+    },
+    "implementation_scope": "The unified subject-level workflow has exactly two active methods: hcp151_template_matching and hcp151_fixed.",
+    "no_per_subject_clustering": "Group-specific clustering belongs only to external_group_atlas_analysis; kember_metrics has no clustering method.",
+    "next_action_requires_user_authorization": false
+  }
+}

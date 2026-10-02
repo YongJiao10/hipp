@@ -1,0 +1,5 @@
+node_modules/
+__pycache__/
+.render_deps/
+.render_runtime/
+compact/qa/
