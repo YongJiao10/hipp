@@ -19,6 +19,7 @@ import numpy as np
 
 
 TR_HCP_3T = 0.72
+TASK_HIGH_PASS_PERIOD_S = 128.0
 N_GRAYORDINATES_91K = 91282
 
 # Expected run lengths for the maintained HCP 3T task branches.
@@ -289,16 +290,27 @@ def load_nuisance_regressors(path: Path, *, n_frames: int) -> np.ndarray:
 
 
 def build_first_level_design(
-    task_regressors: np.ndarray, nuisance: np.ndarray
+    task_regressors: np.ndarray, nuisance: np.ndarray, *, tr: float = TR_HCP_3T
 ) -> np.ndarray:
-    """Column-stack ``[task | nuisance | intercept | linear_drift]``."""
+    """Stack ``[task | nuisance | intercept | 128-s DCT drift]`` for one run.
+
+    The nonconstant DCT-II columns match SPM12 ``spm_filter``/``spm_dctmtx``.
+    Joint OLS with these nuisance columns is equivalent to applying the
+    DCT high-pass projection to both data and model before OLS. The explicit
+    intercept is retained; no additional linear trend is added.
+    """
     n = int(task_regressors.shape[0])
     if int(nuisance.shape[0]) != n:
         raise ValueError(
             f"Frame mismatch: task={task_regressors.shape} nuisance={nuisance.shape}"
         )
     intercept = np.ones((n, 1), dtype=np.float64)
-    drift = np.linspace(-1.0, 1.0, n, dtype=np.float64).reshape(n, 1)
+    # SPM uses fix(2 * n * TR / HParam + 1) DCT columns including the
+    # constant, then excludes that constant from the high-pass basis.
+    n_drift = int(np.fix(2.0 * n * tr / TASK_HIGH_PASS_PERIOD_S + 1.0)) - 1
+    orders = np.arange(1, n_drift + 1, dtype=np.float64)
+    samples = np.arange(n, dtype=np.float64)[:, None]
+    drift = np.sqrt(2.0 / n) * np.cos(np.pi * (samples + 0.5) * orders / n)
     return np.concatenate([task_regressors, nuisance, intercept, drift], axis=1)
 
 

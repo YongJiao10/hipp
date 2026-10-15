@@ -2,7 +2,8 @@
 
 The threshold is an explicit analysis parameter, not a calibrated quality label.
 Rest: original mean / linearly detrended sample SD on retained frames.
-Task: original mean / task-model residual sample SD, separately for each run.
+Task: original mean / task-model residual sample SD, separately for each run,
+using the same 128-s DCT drift terms as task activation and background FC.
 A combined mask requires each included run to pass.
 """
 from __future__ import annotations

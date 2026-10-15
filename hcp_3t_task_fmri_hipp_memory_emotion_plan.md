@@ -68,7 +68,8 @@ its task-specific directories.
 
 `04_03_materialize_task_activation.py` fits subject-level hippocampal GLMs
 using the declared LR/RL designs, the SPM canonical HRF, motion regressors,
-run intercepts, and linear drifts. The model uses OLS without autoregressive
+run intercepts, and per-run DCT drift terms with a fixed 128-second high-pass
+cutoff period. The model uses OLS without autoregressive
 prewhitening. Invalid vertices remain NaN. Saved products include condition
 betas, combined contrasts, and run-specific contrasts.
 
@@ -96,9 +97,24 @@ measurement's effective sample size and BH-FDR-adjusted p values. Paired
 subregion comparisons use their complete paired observations.
 
 Profile curves use 20 equal-vertex-count bins along the group surface's PCA
-long axis, numbered anterior to posterior. These bins describe surface order.
-Condition curves retain the contrast's fixed weights; missing required values
-remain NaN. Beta values use the input signal's arbitrary units.
+long axis, numbered 1–20 from anterior to posterior. These bins describe
+surface order. Vertices are averaged within each subject's bin, then subjects
+are averaged for the plotted curves. Condition curves retain the contrast's
+fixed weights; missing required values remain NaN. Beta values use the input
+signal's arbitrary units.
+
+Each contrast's bin means are tested against zero across subjects with a
+two-sided one-sample t-test. BH-FDR correction covers all selected 2mm task
+contrasts, both hemispheres, and all 20 bins as one family: 40 tests for the
+full EMOTION build and 520 for WM. A narrow ribbon at the bottom of each
+profile panel shows white for q ≥ .05 or untested bins, and progressively
+darker gray for q < .05, .01, .001, and .0001. Adjacent bins at the same
+level form continuous segments, and each figure has one shared legend
+using `ns`, `+`, `*`, `**`, and `***`, consistent with bar/bracket symbols;
+curves carry no significance symbols. The manifest-declared
+`group_bin_summary.tsv` contains effective n, mean, t, p, and q per bin;
+condition-beta rows provide the colored curves and are not in the correction
+family. Cluster-bar and paired-subregion corrections remain separate.
 
 ## Run the complete group analysis and presentation
 
@@ -120,7 +136,7 @@ subject_roster="${task_root}/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_14
 ```
 
 The group directory contains `subject_cluster_table.tsv`,
-`group_cluster_summary.tsv`, `coverage_exclusions.tsv`, group maps, and the
+`group_cluster_summary.tsv`, `group_bin_summary.tsv`, `coverage_exclusions.tsv`, group maps, and the
 existing `group_build_manifest.json`.
 
 The maintained 2mm figures are:

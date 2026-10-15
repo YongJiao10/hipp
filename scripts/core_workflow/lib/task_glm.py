@@ -61,7 +61,7 @@ def background_residuals(
 ) -> np.ndarray:
     """Remove task + nuisance fit, keeping residuals for background FC.
 
-    The full design (task + motion + intercept + drift) is regressed out;
+    The full design (task + motion + intercept + 128-s DCT drift) is regressed out;
     ``n_task_regressors`` is validated but the residual keeps no task
     variance by construction.
     """

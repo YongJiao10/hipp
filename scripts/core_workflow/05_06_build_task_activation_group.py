@@ -34,6 +34,9 @@ Outputs:
 - Command-line output / file outputs:
   - Group maps: `{out_root}/{smoothing}/hemi_{hemi}/group_contrast_{name}_{mean,tstat,cohens_d}.npy` plus per-condition `group_beta_{stem}_{mean,tstat,cohens_d}.npy`.
   - `{out_root}/subject_cluster_table.tsv`, `{out_root}/group_cluster_summary.tsv` (with BH-FDR `group_p_fdr`), `{out_root}/group_build_manifest.json` (contrast column holds maintained contrasts and `beta_{stem}` items).
+  - `{out_root}/group_bin_summary.tsv`: 2mm subject-level bin means, effective
+    n, and two-sided one-sample t/p; BH-FDR across task contrasts x hemispheres
+    x 20 bins. Beta rows provide colored profile means and have no FDR test.
 """
 import argparse
 import json
@@ -47,13 +50,16 @@ from lib.output_layout import (
     DEFAULT_KONG2022_TEMPLATE_ROOT,
 )
 from lib.task_design import TASK_CONTRASTS, normalize_task_branch
+from lib.surface_utils import equal_vertex_long_axis_bins, long_axis_order
 from lib.task_group import (
+    N_LONG_AXIS_BINS,
     PARCELLATION_CHOICES,
     PARCELLATION_HCP151_ATLAS,
     PARCELLATION_TEMPLATE_MATCHING,
     anatomical_cluster_names,
     fdr_adjust,
     group_summary_stats,
+    group_bin_stats,
     individual_labels_path,
     load_group_labels,
     load_subject_betas,
@@ -163,6 +169,26 @@ def main() -> int:
     input_metas: list[dict[str, object]] = []
     combos: list[dict[str, object]] = []
     areas_cache: dict[tuple[str, str], np.ndarray] = {}
+    bin_rows: list[dict[str, object]] = []
+    bins_by_hemi: dict[str, list[np.ndarray]] = {}
+
+    def collect_bin_stats(stack: np.ndarray, smoothing: str, hemi: str, contrast: str) -> None:
+        if smoothing != "2mm":
+            return
+        if hemi not in bins_by_hemi:
+            bins_by_hemi[hemi] = equal_vertex_long_axis_bins(
+                long_axis_order(group_average_surface(surfaces_dir, hemi)), N_LONG_AXIS_BINS
+            )
+        stats = group_bin_stats(stack, bins_by_hemi[hemi])
+        for i in range(N_LONG_AXIS_BINS):
+            bin_rows.append({
+                "task": task, "smoothing": smoothing, "hemi": hemi,
+                "contrast": contrast, "bin": i + 1,
+                "n_subjects": int(stats["n"][i]), "group_mean": float(stats["mean"][i]),
+                "group_t": float(stats["tstat"][i]), "group_p": float(stats["p"][i]),
+                "group_p_fdr": float("nan"),
+            })
+
     for smoothing in args.smoothings:
         for hemi in args.hemis:
             contrasts = (
@@ -230,6 +256,7 @@ def main() -> int:
             )
             for stem in beta_items:
                 beta_stats = group_summary_stats(beta_stacks[stem])
+                collect_bin_stats(beta_stacks[stem], smoothing, hemi, f"beta_{stem}")
                 for key in ("mean", "tstat", "cohens_d"):
                     np.save(
                         str(beta_combo_dir / f"group_beta_{stem}_{key}.npy"),
@@ -251,6 +278,7 @@ def main() -> int:
                     contrast=contrast,
                 )
                 stats = group_summary_stats(stack)
+                collect_bin_stats(stack, smoothing, hemi, contrast)
                 combo_dir = out_root / smoothing / f"hemi_{hemi}"
                 combo_dir.mkdir(parents=True, exist_ok=True)
                 for key in ("mean", "tstat", "cohens_d"):
@@ -616,6 +644,17 @@ def main() -> int:
     for row, adjusted in zip(group_rows, fdr_values):
         row["group_p_fdr"] = adjusted
     write_tsv(out_root / "group_cluster_summary.tsv", group_rows, group_fields)
+    # One family across all 2mm task contrasts, hemispheres and bins.
+    # Condition betas supply the colored profile lines and are not tested here.
+    contrast_bin_rows = [r for r in bin_rows if r["contrast"] in TASK_CONTRASTS[task]]
+    bin_adjusted = fdr_adjust([float(r["group_p"]) for r in contrast_bin_rows])
+    for row, adjusted in zip(contrast_bin_rows, bin_adjusted):
+        row["group_p_fdr"] = adjusted
+    bin_path = out_root / "group_bin_summary.tsv"
+    write_tsv(bin_path, bin_rows, [
+        "task", "smoothing", "hemi", "contrast", "bin", "n_subjects",
+        "group_mean", "group_t", "group_p", "group_p_fdr",
+    ])
     all_subjects = sorted({r["subject"] for r in subject_rows})
     write_json(
         out_root / "group_build_manifest.json",
@@ -637,6 +676,9 @@ def main() -> int:
             "group_average_surfaces_dir": str(surfaces_dir.resolve()),
             "hippunfold_batch_root": str(batch_root.resolve()),
             "crossfit_subjects_root": str(crossfit_root.resolve()),
+            "bin_summary": str(bin_path.resolve()),
+            "bin_fdr_family": "2mm_task_contrasts_x_hemispheres_x_bins",
+            "n_bin_tests": len(contrast_bin_rows),
             "inputs": input_metas,
         },
     )

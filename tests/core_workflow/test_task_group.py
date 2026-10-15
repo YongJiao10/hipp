@@ -8,6 +8,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from scipy.stats import ttest_1samp
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
@@ -22,6 +23,36 @@ from scripts.core_workflow.lib.task_group import (
     load_subject_stack,
     subject_cluster_rows,
 )
+
+
+def test_bin_statistics_use_subject_means_and_effective_sample_size() -> None:
+    from scripts.core_workflow.lib import task_group
+
+    stack = np.array([
+        [1., 3., 8., 10., np.nan, np.nan],
+        [2., 4., 9., 11., 7., np.nan],
+        [3., 5., 10., 12., np.nan, np.nan],
+        [4., 6., 11., 13., np.nan, np.nan],
+    ])
+    bins = [np.array([0, 1]), np.array([2, 3]), np.array([4, 5])]
+    result = task_group.group_bin_stats(stack, bins)
+    expected = ttest_1samp(np.array([[2., 9.], [3., 10.], [4., 11.], [5., 12.]]), 0, axis=0)
+    np.testing.assert_array_equal(result['n'], [4, 4, 1])
+    np.testing.assert_allclose(result['mean'], [3.5, 10.5, 7.])
+    np.testing.assert_allclose(result['tstat'][:2], expected.statistic)
+    np.testing.assert_allclose(result['p'][:2], expected.pvalue)
+    assert np.isnan(result['tstat'][2]) and np.isnan(result['p'][2])
+
+
+def test_bin_statistics_do_not_count_vertices_as_independent_subjects() -> None:
+    from scripts.core_workflow.lib import task_group
+
+    stack = np.array([[1., 2.], [2., 3.], [3., 4.], [4., 5.]])
+    original = task_group.group_bin_stats(stack, [np.arange(2)])
+    repeated = task_group.group_bin_stats(np.tile(stack, (1, 20)), [np.arange(40)])
+    np.testing.assert_array_equal(repeated['n'], [4])
+    np.testing.assert_allclose(repeated['tstat'], original['tstat'])
+    np.testing.assert_allclose(repeated['p'], original['p'])
 
 
 def _write_contrast(shared: Path, subject: str, values: np.ndarray) -> None:

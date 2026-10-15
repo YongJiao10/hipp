@@ -20,6 +20,7 @@ from .fc_math import bh_fdr
 from .task_design import normalize_task_branch
 
 ANATOMICAL_CLUSTER_NAMES = ("Anterior", "Body", "Posterior")
+N_LONG_AXIS_BINS = 20
 
 # Subregion zone branches. hcp151_atlas = rest group K=3 labels shared by all
 # subjects; template_matching = crossfit individualized K=3 labels per subject.
@@ -199,6 +200,29 @@ def group_summary_stats(stack: np.ndarray) -> dict[str, np.ndarray]:
         cohens_d = np.where(sd > 0, mean / sd, np.nan)
     tstat[n < 2] = np.nan
     return {"mean": mean, "tstat": tstat, "cohens_d": cohens_d, "n": n}
+
+
+def group_bin_stats(stack: np.ndarray, bins: list[np.ndarray]) -> dict[str, np.ndarray]:
+    """Average vertices within each subject/bin, then test subjects against zero."""
+    values = np.asarray(stack, dtype=np.float64)
+    if values.ndim != 2:
+        raise ValueError(f"Expected subjects x vertices for bin statistics, got {values.shape}")
+    profiles = np.full((values.shape[0], len(bins)), np.nan)
+    for i, vertices in enumerate(bins):
+        block = values[:, vertices]
+        finite = np.isfinite(block)
+        counts = finite.sum(axis=1)
+        np.divide(np.where(finite, block, 0.0).sum(axis=1), counts,
+                  out=profiles[:, i], where=counts > 0)
+    n = np.isfinite(profiles).sum(axis=0)
+    mean = np.full(len(bins), np.nan)
+    np.divide(np.nansum(profiles, axis=0), n, out=mean, where=n > 0)
+    tstat = np.full(len(bins), np.nan)
+    estimable = n >= 2
+    if np.any(estimable):
+        tstat[estimable] = group_summary_stats(profiles[:, estimable])["tstat"]
+    p = np.array([two_tailed_p(t, int(count)) for t, count in zip(tstat, n)])
+    return {"mean": mean, "tstat": tstat, "n": n, "p": p}
 
 
 def load_group_labels(

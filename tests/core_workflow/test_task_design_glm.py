@@ -6,6 +6,7 @@ import sys
 
 import numpy as np
 import pytest
+from scipy.fft import idct
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
@@ -72,6 +73,53 @@ def test_glm_recovers_known_betas_and_contrast() -> None:
     np.testing.assert_allclose(apply_contrast(betas, c), true_beta[:, 0] - true_beta[:, 1], atol=1e-3)
 
 
+@pytest.mark.parametrize(
+    "n_frames,tr,n_drift",
+    [(176, 0.72, 1), (405, 0.72, 4), (232, 0.72, 2), (405, 0.36, 2)],
+)
+def test_design_uses_spm_128s_dct_drift(
+    n_frames: int, tr: float, n_drift: int
+) -> None:
+    rng = np.random.default_rng(8)
+    task = rng.normal(size=(n_frames, 2))
+    nuisance = rng.normal(size=(n_frames, 12))
+    design = build_first_level_design(task, nuisance, tr=tr)
+
+    assert design.shape == (n_frames, 15 + n_drift)
+    np.testing.assert_array_equal(design[:, :2], task)
+    np.testing.assert_array_equal(design[:, 2:14], nuisance)
+    np.testing.assert_array_equal(design[:, 14], np.ones(n_frames))
+    # Independent DCT-II reference; omit the constant, which is already explicit.
+    expected_drift = idct(np.eye(n_frames)[:, 1 : n_drift + 1], norm="ortho", axis=0)
+    np.testing.assert_allclose(design[:, 15:], expected_drift, atol=1e-14)
+
+
+@pytest.mark.parametrize("n_frames,n_drift", [(176, 1), (405, 4), (232, 2)])
+def test_dct_glm_matches_filtering_both_data_and_model(
+    n_frames: int, n_drift: int
+) -> None:
+    rng = np.random.default_rng(9)
+    task = rng.normal(size=(n_frames, 2))
+    nuisance = rng.normal(size=(n_frames, 12))
+    base = np.column_stack([task, nuisance, np.ones(n_frames)])
+    drift = idct(np.eye(n_frames)[:, 1 : n_drift + 1], norm="ortho", axis=0)
+    y = base @ rng.normal(size=(15, 3))
+    y += drift @ rng.normal(scale=20.0, size=(n_drift, 3))
+    y += rng.normal(size=y.shape)
+
+    # spm_filter: remove the same low-frequency subspace from Y and X.
+    filtered_y = y - drift @ (drift.T @ y)
+    filtered_base = base - drift @ (drift.T @ base)
+    expected_beta = np.linalg.lstsq(filtered_base, filtered_y, rcond=None)[0]
+    expected_residual = filtered_y - filtered_base @ expected_beta
+
+    design = build_first_level_design(task, nuisance)
+    beta, residual, _ = fit_first_level_glm(y.T, design)
+    np.testing.assert_allclose(beta[:, :15], expected_beta.T, atol=1e-11)
+    np.testing.assert_allclose(residual, expected_residual.T, atol=1e-11)
+    np.testing.assert_allclose(residual @ design, 0.0, atol=1e-10)
+
+
 def test_background_residuals_remove_task_variance() -> None:
     rng = np.random.default_rng(1)
     n_frames = 176
@@ -82,8 +130,7 @@ def test_background_residuals_remove_task_variance() -> None:
     resid = background_residuals(y, design, 2)
     assert resid.shape == y.shape
     # Residuals must be near-orthogonal to every design column.
-    corr = np.abs(np.corrcoef(resid.ravel(), np.tile(design.ravel(), 5)[: resid.size])[0, 1])
-    assert corr < 0.05
+    np.testing.assert_allclose(resid @ design, 0.0, atol=1e-10)
 
 
 def test_task_run_lengths_match_staged_data() -> None:

@@ -4,7 +4,7 @@ from __future__ import annotations
 """
 Process Step Description:
 Materialize HCP 3T task background (residual) functional connectivity.
-Regresses the full first-level design (task + motion + intercept + drift)
+Regresses the full first-level design (task + motion + intercept + 128-s DCT drift)
 out of BOTH task-sampled hippocampal surface timeseries and task cortex
 parcel timeseries per run, concatenates bilateral residuals across runs,
 and correlates them with NaN propagation (missing vertices yield NaN FC,
@@ -40,6 +40,7 @@ from lib.output_layout import DEFAULT_KONG2022_SHARED_INPUTS_ROOT
 from lib.workflow_utils import capped_jobs, utc_now_iso, write_json
 from lib.io_utils import load_subject_ids
 from lib.task_design import (
+    TASK_HIGH_PASS_PERIOD_S,
     TASK_RUN_LENGTHS,
     TR_HCP_3T,
     build_first_level_design,
@@ -210,7 +211,7 @@ def run_subject(
                         ev_dir, task=task, n_frames=length, tr=tr
                     )
                     nuisance = load_nuisance_regressors(mov_path, n_frames=length)
-                    design = build_first_level_design(task_regs, nuisance)
+                    design = build_first_level_design(task_regs, nuisance, tr=tr)
                     if n_task_regs is None:
                         n_task_regs = len(names)
                     hipp_blocks.append(
@@ -239,6 +240,9 @@ def run_subject(
                         "smoothing": smoothing,
                         "hemi": hemi,
                         "analysis": "exploratory_bilateral_residuals_nan",
+                        "tr": tr,
+                        "drift_model": "dct",
+                        "high_pass_period_s": TASK_HIGH_PASS_PERIOD_S,
                         "run_ids": [run_id for run_id, _, _ in runs],
                         "run_labels": [run_dir.name for _, run_dir, _ in runs],
                         "run_lengths": [length for _, _, length in runs],

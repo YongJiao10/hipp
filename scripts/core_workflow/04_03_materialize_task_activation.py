@@ -5,8 +5,9 @@ from __future__ import annotations
 Process Step Description:
 Materialize HCP 3T task-fMRI first-level activation. Fits a per-vertex OLS
 GLM on task-sampled hippocampal surface timeseries with HRF-convolved FSL
-EV regressors plus 12-column movement nuisance, and writes run-averaged
-beta and contrast maps (faces>shapes, 2bk>0bk, rel>match).
+EV regressors, 12-column movement nuisance, a run intercept and 128-s DCT
+drift terms, and writes run-averaged beta and contrast maps
+(faces>shapes, 2bk>0bk, rel>match).
 
 Main Flow Path:
 - Stage-04 task branch (task activation):
@@ -47,6 +48,7 @@ from lib.workflow_utils import capped_jobs, utc_now_iso, write_json
 from lib.io_utils import load_subject_ids
 from lib.task_design import (
     TASK_CONTRASTS,
+    TASK_HIGH_PASS_PERIOD_S,
     TASK_RUN_LENGTHS,
     TR_HCP_3T,
     build_first_level_design,
@@ -195,7 +197,7 @@ def run_subject(
                         ev_dir, task=task, n_frames=length, tr=tr
                     )
                     nuisance = load_nuisance_regressors(mov_path, n_frames=length)
-                    design = build_first_level_design(task_regs, nuisance)
+                    design = build_first_level_design(task_regs, nuisance, tr=tr)
                     block = ts[:, offset : offset + length]
                     betas, _, r2 = fit_first_level_glm(block, design)
                     betas_runs.append(betas[:, : len(names)])
@@ -240,6 +242,8 @@ def run_subject(
                         "smoothing": smoothing,
                         "hemi": hemi,
                         "tr": tr,
+                        "drift_model": "dct",
+                        "high_pass_period_s": TASK_HIGH_PASS_PERIOD_S,
                         "run_ids": [run_id for run_id, _, _ in runs],
                         "run_labels": [run_dir.name for _, run_dir, _ in runs],
                         "run_lengths": [length for _, _, length in runs],

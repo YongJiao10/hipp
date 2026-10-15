@@ -374,7 +374,7 @@ Implementation structure contract:
 - Shared hippocampus-to-cortex template calculations remain in `scripts/core_workflow/lib/cortex_template_profiles.py`.
 - New utility-style helpers should be added to `lib/` modules rather than redefined in numbered step files.
 
-The WTA-top overview embeds a fixed 20-bin long-axis network profile as its middle column, with percent-of-bin vertices on the horizontal axis and long-axis bins on the vertical axis. The WTA overview and task-activation profiles both use `lib.surface_utils.long_axis_order` followed by `lib.surface_utils.equal_vertex_long_axis_bins`: consecutive PCA-ordered vertices are split into 20 bins, with any extra vertices assigned to earlier bins. At density 512, bins 1–12 contain 26 vertices each and bins 13–20 contain 25 each. The WTA overview displays bins 1–20; the task profile displays the same bins as 0–19. These are equal-vertex groups, not equal distances along an anatomical centerline. Existing WTA PNGs already follow this rule; existing task PNGs need rerendering to show the revised boundaries.
+The WTA-top overview embeds a fixed 20-bin long-axis network profile as its middle column, with percent-of-bin vertices on the horizontal axis and long-axis bins on the vertical axis. The WTA overview and task-activation profiles both use `lib.surface_utils.long_axis_order` followed by `lib.surface_utils.equal_vertex_long_axis_bins`: consecutive PCA-ordered vertices are split into 20 bins, with any extra vertices assigned to earlier bins. At density 512, bins 1–12 contain 26 vertices each and bins 13–20 contain 25 each. Both displays number bins 1–20. These are equal-vertex groups, not equal distances along an anatomical centerline.
 
 For cluster-based `normalized_top20_count` overviews, `06_01_build_group_overview.py`
 reconstructs the displayed normalized network profile from each cluster's
@@ -435,15 +435,30 @@ with coverage recorded; the cached surface series is only trusted when the
 ids, lengths, and bold sources entry-by-entry) and `04_04` (EXPLORATORY
 background FC from bilateral design regression with NaN-propagating
 correlations, verifying both surface and cortex receipts; not wired into
-`05_01`) consume those task roots. First-level design uses intercept plus linear drift
-only (no high-pass, OLS white-noise assumption); block designs mitigate this,
-and any formal use must state the choice.
+`05_01`) consume those task roots. Each run's first-level design contains
+task EVs, 12 motion regressors, an intercept, and the nonconstant DCT-II basis
+from SPM's high-pass construction with a fixed 128-second cutoff period.
+No separate linear trend is added. Joint OLS with these DCT nuisance columns
+is equivalent to applying the same high-pass projection to the data and all
+model columns before OLS; the solver does not perform temporal prewhitening.
+At TR=0.72 s, emotion, WM, and relational runs use 1, 4, and 2 DCT columns,
+respectively. `04_03`/`04_04 --tr` controls both HRF sampling and the DCT count;
+their existing output summaries record `drift_model`, `high_pass_period_s`,
+and `tr`. The drift construction follows
+[SPM's filter](https://github.com/spm/spm12/blob/main/spm_filter.m) and
+[DCT basis](https://github.com/spm/spm12/blob/main/spm_dctmtx.m).
+To regenerate task results with this model, rerun `04_03` for activation,
+`04_04` for exploratory background FC when used, and `05_06`/`06_11` for
+downstream group activation and presentation products. Anatomical processing
+and surface sampling do not need to be rerun for this drift change.
 
-Task hippocampal and cortical masks now require finite, nonconstant data in
-**every declared run** and pass the runwise residual tSNR gate (`runwise_baseline_over_task_residual_sd`). There is no concatenated total-SD
-ceiling and no `10000/std >= 25` rejection for task data. This is residual
-tSNR; motion, registration and model-fit QC remain separate. A constant run remains invalid even when a
-baseline jump makes the concatenated series variable. The existing Dice and
+Task hippocampal and cortical masks require finite, nonconstant data in
+**every declared run**. With a numerical tSNR threshold, they also use the
+runwise residual tSNR gate (`runwise_baseline_over_task_residual_sd`);
+`--tsnr-threshold none` applies signal validity only. There is no concatenated
+total-SD ceiling and no `10000/std >= 25` rejection for task data. Motion,
+registration and model-fit QC remain separate. A constant run remains invalid
+even when a baseline jump makes the concatenated series variable. The existing Dice and
 maximum invalid-vertex-fraction checks still apply.
 
 The existing `tsnr_gate/` mask and summary paths are retained for downstream
@@ -522,6 +537,29 @@ the resulting group products. Outputs use the stable
 `present/task_activation/task-<task>/` paths. The group manifest records the
 analysis roster and consumed inputs.
 
+For task bin profiles, `05_06` first averages finite vertices within each
+subject's bin, then averages those subject values for all three profile
+curves. It tests each contrast's subject-level bin means against zero with a
+two-sided one-sample t-test; vertices are not independent observations.
+`group_bin_summary.tsv` records bin 1–20, effective subject n, mean, t, p,
+and BH-FDR q. A single correction family includes all selected 2mm task
+contrasts, hemispheres, and bins in the group build (40 tests for the full
+Emotion build; 520 for WM). Condition-beta rows supply colored curves and
+are excluded from this correction family. Cluster-bar and paired-region
+correction families remain separate.
+`06_11` reads the exact bin table declared in `group_build_manifest.json`
+and draws a narrow grayscale significance ribbon along the bottom of each
+profile panel. White denotes q ≥ .05 or an untested bin; progressively darker
+gray denotes q < .05, .01, .001, and .0001. Adjacent bins at the same level
+share a continuous segment, with one shared symbol legend per figure
+(`ns`, `+`, `*`, `**`, `***`) and no markers on the curves. The legend uses
+the same thresholds as bar and bracket symbols.
+Missing or duplicate bin rows fail closed; bins with insufficient subjects
+are unmarked.
+After updating this statistic, rerun `05_06` with the same complete roster
+and then `06_11`; first-level GLMs do not need to be rerun. Display-only changes
+require rerunning `06_11` alone.
+
 ### Dataset-specific tSNR QC
 
 The implementation is in `lib/tsnr.py`, called by hippocampal preparation
@@ -530,11 +568,14 @@ HCP rest retains `10000 / SD >= 25` unchanged.
 
 HCP task computes the original mean divided by task-model residual sample SD
 (ddof=1), separately for every declared run, before smoothing or masking. The
-model is the same EV + 12 motion + intercept + linear drift design as the task
-analysis. The current task workflow uses `--tsnr-threshold none`: residual
-tSNR is recorded without a numerical cutoff, and every run must retain finite,
-nonconstant signal. Run means are never pooled before estimating noise. The
-gate writes per-run scores and their minimum, plus masks.
+model is the same EV + 12 motion + intercept + 128-second DCT drift design
+as the task analysis, using the canonical HCP TR=0.72 s. If task tSNR is
+enabled with a numerical threshold, rerun the task tSNR gate and its dependent
+masking/reference steps when regenerating results with this model.
+The current task workflow uses `--tsnr-threshold none`: tSNR is skipped and
+every run must retain finite, nonconstant signal. With a numerical threshold,
+run means are never pooled before estimating noise, and the gate writes
+per-run scores and their minimum, plus masks.
 
 Stanford, JJ_TMS and Iowa7T rest use baseline-preserving pre-XCP samples in the
 same geometry/mapping as their analysis. On the explicitly retained original

@@ -7,7 +7,9 @@ Render task-activation group products. Paints group-mean contrast and beta
 maps onto group-average midthickness surfaces as GIFTI overlays and renders
 one summary PNG per task (profile / bars rows stacked per contrast):
 summary top row long-axis profile lines (weighted beta sides + contrast,
-no CI bands; bins numbered 1-20 head to tail),
+subject-level bin means, lower-panel contrast-vs-zero BH-FDR grayscale bands,
+no curve markers or CI bands;
+bins numbered 1-20 head to tail),
 bottom row bar+scatter cluster plots (contrast, hcp151_atlas + template_matching,
 Ant/Mid/Post, light fills with dark dots, single red 95% CI error bars,
 FDR markers, black paired-subregion brackets with range-scaled end caps,
@@ -16,9 +18,11 @@ Hemispheres share y-scales; panels annotate N, coverage, correction;
 bins are PCA-ordered equal-vertex bins (not equidistant anatomy); beta units
 are raw BOLD (a.u.), never % signal change.
 
-Significance markers (BH-FDR two-tailed): '+' 0.01<=p<0.05, '*' 0.001<=p<0.01,
-'**' 0.0001<=p<0.001, '***' p<0.0001. Analysis and visualization cover 2mm
-only; overlays sit directly under the task present root (no smoothing folder).
+Bar/bracket significance markers (BH-FDR two-tailed): '+' 0.01<=q<0.05,
+'*' 0.001<=q<0.01, '**' 0.0001<=q<0.001, '***' q<0.0001. Bin bands use
+progressively darker gray at the same thresholds, with one shared legend per
+figure. Analysis and visualization cover 2mm only; overlays sit directly
+under the task present root (no smoothing folder).
 
 Main Flow Path:
 - Stage-06 task branch (task presentation):
@@ -32,7 +36,8 @@ Inputs:
   - --out-root: Stable presentation root (default: `outputs_hcp/present/task_activation/task-<task>/`). Reruns refresh the same files.
   - --hemis / --contrasts: Subsets to render; each defaults to auto-discovery from the group root.
 - Physical inputs:
-  - Group maps, `group_cluster_summary.tsv`, and per-subject data backing 05_06.
+  - Group maps, `group_cluster_summary.tsv`, the manifest-declared
+    `group_bin_summary.tsv`, and per-subject data backing 05_06.
 
 Outputs:
 - Command-line output / file outputs:
@@ -64,6 +69,7 @@ from scipy.stats import t as t_dist
 from lib.surface_utils import equal_vertex_long_axis_bins, long_axis_order
 from lib.task_design import TASK_CONTRASTS, normalize_task_branch
 from lib.task_group import (
+    N_LONG_AXIS_BINS,
     PARCELLATION_HCP151_ATLAS,
     PARCELLATION_TEMPLATE_MATCHING,
     fdr_adjust,
@@ -83,7 +89,6 @@ DEFAULT_GROUP_AVG_SURFACES_DIR = (
     / "hipp_group_average_t1only_151"
     / "group_average_surfaces"
 )
-N_LONG_AXIS_BINS = 20
 CLUSTER_ORDER = ["Anterior", "Body", "Posterior"]
 CLUSTER_SHORT = {"Anterior": "Ant", "Body": "Mid", "Posterior": "Post"}
 ZONE_ORDER = [PARCELLATION_HCP151_ATLAS, PARCELLATION_TEMPLATE_MATCHING]
@@ -106,6 +111,12 @@ ZONE_DOT_COLORS = {
 # Bracket palette: black = subregion difference within one method.
 REGION_BRACKET_COLOR = "black"
 NATURE_FONT = {"family": "sans-serif", "sans-serif": ["Arial", "Helvetica", "DejaVu Sans"]}
+BIN_BAND_COLORS = ("#FFFFFF", "#E0E0E0", "#B8B8B8", "#858585", "#4D4D4D")
+FIGURE_NOTE = (
+    "Bin band: contrast vs 0; BH-FDR over all task contrasts × hemispheres × 20 bins (equal-vertex, Ant → Post).\n"
+    "Bars/brackets: +=q<.05, *=q<.01, **=q<.001, ***=q<.0001; "
+    "black brackets = within-method subregion comparisons; BOLD a.u."
+)
 BETA_DISPLAY = {"fear": "Emotional faces", "neut": "Shapes"}
 CATEGORY_THEMES = {
     "faces": {"text": "#9F1239", "bg": "#FFE4E6", "border": "#FDA4AF", "title": "Faces"},
@@ -277,6 +288,56 @@ def binned_profile(mean_map: np.ndarray, bins: list[np.ndarray]) -> np.ndarray:
     return profile
 
 
+def read_bin_summary(path: Path) -> dict[tuple[str, str], dict[str, np.ndarray]]:
+    """Read the exact 05_06 bin product, requiring one row for every bin."""
+    if not path.is_file():
+        raise FileNotFoundError(f"Missing bin statistics: {path}; re-run 05_06")
+    grouped: dict[tuple[str, str], list[dict[str, str]]] = {}
+    with path.open(encoding="utf-8") as stream:
+        for row in csv.DictReader(stream, delimiter="\t"):
+            if row["smoothing"] != "2mm":
+                raise ValueError(f"Expected 2mm bin statistics: {path} row={row}")
+            grouped.setdefault((row["hemi"], row["contrast"]), []).append(row)
+    result = {}
+    for key, rows in grouped.items():
+        rows.sort(key=lambda r: int(r["bin"]))
+        if [int(r["bin"]) for r in rows] != list(range(1, N_LONG_AXIS_BINS + 1)):
+            raise ValueError(f"Missing or duplicate bins for {key}: {path}")
+        result[key] = {
+            "mean": np.array([float(r["group_mean"]) for r in rows]),
+            "q": np.array([float(r["group_p_fdr"]) for r in rows]),
+            "n": np.array([int(r["n_subjects"]) for r in rows]),
+        }
+    return result
+
+
+def draw_bin_band(ax, adjusted_p: np.ndarray) -> None:
+    """Align a grayscale significance ribbon to bins without changing y limits."""
+    levels = np.zeros(len(adjusted_p), dtype=int)
+    for level, threshold in enumerate((0.05, 0.01, 0.001, 0.0001), start=1):
+        levels[np.asarray(adjusted_p) < threshold] = level
+    edges = np.r_[0, np.flatnonzero(np.diff(levels)) + 1, len(levels)]
+    for start, stop in zip(edges[:-1], edges[1:]):
+        ax.add_patch(patches.Rectangle(
+            (start + 0.5, 0.025), stop - start, 0.045,
+            transform=ax.get_xaxis_transform(),
+            facecolor=BIN_BAND_COLORS[levels[start]], edgecolor="none",
+            antialiased=False, zorder=1,
+        ))
+
+
+def draw_bin_legend(fig) -> None:
+    """Use one shared grayscale key for all profile ribbons in a figure."""
+    labels = ("ns", "+", "*", "**", "***")
+    fig.legend(
+        handles=[patches.Patch(facecolor=color, edgecolor="#CBD5E1", linewidth=0.5, label=label)
+                 for color, label in zip(BIN_BAND_COLORS, labels)],
+        loc="lower center", bbox_to_anchor=(0.5, 0.04), ncol=5,
+        frameon=False, fontsize=8, handlelength=1.8,
+        handleheight=0.65, columnspacing=1.6, borderaxespad=0,
+    )
+
+
 ZONE_ORDER = [PARCELLATION_HCP151_ATLAS, PARCELLATION_TEMPLATE_MATCHING]
 ZONE_LABELS = {
     PARCELLATION_HCP151_ATLAS: "hcp151",
@@ -383,6 +444,7 @@ def render_task_figure(
     surfaces_dir: Path,
     summary_rows: list[dict[str, str]],
     subject_table: list[dict[str, str]],
+    bin_summary: dict[tuple[str, str], dict[str, np.ndarray]],
     n_subjects: int,
     profile_axes: list,
     bars_axes: list,
@@ -393,28 +455,25 @@ def render_task_figure(
     pos_weights, neg_weights, label1, label2 = contrast_physiological_sides(task, contrast)
     for col, hemi in enumerate(hemis):
         ax = profile_axes[col]
-        surface_path = (
-            surfaces_dir
-            / f"group-average_hemi-{hemi}_space-corobl_den-512_label-hipp_midthickness.surf.gii"
-        )
-        bins = equal_vertex_long_axis_bins(long_axis_order(surface_path), N_LONG_AXIS_BINS)
-        pos_map = weighted_side_map(group_root, weights=pos_weights, hemi=hemi)
-        neg_map = weighted_side_map(group_root, weights=neg_weights, hemi=hemi)
-        contrast_map = np.load(
-            str(group_root / "2mm" / f"hemi_{hemi}" / f"group_contrast_{contrast}_mean.npy")
-        ).astype(np.float64).reshape(-1)
+        pos_profile = sum(weight * bin_summary[hemi, f"beta_{stem}"]["mean"]
+                          for stem, weight in pos_weights.items())
+        neg_profile = sum(weight * bin_summary[hemi, f"beta_{stem}"]["mean"]
+                          for stem, weight in neg_weights.items())
+        contrast_stats = bin_summary[hemi, contrast]
 
         contrast_label = "Contrast" if is_card else f"contrast {contrast_display(contrast)}"
         lines = [
-            (binned_profile(pos_map, bins), "#2563EB", 1.8, label1),
-            (binned_profile(neg_map, bins), "#D97706", 1.8, label2),
-            (binned_profile(contrast_map, bins), "#111827", 2.2, contrast_label),
+            (pos_profile, "#2563EB", 1.8, label1),
+            (neg_profile, "#D97706", 1.8, label2),
+            (contrast_stats["mean"], "#111827", 2.2, contrast_label),
         ]
         bin_numbers = np.arange(1, N_LONG_AXIS_BINS + 1)
         for mean, color, width, label in lines:
             ax.plot(bin_numbers, mean, color=color, linewidth=width, label=label)
+        draw_bin_band(ax, contrast_stats["q"])
+        ax.margins(y=0.15)
         ax.axhline(0.0, color="#64748B", linestyle="--", linewidth=0.7)
-        ax.set_xlim(0.8, N_LONG_AXIS_BINS + 0.2)
+        ax.set_xlim(0.5, N_LONG_AXIS_BINS + 0.5)
         ax.set_xticks([1, 5, 10, 15, 20])
         panel_n = len(group_roster(group_root, smoothing="2mm", hemi=hemi, contrast=contrast))
         panel_cov = panel_coverage(subject_table, contrast=contrast, hemi=hemi, zone=PARCELLATION_HCP151_ATLAS)
@@ -789,6 +848,7 @@ def render_wm_figures(
     out_root: Path,
     summary_rows: list[dict[str, str]],
     subject_table: list[dict[str, str]],
+    bin_summary: dict[tuple[str, str], dict[str, np.ndarray]],
     n_subjects: int,
     hemis: list[str],
 ) -> list[Path]:
@@ -816,6 +876,7 @@ def render_wm_figures(
         surfaces_dir=surfaces_dir,
         summary_rows=summary_rows,
         subject_table=subject_table,
+        bin_summary=bin_summary,
         n_subjects=n_subjects,
         profile_axes=list(axes_load[0]),
         bars_axes=list(axes_load[1]),
@@ -832,14 +893,14 @@ def render_wm_figures(
     fig_load.text(
         0.5,
         0.01,
-        "Markers: +=p<.05, *=p<.01, **=p<.001, ***=p<.0001 (BH-FDR, two-tailed); bins = equal-vertex bins 1-20 (Ant → Post)\n"
-        "Beta/Contrast in raw BOLD units (a.u.); black brackets = pairwise subregion difference within parcellation method",
+        FIGURE_NOTE,
         ha="center",
         fontsize=7.5,
         style="italic",
         color="#334155",
     )
-    fig_load.tight_layout(rect=[0, 0.03, 1, 0.95])
+    draw_bin_legend(fig_load)
+    fig_load.tight_layout(rect=[0, 0.09, 1, 0.95])
     out_load_png = out_root / "task_wm_load.png"
     fig_load.savefig(out_load_png, dpi=300)
     plt.close(fig_load)
@@ -860,7 +921,7 @@ def render_wm_figures(
         left=0.035,
         right=0.985,
         top=0.90,
-        bottom=0.045,
+        bottom=0.08,
         wspace=0.26,
         hspace=0.40,
     )
@@ -894,6 +955,7 @@ def render_wm_figures(
                 surfaces_dir=surfaces_dir,
                 summary_rows=summary_rows,
                 subject_table=subject_table,
+                bin_summary=bin_summary,
                 n_subjects=n_subjects,
                 profile_axes=[prof_L, prof_R],
                 bars_axes=[bar_L, bar_R],
@@ -994,14 +1056,14 @@ def render_wm_figures(
     fig_cat.text(
         0.5,
         0.008,
-        "Markers: +=p<.05, *=p<.01, **=p<.001, ***=p<.0001 (BH-FDR, two-tailed); bins = equal-vertex bins 1-20 (Ant → Post)\n"
-        "Beta in raw BOLD units (a.u.); black brackets = pairwise subregion difference within parcellation method (BH-FDR family across whole figure)",
+        FIGURE_NOTE,
         ha="center",
         fontsize=7.5,
         style="italic",
         color="#475569",
     )
 
+    draw_bin_legend(fig_cat)
     out_cat_png = out_root / "task_wm_categories.png"
     fig_cat.savefig(out_cat_png, dpi=300)
     plt.close(fig_cat)
@@ -1016,7 +1078,7 @@ def render_wm_figures(
         left=0.065,
         right=0.975,
         top=0.93,
-        bottom=0.045,
+        bottom=0.08,
         wspace=0.24,
         hspace=0.34,
     )
@@ -1055,6 +1117,7 @@ def render_wm_figures(
                 surfaces_dir=surfaces_dir,
                 summary_rows=summary_rows,
                 subject_table=subject_table,
+                bin_summary=bin_summary,
                 n_subjects=n_subjects,
                 profile_axes=[prof_L, prof_R],
                 bars_axes=[bar_L, bar_R],
@@ -1129,14 +1192,14 @@ def render_wm_figures(
     fig_load_by_cat.text(
         0.5,
         0.008,
-        "Markers: +=p<.05, *=p<.01, **=p<.001, ***=p<.0001 (BH-FDR, two-tailed); bins = equal-vertex bins 1-20 (Ant → Post)\n"
-        "Beta/Contrast in raw BOLD units (a.u.); black brackets = pairwise subregion difference within parcellation method (BH-FDR family across figure)",
+        FIGURE_NOTE,
         ha="center",
         fontsize=7.5,
         style="italic",
         color="#475569",
     )
 
+    draw_bin_legend(fig_load_by_cat)
     out_load_by_cat_png = out_root / "task_wm_load_by_category.png"
     fig_load_by_cat.savefig(out_load_by_cat_png, dpi=300)
     plt.close(fig_load_by_cat)
@@ -1170,6 +1233,15 @@ def main() -> int:
     summary_rows = [r for r in read_cluster_summary(group_root) if r["smoothing"] == "2mm"]
     subject_table = [r for r in read_subject_table(group_root) if r["smoothing"] == "2mm"]
     beta_stems = discover_beta_stems(group_root)
+    if "bin_summary" not in group_manifest:
+        raise ValueError(f"Missing bin_summary declaration: {manifest_path}; re-run 05_06")
+    bin_path = group_root / group_manifest["bin_summary"]
+    bin_summary = read_bin_summary(bin_path)
+    required_bins = {(h, c) for h in hemis for c in contrasts}
+    required_bins.update((h, f"beta_{stem}") for h in hemis for stem in beta_stems)
+    missing_bins = required_bins - bin_summary.keys()
+    if missing_bins:
+        raise ValueError(f"Missing bin statistics {sorted(missing_bins)}: {bin_path}; re-run 05_06")
     out_root.mkdir(parents=True, exist_ok=True)
     products: list[dict[str, object]] = []
 
@@ -1202,6 +1274,7 @@ def main() -> int:
             out_root=out_root,
             summary_rows=summary_rows,
             subject_table=subject_table,
+            bin_summary=bin_summary,
             n_subjects=int(group_manifest["n_subjects_total"]),
             hemis=hemis,
         )
@@ -1234,6 +1307,7 @@ def main() -> int:
                 surfaces_dir=surfaces_dir,
                 summary_rows=summary_rows,
                 subject_table=subject_table,
+                bin_summary=bin_summary,
                 n_subjects=int(group_manifest["n_subjects_total"]),
                 profile_axes=list(axes[base]),
                 bars_axes=list(axes[base + 1]),
@@ -1256,14 +1330,14 @@ def main() -> int:
         fig.text(
             0.5,
             0.01,
-            "Markers: +=p<.05, *=p<.01, **=p<.001, ***=p<.0001 (BH-FDR, two-tailed); bins = equal-vertex bins 1-20 (Ant → Post)\n"
-            "Beta/Contrast in raw BOLD units (a.u.); black brackets = pairwise subregion difference within parcellation method",
+            FIGURE_NOTE,
             ha="center",
             fontsize=7.5,
             style="italic",
             color="#334155",
         )
-        fig.tight_layout(rect=[0, 0.03, 1, 0.95])
+        draw_bin_legend(fig)
+        fig.tight_layout(rect=[0, 0.09, 1, 0.95])
         fig.savefig(out_png, dpi=300)
         plt.close(fig)
         products.append({"path": str(out_png.resolve()), "meta": file_meta(out_png)})
@@ -1289,6 +1363,9 @@ def main() -> int:
             "n_subjects_total": group_manifest["n_subjects_total"],
             "contrasts": contrasts,
             "hemis": hemis,
+            "bin_summary": str(bin_path.resolve()),
+            "bin_fdr_family": group_manifest["bin_fdr_family"],
+            "n_bin_tests": group_manifest["n_bin_tests"],
             "legacy_pngs": legacy_pngs,
             "products": products,
         },

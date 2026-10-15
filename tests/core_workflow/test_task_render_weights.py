@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import importlib
+import csv
 import sys
 from pathlib import Path
 
@@ -29,6 +30,54 @@ LOAD_X_PLACES_WEIGHTS = {
     "2bk_tools": -1.0 / 6.0,
     "2bk_body": -1.0 / 6.0,
 }
+
+
+@pytest.fixture
+def bin_summary() -> dict:
+    return {
+        ('L', effect): {'mean': np.ones(20), 'q': np.ones(20), 'n': np.full(20, 6)}
+        for effect in ('faces_gt_shapes', 'beta_fear', 'beta_neut')
+    }
+
+
+def test_bin_band_aligns_bins_merges_equal_levels_and_keeps_curve_scale() -> None:
+    fig, ax = render.plt.subplots()
+    try:
+        ax.set_xlim(.5, 8.5)
+        ax.set_ylim(-50., 50.)
+        corrected = np.array([.2, .049, .04, .005, .0005, .00005, .2, np.nan])
+        render.draw_bin_band(ax, corrected)
+        assert not ax.texts
+        assert ax.get_ylim() == (-50., 50.)
+        np.testing.assert_allclose([p.get_x() for p in ax.patches], [.5, 1.5, 3.5, 4.5, 5.5, 6.5])
+        np.testing.assert_allclose([p.get_width() for p in ax.patches], [1, 2, 1, 1, 1, 2])
+        brightness = [np.mean(p.get_facecolor()[:3]) for p in ax.patches]
+        assert all(a > b for a, b in zip(brightness[:5], brightness[1:5]))
+        assert brightness[0] == brightness[-1]
+        fig.canvas.draw()
+        height = ax.patches[1].get_window_extent().height
+        ax.set_ylim(-500., 500.)
+        fig.canvas.draw()
+        assert ax.patches[1].get_window_extent().height == pytest.approx(height)
+    finally:
+        render.plt.close(fig)
+
+
+def test_bin_summary_requires_exact_twenty_bins(tmp_path: Path) -> None:
+    path = tmp_path / 'group_bin_summary.tsv'
+    fields = ['smoothing', 'hemi', 'contrast', 'bin', 'n_subjects', 'group_mean', 'group_p_fdr']
+    rows = [dict(smoothing='2mm', hemi='L', contrast='faces_gt_shapes', bin=i,
+                 n_subjects=4, group_mean=float(i), group_p_fdr=.04) for i in range(20, 0, -1)]
+    with path.open('w') as stream:
+        writer = csv.DictWriter(stream, fieldnames=fields, delimiter='\t')
+        writer.writeheader()
+        writer.writerows(rows)
+    profiles = render.read_bin_summary(path)
+    np.testing.assert_allclose(profiles['L', 'faces_gt_shapes']['mean'], np.arange(1, 21))
+    with path.open('a') as stream:
+        csv.DictWriter(stream, fieldnames=fields, delimiter='\t').writerow(rows[-1])
+    with pytest.raises(ValueError, match='bins'):
+        render.read_bin_summary(path)
 
 
 def test_contrast_side_weights_sum_to_one() -> None:
@@ -82,7 +131,7 @@ def test_weighted_side_preserves_missing_conditions(tmp_path: Path) -> None:
     np.testing.assert_allclose(actual, [np.nan, 4., np.nan, np.nan], equal_nan=True)
 
 
-def test_cluster_plot_labels_effective_counts(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_cluster_plot_labels_effective_counts(monkeypatch: pytest.MonkeyPatch, bin_summary: dict) -> None:
     monkeypatch.setattr(render, "group_roster", lambda *a, **kw: ["a", "b", "c"])
     monkeypatch.setattr(render, "long_axis_order", lambda *a: np.arange(40, dtype=np.int32))
     monkeypatch.setattr(render, "equal_vertex_long_axis_bins",
@@ -106,6 +155,7 @@ def test_cluster_plot_labels_effective_counts(monkeypatch: pytest.MonkeyPatch) -
         render.render_task_figure(task="emotion", contrast="faces_gt_shapes", hemis=["L"],
                                  group_root=Path("unused"), surfaces_dir=Path("unused"),
                                  summary_rows=summary, subject_table=subjects, n_subjects=3,
+                                 bin_summary=bin_summary,
                                  profile_axes=[axes[0]], bars_axes=[axes[1]], bracket_tests=[])
         labels = [t.get_text() for t in axes[1].texts]
         assert labels.count("n=2") == 2
@@ -115,7 +165,7 @@ def test_cluster_plot_labels_effective_counts(monkeypatch: pytest.MonkeyPatch) -
         render.plt.close(fig)
 
 
-def test_region_brackets_drawn_with_legend(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_region_brackets_drawn_with_legend(monkeypatch: pytest.MonkeyPatch, bin_summary: dict) -> None:
     roster = ["a", "b", "c", "d", "e", "f"]
     monkeypatch.setattr(render, "group_roster", lambda *a, **kw: list(roster))
     monkeypatch.setattr(render, "long_axis_order", lambda *a: np.arange(40, dtype=np.int32))
@@ -145,6 +195,7 @@ def test_region_brackets_drawn_with_legend(monkeypatch: pytest.MonkeyPatch) -> N
         render.render_task_figure(task="emotion", contrast="faces_gt_shapes", hemis=["L"],
                                  group_root=Path("unused"), surfaces_dir=Path("unused"),
                                  summary_rows=summary, subject_table=subjects, n_subjects=6,
+                                 bin_summary=bin_summary,
                                  profile_axes=[axes[0]], bars_axes=[axes[1]],
                                  bracket_tests=bracket_tests)
         assert len(bracket_tests) == 6  # 2 zones x 3 subregion pairs, no method tests
@@ -211,7 +262,7 @@ def test_contrast_physiological_sides_wm() -> None:
             assert diff == pytest.approx(expected_weights[stem])
 
 
-def test_draw_brackets_collision_free_and_headroom(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_draw_brackets_collision_free_and_headroom(monkeypatch: pytest.MonkeyPatch, bin_summary: dict) -> None:
     """Verify that multiple overlapping significance brackets never collide or overflow the top frame."""
     roster = ["s1", "s2", "s3", "s4", "s5", "s6"]
     monkeypatch.setattr(render, "group_roster", lambda *a, **kw: list(roster))
@@ -239,6 +290,7 @@ def test_draw_brackets_collision_free_and_headroom(monkeypatch: pytest.MonkeyPat
         render.render_task_figure(task="emotion", contrast="faces_gt_shapes", hemis=["L"],
                                  group_root=Path("unused"), surfaces_dir=Path("unused"),
                                  summary_rows=summary, subject_table=subjects, n_subjects=len(roster),
+                                 bin_summary=bin_summary,
                                  profile_axes=[axes[0]], bars_axes=[axes[1]],
                                  bracket_tests=bracket_tests)
         render.draw_brackets(bracket_tests)
