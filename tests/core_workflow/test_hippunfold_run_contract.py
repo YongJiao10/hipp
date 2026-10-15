@@ -103,9 +103,9 @@ def test_non_hcp_presets_only_change_dataset_paths_and_extension(
 def test_contract_rejects_unsafe_or_unknown_inputs() -> None:
     with pytest.raises(ValueError, match="Unknown HippUnfold dataset"):
         resolve_run_contract("free_form", "1001")
-    with pytest.raises(ValueError, match="digit-only"):
+    with pytest.raises(ValueError, match="alphanumeric"):
         resolve_run_contract("hcp", "sub-1001")
-    with pytest.raises(ValueError, match="digit-only"):
+    with pytest.raises(ValueError, match="alphanumeric"):
         resolve_run_contract("hcp", "1001/../../other")
 
 
@@ -175,4 +175,37 @@ def test_shell_compatibility_adapter_rejects_free_form_argument_counts() -> None
 
 
 def test_dataset_presets_are_closed_and_complete() -> None:
-    assert tuple(DATASET_PRESETS) == ("hcp", "stanford", "iowa_jj_tms")
+    assert tuple(DATASET_PRESETS) == ("hcp", "stanford", "iowa_jj_tms", "banda", "pdc")
+
+
+@pytest.mark.parametrize("dataset", ("hcp", "stanford", "iowa_jj_tms"))
+def test_established_presets_keep_their_n4_launch_behavior(dataset: str) -> None:
+    contract = resolve_run_contract(dataset, "1001")
+
+    assert "--skip-preproc" not in contract.hippunfold_argv
+    assert contract.as_json().get("skip_preproc") is False
+
+
+@pytest.mark.parametrize(
+    ("dataset", "subject"),
+    (("banda", "BANDA001"), ("pdc", "e0010s01")),
+)
+def test_bias_corrected_inputs_skip_n4_in_the_public_dry_run(
+    dataset: str, subject: str
+) -> None:
+    proc = subprocess.run(
+        [str(PY314), str(CORE_ENTRY), subject, "--dataset", dataset, "--dry-run"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    assert payload["dataset"] == dataset
+    assert payload["subject"] == subject
+    assert payload["hippunfold_argv"].count("--skip-preproc") == 1
+    assert payload.get("skip_preproc") is True
+    assert payload["modality"] == "T1w"
+    assert "--no-reg-template" not in payload["hippunfold_argv"]

@@ -22,14 +22,17 @@ CANONICAL_MODEL_PATH = (
     "trained_model.3d_fullres.Task101_hcp1200_T1w.nnUNetTrainerV2.model_best.tar"
 )
 RUNTIME_WORK_ROOT = REPO_ROOT / "runtime" / "hippunfold_workdirs"
-_SAFE_SUBJECT = re.compile(r"^[0-9]+$")
+_SAFE_SUBJECT = re.compile(r"^[0-9A-Za-z]+$")
 
 
 @dataclass(frozen=True)
 class DatasetPreset:
+    """Dataset paths and the per-dataset N4 preprocessing setting."""
+
     bids_dir: Path
     output_root: Path
     t1w_filter: str
+    skip_preproc: bool = False
 
 
 DATASET_PRESETS = MappingProxyType({
@@ -42,6 +45,7 @@ DATASET_PRESETS = MappingProxyType({
         / "hippunfold"
         / "dense_corobl_batch",
         t1w_filter="extension=.nii.gz",
+        skip_preproc=False,
     ),
     "stanford": DatasetPreset(
         bids_dir=Path(
@@ -55,6 +59,7 @@ DATASET_PRESETS = MappingProxyType({
         / "hippunfold"
         / "dense_corobl_batch",
         t1w_filter="extension=.nii.gz",
+        skip_preproc=False,
     ),
     "iowa_jj_tms": DatasetPreset(
         bids_dir=Path(
@@ -68,6 +73,33 @@ DATASET_PRESETS = MappingProxyType({
         / "hippunfold"
         / "dense_corobl_batch",
         t1w_filter="extension=.nii",
+        skip_preproc=False,
+    ),
+    "banda": DatasetPreset(
+        bids_dir=Path(
+            "/home/yojiao/LSS/jianglab/3_Data_Working/Depression/BANDA/bids_input"
+        ),
+        output_root=REPO_ROOT
+        / "outputs_banda"
+        / "inputs"
+        / "banda"
+        / "hippunfold"
+        / "dense_corobl_batch",
+        t1w_filter="extension=.nii.gz",
+        skip_preproc=True,
+    ),
+    "pdc": DatasetPreset(
+        bids_dir=Path(
+            "/home/yojiao/LSS/jianglab/3_Data_Working/Depression/PDC/bids_input"
+        ),
+        output_root=REPO_ROOT
+        / "outputs_pdc"
+        / "inputs"
+        / "pdc"
+        / "hippunfold"
+        / "dense_corobl_batch",
+        t1w_filter="extension=.nii.gz",
+        skip_preproc=True,
     ),
 })
 
@@ -85,7 +117,7 @@ class HippUnfoldRunContract:
             )
         if not _SAFE_SUBJECT.fullmatch(self.subject):
             raise ValueError(
-                f"HippUnfold subject must be digit-only: {self.subject!r}"
+                f"HippUnfold subject must be alphanumeric: {self.subject!r}"
             )
 
     @property
@@ -106,7 +138,7 @@ class HippUnfoldRunContract:
 
     @property
     def hippunfold_argv(self) -> tuple[str, ...]:
-        return (
+        argv = (
             str(HIPPUNFOLD_EXECUTABLE),
             str(self.bids_dir),
             str(self.output_dir),
@@ -135,6 +167,7 @@ class HippUnfoldRunContract:
             self.t1w_filter,
             "--use_gpu",
         )
+        return argv + (("--skip-preproc",) if self.preset.skip_preproc else ())
 
     @property
     def runtime_root(self) -> Path:
@@ -147,6 +180,7 @@ class HippUnfoldRunContract:
             "bids_dir": str(self.bids_dir),
             "output_dir": str(self.output_dir),
             "modality": "T1w",
+            "skip_preproc": self.preset.skip_preproc,
             "output_density": "512",
             "output_spaces": ["corobl"],
             "expected_surface_spaces": ["corobl", "T1w", "unfold"],

@@ -10,6 +10,7 @@ import sys
 from pathlib import Path
 
 from lib.hippunfold_run_contract import (
+    DATASET_PRESETS,
     REPO_ROOT,
     build_run_environment,
     resolve_run_contract,
@@ -44,7 +45,7 @@ def run_t1w_local(argv: list[str] | None = None) -> int:
     parser.add_argument("subject", help="Subject ID without the sub- prefix.")
     parser.add_argument(
         "--dataset",
-        choices=("hcp", "stanford", "iowa_jj_tms"),
+        choices=tuple(DATASET_PRESETS),
         required=True,
         help="Closed dataset preset; paths and all HippUnfold flags come from the preset.",
     )

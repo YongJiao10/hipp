@@ -366,15 +366,27 @@ cannot silently choose different runtime roots or model locations. Runtime
 scratch is retained; no cleanup override is accepted by stage 01.
 
 The active public T1w launcher `scripts/core_workflow/01_01_run_hippunfold_t1w_local.py`
-accepts only `<subject> --dataset {hcp,stanford,iowa_jj_tms}` plus `--dry-run`.
+accepts only `<subject> --dataset {hcp,stanford,iowa_jj_tms,banda,pdc}` plus `--dry-run`.
 The closed dataset preset fixes the input root, output root, T1w extension filter,
 T1w modality, `corobl` output space, density `512`, autotopology labels, GPU
-inference, one core, and the canonical shared local cache/model paths. All
+inference, one core, the N4 preprocessing choice, and the canonical shared local cache/model paths. All
 `HIPPUNFOLD_*` caller overrides are scrubbed; free-form Snakemake arguments are
 not accepted. The local model is consumed through the canonical cache output, so
 the workflow is never pruned with `--omit-from download_nnunet_model`. Before a real run, the launcher repeats the hippo2 gate: exact executable resolution, CLI version `2.0.0`, and T1w/512 help support.
-JJ_TMS is the only preset using `extension=.nii`; HCP and Stanford use
+JJ_TMS is the only preset using `extension=.nii`; the other presets use
 `extension=.nii.gz`.
+
+The BANDA/PDC presets consume HCP bias-field-corrected
+`T1w_acpc_dc_restore.nii.gz` products and set `skip_preproc=True`, automatically
+adding `--skip-preproc`. Established HCP, Stanford, and JJ_TMS launch contracts
+retain `False`; the setting defaults to `False` in `DatasetPreset`. The public
+dry-run JSON exposes the selected value and command without reading inputs.
+The setting follows documented upstream bias-field correction of the consumed
+input, rather than scanner field strength or voxel size. See
+[stage-01 input preprocessing](../../scripts/core_workflow/README.md#input-preprocessing).
+
+The BANDA/PDC batch drivers under `outputs_<dataset>/work/run_hippunfold_batch.sh`
+use the checker's default automatic cleanup after each stage-01 run.
 
 The output checker `scripts/core_workflow/01_02_check_hippunfold_outputs.py`
 accepts legacy success markers, HippUnfold 2.x `N of N steps (100%) done`
@@ -411,7 +423,7 @@ For interactive shells, use the canonical gate in `AGENTS.md`: activate
 verify the 512-density help output before a direct run.
 
 GPU inference, modality, density, output space, workflow profile, scheduler
-data-management mode, core count, and T1w extension filter are fixed in the
+data-management mode, core count, N4 preprocessing choice, and T1w extension filter are fixed in the
 stage-01 argv contract. They are not controlled by `HIPPUNFOLD_USE_GPU`,
 `HIPPUNFOLD_USE_CONDA`, or any other caller environment variable.
 

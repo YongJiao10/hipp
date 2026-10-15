@@ -8,7 +8,16 @@ from .workflow_utils import utc_timestamp_for_filename
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
-DATASET_KEYS = ("hcp", "iowa", "iowa_estt", "iowa_jj_tms", "stanford", "iowa_hcp500")
+DATASET_KEYS = (
+    "hcp",
+    "iowa",
+    "iowa_estt",
+    "iowa_jj_tms",
+    "stanford",
+    "iowa_hcp500",
+    "banda",
+    "pdc",
+)
 DEFAULT_DATASET = "hcp"
 
 IOWA7T_BRANCHES = ("multiband", "multi_echo")

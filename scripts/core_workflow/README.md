@@ -82,12 +82,33 @@ The presets are fixed and are not positional input/output arguments:
 - `hcp`: `data/hippunfold_input` → `outputs_hcp/inputs/hcp/hippunfold/dense_corobl_batch/`, T1w `.nii.gz`.
 - `stanford`: `/home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_CausalConnectome/rest_fmriprep/DataOrg_PFM_36P` → `outputs_stanford/inputs/stanford/hippunfold/dense_corobl_batch/`, T1w `.nii.gz`.
 - `iowa_jj_tms`: `/home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_JJ_TMS/raw` → `outputs_iowa_jj_tms/inputs/iowa_jj_tms/hippunfold/dense_corobl_batch/`, T1w `.nii`.
+- `banda`: `/home/yojiao/LSS/jianglab/3_Data_Working/Depression/BANDA/bids_input` → `outputs_banda/inputs/banda/hippunfold/dense_corobl_batch/`, T1w `.nii.gz`.
+- `pdc`: `/home/yojiao/LSS/jianglab/3_Data_Working/Depression/PDC/bids_input` → `outputs_pdc/inputs/pdc/hippunfold/dense_corobl_batch/`, T1w `.nii.gz`.
 
 Every preset fixes HippUnfold 2.0 to modality `T1w`, density `512`, output
 space `corobl`, autotopology `hipp dentate`, unfolded registration enabled,
 GPU inference, one core, and the canonical shared local model/cache. No
 `HIPPUNFOLD_*` override or `--omit-from`/free-form Snakemake argument is accepted.
 Use `--dry-run` to inspect the resolved JSON contract without creating outputs. A real run first gates the local `hippo2` executable, requiring `which hippunfold` to resolve to the repository build, CLI version `2.0.0`, and successful T1w/512 help.
+
+### Input preprocessing
+
+The BANDA/PDC presets set `skip_preproc=True` and automatically pass
+`--skip-preproc`: their staged T1w inputs link to HCP-processed
+`imaging/<scan>/T1w/T1w_acpc_dc_restore.nii.gz` products, which already have
+bias-field correction. The established HCP, Stanford, and JJ_TMS presets retain
+`skip_preproc=False`. The dry-run JSON includes the selected value and command.
+
+For future datasets, choose this setting from the documented upstream
+bias-field correction status of the consumed input, rather than field strength
+or voxel size. In the T1w workflow, `--skip-preproc` bypasses N4; template
+registration, cropping/resampling, segmentation, and unfolding still run.
+See the [official preprocessing documentation](https://hippunfold.khanlab.ca/en/main/pipeline/pipeline.html).
+
+The BANDA/PDC batch scripts under `outputs_<dataset>/work/` use the output
+checker's default automatic cleanup after a run. The checker removes
+`anat/`, `coords/`, `warps/`, and `cifti/` after successful output validation,
+retaining `surf/`, `metric/`, and `qc/`.
 
 The shell adapter `lib/hippunfold_shell/run_hippunfold_local.sh` is a
 compatibility entrypoint only; it accepts exactly `<dataset> <subject>` and
