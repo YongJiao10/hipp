@@ -1,16 +1,10 @@
 #!/usr/bin/env python3
 """Group-level task-activation helpers shared by stage 05_06/06_11.
 
-Design notes for seamless increments (no hardcoded rosters):
-
-- The subject roster is never fixed here. Callers resolve it explicitly via
-  ``--subjects`` / ``--subjects-manifest``, or fall back to auto-discovery:
-  every subject directory under the task shared root holding the required
-  contrast file for a smoothing/hemi combo.
-- Group outputs live at stable paths. Rerunning after new subjects finish
-  per-subject stages deterministically refreshes the same files; the roster
-  and per-input receipts are recorded in the group
-  manifest, so provenance stays exact without dated directories.
+Callers supply the complete analysis roster through ``--subjects`` or
+``--subjects-manifest``. Every selected subject must have the required
+activation products. Group outputs use stable paths and record the resolved
+roster and input files in the existing group manifest.
 """
 
 from __future__ import annotations
@@ -23,7 +17,7 @@ from scipy.stats import t as t_dist
 
 from .surface_utils import long_axis_order, vertex_area_weights
 from .fc_math import bh_fdr
-from .task_design import TASK_CONTRASTS, normalize_task_branch
+from .task_design import normalize_task_branch
 
 ANATOMICAL_CLUSTER_NAMES = ("Anterior", "Body", "Posterior")
 
@@ -79,61 +73,6 @@ def subject_contrast_path(
         / f"hemi_{hemi}"
         / f"contrast_{contrast}.npy"
     )
-
-
-def discover_subjects(
-    shared_root: Path,
-    *,
-    task: str,
-    smoothing: str,
-    hemi: str,
-    contrast: str,
-) -> list[str]:
-    """Auto-discover subjects with a complete contrast file for one combo."""
-    branch = normalize_task_branch(task)
-    found: list[str] = []
-    for subject_dir in sorted(Path(shared_root).glob("sub-*")):
-        if not subject_dir.is_dir():
-            continue
-        subject = subject_dir.name.removeprefix("sub-")
-        path = subject_contrast_path(
-            shared_root,
-            subject=subject,
-            task=branch,
-            smoothing=smoothing,
-            hemi=hemi,
-            contrast=contrast,
-        )
-        if path.is_file():
-            found.append(subject)
-    return found
-
-
-def discover_contrasts(
-    shared_root: Path, *, task: str, smoothing: str, hemi: str
-) -> list[str]:
-    """Auto-discover maintained contrast names with at least one subject file."""
-    branch = normalize_task_branch(task)
-    names = sorted(TASK_CONTRASTS[branch].keys())
-    kept: list[str] = []
-    probe_subjects = sorted(
-        p.name.removeprefix("sub-")
-        for p in Path(shared_root).glob("sub-*")
-        if p.is_dir()
-    )
-    for name in names:
-        for subject in probe_subjects:
-            if subject_contrast_path(
-                shared_root,
-                subject=subject,
-                task=branch,
-                smoothing=smoothing,
-                hemi=hemi,
-                contrast=name,
-            ).is_file():
-                kept.append(name)
-                break
-    return kept
 
 
 def load_subject_stack(

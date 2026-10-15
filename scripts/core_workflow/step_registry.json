@@ -254,7 +254,7 @@
     {
       "step_id": "05_06_build_task_activation_group",
       "stage": "05_group_atlas",
-      "purpose": "Build group-level task-activation products: roster-resolved stacking of per-subject contrasts/betas into group mean/t/d maps, per-subject and group cluster tables across hcp151_atlas/template_matching zones with native-area weighting, BH-FDR correction, explicit-roster fail-closed, --min-valid-area-fraction coverage gate with exclusion report. Stable out-root refreshed on rerun; roster recorded for increments.",
+      "purpose": "Build group-level task-activation products from an explicit complete analysis roster and all maintained task contrasts: group mean/t/d maps, per-subject and group cluster tables across hcp151_atlas/template_matching zones with native-area weighting, BH-FDR correction, and --min-valid-area-fraction coverage exclusions. Missing required subject products fail closed; the group manifest records the analysis roster and consumed inputs.",
       "branches": [
         "kong2022_routea"
       ],

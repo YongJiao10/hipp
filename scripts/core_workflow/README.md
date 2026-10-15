@@ -447,7 +447,7 @@ baseline jump makes the concatenated series variable. The existing Dice and
 maximum invalid-vertex-fraction checks still apply.
 
 The existing `tsnr_gate/` mask and summary paths are retained for downstream
-path compatibility. Task summaries record threshold 25, the residual tSNR
+path compatibility. Task summaries record the selected threshold, the residual tSNR
 definition, policy and task. Task mode writes per-run `*_run_tsnr.npy` and
 minimum-over-runs `*_tsnr.npy`. `02_01` recomputes requested task
 gate/QC/smoothing stages even with resume enabled; `03_02` likewise rebuilds
@@ -459,9 +459,36 @@ After approval to replace the exact production paths, rebuild in this order:
 `03_02 --task <task>`; `04_03` and `04_04`; `05_06` and `06_11`.
 Pass explicit task surface/reference roots, the existing task manifest root,
 and the selected subject roster throughout. Set `02_01 --route-root` to the
-task root so task QC lists/logs cannot overwrite the rest cohort. Raw surface
-samples can be reused. Do not feed old masked/smoothed arrays into a new gate.
-Rest branches retain their existing formula in this change.
+task root and `--shared-root` to its surface directory. `02_01` rejects task
+or non-HCP preparation that uses either HCP rest default before creating
+directories or running any stage. For `--stage all` or `--stage group-average`,
+it also requires a separate `--template-root`; routine task prep can select
+only `raw`, `tsnr`, `qc`, and `smooth` to reuse the existing formal anatomy.
+Before writing either a QC report or a pass list to a formal HCP rest
+destination, `02_02` requires the final QC-passed subject IDs to match the
+exact HCP151 roster below. Protected destinations include the Kong2022
+default `qc`/`manifests` directories and the branch-neutral
+`qc/vertex_qc_t1only/qc` and `qc/vertex_qc_t1only/manifests` directories.
+Default Kong2022 QC destinations also require the default rest surface
+inputs. Each task uses its complete roster and explicitly selects its own
+`--out-dir` and `--manifest-dir`. Its `latest` list contains the complete
+QC-passed task cohort; the HCP rest cohort authority is the explicit
+151-subject file below.
+
+The formal average at `kong2022/templates/hipp_group_average_t1only_151`
+accepts only the exact roster in
+`outputs_hcp/inputs/hcp/qc/vertex_qc_t1only/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_151.txt`,
+even if an existing average has missing or incorrect metadata. Other analyses
+use their own explicit `--template-root`. Raw surface samples
+can be reused. Do not feed old masked/smoothed arrays into a new gate. Rest
+branches retain their existing signal-validity formula.
+
+Task group analysis (`05_06`) requires the complete analysis roster through
+`--subjects-manifest` or `--subjects`. The default contrast set contains all
+maintained contrasts for the selected task. Missing required contrasts or
+condition betas for any selected subject cause an error.
+See [the complete task workflow](../../hcp_3t_task_fmri_hipp_memory_emotion_plan.md)
+for the current EMOTION and WM rosters, paths, methods, and commands.
 
 Task group stages `05_06` (group mean/t/d/beta maps plus subject and group
 cluster tables across hcp151_atlas/template_matching zones
@@ -488,13 +515,12 @@ required condition propagates NaN without reweighting. Cluster bars show each
 region's effective n. Count labels sit above the plotting area;
 the figure-wide N is explicitly the cohort size.
 Missing `group_p_fdr`
-fails closed instead of plotting raw p as FDR) resolve the
-roster explicitly via `--subjects`/`--subjects-manifest` or auto-discover it
-from complete contrast files, so reruns after new uploads refresh the same
-stable `work/task_activation/task-<task>/group/` and
-`present/task_activation/task-<task>/` paths with no edits. Rosters
-and per-input receipts are recorded in the group manifest; no
-roster size is hardcoded.
+fails closed instead of plotting raw p as FDR). `05_06` requires the complete
+analysis roster through `--subjects` or `--subjects-manifest`; `06_11` uses
+the resulting group products. Outputs use the stable
+`work/task_activation/task-<task>/group/` and
+`present/task_activation/task-<task>/` paths. The group manifest records the
+analysis roster and consumed inputs.
 
 ### Dataset-specific tSNR QC
 
@@ -505,8 +531,10 @@ HCP rest retains `10000 / SD >= 25` unchanged.
 HCP task computes the original mean divided by task-model residual sample SD
 (ddof=1), separately for every declared run, before smoothing or masking. The
 model is the same EV + 12 motion + intercept + linear drift design as the task
-analysis. Every included run must reach 25. Run means are never pooled before
-estimating noise. The gate writes per-run scores and their minimum, plus masks.
+analysis. The current task workflow uses `--tsnr-threshold none`: residual
+tSNR is recorded without a numerical cutoff, and every run must retain finite,
+nonconstant signal. Run means are never pooled before estimating noise. The
+gate writes per-run scores and their minimum, plus masks.
 
 Stanford, JJ_TMS and Iowa7T rest use baseline-preserving pre-XCP samples in the
 same geometry/mapping as their analysis. On the explicitly retained original
@@ -538,8 +566,9 @@ previously computed baseline input. Preserve separate 22P/36P retained-frame
 selections and MB/ME acquisition inputs. Existing output replacement follows
 repository path-approval rules.
 
-See `docs/tsnr_cross_dataset_assessment_2026-09-26.md` for measured before/after
-comparisons and outstanding production input availability.
+See [fMRI QC](../../docs/hipp_parcellation_network/fmri_qc.md) for the formal
+HCP rest cohort and [the task workflow](../../hcp_3t_task_fmri_hipp_memory_emotion_plan.md)
+for the complete EMOTION and WM cohorts.
 
 The task renderer `06_11` explicitly selects 2mm rows when a group table
 contains both 2mm and 4mm, matching its maintained 2mm figure contract.

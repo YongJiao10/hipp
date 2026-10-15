@@ -22,6 +22,15 @@
 
 ## Doc Sync Rule
 
+- Write project documentation in English, using the current complete datasets
+  and their authoritative analysis rosters. Keep instructions focused on current
+  inputs, methods, outputs, and usage.
+- Do not retain incremental-ingestion rosters, batch histories, or instructions
+  for partial uploads in active workflows or documentation.
+- Use subtractive updates (减法更新): delete or replace incorrect/outdated statements in
+  place. Do not retain them and append another statement explaining that they
+  are wrong; keep one current, correct instruction instead of accumulating
+  corrections.
 - Any code change that affects behavior, paths, caches, launchers, environment setup, or workflow outputs must be accompanied by a matching documentation update in the same change.
 - This includes edits to:
   - launcher scripts

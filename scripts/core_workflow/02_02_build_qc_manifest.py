@@ -11,7 +11,7 @@ Main Flow Path:
 
 Inputs:
 - Command-line arguments:
-  - --hippunfold-batch-root: Batch output root containing sub-*/hippunfold outputs (default: `outputs_hcp/inputs/hcp/hippunfold/dense_corobl_batch`).
+  - --hippunfold-batch-root: Root containing sub-*/hippunfold outputs (default: `outputs_hcp/inputs/hcp/hippunfold/dense_corobl_batch`).
   - --shared-root: Path to output shared processed surface files (default: `outputs_hcp/inputs/hcp/kong2022/shared_inputs/surface`).
   - --out-dir: Output directory for the QC report TSV (default: `outputs_hcp/inputs/hcp/kong2022/qc`).
   - --manifest-dir: Output directory for the generated subjects manifest (default: `outputs_hcp/inputs/hcp/kong2022/manifests`).
@@ -24,10 +24,12 @@ Inputs:
 
 Outputs:
 - Command-line output / file outputs:
-  - QC summary TSV file: `{out_dir}/hcp_7t_hippocampus_fmri_qc_summary_t1only.tsv` detailing Dice scores and invalid tSNR fractions per subject.
-  - QC-passed subjects list manifest: `{manifest_dir}/hcp_7t_hippocampus_fmri_qc_pass_t1only_151.txt` (the default 151 subjects cohort list).
-  - Rolling pointer symlink/manifest: `{manifest_dir}/hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt` (pointing to the 151 subjects list).
-  - QC run traceability manifest: `{manifest_dir}/build_qc_manifest_run_manifest.json`.
+  - QC summary TSV file: `{out_dir}/t1only_hippunfold_tsnr_qc.tsv` detailing Dice scores and invalid tSNR fractions per subject.
+  - QC-passed subjects list: `{manifest_dir}/hcp_7t_hippocampus_fmri_qc_pass_t1only_<N>.txt` (N is the number passing this run).
+  - Rolling list: `{manifest_dir}/hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt` (a copy of this run's pass list).
+  - QC run metadata: `{out_dir}/t1only_hippunfold_tsnr_qc.json`.
+  - Default Kong2022 QC destinations require the default HCP rest surface inputs.
+  - Default and branch-neutral formal QC destinations accept only the exact HCP151 QC-passed roster; each other analysis uses its own complete roster and output directories.
 """
 import argparse
 import csv
@@ -39,7 +41,9 @@ from lib.output_layout import (
     DEFAULT_KONG2022_MANIFEST_ROOT,
     DEFAULT_KONG2022_QC_ROOT,
     DEFAULT_KONG2022_SURFACE_ROOT,
+    resolve_qc_root,
 )
+from lib.formal_cohorts import load_formal_subjects
 from lib.workflow_utils import file_meta, git_commit, utc_now_iso, write_json
 from lib.io_utils import write_tsv
 
@@ -49,6 +53,9 @@ DEFAULT_BATCH_ROOT = DEFAULT_HIPPUNFOLD_BATCH_ROOT
 DEFAULT_SHARED_ROOT = DEFAULT_KONG2022_SURFACE_ROOT
 DEFAULT_OUT_DIR = DEFAULT_KONG2022_QC_ROOT
 DEFAULT_MANIFEST_DIR = DEFAULT_KONG2022_MANIFEST_ROOT
+FORMAL_SUBJECTS_MANIFEST = (
+    resolve_qc_root() / "manifests" / "hcp_7t_hippocampus_fmri_qc_pass_t1only_151.txt"
+)
 
 
 def load_subjects(batch_root: Path, explicit: list[str] | None) -> list[str]:
@@ -104,6 +111,15 @@ def main() -> int:
     shared_root = Path(args.shared_root).resolve()
     out_dir = Path(args.out_dir).resolve()
     manifest_dir = Path(args.manifest_dir).resolve()
+    if shared_root != DEFAULT_SHARED_ROOT.resolve() and (
+        out_dir == DEFAULT_OUT_DIR.resolve()
+        or manifest_dir == DEFAULT_MANIFEST_DIR.resolve()
+    ):
+        parser.error(
+            f"Non-default --shared-root {shared_root} requires separate --out-dir "
+            f"and --manifest-dir; cannot write HCP rest QC destinations "
+            f"{DEFAULT_OUT_DIR.resolve()} or {DEFAULT_MANIFEST_DIR.resolve()}."
+        )
     subjects = load_subjects(batch_root, args.subjects)
 
     rows: list[dict[str, object]] = []
@@ -153,6 +169,23 @@ def main() -> int:
                 "exclude_reason": ",".join(sorted(set(reasons))),
             }
         )
+
+    if (
+        out_dir in {DEFAULT_OUT_DIR.resolve(), (FORMAL_SUBJECTS_MANIFEST.parent.parent / "qc").resolve()}
+        or manifest_dir in {DEFAULT_MANIFEST_DIR.resolve(), FORMAL_SUBJECTS_MANIFEST.parent.resolve()}
+    ):
+        expected = [
+            subject.removeprefix("sub-")
+            for subject in load_formal_subjects(FORMAL_SUBJECTS_MANIFEST, "hcp151")
+        ]
+        if sorted(pass_subjects) != sorted(expected):
+            parser.error(
+                f"Formal HCP rest QC destinations require the exact HCP151 QC-passed "
+                f"subject IDs from {FORMAL_SUBJECTS_MANIFEST}; got {len(pass_subjects)} "
+                f"passing subjects. Refusing to write {out_dir} and {manifest_dir}. "
+                "For another analysis, set --out-dir and --manifest-dir to its own "
+                "QC destinations."
+            )
 
     out_dir.mkdir(parents=True, exist_ok=True)
     manifest_dir.mkdir(parents=True, exist_ok=True)

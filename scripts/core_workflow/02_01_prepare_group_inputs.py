@@ -14,7 +14,7 @@ Inputs:
   - --hippunfold-batch-root: Batch output root containing sub-*/hippunfold outputs (default: `outputs_hcp/inputs/hcp/hippunfold/dense_corobl_batch`).
   - --route-root: Route-specific processing directory (default: `outputs_hcp/inputs/hcp/kong2022`).
   - --shared-root: Path to output shared processed surface files (default: `outputs_hcp/inputs/hcp/kong2022/shared_inputs/surface`).
-  - --template-root: Path to template root directory (default: `outputs_hcp/inputs/hcp/kong2022/shared_inputs/template`).
+  - --template-root: Path to template root directory (default: `outputs_hcp/inputs/hcp/kong2022/templates/hipp_group_average_t1only_151`).
   - --bold-root: Root path containing raw fMRI volume timeseries (default: `/home/yojiao/LSS/jianglab/3_Data_Working/HCP_7T_Hippocampus/rsfmri_volume`).
   - --subjects-manifest: Path to subject manifest list (txt file, one ID per line).
   - --subjects: Space-separated list of explicit subject IDs.
@@ -56,11 +56,13 @@ from lib.io_utils import (
     load_run_artifact_manifest,
     load_subject_ids,
 )
+from lib.formal_cohorts import load_formal_subjects
 from lib.output_layout import (
     DEFAULT_HIPPUNFOLD_BATCH_ROOT,
     DEFAULT_KONG2022_ROOT,
     DEFAULT_KONG2022_SURFACE_ROOT,
     DEFAULT_KONG2022_TEMPLATE_ROOT,
+    resolve_qc_root,
 )
 from lib.path_templates import format_subject_path_template
 from lib.task_design import TASK_RUN_LENGTHS, normalize_task_branch
@@ -76,6 +78,9 @@ DEFAULT_BATCH_ROOT = DEFAULT_HIPPUNFOLD_BATCH_ROOT
 DEFAULT_ROUTE_ROOT = DEFAULT_KONG2022_ROOT
 DEFAULT_SHARED_ROOT = DEFAULT_KONG2022_SURFACE_ROOT
 DEFAULT_TEMPLATE_ROOT = DEFAULT_KONG2022_TEMPLATE_ROOT
+FORMAL_SUBJECTS_MANIFEST = (
+    resolve_qc_root() / "manifests" / "hcp_7t_hippocampus_fmri_qc_pass_t1only_151.txt"
+)
 DEFAULT_BOLD_ROOT = Path("/home/yojiao/LSS/jianglab/3_Data_Working/HCP_7T_Hippocampus/rsfmri_volume")
 DEFAULT_BOLD_TEMPLATE = "{bold_root}/{subject}/func_uncompressed.nii"
 QC_SCRIPT = REPO_ROOT / "scripts" / "core_workflow" / "02_02_build_qc_manifest.py"
@@ -565,6 +570,17 @@ def save_surface(path: Path, coords: np.ndarray, faces: np.ndarray) -> None:
 
 def build_group_average_surfaces(batch_root: Path, template_root: Path, subjects: list[str]) -> None:
     out_dir = template_root / "group_average_surfaces"
+    if template_root.resolve() == DEFAULT_TEMPLATE_ROOT.resolve():
+        expected = [
+            subject.removeprefix("sub-")
+            for subject in load_formal_subjects(FORMAL_SUBJECTS_MANIFEST, "hcp151")
+        ]
+        if sorted(subjects) != sorted(expected):
+            raise ValueError(
+                f"Formal HCP151 surface destination {out_dir} requires the exact "
+                f"151 subjects from {FORMAL_SUBJECTS_MANIFEST}; got {len(subjects)} "
+                "subjects. Use an explicit isolated --template-root for another cohort."
+            )
     outputs: list[dict[str, object]] = []
     inputs: list[dict[str, object]] = []
     for hemi in HEMIS:
@@ -683,6 +699,23 @@ def main() -> int:
     shared_root = Path(args.shared_root).resolve()
     template_root = Path(args.template_root).resolve()
     bold_root = Path(args.bold_root).resolve()
+    if args.task != "rest" or args.dataset != "hcp":
+        destinations = [
+            ("--route-root", route_root, DEFAULT_ROUTE_ROOT),
+            ("--shared-root", shared_root, DEFAULT_SHARED_ROOT),
+        ]
+        if args.stage in {"all", "group-average"}:
+            destinations.append(("--template-root", template_root, DEFAULT_TEMPLATE_ROOT))
+        conflicts = [
+            f"{option}={path}"
+            for option, path, rest_path in destinations
+            if path == rest_path.resolve()
+        ]
+        if conflicts:
+            parser.error(
+                f"--task {args.task} --dataset {args.dataset} cannot write HCP rest "
+                f"destinations: {', '.join(conflicts)}. Pass explicit separate roots."
+            )
     log_dir = route_root / "logs" / "prepare_t1only_group_inputs"
     log_dir.mkdir(parents=True, exist_ok=True)
     shared_root.mkdir(parents=True, exist_ok=True)

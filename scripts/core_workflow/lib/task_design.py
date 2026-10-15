@@ -67,6 +67,22 @@ TASK_CONTRASTS = {
             "2bk_tools": 0.25,
             "2bk_body": 0.25,
         },
+        "twobk_gt_zerobk_faces": {
+            "0bk_faces": -1.0,
+            "2bk_faces": 1.0,
+        },
+        "twobk_gt_zerobk_places": {
+            "0bk_places": -1.0,
+            "2bk_places": 1.0,
+        },
+        "twobk_gt_zerobk_tools": {
+            "0bk_tools": -1.0,
+            "2bk_tools": 1.0,
+        },
+        "twobk_gt_zerobk_body": {
+            "0bk_body": -1.0,
+            "2bk_body": 1.0,
+        },
         "faces_gt_others": {
             "0bk_faces": 0.5,
             "0bk_places": -1.0 / 6.0,

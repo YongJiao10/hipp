@@ -37,7 +37,11 @@ Inputs:
 Outputs:
 - Command-line output / file outputs:
   - GIFTI overlays: `{out_root}/hemi_{hemi}_{group_contrast_{name}_mean,group_beta_{stem}_mean}.func.gii`.
-  - Summary PNG: `{out_root}/task_{task}.png` (per contrast: profiles; bars with paired-subregion brackets).
+  - Summary PNGs:
+    - `{out_root}/task_{task}.png` (for emotion / relational).
+    - For working memory: `{out_root}/task_wm_load.png` (pooled load),
+      `{out_root}/task_wm_categories.png` (specialization & interaction), and
+      `{out_root}/task_wm_load_by_category.png` (2bk-0bk by category).
   - `{out_root}/task_activation_products_manifest.json`.
 """
 import argparse
@@ -173,6 +177,10 @@ def contrast_display(contrast: str) -> str:
     """Plain-language panel titles (keys stay as filenames/manifest IDs)."""
     return {
         "twobk_gt_zerobk": "Working memory load (2-back > 0-back)",
+        "twobk_gt_zerobk_faces": "Faces (2-back > 0-back)",
+        "twobk_gt_zerobk_places": "Places (2-back > 0-back)",
+        "twobk_gt_zerobk_tools": "Tools (2-back > 0-back)",
+        "twobk_gt_zerobk_body": "Body (2-back > 0-back)",
         "faces_gt_shapes": "Emotional faces > Shapes",
         "rel_gt_match": "Relational > Matching",
         "faces_gt_others": "Faces > Others (Places/Tools/Body)",
@@ -193,6 +201,7 @@ def contrast_physiological_sides(
 
     For working memory:
     - Load (twobk_gt_zerobk): 2-back (mean) vs 0-back (mean) across categories
+    - Category-specific load (twobk_gt_zerobk_<cat>): 2-back vs 0-back for that category
     - Category contrasts (<cat>_gt_others): <Cat> (mean 0bk+2bk) vs Others (mean 0bk+2bk across 3 categories)
     - Category x Load interactions (load_x_<cat>): Δ <Cat> (2bk - 0bk) vs Δ Others (2bk - 0bk across 3 categories)
     Difference (side1 - side2) algebraically reconstructs the contrast map exactly.
@@ -205,6 +214,13 @@ def contrast_physiological_sides(
             side2 = {f"0bk_{c}": 0.25 for c in categories}
             return side1, side2, "2-back (mean)", "0-back (mean)"
         for cat in categories:
+            if contrast == f"twobk_gt_zerobk_{cat}":
+                return (
+                    {f"2bk_{cat}": 1.0},
+                    {f"0bk_{cat}": 1.0},
+                    "2-back",
+                    "0-back",
+                )
             if contrast == f"{cat}_gt_others":
                 others = [c for c in categories if c != cat]
                 side1 = {f"0bk_{cat}": 0.5, f"2bk_{cat}": 0.5}
@@ -990,6 +1006,141 @@ def render_wm_figures(
     fig_cat.savefig(out_cat_png, dpi=300)
     plt.close(fig_cat)
     generated_pngs.append(out_cat_png)
+
+    # 3. 2x2 LOAD BY CATEGORY FIGURE
+    fig_load_by_cat = plt.figure(figsize=(15.5, 14.5))
+    outer_gs_load = gridspec.GridSpec(
+        2,
+        2,
+        figure=fig_load_by_cat,
+        left=0.065,
+        right=0.975,
+        top=0.93,
+        bottom=0.045,
+        wspace=0.24,
+        hspace=0.34,
+    )
+    bracket_tests_load_by_cat: list[dict[str, object]] = []
+    all_prof_axes: list = []
+    all_bar_axes: list = []
+
+    cat_grid = [
+        ["faces", "places"],
+        ["tools", "body"],
+    ]
+
+    for r in range(2):
+        for c in range(2):
+            cat = cat_grid[r][c]
+            contrast = f"twobk_gt_zerobk_{cat}"
+            sub_gs = gridspec.GridSpecFromSubplotSpec(
+                2,
+                2,
+                subplot_spec=outer_gs_load[r, c],
+                wspace=0.22,
+                hspace=0.34,
+            )
+            prof_L = fig_load_by_cat.add_subplot(sub_gs[0, 0])
+            prof_R = fig_load_by_cat.add_subplot(sub_gs[0, 1])
+            bar_L = fig_load_by_cat.add_subplot(sub_gs[1, 0])
+            bar_R = fig_load_by_cat.add_subplot(sub_gs[1, 1])
+            all_prof_axes.extend([prof_L, prof_R])
+            all_bar_axes.extend([bar_L, bar_R])
+
+            render_task_figure(
+                task="wm",
+                contrast=contrast,
+                hemis=hemis,
+                group_root=group_root,
+                surfaces_dir=surfaces_dir,
+                summary_rows=summary_rows,
+                subject_table=subject_table,
+                n_subjects=n_subjects,
+                profile_axes=[prof_L, prof_R],
+                bars_axes=[bar_L, bar_R],
+                bracket_tests=bracket_tests_load_by_cat,
+                is_card=True,
+                unit_category=cat,
+            )
+
+    # 1. Unify profile Y-axis limits across all 4 categories
+    prof_ylims = [ax.get_ylim() for ax in all_prof_axes]
+    shared_prof = (min(lo for lo, _ in prof_ylims), max(hi for _, hi in prof_ylims))
+    for ax in all_prof_axes:
+        ax.set_ylim(shared_prof)
+
+    # 2. Draw brackets
+    draw_brackets(bracket_tests_load_by_cat, is_card=True)
+
+    # 3. Unify cluster bar Y-axis limits across all 4 categories so heights are directly comparable
+    bar_ylims = [ax.get_ylim() for ax in all_bar_axes]
+    shared_bar = (min(lo for lo, _ in bar_ylims), max(hi for _, hi in bar_ylims))
+    for ax in all_bar_axes:
+        ax.set_ylim(shared_bar)
+
+    # Draw card boxes and distinct headers
+    for r in range(2):
+        for c in range(2):
+            cat = cat_grid[r][c]
+            theme = CATEGORY_THEMES[cat]
+            bb = outer_gs_load[r, c].get_position(fig_load_by_cat)
+            pad_x = 0.009
+            pad_y_bottom = 0.010
+            pad_y_top = 0.026
+            card_rect = patches.FancyBboxPatch(
+                (bb.x0 - pad_x, bb.y0 - pad_y_bottom),
+                bb.width + 2 * pad_x,
+                bb.height + pad_y_bottom + pad_y_top,
+                boxstyle="round,pad=0.005,rounding_size=0.008",
+                transform=fig_load_by_cat.transFigure,
+                facecolor="#FFFFFF",
+                edgecolor="#CBD5E1",
+                linewidth=1.2,
+                zorder=-1,
+            )
+            fig_load_by_cat.patches.append(card_rect)
+
+            title_text = f"{theme['title']}: 2-back > 0-back"
+            fig_load_by_cat.text(
+                bb.x0 + bb.width / 2.0,
+                bb.y1 + 0.014,
+                title_text,
+                ha="center",
+                va="center",
+                fontsize=11,
+                fontweight="bold",
+                color=theme["text"],
+                bbox=dict(
+                    boxstyle="round,pad=0.3",
+                    facecolor=theme["bg"],
+                    edgecolor=theme["border"],
+                    linewidth=1.0,
+                ),
+                zorder=10,
+            )
+
+    fig_load_by_cat.suptitle(
+        f"HCP 3T Task-fMRI Working Memory: Cognitive Load by Stimulus Category (N={n_subjects}, 2mm; markers BH-FDR)",
+        fontsize=13.5,
+        fontweight="bold",
+        y=0.985,
+        color="#0F172A",
+    )
+    fig_load_by_cat.text(
+        0.5,
+        0.008,
+        "Markers: +=p<.05, *=p<.01, **=p<.001, ***=p<.0001 (BH-FDR, two-tailed); bins = equal-vertex bins 1-20 (Ant → Post)\n"
+        "Beta/Contrast in raw BOLD units (a.u.); black brackets = pairwise subregion difference within parcellation method (BH-FDR family across figure)",
+        ha="center",
+        fontsize=7.5,
+        style="italic",
+        color="#475569",
+    )
+
+    out_load_by_cat_png = out_root / "task_wm_load_by_category.png"
+    fig_load_by_cat.savefig(out_load_by_cat_png, dpi=300)
+    plt.close(fig_load_by_cat)
+    generated_pngs.append(out_load_by_cat_png)
     return generated_pngs
 
 

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import importlib
 import sys
 from pathlib import Path
 
@@ -17,8 +18,6 @@ if str(CORE_DIR) not in sys.path:
 
 from scripts.core_workflow.lib.task_group import (
     anatomical_cluster_names,
-    discover_contrasts,
-    discover_subjects,
     group_summary_stats,
     load_subject_stack,
     subject_cluster_rows,
@@ -31,22 +30,40 @@ def _write_contrast(shared: Path, subject: str, values: np.ndarray) -> None:
     np.save(str(out_dir / "contrast_faces_gt_shapes.npy"), values.astype(np.float32))
 
 
-def test_discovery_picks_up_new_subjects_without_edits(tmp_path: Path) -> None:
-    shared = tmp_path / "shared"
-    _write_contrast(shared, "001", np.zeros(8))
-    first = discover_subjects(
-        shared, task="emotion", smoothing="2mm", hemi="L", contrast="faces_gt_shapes"
-    )
-    assert first == ["001"]
-    # A later upload appears with no code changes.
-    _write_contrast(shared, "002", np.ones(8))
-    second = discover_subjects(
-        shared, task="emotion", smoothing="2mm", hemi="L", contrast="faces_gt_shapes"
-    )
-    assert second == ["001", "002"]
-    assert discover_contrasts(shared, task="emotion", smoothing="2mm", hemi="L") == [
-        "faces_gt_shapes"
-    ]
+def test_group_cli_requires_an_explicit_complete_roster(tmp_path, monkeypatch):
+    group = importlib.import_module("scripts.core_workflow.05_06_build_task_activation_group")
+    output = tmp_path / "group"
+    monkeypatch.setattr(sys, "argv", [
+        "group", "--task", "emotion", "--shared-root", str(tmp_path / "shared"),
+        "--out-root", str(output),
+    ])
+    with pytest.raises(SystemExit) as exc:
+        group.main()
+    assert exc.value.code == 2
+    assert not output.exists()
+
+
+def test_group_cli_requires_all_maintained_contrasts_for_the_roster(tmp_path, monkeypatch):
+    group = importlib.import_module("scripts.core_workflow.05_06_build_task_activation_group")
+    shared, output = tmp_path / "shared", tmp_path / "group"
+    for subject in ["001", "002"]:
+        directory = shared / f"sub-{subject}/task/wm/2mm/hemi_L"
+        directory.mkdir(parents=True)
+        np.save(directory / "task_betas.npy", np.zeros((8, 8), dtype=np.float32))
+        np.save(directory / "contrast_twobk_gt_zerobk.npy", np.zeros(8, dtype=np.float32))
+    monkeypatch.setattr(group, "load_group_labels", lambda *a, **k: (
+        np.ones(8, dtype=np.int32), np.ones(8, dtype=bool), {},
+    ))
+    monkeypatch.setattr(group, "group_average_surface", lambda *a: tmp_path / "surface.gii")
+    monkeypatch.setattr(group, "anatomical_cluster_names", lambda **k: {1: "Anterior", 2: "Body", 3: "Posterior"})
+    monkeypatch.setattr(sys, "argv", [
+        "group", "--task", "wm", "--shared-root", str(shared),
+        "--subjects", "001", "002", "--smoothings", "2mm", "--hemis", "L",
+        "--out-root", str(output),
+    ])
+    with pytest.raises(ValueError, match="roster is incomplete"):
+        group.main()
+    assert not output.exists()
 
 
 def test_load_stack_fails_closed_on_shape_drift(tmp_path: Path) -> None:

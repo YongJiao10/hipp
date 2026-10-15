@@ -6,8 +6,6 @@ Vertex-level QC is pre-Kong behavior and uses a branch-agnostic root:
 - `outputs_hcp/inputs/hcp/qc/vertex_qc_t1only/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_151.txt`
 - `outputs_hcp/inputs/hcp/qc/vertex_qc_t1only/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt`
 
-Legacy `manifests/hcp_7t_hippocampus_fmri_qc_pass_153.txt` is T2only-era and is not the active default for T1only workflows.
-
 Audit/provenance artifacts for current on-disk assets:
 
 - `outputs_hcp/inputs/hcp/qc/vertex_qc_t1only/qc/hcp7t_t1only_vertex_qc_166_audit.tsv`
@@ -15,7 +13,7 @@ Audit/provenance artifacts for current on-disk assets:
 - `outputs_hcp/inputs/hcp/qc/vertex_qc_t1only/manifests/hcp_7t_hippocampus_fmri_qc_excluded_t1only_15.txt`
 - `outputs_hcp/inputs/hcp/qc/vertex_qc_t1only/manifests/hcp_7t_hippocampus_fmri_qc_excluded_t1only_latest.txt`
 
-Path plan (canonical):
+Current paths:
 
 - Root: `outputs_hcp/inputs/hcp/qc/vertex_qc_t1only/`
 - Pass manifest: `manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_151.txt`
@@ -24,6 +22,14 @@ Path plan (canonical):
 - 166-audit metadata: `qc/hcp7t_t1only_vertex_qc_166_audit.json`
 
 Kong2022 consumes this vertex-level QC cohort for downstream atlas/model steps; it is not the ownership root for QC artifacts.
+
+Before writing QC reports or pass lists to these formal directories or the
+Kong2022 default `qc`/`manifests` directories, `02_02_build_qc_manifest.py`
+requires the final passing subject IDs to match the explicit HCP151 file.
+QC evaluates the complete input dataset and applies the declared criteria.
+Formal HCP outputs must contain the exact QC-passed HCP151 subject IDs. The
+authority is the explicit 151-subject file. Each task analysis uses its own
+complete cohort and QC output directories.
 
 QC criteria:
 

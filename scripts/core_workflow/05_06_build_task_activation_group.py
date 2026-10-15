@@ -17,14 +17,14 @@ Inputs:
 - Command-line arguments:
   - --task: Task branch (required: emotion | wm | relational).
   - --shared-root: Task shared root holding per-subject contrasts (default: `outputs_hcp/inputs/hcp/kong2022/shared_inputs/task-<task>`).
-  - --subjects / --subjects-manifest: Explicit roster; when omitted, subjects are auto-discovered from complete contrast files, so reruns after new uploads pick them up with no edits.
-  - --smoothings / --hemis / --contrasts: Combos to build; --contrasts defaults to maintained contrasts with at least one complete file.
+  - --subjects / --subjects-manifest: Required complete analysis roster; missing subject products are errors.
+  - --smoothings / --hemis / --contrasts: Combos to build; --contrasts defaults to all maintained contrasts.
   - --zones: Subregion branches: hcp151_atlas (rest group K=3), template_matching (crossfit individualized K=3). Default: both.
   - --group-atlas-root: Rest gradient-spectral root holding K=3 labels (default: routea_17net root, which reuses the RouteA gradient bank).
   - --group-average-surfaces-dir: Group-average midthickness surfaces for anatomical cluster naming.
-  - --hippunfold-batch-root: Native HippUnfold batch root for per-subject vertex areas.
+  - --hippunfold-batch-root: Native HippUnfold input root for per-subject vertex areas.
   - --crossfit-subjects-root: Crossfit individualized-label subject root.
-  - --out-root: Stable group output root (default: `outputs_hcp/work/task_activation/task-<task>/group/`). Reruns refresh the same paths; the roster in the manifest distinguishes increments.
+  - --out-root: Stable group output root (default: `outputs_hcp/work/task_activation/task-<task>/group/`).
 - Physical inputs:
   - Per-subject contrasts: `{shared_root}/sub-*/task/{task}/{smoothing}/hemi_{hemi}/contrast_{name}.npy`.
   - Rest labels: `{group_atlas_root}/gradient-spectral/.../group_labels_final.npy` + support mask + manifest.
@@ -52,7 +52,6 @@ from lib.task_group import (
     PARCELLATION_HCP151_ATLAS,
     PARCELLATION_TEMPLATE_MATCHING,
     anatomical_cluster_names,
-    discover_contrasts,
     fdr_adjust,
     group_summary_stats,
     individual_labels_path,
@@ -115,8 +114,9 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Group task-activation build.")
     parser.add_argument("--task", required=True)
     parser.add_argument("--shared-root", default=None)
-    parser.add_argument("--subjects", nargs="*", default=None)
-    parser.add_argument("--subjects-manifest", default=None)
+    cohort = parser.add_mutually_exclusive_group(required=True)
+    cohort.add_argument("--subjects", nargs="+", default=None)
+    cohort.add_argument("--subjects-manifest", default=None)
     parser.add_argument("--smoothings", nargs="*", default=SMOOTHINGS)
     parser.add_argument("--hemis", nargs="*", default=HEMIS)
     parser.add_argument("--contrasts", nargs="*", default=None)
@@ -153,11 +153,10 @@ def main() -> int:
     surfaces_dir = Path(args.group_average_surfaces_dir)
     batch_root = Path(args.hippunfold_batch_root)
     crossfit_root = Path(args.crossfit_subjects_root)
-    explicit_roster: list[str] | None = None
     if args.subjects:
-        explicit_roster = sorted({s.replace("sub-", "") for s in args.subjects})
-    elif args.subjects_manifest:
-        explicit_roster = sorted(load_subject_ids(Path(args.subjects_manifest)))
+        analysis_roster = sorted({s.replace("sub-", "") for s in args.subjects})
+    else:
+        analysis_roster = sorted(load_subject_ids(Path(args.subjects_manifest)))
 
     subject_rows: list[dict[str, object]] = []
     group_rows: list[dict[str, object]] = []
@@ -169,12 +168,10 @@ def main() -> int:
             contrasts = (
                 list(args.contrasts)
                 if args.contrasts
-                else discover_contrasts(
-                    shared_root, task=task, smoothing=smoothing, hemi=hemi
-                )
+                else list(TASK_CONTRASTS[task])
             )
             if not contrasts:
-                raise ValueError(f"No contrasts discovered for {smoothing}/hemi-{hemi}")
+                raise ValueError(f"No contrasts selected for {smoothing}/hemi-{hemi}")
             labels, mask, atlas_manifest = load_group_labels(
                 group_atlas_root, smoothing=smoothing, hemi=hemi, k=3
             )
@@ -186,18 +183,9 @@ def main() -> int:
             # One unified roster per combo: every subject must hold all
             # contrast files AND task betas, so profile lines and cluster
             # tables always describe the same subjects.
-            candidates = (
-                list(explicit_roster)
-                if explicit_roster is not None
-                else sorted(
-                    p.name.removeprefix("sub-")
-                    for p in Path(shared_root).glob("sub-*")
-                    if p.is_dir()
-                )
-            )
             unified_roster: list[str] = []
             excluded_incomplete: list[str] = []
-            for subject in candidates:
+            for subject in analysis_roster:
                 task_dir = (
                     Path(shared_root)
                     / f"sub-{subject}"
@@ -218,7 +206,7 @@ def main() -> int:
                     excluded_incomplete.append(
                         f"sub-{subject} (missing: {', '.join(missing)})"
                     )
-            if explicit_roster is not None and excluded_incomplete:
+            if excluded_incomplete:
                 raise ValueError(
                     f"Explicit roster is incomplete for {smoothing}/hemi-{hemi}: "
                     f"{excluded_incomplete}. Re-run 04_03 for these subjects "
@@ -639,7 +627,7 @@ def main() -> int:
             "zones": zones,
             "n_subjects_total": len(all_subjects),
             "roster": all_subjects,
-            "roster_source": "explicit" if explicit_roster is not None else "auto_discovered",
+            "roster_source": "explicit",
             "min_valid_area_fraction": min_valid_area_fraction,
             "n_coverage_excluded_entries": len(exclusion_rows),
             "smoothings": list(args.smoothings),

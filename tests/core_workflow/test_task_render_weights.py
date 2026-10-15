@@ -196,6 +196,20 @@ def test_contrast_physiological_sides_wm() -> None:
             diff = side1.get(stem, 0.0) - side2.get(stem, 0.0)
             assert diff == pytest.approx(expected_weights[stem])
 
+    # 4. Category-specific load contrasts (2bk - 0bk per category)
+    for cat in categories:
+        contrast = f"twobk_gt_zerobk_{cat}"
+        side1, side2, l1, l2 = render.contrast_physiological_sides("wm", contrast)
+        assert l1 == "2-back" and l2 == "0-back"
+        assert sum(side1.values()) == pytest.approx(1.0)
+        assert sum(side2.values()) == pytest.approx(1.0)
+        assert side1[f"2bk_{cat}"] == 1.0
+        assert side2[f"0bk_{cat}"] == 1.0
+        expected_weights = render.TASK_CONTRASTS["wm"][contrast]
+        for stem in expected_weights:
+            diff = side1.get(stem, 0.0) - side2.get(stem, 0.0)
+            assert diff == pytest.approx(expected_weights[stem])
+
 
 def test_draw_brackets_collision_free_and_headroom(monkeypatch: pytest.MonkeyPatch) -> None:
     """Verify that multiple overlapping significance brackets never collide or overflow the top frame."""
