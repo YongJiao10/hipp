@@ -1,7 +1,7 @@
 # Kong2022 ArealMSHBM
 
 This is the single maintained interface for subject-level Kong2022_ArealMSHBM
-parcellation on JJ_TMS, Stanford, Iowa7T, ESTT, and Iowa HCP500. Dataset
+parcellation on JJ_TMS, Stanford, Iowa7T, ESTT, Iowa HCP500, PDC, and BANDA. Dataset
 selection, input adaptation, SGE submission, MATLAB execution, provenance, and
 status reporting live in this directory. It does not modify the
 Kong2022_ArealMSHBM algorithm logic.
@@ -9,7 +9,7 @@ Kong2022_ArealMSHBM algorithm logic.
 ## Datasets
 
 Select the dataset with `DATASET=jj_tms`, `DATASET=stanford`, `DATASET=iowa7t`,
-`DATASET=estt`, or `DATASET=iowa_hcp500`. ESTT and Iowa7T are separate dataset
+`DATASET=estt`, `DATASET=iowa_hcp500`, `DATASET=pdc`, or `DATASET=banda`. ESTT and Iowa7T are separate dataset
 branches with separate input/output roots; they are not aliases of one another.
 If unset,
 `DATASET=jj_tms` is used for backward compatibility.
@@ -24,9 +24,12 @@ If unset,
 | `estt` + `ESTT_VARIANT=22p` | `/Shared/jianglab/3_Data_Working/fmriprep_processed_esTT/DataOrg_PFM_22P` | `/Shared/jianglab/3_Data_Working/fmriprep_processed_esTT/DataOrg_PFM_22P/hipp_outputs/cortex_kong2022_areal_mshbm` | `func/sub-<id>_task-rest_run-concat.dtseries.nii` |
 | `estt` + `ESTT_VARIANT=23p` | `/Shared/jianglab/3_Data_Working/fmriprep_processed_esTT/DataOrg_PFM_23P` | `/Shared/jianglab/3_Data_Working/fmriprep_processed_esTT/DataOrg_PFM_23P/hipp_outputs/cortex_kong2022_areal_mshbm` | `func/sub-<id>_task-rest_run-concat.dtseries.nii` |
 | `iowa_hcp500` | `/old_Users/yojiao/HCPpipeline500/work/qunex_iowa7t_hcppipeline500/sessions` | `${REPO_ROOT}/outputs_iowa_hcp500/inputs/iowa_hcp500/kong2022/cortex_references/routea_areal_mshbm` | `<subject>/hcp/<subject>/MNINonLinear/Results/REST/REST_Atlas_MSMAll_hp0_clean_rclean.dtseries.nii` |
+| `pdc` | `/Shared/jianglab/3_Data_Working/Depression/PDC/imaging` | `${REPO_ROOT}/outputs_pdc/inputs/pdc/kong2022/cortex_references/routea_areal_mshbm` | exact run filenames in `COHORT_MANIFEST`, mapped from `<base>_<visit>_MR/MNINonLinear/Results/` |
+| `banda` | `/Shared/jianglab/3_Data_Working/Depression/BANDA/imaging` | `${REPO_ROOT}/outputs_banda/inputs/banda/kong2022/cortex_references/routea_areal_mshbm` | exact run filenames in `COHORT_MANIFEST`, mapped from `BANDA<ID>_MR/MNINonLinear/Results/` |
 
-Each task scans one `sub-*` directory for the selected dataset's rest dtseries
-pattern and passes the resulting fsLR sessions to
+JJ_TMS and Stanford tasks scan one `sub-*` directory for the dataset's rest
+dtseries pattern. PDC/BANDA tasks consume only metadata-declared exact paths.
+The resulting fsLR sessions are passed to
 `CBIG_ArealMSHBM_parcellation_single_subject` in `params.lh_fMRI_list`, with a
 matching all-ones censor file in `params.censor_list`. JJ_TMS and Stanford
 source runs are not merged before MATLAB. ESTT is the explicit compatibility
@@ -39,6 +42,76 @@ path directly and obtains the timepoint count with `wb_command -file-information
 it does not require a Python runtime on Argon. Existing JJ_TMS and Stanford
 presets continue to use the Python input preparer. ESTT uses the Argon
 `hippo_nnunet` Python runtime for label-asset materialization.
+
+### PDC and BANDA
+
+These presets consume the released HCP `MSMAll_hp0_clean` CIFTIs directly;
+they are not fMRIPrep 22P/36P branches. Both datasets use their official
+`metadata/datastructure_manifest.txt` as the authoritative input source.
+The complete cortex roster is 455 PDC
+visits (984 runs) and 202 BANDA participants (808 runs). BANDA199 has no
+run-level resting CIFTI in the source metadata and is explicitly recorded in
+`excluded_subjects`; the structural HippUnfold roster is not a substitute for
+the cortex roster.
+
+PDC visits retain separate outputs: `e0011_02_MR` maps to `sub-e0011s02`,
+with the original session, base subject and visit recorded in provenance.
+`BANDA001_MR` maps to `sub-BANDA001`. Each declared `rfMRI_REST1_AP`,
+`rfMRI_REST1_PA`, `rfMRI_REST2_AP`, or `rfMRI_REST2_PA` is one MATLAB session.
+PDC visits have one to four available runs; BANDA participants have four.
+The separately released concatenated `rfMRI_REST` is excluded to avoid
+counting the same frames twice. No run splitting, task fMRI, extra denoising,
+subject surface requirement, or Kong2022 model change is introduced.
+
+Build the complete input contracts on Argon:
+
+```bash
+/Users/yojiao/miniconda3/envs/py313/bin/python scripts/ArealMSHBM_Kong2022/prepare_kong2022_areal_mshbm_subject_inputs.py --action build-cohort \
+  --dataset pdc --data-root /Shared/jianglab/3_Data_Working/Depression/PDC/imaging \
+  --manifest /old_Users/yojiao/hipp/outputs_pdc/inputs/pdc/kong2022/manifests/pdc_cortex_inputs.json
+/Users/yojiao/miniconda3/envs/py313/bin/python scripts/ArealMSHBM_Kong2022/prepare_kong2022_areal_mshbm_subject_inputs.py --action build-cohort \
+  --dataset banda --data-root /Shared/jianglab/3_Data_Working/Depression/BANDA/imaging \
+  --manifest /old_Users/yojiao/hipp/outputs_banda/inputs/banda/kong2022/manifests/banda_cortex_inputs.json
+```
+
+The builder refuses to replace an existing manifest. It checks every selected
+file's identity against source metadata and records exact paths, on-disk sizes,
+modification times, source metadata hashes and
+identity mappings. Tasks fail on missing, duplicate, stale, misidentified or
+wrong-variant declarations. CIFTI headers must contain both 32,492-vertex
+cortical models; consumed asset evidence is recorded for every run.
+
+Preview the shared launchers before requesting production approval:
+
+```bash
+SYSTEM_NAME=argon DATASET=pdc KEEP_TMP=1 DRY_RUN=1 \
+  scripts/ArealMSHBM_Kong2022/submit_kong2022_areal_mshbm.sh
+SYSTEM_NAME=argon DATASET=banda KEEP_TMP=1 DRY_RUN=1 \
+  HOLD_JID=pdc_k22_ui,pdc_k22_pinc \
+  scripts/ArealMSHBM_Kong2022/submit_kong2022_areal_mshbm.sh
+```
+
+After approval, submit PDC first and set BANDA's `HOLD_JID` to both returned
+PDC array IDs. Each cohort uses UI `-tc 5` plus PINC `-tc 15`; holding BANDA
+until both PDC arrays finish keeps combined concurrency at 20 or below.
+Check the live queue before submission. SGE dependencies wait for completion,
+not scientific success; inspect each cohort's label/provenance outputs.
+`SMOKE_N=1` selects one declared subject, while `TASK_DRY_RUN=1` validates
+headers and prepared run/censor lists without starting MATLAB.
+
+`COHORT_MANIFEST` selects an exact alternative manifest explicitly. A
+`SUBJECT_IDS_FILE` or `SUBJECT_IDS_CSV` may select only identities declared
+there; malformed or unknown identities fail. Per-subject products are
+`lh_labels.txt`, `rh_labels.txt`, `provenance.json` and persistent `inputs/`
+under the selected formal output root. Each hemisphere has 32,492 labels;
+provenance records parcel counts, run identity, frame counts, input fingerprints
+and source/cohort manifest hashes. Label/provenance files already present cause
+an error for inspection, rather than reuse of an unvalidated cache.
+PDC/BANDA requires `OVERWRITE=0` and `KEEP_TMP=1`; every task creates a unique
+temporary CBIG project and retains it without automatic deletion.
+The Argon runtime is the existing `py313` interpreter, nibabel, NumPy,
+Workbench, MATLAB R2021a and CBIG; the local core-workflow py314 environment
+is not required on Argon.
 
 ### Stanford version isolation
 
@@ -241,14 +314,16 @@ Key RouteA outputs:
 - `rh_labels.txt`
 - `provenance.json` after successful non-dry-run MATLAB completion
 
-The wrapper keeps CBIG working files and prepared input lists under a dataset
-scoped `/tmp/<dataset>_kong2022_<job>_<task>_<subject>` directory during
-execution and removes that work directory automatically when the task exits.
+JJ_TMS, Stanford and Iowa7T keep CBIG working files and prepared input lists
+under `/tmp/<dataset>_kong2022_<job>_<task>_<subject>` during execution.
+PDC/BANDA keeps its input lists and manifests under each formal subject's
+`inputs/` directory and uses a unique temporary CBIG project with a random
+suffix. Automatic temporary-directory cleanup occurs only when `KEEP_TMP=0`.
 ESTT deliberately retains its subject-level work directory because that is
 part of the existing ESTT reproducibility contract.
-For `iowa_hcp500`, `KEEP_TMP=1` is the default so validation and smoke runs do
-not delete temporary files. Set `KEEP_TMP=0` only when deletion has been
-explicitly approved.
+For `iowa_hcp500`, `KEEP_TMP=1` is the default. PDC/BANDA requires `KEEP_TMP=1`.
+Set `KEEP_TMP=0` for a supported dataset only when deletion has been explicitly
+approved.
 
 The task script prepends `${REPO_ROOT}/software/workbench/bin_linux64` to
 `PATH` and passes `WB_COMMAND` through qsub so CBIG/MATLAB calls to

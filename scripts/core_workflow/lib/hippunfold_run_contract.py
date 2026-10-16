@@ -247,12 +247,31 @@ def build_run_environment(
 
 def validate_local_assets() -> None:
     """Require the repository's validated hippo2 CLI before a real run."""
-    model = Path(CANONICAL_MODEL_PATH)
-    if not model.is_file():
-        raise FileNotFoundError(f"Canonical local HippUnfold model is missing: {model}")
     if not HIPPUNFOLD_EXECUTABLE.is_file():
         raise FileNotFoundError(
             f"Validated HippUnfold executable is missing: {HIPPUNFOLD_EXECUTABLE}"
+        )
+
+    resource_adapter = subprocess.run(
+        [
+            str(HIPPO2_PREFIX / "bin" / "python"),
+            "-c",
+            "from hippunfold.workflow.lib.local_assets import "
+            "template_is_cached, atlas_copy_is_cached, atlas_extract_is_cached, "
+            "model_is_unpacked",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
+    )
+    if resource_adapter.returncode != 0:
+        raise RuntimeError(
+            "hippo2 local-asset adaptation is missing. Apply "
+            "scripts/core_workflow/lib/hippunfold_local_assets.patch to the installed "
+            "HippUnfold package, as documented in "
+            "docs/environment/hippo2_reproducibility_manifest.md. "
+            f"stderr={resource_adapter.stderr.strip()!r}"
         )
 
     activation = Path("/opt/conda/bin/activate")

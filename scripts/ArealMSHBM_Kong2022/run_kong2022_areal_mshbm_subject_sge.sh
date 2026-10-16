@@ -63,8 +63,14 @@ case "${dataset}" in
     default_out_root="${repo_root}/outputs_iowa_hcp500/inputs/iowa_hcp500/kong2022/cortex_references/routea_areal_mshbm"
     tmp_prefix="iowa_hcp500_kong2022"
     ;;
+  pdc|banda)
+    dataset_label="${dataset^^}"
+    default_data_root="/Shared/jianglab/3_Data_Working/Depression/${dataset_label}/imaging"
+    default_out_root="${repo_root}/outputs_${dataset}/inputs/${dataset}/kong2022/cortex_references/routea_areal_mshbm"
+    tmp_prefix="${dataset}_kong2022"
+    ;;
   *)
-    echo "ERROR: unsupported DATASET=${DATASET:-}. Expected jj_tms, stanford, iowa7t, estt, or iowa_hcp500." >&2
+    echo "ERROR: unsupported DATASET=${DATASET:-}. Expected jj_tms, stanford, iowa7t, estt, iowa_hcp500, pdc, or banda." >&2
     exit 2
     ;;
 esac
@@ -241,7 +247,19 @@ group_prior="${GROUP_PRIOR:-${cbig_code_dir}/stable_projects/brain_parcellation/
 wb_command="${WB_COMMAND:-${repo_root}/software/workbench/bin_linux64/wb_command}"
 kong2022_dlabel="${KONG2022_DLABEL:-${repo_root}/external/Schaefer2018_Kong2022/Schaefer2018_400Parcels_Kong2022_17Networks_order.dlabel.nii}"
 overwrite="${OVERWRITE:-0}"
-keep_tmp="${KEEP_TMP:-$([ "${dataset}" = "iowa_hcp500" ] && printf 1 || printf 0)}"
+keep_tmp="${KEEP_TMP:-$([[ "${dataset}" = "iowa_hcp500" || "${dataset}" = "pdc" || "${dataset}" = "banda" ]] && printf 1 || printf 0)}"
+cohort_manifest="${COHORT_MANIFEST:-}"
+if [ "${dataset}" = "pdc" ] || [ "${dataset}" = "banda" ]; then
+  if [ "${keep_tmp}" != "1" ] || [ "${overwrite}" != "0" ]; then
+    echo "ERROR: PDC/BANDA requires KEEP_TMP=1 OVERWRITE=0." >&2
+    exit 2
+  fi
+  if [ -z "${subject_ids_file}" ] && [ -z "${subject_ids_csv}" ]; then
+    echo "ERROR: PDC/BANDA tasks require an explicit subject list from the shared launcher." >&2
+    exit 2
+  fi
+  cohort_manifest="${COHORT_MANIFEST:-${repo_root}/outputs_${dataset}/inputs/${dataset}/kong2022/manifests/${dataset}_cortex_inputs.json}"
+fi
 task_dry_run="${TASK_DRY_RUN:-${DRY_RUN:-0}}"
 matlab_mode="${MATLAB_MODE:-batch}"
 run_id="${RUN_ID:-manual}"
@@ -291,6 +309,9 @@ if [ "${dataset}" = "estt" ]; then
   project_dir="${tmp_root}/project_dir"
 else
   tmp_root="/tmp/${tmp_prefix}_${job_id}_${task_id}_${subject}"
+  if [ "${dataset}" = "pdc" ] || [ "${dataset}" = "banda" ]; then
+    tmp_root="$(mktemp -d "/tmp/${tmp_prefix}_${job_id}_${task_id}_${subject}.XXXXXX")"
+  fi
   project_dir="${tmp_root}/cbig_project"
 fi
 run_list="${tmp_root}/inputs/task_rest_dtseries.txt"
@@ -299,6 +320,17 @@ input_manifest="${tmp_root}/inputs/input_manifest.json"
 lh_labels="${subject_out}/lh_labels.txt"
 rh_labels="${subject_out}/rh_labels.txt"
 provenance_path="${subject_out}/provenance.json"
+if [ "${dataset}" = "pdc" ] || [ "${dataset}" = "banda" ]; then
+  for existing in "${lh_labels}" "${rh_labels}" "${provenance_path}"; do
+    if [ -e "${existing}" ]; then
+      echo "ERROR: refusing to reuse an existing PDC/BANDA result: ${existing}; inspect its input provenance before resubmission." >&2
+      exit 2
+    fi
+  done
+  run_list="${subject_out}/inputs/task_rest_dtseries.txt"
+  censor_list="${subject_out}/inputs/task_rest_censors.txt"
+  input_manifest="${subject_out}/inputs/input_manifest.json"
+fi
 run_start_utc="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 run_start_epoch="$(date -u +%s)"
 
@@ -361,6 +393,9 @@ if [ "${dataset}" != "iowa_hcp500" ] && [ "${dataset}" != "iowa7t" ]; then
     "${script_dir}/prepare_kong2022_areal_mshbm_subject_inputs.py"
   )
 fi
+if [ "${dataset}" = "pdc" ] || [ "${dataset}" = "banda" ]; then
+  required+=("${cohort_manifest}" "${script_dir}/prepare_kong2022_areal_mshbm_subject_inputs.py")
+fi
 if [ "${dataset}" = "estt" ]; then
   required+=("${kong2022_dlabel}")
 fi
@@ -391,7 +426,13 @@ left_midthickness=""
 right_midthickness=""
 sulc_dscalar=""
 
-if [ "${dataset}" = "estt" ]; then
+if [ "${dataset}" = "pdc" ] || [ "${dataset}" = "banda" ]; then
+  "${python_exe}" "${script_dir}/prepare_kong2022_areal_mshbm_subject_inputs.py" \
+    --action prepare-cohort \
+    --dataset "${dataset}" --data-root "${data_root}" \
+    --cohort-manifest "${cohort_manifest}" --subject "${subject}" \
+    --subject-output-dir "${subject_out}"
+elif [ "${dataset}" = "estt" ]; then
   subject_dir="${data_root}/${subject}"
   dtseries="${subject_dir}/func/${subject}_task-rest_run-concat.dtseries.nii"
   left_midthickness="${subject_dir}/anat/${subject}_hemi-L_space-fsLR_den-32k_midthickness.surf.gii"

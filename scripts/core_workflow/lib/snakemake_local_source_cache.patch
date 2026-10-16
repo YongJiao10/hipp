@@ -1,0 +1,16 @@
+--- a/sourcecache.py
++++ b/sourcecache.py
+@@ -759,7 +759,12 @@
+ 
+     def _cache(self, source_file: SourceFile):
+         cache_entry = self._cache_entry(source_file)
+-        if not cache_entry.exists():
++        # A caller-supplied runtime cache may outlive an installed workflow patch.
++        # Refresh changed local code without probing metadata of remote sources.
++        if not cache_entry.exists() or (
++            isinstance(source_file, LocalSourceFile)
++            and source_file.mtime() != cache_entry.stat().st_mtime
++        ):
+             self._do_cache(source_file, cache_entry)
+         return cache_entry
+ 

@@ -236,6 +236,17 @@ def main() -> int:
     }
     if manifest.get("variant") is not None:
         payload["variant"] = manifest["variant"]
+    if args.dataset in ("pdc", "banda"):
+        for key in ("source_subject", "cohort_manifest", "cohort_manifest_sha256",
+                    "source_manifest", "source_manifest_sha256", "session_policy"):
+            payload[key] = manifest[key]
+        for key in ("base_subject_id", "session_number"):
+            if key in manifest:
+                payload[key] = manifest[key]
+        payload["label_stats"] = label_stats(
+            read_labels(args.output_dir / "lh_labels.txt", subject=subject, hemi="L"),
+            read_labels(args.output_dir / "rh_labels.txt", subject=subject, hemi="R"),
+        )
     if asset_outputs:
         payload["assets"] = asset_outputs
         payload["label_stats"] = asset_label_stats

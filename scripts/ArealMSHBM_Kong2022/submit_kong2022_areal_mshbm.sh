@@ -87,8 +87,15 @@ case "${dataset}" in
     job_prefix="ia500_k22"
     manifest_prefix="iowa_hcp500"
     ;;
+  pdc|banda)
+    dataset_label="${dataset^^}"
+    default_data_root="/Shared/jianglab/3_Data_Working/Depression/${dataset_label}/imaging"
+    default_out_root="${repo_root}/outputs_${dataset}/inputs/${dataset}/kong2022/cortex_references/routea_areal_mshbm"
+    job_prefix="${dataset}_k22"
+    manifest_prefix="${dataset}"
+    ;;
   *)
-    echo "ERROR: unsupported DATASET=${DATASET:-}. Expected jj_tms, stanford, iowa7t, estt, or iowa_hcp500." >&2
+    echo "ERROR: unsupported DATASET=${DATASET:-}. Expected jj_tms, stanford, iowa7t, estt, iowa_hcp500, pdc, or banda." >&2
     exit 2
     ;;
 esac
@@ -268,7 +275,9 @@ smoke_n="${SMOKE_N:-0}"
 subjects_csv="${SUBJECT_IDS_CSV:-}"
 subject_ids_file="${SUBJECT_IDS_FILE:-}"
 overwrite="${OVERWRITE:-0}"
-keep_tmp="${KEEP_TMP:-$([ "${dataset}" = "iowa_hcp500" ] && printf 1 || printf 0)}"
+keep_tmp="${KEEP_TMP:-$([[ "${dataset}" = "iowa_hcp500" || "${dataset}" = "pdc" || "${dataset}" = "banda" ]] && printf 1 || printf 0)}"
+cohort_manifest="${COHORT_MANIFEST:-}"
+hold_jid="${HOLD_JID:-}"
 ui_tc="${UI_TC:-${default_ui_tc}}"
 pinc_tc="${PINC_TC:-${default_pinc_tc}}"
 timestamp="$(date +%Y%m%d_%H%M%S)"
@@ -286,7 +295,7 @@ usage() {
 Usage: $(basename "$0")
 
 Environment controls:
-  DATASET=jj_tms|stanford|iowa7t|estt|iowa_hcp500
+  DATASET=jj_tms|stanford|iowa7t|estt|iowa_hcp500|pdc|banda
                         Dataset preset. Default: jj_tms.
   STANFORD_VARIANT=22p|36p
                         Stanford input version. Auto-detected from DATA_ROOT;
@@ -304,7 +313,9 @@ Environment controls:
   UI_TC=N               UI array throttle. IDAS default: 3; Argon default: 5.
   PINC_TC=N             PINC array throttle. IDAS default: 7; Argon default: 15.
   OVERWRITE=1           Recompute existing outputs.
-  KEEP_TMP=1            Retain task temporary files. Default: 1 for iowa_hcp500.
+  KEEP_TMP=1            Retain task temporary files. Required for pdc/banda.
+  COHORT_MANIFEST=...   Exact metadata-derived PDC/BANDA input manifest.
+  HOLD_JID=...          Explicit comma-separated prerequisite SGE job IDs.
   IOWA7T_BRANCH=...     Required for DATASET=iowa7t: multiband or multi_echo.
   IOWA7T_VARIANT=...    Optional for DATASET=iowa7t: 0p, 22p, 32p, 36p, or noxcpd.
                         Auto-detected from DATA_ROOT basename when possible.
@@ -351,9 +362,35 @@ if [ "$((ui_tc + pinc_tc))" -gt "${max_concurrency}" ]; then
   exit 2
 fi
 
+cohort_ids=()
+if [ "${dataset}" = "pdc" ] || [ "${dataset}" = "banda" ]; then
+  if [ "${keep_tmp}" != "1" ] || [ "${overwrite}" != "0" ]; then
+    echo "ERROR: PDC/BANDA requires KEEP_TMP=1 OVERWRITE=0; existing outputs must remain protected." >&2
+    exit 2
+  fi
+  cohort_manifest="${COHORT_MANIFEST:-${repo_root}/outputs_${dataset}/inputs/${dataset}/kong2022/manifests/${dataset}_cortex_inputs.json}"
+  cohort_text="$("${python_exe}" "${script_dir}/prepare_kong2022_areal_mshbm_subject_inputs.py" \
+    --action list-cohort --dataset "${dataset}" --data-root "${data_root}" \
+    --cohort-manifest "${cohort_manifest}")"
+  mapfile -t cohort_ids <<< "${cohort_text}"
+fi
+
 mkdir -p "${manifest_dir}" "${log_root}"
 
 read_subjects() {
+  if [ "${dataset}" = "pdc" ] || [ "${dataset}" = "banda" ]; then
+    if [ -n "${subject_ids_file}" ] && [ -n "${subjects_csv}" ]; then
+      echo "ERROR: select SUBJECT_IDS_FILE or SUBJECT_IDS_CSV, not both." >&2
+      return 2
+    elif [ -n "${subject_ids_file}" ]; then
+      awk 'NF {sub(/\r$/, ""); sub(/^sub-/, ""); print}' "${subject_ids_file}"
+    elif [ -n "${subjects_csv}" ]; then
+      printf '%s\n' "${subjects_csv}" | tr ',' '\n' | sed 's/^sub-//'
+    else
+      printf '%s\n' "${cohort_ids[@]}"
+    fi
+    return
+  fi
   if [ -n "${subject_ids_file}" ]; then
     if [ ! -f "${subject_ids_file}" ]; then
       echo "ERROR: SUBJECT_IDS_FILE not found: ${subject_ids_file}" >&2
@@ -380,10 +417,24 @@ read_subjects() {
   fi
 }
 
-mapfile -t all_ids < <(read_subjects)
-if [ "${#all_ids[@]}" -lt 1 ]; then
+selected_ids="$(read_subjects)"
+if [ -z "${selected_ids}" ]; then
   echo "ERROR: no valid subject IDs found" >&2
   exit 2
+fi
+mapfile -t all_ids <<< "${selected_ids}"
+
+if [ "${dataset}" = "pdc" ] || [ "${dataset}" = "banda" ]; then
+  for sid in "${all_ids[@]}"; do
+    found=0
+    for declared_id in "${cohort_ids[@]}"; do
+      if [ "${sid}" = "${declared_id}" ]; then found=1; break; fi
+    done
+    if [ "${found}" != "1" ]; then
+      echo "ERROR: ${sid} is not declared in ${cohort_manifest}." >&2
+      exit 2
+    fi
+  done
 fi
 
 dup_ids="$(printf '%s\n' "${all_ids[@]}" | sort | uniq -d || true)"
@@ -453,6 +504,7 @@ write_job_wrapper() {
     printf "export TASK_DRY_RUN=%s\n" "$(shell_quote "${task_dry_run}")"
     printf "export OVERWRITE=%s\n" "$(shell_quote "${overwrite}")"
     printf "export KEEP_TMP=%s\n" "$(shell_quote "${keep_tmp}")"
+    printf "export COHORT_MANIFEST=%s\n" "$(shell_quote "${cohort_manifest}")"
     printf "exec %s\n" "$(shell_quote "${task_script}")"
   } > "${wrapper_file}"
   chmod +x "${wrapper_file}"
@@ -488,6 +540,9 @@ submit_queue() {
     -o "${log_dir}/${job_name}.\$JOB_ID.\$TASK_ID.log"
     "${job_wrapper}"
   )
+  if [ -n "${hold_jid}" ]; then
+    qsub_cmd=("${qsub_cmd[@]:0:1}" -hold_jid "${hold_jid}" "${qsub_cmd[@]:1}")
+  fi
 
   echo "[submit] ${queue}: subjects=${subject_count} tc=${tc} task_dry_run=${task_dry_run} dry_run=${dry_run}" >&2
   echo "[submit] ${queue}: subject_list=${subject_list}" >&2

@@ -31,6 +31,8 @@
 !/tests/**
 !**/config/**
 !/scripts/core_workflow/step_registry.json
+!/scripts/core_workflow/lib/hippunfold_local_assets.patch
+!/scripts/core_workflow/lib/snakemake_local_source_cache.patch
 !/scripts/visualize/flowchart/package.json
 !/scripts/visualize/flowchart/compact/layout.json
 !/scripts/visualize/flowchart/compact/asset_details.json

@@ -26,6 +26,16 @@ Use exactly one of these based on task type.
 - activate `hippo2` with `source /opt/conda/bin/activate hippo2` and pass the HippUnfold gate from `AGENTS.md`
 - expected CLI path after activation: `/home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2/bin/hippunfold`
 
+3. Argon SGE Kong2022 launchers and their dataset adapters (including PDC/BANDA):
+`/Users/yojiao/miniconda3/envs/py313/bin/python`. This is the existing Argon
+runtime with nibabel and NumPy, alongside MATLAB R2021a, CBIG and Workbench.
+PDC/BANDA reads metadata-declared HCP MSMAll clean CIFTIs under
+`/Shared/jianglab/3_Data_Working/Depression/{PDC,BANDA}/imaging/` and validates
+their cortical models as fsLR32k. No new environment or dependency is needed.
+Use the shared `scripts/ArealMSHBM_Kong2022/` interface and its README for
+manifest preparation and SGE execution; local py314 paths do not apply to
+these Argon launchers.
+
 ## One-Shot Preflight (Run First)
 
 ```bash

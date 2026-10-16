@@ -86,6 +86,13 @@
 CONDA_SAFETY_CHECKS=disabled conda install -y -p /home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2 -c khanlab -c conda-forge -c bioconda khanlab::hippunfold=2.0.0=py_0 --force-reinstall
 ```
 
+- The local runtime also requires the resource patches documented in
+  `docs/environment/hippo2_reproducibility_manifest.md#local-resource-resolution`.
+  Reapply the HippUnfold patch after reinstalling HippUnfold and the local-source
+  cache patch after reinstalling Snakemake. Complete cached resources must not
+  register remote dependencies or issue HTTP requests; absent resources use the
+  original declared download URL. Existing incomplete caches report the exact
+  missing files. Stage 01 checks that the resource adapter is installed.
 - Do not treat `bioconda::hippunfold` as sufficient evidence of native `512` support.
 - Avoid forbidden workflow version labels for this project: `1.5.2`, `1.5.2-pre.2`, `1.5.2rc2`.
 

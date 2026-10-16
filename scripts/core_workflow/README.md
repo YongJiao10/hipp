@@ -110,6 +110,25 @@ checker's default automatic cleanup after a run. The checker removes
 `anat/`, `coords/`, `warps/`, and `cifti/` after successful output validation,
 retaining `surf/`, `metric/`, and `qc/`.
 
+### Shared resource resolution
+
+HippUnfold checks the exact shared cache for the selected registration template,
+surface atlas, and nnUNet model before registering their download rules. Complete
+local resources are external DAG inputs and cause no HTTP requests, including
+metadata `HEAD` requests. An already unpacked nnUNet v1 model is reusable without
+its original archive. Atlas files already materialized in `atlases/` are reused;
+otherwise the existing `atlases_dl/` extraction supplies the required copies.
+When a resource is absent, its original upstream download rule and declared URL
+are used. Existing incomplete template, extraction, or model directories fail
+with the exact missing filenames so they can be repaired explicitly.
+
+The installed Snakemake source cache refreshes local workflow code when its
+modification time changes. This keeps the shared runtime source cache from
+continuing to execute rules from before a package patch. Stage 01 checks that the
+resource adapter is installed before launching. The runtime patches and package
+reinstallation commands are recorded in
+[the environment manifest](../../docs/environment/hippo2_reproducibility_manifest.md#local-resource-resolution).
+
 The shell adapter `lib/hippunfold_shell/run_hippunfold_local.sh` is a
 compatibility entrypoint only; it accepts exactly `<dataset> <subject>` and
 delegates to this entrypoint.

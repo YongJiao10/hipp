@@ -1,0 +1,364 @@
+--- a/workflow/rules/download.smk
++++ b/workflow/rules/download.smk
+@@ -1,86 +1,116 @@
+-# populate the HIPPUNFOLD_CACHE_DIR folder as needed
++# Resolve declared local resources before any remote storage() input is registered.
+ from lib import utils as utils
++from lib.local_assets import (
++    atlas_copy_is_cached, atlas_extract_is_cached, template_is_cached,
++)
+ 
+ download_dir = utils.get_download_dir()
+-
+-
+-rule download_extract_template:
+-    """Note: OSF urls don't seem to be supported with snakemake storage plugin"""
+-    params:
+-        url=lambda wildcards: config["resource_urls"]["template"][wildcards.template],
+-    output:
+-        unzip_dir=directory(Path(download_dir) / "template" / "{template}"),
+-    shadow:
+-        "minimal"
+-    script:
+-        "../scripts/download.py"
+-
+-
+-rule download_surf_template_atlas:
+-    input:
+-        zip_file=lambda wildcards: storage(
+-            config["resource_urls"]["atlas"][wildcards.atlas]
+-        ),
+-    output:
+-        unzip_dir=temp(directory(Path(download_dir) / "atlases_dl" / "tpl-{atlas}")),
+-    wildcard_constraints:
+-        atlas="|".join(config["builtin_atlases"]),
+-    shadow:
+-        "minimal"
+-    shell:
+-        "unzip {input} -d {output}"
+-
+-
+-rule cp_atlas_surf_gii:
+-    input:
+-        unzip_dir=Path(download_dir) / "atlases_dl" / "tpl-{atlas}",
+-    params:
+-        path=lambda wildcards, input: bids_atlas(
+-            root=Path(input.unzip_dir).parent,
+-            template=wildcards.atlas,
+-            hemi=wildcards.hemi,
+-            label=wildcards.label,
+-            den=wildcards.density,
+-            space=wildcards.space,
+-            suffix=f"{wildcards.surf_name}.surf.gii",
+-        ),
+-    output:
+-        atlas_file=bids_atlas(
+-            root=get_atlas_dir(),
+-            template="{atlas}",
+-            hemi="{hemi}",
+-            label="{label}",
+-            den="{density}",
+-            space="{space}",
+-            suffix="{surf_name}.surf.gii",
+-        ),
+-    shell:
+-        "cp {params.path} {output}"
+-
+-
+-rule cp_atlas_metric_gii:
+-    input:
+-        unzip_dir=Path(download_dir) / "atlases_dl" / "tpl-{atlas}",
+-    params:
+-        path=lambda wildcards, input: bids_atlas(
+-            root=Path(input.unzip_dir).parent,
+-            template=wildcards.atlas,
+-            hemi=wildcards.hemi,
+-            label=wildcards.label,
+-            den=wildcards.density,
+-            suffix=f"{wildcards.metricname}.{wildcards.metrictype}.gii",
+-        ),
+-    output:
+-        atlas_file=bids_atlas(
+-            root=get_atlas_dir(),
+-            template="{atlas}",
+-            hemi="{hemi}",
+-            label="{label}",
+-            den="{density}",
+-            suffix="{metricname}.{metrictype}.gii",
+-        ),
+-    shell:
+-        "cp {params.path} {output}"
++selected_templates = {config["template"], config["inject_template"]}
++cached_templates = {
++    name for name in selected_templates
++    if template_is_cached(download_dir, name, config)
++}
++missing_templates = [
++    name for name in config["resource_urls"]["template"] if name not in cached_templates
++]
++copy_atlases = [
++    name for name in config["builtin_atlases"]
++    if not atlas_copy_is_cached(download_dir, name, config)
++]
++download_atlases = [
++    name for name in copy_atlases
++    if not atlas_extract_is_cached(download_dir, name, config)
++]
++
++if missing_templates:
++
++    rule download_extract_template:
++        """Note: OSF urls don't seem to be supported with snakemake storage plugin"""
++        params:
++            url=lambda wildcards: config["resource_urls"]["template"][wildcards.template],
++        output:
++            unzip_dir=directory(Path(download_dir) / "template" / "{template}"),
++        wildcard_constraints:
++            template="|".join(missing_templates),
++        shadow:
++            "minimal"
++        script:
++            "../scripts/download.py"
++
++
++if download_atlases:
++
++    rule download_surf_template_atlas:
++        input:
++            zip_file=lambda wildcards: storage(
++                config["resource_urls"]["atlas"][wildcards.atlas]
++            ),
++        output:
++            unzip_dir=temp(directory(Path(download_dir) / "atlases_dl" / "tpl-{atlas}")),
++        wildcard_constraints:
++            atlas="|".join(download_atlases),
++        shadow:
++            "minimal"
++        shell:
++            "unzip {input} -d {output}"
++
++
++if copy_atlases:
++
++    rule cp_atlas_surf_gii:
++        input:
++            unzip_dir=Path(download_dir) / "atlases_dl" / "tpl-{atlas}",
++        params:
++            path=lambda wildcards, input: bids_atlas(
++                root=Path(input.unzip_dir).parent,
++                template=wildcards.atlas,
++                hemi=wildcards.hemi,
++                label=wildcards.label,
++                den=wildcards.density,
++                space=wildcards.space,
++                suffix=f"{wildcards.surf_name}.surf.gii",
++            ),
++        output:
++            atlas_file=bids_atlas(
++                root=get_atlas_dir(),
++                template="{atlas}",
++                hemi="{hemi}",
++                label="{label}",
++                den="{density}",
++                space="{space}",
++                suffix="{surf_name}.surf.gii",
++            ),
++        wildcard_constraints:
++            atlas="|".join(copy_atlases),
++        shell:
++            "cp {params.path} {output}"
++
++
++    rule cp_atlas_metric_gii:
++        input:
++            unzip_dir=Path(download_dir) / "atlases_dl" / "tpl-{atlas}",
++        params:
++            path=lambda wildcards, input: bids_atlas(
++                root=Path(input.unzip_dir).parent,
++                template=wildcards.atlas,
++                hemi=wildcards.hemi,
++                label=wildcards.label,
++                den=wildcards.density,
++                suffix=f"{wildcards.metricname}.{wildcards.metrictype}.gii",
++            ),
++        output:
++            atlas_file=bids_atlas(
++                root=get_atlas_dir(),
++                template="{atlas}",
++                hemi="{hemi}",
++                label="{label}",
++                den="{density}",
++                suffix="{metricname}.{metrictype}.gii",
++            ),
++        wildcard_constraints:
++            atlas="|".join(copy_atlases),
++        shell:
++            "cp {params.path} {output}"
+ 
+ 
+ ## unpack template
+--- a/workflow/rules/nnunet.smk
++++ b/workflow/rules/nnunet.smk
+@@ -1,4 +1,5 @@
+ import re
++from lib.local_assets import file_is_present, model_is_unpacked
+ 
+ 
+ def get_nnunet_input(wildcards):
+@@ -63,13 +64,18 @@
+     return get_model_tar().removesuffix(".gz").removesuffix(".tar")
+ 
+ 
+-rule download_nnunet_model:
+-    input:
+-        url=storage(model_dict["url"]),
+-    output:
+-        model_tar=temp(get_model_tar()),
+-    shell:
+-        "cp {input} {output}"
++local_model_unpacked = model_is_unpacked(get_model_dir(), model_dict)
++
++
++if not local_model_unpacked and not file_is_present(get_model_tar()):
++
++    rule download_nnunet_model:
++        input:
++            url=storage(model_dict["url"]),
++        output:
++            model_tar=temp(get_model_tar()),
++        shell:
++            "cp {input} {output}"
+ 
+ 
+ def get_cmd_copy_inputs(wildcards, input):
+@@ -85,16 +91,18 @@
+         return " && ".join(cmd)
+ 
+ 
+-rule unpack_nnunet_model:
+-    """ Unpack nnunet model tar to temp folder to check contents"""
+-    input:
+-        tar=get_model_tar(),
+-    params:
+-        tar_opts=lambda wildcards, input: "-xzf" if input.tar[-2:] == "gz" else "-xf",
+-    output:
+-        directory(get_model_dir()),
+-    shell:
+-        "mkdir -p {output} && tar {params.tar_opts} {input} -C {output}"
++if not local_model_unpacked:
++
++    rule unpack_nnunet_model:
++        """ Unpack nnunet model tar to temp folder to check contents"""
++        input:
++            tar=get_model_tar(),
++        params:
++            tar_opts=lambda wildcards, input: "-xzf" if input.tar[-2:] == "gz" else "-xf",
++        output:
++            directory(get_model_dir()),
++        shell:
++            "mkdir -p {output} && tar {params.tar_opts} {input} -C {output}"
+ 
+ 
+ if model_dict["arch_version"] == "nnunet_v1":
+--- /dev/null
++++ b/workflow/lib/local_assets.py
+@@ -0,0 +1,99 @@
++"""Resolve the installed workflow's declared resources before registering downloads."""
++
++from itertools import product
++from pathlib import Path
++from string import Formatter
++
++
++def file_is_present(path):
++    path = Path(path)
++    return path.is_file() and path.stat().st_size > 0
++
++
++def directory_is_cached(folder, filenames):
++    folder = Path(folder)
++    if not folder.exists():
++        return False
++    missing = [folder / name for name in filenames if not file_is_present(folder / name)]
++    if missing:
++        raise FileNotFoundError(
++            f"Incomplete HippUnfold resource cache at {folder}; missing or empty: "
++            + ", ".join(map(str, missing))
++            + ". Repair this declared cache before reuse."
++        )
++    return True
++
++
++def template_is_cached(cache, template, config):
++    spec = config["template_files"][template]
++    values = {
++        "hemi": spec["hemi_wildcards"],
++        "dir": ("AP", "PD", "IO"),
++        "label": config["autotop_labels"],
++        "modality": [name for name in ("T1w", "T2w") if name in spec],
++    }
++    filenames = set()
++    for pattern in spec.values():
++        if not isinstance(pattern, str):
++            continue
++        fields = sorted({name for _, name, _, _ in Formatter().parse(pattern) if name})
++        for combination in product(*(values[name] for name in fields)):
++            filenames.add(pattern.format(**dict(zip(fields, combination))))
++    return directory_is_cached(Path(cache) / "template" / template, sorted(filenames))
++
++
++def atlas_filenames(atlas, config):
++    # Atlas metrics are registration inputs at unfoldreg_density; participant
++    # metrics at output_density are computed by the workflow, not copied here.
++    registration_density = config["unfoldreg_density"]
++    densities = sorted((set(config["output_density"]) | {registration_density}) - {"native"})
++    filenames = []
++    for hemi, label in product(config["hemi"], config["autotop_labels"]):
++        prefix = f"tpl-{atlas}_hemi-{hemi}"
++        for density, surface in product(densities, ("inner", "midthickness", "outer")):
++            filenames.append(
++                f"{prefix}_space-unfold_den-{density}_label-{label}_{surface}.surf.gii"
++            )
++        for metric in config["atlas_metadata"][atlas]["metric_wildcards"]:
++            filenames.append(
++                f"{prefix}_den-{registration_density}_label-{label}_{metric}.shape.gii"
++            )
++        if label == "hipp":
++            for density in densities:
++                filenames.append(f"{prefix}_den-{density}_label-hipp_dseg.label.gii")
++    return filenames
++
++
++def atlas_copy_is_cached(cache, atlas, config):
++    folder = Path(cache) / "atlases" / f"tpl-{atlas}"
++    return all(file_is_present(folder / name) for name in atlas_filenames(atlas, config))
++
++
++def atlas_extract_is_cached(cache, atlas, config):
++    folder = Path(cache) / "atlases_dl" / f"tpl-{atlas}"
++    return directory_is_cached(folder, atlas_filenames(atlas, config))
++
++
++def model_is_unpacked(folder, model):
++    folder = Path(folder)
++    if model["arch_version"] != "nnunet_v1" or not folder.exists():
++        return False
++    training = (
++        folder / "nnUNet" / "3d_fullres" / model["task"]
++        / f"{model['trainer']}__nnUNetPlansv2.1"
++    )
++    if not training.is_dir():
++        raise FileNotFoundError(f"Incomplete HippUnfold model cache: {training}")
++    # nnUNet v1 discovers every fold in this exact model directory. Check all
++    # discovered folds; directory order never selects a checkpoint or a variant.
++    folds = [
++        child for child in training.iterdir()
++        if child.is_dir() and (child.name == "all" or child.name.startswith("fold_"))
++    ]
++    if not folds:
++        raise FileNotFoundError(f"Incomplete HippUnfold model cache: no folds in {training}")
++    checkpoint = model["checkpoint"]
++    names = ["plans.pkl"]
++    for fold in folds:
++        names.extend((f"{fold.name}/{checkpoint}.model", f"{fold.name}/{checkpoint}.model.pkl"))
++    return directory_is_cached(training, names)

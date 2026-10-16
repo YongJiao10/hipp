@@ -98,8 +98,8 @@ The environment should be checked with `conda run -p /home/yojiao/hpchome/hipp/.
 ```text
 Item                Observed value
 ------------------  ---------------------------------------------
-Python              3.11.15
-hippunfold module   /home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2/lib/python3.11/
+Python              3.13.13
+hippunfold module   /home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2/lib/python3.13/
                     site-packages/hippunfold/__init__.py
 nnUNet_predict      /home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2/bin/nnUNet_predict
 reg_aladin          /home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2/bin/reg_aladin
@@ -331,7 +331,7 @@ Setting / Path                                 Purpose
 `HIPPUNFOLD_CLEANUP_RUNTIME`                 Not accepted by the stage-01 contract; runtime scratch is retained for reproducibility
 `runtime/hippunfold_asset_store_shared`       Hardcoded shared asset store for reusable template/model downloads
 `runtime/hippunfold_asset_store_shared/hippunfold_assets`       Canonical `HIPPUNFOLD_CACHE_DIR`; the contract writes this value
-`hippunfold_assets/model/trained_model.3d_fullres.Task101_hcp1200_T1w.nnUNetTrainerV2.model_best.tar`  Canonical local T1w nnUNet model; required before a run
+`hippunfold_assets/model/trained_model.3d_fullres.Task101_hcp1200_T1w.nnUNetTrainerV2.model_best.tar`  Canonical T1w nnUNet archive; reuse the unpacked model or archive when present, otherwise use the declared upstream download
 `runtime/hippunfold_asset_store_shared/runtime_source_assets`   Canonical `HIPPUNFOLD_RUNTIME_SOURCE_CACHE`; the contract writes this value
 `snakemake_conda`                             Not used by the locked stage-01 contract
 `conda_pkgs`                                  Not used by the locked stage-01 contract
@@ -364,6 +364,65 @@ and scrubs every caller-provided `HIPPUNFOLD_*` override before launching.
 `HIPPUNFOLD_CACHE_ROOT` is derived from the dataset and subject, so two batches
 cannot silently choose different runtime roots or model locations. Runtime
 scratch is retained; no cleanup override is accepted by stage 01.
+
+### Local resource resolution
+
+The installed HippUnfold 2.0.0 resource rules resolve the exact selected asset in
+the shared cache before registering a remote producer. Registration templates
+are checked against their declared filenames. Surface atlases are checked for
+the selected hemispheres, labels and output/registration densities, including
+surfaces, registration metrics and hippocampal subfield labels. nnUNet v1 can
+reuse its complete unpacked model, including every detected fold's configured
+checkpoint and metadata; a local model archive can also supply unpacking.
+Existing incomplete resource directories stop with the missing paths. For an
+absent resource the original download rule and URL remain available. The old
+launcher requirement that the T1w model archive must already exist is removed
+so this declared missing-resource path can run.
+
+Complete cached resources are consumed without any remote HTTP request during
+DAG construction or execution. This includes skipping remote metadata `HEAD`
+checks. Download rules are omitted only for assets already present; the complete
+subject analysis DAG and its requested outputs remain in place.
+
+Snakemake 9.19.0 normally reuses an existing runtime source-cache entry without
+checking whether a local source file changed. The installed source-cache patch
+refreshes changed local code by modification time and leaves remote source
+handling unchanged. This is necessary because the shared runtime source cache
+persists across workflow patches.
+
+The source patches are maintained at:
+
+- `scripts/core_workflow/lib/hippunfold_local_assets.patch`
+- `scripts/core_workflow/lib/snakemake_local_source_cache.patch`
+
+These two source patches are explicitly included in the repository's source-only
+Git allowlist.
+
+Both are installed in the current runtime. After reinstalling **HippUnfold**,
+apply its patch to the installed package:
+
+```bash
+hippo_site_packages=/home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2/lib/python3.13/site-packages
+patch --batch --forward --dry-run -p1 -d "${hippo_site_packages}/hippunfold" < scripts/core_workflow/lib/hippunfold_local_assets.patch
+patch --batch --forward -p1 -d "${hippo_site_packages}/hippunfold" < scripts/core_workflow/lib/hippunfold_local_assets.patch
+```
+
+After reinstalling **Snakemake**, apply its patch separately:
+
+```bash
+hippo_site_packages=/home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2/lib/python3.13/site-packages
+patch --batch --forward --dry-run -p1 -d "${hippo_site_packages}/snakemake" < scripts/core_workflow/lib/snakemake_local_source_cache.patch
+patch --batch --forward -p1 -d "${hippo_site_packages}/snakemake" < scripts/core_workflow/lib/snakemake_local_source_cache.patch
+```
+
+Apply the matching patch after the corresponding package was reinstalled;
+the dry-run must succeed before application. Stage 01 imports the installed
+resource adapter as part of its runtime gate and reports the patch path if the
+adapter was removed by a reinstall. Focused regression checks are in
+`tests/core_workflow/test_hippunfold_local_assets.py` and
+`tests/core_workflow/test_hippunfold_cache_contract.py`. Real BANDA/PDC DAGs have
+also been checked with HTTP requests blocked in the validation process; this
+test does not set a network-blocking policy for production missing resources.
 
 The active public T1w launcher `scripts/core_workflow/01_01_run_hippunfold_t1w_local.py`
 accepts only `<subject> --dataset {hcp,stanford,iowa_jj_tms,banda,pdc}` plus `--dry-run`.
@@ -475,12 +534,12 @@ From scratch, a future agent should:
 5. Ignore `importlib.metadata.version("hippunfold")` if it still reports `1.5.2rc2`.
 6. Build or update the server environment from `environment/hippo2_server.yml` before first run.
 7. Use the active stage-01 launcher only through its closed preset interface:
-   `/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/01_01_run_hippunfold_t1w_local.py <subject> --dataset <hcp|stanford|iowa_jj_tms>`.
+   `/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/01_01_run_hippunfold_t1w_local.py <subject> --dataset <hcp|stanford|iowa_jj_tms|banda|pdc>`.
 8. Do not pass positional input/output paths, model paths, `HIPPUNFOLD_*` overrides, or free-form Snakemake arguments.
-9. Make sure the validated `hippo2/bin/hippunfold` executable and canonical local model are resolvable before a real run.
+9. Apply the runtime resource patches above and make sure the validated `hippo2/bin/hippunfold` executable is resolvable before a real run.
 10. Make sure `c3d`, `greedy`, `LN2_LAYERS`, and `N4BiasFieldCorrection` resolve from the conda env or explicit binary paths.
 11. Runtime scratch is derived under `runtime/hippunfold_workdirs/<dataset>/sub-<id>/` and retained; do not share or clean it between subjects.
-12. HCP, Stanford, and JJ-TMS input/output roots and extension filters are defined only in `scripts/core_workflow/lib/hippunfold_run_contract.py`.
+12. HCP, Stanford, JJ-TMS, BANDA, and PDC input/output roots and extension filters are defined only in `scripts/core_workflow/lib/hippunfold_run_contract.py`.
 
 ## Activation Path Guardrail
 
