@@ -4,7 +4,8 @@
 
 EMOTION and WM each use the complete 144-participant task dataset at
 `/home/yojiao/LSS/jianglab/3_Data_Working/HCP_tast_3T/`.
-The independent HCP 7T resting-state reference cohort contains 151 participants.
+The HCP 7T resting-state reference cohort contains 151 participants; all 144
+task participants are also members of that reference cohort.
 HippUnfold anatomy uses 512 vertices per hippocampal hemisphere.
 
 | Task | Runs | Frames per run | Primary comparison |
@@ -37,8 +38,13 @@ For `task-emotion` or `task-wm`, use:
 - Group statistics: `outputs_hcp/work/task_activation/task-<task>/group/`.
 - Presentation: `outputs_hcp/present/task_activation/task-<task>/`.
 
-Hippocampal time series are sampled from each declared BOLD volume onto the
-subject's HippUnfold midthickness surface using Workbench enclosing mapping.
+The current hippocampal time series were sampled from each declared BOLD
+volume onto the subject's HippUnfold midthickness surface using Workbench
+trilinear mapping, as recorded in the consumed surface-sampling summaries.
+The [coordinate audit](docs/hipp_surface_qc.md) confirms that these caches used
+corobl coordinates directly in MNI volumes. Their hippocampal functional
+outputs require controlled reassessment. Keep the commands below on hold
+until sampling is repaired; first run the isolated coordinate-only pilot.
 Cortical time series use task MSMAll CIFTIs and the subject's Kong2022 400-ROI
 labels. Runs are concatenated in memory in the declared order. Missing,
 misordered, or mismatched inputs are errors.
@@ -54,11 +60,31 @@ corresponding `--task-manifest-root`. The preparation stages are `raw`,
 `tsnr`, `qc`, and `smooth`, using the same task-specific roots throughout.
 
 Current task surfaces use `--tsnr-threshold none`: finite, nonconstant signal
-is required in every declared run. Residual-tSNR measurements are recorded
-under `runwise_baseline_over_task_residual_sd`, with no numerical tSNR cutoff.
+is required in every declared run. The summaries retain the policy identifier
+`runwise_baseline_over_task_residual_sd`, but record `tsnr_computed: false`;
+the disabled calculation writes NaN score arrays, so residual tSNR has not
+been measured in these products.
 QC additionally requires HippUnfold Dice >= 0.70 and an invalid-vertex
 fraction < 0.20 in both hemispheres. Motion and model quality require their
 own assessment.
+
+The [registered surface comparison](docs/hipp_surface_qc.md) supplies separate
+LR/RL residual-tSNR measurements. Its CIFTI-GM projection is a research
+representation, distinct from the existing full-volume production sampler.
+Production gates remain validity-only.
+The primary QC target is the signal at each hippocampal surface vertex.
+Keep vertexwise tSNR and actual functional sampling coverage central to the
+comparison. The retained supplementary motion candidate is mean relative
+RMS<=0.5 mm, following Savage2024 (Communications Biology). Both task cohorts
+pass this mean-motion threshold; it does not establish local hippocampal
+surface signal quality. The per-run R20 exclusion rule is no longer considered.
+The [five-dataset measurements](docs/qc_five_datasets.md) preserve the completed
+comparisons. Production gates and rosters remain as described above.
+The existing 20% invalid-vertex rule is a project criterion; it is not
+Kember et al. (2026)'s 20 mm² improper-interpolation criterion. The QC
+review records the CIFTI header discrepancy and known EMOTION terminal
+truncation. The current hippocampal GLM explicitly uses the BOLD TR of
+0.72 seconds; the header observation alone does not require a rebuild.
 
 Formal resting-state QC outputs and the reference average require the exact
 HCP151 subject IDs. Task QC evaluates and writes the complete task cohort in

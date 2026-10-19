@@ -119,7 +119,8 @@ M tests/core_workflow/test_kong400_subject_completeness.py
 
 - [ ] 写明用户选择的 ctxdrop 展示定义，原始 FC 与控制后空间 cluster 的区别，以及 normalized count 的来源。
 - [ ] 保留 ctxreg 回归方向与 cluster-mean 统计定义，不把 ctxdrop 改成 ctxreg，不把 0.13/0.04 设为数值正确性指标。
-- [ ] Lynch 依据优先使用现有解析文件 `refs/Lynch et al. - 2024 - Frontostriatal salience network expansion in indiv.md`；只引用实际读到的段落。不得声称文章有相同海马 cluster DMN Fisher-z 对照。
+- [ ] Lynch 依据优先使用现有解析文件 `refs/Lynch_2024_Frontostriatal_Salience_Expansion/Lynch_2024_Frontostriatal_Salience_Expansion.md`；只引用实际读到的段落。不得声称文章有相同海马 cluster DMN Fisher-z 对照。
+
 - [ ] 说明此次哪些是标签修改、哪些是 provenance 修复、哪些真正重新计算；更新完成声明时只写已完成且有证据的阶段。
 - [ ] 若行为/路径代码发生变化，同一变更更新对应文档；环境栈未变化则不无故修改环境清单。
 

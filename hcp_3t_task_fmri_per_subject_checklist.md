@@ -1,41 +1,54 @@
-# HCP 3T Task-fMRI 每人必备文件清单（EMOTION + WM 优先）
+# HCP 3T task inputs and current completeness
 
-## 每人必备（LR / RL 各一份）
+EMOTION and WM use the complete 144-participant task cohort at
+`/home/yojiao/LSS/jianglab/3_Data_Working/HCP_tast_3T/`.
+Every participant has LR and RL. The task cohort is a subset of the 151-person
+HCP 7T resting-state reference cohort; 151 is not the task denominator.
 
-| # | 内容 | 压缩包内路径（每 run） | 用途 | 校验 |
-|---|---|---|---|---|
-| 1 | 皮层 CIFTI | `Results/tfMRI_EMOTION_LR\|RL/tfMRI_EMOTION_LR\|RL_Atlas_MSMAll_hp0_clean_rclean_tclean.dtseries.nii`；WM 同理 | cortex 400ROI 时间序列（`03_02`） | EMOTION 176 帧，WM 405 帧，`91282` grayordinates |
-| 2 | 海马 volume | `Results/tfMRI_EMOTION_LR\|RL/tfMRI_EMOTION_LR\|RL_hp0_clean*.nii.gz`（或 `*.nii.gz`） | hipp volume→surface 采样（`02_01`） | 4D，第 4 维=176 / 405，与 CIFTI 帧数一致 |
-| 3 | EV 事件文件 | EMOTION `EVs/fear.txt`（faces）、`EVs/neut.txt`（shapes），18s block；WM `EVs/0bk_{faces,places,tools,body}.txt`、`2bk_*.txt`，27.5s block | 一阶 GLM 设计矩阵 | FSL 3 列 `onset duration weight`，秒为单位 |
-| 4 | 头动回归 | `Movement_Regressors.txt`（12 列）+ `Movement_RelativeRMS/AbsoluteRMS.txt` | GLM nuisance 协变量 + 质控剔除 | 行数=TR 数（176/405），列数=12 |
-| 5 | 行为 | EMOTION `EMOTION_Stats.csv`（FACE/SHAPE 准确率/RT）；WM `WM_Stats.csv` 或 `TAB.txt` 类 | 脑行为关联校验，与组 CSV 交叉核对 | 与 `HCP_YA_subjects.csv` 对应列一致 |
-| 6 | cue/正确性细分（WM） | `EVs/cue.txt`，`*_cor/_err/_nlr.txt` | 进阶：正确 vs 错误试次、cue 建模 | 可选，一阶先不用 |
+Resolve every run from its exact subject declaration:
 
-Relational 如做对照，加一套同样的 `tfMRI_RELATIONAL_LR|RL`（232 帧）+ `match/rel` EV。
+- `outputs_hcp/inputs/hcp/kong2022/manifests/task-emotion/sub-<id>.json`
+- `outputs_hcp/inputs/hcp/kong2022/manifests/task-wm/sub-<id>.json`
 
-## 概念对照
+Do not select another variant by filename order or existence. Current task
+rosters live in each task's `shared_inputs/task-<task>/manifests/` directory
+and are named `hcp_7t_hippocampus_fmri_qc_pass_t1only_144.txt`.
 
-* `*_EV/`：FSL 3 列 `[onset duration weight]`，GLM 设计矩阵核心。包内 `EVs/` 全有。
-* `Movement_Regressors.txt`：每 TR 12 列刚体运动参数 + 导数，GLM 协变量。每个 run 都有。
-* block 设计：同类刺激集中连续呈现（EMOTION 18s，WM 27.5s = 2.5s cue + 10 个刺激），`Duration` 列即 block 长，检测功效高。
-* `func/` 只有 `task-rest_run-concat`：本地 BIDS `func/` 现只有静息拼接数据；任务包在 `/Volumes/Elements/HCPYA2025_TaskfMRI3T_preprocessed/`，需 stage（解压部署）到本地 `func/` 才可跑任务分析。
+## Required inputs per declared run
 
-## 不用 stage 的东西
+| Input | Exact variant / contract | Purpose |
+| --- | --- | --- |
+| Hippocampal source BOLD | `tfMRI_<TASK>_<LR-or-RL>_hp0_clean_rclean_tclean.nii.gz`; 176 frames for EMOTION, 405 for WM | Sampling to hippocampal surfaces |
+| Cortex CIFTI | `tfMRI_<TASK>_<LR-or-RL>_Atlas_MSMAll_hp0_clean_rclean_tclean.dtseries.nii`; same frames, 91,282 grayordinates | Cortex ROI time series |
+| EMOTION conditions | `EVs/fear.txt`, `EVs/neut.txt` | Faces/shapes regressors |
+| WM conditions | `EVs/0bk_<category>.txt`, `EVs/2bk_<category>.txt`; categories faces, places, tools, body | Eight category-by-load regressors |
+| Movement regressors | `Movement_Regressors.txt`; frames × 12 finite values | Model nuisance regressors |
+| Displacement traces | `Movement_RelativeRMS.txt`, `Movement_AbsoluteRMS.txt`; one finite value per frame | Motion assessment; RMS is not Power FD |
 
-* `tfMRI_Concat/*`：14 任务大拼接，只适合跨任务连接组学，不进 GLM。
-* `*_Atlas_MSMAll_hp2000_clean*`（如有）：rest 去噪版本线，任务用包内 `hp0_clean_rclean_tclean` 即可，不要混用。
+Condition EVs contain three finite columns: onset, duration, and weight,
+with times in seconds. WM cue and correct/error/no-response EVs are additional
+inputs for a model that explicitly includes those distinctions. Subject-level
+behavior is available in `data/HCP_YA_subjects_2026_04_09_16_01_42.csv`;
+condition accuracy, response times, and completion need separate assessment.
 
-## stage 落点建议
+## Observed state and unresolved timing
 
-保持 HCP 原名，不要重命名，沿用现有布局：
+The complete-cohort inspection found all required source files, the expected
+image and movement-array dimensions, finite condition EVs, and matching
+LR/RL sampling declarations. Sampling summaries record trilinear mapping on
+den-512 hippocampal surfaces.
 
-```text
-data/hippunfold_input/sub-<ID>/func/
-  sub-<ID>_task-emotion_run-01.dtseries.nii  <- tfMRI_EMOTION_LR_Atlas...dtseries.nii
-  sub-<ID>_task-emotion_run-01.nii.gz        <- tfMRI_EMOTION_LR volume
-  sub-<ID>_task-emotion_run-02.*             <- RL
-  sub-<ID>_task-wm_run-01/02.*
-  .../EVs/、Movement_Regressors.txt 原目录结构保留
-```
+All consumed task CIFTIs currently declare a one-second SeriesAxis step,
+whereas every paired BOLD header and the current hippocampal GLM use 0.72 seconds.
+Reconcile source/acquisition timing before using a header-driven task model.
+EMOTION's final fear EV extends beyond the acquisition window; the official
+HCP protocol documents missing final trials. Interpret the actual final-block
+timing without imposing an unsupported global event shift.
 
-每人 stage 完跑三行校验：`nibabel` 读 dtseries/volume 帧数相等且等于 176/405；EV 为 3 列；`Movement_Regressors.txt` 行数等于帧数。任一项对不上就 fail，不进 `02_01`。
+Current task masks use `--tsnr-threshold none`; residual-tSNR scores were not
+computed. File completeness and basic signal validity are prerequisites,
+not evidence of acceptable motion, local signal, or task reliability.
+See [the complete QC review](tsnr_qc_literature_review.md) for the primary
+sources, precise observed scope, and proposed next analysis, and
+[the task workflow](hcp_3t_task_fmri_hipp_memory_emotion_plan.md) for current
+analysis and output paths.
