@@ -1,9 +1,15 @@
 # tSNR QC: current handoff
 
-The immediate priority is a small, coordinate-only functional comparison before
-final QC selection. Do not launch a production rebuild. The confirmed sampling
-defect affects hippocampal functional inputs and their consumers; it does not
-invalidate raw data or anatomical reconstructions by itself.
+The [five-person coordinate-only pilot](docs/coordinate_pilot.md) is complete.
+It confirms material changes in full-length HCP7T time series, FC and gradients,
+despite much greater agreement of coarse K=3 partitions. The next priority is
+sampling-code repair before final QC selection. Do not launch a production
+rebuild. The downstream defect does not invalidate raw data or anatomical
+reconstructions by itself.
+
+One-off analysis code is in `tmp/hippocampal_qc/scripts/`; retained tables,
+figures, FC arrays and transformed geometry are in
+`tmp/hippocampal_qc/outputs/`. Written reports remain in `docs/`.
 
 The active evidence review is
 [docs/tsnr_task_rest_qc_justification.md](docs/tsnr_task_rest_qc_justification.md).
@@ -91,8 +97,8 @@ writes standalone research tables, vertex maps and documentation. It does not ac
 production gate, change a cohort or mask, access
 archives, or rebuild/replace formal results. A proposed production repair
 must identify the exact affected paths for the approval required by this
-repository. New measurement alone does not require a downstream rebuild;
-changed models, masks, or cohorts determine the affected dependencies.
+repository. Corrected functional time series require rebuilding their affected
+consumers even when numerical QC thresholds and cohort membership are unchanged.
 
 Completed alternative-scheme results are reviewable research outputs; formal
 production masks and analysis cohorts are unchanged. The HCP7T reference

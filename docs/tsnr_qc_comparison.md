@@ -80,9 +80,9 @@ Iowa multiband baseline sources are selected from each variant's `dataset_descri
 
 ## Inputs, reuse, and remaining availability
 
-The calculation uses the 166-person HCP structural parent, both authoritative 144-person task rosters, the 199-person Stanford parent, and the comment-aware 94-person JJ_TMS roster. Exact paths and scientific variants are declared in [the script](tsnr_qc_comparison.py). The HCP reference151 and excluded15 explicitly select their respective existing raw roots by roster membership; dangling reference links in the excluded-set QC root are not used.
+The calculation uses the 166-person HCP structural parent, both authoritative 144-person task rosters, the 199-person Stanford parent, and the comment-aware 94-person JJ_TMS roster. Exact paths and scientific variants are declared in [the script](../tmp/hippocampal_qc/scripts/tsnr_qc_comparison.py). The HCP reference151 and excluded15 explicitly select their respective existing raw roots by roster membership; dangling reference links in the excluded-set QC root are not used.
 
-Basic validity was recomputed from current raw surface inputs, and available motion/censoring reports were read directly. Iowa7T T25 was calculated using the explicitly selected canonical anatomy and matched baseline frames. Stanford/JJ T25 reuses the saved numerical outputs in [the existing notebook](tsnr_existing_mask_scope_2026-09-26.ipynb), cell19 plus Stanford4117 in cell21. Hemisphere, variant, declared sampling method, 512-vertex count and retained frame count were checked against current inputs. These reused rest scores are not described as newly recalculated baseline time series. A one-participant JJ36 mapping check gave 67 invalid left vertices with enclosing sampling, matching the saved value, versus 43 with trilinear sampling.
+Basic validity was recomputed from current raw surface inputs, and available motion/censoring reports were read directly. Iowa7T T25 was calculated using the explicitly selected canonical anatomy and matched baseline frames. Stanford/JJ T25 reuses the saved numerical outputs in [the existing notebook](../tmp/hippocampal_qc/scripts/tsnr_existing_mask_scope_2026-09-26.ipynb), cell19 plus Stanford4117 in cell21. Hemisphere, variant, declared sampling method, 512-vertex count and retained frame count were checked against current inputs. These reused rest scores are not described as newly recalculated baseline time series. A one-participant JJ36 mapping check gave 67 invalid left vertices with enclosing sampling, matching the saved value, versus 43 with trilinear sampling.
 
 For JJ, some vertices are constant in one run but variable in the concatenation. The notebook's saved T25 masks already included whole-series validity. If their invalid count is B and current runwise validity adds D invalid vertices, the combined invalid count lies between `max(B, current_invalid_count)` and `min(512, B+D)`. For every JJ participant these bounds settle the <20% decision; none straddles the boundary. The participant table records lower/upper fractions, and leaves the exact T25 fraction blank when the overlap is unknown. No per-vertex mask was reconstructed from a scalar. This reuses the existing measurements without changing the QC rule or rereading hundreds of baseline volumes.
 
@@ -104,9 +104,9 @@ The comparison used two analysis workers with numerical libraries limited to one
 
 Outputs:
 
-- [Participant decisions and measured criteria](tsnr_qc_comparison_subjects.tsv)
-- [All scheme/dataset totals, passes, failures, unassessable counts and rates](tsnr_qc_comparison_summary.tsv)
-- [Analysis script](tsnr_qc_comparison.py)
+- [Participant decisions and measured criteria](../tmp/hippocampal_qc/outputs/tsnr_qc_comparison_subjects.tsv)
+- [All scheme/dataset totals, passes, failures, unassessable counts and rates](../tmp/hippocampal_qc/outputs/tsnr_qc_comparison_summary.tsv)
+- [Analysis script](../tmp/hippocampal_qc/scripts/tsnr_qc_comparison.py)
 - [Agreed implementation plan](superpowers/plans/2026-10-18-tsnr-qc-comparison.md)
 - [Primary-source review](../tsnr_qc_literature_review.md)
 
@@ -116,7 +116,7 @@ To recalculate from the exact declared current inputs:
 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1 \
 VECLIB_MAXIMUM_THREADS=1 CORE_WORKFLOW_WB_THREADS=1 \
 CORE_WORKFLOW_WB_COMMAND=/home/yojiao/FASTANS/workbench/bin_linux64/wb_command \
-/home/yojiao/.conda/envs/py314/bin/python -u docs/tsnr_qc_comparison.py
+/home/yojiao/.conda/envs/py314/bin/python -u tmp/hippocampal_qc/scripts/tsnr_qc_comparison.py
 ```
 
 Supplementary R20 motion counts and the current surface/volume distinction are in [the follow-up comparison](qc_five_datasets.md). These original H/V/M/C/T25 results remain comparisons; production gates and the HCP7T resting reference are unchanged.

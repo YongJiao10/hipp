@@ -43,7 +43,9 @@ tune thresholds, and no new surface-area result is claimed.
 
 ## Outputs and boundary
 
-The motion/signal measurement report is `docs/qc_five_datasets.md`; its script and three TSV tables
-share the `qc_five_datasets` prefix. These are research comparisons. Production
+The motion/signal measurement report is `docs/qc_five_datasets.md`. Its driver
+is in `tmp/hippocampal_qc/scripts/`; the three TSV tables are in
+`tmp/hippocampal_qc/outputs/`, sharing the `qc_five_datasets` prefix.
+These are research comparisons. Production
 masks, rosters, denoising and formal results are unchanged. No archive access,
 deletions, hashes, new QC-method workflow or pipeline rebuild is needed.

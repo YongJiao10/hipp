@@ -98,10 +98,10 @@ folded unsupported area with an explicit interpolation/hemisphere convention;
 
 ## Outputs and rerun
 
-- [All schemes, totals, passes, failures and unassessable counts](qc_five_datasets_summary.tsv)
-- [Individual decisions and measured criteria](qc_five_datasets_subjects.tsv)
-- [Original-run motion measurements](qc_five_datasets_motion_runs.tsv)
-- [Analysis script](qc_five_datasets.py)
+- [All schemes, totals, passes, failures and unassessable counts](../tmp/hippocampal_qc/outputs/qc_five_datasets_summary.tsv)
+- [Individual decisions and measured criteria](../tmp/hippocampal_qc/outputs/qc_five_datasets_subjects.tsv)
+- [Original-run motion measurements](../tmp/hippocampal_qc/outputs/qc_five_datasets_motion_runs.tsv)
+- [Analysis script](../tmp/hippocampal_qc/scripts/qc_five_datasets.py)
 
 The script refreshes all TSV tables from exact declared inputs and completed
 signal measurements. To refresh HCP7T motion only while retaining other cohort
@@ -110,12 +110,12 @@ measurements, run:
 ```bash
 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1 \
 /home/yojiao/.conda/envs/py314/bin/python -c \
-'from docs.qc_five_datasets import update_hcp7t_motion; update_hcp7t_motion()'
+'import sys; sys.path.insert(0, "tmp/hippocampal_qc/scripts"); from qc_five_datasets import update_hcp7t_motion; update_hcp7t_motion()'
 ```
 
 To recalculate the full comparison:
 
 ```bash
 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1 \
-/home/yojiao/.conda/envs/py314/bin/python -u docs/qc_five_datasets.py
+/home/yojiao/.conda/envs/py314/bin/python -u tmp/hippocampal_qc/scripts/qc_five_datasets.py
 ```

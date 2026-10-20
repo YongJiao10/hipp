@@ -123,7 +123,7 @@ that the sampled responses can change fundamentally even when median tSNR
 changes moderately. This one-run check isolates coordinates; the full-cohort
 registered comparison also changes HCP's functional representation, as stated
 above. Research examples are retained under
-`hipp_surface_qc_samples/coordinate_impact/sub-100610_EMOTION_LR/`.
+`tmp/hippocampal_qc/outputs/hipp_surface_qc_samples/coordinate_impact/sub-100610_EMOTION_LR/`.
 
 The dependency chain is explicit in the current code: preparation selects
 corobl meshes for direct BOLD sampling in
@@ -149,10 +149,13 @@ input/lineage check, not a cohort-wide recomputation of FC or gradients.
 
 The conclusion is that affected hippocampal functional analyses need controlled
 recalculation and reassessment. It does not establish that every project result
-or every scientific conclusion is wrong. The direction and size of changes in
-FC, gradients, parcellations and group effects remain unmeasured. Repair scope
-must follow each formal branch's actual consumed inputs; existing result files
-are retained for comparison.
+or every scientific conclusion is wrong. The
+[five-person coordinate-only pilot](coordinate_pilot.md) now measures paired
+changes in full-length HCP7T time series, FC, group gradients and fixed-K=3
+partitions. It finds profound FC change, moderate G1 correspondence and much
+stronger coarse K=3 agreement. Cohort-wide and patient-group effects remain
+unmeasured. Repair scope must follow each formal branch's actual consumed
+inputs; existing result files are retained for comparison.
 
 ## Populations and outputs
 
@@ -167,16 +170,19 @@ PDC also reports people with at least one passing visit. That count describes
 available data and does not authorize discarding visits within longitudinal
 analyses. The two-task HCP3T summary requires both tasks to pass.
 
+The one-off analysis code is in `tmp/hippocampal_qc/scripts/`; all generated
+tables, logs, transformed geometry and vertex maps are under
+`tmp/hippocampal_qc/outputs/`. `docs/` contains the written reports.
 Run from the repository root:
 
 ```bash
 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 \
 NUMEXPR_NUM_THREADS=1 ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS=1 \
-/home/yojiao/.conda/envs/py314/bin/python docs/hipp_surface_qc.py
+/home/yojiao/.conda/envs/py314/bin/python tmp/hippocampal_qc/scripts/hipp_surface_qc.py
 
 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 \
 NUMEXPR_NUM_THREADS=1 ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS=1 \
-/home/yojiao/.conda/envs/py314/bin/python docs/hipp_surface_tsnr_registered.py
+/home/yojiao/.conda/envs/py314/bin/python tmp/hippocampal_qc/scripts/hipp_surface_tsnr_registered.py
 ```
 
 `--pilot` tests sub-100610, sub-1017, sub-BANDA001 and sub-e0010s01 across their
@@ -190,7 +196,7 @@ workers plus at most two external commands stay below IDAS's 10-process cap.
 - `hipp_surface_qc_registered_subjects.tsv` and
   `hipp_surface_qc_registered_summary.tsv`: main comparison using registered
   surface tSNR and signal validity, with existing T25 retained as a reference.
-- `hipp_surface_qc_samples/`: research transformed geometry and vertex maps;
+- `tmp/hippocampal_qc/outputs/hipp_surface_qc_samples/`: research transformed geometry and vertex maps;
   HCP world-field conversions and Stanford point CSVs are retained inputs to
   this analysis. No temporary or user-owned files are deleted.
 
@@ -243,8 +249,8 @@ alone is insufficient to reproduce the unreported vertex classifier. The
 primary definition was fixed before the full-cohort pass-count calculation;
 neither numerical threshold was adjusted to obtain a preferred retention rate.
 
-The run produced [individual results](hipp_surface_qc_registered_subjects.tsv)
-and [all totals, failures, unknowns and both rate denominators](hipp_surface_qc_registered_summary.tsv).
+The run produced [individual results](../tmp/hippocampal_qc/outputs/hipp_surface_qc_registered_subjects.tsv)
+and [all totals, failures, unknowns and both rate denominators](../tmp/hippocampal_qc/outputs/hipp_surface_qc_registered_summary.tsv).
 Checks compare all measured vertex masks with participant decisions and parent
 rosters, then independently recount the 45 summaries, task intersection and
 PDC person aggregation. On the BANDA001 sample, sparse interpolation agrees

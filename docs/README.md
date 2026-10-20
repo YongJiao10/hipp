@@ -2,6 +2,11 @@
 
 Documentation is grouped by intent.
 
+Keep one-off analysis scripts, notebooks, result tables, logs and generated
+research images under the repository's `tmp/` workspace. The hippocampal QC
+comparison uses `tmp/hippocampal_qc/scripts/` for code and
+`tmp/hippocampal_qc/outputs/` for products; this directory retains its reports.
+
 For the source-only GitHub scope and future pushes, see [GitHub synchronization](github_sync.md).
 
 - `official/`: project-level context and cross-cutting summaries

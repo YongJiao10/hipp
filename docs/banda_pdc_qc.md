@@ -63,10 +63,10 @@ does not settle the appropriate local surface-vertex signal criterion.
 
 ## Outputs
 
-Use [the five-dataset summary](qc_five_datasets_summary.tsv),
-[individual decisions](qc_five_datasets_subjects.tsv), and
-[runwise motion measurements](qc_five_datasets_motion_runs.tsv) for refreshed
+Use [the five-dataset summary](../tmp/hippocampal_qc/outputs/qc_five_datasets_summary.tsv),
+[individual decisions](../tmp/hippocampal_qc/outputs/qc_five_datasets_subjects.tsv), and
+[runwise motion measurements](../tmp/hippocampal_qc/outputs/qc_five_datasets_motion_runs.tsv) for refreshed
 anatomy and the new R20/F25 decisions. The original
-[runwise native signal measurements](banda_pdc_qc_runs.tsv) and
-[signal analysis script](banda_pdc_qc.py) retain the native-CIFTI calculation.
+[runwise native signal measurements](../tmp/hippocampal_qc/outputs/banda_pdc_qc_runs.tsv) and
+[signal analysis script](../tmp/hippocampal_qc/scripts/banda_pdc_qc.py) retain the native-CIFTI calculation.
 Production masks, rosters and results are unchanged.

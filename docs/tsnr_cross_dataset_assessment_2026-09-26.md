@@ -60,7 +60,7 @@ A correction should define the intended quality property, use explicit dataset/r
 
 ## Historical follow-up: existing masks under the old formula
 
-At this stage of the chronological investigation, the follow-up examined every subject directory under the exact current surface and routea roots listed in `docs/tsnr_existing_mask_scope_2026-09-26.ipynb`. The later sections record the code changes and task deployment. These populations are existing-product populations, not automatically final analysis cohorts.
+At this stage of the chronological investigation, the follow-up examined every subject directory under the exact current surface and routea roots listed in `tmp/hippocampal_qc/scripts/tsnr_existing_mask_scope_2026-09-26.ipynb`. The later sections record the code changes and task deployment. These populations are existing-product populations, not automatically final analysis cohorts.
 
 ### Confirmed scope
 
@@ -586,4 +586,4 @@ group outputs. fMRIPrep, XCP-D, and HippUnfold are upstream of these masks and
 do not need rerunning for that change.
 
 The executable threshold sweep and its source paths are appended to the
-companion notebook `docs/tsnr_existing_mask_scope_2026-09-26.ipynb`.
+companion notebook `tmp/hippocampal_qc/scripts/tsnr_existing_mask_scope_2026-09-26.ipynb`.

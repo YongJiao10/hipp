@@ -7,8 +7,10 @@ motion candidate is participant mean relative RMS<=0.5 mm; it is a whole-scan
 rigid-body motion measure, not a hippocampal or vertex-specific signal measure.
 
 Final gate selection is deferred until the confirmed corobl-to-MNI sampling
-defect is assessed with a small, same-volume coordinate comparison. The
-registered QC experiment is not a repair of existing FC or atlas products.
+defect is repaired. The [five-person same-volume pilot](coordinate_pilot.md)
+already establishes material changes in full-length HCP7T time series, FC and
+gradients; further threshold research is not required before sampling repair.
+The registered QC experiment is not a repair of existing FC or atlas products.
 
 The 0.5-mm precedent is [Savage et al., Communications Biology 2024](https://www.nature.com/articles/s42003-024-06573-z),
 *Dissecting task-based fMRI activity using normative modelling: an application

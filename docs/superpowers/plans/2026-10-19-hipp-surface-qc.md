@@ -45,10 +45,10 @@ Production results, masks and rosters remain read-only.
 - [x] Confirm one representative surface/transform/functional-grid combination
   per dataset. Stop an affected comparison if the declared coordinate mapping
   is missing; never substitute unregistered coordinates.
-- [x] Add `docs/hipp_surface_qc.py`, `docs/hipp_surface_tsnr_registered.py` and matching documentation.
+- [x] Add `tmp/hippocampal_qc/scripts/hipp_surface_qc.py`, `tmp/hippocampal_qc/scripts/hipp_surface_tsnr_registered.py` and matching documentation.
   Calculate coverage, BANDA/PDC surface tSNR, missing reasons and joint decisions.
 - [x] Run all five parent rosters, retaining per-person/visit results and summary
-  TSVs under `docs/`; retain research projection outputs under the same analysis.
+  TSVs under `tmp/hippocampal_qc/outputs/`; retain research projection outputs under the same analysis.
 - [x] Check physical units/topology, representative projection alignment and
   denominator arithmetic; discrepancies change the affected results, not just
   a validation label. Report pass/fail/unknown counts and interpret retention.

@@ -1,5 +1,9 @@
 # Repository Rules
 
+## Temporary Workspace
+
+- `<repository>/tmp/` is the only temporary workspace for this project.
+
 ## Concurrency Limit — Identify the System First
 
 - Before launching parallel work or an SGE array, identify the active system
