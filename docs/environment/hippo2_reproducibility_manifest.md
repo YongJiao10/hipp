@@ -154,11 +154,16 @@ nnUNet_predict     /home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2/bin/nnUNet
 reg_aladin          /home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2/bin/reg_aladin
 bash               /home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2/bin/bash
 wb_command         /home/yojiao/hpchome/hipp/software/workbench/bin_linux64/wb_command
+antsApplyTransformsToPoints  /home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2/bin/antsApplyTransformsToPoints
 LN2_LAYERS         resolved through `_archive/deprecated_2026-05-20/scripts_pre_core_workflow/LN2_LAYERS` wrapper
 ```
 
 Core workflow code resolves Workbench directly from
 `software/workbench/bin_linux64/wb_command` via `scripts/core_workflow/lib/workbench.py`.
+Registered hippocampal sampling uses the ANTs points executable above for
+fMRIPrep datasets. `CORE_WORKFLOW_ANTS_POINTS` selects an explicit executable
+on another system. FNIRT datasets use Workbench warp conversion and existing
+py314 SciPy interpolation; no new package installation is needed.
 Legacy scripts may still call the wrapper in `_archive/deprecated_2026-05-20/scripts_pre_core_workflow/wb_command`.
 
 ### HippUnfold External Binary Bundle

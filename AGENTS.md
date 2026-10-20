@@ -11,10 +11,8 @@
   Accept only `idas` or `argon`; if detection is ambiguous, stop and set
   `SYSTEM_NAME` explicitly.
 - On **IDAS**, the hard cap is **10 total concurrent jobs/tasks/processes**.
-  For Kong2022 ArealMSHBM arrays, the standard defaults are UI `-tc 3` plus
-  PINC `-tc 7`.
 - On **Argon**, the Kong2022 ArealMSHBM standard is UI `-tc 5` plus PINC
-  `-tc 15`, for a **20-task total cap**. Do not apply the IDAS 10-task cap to
+  `-tc 20`, for a **20-task total cap**. Do not apply the IDAS 10-task cap to
   an Argon array.
 - These limits apply to all agents (Codex, Claude, or any automated runner)
   operating in this repository. Count intended concurrency before launching a

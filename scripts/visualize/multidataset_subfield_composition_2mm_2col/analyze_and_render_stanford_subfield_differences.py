@@ -266,7 +266,7 @@ def load_all_subject_data(atlas_mode: str, spec: GridSpec | None = None) -> tupl
                 support = np.asarray(np.load(hdir_hcp / "group_support_mask.npy"), dtype=bool).reshape(-1)
                 for s in subjects:
                     lp = hipp_root / f"sub-{s}/hippunfold/sub-{s}/metric/sub-{s}_hemi-{hemi}_den-512_label-hipp_atlas-multihist7_subfields.label.gii"
-                    sp = hipp_root / f"sub-{s}/hippunfold/sub-{s}/surf/sub-{s}_hemi-{hemi}_space-corobl_den-512_label-hipp_midthickness.surf.gii"
+                    sp = hipp_root / f"sub-{s}/hippunfold/sub-{s}/surf/sub-{s}_hemi-{hemi}_space-T1w_den-512_label-hipp_midthickness.surf.gii"
                     tasks.append((cinfo, cname, s, hemi, labels, support, lp, sp, None))
 
             elif atlas_mode == "v2_cohort_specific_atlas":
@@ -274,13 +274,13 @@ def load_all_subject_data(atlas_mode: str, spec: GridSpec | None = None) -> tupl
                 support = np.asarray(np.load(hdir / "group_support_mask.npy"), dtype=bool).reshape(-1)
                 for s in subjects:
                     lp = hipp_root / f"sub-{s}/hippunfold/sub-{s}/metric/sub-{s}_hemi-{hemi}_den-512_label-hipp_atlas-multihist7_subfields.label.gii"
-                    sp = hipp_root / f"sub-{s}/hippunfold/sub-{s}/surf/sub-{s}_hemi-{hemi}_space-corobl_den-512_label-hipp_midthickness.surf.gii"
+                    sp = hipp_root / f"sub-{s}/hippunfold/sub-{s}/surf/sub-{s}_hemi-{hemi}_space-T1w_den-512_label-hipp_midthickness.surf.gii"
                     tasks.append((cinfo, cname, s, hemi, labels, support, lp, sp, None))
 
             elif atlas_mode == "v3_individual_template_matching":
                 for s in subjects:
                     lp = hipp_root / f"sub-{s}/hippunfold/sub-{s}/metric/sub-{s}_hemi-{hemi}_den-512_label-hipp_atlas-multihist7_subfields.label.gii"
-                    sp = hipp_root / f"sub-{s}/hippunfold/sub-{s}/surf/sub-{s}_hemi-{hemi}_space-corobl_den-512_label-hipp_midthickness.surf.gii"
+                    sp = hipp_root / f"sub-{s}/hippunfold/sub-{s}/surf/sub-{s}_hemi-{hemi}_space-T1w_den-512_label-hipp_midthickness.surf.gii"
                     if cinfo["id"] == "hcp_7t":
                         indiv_label_path = REPO_ROOT / f"outputs_hcp/work/crossfit_template_matching/subjects/sub-{s}/{spec.smoothing}/hemi_{hemi}/individual_labels_k3.npy"
                     else:

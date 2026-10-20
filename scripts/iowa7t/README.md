@@ -23,6 +23,20 @@ results. The destination must not already exist.
 
 ## Downstream tSNR
 
+Both downstream adapters import run-segment and TSV utilities directly from
+`core_workflow/lib/io_utils.py`; RouteA label helpers come from its extractor.
+
+Both downstream adapters register native T1w hippocampal vertices with the
+declared fMRIPrep MNI-to-T1w image composite before sampling MNI BOLD. The
+image transform is under `derivatives/sub-<id>/anat/` in the Iowa7T source
+tree. Mapped meshes are saved under `surface/raw/sampling_surfaces/`; native
+T1w geometry defines millimetre smoothing and `space-T1w` metric filenames.
+Resume rejects an unregistered corobl raw summary and requires an explicit
+`--overwrite` rebuild for those products.
+Gate summaries record `sampling_space=MNI152NLin6Asym` and surface-stage
+parameters record `smoothing_space=T1w`; QC and smoothing without those
+coordinate declarations cannot be reused after an interrupted repair.
+
 Both `run_branch_downstream.py` and `run_runwise_downstream.py` require explicit
 baseline QC inputs through `--tsnr-input-template`. Supported placeholders:
 `{subject}`, `{hemi}`, `{domain}` (hipp/cortex), `{variant}`, `{branch}` and `{run}`

@@ -202,13 +202,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 if __name__ == "__main__":
     parser = build_arg_parser()
-    args = parser.parse_args()
     raise SystemExit(
         run_stage(
             StageSpec(
                 step_id="05_04_compute_confidence_maps",
                 purpose="Compute vertex-level silhouette confidence maps for group-level functional parcellations.",
-                stage_main=lambda: main(args),
+                stage_main=lambda: main(parser.parse_args()),
                 upstream_defaults=("05_02_run_group_atlas",),
             )
         )

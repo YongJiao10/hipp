@@ -105,7 +105,7 @@ def write_subject_sources(inputs: dict[str, Path]) -> None:
         outputs: dict[str, dict[str, object]] = {}
         for hemi in ("L", "R"):
             surface = subject_dir / "surf" / (
-                f"sub-{subject}_hemi-{hemi}_space-corobl_den-512_"
+                f"sub-{subject}_hemi-{hemi}_space-T1w_den-512_"
                 "label-hipp_midthickness.surf.gii"
             )
             spec = surface.parent / f"sub-{subject}_den-512_label-hipp_surfaces.spec"

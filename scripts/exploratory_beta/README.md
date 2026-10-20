@@ -6,9 +6,12 @@ hippocampal surface-beta exploration. It is deliberately outside
 numbered or frozen formal-workflow step, and its outputs are not automatically
 suitable for reporting.
 
-The command interface, model formulas, input tables, and output layouts remain
-unchanged from the local migration snapshot. Only the source location and
-analysis-status documentation changed.
+Both Stanford and JJ_TMS Native con volumes use the individual's
+`space-T1w_den-512` surfaces for volume sampling and physical vertex areas.
+Functional parcellation labels must come from the registered-BOLD workflow.
+The selected mapping's existing `run_manifest.json` must declare the same
+dataset and `native_surface_space=T1w`; old corobl mappings must be rebuilt
+before beta extraction.
 
 ## Entry points
 

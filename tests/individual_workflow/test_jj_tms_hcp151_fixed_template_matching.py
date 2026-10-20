@@ -319,7 +319,7 @@ def test_sample_runs_creates_workbench_output_parent_before_call(
     )
     observed: list[Path] = []
 
-    def fake_workbench(_command: Path, args: list[object]) -> None:
+    def fake_workbench(args: list[object], **_kwargs) -> None:
         assert args[0] == "-volume-to-surface-mapping"
         partial = Path(args[3])
         observed.append(partial)
@@ -329,7 +329,14 @@ def test_sample_runs_creates_workbench_output_parent_before_call(
             partial, np.zeros((512, n_timepoints), dtype=np.float32)
         )
 
-    monkeypatch.setattr(workflow, "_run_workbench", fake_workbench)
+    monkeypatch.setattr(sys.modules[workflow.sample_volume_to_surface.__module__], "run_workbench", fake_workbench)
+    mapped = {hemi: tmp_path/f'hemi-{hemi}_space-MNI152NLin6Asym.surf.gii' for hemi in ('L', 'R')}
+    for path in mapped.values():
+        nib.save(nib.gifti.GiftiImage(darrays=[
+            nib.gifti.GiftiDataArray(np.ones((512, 3), dtype=np.float32), intent='NIFTI_INTENT_POINTSET'),
+            nib.gifti.GiftiDataArray(np.array([[0, 1, 2]], dtype=np.int32), intent='NIFTI_INTENT_TRIANGLE'),
+        ]), path)
+    monkeypatch.setattr(workflow, 'registered_sampling_surfaces', lambda *args, **kwargs: mapped)
     outputs: dict[str, Path] = {}
     raw = workflow._sample_runs(
         functional=functional,
@@ -419,12 +426,11 @@ def test_hippocampal_rest_validity_has_no_amplitude_threshold():
         dtype=np.float32,
     )
 
-    tsnr, valid = workflow.compute_tsnr(timeseries)
-
-    expected = 10000.0 / np.std(timeseries[:2], axis=1, ddof=1)
-    assert np.allclose(tsnr[:2], expected.astype(np.float32))
+    # This checks basic residual validity, separately from baseline tSNR QC.
+    valid = workflow.rest_signal_validity(timeseries)
     assert valid.tolist() == [True, True, False]
-    assert np.isnan(tsnr[2])
+    with pytest.raises(ValueError, match='baseline_input'):
+        workflow.compute_tsnr(timeseries)
 
 
 def test_combo_validation_requires_nonzero_valid_labels_and_all_three_codes():
@@ -1631,3 +1637,36 @@ def test_in_memory_concat_dtseries(tmp_path: Path):
     assert headers["concat_timepoints"] == 30
     assert set(headers["cortex_vertex_counts"]) == {"L", "R"}
 
+
+
+def test_sample_runs_preserves_fractional_voxel_signal_with_trilinear_mapping(tmp_path, monkeypatch):
+    workflow = load_module()
+    from lib.workbench import resolve_wb_command
+    volume_root, dtseries_root, concat_root = _write_functional_inputs(
+        tmp_path, subject='1001', run_lengths=[2, 2, 2],
+    )
+    functional = workflow.resolve_subject_runs(
+        subject='1001', volume_root=volume_root, dtseries_root=dtseries_root,
+        concat_dtseries_root=concat_root,
+    )
+    volume = np.indices((4, 4, 4))[0].astype(np.float32)
+    for run in functional.runs:
+        nib.save(nib.Nifti1Image(np.stack([volume, volume+10], axis=-1), np.eye(4)), run.volume)
+    points = np.tile([[1.25, 1.5, 1.5]], (512, 1)).astype(np.float32)
+    faces = np.array([[0, 1, 2]], dtype=np.int32)
+    mapped = {}
+    for hemi in ('L', 'R'):
+        path = tmp_path/f'hemi-{hemi}_space-MNI152NLin6Asym.surf.gii'
+        nib.save(nib.gifti.GiftiImage(darrays=[
+            nib.gifti.GiftiDataArray(points, intent='NIFTI_INTENT_POINTSET'),
+            nib.gifti.GiftiDataArray(faces, intent='NIFTI_INTENT_TRIANGLE'),
+        ]), path)
+        mapped[hemi] = path
+    monkeypatch.setattr(workflow, 'registered_sampling_surfaces', lambda *args, **kwargs: mapped)
+    raw = workflow._sample_runs(
+        functional=functional,
+        surfaces={hemi: {'consumed_asset': path} for hemi,path in mapped.items()},
+        subject_dir=tmp_path/'subject-output', wb_command=resolve_wb_command(), outputs={},
+    )
+    for hemi in ('L', 'R'):
+        np.testing.assert_allclose(raw[hemi], np.tile([1.25, 11.25]*3, (512, 1)), atol=1e-6)

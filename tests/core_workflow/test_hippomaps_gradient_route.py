@@ -809,7 +809,7 @@ def test_endpoint_fc_contrast_uses_top_minus_bottom_gradient_quartiles() -> None
     assert np.allclose(got, [3.0, 30.0]), got
 
 
-def test_render_gradient_figure_calls_official_hippomaps_plotter_options() -> None:
+def test_render_gradient_figure_calls_official_hippomaps_plotter_options(tmp_path) -> None:
     calls: list[dict[str, object]] = []
 
     class FakeFigure:
@@ -821,7 +821,7 @@ def test_render_gradient_figure_calls_official_hippomaps_plotter_options() -> No
         calls.append({"shape": tuple(cdata.shape), "kwargs": kwargs})
         return FakeFigure()
 
-    out = REPO_ROOT / "outputs_hcp" / "reruns" / "test_hippomaps_renderer" / "hippomaps_renderer_test.png"
+    out = tmp_path / "hippomaps_renderer_test.png"
     render_mod.render_gradient_figure(
         left=np.ones((4, 3), dtype=np.float32),
         right=np.zeros((4, 3), dtype=np.float32),
@@ -905,7 +905,7 @@ def test_shared_display_color_ranges_use_component_bounds_across_routes() -> Non
     assert render_mod.format_color_ranges_for_components(ranges, [1, 2]) == [[(-4.0, 5.0)], [(-5.0, 7.0)]]
 
 
-def test_render_gradient_figure_passes_explicit_shared_color_ranges() -> None:
+def test_render_gradient_figure_passes_explicit_shared_color_ranges(tmp_path) -> None:
     calls: list[dict[str, object]] = []
 
     class FakeFigure:
@@ -917,7 +917,7 @@ def test_render_gradient_figure_passes_explicit_shared_color_ranges() -> None:
         calls.append({"shape": tuple(cdata.shape), "kwargs": kwargs})
         return FakeFigure()
 
-    out = REPO_ROOT / "outputs_hcp" / "reruns" / "test_hippomaps_renderer" / "hippomaps_renderer_test_ranges.png"
+    out = tmp_path / "hippomaps_renderer_test_ranges.png"
     render_mod.render_gradient_figure(
         left=np.ones((4, 2), dtype=np.float32),
         right=np.zeros((4, 2), dtype=np.float32),
@@ -931,7 +931,7 @@ def test_render_gradient_figure_passes_explicit_shared_color_ranges() -> None:
     assert calls[0]["kwargs"]["color_range"] == [[(-2.0, 3.0)], [(-4.0, 5.0)]], calls
     assert calls[0]["kwargs"]["tighten_cwindow"] is False, calls
 
-def test_render_gradient_figure_can_render_left_hemi_only() -> None:
+def test_render_gradient_figure_can_render_left_hemi_only(tmp_path) -> None:
     calls: list[dict[str, object]] = []
 
     class FakeFigure:
@@ -943,7 +943,7 @@ def test_render_gradient_figure_can_render_left_hemi_only() -> None:
         calls.append({"shape": tuple(cdata.shape), "kwargs": kwargs})
         return FakeFigure()
 
-    out = REPO_ROOT / "outputs_hcp" / "reruns" / "test_hippomaps_renderer" / "hippomaps_renderer_test_left.png"
+    out = tmp_path / "hippomaps_renderer_test_left.png"
     render_mod.render_gradient_figure(
         left=np.ones((4, 3), dtype=np.float32),
         output_png=out,

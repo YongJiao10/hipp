@@ -186,7 +186,7 @@ def test_analyzer_fails_closed_on_missing_individual_template_label(tmp_path, mo
         metric_dir.mkdir(parents=True, exist_ok=True)
         surf_dir.mkdir(parents=True, exist_ok=True)
         (metric_dir / f"sub-001_hemi-{hemi}_den-512_label-hipp_atlas-multihist7_subfields.label.gii").touch()
-        (surf_dir / f"sub-001_hemi-{hemi}_space-corobl_den-512_label-hipp_midthickness.surf.gii").touch()
+        (surf_dir / f"sub-001_hemi-{hemi}_space-T1w_den-512_label-hipp_midthickness.surf.gii").touch()
 
     cinfo = {
         "id": "stanford_fixture",

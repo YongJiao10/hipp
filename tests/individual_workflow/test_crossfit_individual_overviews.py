@@ -177,21 +177,10 @@ def fake_locked_grid(calls: list[dict[str, object]]):
 
 
 def _synthetic_kong2022_registry() -> list[dict[str, object]]:
-    networks = (
-        "VentralAttention",
-        "Somatomotor",
-        "Default",
-        "Auditory",
-        "Control",
-        "DorsalAttention",
-        "Language",
-        "Visual",
-    )
-    return [
-        {"roi_id": index + 1, "canonical8": network}
-        for network in networks
-        for index in range(50)
-    ]
+    from scripts.core_workflow.lib.kong2022_fc_contract import authoritative_kong2022_roi_registry
+
+    return authoritative_kong2022_roi_registry()
+
 
 
 def _synthetic_template_profile(offset: float = 0.0) -> np.ndarray:
@@ -203,14 +192,14 @@ def _synthetic_template_profile(offset: float = 0.0) -> np.ndarray:
     }
     profile = np.zeros((3, 400), dtype=np.float32)
     for column, row in enumerate(registry):
-        network = str(row["canonical8"])
+        network = str(row["canonical7"])
         for label in range(1, 4):
             profile[label - 1, column] = scores[str(label)].get(network, -0.02)
     return profile
 
 
 def _synthetic_network_colors() -> dict[str, tuple[int, int, int, int]]:
-    # Legacy aliases stay present so the RED test fails by assertion rather than KeyError.
+    # Legacy aliases deliberately differ, so canonical colors must be selected.
     return {
         "VAN": (231, 150, 156, 255),
         "DMN": (196, 156, 148, 255),

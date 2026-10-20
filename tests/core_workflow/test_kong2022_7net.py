@@ -323,7 +323,7 @@ def test_kong2022_default_is_a_direct_canonical7_05_02_branch() -> None:
 
 def test_default_parsers_select_canonical7_without_a_7net_suffix() -> None:
     assert reference_builder.DEFAULT_SHARED_ROOT.name == "routea"
-    assert extractor.build_arg_parser().parse_args(["--subject", "01"]).atlas_slug == "kong2022"
+    assert extractor.build_arg_parser().parse_args(["--subject", "01", "--dataset", "hcp"]).atlas_slug == "kong2022"
     assert atlas.build_arg_parser().parse_args([]).network_taxonomy == "canonical7"
     assert weighted_branch.build_arg_parser().parse_args([]).network_column == "canonical7"
 
@@ -691,6 +691,9 @@ def test_05_02_group_atlas_rejects_retired_canonical8_taxonomy(monkeypatch) -> N
 
 
 def test_05_05_weighted_fisherz_rejects_retired_canonical8(monkeypatch) -> None:
+    # The CLI mutates these module globals before rejecting the requested taxonomy.
+    monkeypatch.setattr(weighted_branch, "ATLAS", "kong2022")
+    monkeypatch.setattr(weighted_branch, "NETWORK_COLUMN", "canonical7")
     monkeypatch.setattr(
         sys,
         "argv",

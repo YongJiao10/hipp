@@ -22,7 +22,7 @@ from pathlib import Path
 import numpy as np
 
 from lib.gifti_labels import materialize_combo
-from lib.io_utils import load_json
+from lib.io_utils import write_tsv, load_json, load_run_segment_metadata
 from lib.group_atlas_lineage import validate_group_atlas_lineage
 from lib.kong2022_label_utils import load_kong2022_merge_mapping
 from lib.network_colors import load_network_colors
@@ -117,14 +117,6 @@ def read_tsv(path: Path) -> list[dict[str, object]]:
     return rows
 
 
-def write_tsv(path: Path, rows: list[dict[str, object]], fieldnames: list[str]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames, delimiter="\t", extrasaction="ignore")
-        writer.writeheader()
-        writer.writerows(rows)
-
-
 def copy_run_tree(src_run: Path, dst_run: Path) -> None:
     if not src_run.exists():
         raise FileNotFoundError(f"Missing source run directory: {src_run}")
@@ -156,21 +148,33 @@ def load_subject_weighted_cluster_profile(
 ) -> np.ndarray:
     ts_path = surface_timeseries_path(surface_root, subject, smoothing, hemi)
     roi_path, rows_path = reference_paths(reference_root, subject)
+    mask_path = surface_root / f"sub-{subject}" / "surface" / "tsnr_gate" / f"sub-{subject}_hemi-{hemi}_valid_mask.npy"
+    summary_path = roi_path.parent / "reference_summary.json"
     if not ts_path.exists():
         raise FileNotFoundError(f"Missing hippocampal surface timeseries for strict weighted_fisherz: {ts_path}")
+    if not mask_path.is_file():
+        raise FileNotFoundError(f"Missing subject valid mask for strict weighted_fisherz: {mask_path}")
     ts = np.load(ts_path).astype(np.float32)
+    valid_mask = np.load(mask_path).astype(bool)
+    if ts.ndim != 2 or valid_mask.ndim != 1 or valid_mask.shape != (ts.shape[0],):
+        raise ValueError(f"Subject valid mask vertex mismatch: {mask_path} shape={valid_mask.shape}; timeseries={ts_path} shape={ts.shape}")
+    support_mask = np.asarray(support, dtype=bool).reshape(-1)
+    if support_mask.shape != valid_mask.shape:
+        raise ValueError(f"Group support/subject mask vertex mismatch: support={support_mask.shape}; {mask_path} shape={valid_mask.shape}")
+    _run_ids, run_lengths = load_run_segment_metadata(summary_path)
     roi_ts = np.load(roi_path).astype(np.float32)
     rows = read_tsv(rows_path)
     if roi_ts.shape[0] != len(rows):
         raise RuntimeError(f"ROI rows mismatch for sub-{subject}: {roi_ts.shape} vs {len(rows)} rows")
     return weighted_cluster_network_fisherz_profile_from_timeseries(
         labels,
-        support,
+        support_mask & valid_mask,
         ts,
         roi_ts,
         rows,
         network_names,
         network_column=str(network_column or NETWORK_COLUMN),
+        run_lengths=run_lengths,
     )
 
 
@@ -276,7 +280,6 @@ def recompute_gradient_weighted_run(
         profiles.append(cluster_profile)
 
     profile = np.nanmean(np.stack(profiles, axis=0), axis=0).astype(np.float32)
-    profile[~np.isfinite(profile)] = 0.0
     old_profile = dst_run / "cluster_network_profile.npy"
     if not old_profile.is_file():
         raise FileNotFoundError(f"Weighted branch source lacks exact baseline profile: {old_profile}")

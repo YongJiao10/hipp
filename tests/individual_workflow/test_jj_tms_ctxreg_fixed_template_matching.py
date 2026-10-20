@@ -230,7 +230,7 @@ def _write_subject_inputs(module, root: Path, subject: str, prototypes: np.ndarr
             / f"sub-{subject}"
             / "surf"
             / (
-                f"sub-{subject}_hemi-{hemi}_space-corobl_den-512_"
+                f"sub-{subject}_hemi-{hemi}_space-T1w_den-512_"
                 "label-hipp_midthickness.surf.gii"
             )
         )

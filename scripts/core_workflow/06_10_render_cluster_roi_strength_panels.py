@@ -3,33 +3,23 @@ from __future__ import annotations
 
 import argparse
 import json
-import subprocess
-import sys
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, cast
 
-import matplotlib
-
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
+import matplotlib  # type: ignore[import-untyped]
 import nibabel as nib
 import numpy as np
-from matplotlib.colors import Normalize
-
-REPO_ROOT = Path(__file__).resolve().parents[2]
-CORE_WORKFLOW_DIR = Path(__file__).resolve().parent
-if str(CORE_WORKFLOW_DIR) not in sys.path:
-    sys.path.insert(0, str(CORE_WORKFLOW_DIR))
-
 from lib.cortex_template_profiles import (
     DEFAULT_WTA_ASSIGNMENT_METRIC,
     build_wta_pseudocluster_labels,
     compute_subject_label_roi_profiles,
     load_wta_run,
+    parse_roi_registry,
+    resolve_cortex_assets,
     select_top_wta_networks,
 )
 from lib.gifti_labels import make_named_label_gifti
-from lib.io_utils import read_tsv_rows
 from lib.kong2022_label_utils import KONG2022_DLABEL_PATH, load_kong2022_bundle
 from lib.output_layout import (
     DEFAULT_CORTEX_ASSETS_ROOT,
@@ -40,12 +30,22 @@ from lib.output_layout import (
     DEFAULT_KONG2022_SURFACE_ROOT,
     DEFAULT_ROUTEA_GROUP_ATLAS_ROOT,
 )
-from lib.route_tags import ROUTE_TAG_CHOICES, infer_route_tag_from_group_root, validate_group_atlas_root_for_route
-from lib.template_assets import validate_template_surface_path
+from lib.render_cortex_pfm_scene import render_cortex_pfm_scene
+from lib.route_tags import (
+    ROUTE_TAG_CHOICES,
+    infer_route_tag_from_group_root,
+    validate_group_atlas_root_for_route,
+)
 from lib.surface_utils import long_axis_order
-from lib.workbench import run_workbench
+from lib.template_assets import validate_template_surface_path
 from lib.workflow_utils import write_json
+from matplotlib.colors import Normalize  # type: ignore[import-untyped]
+from nibabel.gifti.gifti import GiftiImage
 
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt  # type: ignore[import-untyped]  # noqa: E402
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
 METHOD = "gradient-spectral"
 DEFAULT_SMOOTHINGS = ("2mm", "4mm")
 DEFAULT_HEMIS = ("L", "R")
@@ -159,34 +159,6 @@ def strength_colors(
 def _rgba255(rgba: Iterable[float]) -> tuple[int, int, int, int]:
     vals = [int(round(float(value) * 255.0)) for value in rgba]
     return tuple(max(0, min(255, value)) for value in vals)  # type: ignore[return-value]
-
-
-def parse_roi_registry(path: Path) -> list[dict[str, Any]]:
-    rows = read_tsv_rows(path)
-    out: list[dict[str, Any]] = []
-    for row in rows:
-        canonical7 = str(row.get("canonical7", "")).strip()
-        if not canonical7:
-            raise ValueError(
-                f"ROI registry row is missing canonical7 network: {path}"
-            )
-        out.append(
-            {
-                "roi_id": int(row["roi_id"]),
-                "roi_name": str(row["roi_name"]),
-                "hemi": str(row["hemi"]),
-                "family17": str(row.get("family17", "")),
-                "subregion": str(row.get("subregion", "")),
-                "rank": int(row.get("rank", "0")),
-                "canonical7": canonical7,
-            }
-        )
-    if len(out) != 400:
-        raise ValueError(f"Expected 400 ROI registry rows, got {len(out)} from {path}")
-    ids = [int(row["roi_id"]) for row in out]
-    if len(set(ids)) != 400:
-        raise ValueError(f"ROI registry has duplicate IDs: {path}")
-    return out
 
 
 def resolve_cluster_names(
@@ -321,102 +293,6 @@ def load_run(
     }
 
 
-def _first_existing(paths: Iterable[Path]) -> Path | None:
-    for path in paths:
-        if path.exists():
-            return path.resolve()
-    return None
-
-
-def resolve_cortex_assets(
-    *,
-    subject: str,
-    data_root: Path,
-    assets_root: Path,
-    scene: Path,
-    dlabel: Path,
-) -> dict[str, Path]:
-    subject = str(subject).removeprefix("sub-")
-    anat = data_root / f"sub-{subject}" / "anat"
-    asset_subject = assets_root / f"sub-{subject}" / "assets"
-    public_root = REPO_ROOT / "external"
-    fastans_tpl = public_root / "FASTANS" / "resources" / "templates"
-
-    left_inflated = _first_existing(
-        (
-            anat / f"sub-{subject}_hemi-L_space-fsLR_den-32k_desc-MSMAll_inflated.surf.gii",
-            assets_root / f"sub-{subject}_hemi-L_space-fsLR_den-32k_desc-MSMAll_inflated.surf.gii",
-            public_root / f"sub-{subject}_hemi-L_space-fsLR_den-32k_desc-MSMAll_inflated.surf.gii",
-        )
-    )
-    right_inflated = _first_existing(
-        (
-            anat / f"sub-{subject}_hemi-R_space-fsLR_den-32k_desc-MSMAll_inflated.surf.gii",
-            assets_root / f"sub-{subject}_hemi-R_space-fsLR_den-32k_desc-MSMAll_inflated.surf.gii",
-            public_root / f"sub-{subject}_hemi-R_space-fsLR_den-32k_desc-MSMAll_inflated.surf.gii",
-        )
-    )
-    sulc_dscalar = _first_existing(
-        (
-            anat / f"sub-{subject}_space-fsLR_den-32k_desc-MSMAll_sulc.dscalar.nii",
-            assets_root / f"sub-{subject}_space-fsLR_den-32k_desc-MSMAll_sulc.dscalar.nii",
-            public_root / f"sub-{subject}_space-fsLR_den-32k_desc-MSMAll_sulc.dscalar.nii",
-        )
-    )
-    left_sulc = _first_existing(
-        (
-            asset_subject / f"sub-{subject}_hemi-L_space-fsLR_den-32k_desc-MSMAll_sulc.func.gii",
-            assets_root / f"sub-{subject}_hemi-L_space-fsLR_den-32k_desc-MSMAll_sulc.func.gii",
-            fastans_tpl / "CORTEX_LEFT.32k_fs_LR..func.gii",
-        )
-    )
-    right_sulc = _first_existing(
-        (
-            asset_subject / f"sub-{subject}_hemi-R_space-fsLR_den-32k_desc-MSMAll_sulc.func.gii",
-            assets_root / f"sub-{subject}_hemi-R_space-fsLR_den-32k_desc-MSMAll_sulc.func.gii",
-            fastans_tpl / "CORTEX_RIGHT.32k_fs_LR.func.gii",
-        )
-    )
-    if (left_sulc is None or right_sulc is None) and sulc_dscalar is not None:
-        cache_dir = REPO_ROOT / "tmp" / "cortex_template_cache" / f"sub-{subject}"
-        cache_dir.mkdir(parents=True, exist_ok=True)
-        left_generated = cache_dir / f"sub-{subject}_hemi-L_space-fsLR_den-32k_desc-MSMAll_sulc.func.gii"
-        right_generated = cache_dir / f"sub-{subject}_hemi-R_space-fsLR_den-32k_desc-MSMAll_sulc.func.gii"
-        if not left_generated.exists() or not right_generated.exists():
-            run_workbench(
-                [
-                    "-cifti-separate",
-                    str(sulc_dscalar),
-                    "COLUMN",
-                    "-metric",
-                    "CORTEX_LEFT",
-                    str(left_generated),
-                    "-metric",
-                    "CORTEX_RIGHT",
-                    str(right_generated),
-                ]
-            )
-        left_sulc = left_sulc or left_generated.resolve()
-        right_sulc = right_sulc or right_generated.resolve()
-
-    required = {
-        "left_inflated": left_inflated,
-        "right_inflated": right_inflated,
-        "left_sulc": left_sulc,
-        "right_sulc": right_sulc,
-        "sulc_dscalar": sulc_dscalar,
-        "scene": scene.resolve() if scene.exists() else None,
-        "dlabel": dlabel.resolve() if dlabel.exists() else None,
-    }
-    missing = [name for name, path in required.items() if path is None]
-    if missing:
-        raise FileNotFoundError(
-            "Missing cortex assets for template subject "
-            f"sub-{subject}: {', '.join(missing)}"
-        )
-    return {name: path for name, path in required.items() if path is not None}
-
-
 def _strength_label_items(
     *,
     roi_registry: list[dict[str, Any]],
@@ -438,7 +314,7 @@ def _strength_label_items(
     return items
 
 
-def _label_table_signature(image: nib.gifti.GiftiImage) -> tuple[tuple[Any, ...], ...]:
+def _label_table_signature(image: GiftiImage) -> tuple[tuple[Any, ...], ...]:
     labels = []
     for label in image.labeltable.labels:
         labels.append(
@@ -454,11 +330,11 @@ def _label_table_signature(image: nib.gifti.GiftiImage) -> tuple[tuple[Any, ...]
     return tuple(sorted(labels))
 
 
-def _label_gifti_matches(path: Path, image: nib.gifti.GiftiImage) -> bool:
+def _label_gifti_matches(path: Path, image: GiftiImage) -> bool:
     if not path.exists():
         return False
     try:
-        existing = nib.load(str(path))
+        existing = cast(GiftiImage, nib.load(str(path)))
         return (
             len(existing.darrays) == len(image.darrays)
             and all(np.array_equal(old.data, new.data) for old, new in zip(existing.darrays, image.darrays))
@@ -532,51 +408,20 @@ def render_panel(
 
     out_scene = panel_dir / f"strength_{panel_tag}.scene"
     out_png = panel_dir / f"strength_{panel_tag}.png"
-    render_script = REPO_ROOT / "scripts" / "core_workflow" / "lib" / "render_cortex_pfm_scene.py"
-    command = [
-        sys.executable,
-        str(render_script),
-        "--source-scene",
-        str(cortex_assets["scene"]),
-        "--left-surface",
-        str(cortex_assets["left_inflated"]),
-        "--right-surface",
-        str(cortex_assets["right_inflated"]),
-        "--left-label",
-        str(left_label),
-        "--right-label",
-        str(right_label),
-        "--left-sulc",
-        str(cortex_assets["left_sulc"]),
-        "--right-sulc",
-        str(cortex_assets["right_sulc"]),
-        "--sulc-dscalar",
-        str(cortex_assets["sulc_dscalar"]),
-        "--dlabel",
-        str(cortex_assets["dlabel"]),
-        "--out-scene",
-        str(out_scene),
-        "--out-png",
-        str(out_png),
-        "--width",
-        "1000",
-        "--height",
-        "700",
-        "--renderer",
-        "OSMesa",
-    ]
     render_inputs = (left_label, right_label, out_scene)
     needs_render = not out_png.exists()
     if not needs_render:
         output_mtime = out_png.stat().st_mtime_ns
         needs_render = any(path.stat().st_mtime_ns > output_mtime for path in render_inputs if path.exists())
     if needs_render:
-        proc = subprocess.run(command, text=True, capture_output=True)
-        if proc.returncode != 0:
-            raise RuntimeError(
-                f"Workbench cortex render failed for {panel_key}: {' '.join(command)}\n"
-                f"STDOUT:\n{proc.stdout}\nSTDERR:\n{proc.stderr}"
-            )
+        render_cortex_pfm_scene(
+            source_scene=cortex_assets["scene"],
+            left_surface=cortex_assets["left_inflated"], right_surface=cortex_assets["right_inflated"],
+            left_label=left_label, right_label=right_label,
+            left_sulc=cortex_assets["left_sulc"], right_sulc=cortex_assets["right_sulc"],
+            sulc_dscalar=cortex_assets["sulc_dscalar"], dlabel=cortex_assets["dlabel"],
+            out_scene=out_scene, out_png=out_png, width=1000, height=700, renderer="OSMesa",
+        )
     return out_png
 
 

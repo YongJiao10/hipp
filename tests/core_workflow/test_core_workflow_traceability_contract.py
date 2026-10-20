@@ -7,6 +7,7 @@ import sys
 import tempfile
 from pathlib import Path
 
+import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CORE_ROOT = REPO_ROOT / "scripts" / "core_workflow"
@@ -100,6 +101,24 @@ def test_every_numbered_step_emits_traceability_manifest_fields() -> None:
             assert "outputs/example_b" in manifest["output_artifacts"]
             assert isinstance(manifest.get("command"), str) and manifest["command"]
             assert isinstance(manifest.get("git_commit"), str) and manifest["git_commit"]
+
+
+@pytest.mark.parametrize("step_id", [
+    "05_04_compute_confidence_maps", "06_06_render_confidence_maps",
+])
+def test_confidence_cli_accepts_traceability_flags_before_stage_parsing(tmp_path, step_id):
+    manifest_path = tmp_path / "step.json"
+    proc = subprocess.run(
+        [TEST_PYTHON, str(CORE_ROOT / f"{step_id}.py"),
+         "--workflow-branch", "kong2022_routeb",
+         "--step-manifest-out", str(manifest_path), "--dry-run"],
+        cwd=REPO_ROOT, capture_output=True, text=True,
+    )
+    assert proc.returncode == 0, proc.stderr
+    manifest = json.loads(manifest_path.read_text())
+    assert manifest["step_id"] == step_id
+    assert manifest["workflow_branch"] == "kong2022_routeb"
+    assert manifest["status"] == "dry_run"
 
 
 def test_active_core_workflow_has_no_legacy_wrapper_or_runtime_refs() -> None:

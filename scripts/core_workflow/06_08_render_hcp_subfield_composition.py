@@ -6,7 +6,7 @@ Render HCP 151-subject weighted_fisherz gradient cluster subfield composition.
 
 The figure overlaps RouteA weighted_fisherz K=3 gradient-spectral group labels
 with subject-level HippUnfold multihist7 subfield labels. Composition is
-computed within each subject first, using den-512 corobl midthickness vertex
+computed within each subject first, using den-512 T1w midthickness vertex
 area weights, then averaged across subjects.
 """
 
@@ -24,6 +24,9 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import nibabel as nib
 import numpy as np
+
+from lib.io_utils import load_json
+from lib.workflow_utils import write_json
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -82,14 +85,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--coverage-tag", default=COVERAGE_TAG)
     parser.add_argument("--gradient-components", default=COMPONENT_TAG)
     return parser.parse_args(argv)
-
-
-def load_json(path: Path) -> dict[str, Any]:
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
-def write_json(path: Path, payload: dict[str, Any]) -> None:
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
 def write_tsv(path: Path, rows: list[dict[str, Any]], fields: list[str]) -> None:
@@ -199,7 +194,7 @@ def midthickness_surface_path(hippunfold_root: Path, subject: str, hemi: str) ->
         / "hippunfold"
         / f"sub-{subject}"
         / "surf"
-        / f"sub-{subject}_hemi-{hemi}_space-corobl_den-512_label-hipp_midthickness.surf.gii"
+        / f"sub-{subject}_hemi-{hemi}_space-T1w_den-512_label-hipp_midthickness.surf.gii"
     )
 
 
@@ -533,7 +528,7 @@ def run(args: argparse.Namespace) -> dict[str, Path]:
             "cluster_display_names": CLUSTER_NAMES,
             "subfield_order": [SUBFIELD_NAMES[idx] for idx in SUBFIELD_ORDER],
             "excluded_labels": {"0": "non-label", "8": "cysts"},
-            "weighting": "subject_level_space-corobl_den-512_label-hipp_midthickness_vertex_area",
+            "weighting": "subject_level_space-T1w_den-512_label-hipp_midthickness_vertex_area",
             "aggregation": "subject_normalized_proportions_then_mean_and_sem",
             "outputs": {
                 "png": str(png),
@@ -542,6 +537,7 @@ def run(args: argparse.Namespace) -> dict[str, Path]:
             },
             "combo_manifests": combo_manifests,
         },
+        sort_keys=True, trailing_newline=True,
     )
     return {"png": png, "subject_tsv": subject_tsv, "summary_tsv": summary_tsv, "manifest": manifest_json}
 

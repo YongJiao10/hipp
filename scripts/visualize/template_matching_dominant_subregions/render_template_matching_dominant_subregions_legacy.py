@@ -52,22 +52,11 @@ for p in (CORE_DIR, VIS_LIB_DIR):
     if str(p) not in sys.path:
         sys.path.insert(0, str(p))
 
-import importlib.util
 from lib.surface_utils import render_locked_grid, make_network_label_gifti
 
-# Dynamically import heatmap utilities from 06_05
-_HM_PATH = REPO_ROOT / "scripts" / "core_workflow" / "06_05_render_group_gradient_heatmaps.py"
-_HM_SPEC = importlib.util.spec_from_file_location("heatmaps_06_05", _HM_PATH)
-if _HM_SPEC is None or _HM_SPEC.loader is None:
-    raise ImportError(f"Cannot load {_HM_PATH}")
-_HM = importlib.util.module_from_spec(_HM_SPEC)
-sys.modules[_HM_SPEC.name] = _HM
-_HM_SPEC.loader.exec_module(_HM)
-
-save_shape_gii = _HM.save_shape_gii
-apply_metric_palette = _HM.apply_metric_palette
-build_scene_root = _HM.build_scene_root
-_capture_scene_root = _HM._capture_scene_root
+from lib.workbench_scene_batch import (
+    save_shape_gii, build_scene_root, capture_scene_root as _capture_scene_root,
+)
 
 # Canonical Paths
 DEFAULT_36P_ROOT = REPO_ROOT / "outputs_iowa_jj_tms" / "work" / "hcp151_fixed_template_matching" / "subjects"

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import importlib
 import json
 import shutil
 import sys
@@ -19,8 +20,13 @@ if str(CORE_WORKFLOW_DIR) not in sys.path:
 from lib.kong2022_label_utils import (
     canonical_families_17_order,
     canonical_families_7_order,
-    load_kong2022_merge_mapping,
 )
+
+from lib.io_utils import load_run_segment_metadata
+from lib.kong2022_fc_contract import authoritative_kong2022_roi_registry
+from lib.task_quality import parse_tsnr_threshold, signal_validity_policy
+
+materialize_fc = importlib.import_module("04_01_materialize_kong2022_roi_fc").materialize_fc
 
 JJ_MATCH_ROOT = REPO_ROOT / "outputs_iowa_jj_tms/work/hcp151_fixed_template_matching/subjects"
 BATCH_ROOT = REPO_ROOT / "outputs_iowa_jj_tms/inputs/iowa_jj_tms/hippunfold/dense_corobl_batch"
@@ -29,25 +35,13 @@ SHARED_SURFACE_ROOT = KONG_ROOT / "shared_inputs" / "surface"
 SHARED_ROUTEA_ROOT = KONG_ROOT / "shared_inputs" / "routea"
 TEMPLATE_ROOT = KONG_ROOT / "templates" / "hipp_group_average_t1only_151" / "group_average_surfaces"
 MANIFEST_94 = REPO_ROOT / "manifests" / "jj_tms_94_subjects.txt"
-KONG2022_REGISTRY_TSV = REPO_ROOT / "outputs_hcp/work/group_atlas/routea_full_k3_fisherz/gradient-spectral/kong2022/2mm/cov_0p80/g1g2g3/hemi_L/cluster_roi_registry.tsv"
 
 HEMIS = ["L", "R"]
 SMOOTHINGS = ["2mm", "4mm"]
 
 
 def load_kong2022_reference_table() -> list[dict[str, str]]:
-    lines = KONG2022_REGISTRY_TSV.read_text(encoding="utf-8").splitlines()
-    header = lines[0].split("\t")
-    rows = []
-    for line in lines[1:]:
-        if not line.strip():
-            continue
-        parts = line.split("\t")
-        rows.append(dict(zip(header, parts)))
-    mapping_17_to_7 = load_kong2022_merge_mapping(taxonomy="canonical7")
-    for row in rows:
-        row["canonical7"] = mapping_17_to_7[row["family17"]]
-    return rows
+    return authoritative_kong2022_roi_registry()
 
 
 def build_cortex_parcels_tsv(vertex_counts: np.ndarray, base_table: list[dict[str, str]]) -> str:
@@ -94,10 +88,49 @@ def compute_group_average_surfaces(subjects: list[str]) -> None:
     (TEMPLATE_ROOT / "stage_manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
 
 
+def read_cortex_reference_policy(
+    source_manifest: Path, *, subject: str,
+) -> tuple[dict[str, object], dict[str, str | None]]:
+    """Read the dedicated JJ matcher policy and its declared cortex baselines."""
+    payload = json.loads(Path(source_manifest).read_text(encoding="utf-8"))
+    parameters = payload.get("parameters", {})
+    dataset = "iowa_jj_tms"
+    expected_policy = signal_validity_policy(dataset, "rest")
+    if (payload.get("subject") != f"sub-{subject}"
+            or payload.get("workflow") != "jj_tms_hcp151_fixed_template_matching"
+            or parameters.get("task") != "rest"
+            or parameters.get("validity_policy") != expected_policy
+            or "tsnr_threshold" not in parameters):
+        raise ValueError(f"Rebuild JJ cortex inputs with the declared rest baseline policy: {source_manifest}")
+    threshold = parse_tsnr_threshold(parameters["tsnr_threshold"])
+    policy: dict[str, object] = {
+        "dataset": dataset, "task": "rest", "validity_policy": expected_policy,
+        "tsnr_threshold": threshold,
+    }
+    baselines: dict[str, str | None] = {}
+    for hemi in HEMIS:
+        record = payload.get("inputs", {}).get(f"tsnr_cortex_{hemi}", {})
+        baseline = record.get("path")
+        if threshold is not None and (not isinstance(baseline, str) or not baseline):
+            raise ValueError(f"Rebuild JJ cortex inputs: missing tsnr_cortex_{hemi} baseline at {source_manifest}")
+        baselines[hemi] = baseline
+    return policy, baselines
+
+
 def materialize_subject(sub: str, base_table: list[dict[str, str]]) -> None:
     src_sub = JJ_MATCH_ROOT / f"sub-{sub}"
     dst_surf = SHARED_SURFACE_ROOT / f"sub-{sub}/surface"
     dst_routea = SHARED_ROUTEA_ROOT / f"sub-{sub}"
+
+    run_metadata = src_sub / "subject_manifest.json"
+    run_ids, run_lengths = load_run_segment_metadata(run_metadata)
+    reference_policy, baseline_inputs = read_cortex_reference_policy(run_metadata, subject=sub)
+    for sm in SMOOTHINGS:
+        for hemi in HEMIS:
+            source_ts = src_sub / f"surface/{sm}/hemi-{hemi}_timeseries.npy"
+            shape = np.load(source_ts, mmap_mode="r").shape
+            if len(shape) != 2 or shape[1] != sum(run_lengths):
+                raise ValueError(f"Run metadata lengths do not match {source_ts}: {run_lengths}, shape={shape}")
 
     # 1. Surface shared inputs
     for hemi in HEMIS:
@@ -111,14 +144,14 @@ def materialize_subject(sub: str, base_table: list[dict[str, str]]) -> None:
         raw_dir = dst_surf / "raw"
         raw_dir.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src_sub / f"surface/raw/hemi-{hemi}_timeseries.npy", raw_dir / f"sub-{sub}_hemi-{hemi}_timeseries.npy")
-        shutil.copy2(src_sub / f"surface/raw/sub-{sub}_hemi-{hemi}_space-corobl_den-512_label-hipp_bold.func.gii", raw_dir / f"sub-{sub}_hemi-{hemi}_space-corobl_den-512_label-hipp_bold.func.gii")
+        shutil.copy2(src_sub / f"surface/raw/sub-{sub}_hemi-{hemi}_space-T1w_den-512_label-hipp_bold.func.gii", raw_dir / f"sub-{sub}_hemi-{hemi}_space-T1w_den-512_label-hipp_bold.func.gii")
 
         # Smoothings
         for sm in SMOOTHINGS:
             sm_dir = dst_surf / sm
             sm_dir.mkdir(parents=True, exist_ok=True)
             shutil.copy2(src_sub / f"surface/{sm}/hemi-{hemi}_timeseries.npy", sm_dir / f"sub-{sub}_hemi-{hemi}_timeseries.npy")
-            shutil.copy2(src_sub / f"surface/{sm}/sub-{sub}_hemi-{hemi}_space-corobl_den-512_label-hipp_bold_{sm}.func.gii", sm_dir / f"sub-{sub}_hemi-{hemi}_space-corobl_den-512_label-hipp_bold.func.gii")
+            shutil.copy2(src_sub / f"surface/{sm}/sub-{sub}_hemi-{hemi}_space-T1w_den-512_label-hipp_bold_{sm}.func.gii", sm_dir / f"sub-{sub}_hemi-{hemi}_space-T1w_den-512_label-hipp_bold.func.gii")
 
     # 2. RouteA Reference inputs
     ref_dir = dst_routea / "reference/kong2022"
@@ -178,8 +211,11 @@ def materialize_subject(sub: str, base_table: list[dict[str, str]]) -> None:
         "subject": sub,
         "atlas_slug": "kong2022",
         "reference_label_source": "route_a_kong2022_areal_mshbm",
+        **reference_policy,
         "n_rois": 400,
         "network_taxonomy": "canonical7",
+        "run_ids": list(run_ids),
+        "run_lengths": list(run_lengths),
     }, indent=2), encoding="utf-8")
     (ref_dir / "stage_manifest.json").write_text(json.dumps({
         "stage": "routea_kong2022_reference",
@@ -194,42 +230,34 @@ def materialize_subject(sub: str, base_table: list[dict[str, str]]) -> None:
     shutil.copy2(src_sub / "cortex/hemi-R_valid_mask.npy", common_tsnr / "cortex_right_valid_mask.npy")
     shutil.copy2(src_sub / "cortex/hemi-L_tsnr.npy", common_tsnr / "cortex_left_tsnr.npy")
     shutil.copy2(src_sub / "cortex/hemi-R_tsnr.npy", common_tsnr / "cortex_right_tsnr.npy")
+    for side, hemi in (("left", "L"), ("right", "R")):
+        mask = np.load(common_tsnr / f"cortex_{side}_valid_mask.npy").astype(bool)
+        gate_summary = {
+            "hemi": side, "dataset": reference_policy["dataset"],
+            "task": reference_policy["task"], "validity_policy": reference_policy["validity_policy"],
+            "tsnr_definition": reference_policy["validity_policy"],
+            "threshold": reference_policy["tsnr_threshold"], "baseline_input": baseline_inputs[hemi],
+            "run_lengths": list(run_lengths),
+            "n_grayordinates_total": int(mask.size), "n_grayordinates_valid": int(mask.sum()),
+            "n_grayordinates_invalid": int((~mask).sum()),
+        }
+        (common_tsnr / f"cortex_{side}_tsnr_gate_summary.json").write_text(
+            json.dumps(gate_summary, indent=2), encoding="utf-8",
+        )
 
-    # 3. RouteA FC inputs
+
+    # 3. Compute pooled and actual per-run FC with the shared core implementation.
     for sm in SMOOTHINGS:
         for hemi in HEMIS:
-            fc_dir = dst_routea / f"fc/kong2022/{sm}/hemi_{hemi}"
-            fc_dir.mkdir(parents=True, exist_ok=True)
-            
-            pearson_fc = np.load(src_sub / f"matching/{sm}/hemi-{hemi}/vertex_to_roi_pearson_fc.npy")
-            valid_mask = np.load(src_sub / f"surface/tsnr_gate/hemi-{hemi}_valid_mask.npy")
-            active_fc = pearson_fc[valid_mask, :]
-            
-            np.save(fc_dir / "hipp_vertex_to_network_fc.npy", pearson_fc)
-            np.save(fc_dir / "hipp_vertex_to_network_fc_active.npy", active_fc)
-            
-            for rid in [1, 2, 3, 4]:
-                run_dir = fc_dir / f"runs/run-{rid}"
-                run_dir.mkdir(parents=True, exist_ok=True)
-                np.save(run_dir / "hipp_vertex_to_network_fc_active.npy", active_fc)
-            
-            summary = {
-                "subject": sub,
-                "atlas_slug": "kong2022",
-                "smooth": sm,
-                "hemi": hemi,
-                "fc_shape": list(pearson_fc.shape),
-                "active_fc_shape": list(active_fc.shape),
-                "n_vertices_total": int(valid_mask.size),
-                "n_vertices_valid_high_tsnr": int(valid_mask.sum()),
-                "n_roi_targets_used": 400,
-            }
-            (fc_dir / "fc_summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
-            (fc_dir / "stage_manifest.json").write_text(json.dumps({
-                "stage": "materialize_kong2022_roi_fc",
-                "status": "done",
-                "subject": f"sub-{sub}",
-            }, indent=2), encoding="utf-8")
+            materialize_fc(
+                shared_root=SHARED_ROUTEA_ROOT,
+                dataset="iowa_jj_tms",
+                surface_root=SHARED_SURFACE_ROOT,
+                subject=sub,
+                smoothing=sm,
+                hemi=hemi,
+                run_metadata=run_metadata,
+            )
 
 
 def main() -> int:

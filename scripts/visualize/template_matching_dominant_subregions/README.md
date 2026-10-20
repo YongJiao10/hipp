@@ -1,11 +1,11 @@
 # Iowa 3T Template Matching: Dominant Subregions & Dominance Heatmaps
 
 The formal renderer is maintained independently in
-`render_template_matching_dominant_subregions.py`. The original formal
-four-grid implementation is preserved byte-for-byte as
-`render_template_matching_dominant_subregions_legacy.py` for historical
-reproduction. Neither renderer imports or executes code from
-`ctxreg_worktree`.
+`render_template_matching_dominant_subregions.py`. The older four-grid
+implementation remains in `render_template_matching_dominant_subregions_legacy.py`.
+Both import scalar export, folded-scene assembly and scene capture from
+`scripts/core_workflow/lib/workbench_scene_batch.py`; neither loads the retired
+`06_05` renderer. Neither renderer imports or executes code from `ctxreg_worktree`.
 
 Publication-ready visualization suite displaying the group-level hippocampal functional subregion atlases derived from individual template matching alongside percentage dominance agreement heatmaps across the repository's canonical $2 \times 2$ grid architecture ($2\text{mm} / 4\text{mm}$ hippocampal surface smoothing $\times$ $36\text{P} / 22\text{P}$ fMRIPrep/xcp-d confound regression).
 
@@ -194,9 +194,11 @@ grid figure:
   subregion area expressed as **% of that subject's own hemisphere total
   midthickness area** (sum over all 512 vertices, including the rare label-0
   vertices: ≤31 vertices / 6% in one HC hemisphere, ≤5 vertices elsewhere).
-  `labels.npy` weighted by native `space-corobl_den-512 midthickness` vertex
+  `labels.npy` weighted by native `space-T1w_den-512 midthickness` vertex
   areas (`wb_command -surface-vertex-areas`, cross-checked against the
-  `cortex_network_area` numpy formula; missing surfaces fail closed).
+  `cortex_network_area` numpy formula; missing surfaces fail closed). Temporary
+  area metrics are created under the repository `tmp/` workspace. Corobl
+  surfaces remain display assets and are not used for physical areas.
   Normalizing by whole-hippocampus size removes between-subject head-size /
   segmentation scaling, so this column tests *relative redistribution*
   between subregions, while the count column keeps the absolute scale.

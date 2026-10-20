@@ -79,6 +79,10 @@ For subject $s$, hemisphere $h \in \{\text{L, R}\}$, functional subregion $k \in
 - **Absolute Subfield Surface Area ($mm^2$)**:
   $$\text{area}(s, h, k, j) = \sum_{v \in k, \text{sf}(v)=j} w_v(s, h)$$
 
+  Vertex weights use each subject's `space-T1w_den-512` midthickness mesh
+  (triangle area divided among its three vertices). Corobl coordinates are
+  used for display only; native mm² must not be measured on the corobl mesh.
+
 #### B. Statistical Tests Executed for Each Hypothesis ($M = 150$ total tests)
 
 1. **Welch's Two-Sample $t$-Test**: Unpaired test allowing unequal variances $\to t$-statistic, parametric $p$-value ($p_{\text{param}}$).

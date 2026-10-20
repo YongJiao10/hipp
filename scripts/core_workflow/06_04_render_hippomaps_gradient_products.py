@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
-
 """
 Process Step Description:
 Render HippoMaps gradient products. Renders computed continuous functional gradient data into standard visualization products (including unfolded/folded surface renderings, explained variance plots, and endpoint functional connectivity contrasts).
@@ -33,27 +31,39 @@ Outputs:
   - Endpoint FC contrast plot PNG: `{present_root}/{route}/{smoothing}/hippomaps_endpoint_fc_contrast_{route}_{smoothing}_{out_tag}.png`
   - Manifest JSON: `{present_root}/{route}/{smoothing}/hippomaps_gradient_products_{route}_{smoothing}_{out_tag}_manifest.json`
 """
+from __future__ import annotations
+
 import argparse
 import json
-import os
-import tempfile
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
-import matplotlib
-
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
+import matplotlib  # type: ignore[import-untyped]
 import numpy as np
+from lib.fc_math import finite_pearson_1d as finite_pearson_correlation
+from lib.hippomaps_adapter import (
+    DEFAULT_HIPPOMAPS_ROOT,
+    capture_hippomaps_plot,
+    enable_den512_plotting_v2,
+    ensure_hippomaps_on_path,
+    hippomaps_commit,
+    load_hippomaps_plotter,
+    normalize_hemis,
+    wait_for_stable_file,
+)
+from lib.hippomaps_adapter import (
+    stitch_hemi_images as stitch_hemi_gradient_images,
+)
+from lib.io_utils import load_json
+from lib.output_layout import DEFAULT_GRADIENTS_DIR, DEFAULT_HIPPOMAPS_GRADIENT_ROOT
+from lib.traceability import StageSpec, run_stage
+from lib.workflow_utils import write_json
 from PIL import Image, ImageDraw, ImageFont
 
-from lib.hippomaps_adapter import DEFAULT_HIPPOMAPS_ROOT, ensure_hippomaps_on_path, hippomaps_commit
-from lib.output_layout import DEFAULT_GRADIENTS_DIR, DEFAULT_HIPPOMAPS_GRADIENT_ROOT
-from lib.workflow_utils import write_json
-from lib.io_utils import load_json
-from lib.traceability import StageSpec, run_stage
-
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt  # type: ignore[import-untyped]  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_GRADIENT_ROOT = DEFAULT_HIPPOMAPS_GRADIENT_ROOT
@@ -61,27 +71,6 @@ DEFAULT_PRESENT_ROOT = DEFAULT_GRADIENTS_DIR
 ROUTES = ("routea", "routea_ctxreg", "routea_ctxdrop", "routeb")
 SMOOTHINGS = ("2mm", "4mm")
 HEMIS = ("L", "R")
-
-
-
-
-def wait_for_stable_file(path: Path, *, checks: int = 3, interval: float = 0.15) -> None:
-    last: tuple[int, int] | None = None
-    stable = 0
-    for _ in range(max(1, checks * 10)):
-        if path.exists():
-            st = path.stat()
-            current = (int(st.st_size), int(st.st_mtime_ns))
-            if current == last and current[0] > 0:
-                stable += 1
-                if stable >= checks:
-                    return
-            else:
-                stable = 0
-                last = current
-        time.sleep(float(interval))
-    if not path.exists() or path.stat().st_size <= 0:
-        raise TypeError(f"Render target did not stabilize: {path}")
 
 
 def compute_row_ev_percentages(manifests: dict[str, dict[str, Any]], selected_components: list[int]) -> list[float]:
@@ -105,35 +94,8 @@ def compute_hemi_ev_percentages(manifest: dict[str, Any], selected_components: l
     return [float(ev[int(comp) - 1]) * 100.0 for comp in selected_components]
 
 
-def normalize_hemis(hemis: list[str] | tuple[str, ...]) -> list[str]:
-    out = [str(hemi).upper() for hemi in hemis]
-    if not out:
-        raise ValueError("At least one hemisphere is required")
-    invalid = [hemi for hemi in out if hemi not in HEMIS]
-    if invalid:
-        raise ValueError(f"Invalid hemisphere(s): {invalid}; expected one or more of {HEMIS}")
-    return out
-
-
 def hemi_output_tag(hemis: list[str]) -> str:
     return "bilateral" if tuple(hemis) == HEMIS else "hemi-" + "".join(hemis)
-
-
-
-def finite_pearson_correlation(a: np.ndarray, b: np.ndarray) -> float:
-    x = np.asarray(a, dtype=np.float64).reshape(-1)
-    y = np.asarray(b, dtype=np.float64).reshape(-1)
-    finite = np.isfinite(x) & np.isfinite(y)
-    if int(np.count_nonzero(finite)) < 2:
-        return float("nan")
-    x = x[finite]
-    y = y[finite]
-    x = x - float(np.mean(x))
-    y = y - float(np.mean(y))
-    denom = float(np.sqrt(np.sum(x * x) * np.sum(y * y)))
-    if denom <= 0.0 or not np.isfinite(denom):
-        return float("nan")
-    return float(np.sum(x * y) / denom)
 
 
 def align_display_gradients_to_reference(
@@ -225,7 +187,7 @@ def compute_shared_display_color_ranges(
 def format_color_ranges_for_components(
     color_ranges_by_component: dict[int, tuple[float, float]], selected_components: list[int]
 ) -> list[list[tuple[float, float]]]:
-    return [[tuple(map(float, color_ranges_by_component[int(comp)]))] for comp in selected_components]
+    return [[(float(color_ranges_by_component[int(comp)][0]), float(color_ranges_by_component[int(comp)][1]))] for comp in selected_components]
 
 
 def load_gradient_arrays_for_display(
@@ -323,21 +285,6 @@ def annotate_gradient_image(
     return image_path
 
 
-def stitch_hemi_gradient_images(left_png: Path, right_png: Path, output_png: Path) -> Path:
-    left_img = Image.open(left_png).convert("RGB")
-    right_img = Image.open(right_png).convert("RGB")
-    out = Image.new(
-        "RGB",
-        (left_img.size[0] + right_img.size[0], max(left_img.size[1], right_img.size[1])),
-        (255, 255, 255),
-    )
-    out.paste(left_img, (0, 0))
-    out.paste(right_img, (left_img.size[0], 0))
-    output_png.parent.mkdir(parents=True, exist_ok=True)
-    out.save(output_png)
-    return output_png
-
-
 def ensure_bilateral_gradient_annotations(
     *,
     side_paths: dict[str, Path],
@@ -369,27 +316,6 @@ def ensure_bilateral_gradient_annotations(
     return output_png
 
 
-def enable_den512_plotting_v2(hippomaps_root: Path) -> bool:
-    ensure_hippomaps_on_path(hippomaps_root)
-    import hippomaps.plotting as hm_plotting
-
-    v2_densities = getattr(hm_plotting, "_V2_DENS", None)
-    if not isinstance(v2_densities, set):
-        raise TypeError("Expected hippomaps.plotting._V2_DENS to be a set")
-    if "512" in v2_densities:
-        return False
-    v2_densities.add("512")
-    return True
-
-
-def load_hippomaps_plotter(hippomaps_root: Path = DEFAULT_HIPPOMAPS_ROOT) -> Callable[..., object]:
-    ensure_hippomaps_on_path(hippomaps_root)
-    enable_den512_plotting_v2(hippomaps_root)
-    from hippomaps.plotting import surfplot_canonical_foldunfold
-
-    return surfplot_canonical_foldunfold
-
-
 def render_gradient_figure(
     *,
     left: np.ndarray,
@@ -415,11 +341,6 @@ def render_gradient_figure(
     if plotter is None:
         plotter = load_hippomaps_plotter()
     unfold_ap_rescale = str(den) != "512"
-    output_png.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.NamedTemporaryFile(
-        prefix=f".{output_png.stem}.", suffix=output_png.suffix, dir=output_png.parent, delete=False
-    ) as tmp:
-        render_png = Path(tmp.name)
     plotter_kwargs = {
         "hemis": hemis,
         "labels": ["hipp"],
@@ -433,7 +354,6 @@ def render_gradient_figure(
         "transparent_bg": False,
         "interactive": False,
         "screenshot": True,
-        "filename": str(render_png),
         "suppress_warnings": True,
         "size": [450, 300],
         "cb__width": 0.95,
@@ -444,32 +364,7 @@ def render_gradient_figure(
     }
     if color_ranges is not None:
         plotter_kwargs["color_range"] = color_ranges
-    fig = plotter(cdata, **plotter_kwargs)
-    final_render = render_png
-    if fig is None:
-        if not render_png.exists() or render_png.stat().st_size <= 0:
-            raise TypeError("HippoMaps plotter returned None and did not create the requested screenshot")
-    elif isinstance(fig, str):
-        got = Path(fig)
-        if got.exists() and got.stat().st_size > 0:
-            final_render = got
-        elif not render_png.exists() or render_png.stat().st_size <= 0:
-            raise TypeError(f"HippoMaps plotter returned screenshot path but file is missing: {fig}")
-    elif hasattr(fig, "savefig"):
-        fig.savefig(render_png, dpi=220, bbox_inches="tight")
-        try:
-            plt.close(fig)
-        except TypeError:
-            pass
-    elif hasattr(fig, "screenshot"):
-        fig.screenshot(str(render_png))
-    else:
-        raise TypeError(f"Unsupported HippoMaps plotter return type: {type(fig)!r}")
-    if not final_render.exists() or final_render.stat().st_size <= 0:
-        raise TypeError(f"HippoMaps render target was not created: {final_render}")
-    os.replace(final_render, output_png)
-    wait_for_stable_file(output_png)
-    return output_png
+    return capture_hippomaps_plot(plotter, cdata, output_png=output_png, **plotter_kwargs)
 
 
 def render_bilateral_gradient_figure(

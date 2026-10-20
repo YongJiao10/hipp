@@ -34,7 +34,7 @@ from pathlib import Path
 
 from lib.output_layout import DEFAULT_KONG2022_MANIFEST_ROOT, DEFAULT_KONG2022_ROOT
 from lib.workflow_utils import capped_jobs, utc_now_iso, write_json
-from lib.io_utils import load_subject_ids
+from lib.io_utils import load_run_segment_metadata, load_subject_ids
 from lib.fc_math import corrcoef_rows
 
 import numpy as np
@@ -48,17 +48,7 @@ DEFAULT_SURFACE_ROOT = DEFAULT_SHARED_INPUTS_ROOT / "surface"
 DEFAULT_SUBJECTS = DEFAULT_KONG2022_MANIFEST_ROOT / "hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt"
 SMOOTHINGS = ["2mm", "4mm"]
 HEMIS = ["L", "R"]
-RUN_IDS = [1, 2, 3, 4]
 
-
-
-def load_run_lengths(shared_root: Path, subject: str) -> list[int]:
-    out: list[int] = []
-    for rid in RUN_IDS:
-        p = shared_root / f"sub-{subject}" / "reference" / "common" / "runs" / f"run-{rid}" / "reference_summary.json"
-        obj = json.loads(p.read_text(encoding="utf-8"))
-        out.append(int(obj["run_length"]))
-    return out
 
 
 def materialize_subject(
@@ -72,7 +62,8 @@ def materialize_subject(
 ) -> dict[str, object]:
     reference_root = reference_root or shared_root
     mask_root = mask_root or surface_root
-    run_lengths = load_run_lengths(reference_root, subject)
+    run_metadata = reference_root / f"sub-{subject}" / "reference" / "kong2022" / "reference_summary.json"
+    run_ids, run_lengths = load_run_segment_metadata(run_metadata)
     n_combo = 0
     for smoothing in smoothings:
         for hemi in hemis:
@@ -83,20 +74,20 @@ def materialize_subject(
             ts = np.load(ts_path).astype(np.float32)
             valid = np.load(mask_path).astype(bool)
             active = ts[valid, :]
-            fc = corrcoef_rows(active, active)
-            np.fill_diagonal(fc, 1.0)
+            fc = corrcoef_rows(active, active, run_lengths=run_lengths)
+            np.fill_diagonal(fc, np.where(np.isfinite(np.diag(fc)), 1.0, np.nan))
             out_dir = subj / "fc" / "intrinsic" / smoothing / f"hemi_{hemi}"
             out_dir.mkdir(parents=True, exist_ok=True)
             np.save(out_dir / "hipp_vertex_to_vertex_fc_active.npy", fc)
             offset = 0
-            for rid, run_len in zip(RUN_IDS, run_lengths, strict=True):
+            for rid, run_len in zip(run_ids, run_lengths, strict=True):
                 run_ts = active[:, offset : offset + run_len]
                 if run_ts.shape[1] != run_len:
                     raise RuntimeError(f"Run slice mismatch sub-{subject} {smoothing} hemi-{hemi} run-{rid}")
                 run_dir = out_dir / "runs" / f"run-{rid}"
                 run_dir.mkdir(parents=True, exist_ok=True)
                 run_fc = corrcoef_rows(run_ts, run_ts)
-                np.fill_diagonal(run_fc, 1.0)
+                np.fill_diagonal(run_fc, np.where(np.isfinite(np.diag(run_fc)), 1.0, np.nan))
                 np.save(run_dir / "hipp_vertex_to_vertex_fc_active.npy", run_fc)
                 offset += run_len
             if offset != ts.shape[1]:
@@ -108,12 +99,13 @@ def materialize_subject(
                     "status": "done",
                     "timestamp_utc": utc_now_iso(),
                     "params": {"subject": subject, "smoothing": smoothing, "hemi": hemi},
-                    "inputs": [str(ts_path.resolve()), str(mask_path.resolve())],
+                    "inputs": [str(ts_path.resolve()), str(mask_path.resolve()), str(run_metadata.resolve())],
                     "outputs": [str((out_dir / "hipp_vertex_to_vertex_fc_active.npy").resolve())],
                     "n_vertices_total": int(ts.shape[0]),
                     "n_vertices_active": int(active.shape[0]),
                     "n_timepoints": int(ts.shape[1]),
-                    "run_lengths": run_lengths,
+                    "run_ids": list(run_ids),
+                    "run_lengths": list(run_lengths),
                 },
             )
             n_combo += 1

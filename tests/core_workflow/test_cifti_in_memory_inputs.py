@@ -124,13 +124,7 @@ def test_run_volume_sampling_concatenates_in_memory_and_removes_run_outputs(
         )
         runs.append((run_id, bold))
 
-    monkeypatch.setattr(surface_sampling, "subject_surf_dir", lambda *_args: tmp_path)
-    monkeypatch.setattr(surface_sampling, "detect_space_strict", lambda **_kwargs: "corobl")
-    monkeypatch.setattr(
-        surface_sampling,
-        "find_surface_asset_strict",
-        lambda **kwargs: surfaces[str(kwargs["hemi"])],
-    )
+    monkeypatch.setattr(surface_sampling, '_prepare_surfaces', lambda **kwargs: (surfaces, surfaces))
 
     def fake_sample(**kwargs: object) -> list[dict[str, object]]:
         bold = Path(kwargs["bold"])
@@ -140,7 +134,7 @@ def test_run_volume_sampling_concatenates_in_memory_and_removes_run_outputs(
         sampled: list[dict[str, object]] = []
         for hemi in ("L", "R"):
             metric = outdir / (
-                f"sub-1027_hemi-{hemi}_space-corobl_den-512_label-hipp_bold.func.gii"
+                f"sub-1027_hemi-{hemi}_space-T1w_den-512_label-hipp_bold.func.gii"
             )
             nib.save(
                 nib.gifti.GiftiImage(
@@ -156,7 +150,7 @@ def test_run_volume_sampling_concatenates_in_memory_and_removes_run_outputs(
             sampled.append({"hemi": hemi, "metric_gii": str(metric)})
         return sampled
 
-    monkeypatch.setattr(surface_sampling, "sample_hipp_surface_timeseries", fake_sample)
+    monkeypatch.setattr(surface_sampling, "_sample_prepared_surfaces", fake_sample)
     outdir = tmp_path / "sampled"
 
     arrays, summary = surface_sampling.sample_hipp_surface_run_timeseries(
@@ -165,7 +159,8 @@ def test_run_volume_sampling_concatenates_in_memory_and_removes_run_outputs(
         subject="1027",
         density="512",
         outdir=outdir,
-        space="corobl",
+        space="T1w",
+        registration=surface_sampling.SurfaceRegistration('ants', tmp_path/'transform.h5'),
     )
 
     assert summary["run_ids"] == [2, 3]
@@ -601,8 +596,8 @@ def test_reference_batch_passes_manifest_declared_paths_and_ids(
 ) -> None:
     first = tmp_path / "source-alpha.dtseries.nii"
     second = tmp_path / "source-beta.dtseries.nii"
-    first.write_bytes(b"first")
-    second.write_bytes(b"second")
+    _write_test_dtseries(first, np.zeros((3, 8), dtype=np.float32))
+    _write_test_dtseries(second, np.zeros((2, 8), dtype=np.float32))
     manifest = tmp_path / "sub-1027_run_artifacts.json"
     manifest.write_text(
         json.dumps(
@@ -616,13 +611,12 @@ def test_reference_batch_passes_manifest_declared_paths_and_ids(
         ),
         encoding="utf-8",
     )
-    calls: list[list[str]] = []
+    calls = []
 
-    def fake_run(cmd: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
-        calls.append(cmd)
-        return subprocess.CompletedProcess(cmd, 0, "", "")
+    def fake_build(**kwargs):
+        calls.append(kwargs["request"])
 
-    monkeypatch.setattr(module.subprocess, "run", fake_run)
+    monkeypatch.setattr(module, "build_kong2022_reference", fake_build)
     kwargs: dict[str, object] = {
         "subject": "1027",
         "shared_root": tmp_path / "shared",
@@ -634,17 +628,16 @@ def test_reference_batch_passes_manifest_declared_paths_and_ids(
     }
     if module is routea_batch:
         kwargs["route_a_root"] = tmp_path / "route-a"
+        kwargs["dataset"] = "hcp"
     result = module.run_subject(**kwargs)
 
     assert result == ("1027", True, "ok")
     assert len(calls) == 1
-    command = calls[0]
-    assert command[command.index("--run-dtseries") + 1 : command.index("--run-ids")] == [
-        str(first.resolve()),
-        str(second.resolve()),
-    ]
-    ids_start = command.index("--run-ids") + 1
-    assert command[ids_start : ids_start + 2] == ["2", "7"]
+    selected = calls[0]
+    assert selected.run_dtseries == [first.resolve(), second.resolve()]
+    assert selected.run_ids == [2, 7]
+    assert selected.run_artifact_manifest == manifest.resolve()
+
 
 
 def test_fc_run_loader_uses_current_reference_manifest_not_stale_run_directories(tmp_path: Path) -> None:
@@ -750,3 +743,81 @@ def test_group_atlas_runwise_loader_uses_current_fc_manifest_not_stale_run_direc
     assert sorted(bank) == [1, 2, 3]
     for rid in (1, 2, 3):
         np.testing.assert_allclose(bank[rid][subject], np.full((2, 400), np.arctanh(0.1 * rid)), rtol=1e-6)
+
+
+@pytest.mark.parametrize('module', [routea_batch, routeb_batch])
+def test_reference_worker_preserves_outputs_and_isolates_concurrent_subject_failure(tmp_path, module):
+    from concurrent.futures import ThreadPoolExecutor
+    from lib.kong2022_label_utils import load_kong2022_bundle
+    bundle = load_kong2022_bundle()
+    ids = np.asarray([row['roi_id'] for row in bundle['roi_registry']], np.int32)
+    left = nib.cifti2.BrainModelAxis.from_surface(np.arange(200), 32492, name='CORTEX_LEFT')
+    right = nib.cifti2.BrainModelAxis.from_surface(np.arange(200), 32492, name='CORTEX_RIGHT')
+    axis = left + right
+    data = np.tile(np.asarray([10., 12., 14., 12.], np.float32)[:, None], (1, 400))
+    source = tmp_path / 'sub-01.dtseries.nii'
+    nib.save(nib.Cifti2Image(data, header=nib.Cifti2Header.from_axes([
+        nib.cifti2.SeriesAxis(0, 1, 4), axis])), source)
+    dlabel = tmp_path / 'atlas.dlabel.nii'
+    nib.save(nib.Cifti2Image(ids[None, :], header=nib.Cifti2Header.from_axes([
+        bundle['img'].header.get_axis(0), axis])), dlabel)
+    labels = tmp_path / 'labels/sub-01'
+    labels.mkdir(parents=True)
+    for hemi, values in [('lh', ids[:200]), ('rh', ids[200:])]:
+        full = np.zeros(32492, np.int32)
+        full[:200] = values
+        np.savetxt(labels / f'{hemi}_labels.txt', full, fmt='%d')
+    metadata = tmp_path / 'runs.json'
+    metadata.write_text(json.dumps({'run_ids': [1, 3], 'run_lengths': [2, 2]}))
+    shared = tmp_path / 'shared'
+    kwargs = dict(shared_root=shared, data_root=tmp_path,
+        dtseries_template=str(tmp_path / 'sub-{subject}.dtseries.nii'),
+        run_artifact_manifest_template=None, kong2022_dlabel=dlabel,
+        run_metadata_template=str(metadata))
+    if module is routea_batch:
+        kwargs.update(route_a_root=labels.parent, atlas_slug='kong2022', overwrite=False, dataset='hcp')
+    else:
+        kwargs['cross_atlas_merge_json'] = None
+    original_argv = sys.argv[:]
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        good = pool.submit(module.run_subject, subject='01', **kwargs)
+        bad = pool.submit(module.run_subject, subject='02', **kwargs)
+        good_result, bad_result = good.result(), bad.result()
+    assert good_result == ('01', True, 'ok')
+    assert bad_result[:2] == ('02', False)
+    assert 'sub-02.dtseries.nii' in bad_result[2]
+    assert sys.argv == original_argv
+    reference = shared / 'sub-01/reference/kong2022'
+    np.testing.assert_array_equal(np.load(reference / 'cortex_roi_parcel_timeseries.npy'), data.T)
+    summary = json.loads((reference / 'reference_summary.json').read_text())
+    assert summary['run_ids'] == [1, 3]
+    assert summary['run_lengths'] == [2, 2]
+    assert summary['n_parcels_used_after_tsnr'] == 400
+
+
+def test_routeb_batch_default_matches_its_public_label_extractor():
+    import importlib
+    direct = importlib.import_module('scripts.core_workflow.lib.extract_cortex_kong2022_routeb_roi_timeseries')
+    assert routeb_batch.DEFAULT_SHARED_ROOT == direct.DEFAULT_SHARED_ROOT
+    assert routeb_batch.DEFAULT_SHARED_ROOT.name == 'routeb'
+    assert routeb_batch.DEFAULT_SHARED_ROOT != routea_batch.DEFAULT_SHARED_ROOT
+
+
+def test_reference_request_preserves_routea_cli_label_root_default():
+    from lib.kong2022_reference import ReferenceRequest
+    from lib.output_layout import DEFAULT_CORTEX_ROUTEA_ROOT
+    request = ReferenceRequest(subject='01', shared_root=Path('unused'))
+    assert request.route_a_root == DEFAULT_CORTEX_ROUTEA_ROOT
+
+
+@pytest.mark.parametrize('selected', [
+    {'dataset': 'stanford'}, {'task': 'wm'}, {'tsnr_threshold': 'none'},
+    {'tsnr_input_template': 'baseline-{hemi}.npz'}, {'atlas_slug': 'other'},
+])
+def test_routeb_callable_rejects_unsupported_policy_before_reading_inputs(tmp_path, selected):
+    from lib.extract_cortex_kong2022_routeb_roi_timeseries import build_kong2022_reference
+    from lib.kong2022_reference import ReferenceRequest
+    request = ReferenceRequest(subject='01', shared_root=tmp_path / 'out', **selected)
+    with pytest.raises(ValueError, match='Route B.*HCP rest.*25'):
+        build_kong2022_reference(request=request)
+    assert not (tmp_path / 'out').exists()

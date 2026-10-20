@@ -48,7 +48,8 @@ timing without imposing an unsupported global event shift.
 Current task masks use `--tsnr-threshold none`; residual-tSNR scores were not
 computed. File completeness and basic signal validity are prerequisites,
 not evidence of acceptable motion, local signal, or task reliability.
-See [the complete QC review](tsnr_qc_literature_review.md) for the primary
-sources, precise observed scope, and proposed next analysis, and
-[the task workflow](hcp_3t_task_fmri_hipp_memory_emotion_plan.md) for current
-analysis and output paths.
+See [the accepted fMRI QC policy](docs/hipp_parcellation_network/fmri_qc.md)
+for motion, anatomy and hippocampal-coverage selection, their implementation
+status and evaluated retention, and
+[the task workflow](hcp_3t_task_fmri_hipp_memory_emotion_plan.md) for analysis
+and output paths.

@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
-
 """
 Materialize RouteA hippocampal surface time series after local cortex regression.
 
@@ -11,6 +9,8 @@ valid cortical vertices. Regression is run independently inside each run
 segment, and this step writes only controlled time series and diagnostics.
 """
 
+from __future__ import annotations
+
 import argparse
 import hashlib
 import json
@@ -18,24 +18,35 @@ import warnings
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import nibabel as nib
 import numpy as np
-from scipy.spatial import cKDTree
-
 from lib.extract_cortex_merged_network_timeseries import extract_structure_data
-from lib.io_utils import load_run_segment_metadata, load_subject_ids
+from lib.fc_math import finite_pearson_1d as _finite_corr
+from lib.io_utils import (
+    load_optional_cortex_valid_mask,
+    load_subject_ids,
+    segments_from_explicit_metadata,
+    validate_run_segment_order,
+)
 from lib.output_layout import (
     DEFAULT_HIPPUNFOLD_BATCH_ROOT,
-    DEFAULT_KONG2022_MANIFEST_ROOT,
     DEFAULT_KONG400_CTXREG_SHARED_ROOT,
+    DEFAULT_KONG2022_MANIFEST_ROOT,
     DEFAULT_KONG2022_ROUTEA_ROOT,
     DEFAULT_KONG2022_SURFACE_ROOT,
 )
 from lib.path_templates import format_subject_path_template
+from lib.surface_coordinates import (
+    MNI_SPACE,
+    hipp_surface_path,
+    load_surface_coords,
+    native_cortex_coordinates,
+    query_local_cortex_neighbors,
+)
 from lib.workflow_utils import capped_jobs, utc_now_iso, write_json
-
+from scipy.spatial import KDTree as cKDTree
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_DATA_ROOT = REPO_ROOT / "data" / "hippunfold_input"
@@ -68,17 +79,7 @@ class LocalRegressionResult:
     local_cortex_corr: np.ndarray
 
 
-def format_subject_template(template: str, *, data_root: Path, subject: str, hemi: str) -> Path:
-    subject = str(subject).replace("sub-", "")
-    return Path(
-        str(template).format(
-            data_root=str(Path(data_root).resolve()),
-            subject=subject,
-            sub_subject=f"sub-{subject}",
-            hemi=hemi,
-            hemi_lower=hemi.lower(),
-        )
-    ).resolve()
+format_subject_template = format_subject_path_template
 
 
 def format_subject_run_template(
@@ -102,45 +103,13 @@ def format_subject_run_template(
     ).resolve()
 
 
-def load_surface_coords(path: Path) -> np.ndarray:
-    img = nib.load(str(path))
-    coords = None
-    for darray in img.darrays:
-        if int(darray.intent) == 1008:  # NIFTI_INTENT_POINTSET
-            coords = np.asarray(darray.data, dtype=np.float32)
-            break
-    if coords is None:
-        data = img.agg_data()
-        coords = np.asarray(data[0] if isinstance(data, tuple) else data, dtype=np.float32)
-    if coords.ndim != 2 or coords.shape[1] != 3:
-        raise ValueError(f"Expected surface POINTSET coordinates with shape (N, 3): {path} shape={coords.shape}")
-    return coords.astype(np.float32, copy=False)
-
-
-def hipp_surface_path(batch_root: Path, subject: str, hemi: str) -> Path:
-    subject = str(subject).replace("sub-", "")
-    return (
-        Path(batch_root)
-        / f"sub-{subject}"
-        / "hippunfold"
-        / f"sub-{subject}"
-        / "surf"
-        / f"sub-{subject}_hemi-{hemi}_space-corobl_den-512_label-hipp_midthickness.surf.gii"
-    )
-
-
-def dtseries_path(data_root: Path, subject: str) -> Path:
-    subject = str(subject).replace("sub-", "")
-    return Path(data_root) / f"sub-{subject}" / "func" / f"sub-{subject}_task-rest_run-concat.dtseries.nii"
-
-
 def load_cortex_from_dtseries(
     *,
     dtseries: Path,
     left_surface: Path,
     right_surface: Path,
 ) -> tuple[np.ndarray, np.ndarray, dict[str, int]]:
-    img = nib.load(str(dtseries))
+    img = cast(Any, nib.load(str(dtseries)))
     data = np.asarray(img.dataobj, dtype=np.float32)
     if data.ndim != 2:
         raise ValueError(f"Expected 2D dtseries data: {dtseries} shape={data.shape}")
@@ -198,37 +167,6 @@ def load_cortex_from_dtseries_runs(
     )
 
 
-def load_optional_cortex_valid_mask(
-    source_shared_root: Path,
-    subject: str,
-    cortex_counts: dict[str, int],
-    *,
-    require_explicit: bool = True,
-) -> np.ndarray:
-    """Load explicit cortical validity masks; no implicit mask is default."""
-    subject = str(subject).replace("sub-", "")
-    gate = Path(source_shared_root) / f"sub-{subject}" / "reference" / "common" / "tsnr_gate"
-    pieces: list[np.ndarray] = []
-    missing: list[Path] = []
-    for hemi_name, key in [("left", "CORTEX_LEFT"), ("right", "CORTEX_RIGHT")]:
-        path = gate / f"cortex_{hemi_name}_valid_mask.npy"
-        if path.is_file():
-            arr = np.load(path).astype(bool)
-            if int(arr.size) != int(cortex_counts[key]):
-                raise ValueError(f"Cortex valid mask size mismatch: {path} size={arr.size} expected={cortex_counts[key]}")
-            pieces.append(arr)
-        else:
-            missing.append(path)
-            if not require_explicit:
-                pieces.append(np.ones((int(cortex_counts[key]),), dtype=bool))
-    if missing and require_explicit:
-        raise FileNotFoundError(
-            "Missing explicit cortical validity mask(s) required for cortex regression: "
-            + ", ".join(str(path) for path in missing)
-        )
-    return np.concatenate(pieces).astype(bool)
-
-
 def load_run_segments(
     shared_root: Path,
     subject: str,
@@ -236,21 +174,7 @@ def load_run_segments(
     run_metadata: Path | None = None,
 ) -> list[dict[str, int]]:
     if run_metadata is not None:
-        run_ids, run_lengths = load_run_segment_metadata(Path(run_metadata).resolve())
-        segments: list[dict[str, int]] = []
-        offset = 0
-        for run_id, run_length in zip(run_ids, run_lengths, strict=True):
-            stop = offset + int(run_length)
-            segments.append(
-                {
-                    "run_id": int(run_id),
-                    "run_start": int(offset),
-                    "run_stop": int(stop),
-                    "run_length": int(run_length),
-                }
-            )
-            offset = stop
-        return validate_run_segment_order(segments, source=Path(run_metadata).resolve())
+        return segments_from_explicit_metadata(Path(run_metadata).resolve())
 
     subject = str(subject).replace("sub-", "")
     run_root = Path(shared_root) / f"sub-{subject}" / "reference" / "common" / "runs"
@@ -286,45 +210,6 @@ def load_run_segments(
     return validate_run_segment_order(segments, source=run_root)
 
 
-def validate_run_segment_order(
-    segments: list[dict[str, int]],
-    *,
-    source: Path,
-) -> list[dict[str, int]]:
-    if not segments:
-        raise ValueError(f"Run metadata is empty: {source}")
-    out: list[dict[str, int]] = []
-    previous_id = 0
-    previous_stop = 0
-    for index, raw in enumerate(segments, start=1):
-        try:
-            run_id = int(raw["run_id"])
-            start = int(raw["run_start"])
-            stop = int(raw["run_stop"])
-            length = int(raw["run_length"])
-        except (KeyError, TypeError, ValueError) as exc:
-            raise ValueError(f"Malformed run segment at index {index}: {raw}; source={source}") from exc
-        if run_id <= previous_id:
-            raise ValueError(f"Run IDs must be strictly increasing: {source}")
-        if index == 1 and start != 0:
-            raise ValueError(f"Run segments must start at frame 0: {source}")
-        if start != previous_stop:
-            raise ValueError(f"Run segments must be contiguous: {source}")
-        if start < 0 or stop <= start or length != stop - start:
-            raise ValueError(f"Invalid run segment: {raw}; source={source}")
-        out.append(
-            {
-                "run_id": run_id,
-                "run_start": start,
-                "run_stop": stop,
-                "run_length": length,
-            }
-        )
-        previous_id = run_id
-        previous_stop = stop
-    return out
-
-
 def validate_run_segments(run_segments: list[dict[str, int]], n_timepoints: int) -> list[dict[str, int]]:
     out = validate_run_segment_order(run_segments, source=Path("<run_segments>"))
     for seg in out:
@@ -343,7 +228,7 @@ def validate_coordinate_space_compatibility(
     cortex_coords: np.ndarray,
     distance_mm: float,
     max_median_nearest_mm: float | None = None,
-) -> dict[str, float]:
+) -> dict[str, Any]:
     hipp = np.asarray(hipp_coords, dtype=np.float64)
     cortex = np.asarray(cortex_coords, dtype=np.float64)
     if hipp.ndim != 2 or cortex.ndim != 2 or hipp.shape[1] != 3 or cortex.shape[1] != 3:
@@ -370,24 +255,6 @@ def validate_coordinate_space_compatibility(
     }
 
 
-def query_local_cortex_neighbors(
-    *,
-    hipp_coords: np.ndarray,
-    cortex_coords: np.ndarray,
-    cortex_valid_mask: np.ndarray,
-    distance_mm: float,
-) -> list[np.ndarray]:
-    valid = np.asarray(cortex_valid_mask, dtype=bool).reshape(-1)
-    if valid.size != int(np.asarray(cortex_coords).shape[0]):
-        raise ValueError(f"Cortex valid mask size mismatch: mask={valid.size} coords={np.asarray(cortex_coords).shape[0]}")
-    valid_idx = np.flatnonzero(valid)
-    if valid_idx.size == 0:
-        return [np.asarray([], dtype=np.int64) for _ in range(int(np.asarray(hipp_coords).shape[0]))]
-    tree = cKDTree(np.asarray(cortex_coords, dtype=np.float32)[valid_idx, :])
-    local = tree.query_ball_point(np.asarray(hipp_coords, dtype=np.float32), r=float(distance_mm))
-    return [valid_idx[np.asarray(row, dtype=np.int64)] for row in local]
-
-
 def _ols_residual(y: np.ndarray, x: np.ndarray) -> np.ndarray:
     yy = np.asarray(y, dtype=np.float64).reshape(-1)
     xx = np.asarray(x, dtype=np.float64).reshape(-1)
@@ -399,20 +266,6 @@ def _ols_residual(y: np.ndarray, x: np.ndarray) -> np.ndarray:
     out = yy.copy()
     out[finite] = yy[finite] - design @ beta
     return out.astype(np.float32)
-
-
-def _finite_corr(a: np.ndarray, b: np.ndarray) -> float:
-    aa = np.asarray(a, dtype=np.float64).reshape(-1)
-    bb = np.asarray(b, dtype=np.float64).reshape(-1)
-    finite = np.isfinite(aa) & np.isfinite(bb)
-    if int(np.sum(finite)) < 2:
-        return float("nan")
-    x = aa[finite] - float(np.mean(aa[finite]))
-    y = bb[finite] - float(np.mean(bb[finite]))
-    denom = float(np.linalg.norm(x) * np.linalg.norm(y))
-    if denom <= 0.0 or not np.isfinite(denom):
-        return float("nan")
-    return float(np.clip(float(np.dot(x, y) / denom), -1.0, 1.0))
 
 
 def regress_local_cortex_signal(
@@ -483,7 +336,6 @@ def regress_local_cortex_signal(
         variance_after=variance_after,
         local_cortex_corr=local_corr,
     )
-
 
 
 def write_regression_outputs(
@@ -686,6 +538,7 @@ def process_subject(
     hemis: list[str],
     distance_mm: float,
     run_metadata_template: str | None = None,
+    cortex_coordinate_space: str = MNI_SPACE,
 ) -> dict[str, object]:
     subject = str(subject).replace("sub-", "")
     source_shared = Path(source_shared_root)
@@ -747,6 +600,7 @@ def process_subject(
             left_surface=cortex_surface_paths["L"],
             right_surface=cortex_surface_paths["R"],
         )
+    cortex_coords = native_cortex_coordinates(cortex_coords, subject=subject, space=cortex_coordinate_space)
     cortex_valid = load_optional_cortex_valid_mask(source_shared, subject, cortex_counts)
     n_outputs = 0
 
@@ -764,6 +618,7 @@ def process_subject(
             cortex_coords=cortex_coords,
             distance_mm=float(distance_mm),
         )
+        coord_meta.update(cortex_source_space=cortex_coordinate_space, distance_space='T1w')
         neighbors = query_local_cortex_neighbors(
             hipp_coords=hipp_coords,
             cortex_coords=cortex_coords,
@@ -824,6 +679,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--distance-mm", type=float, default=20.0)
     parser.add_argument("--left-cortex-surface-template", default=DEFAULT_LEFT_CORTEX_SURFACE_TEMPLATE)
     parser.add_argument("--right-cortex-surface-template", default=DEFAULT_RIGHT_CORTEX_SURFACE_TEMPLATE)
+    parser.add_argument('--cortex-coordinate-space', choices=['T1w', MNI_SPACE], default=MNI_SPACE,
+                        help='Physical coordinates of cortical meshes; default HCP MSMAll inputs are MNI. Use T1w for native fMRIPrep meshes.')
     parser.add_argument(
         "--dtseries-template",
         default=DEFAULT_DTSERIES_TEMPLATE,
@@ -866,6 +723,7 @@ def main() -> int:
         "hippunfold_batch_root": str(Path(args.hippunfold_batch_root).resolve()),
         "left_cortex_surface_template": str(args.left_cortex_surface_template),
         "right_cortex_surface_template": str(args.right_cortex_surface_template),
+        "cortex_coordinate_space": args.cortex_coordinate_space,
         "dtseries_template": str(args.dtseries_template),
         "dtseries_run_template": str(args.dtseries_run_template) if args.dtseries_run_template else None,
         "run_metadata_template": str(args.run_metadata_template) if args.run_metadata_template else None,

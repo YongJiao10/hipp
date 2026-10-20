@@ -56,6 +56,11 @@ def make_inputs(anatomy: Path, shared: Path, subjects: list[str]) -> None:
                 np.full((3, 3), index + 1, dtype=np.float32),
                 np.array([[0, 1, 2]], dtype=np.int32),
             )
+            PREP.save_surface(
+                PREP.surface_path(anatomy, subject, hemi, space='corobl'),
+                np.full((3, 3), index + 1, dtype=np.float32),
+                np.array([[0, 1, 2]], dtype=np.int32),
+            )
 
 
 @pytest.mark.parametrize("task,dataset", [

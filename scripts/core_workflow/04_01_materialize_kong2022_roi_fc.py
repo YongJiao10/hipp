@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
-
 """
 Process Step Description:
 Materialize Kong2022 ROI-level functional connectivity (FC). Computes the functional connectivity matrix between hippocampal surface vertices and Kong2022 cortical network regions of interest (ROIs).
@@ -26,41 +24,42 @@ Inputs:
 
 Outputs:
 - Command-line output / file outputs:
-  - Complete vertex-to-canonical7-network FC matrix: `{shared_root}/sub-<subject>/fc/kong2022/{smoothing}/hemi_{hemi}/hipp_vertex_to_network_fc.npy`, plus the separate 400-ROI profile cache `hipp_vertex_to_roi_fc.npy`.
-  - Active-only canonical7-network and 400-ROI FC caches with corresponding `_active.npy` filenames.
+  - Ordered 400-ROI FC bank under the historical filename `hipp_vertex_to_network_fc.npy`; normal Kong2022 runs also write `hipp_vertex_to_roi_fc.npy` and separate `hipp_vertex_to_canonical7_fc.npy` summaries.
+  - Active-only caches use corresponding `_active.npy` filenames. The maintained ctxdrop methods consume the historical 400-ROI bank directly.
   - Run manifest: `{shared_root}/sub-<subject>/fc/kong2022/{smoothing}/hemi_{hemi}/fc_summary.json`.
 """
+from __future__ import annotations
+
 import argparse
 import csv
 import json
-from dataclasses import dataclass
 from concurrent.futures import ProcessPoolExecutor, as_completed
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, cast
 
 import nibabel as nib
-from scipy.spatial import cKDTree
-
-from lib.output_layout import (
-    DEFAULT_CORTEX_ROUTEA_ROOT,
-    DEFAULT_HIPPUNFOLD_BATCH_ROOT,
-    DEFAULT_KONG2022_MANIFEST_ROOT,
-    DEFAULT_KONG2022_ROOT,
-    DEFAULT_KONG400_CTXDROP_SHARED_ROOT as DEFAULT_HCP_KONG400_CTXDROP_SHARED_ROOT,
-)
-from lib.path_templates import format_subject_path_template
-from lib.workflow_utils import capped_jobs, utc_now_iso, write_json
-from lib.io_utils import load_run_segment_metadata, load_subject_ids
-from lib.fc_math import corrcoef_rows, compact_active_vertices
-from lib.extract_cortex_merged_network_timeseries import extract_structure_data
+import numpy as np
 from lib.extract_cortex_kong2022_route_a_roi_timeseries import (
     align_surface_labels_to_dt_vertices,
     load_surface_label_vector,
     route_a_label_paths,
 )
-from lib.kong2022_label_utils import (
-    aggregate_kong2022_network_timeseries,
-    canonical_families_7_order,
-    load_kong2022_merge_mapping,
+from lib.extract_cortex_merged_network_timeseries import extract_structure_data
+from lib.fc_math import (
+    center_run_timeseries,
+    compact_active_vertices,
+    corrcoef_rows,
+)
+from lib.io_utils import (
+    load_optional_cortex_valid_mask,
+    load_subject_ids,
+)
+from lib.io_utils import (
+    segments_from_explicit_metadata as _segments_from_explicit_metadata,
+)
+from lib.io_utils import (
+    validate_run_segment_order as _validate_run_segments,
 )
 from lib.kong2022_fc_contract import (
     authoritative_kong2022_roi_registry,
@@ -68,10 +67,34 @@ from lib.kong2022_fc_contract import (
     read_kong2022_roi_registry,
     validate_kong2022_roi_registry,
 )
-from lib.lynch2024_reference import lynch2024_7net_reference_contract, lynch2024_20net_order
-
-import numpy as np
-
+from lib.kong2022_label_utils import (
+    aggregate_kong2022_network_timeseries,
+    canonical_families_7_order,
+    load_kong2022_merge_mapping,
+)
+from lib.lynch2024_reference import (
+    lynch2024_7net_reference_contract,
+    lynch2024_20net_order,
+)
+from lib.output_layout import (
+    DEFAULT_CORTEX_ROUTEA_ROOT,
+    DEFAULT_HIPPUNFOLD_BATCH_ROOT,
+    DEFAULT_KONG2022_MANIFEST_ROOT,
+    DEFAULT_KONG2022_ROOT,
+)
+from lib.output_layout import (
+    DEFAULT_KONG400_CTXDROP_SHARED_ROOT as DEFAULT_HCP_KONG400_CTXDROP_SHARED_ROOT,
+)
+from lib.path_templates import format_subject_path_template
+from lib.surface_coordinates import (
+    MNI_SPACE,
+    hipp_surface_path,
+    load_surface_coords,
+    native_cortex_coordinates,
+    query_local_cortex_neighbors,
+)
+from lib.task_quality import QC_DATASETS, require_cortex_reference_policy
+from lib.workflow_utils import capped_jobs, utc_now_iso, write_json
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_ROUTE_ROOT = DEFAULT_KONG2022_ROOT
@@ -119,20 +142,6 @@ class CtxDropFCResult:
     fc: np.ndarray
     roi_cortex_counts: np.ndarray
     excluded_neighbor_counts: np.ndarray
-
-
-def finite_corr_1d(a: np.ndarray, b: np.ndarray) -> float:
-    aa = np.asarray(a, dtype=np.float64).reshape(-1)
-    bb = np.asarray(b, dtype=np.float64).reshape(-1)
-    finite = np.isfinite(aa) & np.isfinite(bb)
-    if int(np.sum(finite)) < 2:
-        return float("nan")
-    x = aa[finite] - float(np.mean(aa[finite]))
-    y = bb[finite] - float(np.mean(bb[finite]))
-    denom = float(np.linalg.norm(x) * np.linalg.norm(y))
-    if denom <= 0.0 or not np.isfinite(denom):
-        return float("nan")
-    return float(np.clip(float(np.dot(x, y) / denom), -1.0, 1.0))
 
 
 def corr_one_to_rows(y: np.ndarray, x_rows: np.ndarray) -> np.ndarray:
@@ -234,12 +243,12 @@ def compute_ctxdrop_vertex_to_roi_fc(
     )
 
 
-def roi_ids_and_names_from_rows(roi_rows: list[dict[str, object]]) -> tuple[list[int], list[str]]:
+def roi_ids_and_names_from_rows(roi_rows: list[dict[str, Any]]) -> tuple[list[int], list[str]]:
     roi_ids: list[int] = []
     roi_names: list[str] = []
     for idx, row in enumerate(roi_rows):
         raw_id = row.get("parcel_id", idx + 1)
-        roi_ids.append(int(raw_id))
+        roi_ids.append(int(str(raw_id)))
         roi_names.append(str(row.get("parcel_name", row.get("roi_name", raw_id))))
     if not roi_ids:
         raise RuntimeError("No ROI rows available for ctxdrop FC materialization")
@@ -276,9 +285,13 @@ def materialize_ctxdrop_fc_from_arrays(
         if cortex_valid_mask is None
         else np.asarray(cortex_valid_mask, dtype=bool).reshape(-1)
     )
+    run_segments = _validate_run_segments(run_segments, source=fc_dir)
+    pooled_lengths = [int(seg["run_length"]) for seg in run_segments]
+    pooled_ts = center_run_timeseries(ts, pooled_lengths)
+    pooled_cortex = center_run_timeseries(cortex_ts, pooled_lengths)
     result = compute_ctxdrop_vertex_to_roi_fc(
-        hipp_ts=ts,
-        cortex_ts=cortex_ts,
+        hipp_ts=pooled_ts,
+        cortex_ts=pooled_cortex,
         cortex_roi_ids=cortex_roi_ids,
         roi_ids=roi_ids,
         cortex_valid_mask=cortex_valid,
@@ -341,6 +354,7 @@ def materialize_ctxdrop_fc_from_arrays(
             "run_labels": run_labels,
             "run_lengths": run_lengths,
             "fc_definition": "pearson_vertex_to_kong2022_roi_timeseries_ctxdrop_local20mm",
+            "run_centering": "within_run_mean_removed_variance_preserved",
             "ctxdrop_neighbor_count_min": int(np.min(result.excluded_neighbor_counts)) if result.excluded_neighbor_counts.size else 0,
             "ctxdrop_neighbor_count_median": float(np.median(result.excluded_neighbor_counts)) if result.excluded_neighbor_counts.size else 0.0,
             "ctxdrop_neighbor_count_max": int(np.max(result.excluded_neighbor_counts)) if result.excluded_neighbor_counts.size else 0,
@@ -451,7 +465,7 @@ def validate_lynch_reference_contract(
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     merge_config = REPO_ROOT / "config" / "cross_atlas_network_merge.json"
     if atlas_slug == "lynch2024_20net":
-        expected: dict[str, object] = {
+        expected: dict[str, Any] = {
             "network_taxonomy": "lynch20",
             "network_count": 20,
             "network_registry_column": "lynch20_network",
@@ -460,7 +474,7 @@ def validate_lynch_reference_contract(
             "network_order": lynch2024_20net_order(merge_config),
         }
     elif atlas_slug == "lynch2024_7net":
-        expected = lynch2024_7net_reference_contract(merge_config)
+        expected = dict(lynch2024_7net_reference_contract(merge_config))
     else:
         return {}
     for key, expected_value in expected.items():
@@ -537,7 +551,6 @@ def derive_kong2022_canonical7_registry(
             f"observed={sorted(observed)} expected={sorted(expected)}"
         )
     return derived
-
 
 
 def prepare_reference_profiles(
@@ -624,96 +637,6 @@ def prepare_reference_profiles(
     )
 
 
-def _validate_run_segments(
-    segments: list[dict[str, int]],
-    *,
-    source: Path,
-) -> list[dict[str, int]]:
-    if not segments:
-        raise ValueError(f"Run metadata is empty: {source}")
-    out: list[dict[str, int]] = []
-    previous_id = 0
-    previous_stop = 0
-    for index, raw in enumerate(segments, start=1):
-        try:
-            run_id = int(raw["run_id"])
-            start = int(raw["run_start"])
-            stop = int(raw["run_stop"])
-            length = int(raw["run_length"])
-        except (KeyError, TypeError, ValueError) as exc:
-            raise ValueError(f"Malformed run segment at index {index}: {raw}; source={source}") from exc
-        if run_id <= previous_id:
-            raise ValueError(f"Run IDs must be strictly increasing: {source}")
-        if index == 1 and start != 0:
-            raise ValueError(f"Run segments must start at frame 0: {source}")
-        if start != previous_stop:
-            raise ValueError(f"Run segments must be contiguous: {source}")
-        if start < 0 or stop <= start or length != stop - start:
-            raise ValueError(f"Invalid run segment: {raw}; source={source}")
-        out.append(
-            {
-                "run_id": run_id,
-                "run_start": start,
-                "run_stop": stop,
-                "run_length": length,
-            }
-        )
-        previous_id = run_id
-        previous_stop = stop
-    return out
-
-
-def _segments_from_run_dirs(base: Path) -> list[dict[str, int]]:
-    if not base.is_dir():
-        return []
-    run_dirs: list[tuple[int, Path]] = []
-    for child in base.iterdir():
-        if not child.is_dir() or not child.name.startswith("run-"):
-            continue
-        raw_id = child.name[4:]
-        if not raw_id.isdigit() or int(raw_id) <= 0:
-            raise ValueError(f"Malformed run directory name: {child}")
-        run_dirs.append((int(raw_id), child / "reference_summary.json"))
-    run_dirs.sort(key=lambda item: item[0])
-    if not run_dirs:
-        return []
-    segments: list[dict[str, int]] = []
-    for run_id, summary_path in run_dirs:
-        if not summary_path.is_file():
-            raise FileNotFoundError(f"Missing run reference summary: {summary_path}")
-        try:
-            payload = json.loads(summary_path.read_text(encoding="utf-8"))
-            segments.append(
-                {
-                    "run_id": int(payload["run_id"]),
-                    "run_start": int(payload["run_start"]),
-                    "run_stop": int(payload["run_stop"]),
-                    "run_length": int(payload["run_length"]),
-                }
-            )
-        except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
-            raise ValueError(f"Malformed run reference summary: {summary_path}") from exc
-    return _validate_run_segments(segments, source=base)
-
-
-def _segments_from_explicit_metadata(path: Path) -> list[dict[str, int]]:
-    run_ids, run_lengths = load_run_segment_metadata(Path(path).resolve())
-    segments: list[dict[str, int]] = []
-    offset = 0
-    for run_id, run_length in zip(run_ids, run_lengths, strict=True):
-        stop = offset + int(run_length)
-        segments.append(
-            {
-                "run_id": int(run_id),
-                "run_start": int(offset),
-                "run_stop": int(stop),
-                "run_length": int(run_length),
-            }
-        )
-        offset = stop
-    return _validate_run_segments(segments, source=Path(path).resolve())
-
-
 def load_run_segments(
     subj_root: Path,
     reference_atlas: str = "kong2022",
@@ -724,121 +647,18 @@ def load_run_segments(
     if run_metadata is not None:
         return _segments_from_explicit_metadata(Path(run_metadata).resolve())
     current_summary = subj_root / "reference" / str(reference_atlas) / "reference_summary.json"
-    if current_summary.is_file():
-        summary = json.loads(current_summary.read_text(encoding="utf-8"))
-        run_lengths = summary.get("run_lengths")
-        if isinstance(run_lengths, list) and run_lengths:
-            run_ids = summary.get("run_ids")
-            if not isinstance(run_ids, list) or len(run_ids) != len(run_lengths):
-                run_ids = list(range(1, len(run_lengths) + 1))
-            segments: list[dict[str, int]] = []
-            offset = 0
-            for rid, length in zip(run_ids, run_lengths, strict=True):
-                run_length = int(length)
-                if run_length <= 0:
-                    raise ValueError(f"Invalid run length in current reference manifest: {current_summary}")
-                stop = offset + run_length
-                segments.append(
-                    {
-                        "run_id": int(rid),
-                        "run_start": int(offset),
-                        "run_stop": int(stop),
-                        "run_length": int(run_length),
-                    }
-                )
-                offset = stop
-            return _validate_run_segments(segments, source=current_summary)
-
-    run_dir_root = subj_root / "reference" / "common" / "runs"
-    segments = _segments_from_run_dirs(run_dir_root)
-    if segments:
-        return segments
-    raise FileNotFoundError(f"Missing ordered run metadata under {subj_root / 'reference'}")
+    return _segments_from_explicit_metadata(current_summary)
 
 
-
-def read_roi_rows(path: Path) -> list[dict[str, object]]:
+def read_roi_rows(path: Path) -> list[dict[str, Any]]:
     with path.open("r", encoding="utf-8", newline="") as f:
-        rows = list(csv.DictReader(f, delimiter="\t"))
+        rows = [dict(r) for r in csv.DictReader(f, delimiter="\t")]
     if not rows:
         raise RuntimeError(f"Empty ROI TSV: {path}")
     return rows
 
 
-def format_subject_template(template: str, *, data_root: Path, subject: str, hemi: str) -> Path:
-    subject = str(subject).replace("sub-", "")
-    return Path(
-        str(template).format(
-            data_root=str(Path(data_root).resolve()),
-            subject=subject,
-            sub_subject=f"sub-{subject}",
-            hemi=hemi,
-            hemi_lower=hemi.lower(),
-        )
-    ).resolve()
-
-
-def load_surface_coords(path: Path) -> np.ndarray:
-    img = nib.load(str(path))
-    coords = None
-    for darray in img.darrays:
-        if int(darray.intent) == 1008:
-            coords = np.asarray(darray.data, dtype=np.float32)
-            break
-    if coords is None:
-        data = img.agg_data()
-        coords = np.asarray(data[0] if isinstance(data, tuple) else data, dtype=np.float32)
-    if coords.ndim != 2 or coords.shape[1] != 3:
-        raise ValueError(f"Expected surface POINTSET coordinates with shape (N, 3): {path} shape={coords.shape}")
-    return coords.astype(np.float32, copy=False)
-
-
-def hipp_surface_path(batch_root: Path, subject: str, hemi: str) -> Path:
-    subject = str(subject).replace("sub-", "")
-    return (
-        Path(batch_root)
-        / f"sub-{subject}"
-        / "hippunfold"
-        / f"sub-{subject}"
-        / "surf"
-        / f"sub-{subject}_hemi-{hemi}_space-corobl_den-512_label-hipp_midthickness.surf.gii"
-    )
-
-
-def dtseries_path(data_root: Path, subject: str) -> Path:
-    subject = str(subject).replace("sub-", "")
-    return Path(data_root) / f"sub-{subject}" / "func" / f"sub-{subject}_task-rest_run-concat.dtseries.nii"
-
-
-def load_optional_cortex_valid_mask(
-    reference_root: Path,
-    subject: str,
-    cortex_counts: dict[str, int],
-    *,
-    require_explicit: bool = True,
-) -> np.ndarray:
-    """Load explicit cortical validity masks; no implicit mask is default."""
-    subject = str(subject).replace("sub-", "")
-    gate = Path(reference_root) / f"sub-{subject}" / "reference" / "common" / "tsnr_gate"
-    pieces: list[np.ndarray] = []
-    missing: list[Path] = []
-    for hemi_name, key in [("left", "CORTEX_LEFT"), ("right", "CORTEX_RIGHT")]:
-        path = gate / f"cortex_{hemi_name}_valid_mask.npy"
-        if path.is_file():
-            arr = np.load(path).astype(bool)
-            if int(arr.size) != int(cortex_counts[key]):
-                raise ValueError(f"Cortex valid mask size mismatch: {path} size={arr.size} expected={cortex_counts[key]}")
-            pieces.append(arr)
-        else:
-            missing.append(path)
-            if not require_explicit:
-                pieces.append(np.ones((int(cortex_counts[key]),), dtype=bool))
-    if missing and require_explicit:
-        raise FileNotFoundError(
-            "Missing explicit cortical validity mask(s) required for FC materialization: "
-            + ", ".join(str(path) for path in missing)
-        )
-    return np.concatenate(pieces).astype(bool)
+format_subject_template = format_subject_path_template
 
 
 def load_ctxdrop_cortex_inputs(
@@ -856,7 +676,7 @@ def load_ctxdrop_cortex_inputs(
         data_root=data_root,
         subject=subject,
     )
-    dt_img = nib.load(str(dt_path))
+    dt_img = cast(Any, nib.load(str(dt_path)))
     dt_data = np.asarray(dt_img.dataobj, dtype=np.float32)
     if dt_data.ndim != 2:
         raise ValueError(f"Expected 2D dtseries data: {dt_path} shape={dt_data.shape}")
@@ -890,24 +710,6 @@ def load_ctxdrop_cortex_inputs(
     return coords, ts, roi_ids, counts, paths
 
 
-def query_local_cortex_neighbors(
-    *,
-    hipp_coords: np.ndarray,
-    cortex_coords: np.ndarray,
-    cortex_valid_mask: np.ndarray,
-    distance_mm: float,
-) -> list[np.ndarray]:
-    valid = np.asarray(cortex_valid_mask, dtype=bool).reshape(-1)
-    if valid.size != int(np.asarray(cortex_coords).shape[0]):
-        raise ValueError(f"Cortex valid mask size mismatch: mask={valid.size} coords={np.asarray(cortex_coords).shape[0]}")
-    valid_idx = np.flatnonzero(valid)
-    if valid_idx.size == 0:
-        return [np.asarray([], dtype=np.int64) for _ in range(int(np.asarray(hipp_coords).shape[0]))]
-    tree = cKDTree(np.asarray(cortex_coords, dtype=np.float32)[valid_idx, :])
-    local = tree.query_ball_point(np.asarray(hipp_coords, dtype=np.float32), r=float(distance_mm))
-    return [valid_idx[np.asarray(row, dtype=np.int64)] for row in local]
-
-
 def materialize_ctxdrop_fc(
     *,
     shared_root: Path,
@@ -923,10 +725,12 @@ def materialize_ctxdrop_fc(
     neighbor_indices: list[np.ndarray],
     distance_mm: float,
     local_neighbor_dir: Path,
+    dataset: str,
 ) -> None:
     subject = str(subject).replace("sub-", "")
     subj_root = Path(shared_root) / f"sub-{subject}"
     ref_subj_root = Path(reference_root) / f"sub-{subject}"
+    require_cortex_reference_policy(ref_subj_root / "reference" / ATLAS, dataset=dataset)
     surf_subj_root = Path(surface_root) / f"sub-{subject}"
     mask_subj_root = Path(mask_root) / f"sub-{subject}"
     atlas_slug = ATLAS
@@ -964,6 +768,8 @@ def materialize_fc(
     mask_root: Path | None = None,
     atlas: str = DEFAULT_ATLAS,
     run_metadata: Path | None = None,
+    *,
+    dataset: str,
 ) -> None:
     subj_root = shared_root / f"sub-{subject}"
     ref_subj_root = (reference_root or shared_root) / f"sub-{subject}"
@@ -971,7 +777,8 @@ def materialize_fc(
     mask_subj_root = (mask_root or surface_root) / f"sub-{subject}"
     atlas_slug = str(atlas)
     fc_dir = subj_root / "fc" / atlas_slug / smoothing / f"hemi_{hemi}"
-    fc_dir.mkdir(parents=True, exist_ok=True)
+    if atlas_slug == "kong2022":
+        require_cortex_reference_policy(ref_subj_root / "reference" / atlas_slug, dataset=dataset)
 
     ts = np.load(surf_subj_root / "surface" / smoothing / f"sub-{subject}_hemi-{hemi}_timeseries.npy").astype(np.float32)
     valid_mask = np.load(mask_subj_root / "surface" / "tsnr_gate" / f"sub-{subject}_hemi-{hemi}_valid_mask.npy").astype(bool)
@@ -1025,7 +832,14 @@ def materialize_fc(
             f"ROI TSV mismatch for sub-{subject}: ts_rows={roi_ts.shape[0]} roi_names={len(roi_names)}"
         )
 
-    pearson_valid = corrcoef_rows(ts[valid_mask, :], roi_ts)
+    run_segments = load_run_segments(
+        ref_subj_root,
+        reference_atlas=atlas_slug,
+        run_metadata=run_metadata,
+    )
+    pooled_lengths = [int(seg["run_length"]) for seg in run_segments]
+    pearson_valid = corrcoef_rows(ts[valid_mask, :], roi_ts, run_lengths=pooled_lengths)
+    fc_dir.mkdir(parents=True, exist_ok=True)
     pearson_full = np.full((ts.shape[0], roi_ts.shape[0]), np.nan, dtype=np.float32)
     pearson_full[valid_mask, :] = pearson_valid
     full_fc_path = fc_dir / "hipp_vertex_to_network_fc.npy"
@@ -1047,7 +861,7 @@ def materialize_fc(
     np.save(full_fc_path, pearson_full.astype(np.float32))
     np.save(fc_dir / "hipp_vertex_to_network_fc_active.npy", compact_active_vertices(pearson_full, valid_mask))
     if roi_profile_ts is not None:
-        roi_pearson_valid = corrcoef_rows(ts[valid_mask, :], roi_profile_ts)
+        roi_pearson_valid = corrcoef_rows(ts[valid_mask, :], roi_profile_ts, run_lengths=pooled_lengths)
         roi_pearson_full = np.full((ts.shape[0], roi_profile_ts.shape[0]), np.nan, dtype=np.float32)
         roi_pearson_full[valid_mask, :] = roi_pearson_valid
         # Explicit ROI aliases make the feature family clear while retaining
@@ -1057,7 +871,7 @@ def materialize_fc(
     if atlas_slug == "kong2022":
         if kong_network_ts is None or kong_network_names is None:
             raise RuntimeError("Kong2022 canonical7 summary was not materialized from the 400-ROI reference")
-        network_valid = corrcoef_rows(ts[valid_mask, :], kong_network_ts)
+        network_valid = corrcoef_rows(ts[valid_mask, :], kong_network_ts, run_lengths=pooled_lengths)
         network_full = np.full((ts.shape[0], len(kong_network_names)), np.nan, dtype=np.float32)
         network_full[valid_mask, :] = network_valid
         np.save(fc_dir / "hipp_vertex_to_canonical7_fc.npy", network_full.astype(np.float32))
@@ -1065,11 +879,6 @@ def materialize_fc(
 
     run_labels: list[str] = []
     run_lengths: list[int] = []
-    run_segments = load_run_segments(
-        ref_subj_root,
-        reference_atlas=atlas_slug,
-        run_metadata=run_metadata,
-    )
     for seg in run_segments:
         rid = int(seg["run_id"])
         run_start = int(seg["run_start"])
@@ -1097,6 +906,7 @@ def materialize_fc(
         run_pearson_valid = corrcoef_rows(run_ts[valid_mask, :], run_roi)
         np.save(run_dir / "hipp_vertex_to_network_fc_active.npy", run_pearson_valid.astype(np.float32))
         if atlas_slug == "kong2022":
+            assert kong_network_ts is not None
             run_network = np.asarray(kong_network_ts[:, run_start:run_stop], dtype=np.float32)
             run_network_valid = corrcoef_rows(run_ts[valid_mask, :], run_network)
             np.save(run_dir / "hipp_vertex_to_canonical7_fc_active.npy", run_network_valid.astype(np.float32))
@@ -1136,6 +946,7 @@ def materialize_fc(
             "run_ids": [int(seg["run_id"]) for seg in run_segments],
             "run_lengths": run_lengths,
             "run_segments": run_segments,
+            "run_centering": "within_run_mean_removed_variance_preserved",
             "run_metadata_path": str(Path(run_metadata).resolve()) if run_metadata is not None else None,
             "fc_definition": (
                 "pearson_vertex_to_kong2022_roi_timeseries"
@@ -1226,6 +1037,9 @@ def process_subject(
     dtseries_template: str = DEFAULT_DTSERIES_TEMPLATE,
     atlas: str = DEFAULT_ATLAS,
     run_metadata_template: str | None = None,
+    cortex_coordinate_space: str = MNI_SPACE,
+    *,
+    dataset: str,
 ) -> dict[str, object]:
     subject = str(subject).replace("sub-", "")
     shared_root = Path(shared_root_str)
@@ -1249,6 +1063,7 @@ def process_subject(
             right_cortex_surface_template=right_cortex_surface_template,
             dtseries_template=dtseries_template,
         )
+        cortex_coords = native_cortex_coordinates(cortex_coords, subject=subject, space=cortex_coordinate_space)
         cortex_valid = load_optional_cortex_valid_mask(reference_root, subject, cortex_counts)
         neighbors_by_hemi: dict[str, list[np.ndarray]] = {}
         for hemi in hemis:
@@ -1275,6 +1090,7 @@ def process_subject(
                     neighbor_indices=neighbors_by_hemi[hemi],
                     distance_mm=float(ctxdrop_distance_mm),
                     local_neighbor_dir=shared_root / f"sub-{subject}" / "surface" / "local_cortex_neighbors" / f"hemi_{hemi}",
+                    dataset=dataset,
                 )
                 n_fc += 1
         return {"subject": f"sub-{subject}", "fc_combos": int(n_fc), "ctxdrop": True}
@@ -1303,12 +1119,14 @@ def process_subject(
                 mask_root=mask_root,
                 atlas=atlas_slug,
                 run_metadata=run_metadata,
+                dataset=dataset,
             )
             n_fc += 1
     return {"subject": f"sub-{subject}", "fc_combos": int(n_fc), "ctxdrop": False}
 
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Materialize Kong2022 hippocampal vertex-to-ROI FC caches.")
+    parser.add_argument("--dataset", required=True, choices=QC_DATASETS)
     parser.add_argument("--shared-root", default=None, help="Output FC root; omitted ctxdrop runs use the dated HCP 400-ROI control root.")
     parser.add_argument("--surface-root", default=str(DEFAULT_SURFACE_ROOT))
     parser.add_argument("--reference-root", default=None, help="Read cortex reference/run metadata from this root; defaults to --shared-root.")
@@ -1335,6 +1153,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--route-a-root", default=str(DEFAULT_ROUTE_A_ROOT))
     parser.add_argument("--left-cortex-surface-template", default=DEFAULT_LEFT_CORTEX_SURFACE_TEMPLATE)
     parser.add_argument("--right-cortex-surface-template", default=DEFAULT_RIGHT_CORTEX_SURFACE_TEMPLATE)
+    parser.add_argument('--cortex-coordinate-space', choices=['T1w', MNI_SPACE], default=MNI_SPACE,
+                        help='Physical cortical-mesh space; default HCP meshes are MNI. Choose T1w for native fMRIPrep meshes.')
     parser.add_argument(
         "--dtseries-template",
         default=DEFAULT_DTSERIES_TEMPLATE,
@@ -1379,8 +1199,10 @@ def main() -> int:
                 dtseries_template=str(args.dtseries_template),
                 atlas=str(args.atlas),
                 run_metadata_template=str(args.run_metadata_template) if args.run_metadata_template else None,
+                cortex_coordinate_space=args.cortex_coordinate_space,
+                dataset=args.dataset,
             )
-            n_fc += int(obj["fc_combos"])
+            n_fc += int(str(obj["fc_combos"]))
             print(f"[done] {obj['subject']}", flush=True)
     else:
         with ProcessPoolExecutor(max_workers=jobs) as ex:
@@ -1404,12 +1226,14 @@ def main() -> int:
                     str(args.dtseries_template),
                     str(args.atlas),
                     str(args.run_metadata_template) if args.run_metadata_template else None,
+                    args.cortex_coordinate_space,
+                    dataset=args.dataset,
                 )
                 for s in subjects
             ]
             for fut in as_completed(futs):
                 obj = fut.result()
-                n_fc += int(obj["fc_combos"])
+                n_fc += int(str(obj["fc_combos"]))
                 print(f"[done] {obj['subject']}", flush=True)
     print(json.dumps({"subjects": len(subjects), "fc_combos": int(n_fc), "jobs": int(jobs), "status": "ok", "ctxdrop": bool(args.ctxdrop)}, indent=2))
     return 0

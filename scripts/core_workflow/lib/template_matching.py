@@ -2,6 +2,10 @@ from __future__ import annotations
 
 import numpy as np
 
+from .fc_math import finite_pearson_1d
+
+_finite_pearson = finite_pearson_1d
+
 
 def build_cluster_prototypes(
     group_fc: np.ndarray,
@@ -37,23 +41,6 @@ def build_cluster_prototypes(
             sums[present] / counts[present]
         ).astype(np.float32)
     return prototypes
-
-
-def _finite_pearson(left: np.ndarray, right: np.ndarray) -> float:
-    a = np.asarray(left, dtype=np.float64).reshape(-1)
-    b = np.asarray(right, dtype=np.float64).reshape(-1)
-    finite = np.isfinite(a) & np.isfinite(b)
-    if int(np.sum(finite)) < 2:
-        return float("nan")
-    x = a[finite] - float(np.mean(a[finite]))
-    y = b[finite] - float(np.mean(b[finite]))
-    denominator = float(np.linalg.norm(x) * np.linalg.norm(y))
-    if not np.isfinite(denominator) or denominator <= 0.0:
-        return float("nan")
-    correlation = float(np.dot(x, y) / denominator)
-    if not np.isfinite(correlation):
-        return float("nan")
-    return float(np.clip(correlation, -1.0, 1.0))
 
 
 def match_vertices_to_prototypes(

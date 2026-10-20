@@ -30,9 +30,9 @@ from lib.extract_cortex_kong2022_route_a_roi_timeseries import (
     align_surface_labels_to_dt_vertices,
     compute_cortex_tsnr_gate,
     load_surface_label_vector,
-    write_tsv,
 )
 from lib.fc_math import compact_active_vertices, corrcoef_rows
+from lib.io_utils import write_tsv
 from lib.kong2022_label_utils import (
     KONG2022_DLABEL_PATH,
     KONG2022_MERGE_CONFIG,
@@ -41,6 +41,7 @@ from lib.kong2022_label_utils import (
     load_kong2022_bundle,
 )
 from lib.surface_sampling import sample_hipp_surface_timeseries
+from lib.surface_coordinates import dataset_registration, require_registered_sampling
 from lib.tsnr import rest_tsnr_input, REST_POLICY
 from lib.task_quality import rest_signal_validity
 from lib.workbench import run_workbench
@@ -162,8 +163,8 @@ def require_inputs(job: RunwiseJob) -> None:
         job.dtseries,
         job.lh_labels,
         job.rh_labels,
-        job.hippunfold_dir / f"sub-{job.subject}" / "surf" / f"sub-{job.subject}_hemi-L_space-corobl_den-512_label-hipp_midthickness.surf.gii",
-        job.hippunfold_dir / f"sub-{job.subject}" / "surf" / f"sub-{job.subject}_hemi-R_space-corobl_den-512_label-hipp_midthickness.surf.gii",
+        job.hippunfold_dir / f"sub-{job.subject}" / "surf" / f"sub-{job.subject}_hemi-L_space-T1w_den-512_label-hipp_midthickness.surf.gii",
+        job.hippunfold_dir / f"sub-{job.subject}" / "surf" / f"sub-{job.subject}_hemi-R_space-T1w_den-512_label-hipp_midthickness.surf.gii",
     ]
     missing = [str(p) for p in required if not Path(p).exists()]
     if missing:
@@ -192,7 +193,10 @@ def cortex_qc_done(directory: Path) -> bool:
 def qc_policy_done(job) -> bool:
     for hemi in HEMIS:
         path = job.surface_root / "tsnr_gate" / f"sub-{job.subject}_hemi-{hemi}_tsnr_gate_summary.json"
-        if not path.is_file() or json.loads(path.read_text()).get("validity_policy") != REST_POLICY:
+        if not path.is_file():
+            return False
+        summary = json.loads(path.read_text())
+        if summary.get('validity_policy') != REST_POLICY or summary.get('sampling_space') != 'MNI152NLin6Asym':
             return False
     return True
 
@@ -203,9 +207,12 @@ def run_surface_stage(job: RunwiseJob, *, overwrite: bool = False) -> None:
     t0 = time.monotonic()
     raw_dir = job.surface_root / "raw"
     gate_dir = job.surface_root / "tsnr_gate"
+    summary_path = raw_dir / 'surface_sampling_summary.json'
+    if not overwrite and summary_path.is_file():
+        require_registered_sampling(json.loads(summary_path.read_text()), context=summary_path)
     
     raw_done = all(
-        (raw_dir / f"sub-{job.subject}_hemi-{hemi}_space-corobl_den-512_label-hipp_bold.func.gii").exists()
+        (raw_dir / f"sub-{job.subject}_hemi-{hemi}_space-T1w_den-512_label-hipp_bold.func.gii").exists()
         for hemi in HEMIS
     )
     if overwrite or not raw_done:
@@ -216,7 +223,8 @@ def run_surface_stage(job: RunwiseJob, *, overwrite: bool = False) -> None:
             subject=job.subject,
             density="512",
             outdir=raw_dir,
-            space="corobl",
+            space="T1w",
+            registration=dataset_registration('iowa7t', job.subject),
             mapping_method="trilinear",
             smooth_iters=0,
         )
@@ -227,7 +235,7 @@ def run_surface_stage(job: RunwiseJob, *, overwrite: bool = False) -> None:
     if overwrite or not gate_done or not qc_policy_done(job):
         gate_dir.mkdir(parents=True, exist_ok=True)
         for hemi in HEMIS:
-            raw = raw_dir / f"sub-{job.subject}_hemi-{hemi}_space-corobl_den-512_label-hipp_bold.func.gii"
+            raw = raw_dir / f"sub-{job.subject}_hemi-{hemi}_space-T1w_den-512_label-hipp_bold.func.gii"
             data = load_func_gii(raw).astype(np.float64)
             scores, valid = rest_tsnr_input(qc_input(job, hemi, "hipp"), dataset="iowa7t", subject=job.subject, hemi=hemi, n_vertices=data.shape[0], n_frames=data.shape[1])
             valid &= rest_signal_validity(data)
@@ -250,6 +258,7 @@ def run_surface_stage(job: RunwiseJob, *, overwrite: bool = False) -> None:
                     "tsnr_definition": REST_POLICY,
                     "baseline_input": str(qc_input(job, hemi, "hipp")),
                     "validity_policy": REST_POLICY,
+                    "sampling_space": "MNI152NLin6Asym",
                     "n_vertices_total": int(valid.size),
                     "n_vertices_valid": int(valid.sum()),
                     "n_vertices_invalid": int(invalid.sum()),
@@ -257,23 +266,25 @@ def run_surface_stage(job: RunwiseJob, *, overwrite: bool = False) -> None:
                 },
             )
 
+    smoothing_stage = job.surface_root / 'stage_manifest.json'
+    native_smoothing = smoothing_stage.is_file() and json.loads(smoothing_stage.read_text()).get('params', {}).get('smoothing_space') == 'T1w'
     for smoothing in SMOOTHINGS:
         fwhm = float(smoothing.replace("mm", ""))
         out_dir = job.surface_root / smoothing
         out_dir.mkdir(parents=True, exist_ok=True)
         for hemi in HEMIS:
             ts_npy = out_dir / f"sub-{job.subject}_hemi-{hemi}_timeseries.npy"
-            if not overwrite and ts_npy.exists() and not qc_changed:
+            if not overwrite and ts_npy.exists() and not qc_changed and native_smoothing:
                 continue
-            raw = raw_dir / f"sub-{job.subject}_hemi-{hemi}_space-corobl_den-512_label-hipp_bold.func.gii"
+            raw = raw_dir / f"sub-{job.subject}_hemi-{hemi}_space-T1w_den-512_label-hipp_bold.func.gii"
             roi = gate_dir / f"sub-{job.subject}_hemi-{hemi}_valid_roi.shape.gii"
             surf = (
                 job.hippunfold_dir
                 / f"sub-{job.subject}"
                 / "surf"
-                / f"sub-{job.subject}_hemi-{hemi}_space-corobl_den-512_label-hipp_midthickness.surf.gii"
+                / f"sub-{job.subject}_hemi-{hemi}_space-T1w_den-512_label-hipp_midthickness.surf.gii"
             )
-            out_gii = out_dir / f"sub-{job.subject}_hemi-{hemi}_space-corobl_den-512_label-hipp_bold.func.gii"
+            out_gii = out_dir / f"sub-{job.subject}_hemi-{hemi}_space-T1w_den-512_label-hipp_bold.func.gii"
             run_workbench(
                 [
                     "-metric-smoothing",
@@ -297,7 +308,8 @@ def run_surface_stage(job: RunwiseJob, *, overwrite: bool = False) -> None:
             "status": "done",
             "timestamp_utc": utc_now_iso(),
             "git_commit": git_commit(),
-            "params": {"subject": job.subject, "run": job.run_label, "smoothings": SMOOTHINGS},
+            "params": {"subject": job.subject, "run": job.run_label, "smoothings": SMOOTHINGS,
+                       "smoothing_space": "T1w"},
             "elapsed_seconds": float(time.monotonic() - t0),
         },
     )

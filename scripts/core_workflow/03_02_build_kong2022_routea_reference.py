@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
-
 """
 Process Step Description:
 Build Kong2022 RouteA reference data. RouteA-specific step to generate reference template data for Kong2022 cortical networks.
@@ -31,24 +29,31 @@ Outputs:
   - RouteA cortical network reference products under `{shared_root}/sub-<subject>/reference/{atlas_slug}/`.
   - `--atlas-slug kong2022` writes the default direct canonical7 reference branch; it does not use canonical8 artifacts.
 """
+from __future__ import annotations
+
 import argparse
 import json
-import subprocess
-import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
-from lib.output_layout import DEFAULT_CORTEX_ROUTEA_ROOT, DEFAULT_KONG2022_MANIFEST_ROOT, DEFAULT_KONG2022_ROUTEA_ROOT
-from lib.io_utils import is_persistent_concat_path, load_run_artifact_manifest, load_run_segment_metadata, load_subject_ids
-from lib.path_templates import format_subject_path_template
+from lib.extract_cortex_kong2022_route_a_roi_timeseries import build_kong2022_reference
+from lib.io_utils import load_subject_ids
+from lib.kong2022_label_utils import KONG2022_DLABEL_PATH, KONG2022_MERGE_CONFIG
+from lib.kong2022_reference import ReferenceRequest, resolve_batch_subject_dtseries
+from lib.output_layout import (
+    DEFAULT_CORTEX_ROUTEA_ROOT,
+    DEFAULT_KONG2022_MANIFEST_ROOT,
+    DEFAULT_KONG2022_ROUTEA_ROOT,
+)
 from lib.task_design import normalize_task_branch
-from lib.task_quality import QC_DATASETS, signal_validity_policy
 from lib.task_manifests import task_run_manifest_path
-
+from lib.task_quality import (
+    QC_DATASETS,
+    parse_tsnr_threshold,
+    require_cortex_reference_policy,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-PYTHON_EXE = sys.executable or "python"
-EXTRACT_MODULE = "scripts.core_workflow.lib.extract_cortex_kong2022_route_a_roi_timeseries"
 DEFAULT_SHARED_ROOT = DEFAULT_KONG2022_ROUTEA_ROOT
 DEFAULT_ROUTE_A_ROOT = DEFAULT_CORTEX_ROUTEA_ROOT
 DEFAULT_DATA_ROOT = REPO_ROOT / "data" / "hippunfold_input"
@@ -70,22 +75,37 @@ def validate_routea_path(path: Path, arg_name: str) -> None:
 
 
 
-def subject_is_done(shared_root: Path, subject: str, atlas_slug: str, dataset: str = "hcp") -> bool:
+def subject_is_done(
+    shared_root: Path, subject: str, atlas_slug: str, *, dataset: str,
+    tsnr_threshold: str, expected_inputs: dict[str, object],
+    tsnr_input_template: str | None = None, task: str = "rest",
+) -> bool:
+    """Reuse only a reference made from the requested policy and source selection."""
     ref_dir = shared_root / f"sub-{subject}" / "reference" / str(atlas_slug)
-    summary = ref_dir / "reference_summary.json"
     stage = ref_dir / "stage_manifest.json"
-    if not summary.exists() or not stage.exists():
+    if not stage.is_file():
         return False
     try:
-        payload = json.loads(summary.read_text(encoding="utf-8"))
-    except Exception:
+        payload = require_cortex_reference_policy(ref_dir, dataset=dataset, task=task)
+        if parse_tsnr_threshold(payload["tsnr_threshold"]) != parse_tsnr_threshold(tsnr_threshold):
+            return False
+        if (payload.get("reference_label_source") != SOURCE_TAG
+                or payload.get("atlas_slug") != str(atlas_slug)):
+            return False
+        if any(payload.get(field) != value for field, value in expected_inputs.items()):
+            return False
+        for side, hemi in (("left", "L"), ("right", "R")):
+            gate_path = ref_dir.parent / "common" / "tsnr_gate" / f"cortex_{side}_tsnr_gate_summary.json"
+            gate = json.loads(gate_path.read_text(encoding="utf-8"))
+            expected_baseline = (
+                str(Path(tsnr_input_template.format(subject=subject, hemi=hemi)).resolve())
+                if tsnr_input_template is not None else None
+            )
+            if gate.get("baseline_input") != expected_baseline:
+                return False
+    except (OSError, ValueError, KeyError, TypeError):
         return False
-    if dataset != "hcp" and payload.get("validity_policy") != signal_validity_policy(dataset, "rest"):
-        return False
-    return (
-        str(payload.get("reference_label_source", "")) == SOURCE_TAG
-        and str(payload.get("atlas_slug", "")) == str(atlas_slug)
-    )
+    return True
 
 
 def run_subject(
@@ -102,24 +122,24 @@ def run_subject(
     run_metadata_template: str | None = None,
     task: str = "rest",
     task_manifest_root: str | None = None,
-    dataset: str = "hcp",
+    dataset: str,
     tsnr_input_template: str | None = None,
     tsnr_threshold: str = "25",
+    resume: bool = True,
 ) -> tuple[str, bool, str]:
-    cmd = [
-        PYTHON_EXE,
-        "-m",
-        EXTRACT_MODULE,
-        "--subject",
-        str(subject),
-        "--shared-root",
-        str(shared_root),
-        "--route-a-root",
-        str(route_a_root),
-        "--atlas-slug",
-        str(atlas_slug),
-    ]
+    options: dict[str, object] = {
+        "subject": subject,
+        "shared_root": shared_root,
+        "route_a_root": route_a_root,
+        "atlas_slug": atlas_slug,
+    }
     branch = normalize_task_branch(task) if task != "rest" else "rest"
+    expected_inputs: dict[str, object] = {
+        "route_a_lh_labels": str((route_a_root / f"sub-{subject}" / "lh_labels.txt").resolve()),
+        "route_a_rh_labels": str((route_a_root / f"sub-{subject}" / "rh_labels.txt").resolve()),
+        "kong2022_dlabel": str((kong2022_dlabel or KONG2022_DLABEL_PATH).resolve()),
+        "cross_atlas_merge_json": str(KONG2022_MERGE_CONFIG.resolve()),
+    }
     direct_manifest: Path | None = None
     if branch != "rest":
         if not task_manifest_root:
@@ -127,104 +147,37 @@ def run_subject(
                 f"--task {branch} requires --task-manifest-root with a prebuilt "
                 "per-subject run-artifact manifest (see lib.task_manifests)"
             )
-        direct_manifest = task_run_manifest_path(
-            task_manifest_root, subject=subject, task=branch
-        )
-    if direct_manifest is not None:
-        try:
-            records = load_run_artifact_manifest(
-                direct_manifest,
-                subject=subject,
-                required_artifacts=("dtseries",),
-            )
-        except (FileNotFoundError, ValueError, KeyError, TypeError) as exc:
-            return subject, False, str(exc)
-        dtseries_paths = [record["artifacts"]["dtseries"] for record in records]
-        run_ids = [str(record["run_id"]) for record in records]
-        cmd.extend(
-            [
-                "--run-dtseries",
-                *(str(path) for path in dtseries_paths),
-                "--run-ids",
-                *run_ids,
-                "--run-artifact-manifest",
-                str(direct_manifest),
-            ]
-        )
-    elif run_artifact_manifest_template:
-        manifest_path = Path(
-            format_subject_path_template(
-                run_artifact_manifest_template,
-                data_root=data_root,
-                subject=subject,
-            )
-        ).resolve()
-        try:
-            records = load_run_artifact_manifest(
-                manifest_path,
-                subject=subject,
-                required_artifacts=("dtseries",),
-            )
-        except (FileNotFoundError, ValueError, KeyError, TypeError) as exc:
-            return subject, False, str(exc)
-        dtseries_paths = [record["artifacts"]["dtseries"] for record in records]
-        run_ids = [str(record["run_id"]) for record in records]
-        cmd.extend(
-            [
-                "--run-dtseries",
-                *(str(path) for path in dtseries_paths),
-                "--run-ids",
-                *run_ids,
-                "--run-artifact-manifest",
-                str(manifest_path),
-            ]
-        )
-    else:
-        if run_metadata_template is None:
-            return subject, False, (
-                "Single CIFTI input requires --run-metadata-template"
-            )
-        dtseries = format_subject_path_template(
-            dtseries_template,
-            data_root=data_root,
+        direct_manifest = task_run_manifest_path(task_manifest_root, subject=subject, task=branch)
+    try:
+        dt_options, dt_expected = resolve_batch_subject_dtseries(
             subject=subject,
+            data_root=data_root,
+            dtseries_template=dtseries_template,
+            run_artifact_manifest_template=run_artifact_manifest_template,
+            run_metadata_template=run_metadata_template,
+            direct_manifest=direct_manifest,
+            record_expected_lengths=True,
         )
-        if is_persistent_concat_path(dtseries):
-            return subject, False, (
-                "Iowa persistent concat input is not allowed; pass "
-                "--run-artifact-manifest-template for canonical run-level files: "
-                f"{dtseries}"
-            )
-        metadata_path = Path(
-            format_subject_path_template(
-                run_metadata_template,
-                data_root=data_root,
-                subject=subject,
-            )
-        ).resolve()
-        try:
-            load_run_segment_metadata(metadata_path)
-        except (FileNotFoundError, ValueError, KeyError, TypeError) as exc:
-            return subject, False, str(exc)
-        cmd.extend(
-            [
-                "--dtseries",
-                str(dtseries),
-                "--run-metadata-template",
-                str(metadata_path),
-            ]
-        )
+    except (FileNotFoundError, ValueError, KeyError, TypeError) as exc:
+        return subject, False, str(exc)
+    expected_inputs.update(dt_expected)
+    options.update(dt_options)
     if kong2022_dlabel is not None:
-        cmd.extend(["--kong2022-dlabel", str(kong2022_dlabel)])
-    cmd.extend(["--task", branch, "--dataset", dataset, "--tsnr-threshold", str(tsnr_threshold)])
+        options["kong2022_dlabel"] = kong2022_dlabel
+    options.update(task=branch, dataset=dataset, tsnr_threshold=str(tsnr_threshold))
     if tsnr_input_template is not None:
-        cmd.extend(["--tsnr-input-template", tsnr_input_template])
-    if overwrite:
-        cmd.append("--overwrite")
-    proc = subprocess.run(cmd, capture_output=True, text=True)
-    if proc.returncode != 0:
-        tail = (proc.stderr or proc.stdout)[-4000:]
-        return subject, False, tail
+        options["tsnr_input_template"] = tsnr_input_template
+    options["overwrite"] = overwrite
+    if resume and not overwrite and branch == "rest" and subject_is_done(
+        shared_root, subject, atlas_slug, dataset=dataset, task=branch,
+        tsnr_threshold=tsnr_threshold, tsnr_input_template=tsnr_input_template,
+        expected_inputs=expected_inputs,
+    ):
+        return subject, True, "reused"
+    try:
+        build_kong2022_reference(request=ReferenceRequest(**options))  # type: ignore[arg-type]
+    except Exception as exc:
+        return subject, False, str(exc)[-4000:]
     return subject, True, "ok"
 
 
@@ -280,7 +233,7 @@ def main() -> int:
         default=None,
         help="Root holding task-<task>/sub-<subject>.json run-artifact manifests.",
     )
-    parser.add_argument("--dataset", choices=QC_DATASETS, default="hcp")
+    parser.add_argument("--dataset", choices=QC_DATASETS, required=True)
     parser.add_argument(
         "--tsnr-threshold",
         default="25",
@@ -304,10 +257,8 @@ def main() -> int:
         else load_subject_ids(subjects_manifest)
     )
 
-    if args.resume and not args.overwrite and args.task == "rest":
-        todo = [s for s in subjects if not subject_is_done(shared_root, s, args.atlas_slug, args.dataset)]
-    else:
-        todo = list(subjects)
+    # Source selection must be resolved before deciding whether a cache matches.
+    todo = list(subjects)
 
     print(f"[info] total={len(subjects)} todo={len(todo)} resume={bool(args.resume)}", flush=True)
     if not todo:
@@ -335,6 +286,7 @@ def main() -> int:
                 dataset=args.dataset,
                 tsnr_input_template=args.tsnr_input_template,
                 tsnr_threshold=str(args.tsnr_threshold),
+                resume=bool(args.resume),
             ): s
             for s in todo
         }

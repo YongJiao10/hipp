@@ -3,11 +3,11 @@
 Documentation is grouped by intent.
 
 Keep one-off analysis scripts, notebooks, result tables, logs and generated
-research images under the repository's `tmp/` workspace. The hippocampal QC
-comparison uses `tmp/hippocampal_qc/scripts/` for code and
-`tmp/hippocampal_qc/outputs/` for products; this directory retains its reports.
-
-For the source-only GitHub scope and future pushes, see [GitHub synchronization](github_sync.md).
+research images under the repository's `tmp/` workspace. The current QC policy,
+multiple-run definitions, implementation status and evaluated retention are in
+[the canonical fMRI QC document](hipp_parcellation_network/fmri_qc.md).
+Exploratory QC reports, code/results and discussions are retained locally under
+`_archive/hippocampal_qc_exploration/`; they are not active workflow instructions.
 
 - `official/`: project-level context and cross-cutting summaries
 - `hipp_parcellation_network/`: canonical hippocampal workflow docs and branch references

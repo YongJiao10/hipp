@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
+import re
 import tempfile
 from collections.abc import Sequence
 from pathlib import Path
@@ -11,7 +11,9 @@ from pathlib import Path
 import nibabel as nib
 import numpy as np
 
-from lib.hipp_density_assets import detect_space_strict, find_surface_asset_strict, subject_surf_dir
+from lib.hipp_density_assets import find_surface_asset_strict, subject_surf_dir
+from lib.surface_coordinates import (METRIC_SPACE, REPO_ROOT, SurfaceRegistration,
+                                     registered_sampling_surfaces)
 from lib.workbench import run_workbench
 
 
@@ -29,6 +31,33 @@ def _load_metric_gifti(path: Path, *, n_vertices: int, expected_timepoints: int)
     return metric.astype(np.float32, copy=False)
 
 
+def sample_volume_to_surface(
+    *, bold: Path, surface: Path, out_metric: Path,
+    mapping_method: str = "trilinear", wb_command: Path | None = None,
+) -> np.ndarray:
+    """Sample one registered physical mesh and load its vertex-by-time metric."""
+    out_metric.parent.mkdir(parents=True, exist_ok=True)
+    run_workbench([
+        "-volume-to-surface-mapping", str(bold), str(surface), str(out_metric),
+        f"-{mapping_method}",
+    ], wb_command=wb_command)
+    n_vertices = int(np.asarray(nib.load(surface).agg_data('pointset')).shape[0])
+    return _load_metric_gifti(out_metric, n_vertices=n_vertices,
+                             expected_timepoints=int(nib.load(bold).shape[3]))
+
+
+def _prepare_surfaces(*, hippunfold_dir, subject, density, outdir, space, registration):
+    if space != METRIC_SPACE:
+        raise ValueError('Volume sampling requires native T1w surfaces and an explicit registration; corobl/auto are not physical BOLD spaces')
+    if registration is None:
+        raise ValueError('MNI volume sampling requires an explicit SurfaceRegistration')
+    surf_dir = subject_surf_dir(hippunfold_dir, subject)
+    native = {hemi: find_surface_asset_strict(surf_dir=surf_dir, subject=subject, hemi=hemi,
+              space=METRIC_SPACE, density=density, suffix='midthickness.surf.gii') for hemi in ('L', 'R')}
+    mapped = registered_sampling_surfaces(native, registration=registration, outdir=outdir/'sampling_surfaces')
+    return native, mapped
+
+
 def sample_hipp_surface_timeseries(
     *,
     bold: Path,
@@ -36,51 +65,32 @@ def sample_hipp_surface_timeseries(
     subject: str,
     density: str,
     outdir: Path,
-    space: str = "auto",
-    mapping_method: str = "enclosing",
+    space: str = "T1w",
+    registration: SurfaceRegistration | None = None,
+    mapping_method: str = "trilinear",
     smooth_iters: int = 0,
 ) -> list[dict[str, object]]:
+    native, mapped = _prepare_surfaces(hippunfold_dir=hippunfold_dir, subject=subject,
+        density=density, outdir=outdir, space=space, registration=registration)
+    return _sample_prepared_surfaces(bold=bold, native=native, mapped=mapped, subject=subject,
+        density=density, outdir=outdir, registration=registration,
+        mapping_method=mapping_method, smooth_iters=smooth_iters)
+
+
+def _sample_prepared_surfaces(*, bold, native, mapped, subject, density, outdir,
+                              registration, mapping_method, smooth_iters):
+    declared = re.search(r'_space-([^_]+)_', Path(bold).name)
+    if declared and declared.group(1) != registration.target_space:
+        raise ValueError(f'BOLD/registration space mismatch: {bold}; transform targets {registration.target_space}')
     outdir.mkdir(parents=True, exist_ok=True)
-    surf_dir = subject_surf_dir(hippunfold_dir, subject)
-    resolved_space = detect_space_strict(
-        surf_dir=surf_dir,
-        subject=subject,
-        density=density,
-        preferred=space,
-    )
 
     summary: list[dict[str, object]] = []
     for hemi in ["L", "R"]:
-        mid = find_surface_asset_strict(
-            surf_dir=surf_dir,
-            subject=subject,
-            hemi=hemi,
-            space=resolved_space,
-            density=density,
-            suffix="midthickness.surf.gii",
+        mid = mapped[hemi]
+        out_metric = outdir / f"sub-{subject}_hemi-{hemi}_space-{METRIC_SPACE}_den-{density}_label-hipp_bold.func.gii"
+        metric = sample_volume_to_surface(
+            bold=bold, surface=mid, out_metric=out_metric, mapping_method=mapping_method,
         )
-        out_metric = outdir / f"sub-{subject}_hemi-{hemi}_space-{resolved_space}_den-{density}_label-hipp_bold.func.gii"
-        tmp_metric = outdir / f"sub-{subject}_hemi-{hemi}_space-{resolved_space}_den-{density}_label-hipp_bold.tmp.{os.getpid()}.func.gii"
-        cmd_args = [
-            "-volume-to-surface-mapping",
-            str(bold),
-            str(mid),
-            str(tmp_metric),
-            f"-{mapping_method}",
-        ]
-        try:
-            run_workbench(cmd_args)
-            metric_img = nib.load(str(tmp_metric))
-            metric = np.asarray(metric_img.agg_data(), dtype=np.float32)
-            if metric.ndim == 1:
-                metric = metric[:, None]
-            n_vertices = int(np.asarray(nib.load(str(mid)).agg_data("pointset")).shape[0])
-            if metric.shape[0] != n_vertices and metric.ndim == 2 and metric.shape[1] == n_vertices:
-                metric = metric.T
-            tmp_metric.replace(out_metric)
-        finally:
-            if tmp_metric.exists():
-                tmp_metric.unlink()
 
         summary.append(
             {
@@ -89,7 +99,11 @@ def sample_hipp_surface_timeseries(
                 "metric_gii": str(out_metric),
                 "n_vertices": int(metric.shape[0]),
                 "n_timepoints": int(metric.shape[1]),
-                "space": resolved_space,
+                "space": METRIC_SPACE,
+                "source_surface": str(native[hemi]),
+                "sampling_space": registration.target_space,
+                "registration_method": registration.method,
+                "image_transform": str(registration.image_transform),
                 "mapping_method": mapping_method,
                 "smooth_iters": int(smooth_iters),
             }
@@ -110,8 +124,9 @@ def sample_hipp_surface_run_timeseries(
     subject: str,
     density: str,
     outdir: Path,
-    space: str = "auto",
-    mapping_method: str = "enclosing",
+    space: str = "T1w",
+    registration: SurfaceRegistration | None = None,
+    mapping_method: str = "trilinear",
     smooth_iters: int = 0,
 ) -> tuple[dict[str, np.ndarray], dict[str, object]]:
     """Sample run-level volumes and concatenate only the arrays in memory.
@@ -130,29 +145,19 @@ def sample_hipp_surface_run_timeseries(
     if run_ids != sorted(run_ids):
         raise ValueError(f"Run volumes must be ordered by numeric run ID: {run_ids}")
 
-    surf_dir = subject_surf_dir(hippunfold_dir, subject)
-    resolved_space = detect_space_strict(
-        surf_dir=surf_dir,
-        subject=subject,
-        density=density,
-        preferred=space,
-    )
+    native, mapped = _prepare_surfaces(hippunfold_dir=hippunfold_dir, subject=subject,
+        density=density, outdir=outdir, space=space, registration=registration)
     surface_vertices: dict[str, int] = {}
     for hemi in ("L", "R"):
-        mid = find_surface_asset_strict(
-            surf_dir=surf_dir,
-            subject=subject,
-            hemi=hemi,
-            space=resolved_space,
-            density=density,
-            suffix="midthickness.surf.gii",
-        )
+        mid = native[hemi]
         surface_vertices[hemi] = int(np.asarray(nib.load(str(mid)).agg_data("pointset")).shape[0])
 
     by_hemi: dict[str, list[np.ndarray]] = {"L": [], "R": []}
     run_lengths: list[int] = []
     run_records: list[dict[str, object]] = []
-    with tempfile.TemporaryDirectory(prefix=f"sub-{subject}_run_surface_", dir=str(outdir)) as tmp:
+    scratch = REPO_ROOT / 'tmp'
+    scratch.mkdir(exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix=f"sub-{subject}_run_surface_", dir=str(scratch)) as tmp:
         tmp_root = Path(tmp)
         for run_id, bold in normalized_runs:
             if not bold.is_file():
@@ -163,19 +168,20 @@ def sample_hipp_surface_run_timeseries(
             n_timepoints = int(bold_img.shape[3])
             run_tmp = tmp_root / f"run-{run_id}"
             run_tmp.mkdir(parents=True, exist_ok=True)
-            sampled = sample_hipp_surface_timeseries(
+            sampled = _sample_prepared_surfaces(
                 bold=bold,
-                hippunfold_dir=hippunfold_dir,
+                native=native,
+                mapped=mapped,
                 subject=subject,
                 density=density,
                 outdir=run_tmp,
-                space=resolved_space,
+                registration=registration,
                 mapping_method=mapping_method,
                 smooth_iters=smooth_iters,
             )
             for hemi in ("L", "R"):
                 metric_path = run_tmp / (
-                    f"sub-{subject}_hemi-{hemi}_space-{resolved_space}_den-{density}_"
+                    f"sub-{subject}_hemi-{hemi}_space-{METRIC_SPACE}_den-{density}_"
                     "label-hipp_bold.func.gii"
                 )
                 by_hemi[hemi].append(
@@ -206,7 +212,9 @@ def sample_hipp_surface_run_timeseries(
     return concatenated, {
         "subject": str(subject).replace("sub-", ""),
         "input_mode": "in_memory_run_volume_concat",
-        "space": resolved_space,
+        "space": METRIC_SPACE,
+        "sampling_space": registration.target_space,
+        "sampling_surfaces": persistent_sampled_metric_summary(sampled),
         "density": str(density),
         "mapping_method": mapping_method,
         "smooth_iters": int(smooth_iters),
@@ -223,14 +231,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--hippunfold-dir", required=True)
     parser.add_argument("--subject", required=True)
     parser.add_argument("--density", required=True)
-    parser.add_argument("--space", default="auto")
-    parser.add_argument("--mapping-method", choices=["enclosing", "trilinear"], default="enclosing")
+    parser.add_argument("--space", choices=['T1w'], default='T1w')
+    parser.add_argument('--dataset', required=True, choices=['hcp', 'stanford', 'banda', 'pdc', 'iowa_jj_tms', 'iowa7t'])
+    parser.add_argument("--mapping-method", choices=["enclosing", "trilinear"], default="trilinear")
     parser.add_argument("--smooth-iters", type=int, default=0)
     parser.add_argument("--outdir", required=True)
     return parser.parse_args()
 
 
 def main() -> int:
+    from lib.surface_coordinates import dataset_registration
     args = parse_args()
     summary = sample_hipp_surface_timeseries(
         bold=Path(args.bold).resolve(),
@@ -239,6 +249,7 @@ def main() -> int:
         density=str(args.density),
         outdir=Path(args.outdir).resolve(),
         space=str(args.space),
+        registration=dataset_registration(args.dataset, args.subject),
         mapping_method=str(args.mapping_method),
         smooth_iters=int(args.smooth_iters),
     )

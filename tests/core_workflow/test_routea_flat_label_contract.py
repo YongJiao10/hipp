@@ -330,7 +330,9 @@ def test_subject_output_contract_keeps_flat_labels_and_estt_assets() -> None:
     assert "${subject_out}/lh_labels.txt" in wrapper_text
     assert "${subject_out}/rh_labels.txt" in wrapper_text
     assert "project_dir/route_a_outputs" not in wrapper_text
-    assert "${subject_out}/inputs" not in wrapper_text
+    assert 'run_list="${tmp_root}/inputs/task_rest_dtseries.txt"' in wrapper_text
+    assert 'if [ "${dataset}" = "pdc" ] || [ "${dataset}" = "banda" ]; then' in wrapper_text
+    assert 'run_list="${subject_out}/inputs/task_rest_dtseries.txt"' in wrapper_text
     assert "matlab_wrapper.log" in wrapper_text
     assert "--materialize-label-assets" in wrapper_text
 

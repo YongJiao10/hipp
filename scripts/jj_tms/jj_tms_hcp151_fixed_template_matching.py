@@ -53,6 +53,8 @@ from lib.gifti_contracts import (
     validate_gifti_logical_contract,
     validate_gifti_pointset,
 )
+from lib.surface_coordinates import MNI_SPACE, dataset_registration, registered_sampling_surfaces
+from lib.surface_sampling import sample_volume_to_surface
 
 
 SMOOTHINGS = ("2mm", "4mm")
@@ -1053,7 +1055,7 @@ def _surface_path(hippunfold_root: Path, subject: str, hemi: str) -> Path:
         / f"sub-{subject_id}"
         / "surf"
         / (
-            f"sub-{subject_id}_hemi-{hemi}_space-corobl_den-512_"
+            f"sub-{subject_id}_hemi-{hemi}_space-T1w_den-512_"
             "label-hipp_midthickness.surf.gii"
         )
     ).resolve()
@@ -1099,8 +1101,8 @@ def _validate_surfaces(
     evidence: dict[str, dict[str, object]] = {}
     for hemi in HEMIS:
         path = _surface_path(hippunfold_root, subject, hemi)
-        if not path.is_file() or "_space-corobl_den-512_" not in path.name:
-            raise FileNotFoundError(f"Missing consumed corobl den-512 surface: {path}")
+        if not path.is_file() or "_space-T1w_den-512_" not in path.name:
+            raise FileNotFoundError(f"Missing consumed T1w den-512 surface: {path}")
         count = _surface_vertex_count(path)
         if count != N_VERTICES:
             raise ValueError(f"Consumed surface is not 512 vertices: {path} ({count})")
@@ -1133,6 +1135,7 @@ def _expected_subject_inputs(
     for run in functional.runs:
         paths[f"run-{run.run_id:02d}_volume"] = run.volume
         paths[f"run-{run.run_id:02d}_dtseries"] = run.dtseries
+    paths['native_to_mni_image_transform'] = dataset_registration('iowa_jj_tms', subject).image_transform
     for smoothing in SMOOTHINGS:
         for hemi in HEMIS:
             paths[f"template_{smoothing}_hemi-{hemi}_prototypes"] = template.prototypes[
@@ -1157,15 +1160,18 @@ def _expected_subject_output_paths(
                 / f"run-{run.run_id:02d}"
                 / (
                     f"sub-{subject}_task-rest_run-{run.run_id:02d}_hemi-{hemi}_"
-                    "space-corobl_den-512_label-hipp_bold.func.gii"
+                    "space-T1w_den-512_label-hipp_bold.func.gii"
                 )
             )
     for hemi in HEMIS:
+        paths[f'sampling_surface_hemi-{hemi}'] = directory / 'surface/sampling_surfaces' / (
+            f'sub-{subject}_hemi-{hemi}_space-{MNI_SPACE}_den-512_label-hipp_midthickness.surf.gii'
+        )
         paths[f"raw_hemi-{hemi}_timeseries"] = (
             directory / "surface" / "raw" / f"hemi-{hemi}_timeseries.npy"
         )
         paths[f"raw_hemi-{hemi}_gifti"] = directory / "surface" / "raw" / (
-            f"sub-{subject}_hemi-{hemi}_space-corobl_den-512_"
+            f"sub-{subject}_hemi-{hemi}_space-T1w_den-512_"
             "label-hipp_bold.func.gii"
         )
         paths[f"tsnr_hemi-{hemi}"] = (
@@ -1189,7 +1195,7 @@ def _expected_subject_output_paths(
                 / "surface"
                 / smoothing
                 / (
-                    f"sub-{subject}_hemi-{hemi}_space-corobl_den-512_"
+                    f"sub-{subject}_hemi-{hemi}_space-T1w_den-512_"
                     f"label-hipp_bold_{smoothing}.func.gii"
                 )
             )
@@ -1229,9 +1235,11 @@ def _expected_subject_output_paths(
 def _parameters(*, wb_command: Path) -> dict[str, object]:
     return {
         "task": "rest",
-        "mapping_method": "enclosing",
+        "mapping_method": "trilinear",
         "density": N_VERTICES,
-        "surface_space": "corobl",
+        "surface_space": "T1w",
+        "sampling_space": MNI_SPACE,
+        "geometry_space": "T1w",
         "smoothings": list(SMOOTHINGS),
         "hemis": list(HEMIS),
         "tsnr_definition": REST_VALIDITY_POLICY,
@@ -1355,27 +1363,27 @@ def _sample_runs(
     outputs: dict[str, Path],
 ) -> dict[str, np.ndarray]:
     by_hemi: dict[str, list[np.ndarray]] = {hemi: [] for hemi in HEMIS}
+    mapped = registered_sampling_surfaces(
+        {hemi: Path(str(surfaces[hemi]['consumed_asset'])) for hemi in HEMIS},
+        registration=dataset_registration('iowa_jj_tms', functional.subject),
+        outdir=subject_dir/'surface/sampling_surfaces', wb_command=wb_command,
+    )
+    for hemi, path in mapped.items():
+        outputs[f'sampling_surface_hemi-{hemi}'] = path
     for run in functional.runs:
         run_dir = subject_dir / "runs" / f"run-{run.run_id:02d}"
         for hemi in HEMIS:
             final = run_dir / (
                 f"sub-{functional.subject}_task-rest_run-{run.run_id:02d}_hemi-{hemi}_"
-                "space-corobl_den-512_label-hipp_bold.func.gii"
+                "space-T1w_den-512_label-hipp_bold.func.gii"
             )
             partial = final.with_name(f".{final.stem}.partial.func.gii")
             partial.parent.mkdir(parents=True, exist_ok=True)
-            _run_workbench(
-                wb_command,
-                [
-                    "-volume-to-surface-mapping",
-                    run.volume,
-                    surfaces[hemi]["consumed_asset"],
-                    partial,
-                    "-enclosing",
-                ],
+            data = sample_volume_to_surface(
+                bold=run.volume, surface=mapped[hemi], out_metric=partial,
+                mapping_method="trilinear", wb_command=wb_command,
             )
             expected_timepoints = int(nib.load(str(run.volume)).shape[3])
-            data = load_func_gifti(partial, expected_timepoints=expected_timepoints)
             if data.shape != (N_VERTICES, expected_timepoints):
                 raise ValueError(
                     f"Sampled GIFTI shape mismatch for run-{run.run_id:02d} hemi-{hemi}: "
@@ -1397,7 +1405,7 @@ def _sample_runs(
         concatenated[hemi] = data
         npy = subject_dir / "surface" / "raw" / f"hemi-{hemi}_timeseries.npy"
         gifti = subject_dir / "surface" / "raw" / (
-            f"sub-{functional.subject}_hemi-{hemi}_space-corobl_den-512_"
+            f"sub-{functional.subject}_hemi-{hemi}_space-T1w_den-512_"
             "label-hipp_bold.func.gii"
         )
         _save_npy_exclusive(npy, data)
@@ -1434,12 +1442,12 @@ def _smooth_surfaces(
         outputs[f"valid_roi_hemi-{hemi}"] = roi_path
         valid_by_hemi[hemi] = valid
         raw_gifti = subject_dir / "surface" / "raw" / (
-            f"sub-{subject}_hemi-{hemi}_space-corobl_den-512_label-hipp_bold.func.gii"
+            f"sub-{subject}_hemi-{hemi}_space-T1w_den-512_label-hipp_bold.func.gii"
         )
         for smoothing in SMOOTHINGS:
             out_dir = subject_dir / "surface" / smoothing
             final = out_dir / (
-                f"sub-{subject}_hemi-{hemi}_space-corobl_den-512_"
+                f"sub-{subject}_hemi-{hemi}_space-T1w_den-512_"
                 f"label-hipp_bold_{smoothing}.func.gii"
             )
             partial = final.with_name(f".{final.stem}.partial.func.gii")

@@ -38,13 +38,11 @@ For `task-emotion` or `task-wm`, use:
 - Group statistics: `outputs_hcp/work/task_activation/task-<task>/group/`.
 - Presentation: `outputs_hcp/present/task_activation/task-<task>/`.
 
-The current hippocampal time series were sampled from each declared BOLD
-volume onto the subject's HippUnfold midthickness surface using Workbench
-trilinear mapping, as recorded in the consumed surface-sampling summaries.
-The [coordinate audit](docs/hipp_surface_qc.md) confirms that these caches used
-corobl coordinates directly in MNI volumes. Their hippocampal functional
-outputs require controlled reassessment. Keep the commands below on hold
-until sampling is repaired; first run the isolated coordinate-only pilot.
+Hippocampal time series require Workbench trilinear sampling on midthickness
+surfaces transformed into the declared BOLD volume space. Coordinate sampling
+code has been repaired; affected formal functional products have not been
+rebuilt by the QC research analysis. The commands below describe the task
+workflow and do not themselves deploy the newly accepted QC policy.
 Cortical time series use task MSMAll CIFTIs and the subject's Kong2022 400-ROI
 labels. Runs are concatenated in memory in the declared order. Missing,
 misordered, or mismatched inputs are errors.
@@ -55,40 +53,26 @@ Task preparation uses its own `--route-root` and `--shared-root`. The
 
 ## Preparation and QC
 
-Run `02_01_prepare_group_inputs.py` with the complete task roster and the
-corresponding `--task-manifest-root`. The preparation stages are `raw`,
-`tsnr`, `qc`, and `smooth`, using the same task-specific roots throughout.
+The complete 144-participant EMOTION and WM cohorts are input rosters, not
+proof of passing the newly accepted selection. Use
+[the canonical fMRI QC document](docs/hipp_parcellation_network/fmri_qc.md)
+for the three ordered criteria: overall mean Power FD <=0.30 mm, bilateral
+HippUnfold Dice >=0.70, and <=20 unsupported functional-GM vertices per
+hemisphere. The evaluated final counts are 134 per task, with 133 passing
+both. Evaluate motion within each task; do not pool EMOTION and WM to pass FD.
 
-Current task surfaces use `--tsnr-threshold none`: finite, nonconstant signal
-is required in every declared run. The summaries retain the policy identifier
-`runwise_baseline_over_task_residual_sd`, but record `tsnr_computed: false`;
-the disabled calculation writes NaN score arrays, so residual tSNR has not
-been measured in these products.
-QC additionally requires HippUnfold Dice >= 0.70 and an invalid-vertex
-fraction < 0.20 in both hemispheres. Motion and model quality require their
-own assessment.
+The existing preparation entry point uses the task-specific `--route-root`,
+`--shared-root` and `--task-manifest-root`; stages are `raw`, `tsnr`, `qc` and
+`smooth`. Its explicit `--tsnr-threshold none` mode checks finite, nonconstant
+signal without computing residual-tSNR scores. The inherited invalid-fraction
+checks and HCP151 destination contracts are not an implementation of the new
+motion/coverage policy. Production gates, masks and rosters still need that
+integration before the research counts can become formal outputs.
 
-The [registered surface comparison](docs/hipp_surface_qc.md) supplies separate
-LR/RL residual-tSNR measurements. Its CIFTI-GM projection is a research
-representation, distinct from the existing full-volume production sampler.
-Production gates remain validity-only.
-The primary QC target is the signal at each hippocampal surface vertex.
-Keep vertexwise tSNR and actual functional sampling coverage central to the
-comparison. The retained supplementary motion candidate is mean relative
-RMS<=0.5 mm, following Savage2024 (Communications Biology). Both task cohorts
-pass this mean-motion threshold; it does not establish local hippocampal
-surface signal quality. The per-run R20 exclusion rule is no longer considered.
-The [five-dataset measurements](docs/qc_five_datasets.md) preserve the completed
-comparisons. Production gates and rosters remain as described above.
-The existing 20% invalid-vertex rule is a project criterion; it is not
-Kember et al. (2026)'s 20 mm² improper-interpolation criterion. The QC
-review records the CIFTI header discrepancy and known EMOTION terminal
-truncation. The current hippocampal GLM explicitly uses the BOLD TR of
-0.72 seconds; the header observation alone does not require a rebuild.
-
-Formal resting-state QC outputs and the reference average require the exact
-HCP151 subject IDs. Task QC evaluates and writes the complete task cohort in
-its task-specific directories.
+The task CIFTI headers declare a one-second SeriesAxis step, while paired BOLD
+headers and the hippocampal GLM use TR=0.72 seconds. The known EMOTION terminal
+truncation does not justify a uniform event shift. Neither observation is an
+instruction to rerun the task model as part of documentation consolidation.
 
 ## Activation model and regional analysis
 

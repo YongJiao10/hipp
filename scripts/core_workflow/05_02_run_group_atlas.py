@@ -145,9 +145,9 @@ from lib.route_tags import (
     resolve_route_tag_for_group_atlas_run,
     validate_group_atlas_root_for_route,
 )
-from lib.fc_math import corrcoef_rows, fisher_z_transform_fc, bh_fdr
+from lib.fc_math import corrcoef_rows, fisher_z_transform_fc, bh_fdr, center_run_timeseries
 from lib.gifti_labels import make_cluster_label_gifti, make_named_label_gifti
-from lib.io_utils import load_subject_ids, load_json, write_tsv
+from lib.io_utils import load_subject_ids, load_json, write_tsv, load_run_segment_metadata
 from lib.group_atlas_lineage import validate_group_atlas_lineage, gradient_computation_provenance
 from lib.network_colors import load_cluster_palette, load_network_colors
 from lib.cluster_roi_profile_contract import (
@@ -157,8 +157,7 @@ from lib.cluster_roi_profile_contract import (
 from lib.branch_config import (
     SIGNAL_BRANCH_CHOICES,
     normalize_signal_branch,
-    signal_branch_for_route,
-    validate_signal_branch_route,
+    resolve_signal_branch_for_route,
 )
 from lib.workflow_utils import utc_now_iso, write_json
 from lib.template_assets import canonical_dataset_key, canonicalize_template_manifest, dataset_key_from_path
@@ -428,7 +427,6 @@ def spectral_cluster_from_affinity(aff: np.ndarray, k: int, seed: int) -> np.nda
     return reorder_labels_by_size(labels0)
 
 
-
 def reference_path(reference_root: Path, subject: str, atlas: str, filename: str) -> Path:
     return Path(reference_root) / f"sub-{subject}" / "reference" / atlas / str(filename)
 
@@ -573,32 +571,6 @@ def gradient_route_for_route_tag(route_tag: str) -> str:
     if route == "lynch2024_7net":
         return "lynch2024_20net"
     return route
-
-
-def resolve_signal_branch_for_route(
-    route: str,
-    explicit_signal_branch: str | None = None,
-) -> str | None:
-    """Resolve the maintained signal branch for a RouteA control run.
-
-    Lynch and RouteB remain independent atlas routes.  The shared
-    ``standard``/``ctxreg`` signal-branch contract applies only to RouteA and
-    its explicit CtxReg control, so a caller cannot accidentally attach CtxReg
-    provenance to another taxonomy.
-    """
-    route_key = str(route).strip().lower()
-    if route_key in {"routea", "routea_ctxreg"}:
-        if explicit_signal_branch is None:
-            return signal_branch_for_route(route_key)
-        return validate_signal_branch_route(
-            normalize_signal_branch(explicit_signal_branch), route_key
-        )
-    if explicit_signal_branch is not None:
-        raise ValueError(
-            "--signal-branch applies only RouteA controls; "
-            f"route={route!r} has no maintained {SIGNAL_BRANCH_CHOICES} signal branch"
-        )
-    return None
 
 
 def standard_reference_root_for_signal_branch(
@@ -1287,8 +1259,6 @@ def runwise_network_feature_filename(method: str, atlas: str | None = None) -> s
     if method in {"network-spectral", "gradient-spectral"}:
         return "hipp_vertex_to_network_fc_active.npy"
     raise ValueError(f"Not a network feature method: {method}")
-
-
 
 
 def one_sample_one_sided_vector(values: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
@@ -2905,7 +2875,12 @@ def cluster_network_profile(
                 f"{network_timeseries_path if 'network_timeseries_path' in locals() else 'Kong reference'} "
                 f"shape={net.shape}"
             )
-        valid = support & valid_mask
+        _, run_lengths = load_run_segment_metadata(
+            reference_path(reference_root, subject, atlas, "reference_summary.json")
+        )
+        ts = center_run_timeseries(ts, run_lengths)
+        net = center_run_timeseries(net, run_lengths)
+        valid = support & valid_mask & np.isfinite(ts).all(axis=1) & (np.ptp(ts, axis=1) > 0)
         cluster_ts = np.full((k_final, ts.shape[1]), np.nan, dtype=np.float32)
         for c in range(1, k_final + 1):
             m = (labels == c) & valid
@@ -2926,7 +2901,6 @@ def cluster_network_profile(
     if not profiles:
         raise RuntimeError("No subject-level profiles available for cluster-network annotation")
     out = np.nanmean(np.stack(profiles, axis=0), axis=0).astype(np.float32)
-    out[~np.isfinite(out)] = 0.0
     return out
 
 
@@ -3144,7 +3118,12 @@ def cluster_roi_profile(
                 f"ROI TSV rows mismatch for sub-{subject}: roi_shape={roi.shape} rows={len(rows)}"
             )
 
-        valid = support_mask & valid_masks_by_subject[subject]
+        _, run_lengths = load_run_segment_metadata(
+            reference_path(reference_root, subject, reference_atlas, "reference_summary.json")
+        )
+        ts = center_run_timeseries(ts, run_lengths)
+        roi = center_run_timeseries(roi, run_lengths)
+        valid = support_mask & valid_masks_by_subject[subject] & np.isfinite(ts).all(axis=1) & (np.ptp(ts, axis=1) > 0)
         cluster_ts = np.full((k_final, ts.shape[1]), np.nan, dtype=np.float32)
         for c in range(1, k_final + 1):
             m = (group_labels_final == c) & valid
@@ -3312,6 +3291,9 @@ def cluster_roi_profile_subjectwise_from_explicit_original_source(
         roi_empty = np.isnan(roi).all(axis=1)
         if np.any(~roi_observed & ~roi_empty):
             raise ValueError(f"Partially nonfinite original-denoised ROI time series: {roi_path}")
+        _, run_lengths = load_run_segment_metadata(manifest_path)
+        ts = center_run_timeseries(ts, run_lengths)
+        roi = center_run_timeseries(roi, run_lengths)
         cluster_ts = np.full((k_final, ts.shape[1]), np.nan, dtype=np.float32)
         for cluster_id in range(1, k_final + 1):
             selected = (labels == cluster_id) & support & valid
@@ -3456,7 +3438,12 @@ def cluster_roi_profile_subjectwise(
                 f"ROI TSV rows mismatch for sub-{subject}: roi_shape={roi.shape} rows={len(rows)}"
             )
 
-        valid = support & valid_mask
+        _, run_lengths = load_run_segment_metadata(
+            reference_path(reference_root, subject, reference_atlas, "reference_summary.json")
+        )
+        ts = center_run_timeseries(ts, run_lengths)
+        roi = center_run_timeseries(roi, run_lengths)
+        valid = support & valid_mask & np.isfinite(ts).all(axis=1) & (np.ptp(ts, axis=1) > 0)
         cluster_ts = np.full((k_final, ts.shape[1]), np.nan, dtype=np.float32)
         for c in range(1, k_final + 1):
             m = (labels == c) & valid
@@ -3635,11 +3622,21 @@ def assignment_status_from_profile(profile: np.ndarray, network_names: list[str]
     dominant: list[str | None] = []
     for cidx in range(profile.shape[0]):
         row = profile[cidx, :]
-        order = np.argsort(row)
+        finite = np.flatnonzero(np.isfinite(row))
+        if finite.size == 0:
+            rows.append({
+                "cluster_id": int(cidx + 1), "status": "unassigned",
+                "top1_network": None, "top1_fisher_z": float("nan"),
+                "top2_network": None, "top2_fisher_z": float("nan"),
+                "margin": float("nan"), "low_margin_lt_0p05": 0,
+            })
+            dominant.append(None)
+            continue
+        order = finite[np.argsort(row[finite])]
         top1_i = int(order[-1])
-        top2_i = int(order[-2]) if row.size > 1 else int(order[-1])
+        top2_i = int(order[-2]) if order.size > 1 else None
         top1 = float(row[top1_i])
-        top2 = float(row[top2_i])
+        top2 = float(row[top2_i]) if top2_i is not None else float("nan")
         margin = float(top1 - top2)
         rows.append(
             {
@@ -3647,7 +3644,7 @@ def assignment_status_from_profile(profile: np.ndarray, network_names: list[str]
                 "status": "dominant",
                 "top1_network": str(network_names[top1_i]),
                 "top1_fisher_z": top1,
-                "top2_network": str(network_names[top2_i]),
+                "top2_network": str(network_names[top2_i]) if top2_i is not None else None,
                 "top2_fisher_z": top2,
                 "margin": margin,
                 "low_margin_lt_0p05": int(margin < 0.05),
@@ -4049,7 +4046,6 @@ def functional_atlas_from_vertices(
     return out, meta, label_items
 
 
-
 def prepare_combo_inputs(
     *,
     method: str,
@@ -4377,14 +4373,19 @@ def infer_route_tag(
 
 def _resolve_methods_and_taxonomy(args: argparse.Namespace) -> str:
     """Apply --methods/--network-taxonomy defaults and enforce the retired-taxonomy guard."""
+    route = str(args.route_tag)
+    if route == "auto":
+        route = infer_route_tag_from_shared_root(Path(args.shared_root))
     if args.methods is None:
-        args.methods = list(
+        args.methods = ["gradient-spectral", "wta-top"] if route == "routea_ctxdrop" else list(
             dict.fromkeys(
                 method
                 for atlas in args.atlases
                 for method in default_methods_for_atlas(atlas)
             )
         )
+    if route == "routea_ctxdrop" and set(args.methods) - {"gradient-spectral", "wta-top"}:
+        raise ValueError("routea_ctxdrop supports only gradient-spectral and wta-top")
     network_taxonomy = str(args.network_taxonomy)
     if not getattr(args, "_network_taxonomy_explicit", False):
         network_taxonomy = default_network_taxonomy_for_atlases(args.atlases)
@@ -5809,7 +5810,6 @@ def main() -> int:
 
     print(json.dumps({"out_root": str(out_root), "status": "ok"}, indent=2))
     return 0
-
 
 
 def _validated_kong2022_network_values(

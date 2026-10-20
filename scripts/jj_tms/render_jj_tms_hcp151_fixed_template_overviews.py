@@ -270,7 +270,7 @@ def _validate_surface(
         context=f"sub-{subject} {hemi} subject surface",
     )
     expected_name = (
-        f"sub-{subject}_hemi-{hemi}_space-corobl_den-512_"
+        f"sub-{subject}_hemi-{hemi}_space-T1w_den-512_"
         "label-hipp_midthickness.surf.gii"
     )
     if surface.name != expected_name:

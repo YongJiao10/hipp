@@ -3,7 +3,16 @@
 This repository uses a strict interpreter contract so new agents can run once and run correctly.
 
 The selective ctxreg input integration uses the existing py314, nibabel,
-NumPy and Workbench runtime; no dependency or environment change is required.
+NumPy and Workbench runtime. Hippocampal coordinate registration also uses
+the existing SciPy interpolation/linear algebra and the installed
+`antsApplyTransformsToPoints` executable at
+`.cache/conda_envs/hippo2/bin/antsApplyTransformsToPoints`; set
+`CORE_WORKFLOW_ANTS_POINTS` to select an explicit executable on another system.
+ANTs receives native LPS points and the declared MNI-to-T1w image transform;
+its output is converted back to RAS. HCP FNIRT conversion uses Workbench and
+inverts the image pullback at the required points with a 0.001-mm residual
+tolerance. Workbench remains single threaded, including registration calls.
+No package installation or Python environment change is required.
 Iowa derived cortex surfaces and their explicitly selected manifest belong in
 `outputs_iowa_jj_tms/inputs/iowa_jj_tms/cortex_surfaces/fsLR32k/`, not `/tmp`.
 Lynch PFM concatenates explicit run inputs in memory. Worktree asset links and

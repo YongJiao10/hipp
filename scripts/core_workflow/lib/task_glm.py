@@ -72,12 +72,12 @@ def background_residuals(
 
 
 def corrcoef_rows_nan(a: np.ndarray, b: np.ndarray, *, min_frames: int = 3) -> np.ndarray:
-    """Pairwise-complete Pearson correlations with NaN propagation.
+    """Correlate jointly finite frames using each row's finite-frame mean.
 
-    Unlike ``fc_math.corrcoef_rows`` (which zeroes non-finite entries and can
-    emit FC=0 for missing vertices), any row pair without enough jointly
-    valid frames yields NaN, so missing signal never masquerades as zero
-    connectivity. Row means use all finite entries of that row.
+    Unlike the strict full-row ``fc_math.corrcoef_rows``, partially observed
+    rows can contribute when at least ``min_frames`` frames are jointly finite.
+    Cross-products and variances use those shared frames; row means use all
+    finite entries of each row. Insufficient overlap or zero variance yields NaN.
     """
     x = np.asarray(a, dtype=np.float64)
     y = np.asarray(b, dtype=np.float64)

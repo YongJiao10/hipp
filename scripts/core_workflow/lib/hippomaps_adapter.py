@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import os
+import tempfile
+import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import numpy as np
 
@@ -20,6 +23,109 @@ def ensure_hippomaps_on_path(hippomaps_root: Path = DEFAULT_HIPPOMAPS_ROOT) -> P
     if str(root) not in sys.path:
         sys.path.insert(0, str(root))
     return root
+
+
+def wait_for_stable_file(path: Path, *, checks: int = 3, interval: float = 0.15) -> None:
+    last: tuple[int, int] | None = None
+    stable = 0
+    for _ in range(max(1, checks * 10)):
+        if path.exists():
+            st = path.stat()
+            current = (int(st.st_size), int(st.st_mtime_ns))
+            if current == last and current[0] > 0:
+                stable += 1
+                if stable >= checks:
+                    return
+            else:
+                stable = 0
+                last = current
+        time.sleep(float(interval))
+    if not path.exists() or path.stat().st_size <= 0:
+        raise TypeError(f"Render target did not stabilize: {path}")
+
+
+def normalize_hemis(hemis: list[str] | tuple[str, ...]) -> list[str]:
+    out = [str(hemi).upper() for hemi in hemis]
+    if not out:
+        raise ValueError("At least one hemisphere is required")
+    invalid = [hemi for hemi in out if hemi not in ("L", "R")]
+    if invalid:
+        raise ValueError(f"Invalid hemisphere(s): {invalid}; expected one or more of {('L', 'R')}")
+    return out
+
+
+def enable_den512_plotting_v2(hippomaps_root: Path) -> bool:
+    ensure_hippomaps_on_path(hippomaps_root)
+    import hippomaps.plotting as hm_plotting
+
+    v2_densities = getattr(hm_plotting, "_V2_DENS", None)
+    if not isinstance(v2_densities, set):
+        raise TypeError("Expected hippomaps.plotting._V2_DENS to be a set")
+    if "512" in v2_densities:
+        return False
+    v2_densities.add("512")
+    return True
+
+
+def load_hippomaps_plotter(hippomaps_root: Path = DEFAULT_HIPPOMAPS_ROOT) -> Callable[..., object]:
+    ensure_hippomaps_on_path(hippomaps_root)
+    enable_den512_plotting_v2(hippomaps_root)
+    from hippomaps.plotting import surfplot_canonical_foldunfold
+
+    return surfplot_canonical_foldunfold
+
+
+def stitch_hemi_images(left_png: Path, right_png: Path, output_png: Path) -> Path:
+    from PIL import Image
+
+    left_img = Image.open(left_png).convert("RGB")
+    right_img = Image.open(right_png).convert("RGB")
+    out = Image.new("RGB", (left_img.size[0] + right_img.size[0],
+                           max(left_img.size[1], right_img.size[1])), (255, 255, 255))
+    out.paste(left_img, (0, 0))
+    out.paste(right_img, (left_img.size[0], 0))
+    output_png.parent.mkdir(parents=True, exist_ok=True)
+    out.save(output_png)
+    return output_png
+
+
+def capture_hippomaps_plot(
+    plotter: Callable[..., object], cdata: np.ndarray, *, output_png: Path, **plotter_kwargs: Any,
+) -> Path:
+    """Capture the supported HippoMaps return types using one shared adapter."""
+    output_png.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(
+        prefix=f".{output_png.stem}.", suffix=output_png.suffix, dir=output_png.parent, delete=False
+    ) as tmp:
+        render_png = Path(tmp.name)
+    fig = plotter(cdata, **plotter_kwargs, filename=str(render_png))
+    final_render = render_png
+    if fig is None:
+        if not render_png.exists() or render_png.stat().st_size <= 0:
+            raise TypeError("HippoMaps plotter returned None and did not create the requested screenshot")
+    elif isinstance(fig, str):
+        got = Path(fig)
+        if got.exists() and got.stat().st_size > 0:
+            final_render = got
+        elif not render_png.exists() or render_png.stat().st_size <= 0:
+            raise TypeError(f"HippoMaps plotter returned screenshot path but file is missing: {fig}")
+    elif hasattr(fig, "savefig"):
+        import matplotlib.pyplot as plt
+
+        fig.savefig(render_png, dpi=220, bbox_inches="tight")
+        try:
+            plt.close(fig)
+        except TypeError:
+            pass
+    elif hasattr(fig, "screenshot"):
+        fig.screenshot(str(render_png))
+    else:
+        raise TypeError(f"Unsupported HippoMaps plotter return type: {type(fig)!r}")
+    if not final_render.exists() or final_render.stat().st_size <= 0:
+        raise TypeError(f"HippoMaps render target was not created: {final_render}")
+    os.replace(final_render, output_png)
+    wait_for_stable_file(output_png)
+    return output_png
 
 
 def hippomaps_commit(hippomaps_root: Path = DEFAULT_HIPPOMAPS_ROOT) -> str:

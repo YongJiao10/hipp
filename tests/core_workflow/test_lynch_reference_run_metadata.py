@@ -28,7 +28,7 @@ def test_run_spec_preserves_recorded_ids_and_lengths(tmp_path: Path) -> None:
         '{"run_id": 2, "run_length": 214}, {"run_id": 3, "run_length": 212}], '
         '"run_lengths": [229, 214, 212], "concat_timepoints": 655}}'
     )
-    assert module.load_run_spec(metadata) == ((1, 2, 3), (229, 214, 212))
+    assert module.load_run_segment_metadata(metadata) == ((1, 2, 3), (229, 214, 212))
 
 
 def test_common_run_manifest_records_metadata_boundary_source(tmp_path: Path) -> None:
@@ -57,7 +57,7 @@ def test_run_spec_rejects_missing_explicit_lengths(tmp_path: Path) -> None:
     metadata = tmp_path / "subject_manifest.json"
     metadata.write_text('{"header_evidence": {"runs": [{"run_id": 1}]}}')
     try:
-        module.load_run_spec(metadata)
+        module.load_run_segment_metadata(metadata)
     except ValueError as exc:
         assert "explicit" in str(exc) or "length" in str(exc)
     else:
@@ -80,7 +80,7 @@ def test_run_spec_rejects_inferred_or_contradictory_values(tmp_path, payload):
     path = tmp_path / "runs.json"
     path.write_text(json.dumps(payload))
     with pytest.raises(ValueError):
-        module.load_run_spec(path)
+        module.load_run_segment_metadata(path)
 
 
 @pytest.mark.parametrize("lengths", [[2, 3], [2, 4]])

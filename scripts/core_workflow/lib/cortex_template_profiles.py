@@ -4,14 +4,16 @@ from __future__ import annotations
 
 import json
 from collections import Counter
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 import numpy as np
 
-from .fc_math import corrcoef_rows, fisher_z_transform_fc
-from .io_utils import read_tsv_rows
-from .kong2022_label_utils import load_kong2022_merge_mapping
+from .fc_math import center_run_timeseries, corrcoef_rows, fisher_z_transform_fc
+from .io_utils import load_run_segment_metadata, read_tsv_rows
+from .kong2022_label_utils import KONG2022_DLABEL_PATH, load_kong2022_merge_mapping
+from .workbench import REPO_ROOT, run_workbench
 
 
 WTA_NETWORK_COLUMNS = {
@@ -46,9 +48,16 @@ def parse_roi_registry(path: Path) -> list[dict[str, Any]]:
     return out
 
 
+def subject_reference_path(
+    reference_root: Path, subject: str, atlas: str = "kong2022", filename: str = ""
+) -> Path:
+    """Resolve the per-subject reference file for an atlas."""
+    return Path(reference_root) / f"sub-{subject}" / "reference" / str(atlas) / str(filename)
+
+
 def _subject_reference_path(reference_root: Path, subject: str, filename: str) -> Path:
     """Resolve the shared Kong2022 reference used by every network taxonomy."""
-    return reference_root / f"sub-{subject}" / "reference" / "kong2022" / filename
+    return subject_reference_path(reference_root, subject, "kong2022", filename)
 
 
 def _read_subject_roi_tsv(path: Path) -> list[dict[str, Any]]:
@@ -219,8 +228,8 @@ def compute_subject_label_roi_profiles(
     *,
     subjects: list[str],
     shared_root: Path,
-    reference_root: Path,
-    mask_root: Path,
+    reference_root: Path | None = None,
+    mask_root: Path | None = None,
     smoothing: str,
     hemi: str,
     group_labels: np.ndarray,
@@ -228,6 +237,8 @@ def compute_subject_label_roi_profiles(
     roi_registry: list[dict[str, Any]],
 ) -> tuple[np.ndarray, list[str]]:
     """Compute subjectwise label-to-400-ROI Fisher-z profiles."""
+    reference_root = reference_root or shared_root
+    mask_root = mask_root or shared_root
     labels = np.asarray(group_labels, dtype=np.int32)
     support = np.asarray(support_mask, dtype=bool)
     if labels.ndim != 1 or support.ndim != 1 or labels.size != support.size:
@@ -257,14 +268,19 @@ def compute_subject_label_roi_profiles(
         if ts.shape[0] != labels.size or valid_mask.size != labels.size or roi.shape[0] != len(roi_rows):
             continue
 
-        valid_vertices = support & valid_mask
+        _run_ids, run_lengths = load_run_segment_metadata(roi_path.parent / "reference_summary.json")
+        ts = center_run_timeseries(ts, run_lengths)
+        valid_vertices = support & valid_mask & np.isfinite(ts).all(axis=1)
+        valid_vertices[valid_vertices] = np.std(
+            ts[valid_vertices].astype(np.float64), axis=1, ddof=1
+        ) > 0
         pseudo_cluster_ts = np.full((k_final, ts.shape[1]), np.nan, dtype=np.float32)
         for cluster_id in range(1, k_final + 1):
             vertex_mask = (labels == cluster_id) & valid_vertices
             if int(np.sum(vertex_mask)):
-                pseudo_cluster_ts[cluster_id - 1, :] = np.nanmean(ts[vertex_mask, :], axis=0).astype(np.float32)
+                pseudo_cluster_ts[cluster_id - 1, :] = np.mean(ts[vertex_mask, :], axis=0).astype(np.float32)
 
-        corr = corrcoef_rows(pseudo_cluster_ts, roi)
+        corr = corrcoef_rows(pseudo_cluster_ts, roi, run_lengths=run_lengths)
         fisher = fisher_z_transform_fc(corr)
         scatter = np.full((k_final, 400), np.nan, dtype=np.float32)
         for local_col, row in enumerate(roi_rows):
@@ -283,3 +299,83 @@ def compute_subject_label_roi_profiles(
             f"No valid subject profiles for WTA pseudo-clusters, smoothing={smoothing}, hemi={hemi}"
         )
     return np.stack(profiles, axis=0).astype(np.float32), used_subjects
+
+
+compute_subject_cluster_roi_profiles = compute_subject_label_roi_profiles
+
+
+def resolve_cortex_assets(
+    subject: str,
+    data_root: Path,
+    assets_root: Path,
+    scene: Path,
+    dlabel: Path = KONG2022_DLABEL_PATH,
+    *,
+    public_root: Path | None = None,
+) -> dict[str, Path]:
+    subject = str(subject).removeprefix("sub-")
+    anat = data_root / f"sub-{subject}" / "anat"
+    asset_subject = assets_root / f"sub-{subject}" / "assets"
+    pub = (public_root or (REPO_ROOT / "external")).resolve()
+    fastans_tpl = pub / "FASTANS" / "resources" / "templates"
+
+    def first_existing(paths: Iterable[Path]) -> Path | None:
+        for path in paths:
+            if path.exists():
+                return path.resolve()
+        return None
+
+    left_inflated = first_existing((
+        anat / f"sub-{subject}_hemi-L_space-fsLR_den-32k_desc-MSMAll_inflated.surf.gii",
+        assets_root / f"sub-{subject}_hemi-L_space-fsLR_den-32k_desc-MSMAll_inflated.surf.gii",
+        pub / f"sub-{subject}_hemi-L_space-fsLR_den-32k_desc-MSMAll_inflated.surf.gii",
+    ))
+    right_inflated = first_existing((
+        anat / f"sub-{subject}_hemi-R_space-fsLR_den-32k_desc-MSMAll_inflated.surf.gii",
+        assets_root / f"sub-{subject}_hemi-R_space-fsLR_den-32k_desc-MSMAll_inflated.surf.gii",
+        pub / f"sub-{subject}_hemi-R_space-fsLR_den-32k_desc-MSMAll_inflated.surf.gii",
+    ))
+    sulc_dscalar = first_existing((
+        anat / f"sub-{subject}_space-fsLR_den-32k_desc-MSMAll_sulc.dscalar.nii",
+        assets_root / f"sub-{subject}_space-fsLR_den-32k_desc-MSMAll_sulc.dscalar.nii",
+        pub / f"sub-{subject}_space-fsLR_den-32k_desc-MSMAll_sulc.dscalar.nii",
+    ))
+    left_sulc = first_existing((
+        asset_subject / f"sub-{subject}_hemi-L_space-fsLR_den-32k_desc-MSMAll_sulc.func.gii",
+        assets_root / f"sub-{subject}_hemi-L_space-fsLR_den-32k_desc-MSMAll_sulc.func.gii",
+        fastans_tpl / "CORTEX_LEFT.32k_fs_LR..func.gii",
+    ))
+    right_sulc = first_existing((
+        asset_subject / f"sub-{subject}_hemi-R_space-fsLR_den-32k_desc-MSMAll_sulc.func.gii",
+        assets_root / f"sub-{subject}_hemi-R_space-fsLR_den-32k_desc-MSMAll_sulc.func.gii",
+        fastans_tpl / "CORTEX_RIGHT.32k_fs_LR.func.gii",
+    ))
+    if (left_sulc is None or right_sulc is None) and sulc_dscalar is not None:
+        cache_dir = (REPO_ROOT / "tmp" / "cortex_template_cache" / f"sub-{subject}").resolve()
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        left_gen = cache_dir / f"sub-{subject}_hemi-L_space-fsLR_den-32k_desc-MSMAll_sulc.func.gii"
+        right_gen = cache_dir / f"sub-{subject}_hemi-R_space-fsLR_den-32k_desc-MSMAll_sulc.func.gii"
+        if not left_gen.exists() or not right_gen.exists():
+            run_workbench([
+                "-cifti-separate", str(sulc_dscalar), "COLUMN",
+                "-metric", "CORTEX_LEFT", str(left_gen),
+                "-metric", "CORTEX_RIGHT", str(right_gen),
+            ])
+        left_sulc = left_sulc or left_gen.resolve()
+        right_sulc = right_sulc or right_gen.resolve()
+
+    required: dict[str, Path | None] = {
+        "left_inflated": left_inflated,
+        "right_inflated": right_inflated,
+        "left_sulc": left_sulc,
+        "right_sulc": right_sulc,
+        "sulc_dscalar": sulc_dscalar,
+        "scene": scene.resolve() if scene.exists() else None,
+        "dlabel": dlabel.resolve() if dlabel.exists() else None,
+    }
+    missing = [name for name, path in required.items() if path is None]
+    if missing:
+        raise FileNotFoundError(
+            f"Missing cortex rendering assets for sub-{subject}: {', '.join(missing)}"
+        )
+    return {name: path for name, path in required.items() if path is not None}

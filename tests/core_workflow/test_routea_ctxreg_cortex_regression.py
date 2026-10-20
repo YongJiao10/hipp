@@ -419,10 +419,8 @@ def test_ctxdrop_materializer_writes_standard_fc_and_diagnostics(tmp_path: Path)
         {"parcel_id": 2, "parcel_name": "roi2"},
     ]
     run_segments = [
-        {"run_id": 1, "run_start": 0, "run_stop": 1, "run_length": 1},
-        {"run_id": 2, "run_start": 1, "run_stop": 2, "run_length": 1},
-        {"run_id": 3, "run_start": 2, "run_stop": 3, "run_length": 1},
-        {"run_id": 4, "run_start": 3, "run_stop": 4, "run_length": 1},
+        {"run_id": 1, "run_start": 0, "run_stop": 2, "run_length": 2},
+        {"run_id": 2, "run_start": 2, "run_stop": 4, "run_length": 2},
     ]
 
     roi_fc_mod.materialize_ctxdrop_fc_from_arrays(
@@ -459,7 +457,9 @@ def test_ctxdrop_materializer_writes_standard_fc_and_diagnostics(tmp_path: Path)
     assert (fc_dir / "runs" / "run-1" / "hipp_vertex_to_network_fc_active.npy").exists()
 
 
-def test_routea_ctxreg_fc_steps_use_separate_reference_and_mask_roots(tmp_path: Path) -> None:
+def test_routea_ctxreg_fc_steps_use_separate_reference_and_mask_roots(tmp_path: Path, cortex_reference_factory) -> None:
+    import json
+
     subject = "101"
     out_root = tmp_path / "routea_ctxreg"
     controlled_surface = tmp_path / "controlled_surface"
@@ -489,15 +489,17 @@ def test_routea_ctxreg_fc_steps_use_separate_reference_and_mask_roots(tmp_path: 
         "canonical7_network\nDefault\nVisual\nSomatomotor\nDorsalAttention\nVentralAttention\nControl\nLanguage\n",
         encoding="utf-8",
     )
-    for rid, start in enumerate([0, 1, 2, 3], start=1):
+    cortex_reference_factory(routea_reference, subject=subject, dataset="hcp", run_ids=(1, 2), run_lengths=(2, 2))
+    for rid, start in enumerate([0, 2], start=1):
         run_dir = routea_reference / f"sub-{subject}" / "reference" / "common" / "runs" / f"run-{rid}"
         run_dir.mkdir(parents=True)
         (run_dir / "reference_summary.json").write_text(
-            f'{{"run_id": {rid}, "run_start": {start}, "run_stop": {start + 1}, "run_length": 1}}',
+            f'{{"run_id": {rid}, "run_start": {start}, "run_stop": {start + 2}, "run_length": 2}}',
             encoding="utf-8",
         )
 
     roi_fc_mod.materialize_fc(
+        dataset="hcp",
         shared_root=out_root,
         surface_root=controlled_surface,
         reference_root=routea_reference,

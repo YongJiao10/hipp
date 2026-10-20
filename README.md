@@ -6,7 +6,6 @@ and tests for the hippocampal analysis workflows are maintained here.
 - [Workflow documentation](docs/README.md)
 - [Core workflow](docs/hipp_parcellation_network/core_workflow_overview.md)
 - [Agent runtime contract](docs/environment/agent_runtime_contract.md)
-- [GitHub scope and synchronization](docs/github_sync.md)
 
 Datasets, generated images, result tables, caches, installed dependencies, and
 archives are stored locally and are excluded from this source repository.

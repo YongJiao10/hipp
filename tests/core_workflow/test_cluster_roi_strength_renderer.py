@@ -159,13 +159,13 @@ def test_render_panel_colors_both_cortical_hemispheres_for_each_source_hemi(
         "R": (np.asarray([0, 1], dtype=np.int32), np.asarray([201, 202], dtype=np.int32)),
     }
 
-    def fake_run(command: list[str], text: bool, capture_output: bool) -> SimpleNamespace:
-        out_png = Path(command[command.index("--out-png") + 1])
+    def fake_render(**kwargs):
+        out_png = kwargs["out_png"]
         out_png.parent.mkdir(parents=True, exist_ok=True)
         out_png.write_bytes(b"png")
         return SimpleNamespace(returncode=0, stdout="", stderr="")
 
-    monkeypatch.setattr(renderer.subprocess, "run", fake_run)
+    monkeypatch.setattr(renderer, "render_cortex_pfm_scene", fake_render)
     panel_png = renderer.render_panel(
         runtime_root=tmp_path,
         panel_key=("2mm", "L", "Anterior"),
@@ -196,9 +196,9 @@ def test_render_panel_colors_both_cortical_hemispheres_for_each_source_hemi(
 def test_overview_text_is_compact_and_uses_mean_fisher_z_title() -> None:
     assert renderer.overview_title() == "HCP 7T | Kong2022 400 ROIs | gradient-spectral"
     assert renderer.overview_title("wta-top", "canonical7") == "HCP 7T | Kong2022 400 ROIs | WTA normalized | 7-network"
-    assert renderer.overview_title("wta-top", "canonical8") == "HCP 7T | Kong2022 400 ROIs | WTA normalized | 8-network"
-    with pytest.raises(ValueError, match="canonical7"):
-        renderer.overview_title("wta-top", "legacy")
+    for taxonomy in ("canonical8", "legacy"):
+        with pytest.raises(ValueError, match="canonical7"):
+            renderer.overview_title("wta-top", taxonomy)
     assert renderer.overview_row_label("2mm", "L") == "2mm | L"
     assert "source hippocampus" not in renderer.overview_row_label("4mm", "R")
 
@@ -251,14 +251,14 @@ def test_render_panel_invalidates_stale_png_when_label_content_changes(
     }
     calls: list[list[str]] = []
 
-    def fake_run(command: list[str], text: bool, capture_output: bool) -> SimpleNamespace:
-        calls.append(command)
-        out_png = Path(command[command.index("--out-png") + 1])
+    def fake_render(**kwargs):
+        calls.append(kwargs)
+        out_png = kwargs["out_png"]
         out_png.parent.mkdir(parents=True, exist_ok=True)
         out_png.write_bytes(b"png")
         return SimpleNamespace(returncode=0, stdout="", stderr="")
 
-    monkeypatch.setattr(renderer.subprocess, "run", fake_run)
+    monkeypatch.setattr(renderer, "render_cortex_pfm_scene", fake_render)
     assets = {key: tmp_path / f"{key}.asset" for key in (
         "scene",
         "left_inflated",

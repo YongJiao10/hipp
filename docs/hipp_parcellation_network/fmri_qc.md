@@ -1,81 +1,122 @@
 # fMRI QC
 
-The active default hippocampal group-analysis cohort is the T1only 151-subject QC-passed set.
-Vertex-level QC is pre-Kong behavior and uses a branch-agnostic root:
+## Accepted policy and implementation status
 
-- `outputs_hcp/inputs/hcp/qc/vertex_qc_t1only/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_151.txt`
-- `outputs_hcp/inputs/hcp/qc/vertex_qc_t1only/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt`
+The user approved this policy on 20 October 2026 for HCP7T rest, HCP3T
+EMOTION/WM, Stanford 36P, BANDA and PDC. This is the current QC decision.
+Production entry points have not yet been updated to implement all three
+criteria. Their inherited tSNR defaults and HCP151 destination contracts do
+not establish compliance with this policy. The research counts below are not
+new formal rosters; the historical HCP151 reference is not the new QC result.
 
-Audit/provenance artifacts for current on-disk assets:
+## Participant and visit selection
 
-- `outputs_hcp/inputs/hcp/qc/vertex_qc_t1only/qc/hcp7t_t1only_vertex_qc_166_audit.tsv`
-- `outputs_hcp/inputs/hcp/qc/vertex_qc_t1only/qc/hcp7t_t1only_vertex_qc_166_audit.json`
-- `outputs_hcp/inputs/hcp/qc/vertex_qc_t1only/manifests/hcp_7t_hippocampus_fmri_qc_excluded_t1only_15.txt`
-- `outputs_hcp/inputs/hcp/qc/vertex_qc_t1only/manifests/hcp_7t_hippocampus_fmri_qc_excluded_t1only_latest.txt`
+Apply these criteria in order, stopping at the first failure:
 
-Current paths:
+1. **Motion:** overall mean Power FD <=0.30 mm. Perform this step before
+   HippUnfold when processing new inputs.
+2. **Anatomy:** HippUnfold Dice >=0.70 in both hemispheres.
+3. **Hippocampal coverage:** at most 20 vertices without functional-GM support
+   in each consumed den-512 hippocampal hemisphere (20/512 = 3.90625%).
 
-- Root: `outputs_hcp/inputs/hcp/qc/vertex_qc_t1only/`
-- Pass manifest: `manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_151.txt`
-- Excluded manifest: `manifests/hcp_7t_hippocampus_fmri_qc_excluded_t1only_15.txt`
-- 166-audit table: `qc/hcp7t_t1only_vertex_qc_166_audit.tsv`
-- 166-audit metadata: `qc/hcp7t_t1only_vertex_qc_166_audit.json`
+Use one bilateral participant/visit roster per analysis branch. A failure on
+either side excludes that participant/visit from the branch. Missing required
+inputs remain unassessable and are not recorded as quality failures.
 
-Kong2022 consumes this vertex-level QC cohort for downstream atlas/model steps; it is not the ownership root for QC artifacts.
+tSNR can be reported where its input baseline supports interpretation; it is
+not a numerical exclusion criterion. Mean relative RMS <=0.5 mm (M05) adds
+no exclusions among the currently assessed three-criterion passes and is not
+an additional gate. The coverage threshold counts vertices, not physical area.
 
-Before writing QC reports or pass lists to these formal directories or the
-Kong2022 default `qc`/`manifests` directories, `02_02_build_qc_manifest.py`
-requires the final passing subject IDs to match the explicit HCP151 file.
-QC evaluates the complete input dataset and applies the declared criteria.
-Formal HCP outputs must contain the exact QC-passed HCP151 subject IDs. The
-authority is the explicit 151-subject file. Each task analysis uses its own
-complete cohort and QC output directories.
+## Multiple runs and analysis units
 
-QC criteria:
+Calculate Power FD within each physical run from adjacent motion samples:
+sum absolute translations in mm and absolute rotations converted to arc
+length at a 50-mm radius. HCP motion rotations are in degrees; Stanford uses
+fMRIPrep Power FD. Set the first FD sample of each run to zero, and never
+differentiate across run boundaries. Use the original motion frames before
+censoring. The current comparison uses unfiltered, lag-one FD.
 
-1. HippUnfold Dice `>= 0.70` for both hemispheres
-2. fMRI null-vertex rate `< 20%` for both hemispheres
+For multiple runs, use
+`overall_mean_FD = sum(frames_r * mean_FD_r) / sum(frames_r)`.
+Apply the 0.30-mm threshold once to this overall mean. There is no individual
+run veto; for example, equal-length runs with means 0.40 and 0.10 pass at 0.25.
+Dice is evaluated once per anatomical reconstruction, independently of run count.
 
-tSNR convention used for the null-vertex QC gate:
+Coverage uses actual trilinear weights at the registered hippocampal vertices.
+The source GM set is the supplied CIFTI hippocampal BrainModel restricted to
+voxels with finite, nonconstant signals. For multiple declared runs, first
+intersect these valid source-voxel masks, then calculate their surface support.
+A vertex is unsupported when its total GM weight is zero. Count unsupported
+vertices once per hemisphere; do not add counts from different runs.
 
-- The HCP minimal preprocessing pipeline intensity-normalizes fMRI data to a global 4D mean of `10000` (described by HCP as "like in FEAT").
-- FSL FEAT describes intensity normalization as scaling each 4D volume so the global mean becomes a preset constant.
-- For this branch's hp2000-filtered hippocampal surface data, the implemented proxy is `tSNR = 10000 / std_t`, with `ddof=1`; vertices with `sd == 0` are written as `NaN` and counted as invalid.
-- This is a HCP-style tSNR proxy, not the generic textbook `mean_t / std_t` definition.
-- If you need to describe it in a paper, say that the QC gate uses an HCP-normalized hippocampal tSNR proxy with threshold `25`, rather than implying a newly estimated mean signal.
+In the evaluated data, the common-source-mask operation removed no hippocampal
+source voxels. All 166 HCP7T concatenated inputs were additionally checked in
+four 900-frame blocks, with no nonfinite or constant hippocampal source series
+in any block. Run count therefore added no coverage attrition in these records.
 
-T1only uses the same thresholds, but the consumed HippUnfold surfaces and Dice TSVs come from:
+EMOTION and WM are evaluated separately; use their intersection if an analysis
+requires both tasks. PDC is evaluated per visit, without pooling different
+visits to pass motion QC. Cohort identity, denoising variants and declared run
+selection remain explicit.
 
-- `outputs_hcp/inputs/hcp/hippunfold/dense_corobl_batch/`
+## Vertex handling and coordinates
 
-Excluded subjects:
+Passing participant selection permits up to 20 unsupported vertices per side;
+it does not make those vertices usable. Downstream smoothing, FC and activation
+need an explicitly applied vertex mask combining positive GM support with
+finite, nonconstant consumed signal. This mask integration remains production
+work; the pass-count table does not demonstrate that it has been deployed.
 
-- `sub-102816`
-- `sub-109123`
-- `sub-155938`
-- `sub-158136`
-- `sub-164131`
-- `sub-173334`
-- `sub-182739`
-- `sub-198653`
-- `sub-550439`
-- `sub-680957`
-- `sub-783462`
-- `sub-878776`
-- `sub-878877`
-- `sub-898176`
-- `sub-901442`
+Volume-to-surface sampling must use surfaces transformed into the exact BOLD
+volume space. A `space-corobl` mesh cannot be used directly to sample MNI or
+native T1w volumes. Use native T1w geometry for physical distances and smoothing;
+displaying corresponding vertex values on a corobl mesh is a separate operation.
+Coordinate sampling code has been repaired, but affected formal functional
+products have not been rebuilt by this QC analysis.
 
-Current audited breakdown for 166 -> 151:
+## Evaluated retention
 
-- `14` subjects fail the fMRI null-vertex threshold (`>= 20%` in at least one hemisphere)
-- `1` subject fails Dice threshold (`sub-182739`, right Dice `0.69471951`)
-- This split is reflected in `qc/hcp7t_t1only_vertex_qc_166_audit.tsv`
+Rates below are cumulative percentages of the same complete-case N in each
+row, using existing registered coverage and motion records. Missing cases are
+not assigned an assumed final result.
 
-Active shared group-input root:
+| Dataset / unit | Complete-case N | FD pass | FD + Dice pass | All three pass | New exclusions: FD / Dice / coverage |
+|---|---:|---:|---:|---:|---:|
+| HCP7T rest | 166 | 156 (94.0%) | 155 (93.4%) | 148 (89.2%) | 10 / 1 / 7 |
+| HCP3T EMOTION | 144 | 142 (98.6%) | 142 (98.6%) | 134 (93.1%) | 2 / 0 / 8 |
+| HCP3T WM | 144 | 142 (98.6%) | 142 (98.6%) | 134 (93.1%) | 2 / 0 / 8 |
+| Stanford 36P | 199 | 194 (97.5%) | 190 (95.5%) | 186 (93.5%) | 5 / 4 / 4 |
+| BANDA | 202 | 183 (90.6%) | 183 (90.6%) | 179 (88.6%) | 19 / 0 / 4 |
+| PDC visits with complete records | 207 | 197 (95.2%) | 197 (95.2%) | 196 (94.7%) | 10 / 0 / 1 |
 
-- `outputs_hcp/inputs/hcp/kong2022/shared_inputs/routeb/`
+BANDA has 203 roster members; one lacks a declared independent functional run.
+PDC has 455 visits, of which 422 (92.7%) pass motion. The table uses the 207
+visits with completed coverage assessments, not a final 455-visit selection.
+Newly completed anatomical outputs do not acquire a coverage decision
+automatically. The two-task HCP intersection is 133/144 (92.4%).
 
-Example active raw surface path:
+## Method basis
 
-- `outputs_hcp/inputs/hcp/kong2022/shared_inputs/routeb/sub-<id>/surface/raw/sub-<id>_hemi-{L,R}_space-corobl_den-512_label-hipp_bold.func.gii`
+[Gao et al., Nature Communications 2026](https://www.nature.com/articles/s41467-026-71719-y)
+use mean FD >0.30 mm for exclusion in cross-cohort functional-gradient work.
+This supports the numerical choice; it does not establish an exact match of
+FD implementation or aggregation. Different TRs and filtering affect FD, and
+mean FD can conceal brief large movements.
+
+[Kember et al., Nature Communications 2026](https://www.nature.com/articles/s41467-026-74572-1)
+provide the anatomical and functional-GM coverage precedent. Their published
+coverage criterion is >=20 mm² improperly interpolated surface, not 20 vertices.
+The project's vertex-count rule and zero-weight classifier are explicit
+adaptations for den-512 functional nodes. Positive support is not proof of
+adequate SNR or individual tissue purity.
+
+Kember defines low-motion frames by FD <=0.25 mm and requires at least 10
+low-motion minutes. This duration rule was not adopted: the project's full
+EMOTION and WM acquisitions last only 4.224 and 9.72 minutes. The accessible QC
+description does not establish a specific temporal-censoring implementation.
+
+Exploration reports, one-off analysis code/results and QC discussion sessions
+are retained under `_archive/hippocampal_qc_exploration/` with their original
+relative directory structure. They are historical evidence, not active
+workflow instructions.

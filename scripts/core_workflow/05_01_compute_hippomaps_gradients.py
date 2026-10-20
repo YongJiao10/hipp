@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
-
 """
 Process Step Description:
 Compute HippoMaps gradients. Calculates continuous functional gradients of the hippocampus based on functional connectivity data to reflect macroscale functional transition patterns.
@@ -37,6 +35,8 @@ Outputs:
   - Group mean Fisher-z FC matrix: `{out_root}/{route}/smooth-{smoothing}_hemi-{hemi}/group_mean_fisherz_fc_active.npy`.
   - Gradient stage manifest: `{out_root}/{route}/smooth-{smoothing}_hemi-{hemi}/group_gradients_manifest.json`.
 """
+from __future__ import annotations
+
 import argparse
 import json
 from dataclasses import dataclass
@@ -44,43 +44,38 @@ from itertools import permutations
 from pathlib import Path
 from typing import Any
 
-import nibabel as nib
 import numpy as np
-
+from lib.branch_config import (
+    SIGNAL_BRANCH_CHOICES,
+    resolve_signal_branch_for_route,
+)
+from lib.fc_math import finite_pearson_1d, fisher_z_transform_fc
 from lib.hippomaps_adapter import (
-    DEFAULT_HIPPOMAPS_ROOT,
-    ensure_hippomaps_on_path,
     DEFAULT_GRADIENT_RANDOM_STATE,
+    DEFAULT_HIPPOMAPS_ROOT,
     brainspace_sparsity_for_feature_count,
+    ensure_hippomaps_on_path,
     fit_gradientmaps_pearson,
     hippomaps_commit,
     hippomaps_import_path,
     reconstruct_full_surface,
 )
-from lib.traceability import StageSpec, run_stage
-from lib.output_layout import (
-    DEFAULT_HIPPOMAPS_GRADIENT_ROOT,
-    DEFAULT_KONG2022_MANIFEST_ROOT,
-    DEFAULT_KONG2022_SHARED_INPUTS_ROOT,
-    DEFAULT_KONG400_CTXREG_SHARED_ROOT,
-    DEFAULT_KONG400_CTXDROP_SHARED_ROOT,
-    DEFAULT_KONG2022_SURFACE_ROOT,
-    DEFAULT_KONG2022_TEMPLATE_ROOT,
-)
-from lib.workflow_utils import write_json
 from lib.io_utils import load_subject_ids
-from lib.fc_math import fisher_z_transform_fc
 from lib.kong2022_fc_contract import validate_kong2022_roi_fc
 from lib.kong2022_label_utils import canonical_families_7_order
 from lib.lynch2024_reference import lynch2024_20net_order
-from lib.surface_utils import read_surface_vertex_count
-from lib.branch_config import (
-    SIGNAL_BRANCH_CHOICES,
-    normalize_signal_branch,
-    signal_branch_for_route,
-    validate_signal_branch_route,
+from lib.output_layout import (
+    DEFAULT_HIPPOMAPS_GRADIENT_ROOT,
+    DEFAULT_KONG400_CTXDROP_SHARED_ROOT,
+    DEFAULT_KONG400_CTXREG_SHARED_ROOT,
+    DEFAULT_KONG2022_MANIFEST_ROOT,
+    DEFAULT_KONG2022_SHARED_INPUTS_ROOT,
+    DEFAULT_KONG2022_SURFACE_ROOT,
+    DEFAULT_KONG2022_TEMPLATE_ROOT,
 )
-
+from lib.surface_utils import read_surface_vertex_count
+from lib.traceability import StageSpec, run_stage
+from lib.workflow_utils import write_json
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_T1ONLY_ROOT = DEFAULT_KONG2022_SHARED_INPUTS_ROOT.parent
@@ -142,20 +137,8 @@ class GradientComboResult:
 
 
 def finite_pearson_corr(a: np.ndarray, b: np.ndarray) -> float:
-    av = np.asarray(a, dtype=np.float64).reshape(-1)
-    bv = np.asarray(b, dtype=np.float64).reshape(-1)
-    mask = np.isfinite(av) & np.isfinite(bv)
-    if int(np.sum(mask)) < 2:
-        return 0.0
-    x = av[mask] - float(np.mean(av[mask]))
-    y = bv[mask] - float(np.mean(bv[mask]))
-    denom = float(np.linalg.norm(x) * np.linalg.norm(y))
-    if not np.isfinite(denom) or denom <= 0.0:
-        return 0.0
-    corr = float(np.dot(x, y) / denom)
-    if not np.isfinite(corr):
-        return 0.0
-    return float(np.clip(corr, -1.0, 1.0))
+    corr = finite_pearson_1d(a, b)
+    return float(corr) if np.isfinite(corr) else 0.0
 
 
 def best_abs_correlation_assignment(corr: np.ndarray) -> list[int]:
@@ -260,7 +243,6 @@ def group_mean_fisherz_fc(
     return group_fc.astype(np.float32)
 
 
-
 def subject_valid_mask(surface_root: Path, subject: str, hemi: str) -> np.ndarray:
     path = surface_root / f"sub-{subject}" / "surface" / "tsnr_gate" / f"sub-{subject}_hemi-{hemi}_valid_mask.npy"
     if not path.exists():
@@ -273,31 +255,6 @@ def atlas_for_gradient_route(route: str) -> str:
     if route_key not in ROUTE_TO_ATLAS:
         raise ValueError(f"Unsupported gradient route: {route!r}")
     return ROUTE_TO_ATLAS[route_key]
-
-
-def resolve_signal_branch_for_route(
-    route: str,
-    explicit_signal_branch: str | None = None,
-) -> str | None:
-    """Resolve the maintained signal branch for a RouteA control run.
-
-    The formal core workflow treats Lynch and RouteB as independent atlas
-    routes.  Only RouteA and its explicit CtxReg control have the shared
-    ``standard``/``ctxreg`` signal-branch contract.
-    """
-    route_key = str(route).strip().lower()
-    if route_key in {"routea", "routea_ctxreg"}:
-        if explicit_signal_branch is None:
-            return signal_branch_for_route(route_key)
-        return validate_signal_branch_route(
-            normalize_signal_branch(explicit_signal_branch), route_key
-        )
-    if explicit_signal_branch is not None:
-        raise ValueError(
-            "--signal-branch applies only RouteA controls; "
-            f"route={route!r} has no maintained {SIGNAL_BRANCH_CHOICES} signal branch"
-        )
-    return None
 
 
 def resolve_gradient_shared_root(shared_inputs_root: Path, route: str) -> Path:

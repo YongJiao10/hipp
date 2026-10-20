@@ -54,6 +54,7 @@ from lib.weighted_fisherz import (
     assignment_status_from_weighted_network_profile,
     weighted_cluster_network_fisherz_profile_from_timeseries,
 )
+from lib.io_utils import load_run_segment_metadata
 from lib.surface_affinity import (
     GRADIENT_SPECTRAL_AFFINITY,
     GRADIENT_SPECTRAL_AFFINITY_DESCRIPTION,
@@ -365,6 +366,7 @@ def weighted_gradient_profile_from_reference(
         raise FileNotFoundError(f"Missing ROI timeseries for weighted profile: {roi_path}")
     if not roi_tsv.exists():
         raise FileNotFoundError(f"Missing ROI metadata for weighted profile: {roi_tsv}")
+    _run_ids, run_lengths = load_run_segment_metadata(roi_path.parent / "reference_summary.json")
     return weighted_cluster_network_fisherz_profile_from_timeseries(
         group_labels_final=np.asarray(labels, dtype=np.int32),
         support_mask=np.asarray(valid_mask, dtype=bool),
@@ -373,6 +375,7 @@ def weighted_gradient_profile_from_reference(
         roi_rows=read_kong2022_roi_weight_rows(roi_tsv),
         network_names=network_names,
         network_column=network_column,
+        run_lengths=run_lengths,
     )
 
 

@@ -7,6 +7,10 @@ import tempfile
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
+import nibabel as nib
+import numpy as np
+from nibabel.gifti import GiftiDataArray, GiftiImage
+
 from lib.output_layout import DEFAULT_HIPPUNFOLD_BATCH_ROOT
 from lib.workbench import capture_scene
 
@@ -225,6 +229,98 @@ def ensure_scene_white_background(root: ET.Element) -> None:
                 elif "Foreground" in name:
                     for elem in arr.findall("Element"):
                         elem.text = "0"
+
+
+def save_shape_gii(values: np.ndarray, out_path: Path) -> None:
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    da = GiftiDataArray(data=np.asarray(values, dtype=np.float32),
+        intent="NIFTI_INTENT_NONE", datatype="NIFTI_TYPE_FLOAT32")
+    nib.save(GiftiImage(darrays=[da]), str(out_path))
+
+
+def find_gyrification_refs(root: ET.Element) -> dict[str, str]:
+    refs: dict[str, str] = {}
+    for elem in root.iter():
+        text = (elem.text or "").strip()
+        if "space-corobl" not in text or "_gyrification.shape.gii" not in text:
+            continue
+        for hemi in ("L", "R"):
+            if f"hemi-{hemi}" in text and hemi not in refs:
+                refs[hemi] = text
+    if "L" not in refs or "R" not in refs:
+        raise RuntimeError("Could not find current gyrification shape refs in scene")
+    return refs
+
+
+def disable_label_overlays(root: ET.Element) -> None:
+    parent_map = {id(child): parent for parent in root.iter() for child in parent}
+    for obj in root.iter("Object"):
+        if obj.attrib.get("Name") != "m_enabled":
+            continue
+        parent = parent_map.get(id(obj))
+        if parent is None:
+            continue
+        for sibling in parent:
+            text = (sibling.text or "").strip()
+            if "group_gradient" in text and text.endswith(".label.gii"):
+                continue
+            if ".label.gii" in text or ".dlabel.nii" in text:
+                obj.text = "false"
+                break
+
+
+def inject_fixed_palette(root: ET.Element, vmin: float, vmax: float, palette_name: str) -> None:
+    values = {
+        "m_paletteNormalizationMode": "NORMALIZATION_SPECIFIED_VALUES",
+        "m_selectedPaletteName": palette_name,
+        "m_userScalePercentageMinimum": str(vmin),
+        "m_userScalePercentageMaximum": str(vmax),
+    }
+    for obj in root.iter("Object"):
+        name = obj.attrib.get("Name", "")
+        if name in values:
+            obj.text = values[name]
+
+
+def build_scene_root(
+    *, scene_path: Path, template_subject: str, left_surface: Path,
+    right_surface: Path, spec_path: Path, left_shape: Path, right_shape: Path,
+    vmin: float, vmax: float, palette_name: str,
+) -> ET.Element:
+    """Replace the folded hippocampal scene's surfaces and scalar overlays."""
+    parts = spec_path.resolve().parts
+    if "dense_corobl_batch" not in parts:
+        raise RuntimeError(f"Could not infer dense_corobl_batch root from spec path: {spec_path}")
+    dense_root = Path(*parts[:parts.index("dense_corobl_batch") + 1])
+    root = ET.parse(scene_path).getroot()
+    absolutize_scene_paths(root, scene_path, dense_corobl_root=dense_root)
+    replace_subject_text(root, detect_template_subject(root), template_subject)
+    surfaces = find_current_corobl_surface_refs(root)
+    replace_exact_ref(root, surfaces["L"], str(left_surface.resolve()))
+    replace_exact_ref(root, surfaces["R"], str(right_surface.resolve()))
+    replace_exact_ref(root, find_current_spec_ref(root), str(spec_path.resolve()))
+    shapes = find_gyrification_refs(root)
+    replace_exact_ref(root, shapes["L"], str(left_shape.resolve()))
+    replace_exact_ref(root, shapes["R"], str(right_shape.resolve()))
+    disable_label_overlays(root)
+    inject_fixed_palette(root, vmin, vmax, palette_name)
+    return root
+
+
+def capture_scene_root(
+    *, root: ET.Element, out_png: Path, width: int, height: int, renderer: str,
+) -> None:
+    """Capture an in-memory scene using the project's temporary workspace."""
+    out_png.parent.mkdir(parents=True, exist_ok=True)
+    (REPO_ROOT / "tmp").mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".scene", prefix="hipp_scene_",
+                                    dir=REPO_ROOT / "tmp", delete=False) as tmp:
+        temp_scene = Path(tmp.name)
+    try:
+        ET.ElementTree(root).write(temp_scene, encoding="UTF-8", xml_declaration=True)
+        capture_scene(temp_scene, 1, out_png, int(width), int(height), renderer)
+    finally:
+        temp_scene.unlink(missing_ok=True)
 
 
 def parse_args() -> argparse.Namespace:

@@ -178,6 +178,8 @@ def build_command_plan(*, subjects: list[str], layout: dict[str, Path], python_e
                 cmd(
                     python_exe,
                     REPO_ROOT / "scripts/core_workflow/03_02_build_kong2022_routea_reference.py",
+                    "--dataset",
+                    "hcp",
                     "--shared-root",
                     routea_root,
                     "--subjects-manifest",
@@ -199,6 +201,8 @@ def build_command_plan(*, subjects: list[str], layout: dict[str, Path], python_e
                     cmd(
                         python_exe,
                         REPO_ROOT / "scripts/core_workflow/04_01_materialize_kong2022_roi_fc.py",
+                        "--dataset",
+                        "hcp",
                         "--shared-root",
                         shared_root,
                         "--surface-root",

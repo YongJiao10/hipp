@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib
 import ast
+import json
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -124,6 +125,9 @@ def _write_network_reference_subject(
                 dtype=np.float32,
             ),
         )
+        (ref_dir / "reference_summary.json").write_text(json.dumps({
+            "run_ids": [1], "run_lengths": [np.load(network_path).shape[-1]],
+        }))
     return ts_path, order_path, network_path
 
 
@@ -287,6 +291,9 @@ def _write_kong_annotation_subject(
             ),
         )
         _write_kong_registry(registry_path)
+        (ref_dir / "reference_summary.json").write_text(json.dumps({
+            "run_ids": [1], "run_lengths": [np.load(roi_path).shape[-1]],
+        }))
     return ts_path, roi_path, registry_path
 
 

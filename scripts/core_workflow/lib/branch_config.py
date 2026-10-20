@@ -45,3 +45,22 @@ def validate_signal_branch_route(signal_branch: str, route_tag: str) -> str:
             f"route_tag={expected!r}, got {route!r}"
         )
     return branch
+
+
+def resolve_signal_branch_for_route(
+    route: str, explicit_signal_branch: str | None = None,
+) -> str | None:
+    """Resolve standard/ctxreg only for the maintained RouteA controls."""
+    route_key = str(route).strip().lower()
+    if route_key in {"routea", "routea_ctxreg"}:
+        if explicit_signal_branch is None:
+            return signal_branch_for_route(route_key)
+        return validate_signal_branch_route(
+            normalize_signal_branch(explicit_signal_branch), route_key
+        )
+    if explicit_signal_branch is not None:
+        raise ValueError(
+            "--signal-branch applies only RouteA controls; "
+            f"route={route!r} has no maintained {SIGNAL_BRANCH_CHOICES} signal branch"
+        )
+    return None

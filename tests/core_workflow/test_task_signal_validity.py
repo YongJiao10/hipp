@@ -1,4 +1,4 @@
-"""Task QC must preserve task variance and reject unusable run signals."""
+"""Explicit validity-only QC preserves task variance and rejects unusable signals."""
 from pathlib import Path
 import json
 import sys
@@ -11,23 +11,23 @@ sys.path.insert(0, str(ROOT))
 from scripts.core_workflow.lib.io_utils import compute_cortex_tsnr_gate
 
 
-def test_task_cortex_keeps_large_response_but_rejects_invalid_runs(tmp_path):
-    data = np.array([
-        [10000, 12000, 8000, 15000, 17000, 13000],
-        [0, 0, 0, 0, 0, 0],
-        [10000, 10000, 10000, 12000, 12000, 12000],
-        [10000, 10001, 10002, 0, 0, 0],
-        [10000, np.nan, 10002, 10000, 10001, 10002],
-    ])
+def test_task_cortex_keeps_large_response_but_rejects_invalid_runs(tmp_path, emotion_run_paths):
+    signal = 10000 + 2000 * np.sin(np.arange(352))
+    data = np.tile(signal, (5, 1))
+    data[1] = 0
+    data[2, :176], data[2, 176:] = 10000, 12000
+    data[3, 176:] = 0
+    data[4, 100] = np.nan
     mask = compute_cortex_tsnr_gate(
-        data=data, outdir=tmp_path, hemi='left', threshold=25,
-        task='emotion', run_lengths=[3, 3],
+        data=data, outdir=tmp_path, hemi='left', threshold=None,
+        task='emotion', run_lengths=[176, 176], task_bold_paths=emotion_run_paths,
     )
     assert np.load(mask).tolist() == [True, False, False, False, False]
     summary = json.loads((tmp_path / 'cortex_left_tsnr_gate_summary.json').read_text())
     assert summary['threshold'] is None
-    assert summary['tsnr_definition'] is None
-    assert summary['validity_policy'] == 'finite_nonconstant_each_run'
+    assert summary['validity_policy'] == 'runwise_baseline_over_task_residual_sd'
+    assert summary['tsnr_computed'] is False
+    assert np.isnan(np.load(tmp_path / 'cortex_left_run_tsnr.npy')).all()
 
 
 def test_rest_cortex_retains_existing_threshold(tmp_path):
@@ -36,11 +36,11 @@ def test_rest_cortex_retains_existing_threshold(tmp_path):
     assert np.load(mask).tolist() == [False, True, False]
 
 
-def test_task_gate_requires_exact_run_lengths(tmp_path):
-    with pytest.raises(ValueError, match='run lengths'):
+def test_task_gate_requires_exact_run_lengths(tmp_path, emotion_run_paths):
+    with pytest.raises(ValueError, match='run boundaries'):
         compute_cortex_tsnr_gate(
-            data=np.ones((2, 6)), outdir=tmp_path, hemi='left', threshold=25,
-            task='emotion', run_lengths=[3, 2],
+            data=np.ones((2, 6)), outdir=tmp_path, hemi='left', threshold=None,
+            task='emotion', run_lengths=[3, 2], task_bold_paths=emotion_run_paths,
         )
 
 
@@ -63,7 +63,9 @@ def test_task_consumer_rejects_old_smoothing(tmp_path):
 
 
 @pytest.mark.parametrize("task,dataset", [("emotion", "hcp"), ("rest", "stanford"), ("rest", "iowa_jj_tms")])
-def test_hippocampal_validity_respects_dataset_and_run_policy(tmp_path, task, dataset):
+def test_hippocampal_validity_respects_dataset_and_run_policy(
+    tmp_path, task, dataset, emotion_run_paths, baseline_input_factory,
+):
     import importlib.util
     import nibabel as nib
     sys.path.insert(0, str(ROOT / 'scripts/core_workflow'))
@@ -72,7 +74,10 @@ def test_hippocampal_validity_respects_dataset_and_run_policy(tmp_path, task, da
     spec.loader.exec_module(module)
     raw = tmp_path / 'shared/sub-1/surface/raw'
     raw.mkdir(parents=True)
-    (raw / 'surface_sampling_summary.json').write_text(json.dumps({'task': 'emotion', 'run_lengths': [176, 176]}))
+    (raw / 'surface_sampling_summary.json').write_text(json.dumps({
+        'task': 'emotion', 'run_lengths': [176, 176],
+        'bold_inputs': [str(path) for path in emotion_run_paths],
+    }))
     signal = 10000 + 2000 * np.sin(np.arange(352))
     data = np.tile(signal, (512, 1)).astype(np.float32)
     data[1] = 0
@@ -80,19 +85,29 @@ def test_hippocampal_validity_respects_dataset_and_run_policy(tmp_path, task, da
     data[2, 176:] = 20000
     data[3, 200] = np.inf
     for hemi in ['L', 'R']:
-        nib.save(module.make_func_gifti(data), raw / f'sub-1_hemi-{hemi}_space-corobl_den-512_label-hipp_bold.func.gii')
+        nib.save(module.make_func_gifti(data), raw / f'sub-1_hemi-{hemi}_space-T1w_den-512_label-hipp_bold.func.gii')
         surface = module.surface_path(tmp_path / 'batch', '1', hemi)
         surface.parent.mkdir(parents=True, exist_ok=True)
         surface.touch()
-    module.run_tsnr_gate('1', str(tmp_path / 'batch'), str(tmp_path / 'shared'), task, dataset)
+        if task == 'rest':
+            baseline_input_factory(tmp_path / f'baseline-{hemi}.npz', data,
+                                   dataset=dataset, hemi=hemi, run_lengths=[176, 176])
+    module.run_tsnr_gate(
+        '1', str(tmp_path / 'batch'), str(tmp_path / 'shared'), task, dataset,
+        tsnr_input_template=str(tmp_path / 'baseline-{hemi}.npz') if task == 'rest' else None,
+        tsnr_threshold='none',
+    )
     gate = raw.parent / 'tsnr_gate'
     mask = np.load(gate / 'sub-1_hemi-L_valid_mask.npy')
     assert mask.sum() == (509 if task != "rest" else 510)
     assert mask[:4].tolist() == [True, False, task == "rest", False]
-    assert not (gate / 'sub-1_hemi-L_tsnr.npy').exists()
+    assert np.isnan(np.load(gate / 'sub-1_hemi-L_tsnr.npy')).all()
     summary = json.loads((gate / 'sub-1_hemi-L_tsnr_gate_summary.json').read_text())
-    assert summary['validity_policy'] == ('finite_nonconstant_each_run' if task != 'rest' else 'finite_nonconstant')
+    assert summary['validity_policy'] == (
+        'runwise_baseline_over_task_residual_sd' if task != 'rest' else 'runwise_baseline_over_detrended_sd'
+    )
     assert summary['threshold'] is None
+    assert summary['tsnr_computed'] is False
 
 
 def test_task_consumer_accepts_rebuilt_metadata(tmp_path):
@@ -100,7 +115,7 @@ def test_task_consumer_accepts_rebuilt_metadata(tmp_path):
     surface = tmp_path / 'sub-1/surface'
     gate = surface / 'tsnr_gate'
     gate.mkdir(parents=True)
-    policy = {'task': 'emotion', 'validity_policy': 'finite_nonconstant_each_run'}
+    policy = {'task': 'emotion', 'validity_policy': 'runwise_baseline_over_task_residual_sd'}
     (surface / 'stage_manifest.json').write_text(json.dumps({'params': policy}))
     (gate / 'sub-1_hemi-L_tsnr_gate_summary.json').write_text(json.dumps(policy))
     require_task_surface_validity(tmp_path, '1', 'L', 'emotion')
@@ -109,14 +124,18 @@ def test_task_consumer_accepts_rebuilt_metadata(tmp_path):
 
 
 @pytest.mark.parametrize('dataset', ['stanford', 'iowa_jj_tms'])
-def test_denoised_rest_rejects_invalid_signal_without_amplitude_cutoff(tmp_path, dataset):
+def test_denoised_rest_rejects_invalid_signal_without_amplitude_cutoff(tmp_path, dataset, baseline_input_factory):
     data = np.array([[0, 1000, -1000, 0], [0, 0, 0, 0],
                      [1, np.nan, 2, 3], [10, 10, 20, 20]], dtype=float)
-    mask = compute_cortex_tsnr_gate(data=data, outdir=tmp_path, hemi='left',
-                                    threshold=25, dataset=dataset)
+    vertex_ids = np.arange(data.shape[0])
+    baseline = baseline_input_factory(tmp_path / 'baseline.npz', data + 10000,
+                                     dataset=dataset, vertex_ids=vertex_ids)
+    mask = compute_cortex_tsnr_gate(data=data, outdir=tmp_path, hemi='left', threshold=None,
+                                  dataset=dataset, tsnr_input=baseline, subject='1', vertex_ids=vertex_ids)
     assert np.load(mask).tolist() == [True, False, False, True]
     summary = json.loads((tmp_path / 'cortex_left_tsnr_gate_summary.json').read_text())
     assert summary['threshold'] is None
-    assert summary['tsnr_definition'] is None
-    assert summary['validity_policy'] == 'finite_nonconstant'
+    assert summary['tsnr_definition'] == 'runwise_baseline_over_detrended_sd'
+    assert summary['validity_policy'] == 'runwise_baseline_over_detrended_sd'
     assert summary['dataset'] == dataset
+    assert np.isnan(np.load(tmp_path / 'cortex_left_tsnr.npy')).all()

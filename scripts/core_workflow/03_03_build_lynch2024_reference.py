@@ -20,7 +20,7 @@ from pathlib import Path
 
 import numpy as np
 
-from lib.io_utils import load_subject_ids, parse_run_segments
+from lib.io_utils import load_subject_ids, load_run_segment_metadata, parse_run_segments
 from lib.lynch2024_reference import (
     build_lynch_network_references,
     lynch2024_20net_order,
@@ -43,112 +43,6 @@ DEFAULT_COMPONENT_TSV_TEMPLATE = (
     "{cortex_pfm_root}/{sub_subject}/lynch2024/cortex_roi_components.tsv"
 )
 MAX_CONCURRENCY = 10
-
-
-def load_run_spec(path: Path) -> tuple[tuple[int, ...], tuple[int, ...]]:
-    """Read explicit numeric run IDs and lengths from a subject metadata JSON.
-
-    The Iowa matcher records this contract under ``header_evidence``.  No
-    equal-four-way split is inferred when a metadata file is selected.
-    """
-    source = Path(path).resolve()
-    if not source.is_file():
-        raise FileNotFoundError(f"Missing explicitly selected run metadata: {source}")
-    try:
-        payload = json.loads(source.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise ValueError(f"Malformed run metadata JSON: {source}") from exc
-
-    def integer(value: object) -> int:
-        if isinstance(value, bool) or not (
-            isinstance(value, int) or isinstance(value, str) and value.isdecimal()
-        ):
-            raise ValueError(f"Run metadata requires integer IDs and lengths: {source}")
-        return int(value)
-
-    def parse(obj: object) -> tuple[tuple[int, ...], tuple[int, ...]] | None:
-        if not isinstance(obj, dict):
-            return None
-        nested = obj.get("header_evidence")
-        if isinstance(nested, dict):
-            parsed = parse(nested)
-            if parsed is not None:
-                return parsed
-
-        run_lengths = obj.get("run_lengths")
-        run_ids = obj.get("run_ids")
-        runs = obj.get("run_segments", obj.get("runs"))
-        records: list[dict[str, object]] | None = None
-        if isinstance(runs, list):
-            if not all(isinstance(row, dict) for row in runs):
-                raise ValueError(f"Run metadata records must be objects: {source}")
-            records = [dict(row) for row in runs]
-
-        if isinstance(run_lengths, list) and run_lengths:
-            lengths = tuple(integer(value) for value in run_lengths)
-            if records is not None:
-                ids_from_records: list[int] = []
-                lengths_from_records: list[int] = []
-                for row in records:
-                    if "run_id" not in row:
-                        raise ValueError(f"Run metadata record lacks run_id: {source}")
-                    raw_length = row.get("run_length", row.get("n_timepoints"))
-                    if raw_length is None:
-                        raise ValueError(
-                            f"Run metadata record lacks an explicit length: {source}"
-                        )
-                    ids_from_records.append(integer(row["run_id"]))
-                    lengths_from_records.append(integer(raw_length))
-                if tuple(lengths_from_records) != lengths:
-                    raise ValueError(f"run_lengths and runs disagree: {source}")
-                ids = tuple(ids_from_records)
-            elif isinstance(run_ids, list) and len(run_ids) == len(lengths):
-                ids = tuple(integer(value) for value in run_ids)
-            else:
-                raise ValueError(
-                    f"Run metadata lacks explicit run IDs matching lengths: {source}"
-                )
-        elif records is not None and records:
-            ids_list: list[int] = []
-            lengths_list: list[int] = []
-            for row in records:
-                if "run_id" not in row:
-                    raise ValueError(f"Run metadata record lacks run_id: {source}")
-                raw_length = row.get("run_length", row.get("n_timepoints"))
-                if raw_length is None:
-                    raise ValueError(
-                        f"Run metadata record lacks an explicit length: {source}"
-                    )
-                ids_list.append(integer(row["run_id"]))
-                lengths_list.append(integer(raw_length))
-            ids = tuple(ids_list)
-            lengths = tuple(lengths_list)
-        else:
-            return None
-
-        if run_ids is not None and (
-            not isinstance(run_ids, list)
-            or tuple(integer(value) for value in run_ids) != ids
-        ):
-            raise ValueError(f"run_ids and run records disagree: {source}")
-        if len(ids) != len(lengths) or not ids:
-            raise ValueError(f"run_ids/run_lengths mismatch in run metadata: {source}")
-        if any(rid <= 0 for rid in ids) or any(length <= 0 for length in lengths):
-            raise ValueError(f"Invalid run id or length in run metadata: {source}")
-        if tuple(sorted(set(ids))) != ids:
-            raise ValueError(f"Run IDs must be strictly increasing: {source}")
-        declared_total = obj.get("concat_timepoints")
-        if declared_total is not None and integer(declared_total) != sum(lengths):
-            raise ValueError(
-                f"Run metadata total does not match run lengths: {source} "
-                f"concat_timepoints={declared_total} run_total={sum(lengths)}"
-            )
-        return ids, lengths
-
-    parsed = parse(payload)
-    if parsed is None:
-        raise ValueError(f"Run metadata contains no explicit run fields: {source}")
-    return parsed
 
 
 def _write_common_run_manifests(
@@ -236,7 +130,7 @@ def process_subject(
         shared_root=shared_root,
         cortex_pfm_root=cortex_pfm_root,
     )
-    run_ids, metadata_lengths = load_run_spec(metadata_path)
+    run_ids, metadata_lengths = load_run_segment_metadata(metadata_path)
     if (
         run_lengths is not None
         and tuple(int(x) for x in run_lengths) != metadata_lengths

@@ -5,7 +5,7 @@ from typing import Sequence
 
 import numpy as np
 
-from lib.fc_math import corrcoef_rows, fisher_z_transform_fc
+from lib.fc_math import center_run_timeseries, corrcoef_rows, fisher_z_transform_fc
 
 
 def _network_column(network_column: str) -> str:
@@ -118,6 +118,7 @@ def weighted_network_fisherz_profile_from_timeseries(
     network_names: Sequence[str],
     *,
     network_column: str = "canonical7",
+    run_lengths: Sequence[int] | None = None,
 ) -> np.ndarray:
     """Compute Fisher-z FC against vertex-count weighted network time series.
 
@@ -139,7 +140,7 @@ def weighted_network_fisherz_profile_from_timeseries(
         network_names,
         network_column=network_column,
     )
-    profile = fisher_z_transform_fc(corrcoef_rows(hipp, network_ts))
+    profile = fisher_z_transform_fc(corrcoef_rows(hipp, network_ts, run_lengths=run_lengths))
     valid_hipp = np.any(np.isfinite(hipp), axis=1)
     valid_net = np.any(np.isfinite(network_ts), axis=1)
     profile[~valid_hipp, :] = np.nan
@@ -156,8 +157,13 @@ def weighted_cluster_network_fisherz_profile_from_timeseries(
     network_names: Sequence[str],
     *,
     network_column: str = "canonical7",
+    run_lengths: Sequence[int] | None = None,
 ) -> np.ndarray:
-    """Compute cluster-level weighted_fisherz after averaging cluster time series."""
+    """Average supported, complete nonconstant rows, then compute weighted FC.
+
+    Declared run means are removed before row eligibility and cluster averaging.
+    Callers must intersect group support with the subject's valid-vertex mask.
+    """
     labels = np.asarray(group_labels_final, dtype=np.int32).reshape(-1)
     support = np.asarray(support_mask, dtype=bool).reshape(-1)
     hipp = np.asarray(hippocampal_timeseries, dtype=np.float32)
@@ -165,19 +171,26 @@ def weighted_cluster_network_fisherz_profile_from_timeseries(
         raise ValueError(f"Expected 2D hippocampal time series, got shape={hipp.shape}")
     if labels.size != hipp.shape[0] or support.size != hipp.shape[0]:
         raise ValueError(f"Vertex mismatch: labels={labels.size} support={support.size} timeseries={hipp.shape}")
+    if run_lengths is not None:
+        hipp = center_run_timeseries(hipp, run_lengths)
     k_final = int(np.nanmax(labels)) if labels.size else 0
     cluster_ts = np.full((k_final, hipp.shape[1]), np.nan, dtype=np.float32)
-    valid = support & np.any(np.isfinite(hipp), axis=1)
+    valid = support & np.isfinite(hipp).all(axis=1)
+    if hipp.shape[1] < 2:
+        valid[:] = False
+    else:
+        valid[valid] = np.std(hipp[valid].astype(np.float64), axis=1, ddof=1) > 0
     for cid in range(1, k_final + 1):
         mask = (labels == cid) & valid
         if int(np.sum(mask)) > 0:
-            cluster_ts[cid - 1, :] = np.nanmean(hipp[mask, :], axis=0).astype(np.float32)
+            cluster_ts[cid - 1, :] = np.mean(hipp[mask, :], axis=0).astype(np.float32)
     return weighted_network_fisherz_profile_from_timeseries(
         cluster_ts,
         roi_timeseries,
         roi_rows,
         network_names,
         network_column=network_column,
+        run_lengths=run_lengths,
     )
 
 def assignment_status_from_weighted_network_profile(

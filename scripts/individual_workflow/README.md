@@ -153,6 +153,12 @@ inputs and saved artifacts, and subject surfaces are vertex-count validated.
 /home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/03_03_render_hcp_runs_comparison.py
 ```
 
+Fixed-template overview inputs declare native `space-T1w_den-512`
+subject midthickness surfaces, matching the repaired sampling/smoothing
+producer. Label GIFTIs may retain corobl display filenames because vertex
+numbering and topology are shared across spaces; rendering a metric does
+not resample the BOLD volume.
+
 The computation lives under
 `outputs_hcp/work/crossfit_template_matching/`; the quantitative five-fold
 overview, `robustness_summary.tsv`, completely disjoint independent-cohort
@@ -223,6 +229,10 @@ cluster-to-network correlation. `fisherz` and `weighted_fisherz` heatmaps are
 validated against their Fisher-z status rows. The legacy `gradient_count`
 method name is retained as a compatibility alias, but its heatmap and status
 rows use `normalized_top20_count` with the normalized Top-20 ROI profile.
+Weighted time-series profiles use the exact reference run lengths to remove
+within-run means before correlation, preserve run variances, and intersect the
+subject validity mask with group support. Incomplete or constant rows remain
+undefined; entirely missing network profiles are unassigned.
 Stale or missing assignment-variant manifest paths fail instead of falling
 back to same-run-dir files.
 

@@ -53,7 +53,8 @@ def test_fc_math_helpers() -> None:
     b = np.array([[1.0, 2.0, 3.0], [1.0, 1.0, 1.0]], dtype=np.float32)
     corr = corrcoef_rows(a, b)
     assert corr.shape == (2, 2)
-    assert np.all(np.isfinite(corr))
+    assert np.all(np.isfinite(corr[:, 0]))
+    assert np.isnan(corr[:, 1]).all()
     assert corr[0, 0] > 0.99
 
     values = np.arange(12, dtype=np.float32).reshape(4, 3)
@@ -92,3 +93,38 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+
+def test_hippomaps_screenshot_adapter_handles_supported_plotter_results(tmp_path):
+    from PIL import Image
+    from lib import hippomaps_adapter
+    for mode in ("none", "path", "figure", "screenshot"):
+        output = tmp_path / f"{mode}.png"
+        def plotter(data, **kwargs):
+            assert data.shape == (2, 1)
+            assert kwargs["cmap"] == "viridis"
+            target = Path(kwargs["filename"])
+            if mode in {"none", "path"}:
+                Image.new("RGB", (4, 3), "red").save(target)
+                return str(target) if mode == "path" else None
+            if mode == "figure":
+                class Figure:
+                    def savefig(self, path, **options):
+                        Image.new("RGB", (4, 3), "green").save(path)
+                return Figure()
+            class Screenshot:
+                def screenshot(self, path):
+                    Image.new("RGB", (4, 3), "blue").save(path)
+            return Screenshot()
+        result = hippomaps_adapter.capture_hippomaps_plot(
+            plotter, np.ones((2, 1)), output_png=output, cmap="viridis")
+        assert result == output
+        assert Image.open(output).size == (4, 3)
+
+
+def test_hippomaps_screenshot_adapter_rejects_missing_render(tmp_path):
+    import pytest
+    from lib import hippomaps_adapter
+    with pytest.raises(TypeError, match="did not create"):
+        hippomaps_adapter.capture_hippomaps_plot(
+            lambda data, **kwargs: None, np.ones((2, 1)), output_png=tmp_path / "missing.png")

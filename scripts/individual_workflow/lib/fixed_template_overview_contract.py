@@ -348,7 +348,7 @@ def preflight_subject_sources(
                 context=f"subject surface sub-{subject} hemi-{hemi}",
             )
             expected_surface_name = (
-                f"sub-{subject}_hemi-{hemi}_space-corobl_den-512_"
+                f"sub-{subject}_hemi-{hemi}_space-T1w_den-512_"
                 "label-hipp_midthickness.surf.gii"
             )
             if surface_path.name != expected_surface_name:

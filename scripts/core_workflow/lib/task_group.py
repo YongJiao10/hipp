@@ -385,7 +385,7 @@ def native_midthickness_surface(
         / "hippunfold"
         / f"sub-{subject_id}"
         / "surf"
-        / f"sub-{subject_id}_hemi-{hemi}_space-corobl_den-512_label-hipp_midthickness.surf.gii"
+        / f"sub-{subject_id}_hemi-{hemi}_space-T1w_den-512_label-hipp_midthickness.surf.gii"
     )
     if not path.is_file():
         raise FileNotFoundError(

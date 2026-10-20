@@ -69,25 +69,12 @@ for p in (CORE_DIR, VIS_LIB_DIR):
     if str(p) not in sys.path:
         sys.path.insert(0, str(p))
 
-import importlib.util
 
 from lib.surface_utils import make_network_label_gifti, render_locked_grid
 
-# Dynamically import heatmap utilities from 06_05
-_HM_PATH = (
-    REPO_ROOT / "scripts" / "core_workflow" / "06_05_render_group_gradient_heatmaps.py"
+from lib.workbench_scene_batch import (
+    save_shape_gii, build_scene_root, capture_scene_root as _capture_scene_root,
 )
-_HM_SPEC = importlib.util.spec_from_file_location("heatmaps_06_05", _HM_PATH)
-if _HM_SPEC is None or _HM_SPEC.loader is None:
-    raise ImportError(f"Cannot load {_HM_PATH}")
-_HM = importlib.util.module_from_spec(_HM_SPEC)
-sys.modules[_HM_SPEC.name] = _HM
-_HM_SPEC.loader.exec_module(_HM)
-
-save_shape_gii = _HM.save_shape_gii
-apply_metric_palette = _HM.apply_metric_palette
-build_scene_root = _HM.build_scene_root
-_capture_scene_root = _HM._capture_scene_root
 
 # Canonical Paths
 DEFAULT_36P_ROOT = (
@@ -579,7 +566,7 @@ def native_midthickness_path(
         / "hippunfold"
         / subject
         / "surf"
-        / f"{subject}_hemi-{hemi}_space-corobl_den-512_label-hipp_midthickness.surf.gii"
+        / f"{subject}_hemi-{hemi}_space-T1w_den-512_label-hipp_midthickness.surf.gii"
     )
 
 
@@ -626,9 +613,10 @@ def wb_vertex_areas(
         raise FileNotFoundError(f"Missing wb_command for native area: {wb}")
     if not surface_path.is_file():
         raise FileNotFoundError(f"Missing native midthickness surface: {surface_path}")
-    with tempfile.NamedTemporaryFile(suffix=".shape.gii", delete=False) as tmp:
-        metric_path = Path(tmp.name)
-    try:
+    scratch = REPO_ROOT / "tmp"
+    scratch.mkdir(exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="native_vertex_areas_", dir=scratch) as temporary:
+        metric_path = Path(temporary) / "areas.shape.gii"
         subprocess.run(
             [str(wb), "-surface-vertex-areas", str(surface_path), str(metric_path)],
             check=True,
@@ -636,11 +624,6 @@ def wb_vertex_areas(
         expected = np.asarray(
             nib.load(str(metric_path)).darrays[0].data, dtype=np.float64
         ).reshape(-1)
-    finally:
-        try:
-            metric_path.unlink()
-        except OSError:
-            pass
     if expected.shape != (512,):
         raise ValueError(f"wb_command returned shape {expected.shape}: {surface_path}")
     actual = numpy_vertex_areas(surface_path)

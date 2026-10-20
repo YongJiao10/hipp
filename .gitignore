@@ -1,5 +1,5 @@
 # GitHub tracks source, documentation, configuration and tests.
-# Generated data and result files remain local. See docs/github_sync.md.
+# Generated data and result files remain local.
 *
 !*/
 !.gitignore
@@ -41,6 +41,7 @@
 
 # Local datasets, products, dependencies, archives and agent state.
 /outputs*/
+/wrong/
 /present*/
 /data/
 /external/

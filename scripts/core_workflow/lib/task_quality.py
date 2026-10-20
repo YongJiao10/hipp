@@ -67,7 +67,7 @@ def require_task_surface_validity(surface_root: Path, subject: str, hemi: str, t
 
 
 REST_VALIDITY_POLICY = REST_POLICY
-QC_DATASETS = ("hcp", "stanford", "iowa_jj_tms", "iowa7t")
+QC_DATASETS = ("hcp", "stanford", "iowa_jj_tms", "iowa7t", "banda", "pdc")
 
 def signal_validity_policy(dataset: str, task: str) -> str:
     if dataset not in QC_DATASETS:
@@ -88,3 +88,65 @@ def rest_signal_validity(data: np.ndarray) -> np.ndarray:
     valid = np.zeros(values.shape[0], dtype=bool)
     valid[finite] = np.max(values[finite], axis=1) > np.min(values[finite], axis=1)
     return valid
+
+
+def require_cortex_reference_policy(
+    ref_dir: Path, *, dataset: str, task: str | None = None,
+) -> dict:
+    """Require one declared cortex QC policy before consuming a reference."""
+    from .task_design import normalize_task_branch
+
+    def read(path: Path) -> dict:
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(payload, dict):
+                raise ValueError("expected a JSON object")
+            return payload
+        except (OSError, ValueError) as exc:
+            raise ValueError(f"Rebuild cortex reference: missing or malformed policy metadata at {path}: {exc}") from exc
+
+    def require(payload: dict, path: Path, key: str, expected: object) -> None:
+        if key not in payload or payload[key] != expected:
+            raise ValueError(
+                f"Rebuild cortex reference: {path}: {key}={payload.get(key)!r}, expected {expected!r}"
+            )
+
+    def cutoff(payload: dict, path: Path, key: str) -> float | None:
+        if key not in payload:
+            raise ValueError(f"Rebuild cortex reference: missing {key} at {path}")
+        try:
+            return parse_tsnr_threshold(payload[key])
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"Rebuild cortex reference: invalid {key} at {path}: {exc}") from exc
+
+    ref_dir = Path(ref_dir)
+    summary_path = ref_dir / "reference_summary.json"
+    summary = read(summary_path)
+    declared_task = summary.get("task")
+    if not isinstance(declared_task, str):
+        raise ValueError(f"Rebuild cortex reference: missing task at {summary_path}")
+    selected_task = task if task is not None else declared_task
+    try:
+        selected_task = normalize_task_branch(selected_task) if selected_task != "rest" else "rest"
+        policy = signal_validity_policy(dataset, selected_task)
+    except ValueError as exc:
+        raise ValueError(f"Rebuild cortex reference: invalid dataset/task policy at {summary_path}: {exc}") from exc
+    for key, expected in (("dataset", dataset), ("task", selected_task), ("validity_policy", policy)):
+        require(summary, summary_path, key, expected)
+    threshold = cutoff(summary, summary_path, "tsnr_threshold")
+    for side in ("left", "right"):
+        gate_path = ref_dir.parent / "common" / "tsnr_gate" / f"cortex_{side}_tsnr_gate_summary.json"
+        gate = read(gate_path)
+        for key, expected in (("dataset", dataset), ("task", selected_task), ("validity_policy", policy)):
+            require(gate, gate_path, key, expected)
+        gate_threshold = cutoff(gate, gate_path, "threshold")
+        if gate_threshold != threshold:
+            raise ValueError(
+                f"Rebuild cortex reference: {gate_path}: threshold={gate_threshold!r}, "
+                f"reference tsnr_threshold={threshold!r} at {summary_path}"
+            )
+        if dataset != "hcp" and selected_task == "rest" and threshold is not None:
+            baseline = gate.get("baseline_input")
+            if not isinstance(baseline, str) or not baseline:
+                raise ValueError(f"Rebuild cortex reference: missing baseline_input at {gate_path}")
+    return summary

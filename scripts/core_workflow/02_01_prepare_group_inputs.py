@@ -51,6 +51,7 @@ from lib.surface_sampling import (
     sample_hipp_surface_run_timeseries,
     sample_hipp_surface_timeseries,
 )
+from lib.surface_coordinates import dataset_registration, require_registered_sampling
 from lib.io_utils import (
     build_run_level_input_summary,
     load_run_artifact_manifest,
@@ -139,26 +140,62 @@ def dice_pass_subjects(batch_root: Path, subjects: list[str], threshold: float) 
 
 def raw_done(shared_root: Path, subject: str) -> bool:
     raw_dir = shared_root / f"sub-{subject}" / "surface" / "raw"
+    summary = raw_dir / 'surface_sampling_summary.json'
+    if summary.is_file():
+        require_registered_sampling(json.loads(summary.read_text()), context=summary)
     return all(
-        (raw_dir / f"sub-{subject}_hemi-{hemi}_space-corobl_den-512_label-hipp_bold.func.gii").exists()
+        (raw_dir / f"sub-{subject}_hemi-{hemi}_space-T1w_den-512_label-hipp_bold.func.gii").exists()
         for hemi in HEMIS
     ) and (raw_dir / "surface_sampling_summary.json").exists()
 
 
-def tsnr_done(shared_root: Path, subject: str, dataset: str = "hcp") -> bool:
-    gate_dir = shared_root / f"sub-{subject}" / "surface" / "tsnr_gate"
-    if dataset != "hcp":
-        policy = signal_validity_policy(dataset, "rest")
-        for hemi in HEMIS:
-            summary = gate_dir / f"sub-{subject}_hemi-{hemi}_tsnr_gate_summary.json"
-            if not summary.is_file():
-                return False
-            if json.loads(summary.read_text()).get("validity_policy") != policy:
-                return False
-    return all(
-        (gate_dir / f"sub-{subject}_hemi-{hemi}_tsnr_gate_summary.json").exists()
-        for hemi in HEMIS
+def _recorded_files_current(records: list[dict[str, object]]) -> bool:
+    return bool(records) and all(
+        Path(record["path"]).is_file() and file_meta(Path(record["path"])) == record
+        for record in records
     )
+
+
+def tsnr_done(shared_root: Path, subject: str, dataset: str = "hcp", *,
+              task: str = "rest", tsnr_threshold: str = "25",
+              tsnr_input_template: str | None = None) -> bool:
+    from lib.task_quality import parse_tsnr_threshold
+    cutoff = parse_tsnr_threshold(tsnr_threshold)
+    policy = signal_validity_policy(dataset, task)
+    gate_dir = shared_root / f"sub-{subject}" / "surface" / "tsnr_gate"
+    for hemi in HEMIS:
+        summary_path = gate_dir / f"sub-{subject}_hemi-{hemi}_tsnr_gate_summary.json"
+        stage_path = gate_dir / f"hemi-{hemi}/stage_manifest.json"
+        if not summary_path.is_file():
+            return False
+        summary = json.loads(summary_path.read_text())
+        if summary.get('sampling_space') != 'MNI152NLin6Asym':
+            raise ValueError(f'QC cache lacks registered sampling coordinates: {summary_path}; rebuild raw and QC with --no-resume')
+        expected = {"threshold": cutoff, "dataset": dataset, "task": task,
+                    "validity_policy": policy}
+        if any(summary.get(key) != value for key, value in expected.items()):
+            return False
+        baseline = None
+        if task == "rest" and dataset != "hcp":
+            if tsnr_input_template is None:
+                return False
+            baseline = Path(tsnr_input_template.format(subject=subject, hemi=hemi)).resolve()
+            if summary.get("baseline_input") is None or Path(summary["baseline_input"]).resolve() != baseline:
+                return False
+        if not stage_path.is_file():
+            return False
+        stage = json.loads(stage_path.read_text())
+        recorded_inputs = stage.get("inputs", [])
+        if baseline is not None and str(baseline) not in {record["path"] for record in recorded_inputs}:
+            return False
+        suffixes = ["tsnr.npy", "valid_mask.npy", "invalid_initial_mask.npy", "valid_roi.shape.gii"]
+        if policy != "hcp_10000_over_std":
+            suffixes.append("run_tsnr.npy")
+        if not all((gate_dir / f"sub-{subject}_hemi-{hemi}_{suffix}").is_file() for suffix in suffixes):
+            return False
+        if not _recorded_files_current(recorded_inputs) or not _recorded_files_current(stage.get("outputs", [])):
+            return False
+    return True
 
 
 def make_func_gifti(data: np.ndarray) -> GiftiImage:
@@ -183,6 +220,8 @@ def run_raw_sampling(
     run_artifact_manifest_template: str | None = None,
     task: str = "rest",
     task_manifest_root: str | None = None,
+    dataset: str = 'hcp',
+    registration_root: str | None = None,
 ) -> dict[str, object]:
     batch = Path(batch_root)
     shared = Path(shared_root)
@@ -265,7 +304,8 @@ def run_raw_sampling(
                 subject=subject,
                 density="512",
                 outdir=out_dir,
-                space="corobl",
+                space="T1w",
+                registration=dataset_registration(dataset, subject, root=Path(registration_root) if registration_root else None),
                 mapping_method="trilinear",
                 smooth_iters=0,
             )
@@ -311,7 +351,8 @@ def run_raw_sampling(
                 subject=subject,
                 density="512",
                 outdir=out_dir,
-                space="corobl",
+                space="T1w",
+                registration=dataset_registration(dataset, subject, root=Path(registration_root) if registration_root else None),
                 mapping_method="trilinear",
                 smooth_iters=0,
             )
@@ -322,7 +363,7 @@ def run_raw_sampling(
     if surface_data is not None:
         for hemi in HEMIS:
             data = surface_data[hemi]
-            out_gii = out_dir / f"sub-{subject}_hemi-{hemi}_space-corobl_den-512_label-hipp_bold.func.gii"
+            out_gii = out_dir / f"sub-{subject}_hemi-{hemi}_space-T1w_den-512_label-hipp_bold.func.gii"
             np.save(out_dir / f"sub-{subject}_hemi-{hemi}_timeseries.npy", data.astype(np.float32))
             nib.save(make_func_gifti(data), str(out_gii))
     log_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
@@ -365,14 +406,14 @@ def make_shape_gifti(data: np.ndarray) -> GiftiImage:
     )
 
 
-def surface_path(batch_root: Path, subject: str, hemi: str) -> Path:
+def surface_path(batch_root: Path, subject: str, hemi: str, *, space: str = 'T1w') -> Path:
     return (
         batch_root
         / f"sub-{subject}"
         / "hippunfold"
         / f"sub-{subject}"
         / "surf"
-        / f"sub-{subject}_hemi-{hemi}_space-corobl_den-512_label-hipp_midthickness.surf.gii"
+        / f"sub-{subject}_hemi-{hemi}_space-{space}_den-512_label-hipp_midthickness.surf.gii"
     )
 
 
@@ -397,9 +438,10 @@ def run_tsnr_gate(subject: str, batch_root: str, shared_root: str, task: str = "
         if not run_lengths or any(n != TASK_RUN_LENGTHS[task] for n in run_lengths):
             raise ValueError(f"Invalid {task} run lengths at {sampling_path}: {run_lengths}")
     for hemi in HEMIS:
-        raw = shared / f"sub-{subject}" / "surface" / "raw" / f"sub-{subject}_hemi-{hemi}_space-corobl_den-512_label-hipp_bold.func.gii"
+        raw = shared / f"sub-{subject}" / "surface" / "raw" / f"sub-{subject}_hemi-{hemi}_space-T1w_den-512_label-hipp_bold.func.gii"
         surf = surface_path(batch, subject, hemi)
         data = load_func_gii(raw).astype(np.float64)
+        hemi_inputs = [file_meta(raw), file_meta(surf)]
         if policy == "hcp_10000_over_std":
             sd = np.nanstd(data, axis=1, ddof=1)
             tsnr = np.where(sd > 0, 10000.0 / sd, np.nan).astype(np.float32)
@@ -410,10 +452,11 @@ def run_tsnr_gate(subject: str, batch_root: str, shared_root: str, task: str = "
                 raise ValueError(f"{dataset} tSNR requires --tsnr-input-template with baseline-preserving per-run samples and retained frames")
             qc_path = Path(tsnr_input_template.format(subject=subject, hemi=hemi))
             run_tsnr, valid = rest_tsnr_input(qc_path, dataset=dataset, subject=subject, hemi=hemi, n_vertices=data.shape[0], n_frames=data.shape[1], threshold=cutoff)
-            valid &= rest_signal_validity(data)
-            inputs.append(file_meta(qc_path))
+            hemi_inputs.append(file_meta(qc_path))
         else:
             run_tsnr, valid = task_tsnr(data, run_lengths, sampling["bold_inputs"], task=task, threshold=cutoff)
+        if task == "rest":
+            valid &= rest_signal_validity(data)
         if policy != "hcp_10000_over_std":
             tsnr = np.min(run_tsnr, axis=0)
             np.save(gate_dir / f"sub-{subject}_hemi-{hemi}_tsnr.npy", tsnr)
@@ -430,6 +473,7 @@ def run_tsnr_gate(subject: str, batch_root: str, shared_root: str, task: str = "
             "task": task,
             "validity_policy": policy,
             "dataset": dataset,
+            "sampling_space": "MNI152NLin6Asym",
             "tsnr_computed": cutoff is not None,
             "baseline_input": str(qc_path) if task == "rest" and dataset != "hcp" else None,
             "run_lengths": run_lengths,
@@ -449,7 +493,7 @@ def run_tsnr_gate(subject: str, batch_root: str, shared_root: str, task: str = "
                 "timestamp_utc": utc_now_iso(),
                 "git_commit": git_commit(),
                 "params": {key: summary[key] for key in ("subject", "hemi", "threshold", "tsnr_definition", "task", "dataset", "validity_policy", "run_lengths")},
-                "inputs": [file_meta(raw), file_meta(surf)],
+                "inputs": hemi_inputs,
                 "outputs": [
                     file_meta(gate_dir / f"sub-{subject}_hemi-{hemi}_tsnr.npy"),
                     file_meta(gate_dir / f"sub-{subject}_hemi-{hemi}_valid_mask.npy"),
@@ -459,7 +503,7 @@ def run_tsnr_gate(subject: str, batch_root: str, shared_root: str, task: str = "
                 ],
             },
         )
-        inputs.extend([file_meta(raw), file_meta(surf)])
+        inputs.extend(hemi_inputs)
         suffixes = ["valid_mask.npy", "invalid_initial_mask.npy", "valid_roi.shape.gii", "tsnr_gate_summary.json"]
         suffixes.append("tsnr.npy")
         if policy != "hcp_10000_over_std":
@@ -468,19 +512,35 @@ def run_tsnr_gate(subject: str, batch_root: str, shared_root: str, task: str = "
     return {"subject": subject, "ok": True, "stage": "tsnr_gate", "inputs": inputs, "outputs": outputs}
 
 
-def smoothing_done(shared_root: Path, subject: str, dataset: str = "hcp") -> bool:
-    if dataset != "hcp":
-        stage = shared_root / f"sub-{subject}" / "surface" / "stage_manifest.json"
-        if not stage.is_file():
+def smoothing_done(shared_root: Path, subject: str, dataset: str = "hcp", *, task: str = "rest") -> bool:
+    surface = shared_root / f'sub-{subject}/surface'
+    stage_path = surface / 'stage_manifest.json'
+    if not stage_path.is_file():
+        return False
+    stage = json.loads(stage_path.read_text())
+    params = stage.get('params', {})
+    if params.get('smoothing_space') != 'T1w':
+        raise ValueError(f'Smoothing cache lacks native T1w geometry: {stage_path}; rebuild smoothing with --no-resume')
+    expected = {"dataset": dataset, "task": task, "validity_policy": signal_validity_policy(dataset, task)}
+    if any(params.get(key) != value for key, value in expected.items()):
+        return False
+    thresholds = {}
+    for hemi in HEMIS:
+        summary_path = surface / f'tsnr_gate/sub-{subject}_hemi-{hemi}_tsnr_gate_summary.json'
+        if not summary_path.is_file():
             return False
-        if json.loads(stage.read_text()).get("params", {}).get("validity_policy") != signal_validity_policy(dataset, "rest"):
+        gate = json.loads(summary_path.read_text())
+        if any(gate.get(key) != value for key, value in expected.items()):
             return False
+        thresholds[hemi] = gate['threshold']
+    if params.get('tsnr_thresholds') != thresholds:
+        return False
     for smoothing in SMOOTHINGS:
         for hemi in HEMIS:
-            p = shared_root / f"sub-{subject}" / "surface" / smoothing / f"sub-{subject}_hemi-{hemi}_timeseries.npy"
-            if not p.exists():
+            if not (surface / smoothing / f"sub-{subject}_hemi-{hemi}_timeseries.npy").is_file():
                 return False
-    return True
+    return (_recorded_files_current(stage.get('inputs', []))
+            and _recorded_files_current(stage.get('outputs', [])))
 
 
 def run_smoothing(subject: str, batch_root: str, shared_root: str, task: str = "rest", dataset: str = "hcp") -> dict[str, object]:
@@ -489,6 +549,7 @@ def run_smoothing(subject: str, batch_root: str, shared_root: str, task: str = "
     shared = Path(shared_root)
     inputs: list[dict[str, object]] = []
     outputs: list[dict[str, object]] = []
+    thresholds: dict[str, float | None] = {}
     # Thread caps are enforced centrally by lib.workbench.run_workbench.
     _wb_env = {}
     for smoothing in SMOOTHINGS:
@@ -496,15 +557,15 @@ def run_smoothing(subject: str, batch_root: str, shared_root: str, task: str = "
         out_dir = shared / f"sub-{subject}" / "surface" / smoothing
         out_dir.mkdir(parents=True, exist_ok=True)
         for hemi in HEMIS:
-            raw = shared / f"sub-{subject}" / "surface" / "raw" / f"sub-{subject}_hemi-{hemi}_space-corobl_den-512_label-hipp_bold.func.gii"
+            raw = shared / f"sub-{subject}" / "surface" / "raw" / f"sub-{subject}_hemi-{hemi}_space-T1w_den-512_label-hipp_bold.func.gii"
             roi = shared / f"sub-{subject}" / "surface" / "tsnr_gate" / f"sub-{subject}_hemi-{hemi}_valid_roi.shape.gii"
-            if policy != "hcp_10000_over_std":
-                gate_summary = roi.parent / f"sub-{subject}_hemi-{hemi}_tsnr_gate_summary.json"
-                gate = json.loads(gate_summary.read_text(encoding="utf-8"))
-                if gate.get("validity_policy") != policy or gate.get("task") != task:
-                    raise ValueError(f"Rebuild {dataset}/{task} gate with policy={policy}: {gate_summary}")
+            gate_summary = roi.parent / f"sub-{subject}_hemi-{hemi}_tsnr_gate_summary.json"
+            gate = json.loads(gate_summary.read_text(encoding="utf-8"))
+            if gate.get("validity_policy") != policy or gate.get("task") != task or gate.get("dataset") != dataset:
+                raise ValueError(f"Rebuild {dataset}/{task} gate with policy={policy}: {gate_summary}")
+            thresholds[hemi] = gate["threshold"]
             surf = surface_path(batch, subject, hemi)
-            out_gii = out_dir / f"sub-{subject}_hemi-{hemi}_space-corobl_den-512_label-hipp_bold.func.gii"
+            out_gii = out_dir / f"sub-{subject}_hemi-{hemi}_space-T1w_den-512_label-hipp_bold.func.gii"
             cmd = [
                 "-metric-smoothing",
                 str(surf),
@@ -531,8 +592,10 @@ def run_smoothing(subject: str, batch_root: str, shared_root: str, task: str = "
             "timestamp_utc": utc_now_iso(),
             "git_commit": git_commit(),
             "params": {"subject": subject, "smoothings": SMOOTHINGS, "task": task,
+                       "smoothing_space": "T1w",
                        "validity_policy": policy,
                        "dataset": dataset,
+                       "tsnr_thresholds": thresholds,
                        "smoothing_roi_policy": "high_tsnr_vertices_only" if policy == "hcp_10000_over_std" else policy},
             "inputs": inputs,
             "outputs": outputs,
@@ -587,7 +650,7 @@ def build_group_average_surfaces(batch_root: Path, template_root: Path, subjects
         coords_all: list[np.ndarray] = []
         ref_faces: np.ndarray | None = None
         for subject in subjects:
-            p = surface_path(batch_root, subject, hemi)
+            p = surface_path(batch_root, subject, hemi, space='corobl')
             coords, faces = load_surface(p)
             if ref_faces is None:
                 ref_faces = faces
@@ -680,6 +743,7 @@ def main() -> int:
         help="Root holding task-<task>/sub-<subject>.json run-artifact manifests.",
     )
     parser.add_argument("--dataset", choices=QC_DATASETS, default="hcp", help="Select dataset-specific tSNR inputs and definition.")
+    parser.add_argument('--registration-root', help='Explicit Jianglab storage prefix for registration inputs; defaults to the active system prefix.')
     parser.add_argument(
         "--tsnr-threshold",
         default="25",
@@ -762,35 +826,31 @@ def main() -> int:
             args.run_artifact_manifest_template,
             args.task,
             args.task_manifest_root,
+            args.dataset,
+            args.registration_root,
         )
     if args.stage in {"all", "tsnr"}:
-        tsnr_todo = [s for s in dice_subjects if not (args.resume and args.task == "rest" and tsnr_done(shared_root, s, args.dataset))]
+        tsnr_todo = [s for s in dice_subjects if not (args.resume and args.task == "rest" and tsnr_done(shared_root, s, args.dataset, task=args.task, tsnr_threshold=args.tsnr_threshold, tsnr_input_template=args.tsnr_input_template))]
         print(f"[info] tsnr gate todo={len(tsnr_todo)}", flush=True)
         run_parallel("tsnr", tsnr_todo, jobs, run_tsnr_gate, str(batch_root), str(shared_root), args.task, args.dataset, args.tsnr_input_template, str(args.tsnr_threshold))
     manifest_path = route_root / "manifests" / "hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt"
     if args.stage in {"all", "qc"}:
-        if args.resume and args.task == "rest" and args.dataset == "hcp" and manifest_path.exists():
-            print("[info] qc manifest exists, skipping", flush=True)
-        else:
-            cmd = [
-                sys.executable,
-                str(QC_SCRIPT),
-                "--hippunfold-batch-root",
-                str(batch_root),
-                "--shared-root",
-                str(shared_root),
-                "--out-dir",
-                str(route_root / "qc"),
-                "--manifest-dir",
-                str(route_root / "manifests"),
-            ]
-            cmd.extend(["--subjects", *subjects])
-            proc = subprocess.run(cmd, text=True)
-            if proc.returncode != 0:
-                return proc.returncode
+        cmd = [
+            sys.executable,
+            str(QC_SCRIPT),
+            "--hippunfold-batch-root", str(batch_root),
+            "--shared-root", str(shared_root),
+            "--out-dir", str(route_root / "qc"),
+            "--manifest-dir", str(route_root / "manifests"),
+            "--dice-threshold", str(args.dice_threshold),
+            "--subjects", *subjects,
+        ]
+        proc = subprocess.run(cmd, text=True)
+        if proc.returncode != 0:
+            return proc.returncode
     pass_subjects = read_latest_manifest(route_root) if manifest_path.exists() else []
     if args.stage in {"all", "smooth"}:
-        smooth_todo = [s for s in pass_subjects if not (args.resume and args.task == "rest" and smoothing_done(shared_root, s, args.dataset))]
+        smooth_todo = [s for s in pass_subjects if not (args.resume and args.task == "rest" and smoothing_done(shared_root, s, args.dataset, task=args.task))]
         print(f"[info] smoothing pass_subjects={len(pass_subjects)} todo={len(smooth_todo)}", flush=True)
         run_parallel("smooth", smooth_todo, workbench_jobs, run_smoothing, str(batch_root), str(shared_root), args.task, args.dataset)
     if args.stage in {"all", "group-average"}:

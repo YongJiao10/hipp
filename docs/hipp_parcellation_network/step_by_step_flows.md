@@ -38,7 +38,14 @@ only `sub-<id>/hippunfold/sub-<id>` payloads in the explicitly selected
 2. `02_02_build_qc_manifest.py`
 3. `02_03_build_lynch2024_nsi_manifest.py` for the Lynch2024 all-base-subject comparison cohort and NSI audit table
 
-`02_01` derives shared surfaces, tSNR summaries, and group-average templates from validated HippUnfold outputs. `02_02` combines HippUnfold Dice and tSNR gate summaries into the pinned 151-subject QC-pass cohort manifest. `02_03` reads an NSI TSV/CSV containing `subject,nsi`, normalizes `sub-` prefixes, includes every subject from that base manifest, and writes `hcp_7t_lynch2024_pass_151.txt`, `hcp_7t_lynch2024_nsi_audit_151.tsv`, and the run manifest under `outputs_hcp/inputs/hcp/lynch2024_fast_pfm_t1only/manifests/`. NSI is audit metadata only; there is no NSI threshold or expected-count gate.
+`02_01` derives shared signals, tSNR summaries, and display templates from validated HippUnfold outputs. Native T1w vertices are registered to MNI152NLin6Asym before volume sampling; the mapped surfaces are saved in `surface/raw/sampling_surfaces/`. Metrics use `space-T1w` filenames and retain the original vertex numbering. The native T1w mesh defines 2/4-mm smoothing, physical cortical-neighbour distances and subject-level vertex areas; corobl group-average surfaces serve display and vertex correspondence. Dataset registration is selected by `--dataset`, with an optional explicit `--registration-root` Jianglab prefix. Existing corobl raw-cache summaries fail resume. `02_02` combines HippUnfold Dice and tSNR gate summaries into the selected cohort manifest; the quarantined HCP151 decisions must be recomputed from registered signals before downstream execution. `02_03` reads an NSI TSV/CSV containing `subject,nsi`, normalizes `sub-` prefixes, includes every subject from that base manifest, and writes `hcp_7t_lynch2024_pass_151.txt`, `hcp_7t_lynch2024_nsi_audit_151.tsv`, and the run manifest under `outputs_hcp/inputs/hcp/lynch2024_fast_pfm_t1only/manifests/`. NSI is audit metadata only; there is no NSI threshold or expected-count gate.
+
+`04_00` and `04_01 --ctxdrop` take `--cortex-coordinate-space`. The default
+`MNI152NLin6Asym` denotes the HCP MSMAll cortical surfaces; their coordinates
+are transformed to native T1w with the subject's FNIRT image pullback before
+distance queries. Caller-selected fMRIPrep native cortical meshes require
+`--cortex-coordinate-space T1w`. fsLR denotes vertex correspondence and does
+not itself specify the physical coordinate frame.
 
 ```bash
 /home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/02_03_build_lynch2024_nsi_manifest.py --base-subjects-manifest outputs_hcp/inputs/hcp/kong2022/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt --nsi-tsv <path/to/nsi.tsv>
@@ -48,7 +55,7 @@ only `sub-<id>/hippunfold/sub-<id>` payloads in the explicitly selected
 
 - `03_01_build_kong2022_reference.py` for shared Kong2022 branch usage
 - RouteA ArealMSHBM individualized cortex label generation on Argon; this is an external-backend artifact prerequisite documented in `core_workflow_artifact_lineage.md`, not a local numbered entrypoint
-- `03_02_build_kong2022_routea_reference.py` for RouteA-specific reference source, including compact 17-net summaries used by `kong2022_routea_17net`, consuming the generated RouteA label files above
+- `03_02_build_kong2022_routea_reference.py --dataset hcp` for RouteA-specific reference source, including compact 17-net summaries used by `kong2022_routea_17net`, consuming the generated RouteA label files above
 - `03_04_run_lynch2024_fastans_pfm.py` for official FASTANS Lynch2024 hard-label PFM generation from local FASTANS priors and Workbench
 - `03_03_build_lynch2024_reference.py` for hard-label Lynch2024 component references, exact Lynch20 summaries containing 20 unique networks after excluding `Noise`, and canonical7 merged summaries from `config/cross_atlas_network_merge.json`
 
@@ -60,9 +67,9 @@ only `sub-<id>/hippunfold/sub-<id>` payloads in the explicitly selected
 ## 4. Hippocampal Time-Series Control and FC Materialization
 
 1. `04_00_materialize_cortex_regressed_surface_timeseries.py` for the isolated `kong2022_routea_ctxreg` branch
-2. `04_01_materialize_kong2022_roi_fc.py --ctxdrop` for the isolated `kong2022_routea_ctxdrop` branch
-3. `04_01_materialize_kong2022_roi_fc.py`
-4. `04_01_materialize_kong2022_roi_fc.py --atlas lynch2024_20net` and `--atlas lynch2024_7net` for Lynch2024 ROI/component FC caches
+2. `04_01_materialize_kong2022_roi_fc.py --dataset hcp --ctxdrop` for the isolated `kong2022_routea_ctxdrop` branch
+3. `04_01_materialize_kong2022_roi_fc.py --dataset hcp`
+4. `04_01_materialize_kong2022_roi_fc.py --dataset hcp --atlas lynch2024_20net` and `--atlas lynch2024_7net` for Lynch2024 ROI/component FC caches
 5. `04_02_materialize_intrinsic_fc.py`
 6. `04_03_materialize_kong2019_fc.py` (Kong2019 branch only)
 
@@ -70,11 +77,13 @@ only `sub-<id>/hippunfold/sub-<id>` payloads in the explicitly selected
 
 `04_01 --ctxdrop` keeps hippocampal time series unchanged, reloads cortex dtseries plus RouteA individualized Kong2022 labels, and for each hippocampal vertex excludes valid cortex vertices within 20 mm before computing the target ROI mean time series. It writes standard Kong2022 FC cache filenames and stores smoothing-independent local cortex-neighbor diagnostics under `outputs_hcp/inputs/hcp/kong2022/shared_inputs/routea_ctxdrop/sub-*/surface/local_cortex_neighbors/hemi_*/`. The maintained ctxdrop downstream scope is `gradient-spectral` and `wta-top`.
 
+All pooled FC removes each declared run mean at computation time, while stored baselines and run variances are preserved. Empty Kong2022 parcels retain all 400 ordered rows as NaN. Kong2022 FC consumers require matching dataset/task/QC policy and cutoff in the selected reference and both cortex gate summaries. Run IDs and lengths come from the exact reference summary or a caller-selected metadata file; historical untyped references must be rebuilt.
+
 Lynch2024 FC materialization reuses the existing `04_01` implementation with `--atlas`; run it once per Lynch atlas slug so downstream route validators never fall back to Kong2022 paths:
 
 ```bash
-/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/04_01_materialize_kong2022_roi_fc.py --shared-root outputs_hcp/inputs/hcp/lynch2024_fast_pfm_t1only/shared_inputs/pfm_hcp151 --surface-root outputs_hcp/inputs/hcp/kong2022/shared_inputs/surface --reference-root outputs_hcp/inputs/hcp/lynch2024_fast_pfm_t1only/shared_inputs/pfm_hcp151 --mask-root outputs_hcp/inputs/hcp/kong2022/shared_inputs/surface --subjects-manifest outputs_hcp/inputs/hcp/lynch2024_fast_pfm_t1only/manifests/hcp_7t_lynch2024_pass_151.txt --atlas lynch2024_20net
-/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/04_01_materialize_kong2022_roi_fc.py --shared-root outputs_hcp/inputs/hcp/lynch2024_fast_pfm_t1only/shared_inputs/pfm_hcp151 --surface-root outputs_hcp/inputs/hcp/kong2022/shared_inputs/surface --reference-root outputs_hcp/inputs/hcp/lynch2024_fast_pfm_t1only/shared_inputs/pfm_hcp151 --mask-root outputs_hcp/inputs/hcp/kong2022/shared_inputs/surface --subjects-manifest outputs_hcp/inputs/hcp/lynch2024_fast_pfm_t1only/manifests/hcp_7t_lynch2024_pass_151.txt --atlas lynch2024_7net
+/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/04_01_materialize_kong2022_roi_fc.py --dataset hcp --shared-root outputs_hcp/inputs/hcp/lynch2024_fast_pfm_t1only/shared_inputs/pfm_hcp151 --surface-root outputs_hcp/inputs/hcp/kong2022/shared_inputs/surface --reference-root outputs_hcp/inputs/hcp/lynch2024_fast_pfm_t1only/shared_inputs/pfm_hcp151 --mask-root outputs_hcp/inputs/hcp/kong2022/shared_inputs/surface --subjects-manifest outputs_hcp/inputs/hcp/lynch2024_fast_pfm_t1only/manifests/hcp_7t_lynch2024_pass_151.txt --atlas lynch2024_20net
+/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/04_01_materialize_kong2022_roi_fc.py --dataset hcp --shared-root outputs_hcp/inputs/hcp/lynch2024_fast_pfm_t1only/shared_inputs/pfm_hcp151 --surface-root outputs_hcp/inputs/hcp/kong2022/shared_inputs/surface --reference-root outputs_hcp/inputs/hcp/lynch2024_fast_pfm_t1only/shared_inputs/pfm_hcp151 --mask-root outputs_hcp/inputs/hcp/kong2022/shared_inputs/surface --subjects-manifest outputs_hcp/inputs/hcp/lynch2024_fast_pfm_t1only/manifests/hcp_7t_lynch2024_pass_151.txt --atlas lynch2024_7net
 ```
 
 ## 5. Group Atlas Construction

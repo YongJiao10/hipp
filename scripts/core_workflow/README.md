@@ -13,6 +13,24 @@ Formal reference input contracts:
 - `02_01_prepare_group_inputs.py` uses the same artifact manifest template for
   exact BOLD/dtseries pairing and validates both modalities before creating
   surface outputs.
+  Sampling starts from native `space-T1w_den-512` meshes, transforms their
+  vertices into the declared MNI152NLin6Asym BOLD space, and saves those meshes
+  under `surface/raw/sampling_surfaces/`. The core workflow, Iowa7T and
+  JJ_TMS use trilinear BOLD interpolation; JJ_TMS and the core workflow share
+  `lib.surface_sampling.sample_volume_to_surface`. Raw and smoothed metrics use
+  `space-T1w` filenames because their vertices belong to the native mesh.
+  Millimetre smoothing, cortical-neighbour distances and subject vertex areas
+  use native T1w geometry. Corobl meshes remain available for display.
+  For `04_00` and `04_01 --ctxdrop`, the HCP default cortical meshes are MNI
+  and are transformed back to native T1w before distance queries; pass
+  `--cortex-coordinate-space T1w` when supplying native fMRIPrep cortical meshes.
+  Select the registration with `--dataset hcp|stanford|banda|pdc|iowa_jj_tms|iowa7t`;
+  `--registration-root` explicitly overrides the system's Jianglab prefix.
+  HCP uses its declared FNIRT warp/source image; BANDA/PDC use the declared
+  FNIRT pair; fMRIPrep datasets use the MNI-to-T1w image composite for ANTs
+  point mapping. An old corobl raw summary causes resume to stop with a rebuild
+  instruction. See `docs/hipp_parcellation_network/step_by_step_flows.md` for
+  the coordinate contract; QC cutoffs are selected independently.
 - `03_04_run_lynch2024_fastans_pfm.py --run-artifact-manifest-template`
   selects one exact per-subject manifest, preserves its declared order, and
   records input paths, run IDs, and receipts. All consumed production inputs
@@ -20,13 +38,47 @@ Formal reference input contracts:
 - `03_03_build_lynch2024_reference.py --run-metadata-template` selects a
   per-subject JSON containing explicit run IDs and lengths, optionally under
   `header_evidence`. Missing IDs, contradictory records, noninteger lengths,
-- Direct CIFTI extractor run mode requires both `--run-artifact-manifest`
-  and explicit `--run-ids`; single-file mode requires
-  `--run-metadata-template`. Missing or mismatched declarations fail before
-  result directories are created.
   and frame-total mismatches fail before reference products are written.
+  It uses the shared `lib.io_utils.load_run_segment_metadata` parser.
   Run IDs, segments and the metadata source are recorded in output manifests.
   The metadata option is required; there is no equal-four-way fallback.
+- Direct CIFTI extractor run mode requires both `--run-artifact-manifest`
+  and matching run inputs; `--run-ids`, when supplied, must match the manifest.
+  Single-file rest input requires `--run-metadata-template`: its run lengths
+  must sum to the CIFTI header's total frames, and its declared partition is
+  retained for QC and run slicing. Task references require run-level CIFTIs
+  and their manifest-declared original BOLD inputs.
+
+Shared implementation boundaries:
+
+- `03_01` and `03_02` call their extraction functions in the same Python
+  process through `ReferenceRequest`. Each worker returns its own success or
+  error; RouteA source-aware resume and explicit artifact selection remain in
+  the batch stage. Both extractors use
+  `lib.kong2022_reference.materialize_reference_timeseries` for ordered
+  400-parcel export and unweighted canonical7/family17 means. RouteA keeps
+  dataset/task-aware QC and individualized labels; RouteB keeps its public
+  dlabel and HCP rest tSNR25 policy.
+  Both RouteB entrypoints default to `shared_inputs/routeb`, separately from
+  RouteA. The callable RouteB extractor rejects unsupported dataset, task,
+  threshold and atlas selections before reading inputs.
+- `04_00` and `04_01` share native hippocampal surface paths, coordinate loading
+  and valid-cortex neighbour queries in `lib.surface_coordinates`. Coordinate
+  registration and the independent coordinate plausibility check remain
+  explicit; this extraction does not change the physical space or 20 mm query.
+- `05_01` and `05_02` use `lib.branch_config.resolve_signal_branch_for_route`
+  for the standard/ctxreg contract. Other atlas routes keep their own identity.
+- `06_03`, `06_09` and `06_10` call
+  `lib.render_cortex_pfm_scene.render_cortex_pfm_scene` directly. Workbench
+  remains an external process; scene paths, view rotations and image sizes
+  are unchanged. `05_03` and `07_01` retain process-level job orchestration.
+- `06_04`, `06_06` and `06_07` share HippoMaps loading, screenshot return-type
+  handling and bilateral image assembly in `lib.hippomaps_adapter`; each stage
+  supplies its own data, colour ranges and annotations.
+- `06_05` is a retired entrypoint that reports its replacement (`06_04`) and
+  exits with code 2. Live hippocampal scene utilities belong to
+  `lib.workbench_scene_batch`; visualization consumers import that library
+  directly. `06_02` remains the independently runnable label materializer.
 
 See [the selective integration record](../../docs/ctxreg_selective_integration.md)
 for scope and deliberately excluded worktree changes.
@@ -136,29 +188,29 @@ The output checker requires fixed L/R midthickness anchors in `space-corobl`,
 `space-T1w`, and `space-unfold` (all `den-512`), plus the surface spec and both
 Dice QC files before a subject can be marked complete or cleaned up.
 
-Each entrypoint executes local implementation code and can emit a standardized traceability manifest:
+The `run_stage` entrypoints (`05_01`, `05_04`, `06_04`, `06_06` and `06_09`)
+accept the wrapper options below before `--`. Stage-specific options follow
+`--`; use `-- --help` for the stage's own argument help. `--dry-run` emits the
+selected wrapper manifest without executing the scientific stage. Other steps
+write their own stage manifests and expose their own CLI options.
 
 ```bash
-/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/05_02_run_group_atlas.py \
+/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/05_04_compute_confidence_maps.py \
   --workflow-branch kong2022_routea \
-  --upstream-step-id 04_01_materialize_kong2022_roi_fc \
-  --upstream-step-id 04_02_materialize_intrinsic_fc \
-  --input-artifact outputs_hcp/inputs/hcp/kong2022/shared_inputs/routea \
-  --output-artifact outputs_hcp/work/group_atlas/routea_full_k3_fisherz \
-  --step-manifest-out manifests/core_workflow/05_02_run_group_atlas.json \
-  -- --methods intrinsic-spectral network-spectral gradient-spectral wta-top \
-  --gradient-root outputs_hcp/smoke_runs/<run_id>/gradients
+  --upstream-step-id 05_02_run_group_atlas \
+  --step-manifest-out tmp/confidence_stage.json \
+  --dry-run
 ```
 
 RouteA reference construction has a required algorithmic upstream artifact: subject-level Kong2022 ArealMSHBM labels generated by the Argon backend before `03_02_build_kong2022_routea_reference.py`. The artifact-level contract, including the flat subject label paths and required evidence, is maintained in `docs/hipp_parcellation_network/core_workflow_artifact_lineage.md`.
 
 For the RouteA cortex-control branch, run `04_00_materialize_cortex_regressed_surface_timeseries.py` first. It writes only controlled hippocampal time series and diagnostics under the formal root `outputs_hcp/inputs/hcp/kong2022/shared_inputs/routea_ctxreg/`; RouteA references and `surface` masks remain in their upstream roots and are passed to downstream steps via `--reference-root` and `--mask-root`. `04_01` and `04_02` should write FC into the controlled root while reading references from `routea` and masks from `surface`; uncontrolled RouteA roots are not overwritten.
 
-For the RouteA cortex-drop branch, run `04_01_materialize_kong2022_roi_fc.py --ctxdrop` with `--shared-root outputs_hcp/inputs/hcp/kong2022/shared_inputs/routea_ctxdrop`, `--surface-root outputs_hcp/inputs/hcp/kong2022/shared_inputs/surface`, `--reference-root outputs_hcp/inputs/hcp/kong2022/shared_inputs/routea`, and `--mask-root outputs_hcp/inputs/hcp/kong2022/shared_inputs/surface`. This branch keeps hippocampal time series unchanged, excludes valid cortex vertices within 20 mm before ROI averaging, stores smoothing-independent local cortex-neighbor diagnostics under `sub-*/surface/local_cortex_neighbors/hemi_*/`, and is maintained for `gradient-spectral` and `wta-top` outputs. Use `06_07_render_ctxdrop_neighbor_counts.py --source-branch routea_ctxdrop` to render the group-average local neighbor-count hippocampal surface overlay under `outputs_hcp/present/local_cortex_neighbors/`; the same renderer supports `--source-branch routea_ctxreg` from the ctxreg diagnostics.
+For the RouteA cortex-drop branch, run `04_01_materialize_kong2022_roi_fc.py --dataset hcp --ctxdrop` with `--shared-root outputs_hcp/inputs/hcp/kong2022/shared_inputs/routea_ctxdrop`, `--surface-root outputs_hcp/inputs/hcp/kong2022/shared_inputs/surface`, `--reference-root outputs_hcp/inputs/hcp/kong2022/shared_inputs/routea`, and `--mask-root outputs_hcp/inputs/hcp/kong2022/shared_inputs/surface`. This branch keeps hippocampal time series unchanged, excludes valid cortex vertices within 20 mm before ROI averaging, stores smoothing-independent local cortex-neighbor diagnostics under `sub-*/surface/local_cortex_neighbors/hemi_*/`, and is maintained for `gradient-spectral` and `wta-top` outputs. Use `06_07_render_ctxdrop_neighbor_counts.py --source-branch routea_ctxdrop` to render the group-average local neighbor-count hippocampal surface overlay under `outputs_hcp/present/local_cortex_neighbors/`; the same renderer supports `--source-branch routea_ctxreg` from the ctxreg diagnostics.
 
 For the RouteA 17-net taxonomy branch, do not create a new input root or gradient root. Reuse `outputs_hcp/inputs/hcp/kong2022/shared_inputs/routea` and run `05_02_run_group_atlas.py` with `--route-tag routea_17net --network-taxonomy family17 --methods gradient-spectral --out-root outputs_hcp/work/group_atlas/routea_17net_full_k3_fisherz`. `05_02` reads RouteA gradients from `outputs_hcp/work/hippomaps_gradients/routea` for `gradient-spectral`, so `05_01` should not be run as `routea_17net`. Because this branch intentionally reuses the RouteA input root, `--route-tag auto` refuses `--network-taxonomy family17`; pass `--route-tag routea_17net` explicitly. WTA is restricted to the canonical7/canonical8 views and cannot run with family17.
 
-The unsuffixed Kong2022 RouteA branch is the canonical7 default. `03_02 --atlas-slug
+The unsuffixed Kong2022 RouteA branch is the canonical7 default. `03_02 --dataset hcp --atlas-slug
 kong2022` writes direct `reference/kong2022/` canonical7 products, `04_01` materializes the ordered 400-ROI FC bank under the historical
 `hipp_vertex_to_network_fc.npy` filename and writes explicit canonical7 summary
 files for network-only diagnostics; `05_01` computes the `routea` gradient bank
@@ -173,11 +225,31 @@ canonical7 column remain valid, while direct seven-network files are never used
 as a fallback or replacement for the 400-ROI FC bank.
 Canonical8 is not an active default branch; HCP has no native 22P input branch.
 
-When rebuilding RouteA references after changing the subject roster or source
-inputs, pass `--overwrite` to `03_02_build_kong2022_routea_reference.py`.
-This explicit flag takes precedence over the default resume behavior, so an
-existing completed subject is actually re-evaluated instead of being silently
-skipped.
+`03_02`, the direct RouteA extractor, and `04_01` require explicit `--dataset`
+selection (`hcp`, `stanford`, `iowa_jj_tms`, `iowa7t`, `banda`, or `pdc`).
+Reference resume compares the selected source paths, run IDs/lengths, baseline
+inputs, dataset, task, and cutoff. A changed selection is recomputed;
+`--overwrite` also forces recomputation. Before consuming a Kong2022 reference,
+`04_01` requires matching dataset/task/validity policy/cutoff in its summary and
+both cortex gate summaries. Historical null-policy references must be rebuilt
+with the intended dataset and inputs; their presence does not establish validity.
+
+Empty cortical parcels retain their ordered rows with all-NaN time series and
+zero contributing vertices, preserving the fixed 400-ROI bank. Missing or constant
+series have NaN FC and do not count as zero-valued observations in group means.
+Weighted cluster profiles intersect group support with each subject's valid mask
+and exclude incomplete/constant rows; entirely missing network profiles remain
+unassigned.
+
+Stored baseline-bearing surface and cortex time series are unchanged. Pooled FC
+in `04_01` (including ctxdrop), `04_02`, cluster annotation, weighted profiles, and
+cluster-cortex panels removes each declared run's mean at computation time. It
+preserves within-run variance weighting, rather than z-scoring runs or averaging
+run-wise Fisher-z correlations. Per-run FC still uses that run's original series.
+Consumers require explicit ordered run IDs and lengths from the exact reference
+`reference_summary.json` (or a caller-selected run metadata file where supported);
+missing/mismatched boundaries fail before FC writes. This numerical contract does
+not deploy a new participant QC threshold.
 
 Template assets are a producer invariant, not a presentation fallback. The
 existing `05_02` branch and any `05_05` copied-branch path derive
@@ -282,7 +354,7 @@ source manifests, and exact assignment-asset fingerprints.
 
 For an existing run whose top-level pointers were generated under the retired
 normalized default, use the explicit metadata-only command
-`scripts/core_workflow/repair_cluster_level_assignment_default.py` with one
+`scripts/core_workflow/lib/repair_cluster_level_assignment_default.py` with one
 exact `--run-dir` per target. It validates the manifest-declared Fisher-z
 artifacts before writing and does not recompute, delete, or overwrite the
 `normalized_top20_count` variant.
@@ -450,7 +522,7 @@ required by default for cortex regression and ctxdrop, and invalid hippocampal
 vertices remain unchanged and are recorded in regression diagnostics.
 
 Default-root contract for HCP cortex controls: omitting `--shared-root` from
-`04_01_materialize_kong2022_roi_fc.py --ctxdrop` selects the formal
+`04_01_materialize_kong2022_roi_fc.py --dataset hcp --ctxdrop` selects the formal
 `outputs_hcp/inputs/hcp/kong2022/shared_inputs/routea_ctxdrop/` FC root and
 reads references from the authoritative `routea` root. `05_01`, `05_02`,
 `06_01`, `06_07`, and `07_01` likewise resolve only the formal
@@ -600,11 +672,30 @@ After updating this statistic, rerun `05_06` with the same complete roster
 and then `06_11`; first-level GLMs do not need to be rerun. Display-only changes
 require rerunning `06_11` alone.
 
+Pearson FC in `lib/fc_math.py` is defined only for complete finite,
+nonconstant source and target rows with at least two frames. Undefined pairs
+remain NaN in pooled and run-level FC, including empty cortical ROIs; downstream
+finite-entry operations exclude those missing pairs. This is a numerical
+validity requirement and does not select a hippocampal tSNR cutoff.
+
 ### Dataset-specific tSNR QC
+
+The [accepted fMRI QC policy](../../docs/hipp_parcellation_network/fmri_qc.md)
+is overall mean Power FD <=0.30 mm, then bilateral HippUnfold Dice >=0.70,
+then <=20 unsupported functional-GM vertices in each den-512 hemisphere.
+Multiple runs use a frame-count-weighted overall FD without an individual-run
+veto. Scope is HCP7T rest, HCP3T EMOTION/WM, Stanford 36P, BANDA and PDC visits.
+Numerical tSNR exclusion and an additional mean-RMS gate are not part of this
+policy. The three-criterion policy and its vertex-mask integration have not
+yet been deployed in the core entry points. The operations below describe
+existing tSNR machinery and inherited defaults, not the accepted QC selection.
 
 The implementation is in `lib/tsnr.py`, called by hippocampal preparation
 `02_01`, cortex extraction (`03_02` / `lib/io_utils.py`), and Iowa adapters.
-HCP rest retains `10000 / SD >= 25` unchanged.
+HCP rest retains the inherited `10000 / SD` metric and requires a finite,
+nonconstant complete analysis series. The numerical cutoff remains configurable;
+the default 25 is an inherited comparison setting, not the proposed primary
+hippocampal exclusion rule.
 
 HCP task computes the original mean divided by task-model residual sample SD
 (ddof=1), separately for every declared run, before smoothing or masking. The
@@ -612,9 +703,10 @@ model is the same EV + 12 motion + intercept + 128-second DCT drift design
 as the task analysis, using the canonical HCP TR=0.72 s. If task tSNR is
 enabled with a numerical threshold, rerun the task tSNR gate and its dependent
 masking/reference steps when regenerating results with this model.
-The current task workflow uses `--tsnr-threshold none`: tSNR is skipped and
-every run must retain finite, nonconstant signal. With a numerical threshold,
-run means are never pooled before estimating noise, and the gate writes
+The current task `--tsnr-threshold none` mode applies finite/nonconstant run
+validity and omits tSNR score computation. A future coverage implementation must keep any valid tSNR diagnostics
+separate from its exclusion decision. With a
+numerical threshold, run means are never pooled before estimating noise, and the gate writes
 per-run scores and their minimum, plus masks.
 
 Stanford, JJ_TMS and Iowa7T rest use baseline-preserving pre-XCP samples in the
@@ -642,14 +734,21 @@ perform registration or fabricate missing baseline inputs.
 `02_01` takes hippocampal inputs; `03_02` takes cortex inputs. JJ_TMS's dedicated
 matcher also uses `{domain}` (`hipp`/`cortex`). Iowa7T templates additionally
 support `{variant}`, `{branch}` and `{run}`. Missing inputs raise an actionable
-error. Supply `--no-resume` in core or `--overwrite` in Iowa7T when replacing a
-previously computed baseline input. Preserve separate 22P/36P retained-frame
+error. Core `02_01` resume reuses a rest gate only when the requested dataset,
+task, cutoff, selected baseline path, and recorded input/output file metadata
+match. Changed raw or baseline inputs trigger gate recomputation. Explicit `qc`
+and `all` stages rebuild the subject pass list using the requested Dice threshold.
+Smoothing consumes the current gate and is recomputed when its inputs or gate
+cutoffs change; a separate `--stage smooth` does not require repeating the gate's
+cutoff on the command line. Iowa7T replacement still requires `--overwrite`.
+Preserve separate 22P/36P retained-frame
 selections and MB/ME acquisition inputs. Existing output replacement follows
 repository path-approval rules.
 
-See [fMRI QC](../../docs/hipp_parcellation_network/fmri_qc.md) for the formal
-HCP rest cohort and [the task workflow](../../hcp_3t_task_fmri_hipp_memory_emotion_plan.md)
-for the complete EMOTION and WM cohorts.
+See [fMRI QC](../../docs/hipp_parcellation_network/fmri_qc.md) for the accepted
+policy, evaluated retention and implementation status, and
+[the task workflow](../../hcp_3t_task_fmri_hipp_memory_emotion_plan.md) for the
+complete EMOTION and WM input cohorts.
 
 The task renderer `06_11` explicitly selects 2mm rows when a group table
 contains both 2mm and 4mm, matching its maintained 2mm figure contract.

@@ -15,6 +15,25 @@ See:
 - `docs/hipp_parcellation_network/jj_tms_hcp151_fixed_template_matching.md`
 - `docs/hipp_parcellation_network/jj_tms_target_network_mapping.md`
 
+## Shared-input materializer
+
+`materialize_jj_tms_shared_inputs.py` adapts the direct matcher's surface and
+reference layout. The ordered run IDs and lengths come from each source
+`subject_manifest.json` (`header_evidence.runs`, including matching volume and
+CIFTI timepoint counts). Missing or inconsistent run declarations stop before
+FC output is written. The 400-ROI registry comes from the shipped authoritative
+Kong2022 atlas rather than a prior HCP group-result directory.
+
+Pooled and per-run FC use the core `04_01` implementation and the declared time
+slices. Pooled FC removes each run's mean while preserving run variances; stored
+baseline-bearing series remain unchanged. Reference policy fields and both cortex
+gate records are copied from the explicitly selected matcher source and checked
+as `iowa_jj_tms`; missing or conflicting source policy stops materialization.
+Only actual run IDs are emitted; pooled FC is never copied into run
+files. Outputs include explicit 400-ROI and canonical7 FC files and their run
+metadata. Empty or constant reference rows remain NaN, rather than zero
+correlation. This adapter does not choose a new hippocampal QC policy.
+
 ## JJ_TMS CtxReg fixed-template matcher
 
 `scripts/jj_tms/jj_tms_ctxreg_fixed_template_matching.py` is a separate
@@ -22,8 +41,15 @@ CtxReg adapter. It requires the exact template identity
 `hcp151_routea_ctxreg`, exact 2mm CtxReg FC caches under
 `shared_inputs/routea_ctxreg/`, the standard validity masks under
 `shared_inputs/surface/`, and the consumed HippUnfold
-`space-corobl_den-512` surfaces. It does not substitute the standard
+`space-T1w_den-512` surfaces. It does not substitute the standard
 `routea` FC branch or select an alternate file by existence order.
+
+For run-level volume sampling, the native T1w mesh is transformed using
+`derivatives_surf/sub-<id>/anat/sub-<id>_from-MNI152NLin6Asym_to-T1w_mode-image_xfm.h5`
+and ANTs point mapping. The mapped meshes are saved in each subject's
+`surface/sampling_surfaces/`. Native T1w geometry defines smoothing; metrics
+use `space-T1w` filenames. If `04_00` or `04_01 --ctxdrop` is used with JJ_TMS
+native cortical meshes, explicitly pass `--cortex-coordinate-space T1w`.
 
 The default roster is the concatenation of the two existing caller-selected
 manifests `manifests/jj_tms_hc_67_subjects.txt` and
@@ -112,7 +138,7 @@ The 22P roots retain `shared_inputs_22p` and `_22p` suffixes; unversioned roots 
 
 The 22P cortex branch uses 22P XCP-D dtseries and matching 22P individualized
 cortex labels. The hippocampal branch must use full, unsmoothed, denoised 22P
-volumes for the same runs. The structural HippUnfold `corobl den-512` geometry
+volumes for the same runs. The structural HippUnfold `T1w den-512` geometry
 is independent of 22P/36P because it is derived from structural images, but the
 sampled hippocampal BOLD time series are variant-specific and live under the
 dedicated root:
@@ -172,6 +198,9 @@ The fixed-template matcher now requires `--tsnr-input-template` with
 baseline mean / detrended SD on retained frames (threshold 25), intersected
 with finite/nonconstant analysis data. The old XCP `10000/SD` gate and the
 interim validity-only rule are replaced. Baseline samples must use the consumed
-mapping (the matcher uses enclosing voxels), geometry and cortex vertex order.
+mapping (the matcher and core workflow both use trilinear interpolation),
+geometry and cortex vertex order. Both samplers call the shared
+`lib.surface_sampling.sample_volume_to_surface` implementation; per-run
+publication and matching outputs retain the JJ_TMS file layout.
 See the core-workflow README's dataset-specific tSNR section for the NPZ input
 format. Existing products are not automatically rebuilt by this code change.

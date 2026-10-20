@@ -11,7 +11,7 @@ import time
 import traceback
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
-from typing import Any, NamedTuple
+from typing import Any, NamedTuple, Sequence
 
 import nibabel as nib
 import numpy as np
@@ -41,6 +41,7 @@ from lib.output_layout import (  # noqa: E402
     resolve_work_root,
 )
 from lib.kong2022_label_utils import canonical_families_7_order, canonical_families_8_order, canonical_families_17_order  # noqa: E402
+from lib.io_utils import load_run_segment_metadata  # noqa: E402
 from lib.weighted_fisherz import (  # noqa: E402
     assignment_status_from_weighted_network_profile,
     weighted_cluster_network_fisherz_profile_from_timeseries,
@@ -342,6 +343,7 @@ def write_weighted_fisherz_outputs(
     network_names: list[str],
     network_column: str,
     color_map: dict[str, tuple[int, int, int, int]],
+    run_lengths: Sequence[int],
 ) -> dict[str, object]:
     core = load_core_group_atlas_module()
     valid = np.asarray(valid_mask, dtype=bool).reshape(-1)
@@ -355,6 +357,7 @@ def write_weighted_fisherz_outputs(
         roi_rows=roi_rows,
         network_names=network_names,
         network_column=network_column,
+        run_lengths=run_lengths,
     )
     cluster_rows, dominant = assignment_status_from_weighted_network_profile(cluster_profile, network_names)
     functional_labels, functional_meta, label_items = core.functional_atlas_from_clusters(
@@ -594,6 +597,7 @@ def process_combo(config: dict[str, object], combo_dict: dict[str, str]) -> dict
                 "network_column": "canonical8",
             }
         reference_root = Path(str(config["shared_root"])) / f"sub-{combo.subject}" / "reference" / "kong2022"
+        _run_ids, reference_run_lengths = load_run_segment_metadata(reference_root / "reference_summary.json")
         weighted_outputs = write_weighted_fisherz_outputs(
             gradient_dir=k3_dir,
             subject=combo.subject,
@@ -607,6 +611,7 @@ def process_combo(config: dict[str, object], combo_dict: dict[str, str]) -> dict
             network_names=network_names,
             network_column=network_column,
             color_map=color_map,
+            run_lengths=reference_run_lengths,
         )
 
         elapsed = float(time.time() - started)

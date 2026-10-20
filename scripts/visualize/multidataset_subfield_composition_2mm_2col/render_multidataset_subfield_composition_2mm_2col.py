@@ -317,7 +317,7 @@ def compute_cohort_subfield_composition(
                 / "hippunfold"
                 / f"sub-{s}"
                 / "surf"
-                / f"sub-{s}_hemi-{hemi}_space-corobl_den-512_label-hipp_midthickness.surf.gii"
+                / f"sub-{s}_hemi-{hemi}_space-T1w_den-512_label-hipp_midthickness.surf.gii"
             )
             if not lp.is_file():
                 raise FileNotFoundError(f"Missing declared subfield label input: {lp}")
@@ -1208,7 +1208,7 @@ def _render_grid():
                 )
                 sp = (
                     cinfo["hippunfold_root"]
-                    / f"sub-{s}/hippunfold/sub-{s}/surf/sub-{s}_hemi-{hemi}_space-corobl_den-512_label-hipp_midthickness.surf.gii"
+                    / f"sub-{s}/hippunfold/sub-{s}/surf/sub-{s}_hemi-{hemi}_space-T1w_den-512_label-hipp_midthickness.surf.gii"
                 )
                 preload_items.append((lp, sp))
 

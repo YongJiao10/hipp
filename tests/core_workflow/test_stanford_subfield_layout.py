@@ -10,6 +10,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
+import pytest
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -28,6 +29,37 @@ if spec is None or spec.loader is None:
 module = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = module
 spec.loader.exec_module(module)
+
+
+@pytest.fixture
+def synthetic_exports(tmp_path, monkeypatch):
+    """Export small bilateral contrasts instead of reading historical results."""
+    stats_dir = tmp_path / "stats"
+    stats_dir.mkdir()
+    monkeypatch.setattr(module, "OUTPUT_DIR", tmp_path)
+    monkeypatch.setattr(module, "STATS_DIR", stats_dir)
+    cases = [
+        ("NTS Pure MDD", "Body", "Sub", (-6.3564, -8.8565), 0.001),
+        ("TIS PTSD", "Body", "CA1", (4.5, 4.0), 0.02),
+        ("NTS Pure MDD", "Post", "Sub", (-2.0, -1.0), 0.3),
+        ("NTS Pure MDD", "Ant", "Sub", (-5.0, -4.0), 0.4),
+        ("NTS", "Ant", "CA1", (3.0, 2.5), 0.2),
+        ("NTS", "Post", "CA1", (0.3, 0.2), 0.4),
+        ("TEHC", "Post", "CA1", (0.2, 0.1), 0.5),
+        ("HCP 7T", "Body", "Sub", (0.01, 0.01), 0.8),
+    ]
+    stats = [
+        dict(case_cohort=cohort, hemisphere=hemi, cluster_name=cluster,
+             subfield_name=subfield, diff_pct=difference, fdr_q_parametric=q,
+             significant=q < 0.05)
+        for cohort, cluster, subfield, differences, q in cases
+        for hemi, difference in zip(("L", "R"), differences, strict=True)
+    ]
+    subjects = [dict(subject_id="fixture-01", hemisphere=hemi, cohort_name="NTHC",
+                     cluster_name="Body", subfield_name="Sub", proportion_pct=35.25)
+                for hemi in ("L", "R")]
+    module.export_analysis_tsvs(subjects, stats, "fixture", atlas_mode=module.TARGET_ATLAS_MODE)
+    return stats, subjects
 
 
 def test_group_difference_titles_have_a_dedicated_header_gap() -> None:
@@ -95,9 +127,20 @@ def test_group_difference_layout_uses_tighter_margins_and_gaps() -> None:
     assert module.GROUP_DIFFERENCES_GRID_RIGHT >= 0.975
     assert module.GROUP_DIFFERENCES_GRID_WSPACE == 0.22
 
-def test_target_loader_reads_canonical_v2_exports() -> None:
+def test_target_loader_reads_canonical_v2_exports(synthetic_exports) -> None:
     stats_results, subject_rows = module.load_exported_render_inputs(module.TARGET_ATLAS_MODE)
-    assert stats_results and subject_rows
+    expected_stats, expected_subjects = synthetic_exports
+    assert stats_results == expected_stats
+    assert subject_rows == expected_subjects
+
+
+def test_target_loader_rejects_missing_grid_exports_even_with_legacy_files(tmp_path, monkeypatch):
+    monkeypatch.setattr(module, "STATS_DIR", tmp_path)
+    monkeypatch.setattr(module, "OUTPUT_DIR", tmp_path)
+    for name in ("stanford_subfield_group_differences_stats.tsv", "stanford_subfield_subject_level_long.tsv"):
+        (tmp_path / name).write_text("legacy\n", encoding="utf-8")
+    with pytest.raises(FileNotFoundError, match="canonical grid export"):
+        module.load_exported_render_inputs(module.TARGET_ATLAS_MODE)
 
 def test_target_figure_uses_reader_facing_title_and_balanced_lower_row() -> None:
     assert module.GROUP_DIFFERENCES_MAIN_TITLE == (
@@ -126,7 +169,7 @@ def test_large_negative_c_bar_label_is_placed_inside_bar() -> None:
     assert ha_small == "right"
     assert color_small == "#0f172a"
 
-def test_c_selection_adds_largest_nonsignificant_bilateral_candidates() -> None:
+def test_c_selection_adds_largest_nonsignificant_bilateral_candidates(synthetic_exports) -> None:
     stats_results, _ = module.load_exported_render_inputs(module.TARGET_ATLAS_MODE)
     items = module.select_relative_bar_items(stats_results)
     assert items
@@ -141,14 +184,14 @@ def test_c_selection_adds_largest_nonsignificant_bilateral_candidates() -> None:
     assert not any(item[0] == "HCP" for item in items)
 
 
-def test_stanford_subfield_grid_exports_exist() -> None:
-    output_dir = module.OUTPUT_DIR
-    stats_dir = getattr(module, "STATS_DIR", output_dir / "stats")
-    for grid in module.GRID_VARIANTS:
-        fig_path = output_dir / f"stanford_subfield_group_differences_figure_{grid}.png"
-        stats_path = stats_dir / f"stanford_subfield_group_differences_stats_{grid}.tsv"
-        long_path = stats_dir / f"stanford_subfield_subject_level_long_{grid}.tsv"
-        assert fig_path.is_file(), f"Missing figure for {grid}"
-        assert stats_path.is_file(), f"Missing stats TSV for {grid}"
-        assert long_path.is_file(), f"Missing subject long TSV for {grid}"
+@pytest.mark.parametrize("grid", module.GRID_VARIANTS)
+def test_stanford_subfield_grid_exports_roundtrip(synthetic_exports, grid) -> None:
+    stats, subjects = synthetic_exports
+    spec = module.GridSpec.from_tag(grid)
+    module.export_analysis_tsvs(subjects, stats, "fixture", spec=spec, atlas_mode=module.TARGET_ATLAS_MODE)
+    stats_path = module.STATS_DIR / f"stanford_subfield_group_differences_stats_{grid}.tsv"
+    long_path = module.STATS_DIR / f"stanford_subfield_subject_level_long_{grid}.tsv"
+    assert stats_path.is_file()
+    assert long_path.is_file()
+    assert module.load_exported_render_inputs(module.TARGET_ATLAS_MODE, spec=spec) == (stats, subjects)
 

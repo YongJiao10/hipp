@@ -110,60 +110,53 @@ def rewrite_scene_file_refs(root: ET.Element, replacements: dict[str, Path]) -> 
             elem.attrib["Name"] = basename_lookup[file_kind]
 
 
-def validate_required_paths(args: argparse.Namespace) -> None:
-    for path_str in [
-        args.source_scene,
-        args.left_surface,
-        args.right_surface,
-        args.left_label,
-        args.right_label,
-        args.left_sulc,
-        args.right_sulc,
-        args.sulc_dscalar,
-        args.dlabel,
-    ]:
-        path = Path(path_str).resolve()
+def render_cortex_pfm_scene(
+    *, source_scene: Path, left_surface: Path, right_surface: Path,
+    left_label: Path, right_label: Path, left_sulc: Path, right_sulc: Path,
+    sulc_dscalar: Path, dlabel: Path, out_scene: Path, out_png: Path,
+    scene_index: int = 1, width: int = 2000, height: int = 1400,
+    renderer: str = "OSMesa", rotation_axis: str | None = None,
+    rotation_deg: float = 0.0,
+) -> int:
+    """Prepare and capture a cortex scene; propagate input and Workbench errors."""
+    replacements = {
+        "left_surface": Path(left_surface).resolve(),
+        "right_surface": Path(right_surface).resolve(),
+        "left_label": Path(left_label).resolve(),
+        "right_label": Path(right_label).resolve(),
+        "left_sulc": Path(left_sulc).resolve(),
+        "right_sulc": Path(right_sulc).resolve(),
+        "sulc_dscalar": Path(sulc_dscalar).resolve(),
+        "dlabel": Path(dlabel).resolve(),
+    }
+    source_scene = Path(source_scene).resolve()
+    for path in [source_scene, *replacements.values()]:
         if not path.exists():
             raise FileNotFoundError(path)
-
-
-def main() -> int:
-    args = parse_args()
-    validate_required_paths(args)
-
-    source_scene = Path(args.source_scene).resolve()
-    out_scene = Path(args.out_scene).resolve()
-    out_png = Path(args.out_png).resolve()
+    out_scene = Path(out_scene).resolve()
+    out_png = Path(out_png).resolve()
     out_scene.parent.mkdir(parents=True, exist_ok=True)
     out_png.parent.mkdir(parents=True, exist_ok=True)
 
     tree = ET.parse(source_scene)
     root = tree.getroot()
-    rewrite_scene_file_refs(
-        root,
-        {
-            "left_surface": Path(args.left_surface).resolve(),
-            "right_surface": Path(args.right_surface).resolve(),
-            "left_label": Path(args.left_label).resolve(),
-            "right_label": Path(args.right_label).resolve(),
-            "left_sulc": Path(args.left_sulc).resolve(),
-            "right_sulc": Path(args.right_sulc).resolve(),
-            "sulc_dscalar": Path(args.sulc_dscalar).resolve(),
-            "dlabel": Path(args.dlabel).resolve(),
-        },
-    )
+    rewrite_scene_file_refs(root, replacements)
 
-    if args.rotation_axis:
+    if rotation_axis:
         rot_elem = find_rotation_matrix_element(root)
         base_matrix = read_rotation_matrix(rot_elem)
         updated = np.array(base_matrix, copy=True)
-        updated[:3, :3] = axis_rotation(args.rotation_axis, args.rotation_deg) @ base_matrix[:3, :3]
+        updated[:3, :3] = axis_rotation(rotation_axis, rotation_deg) @ base_matrix[:3, :3]
         write_rotation_matrix(rot_elem, updated)
 
     ensure_scene_white_background(root)
     ET.ElementTree(root).write(out_scene, encoding="UTF-8", xml_declaration=True)
-    capture_scene(out_scene, args.scene_index, out_png, args.width, args.height, args.renderer)
+    capture_scene(out_scene, scene_index, out_png, width, height, renderer)
     return 0
+
+
+def main() -> int:
+    return render_cortex_pfm_scene(**vars(parse_args()))
 
 
 def ensure_scene_white_background(root: ET.Element) -> None:

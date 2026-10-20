@@ -127,3 +127,33 @@ def test_ols_group_test_fails_closed():
     with pytest.raises(ValueError):
         RENDERER.ols_group_test(case, ctrl, const_case, const_ctrl)
 
+
+
+def test_area_percentages_use_native_geometry_even_when_corobl_is_present(tmp_path, monkeypatch):
+    import nibabel as nib
+    from lib.workbench import resolve_wb_command
+
+    monkeypatch.setattr(RENDERER, "WB_COMMAND", str(resolve_wb_command()))
+    native = np.zeros((512, 3), dtype=np.float32)
+    native[:6] = [[0, 0, 0], [2, 0, 0], [0, 1, 0],
+                  [0, 0, 2], [0, 2, 2], [0, 0, 3]]
+    faces = np.array([[0, 1, 2], [3, 4, 5]], dtype=np.int32)
+    labels = np.full(512, 3, dtype=np.int32)
+    labels[:3], labels[3:6] = 1, 2
+    for hemi in ('L', 'R'):
+        surf = tmp_path/'batch/sub-01/hippunfold/sub-01/surf'
+        surf.mkdir(parents=True, exist_ok=True)
+        for space, points in [('T1w', native), ('corobl', native * [3, 1, 1])]:
+            nib.save(nib.gifti.GiftiImage(darrays=[
+                nib.gifti.GiftiDataArray(np.asarray(points, dtype=np.float32), intent='NIFTI_INTENT_POINTSET'),
+                nib.gifti.GiftiDataArray(faces, intent='NIFTI_INTENT_TRIANGLE'),
+            ]), surf/f'sub-01_hemi-{hemi}_space-{space}_den-512_label-hipp_midthickness.surf.gii')
+        combo = tmp_path/'subjects/sub-01/matching/2mm'/f'hemi-{hemi}'
+        combo.mkdir(parents=True)
+        np.save(combo/'labels.npy', labels)
+    result = RENDERER.compute_subject_counts_areas(
+        '2mm', ['sub-01'], tmp_path/'subjects', tmp_path/'cache',
+        hippunfold_batch_root=tmp_path/'batch',
+    )
+    for hemi in ('L', 'R'):
+        np.testing.assert_allclose(result['sub-01']['area_pct'][hemi], [50, 50, 0], atol=1e-5)

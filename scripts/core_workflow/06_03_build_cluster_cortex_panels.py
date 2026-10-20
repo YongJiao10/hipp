@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
-
 """
 Process Step Description:
 Build cortical projection panels for clusters. Generates visualization panel data projecting hippocampal clustered networks onto the cerebral cortex surface to show hippocampal-cortical connectivity patterns.
@@ -44,40 +42,50 @@ Outputs:
     - Presentation manifest: `{present_dir}/cluster_roi_cortex_overview_manifest.json`
   - Index README: `{runtime_root}/README.md` and `{present_dir}/README.md`
 """
+from __future__ import annotations
+
 import argparse
 import json
 import math
-import subprocess
-import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import matplotlib
+import matplotlib  # type: ignore[import-untyped]
 import nibabel as nib
 import numpy as np
-from nibabel.gifti import GiftiImage
-from scipy import stats
-
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-
-REPO_ROOT = Path(__file__).resolve().parents[2]
-from lib.kong2022_label_utils import KONG2022_DLABEL_PATH, load_kong2022_bundle
+from lib.cortex_template_profiles import (
+    compute_subject_cluster_roi_profiles,
+    parse_roi_registry,
+    resolve_cortex_assets,
+    subject_reference_path,
+)
+from lib.fc_math import bh_fdr
+from lib.gifti_labels import make_named_label_gifti
+from lib.io_utils import load_json, write_tsv
+from lib.kong2022_label_utils import load_kong2022_bundle
+from lib.network_colors import load_network_colors
 from lib.output_layout import (
     DEFAULT_CORTEX_ASSETS_ROOT as CORE_CORTEX_ASSETS_ROOT,
+)
+from lib.output_layout import (
     DEFAULT_CORTEX_PANELS_DIR,
     DEFAULT_KONG2022_ROUTEA_ROOT,
     DEFAULT_ROUTEA_GROUP_ATLAS_ROOT,
 )
-from lib.route_tags import ROUTE_TAG_CHOICES, infer_route_tag_from_group_root, validate_group_atlas_root_for_route
-from lib.fc_math import corrcoef_rows, bh_fdr
-from lib.gifti_labels import make_named_label_gifti
-from lib.io_utils import load_json, read_tsv_rows, write_tsv
-from lib.surface_utils import render_locked_grid, read_surface_vertex_count
+from lib.render_cortex_pfm_scene import render_cortex_pfm_scene
+from lib.route_tags import (
+    ROUTE_TAG_CHOICES,
+    infer_route_tag_from_group_root,
+    validate_group_atlas_root_for_route,
+)
 from lib.workflow_utils import write_json
-from lib.workbench import run_workbench
-from lib.network_colors import load_network_colors
+from scipy import stats
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt  # type: ignore[import-untyped]  # noqa: E402
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 DEFAULT_GROUP_ROOT = DEFAULT_ROUTEA_GROUP_ATLAS_ROOT
@@ -183,10 +191,6 @@ class PanelComboInputs:
 
 
 
-def subject_reference_path(reference_root: Path, subject: str, atlas: str, filename: str) -> Path:
-    return Path(reference_root) / f"sub-{subject}" / "reference" / atlas / str(filename)
-
-
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
@@ -217,53 +221,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--cortex-assets-root", default=str(DEFAULT_CORTEX_ASSETS_ROOT))
     parser.add_argument("--scene", default=str(DEFAULT_SCENE))
     return parser.parse_args()
-
-
-def run_cmd(cmd: list[str]) -> None:
-    proc = subprocess.run(cmd, text=True, capture_output=True)
-    if proc.returncode != 0:
-        raise RuntimeError(
-            f"Command failed ({proc.returncode}): {' '.join(cmd)}\n"
-            f"STDOUT:\n{proc.stdout}\nSTDERR:\n{proc.stderr}"
-        )
-
-
-def parse_roi_registry(path: Path) -> list[dict[str, Any]]:
-    rows = read_tsv_rows(path)
-    out: list[dict[str, Any]] = []
-    for row in rows:
-        out.append(
-            {
-                "roi_id": int(row["roi_id"]),
-                "roi_name": str(row["roi_name"]),
-                "hemi": str(row["hemi"]),
-                "family17": str(row["family17"]),
-                "subregion": str(row.get("subregion", "")),
-                "rank": int(row.get("rank", "0")),
-                "canonical7": str(row["canonical7"]),
-                "canonical8": str(row["canonical8"]),
-            }
-        )
-    if len(out) != 400:
-        raise RuntimeError(f"Expected 400 ROI registry rows, got {len(out)} from {path}")
-    return out
-
-
-def read_subject_roi_tsv(path: Path) -> list[dict[str, Any]]:
-    rows = read_tsv_rows(path)
-    out: list[dict[str, Any]] = []
-    for row in rows:
-        out.append(
-            {
-                "parcel_id": int(row["parcel_id"]),
-                "parcel_name": str(row["parcel_name"]),
-                "family17": str(row["family17"]),
-                "canonical7": str(row["canonical7"]),
-                "canonical8": str(row["canonical8"]),
-                "hemisphere": str(row["hemisphere"]),
-            }
-        )
-    return out
 
 
 def load_shared_network_colors() -> dict[str, tuple[int, int, int, int]]:
@@ -308,181 +265,6 @@ def one_sample_one_sided_stats(x: np.ndarray) -> tuple[float, float, float, floa
     p_pos = float(stats.t.sf(t_stat, df=n - 1))
     p_neg = float(stats.t.cdf(t_stat, df=n - 1))
     return mean, float(t_stat), p_pos, p_neg, n
-
-
-def resolve_cortex_assets(subject: str, data_root: Path, assets_root: Path, scene: Path) -> dict[str, Path]:
-    anat = data_root / f"sub-{subject}" / "anat"
-    assets = assets_root / f"sub-{subject}" / "assets"
-    public_root = DEFAULT_PUBLIC_TEMPLATE_ROOT.resolve()
-    fastans_tpl = public_root / "FASTANS" / "resources" / "templates"
-
-    def first_existing(paths: list[Path]) -> Path | None:
-        for p in paths:
-            if p.exists():
-                return p.resolve()
-        return None
-
-    left_inflated = first_existing(
-        [
-            anat / f"sub-{subject}_hemi-L_space-fsLR_den-32k_desc-MSMAll_inflated.surf.gii",
-            assets_root / f"sub-{subject}_hemi-L_space-fsLR_den-32k_desc-MSMAll_inflated.surf.gii",
-            public_root / f"sub-{subject}_hemi-L_space-fsLR_den-32k_desc-MSMAll_inflated.surf.gii",
-        ]
-    )
-    right_inflated = first_existing(
-        [
-            anat / f"sub-{subject}_hemi-R_space-fsLR_den-32k_desc-MSMAll_inflated.surf.gii",
-            assets_root / f"sub-{subject}_hemi-R_space-fsLR_den-32k_desc-MSMAll_inflated.surf.gii",
-            public_root / f"sub-{subject}_hemi-R_space-fsLR_den-32k_desc-MSMAll_inflated.surf.gii",
-        ]
-    )
-    sulc_dscalar = first_existing(
-        [
-            anat / f"sub-{subject}_space-fsLR_den-32k_desc-MSMAll_sulc.dscalar.nii",
-            assets_root / f"sub-{subject}_space-fsLR_den-32k_desc-MSMAll_sulc.dscalar.nii",
-            public_root / f"sub-{subject}_space-fsLR_den-32k_desc-MSMAll_sulc.dscalar.nii",
-        ]
-    )
-    left_sulc = first_existing(
-        [
-            assets / f"sub-{subject}_hemi-L_space-fsLR_den-32k_desc-MSMAll_sulc.func.gii",
-            assets_root / f"sub-{subject}_hemi-L_space-fsLR_den-32k_desc-MSMAll_sulc.func.gii",
-            fastans_tpl / "CORTEX_LEFT.32k_fs_LR..func.gii",
-        ]
-    )
-    right_sulc = first_existing(
-        [
-            assets / f"sub-{subject}_hemi-R_space-fsLR_den-32k_desc-MSMAll_sulc.func.gii",
-            assets_root / f"sub-{subject}_hemi-R_space-fsLR_den-32k_desc-MSMAll_sulc.func.gii",
-            fastans_tpl / "CORTEX_RIGHT.32k_fs_LR.func.gii",
-        ]
-    )
-    if (left_sulc is None or right_sulc is None) and sulc_dscalar is not None:
-        cache_dir = (REPO_ROOT / "tmp" / "cortex_template_cache" / f"sub-{subject}").resolve()
-        cache_dir.mkdir(parents=True, exist_ok=True)
-        left_gen = cache_dir / f"sub-{subject}_hemi-L_space-fsLR_den-32k_desc-MSMAll_sulc.func.gii"
-        right_gen = cache_dir / f"sub-{subject}_hemi-R_space-fsLR_den-32k_desc-MSMAll_sulc.func.gii"
-        if not left_gen.exists() or not right_gen.exists():
-            run_workbench(
-                [
-                    "-cifti-separate",
-                    str(sulc_dscalar),
-                    "COLUMN",
-                    "-metric",
-                    "CORTEX_LEFT",
-                    str(left_gen),
-                    "-metric",
-                    "CORTEX_RIGHT",
-                    str(right_gen),
-                ]
-            )
-        if left_sulc is None and left_gen.exists():
-            left_sulc = left_gen.resolve()
-        if right_sulc is None and right_gen.exists():
-            right_sulc = right_gen.resolve()
-
-    out: dict[str, Path | None] = {
-        "left_inflated": left_inflated,
-        "right_inflated": right_inflated,
-        "sulc_dscalar": sulc_dscalar,
-        "left_sulc": left_sulc,
-        "right_sulc": right_sulc,
-        "scene": scene.resolve() if scene.exists() else None,
-        "dlabel": KONG2022_DLABEL_PATH.resolve() if KONG2022_DLABEL_PATH.exists() else None,
-    }
-    missing = [name for name, path in out.items() if path is None]
-    if missing:
-        details = {
-            "missing_keys": missing,
-            "subject": f"sub-{subject}",
-            "data_root": str(data_root),
-            "assets_root": str(assets_root),
-            "public_template_root": str(public_root),
-        }
-        raise FileNotFoundError("Missing cortex rendering assets:\n" + json.dumps(details, indent=2))
-    return {k: v for k, v in out.items() if v is not None}
-
-
-def compute_subject_cluster_roi_profiles(
-    *,
-    subjects: list[str],
-    shared_root: Path,
-    reference_root: Path | None = None,
-    mask_root: Path | None = None,
-    smoothing: str,
-    hemi: str,
-    group_labels: np.ndarray,
-    support_mask: np.ndarray,
-    roi_registry: list[dict[str, Any]],
-) -> tuple[np.ndarray, list[str]]:
-    k_final = int(np.max(group_labels))
-    col_by_roi_id = {int(row["roi_id"]): idx for idx, row in enumerate(roi_registry)}
-    reg_by_id = {int(row["roi_id"]): row for row in roi_registry}
-
-    reference_root = reference_root or shared_root
-    mask_root = mask_root or shared_root
-    all_profiles: list[np.ndarray] = []
-    used_subjects: list[str] = []
-    for subject in subjects:
-        ts_path = shared_root / f"sub-{subject}" / "surface" / smoothing / f"sub-{subject}_hemi-{hemi}_timeseries.npy"
-        roi_path = subject_reference_path(reference_root, subject, "kong2022", "cortex_roi_parcel_timeseries.npy")
-        roi_tsv = subject_reference_path(reference_root, subject, "kong2022", "cortex_roi_parcels.tsv")
-        valid_path = mask_root / f"sub-{subject}" / "surface" / "tsnr_gate" / f"sub-{subject}_hemi-{hemi}_valid_mask.npy"
-        if not (ts_path.exists() and roi_path.exists() and roi_tsv.exists() and valid_path.exists()):
-            continue
-
-        ts = np.load(ts_path).astype(np.float32)
-        roi = np.load(roi_path).astype(np.float32)
-        rows = read_subject_roi_tsv(roi_tsv)
-        valid_mask = np.load(valid_path).astype(bool)
-
-        if ts.ndim != 2 or roi.ndim != 2:
-            continue
-        if ts.shape[1] != roi.shape[1]:
-            continue
-        if int(ts.shape[0]) != int(group_labels.size):
-            continue
-        if int(valid_mask.size) != int(group_labels.size):
-            continue
-        if int(roi.shape[0]) != int(len(rows)):
-            continue
-
-        vertex_valid = support_mask & valid_mask
-        cluster_ts = np.full((k_final, ts.shape[1]), np.nan, dtype=np.float32)
-        for cluster_id in range(1, k_final + 1):
-            mask = (group_labels == int(cluster_id)) & vertex_valid
-            if int(np.sum(mask)) == 0:
-                continue
-            with np.errstate(invalid="ignore"):
-                cluster_ts[cluster_id - 1, :] = np.nanmean(ts[mask, :], axis=0).astype(np.float32)
-
-        corr = corrcoef_rows(cluster_ts, roi)
-        fisher = np.arctanh(np.clip(corr, -0.999999, 0.999999)).astype(np.float32)
-        fisher[~np.isfinite(fisher)] = np.nan
-
-        scatter = np.full((k_final, 400), np.nan, dtype=np.float32)
-        for local_col, row in enumerate(rows):
-            roi_id = int(row["parcel_id"])
-            reg = reg_by_id.get(roi_id)
-            if reg is None:
-                raise KeyError(f"Unexpected ROI id={roi_id} in sub-{subject}")
-            if str(row["parcel_name"]) != str(reg["roi_name"]):
-                raise RuntimeError(
-                    f"ROI name mismatch for sub-{subject}, roi_id={roi_id}: "
-                    f"{row['parcel_name']} != {reg['roi_name']}"
-                )
-            col = int(col_by_roi_id[roi_id])
-            scatter[:, col] = fisher[:, int(local_col)]
-
-        all_profiles.append(scatter)
-        used_subjects.append(subject)
-
-    if not all_profiles:
-        raise RuntimeError(
-            f"No valid subject profiles for smoothing={smoothing} hemi={hemi}; "
-            "required timeseries/ROI/mask artifacts are missing or inconsistent."
-        )
-    return np.stack(all_profiles, axis=0).astype(np.float32), used_subjects
 
 
 def analyze_cluster(
@@ -631,44 +413,19 @@ def render_cortex_single_image(
 ) -> Path:
     views_dir = cluster_dir / "views"
     views_dir.mkdir(parents=True, exist_ok=True)
-    render_scene_script = REPO_ROOT / "scripts" / "core_workflow" / "lib" / "render_cortex_pfm_scene.py"
     view = VIEW_SPECS[0]
     out_scene = views_dir / f"cluster_rois_{view['name']}.scene"
     out_png_single = views_dir / f"cluster_rois_{view['name']}.png"
-    cmd = [
-        sys.executable,
-        str(render_scene_script),
-        "--source-scene",
-        str(cortex_assets["scene"]),
-        "--left-surface",
-        str(cortex_assets["left_inflated"]),
-        "--right-surface",
-        str(cortex_assets["right_inflated"]),
-        "--left-label",
-        str(left_label),
-        "--right-label",
-        str(right_label),
-        "--left-sulc",
-        str(cortex_assets["left_sulc"]),
-        "--right-sulc",
-        str(cortex_assets["right_sulc"]),
-        "--sulc-dscalar",
-        str(cortex_assets["sulc_dscalar"]),
-        "--dlabel",
-        str(cortex_assets["dlabel"]),
-        "--out-scene",
-        str(out_scene),
-        "--out-png",
-        str(out_png_single),
-        "--width",
-        "1000",
-        "--height",
-        "700",
-    ]
-    if view["axis"] is not None:
-        cmd.extend(["--rotation-axis", str(view["axis"]), "--rotation-deg", str(float(view["deg"]))])
     if not out_png_single.exists():
-        run_cmd(cmd)
+        render_cortex_pfm_scene(
+            source_scene=cortex_assets["scene"],
+            left_surface=cortex_assets["left_inflated"], right_surface=cortex_assets["right_inflated"],
+            left_label=left_label, right_label=right_label,
+            left_sulc=cortex_assets["left_sulc"], right_sulc=cortex_assets["right_sulc"],
+            sulc_dscalar=cortex_assets["sulc_dscalar"], dlabel=cortex_assets["dlabel"],
+            out_scene=out_scene, out_png=out_png_single, width=1000, height=700,
+            rotation_axis=view["axis"], rotation_deg=float(view["deg"]),
+        )
     return out_png_single
 
 
@@ -685,49 +442,10 @@ def render_cluster_figure(
     n_selected_negative: int,
     cortex_assets: dict[str, Path],
 ) -> Path:
-    views_dir = cluster_dir / "views"
-    views_dir.mkdir(parents=True, exist_ok=True)
-    render_scene_script = REPO_ROOT / "scripts" / "core_workflow" / "lib" / "render_cortex_pfm_scene.py"
-
-    # Keep only the first scene view. In this scene template the first render already
-    # contains the desired 4-panel cortex layout, avoiding 3x/4x multi-view expansion.
-    view = VIEW_SPECS[0]
-    out_scene = views_dir / f"cluster_rois_{view['name']}.scene"
-    out_png_single = views_dir / f"cluster_rois_{view['name']}.png"
-    cmd = [
-        sys.executable,
-        str(render_scene_script),
-        "--source-scene",
-        str(cortex_assets["scene"]),
-        "--left-surface",
-        str(cortex_assets["left_inflated"]),
-        "--right-surface",
-        str(cortex_assets["right_inflated"]),
-        "--left-label",
-        str(left_label),
-        "--right-label",
-        str(right_label),
-        "--left-sulc",
-        str(cortex_assets["left_sulc"]),
-        "--right-sulc",
-        str(cortex_assets["right_sulc"]),
-        "--sulc-dscalar",
-        str(cortex_assets["sulc_dscalar"]),
-        "--dlabel",
-        str(cortex_assets["dlabel"]),
-        "--out-scene",
-        str(out_scene),
-        "--out-png",
-        str(out_png_single),
-        "--width",
-        "1000",
-        "--height",
-        "700",
-    ]
-    if view["axis"] is not None:
-        cmd.extend(["--rotation-axis", str(view["axis"]), "--rotation-deg", str(float(view["deg"]))])
-    if not out_png_single.exists():
-        run_cmd(cmd)
+    out_png_single = render_cortex_single_image(
+        cluster_dir=cluster_dir, left_label=left_label,
+        right_label=right_label, cortex_assets=cortex_assets,
+    )
 
     out_png = cluster_dir / "cluster_cortex_toproi_4view.png"
     img = plt.imread(out_png_single)

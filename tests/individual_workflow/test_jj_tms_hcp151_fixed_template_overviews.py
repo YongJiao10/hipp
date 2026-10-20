@@ -47,7 +47,7 @@ def _write_fixed_subject(root: Path, subject: str = "1001") -> None:
     surface_dir.mkdir(parents=True)
     for hemi in ("L", "R"):
         surface = surface_dir / (
-            f"sub-{subject}_hemi-{hemi}_space-corobl_den-512_"
+            f"sub-{subject}_hemi-{hemi}_space-T1w_den-512_"
             "label-hipp_midthickness.surf.gii"
         )
         nib.save(
@@ -86,7 +86,7 @@ def _write_fixed_subject(root: Path, subject: str = "1001") -> None:
                 str(labels_path),
             )
             surface = surface_dir / (
-                f"sub-{subject}_hemi-{hemi}_space-corobl_den-512_"
+                f"sub-{subject}_hemi-{hemi}_space-T1w_den-512_"
                 "label-hipp_midthickness.surf.gii"
             )
             subject_inputs[f"surface_hemi-{hemi}"] = {

@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import subprocess
 import sys
 from pathlib import Path
 
@@ -16,7 +15,8 @@ CORE_WORKFLOW_DIR = Path(__file__).resolve().parent
 if str(CORE_WORKFLOW_DIR) not in sys.path:
     sys.path.insert(0, str(CORE_WORKFLOW_DIR))
 
-from lib.workbench import capture_scene, resolve_wb_command, run_workbench
+from lib.workbench import run_workbench
+from lib.render_cortex_pfm_scene import render_cortex_pfm_scene
 from lib.gifti_labels import make_named_label_gifti
 from lib.network_colors import load_network_colors
 from lib.kong2022_label_utils import load_kong2022_bundle
@@ -366,10 +366,6 @@ def run_render_stage() -> int:
     )
 
     # 4. Render individual views
-    render_scene_script = REPO_ROOT / "scripts" / "core_workflow" / "lib" / "render_cortex_pfm_scene.py"
-    if not render_scene_script.exists():
-        raise FileNotFoundError(render_scene_script)
-
     figures_dir = out_dir / "figures"
     scenes_dir = out_dir / "scenes"
     figures_dir.mkdir(parents=True, exist_ok=True)
@@ -380,45 +376,14 @@ def run_render_stage() -> int:
         out_scene = scenes_dir / f"sub-{subject}_atlas-kong2022_areal_mshbm_{spec['name']}.scene"
         out_png = figures_dir / f"sub-{subject}_atlas-kong2022_areal_mshbm_{spec['name']}.png"
         
-        cmd = [
-            sys.executable,
-            str(render_scene_script),
-            "--source-scene",
-            str(source_scene),
-            "--left-surface",
-            str(left_surface),
-            "--right-surface",
-            str(right_surface),
-            "--left-label",
-            str(left_label_gii),
-            "--right-label",
-            str(right_label_gii),
-            "--left-sulc",
-            str(left_sulc_gii),
-            "--right-sulc",
-            str(right_sulc_gii),
-            "--sulc-dscalar",
-            str(sulc_dscalar),
-            "--dlabel",
-            str(dlabel_path),
-            "--out-scene",
-            str(out_scene),
-            "--out-png",
-            str(out_png),
-            "--scene-index",
-            str(args.scene_index),
-            "--renderer",
-            args.renderer,
-            "--width",
-            str(args.width),
-            "--height",
-            str(args.height),
-        ]
-        
-        if spec["axis"] is not None:
-            cmd.extend(["--rotation-axis", str(spec["axis"]), "--rotation-deg", str(spec["deg"])])
-
-        subprocess.run(cmd, check=True)
+        render_cortex_pfm_scene(
+            source_scene=source_scene, left_surface=left_surface, right_surface=right_surface,
+            left_label=left_label_gii, right_label=right_label_gii,
+            left_sulc=left_sulc_gii, right_sulc=right_sulc_gii,
+            sulc_dscalar=sulc_dscalar, dlabel=dlabel_path, out_scene=out_scene, out_png=out_png,
+            scene_index=args.scene_index, renderer=args.renderer, width=args.width, height=args.height,
+            rotation_axis=spec["axis"], rotation_deg=float(spec["deg"]),
+        )
         view_pngs.append((spec["name"], out_png))
 
     # 5. Compose overview image

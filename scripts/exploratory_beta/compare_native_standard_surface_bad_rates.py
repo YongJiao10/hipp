@@ -59,7 +59,7 @@ STANFORD_NATIVE_CON_ROOT = (
 STANFORD_NATIVE_HIPP_ROOT = (
     REPO_ROOT / "outputs_stanford/inputs/stanford/hippunfold/dense_corobl_batch"
 )
-STANFORD_NATIVE_SURFACE_SPACE = "corobl"
+STANFORD_NATIVE_SURFACE_SPACE = "T1w"
 
 JJ_STANDARD_RUN = (
     REPO_ROOT

@@ -8,21 +8,21 @@ nonnegative display window from 0 to an automatically selected upper bound.
 """
 
 import argparse
-import os
-import tempfile
-import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
 import matplotlib
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 from lib.confidence_map import publication_display_data, publication_display_upper
-from lib.hippomaps_adapter import DEFAULT_HIPPOMAPS_ROOT, ensure_hippomaps_on_path
+from lib.hippomaps_adapter import (
+    DEFAULT_HIPPOMAPS_ROOT, wait_for_stable_file, normalize_hemis,
+    enable_den512_plotting_v2, load_hippomaps_plotter, stitch_hemi_images,
+    capture_hippomaps_plot,
+)
 from lib.output_layout import DEFAULT_GRADIENTS_DIR, DEFAULT_ROUTEA_GROUP_ATLAS_ROOT
 from lib.route_tags import ROUTE_TAG_CHOICES, infer_route_tag_from_group_root, validate_group_atlas_root_for_route
 from lib.traceability import StageSpec, run_stage
@@ -48,35 +48,6 @@ CONFIDENCE_PRODUCTS = (
         summary_name="confidence_silhouette_gradient_feature_summary.json",
     ),
 )
-
-
-def wait_for_stable_file(path: Path, *, checks: int = 3, interval: float = 0.15) -> None:
-    last: tuple[int, int] | None = None
-    stable = 0
-    for _ in range(max(1, checks * 10)):
-        if path.exists():
-            st = path.stat()
-            current = (int(st.st_size), int(st.st_mtime_ns))
-            if current == last and current[0] > 0:
-                stable += 1
-                if stable >= checks:
-                    return
-            else:
-                stable = 0
-                last = current
-        time.sleep(float(interval))
-    if not path.exists() or path.stat().st_size <= 0:
-        raise TypeError(f"Render target did not stabilize: {path}")
-
-
-def normalize_hemis(hemis: list[str] | tuple[str, ...]) -> list[str]:
-    out = [str(hemi).upper() for hemi in hemis]
-    if not out:
-        raise ValueError("At least one hemisphere is required")
-    invalid = [hemi for hemi in out if hemi not in HEMIS]
-    if invalid:
-        raise ValueError(f"Invalid hemisphere(s): {invalid}; expected one or more of {HEMIS}")
-    return out
 
 
 def annotate_confidence_image(
@@ -107,42 +78,6 @@ def annotate_confidence_image(
     return image_path
 
 
-def stitch_hemi_images(left_png: Path, right_png: Path, output_png: Path) -> Path:
-    left_img = Image.open(left_png).convert("RGB")
-    right_img = Image.open(right_png).convert("RGB")
-    out = Image.new(
-        "RGB",
-        (left_img.size[0] + right_img.size[0], max(left_img.size[1], right_img.size[1])),
-        (255, 255, 255),
-    )
-    out.paste(left_img, (0, 0))
-    out.paste(right_img, (left_img.size[0], 0))
-    output_png.parent.mkdir(parents=True, exist_ok=True)
-    out.save(output_png)
-    return output_png
-
-
-def enable_den512_plotting_v2(hippomaps_root: Path) -> bool:
-    ensure_hippomaps_on_path(hippomaps_root)
-    import hippomaps.plotting as hm_plotting
-
-    v2_densities = getattr(hm_plotting, "_V2_DENS", None)
-    if not isinstance(v2_densities, set):
-        raise TypeError("Expected hippomaps.plotting._V2_DENS to be a set")
-    if "512" in v2_densities:
-        return False
-    v2_densities.add("512")
-    return True
-
-
-def load_hippomaps_plotter(hippomaps_root: Path = DEFAULT_HIPPOMAPS_ROOT) -> Callable[..., object]:
-    ensure_hippomaps_on_path(hippomaps_root)
-    enable_den512_plotting_v2(hippomaps_root)
-    from hippomaps.plotting import surfplot_canonical_foldunfold
-
-    return surfplot_canonical_foldunfold
-
-
 def render_confidence_figure(
     *,
     left: np.ndarray,
@@ -167,13 +102,8 @@ def render_confidence_figure(
     if plotter is None:
         plotter = load_hippomaps_plotter()
     unfold_ap_rescale = str(den) != "512"
-    output_png.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.NamedTemporaryFile(
-        prefix=f".{output_png.stem}.", suffix=output_png.suffix, dir=output_png.parent, delete=False
-    ) as tmp:
-        render_png = Path(tmp.name)
-    fig = plotter(
-        cdata,
+    return capture_hippomaps_plot(
+        plotter, cdata, output_png=output_png,
         hemis=hemis,
         labels=["hipp"],
         den=str(den),
@@ -187,7 +117,6 @@ def render_confidence_figure(
         transparent_bg=False,
         interactive=False,
         screenshot=True,
-        filename=str(render_png),
         suppress_warnings=True,
         size=[450, 300],
         cb__width=0.95,
@@ -196,31 +125,6 @@ def render_confidence_figure(
         cb__labelTextProperty={"fontSize": 13},
         zoom=1.45,
     )
-    final_render = render_png
-    if fig is None:
-        if not render_png.exists() or render_png.stat().st_size <= 0:
-            raise TypeError("HippoMaps plotter returned None and did not create the requested screenshot")
-    elif isinstance(fig, str):
-        got = Path(fig)
-        if got.exists() and got.stat().st_size > 0:
-            final_render = got
-        elif not render_png.exists() or render_png.stat().st_size <= 0:
-            raise TypeError(f"HippoMaps plotter returned screenshot path but file is missing: {fig}")
-    elif hasattr(fig, "savefig"):
-        fig.savefig(render_png, dpi=220, bbox_inches="tight")
-        try:
-            plt.close(fig)
-        except TypeError:
-            pass
-    elif hasattr(fig, "screenshot"):
-        fig.screenshot(str(render_png))
-    else:
-        raise TypeError(f"Unsupported HippoMaps plotter return type: {type(fig)!r}")
-    if not final_render.exists() or final_render.stat().st_size <= 0:
-        raise TypeError(f"HippoMaps render target was not created: {final_render}")
-    os.replace(final_render, output_png)
-    wait_for_stable_file(output_png)
-    return output_png
 
 
 def render_bilateral_confidence_figure(
@@ -429,13 +333,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 if __name__ == "__main__":
     parser = build_arg_parser()
-    args = parser.parse_args()
     raise SystemExit(
         run_stage(
             StageSpec(
                 step_id="06_06_render_confidence_maps",
                 purpose="Render functional parcellation confidence maps on folded and unfolded surfaces.",
-                stage_main=lambda: main(args),
+                stage_main=lambda: main(parser.parse_args()),
                 upstream_defaults=("05_04_compute_confidence_maps",),
             )
         )

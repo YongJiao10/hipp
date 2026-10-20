@@ -39,7 +39,7 @@ SURFACE_ROOTS = {
     "stanford": REPO_ROOT / "outputs_stanford/inputs/stanford/hippunfold/dense_corobl_batch",
     "jj_tms": REPO_ROOT / "outputs_iowa_jj_tms/inputs/iowa_jj_tms/hippunfold/dense_corobl_batch",
 }
-SURFACE_SPACES = {"stanford": "corobl", "jj_tms": "T1w"}
+SURFACE_SPACES = {"stanford": "T1w", "jj_tms": "T1w"}
 MATCH_ROOTS = {
     "stanford": REPO_ROOT / "outputs_stanford/work/hcp151_fixed_template_matching/subjects",
     "jj_tms": REPO_ROOT / "outputs_iowa_jj_tms/work/hcp151_fixed_template_matching/subjects",
@@ -77,6 +77,13 @@ def surface_path(dataset: str, subject: str, hemi: str, kind: str) -> Path:
     space = SURFACE_SPACES[dataset]
     root = SURFACE_ROOTS[dataset] / f"sub-{subject}/hippunfold/sub-{subject}/surf"
     return root / f"sub-{subject}_hemi-{hemi}_space-{space}_den-512_label-hipp_{kind}.surf.gii"
+
+
+def require_native_mapping_space(mapping_root: Path, dataset: str) -> None:
+    path = mapping_root / 'run_manifest.json'
+    manifest = json.loads(path.read_text(encoding='utf-8'))
+    if manifest.get('dataset') != dataset or manifest.get('native_surface_space') != 'T1w':
+        raise ValueError(f'Native beta requires a {dataset} T1w mapping; rebuild the corobl/undeclared mapping: {path}')
 
 
 def load_surface_areas(path: Path) -> np.ndarray:
@@ -295,6 +302,7 @@ def main() -> int:
     mapping_root = (args.mapping_root or DEFAULT_MAPPING_ROOTS[dataset]).resolve()
     out_root = (args.out_root or DEFAULT_OUT_ROOTS[dataset]).resolve()
     run_dir = out_root / "runs" / args.run_id
+    require_native_mapping_space(mapping_root, dataset)
     jobs_path = mapping_root / "native_jobs.csv"
     if not jobs_path.is_file():
         raise FileNotFoundError(jobs_path)

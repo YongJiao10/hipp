@@ -33,7 +33,7 @@ def aggregate_hemi_roi_timeseries(
     valid_mask: np.ndarray,
     roi_registry: list[dict[str, object]],
 ) -> tuple[list[np.ndarray], list[dict[str, object]], list[dict[str, object]], dict[str, int]]:
-    """Mean ROI time series over valid vertices; shared by RouteA/RouteB extractors."""
+    """Keep ordered ROI identities; empty parcels have all-NaN time series."""
     n_total = int(hemi_dt.shape[0])
     n_used = int(np.sum(valid_mask))
     stats = {
@@ -85,8 +85,9 @@ def aggregate_hemi_roi_timeseries(
         }
         if n_g_used <= 0:
             empty_rows.append(out_row)
-            continue
-        ts = np.nanmean(hemi_dt[valid_idxs, :], axis=0).astype(np.float32)
+            ts = np.full((hemi_dt.shape[1],), np.nan, dtype=np.float32)
+        else:
+            ts = np.nanmean(hemi_dt[valid_idxs, :], axis=0).astype(np.float32)
         ts_rows.append(ts)
         kept_rows.append(out_row)
 

@@ -57,8 +57,9 @@ def run_workbench(
     *,
     env: dict[str, str] | None = None,
     cwd: Path | None = None,
+    wb_command: Path | None = None,
 ) -> subprocess.CompletedProcess[str]:
-    cmd = [str(resolve_wb_command()), *args]
+    cmd = [str(resolve_wb_command(wb_command)), *args]
     proc = subprocess.run(
         cmd,
         cwd=str(cwd) if cwd is not None else None,

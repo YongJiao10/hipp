@@ -362,6 +362,9 @@ def test_lynch_cluster_profile_uses_cluster_time_series_correlation(tmp_path: Pa
     )
     np.save(ts_dir / f"sub-{subject}_hemi-{hemi}_timeseries.npy", hippocampal_ts)
     np.save(ref_dir / "cortex_canonical7_network_timeseries.npy", network_ts)
+    (ref_dir / "reference_summary.json").write_text(json.dumps({
+        "run_ids": [1], "run_lengths": [network_ts.shape[1]],
+    }))
     (ref_dir / "cortex_canonical7_networks.tsv").write_text(
         "canonical7_network\nDefault\nVisual\nSomatomotor\nDorsalAttention\nVentralAttention\nControl\nLanguage\n",
         encoding="utf-8",
@@ -474,6 +477,9 @@ def test_04_01_lynch7_materializes_canonical7_fc_not_component20(tmp_path: Path)
     hipp_ts = np.vstack([t, t[::-1], np.ones_like(t)]).astype(np.float32)
     np.save(surf_dir / f"sub-{subject}_hemi-L_timeseries.npy", hipp_ts)
     np.save(mask_dir / f"sub-{subject}_hemi-L_valid_mask.npy", np.asarray([True, True, False]))
+    (ref_dir / "reference_summary.json").write_text(json.dumps({
+        "run_ids": [1, 2, 3, 4], "run_lengths": [2, 2, 2, 2],
+    }))
 
     fc_mod.materialize_fc(
         shared_root,
@@ -484,6 +490,7 @@ def test_04_01_lynch7_materializes_canonical7_fc_not_component20(tmp_path: Path)
         reference_root=reference_root,
         mask_root=mask_root,
         atlas="lynch2024_7net",
+        dataset="hcp",
     )
 
     out_dir = shared_root / f"sub-{subject}" / "fc" / "lynch2024_7net" / "2mm" / "hemi_L"

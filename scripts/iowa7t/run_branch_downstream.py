@@ -28,8 +28,6 @@ from lib.extract_cortex_kong2022_route_a_roi_timeseries import (
     align_surface_labels_to_dt_vertices,
     compute_cortex_tsnr_gate,
     load_surface_label_vector,
-    parse_run_segments,
-    write_tsv,
 )
 from lib.fc_math import compact_active_vertices, corrcoef_rows
 from lib.kong2022_label_utils import (
@@ -40,6 +38,7 @@ from lib.kong2022_label_utils import (
     load_kong2022_bundle,
 )
 from lib.surface_sampling import sample_hipp_surface_timeseries
+from lib.surface_coordinates import dataset_registration, require_registered_sampling
 from lib.tsnr import rest_tsnr_input, REST_POLICY
 from lib.task_quality import rest_signal_validity
 from lib.workbench import run_workbench
@@ -49,7 +48,7 @@ from lib.output_layout import (
     resolve_iowa7t_hipp_outputs_root,
     validate_iowa7t_variant,
 )
-from lib.io_utils import load_run_segment_metadata
+from lib.io_utils import load_run_segment_metadata, parse_run_segments, write_tsv
 from lib.path_templates import format_subject_path_template
 from lib.workflow_utils import file_meta, file_meta_unresolved, git_commit, utc_now_iso, write_json
 
@@ -179,7 +178,7 @@ def hippunfold_surface_path(job: BranchJob, hemi: str) -> Path:
         job.hippunfold_dir
         / f"sub-{job.subject}"
         / "surf"
-        / f"sub-{job.subject}_hemi-{hemi}_space-corobl_den-512_label-hipp_midthickness.surf.gii"
+        / f"sub-{job.subject}_hemi-{hemi}_space-T1w_den-512_label-hipp_midthickness.surf.gii"
     )
 
 
@@ -221,8 +220,11 @@ def make_shape_gifti(data: np.ndarray) -> GiftiImage:
 
 def raw_outputs_done(job: BranchJob) -> bool:
     raw_dir = job.surface_root / "raw"
+    summary = raw_dir / 'surface_sampling_summary.json'
+    if summary.is_file():
+        require_registered_sampling(json.loads(summary.read_text()), context=summary)
     return all(
-        (raw_dir / f"sub-{job.subject}_hemi-{hemi}_space-corobl_den-512_label-hipp_bold.func.gii").exists()
+        (raw_dir / f"sub-{job.subject}_hemi-{hemi}_space-T1w_den-512_label-hipp_bold.func.gii").exists()
         for hemi in HEMIS
     )
 
@@ -233,6 +235,9 @@ def tsnr_outputs_done(job: BranchJob) -> bool:
 
 
 def smoothing_outputs_done(job: BranchJob) -> bool:
+    stage = job.surface_root / 'stage_manifest.json'
+    if not stage.is_file() or json.loads(stage.read_text()).get('params', {}).get('smoothing_space') != 'T1w':
+        return False
     return all(
         (job.surface_root / smoothing / f"sub-{job.subject}_hemi-{hemi}_timeseries.npy").exists()
         for smoothing in SMOOTHINGS
@@ -262,7 +267,10 @@ def cortex_qc_done(directory: Path) -> bool:
 def qc_policy_done(job) -> bool:
     for hemi in HEMIS:
         path = job.surface_root / "tsnr_gate" / f"sub-{job.subject}_hemi-{hemi}_tsnr_gate_summary.json"
-        if not path.is_file() or json.loads(path.read_text()).get("validity_policy") != REST_POLICY:
+        if not path.is_file():
+            return False
+        summary = json.loads(path.read_text())
+        if summary.get('validity_policy') != REST_POLICY or summary.get('sampling_space') != 'MNI152NLin6Asym':
             return False
     return True
 
@@ -284,7 +292,8 @@ def run_surface_stage(job: BranchJob, *, overwrite: bool = False) -> None:
             subject=job.subject,
             density="512",
             outdir=raw_dir,
-            space="corobl",
+            space="T1w",
+            registration=dataset_registration('iowa7t', job.subject),
             mapping_method="trilinear",
             smooth_iters=0,
         )
@@ -308,7 +317,7 @@ def run_surface_stage(job: BranchJob, *, overwrite: bool = False) -> None:
     if overwrite or not tsnr_outputs_done(job) or not qc_policy_done(job):
         gate_dir.mkdir(parents=True, exist_ok=True)
         for hemi in HEMIS:
-            raw = raw_dir / f"sub-{job.subject}_hemi-{hemi}_space-corobl_den-512_label-hipp_bold.func.gii"
+            raw = raw_dir / f"sub-{job.subject}_hemi-{hemi}_space-T1w_den-512_label-hipp_bold.func.gii"
             surf = hippunfold_surface_path(job, hemi)
             data = load_func_gii(raw).astype(np.float64)
             scores, valid = rest_tsnr_input(qc_input(job, hemi, "hipp"), dataset="iowa7t", subject=job.subject, hemi=hemi, n_vertices=data.shape[0], n_frames=data.shape[1])
@@ -332,6 +341,7 @@ def run_surface_stage(job: BranchJob, *, overwrite: bool = False) -> None:
                     "tsnr_definition": REST_POLICY,
                     "baseline_input": str(qc_input(job, hemi, "hipp")),
                     "validity_policy": REST_POLICY,
+                    "sampling_space": "MNI152NLin6Asym",
                     "n_vertices_total": int(valid.size),
                     "n_vertices_valid": int(valid.sum()),
                     "n_vertices_invalid": int(invalid.sum()),
@@ -347,10 +357,10 @@ def run_surface_stage(job: BranchJob, *, overwrite: bool = False) -> None:
             out_dir = job.surface_root / smoothing
             out_dir.mkdir(parents=True, exist_ok=True)
             for hemi in HEMIS:
-                raw = raw_dir / f"sub-{job.subject}_hemi-{hemi}_space-corobl_den-512_label-hipp_bold.func.gii"
+                raw = raw_dir / f"sub-{job.subject}_hemi-{hemi}_space-T1w_den-512_label-hipp_bold.func.gii"
                 roi = gate_dir / f"sub-{job.subject}_hemi-{hemi}_valid_roi.shape.gii"
                 surf = hippunfold_surface_path(job, hemi)
-                out_gii = out_dir / f"sub-{job.subject}_hemi-{hemi}_space-corobl_den-512_label-hipp_bold.func.gii"
+                out_gii = out_dir / f"sub-{job.subject}_hemi-{hemi}_space-T1w_den-512_label-hipp_bold.func.gii"
                 run_workbench(
                     [
                         "-metric-smoothing",
@@ -378,7 +388,8 @@ def run_surface_stage(job: BranchJob, *, overwrite: bool = False) -> None:
             "status": "done",
             "timestamp_utc": utc_now_iso(),
             "git_commit": git_commit(),
-            "params": {"subject": job.subject, "branch": job.branch, "smoothings": SMOOTHINGS},
+            "params": {"subject": job.subject, "branch": job.branch, "smoothings": SMOOTHINGS,
+                       "smoothing_space": "T1w"},
             "inputs": stage_inputs,
             "outputs": stage_outputs,
             "elapsed_seconds": float(time.monotonic() - t0),

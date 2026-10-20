@@ -572,7 +572,7 @@ def _surface_path(hippunfold_root: Path, subject: str, hemi: str) -> Path:
         / sub_id
         / "surf"
         / (
-            f"{sub_id}_hemi-{hemi}_space-corobl_den-512_"
+            f"{sub_id}_hemi-{hemi}_space-T1w_den-512_"
             "label-hipp_midthickness.surf.gii"
         )
     ).resolve()
@@ -594,7 +594,7 @@ def preflight_subject(
         for name, path in (
             ("exact 2mm CtxReg FC", fc_path),
             ("standard validity mask", mask_path),
-            ("corobl den-512 surface", surface_path),
+            ("T1w den-512 surface", surface_path),
         ):
             if not path.is_file():
                 raise FileNotFoundError(

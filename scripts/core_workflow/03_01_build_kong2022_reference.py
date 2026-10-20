@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
-
 """
 Process Step Description:
 Build Kong2022 reference data. Generates Kong2022 parcellation reference files for cortical network mapping, providing a standard template for establishing hippocampal-cortical connectivity.
@@ -11,7 +9,7 @@ Main Flow Path:
 
 Inputs:
 - Command-line arguments:
-  - --shared-root: Path to output shared processed files (default: `outputs_hcp/inputs/hcp/kong2022/shared_inputs/routea`).
+  - --shared-root: Path to output shared processed files (default: `outputs_hcp/inputs/hcp/kong2022/shared_inputs/routeb`).
   - --data-root: Root directory containing raw structural BIDS folders (default: `data/hippunfold_input`).
   - --subjects-manifest: Path to QC-passed subject list manifest (default: `outputs_hcp/inputs/hcp/kong2022/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt`).
   - --subjects: Space-separated list of explicit subject IDs.
@@ -31,36 +29,28 @@ Outputs:
   - Cortical network parcels description table: `{shared_root}/sub-<subject>/reference/kong2022/cortex_roi_parcels.tsv`.
   - Reference generation run manifest: `{shared_root}/sub-<subject>/reference/kong2022/runs/run-<run_id>/reference_summary.json`.
 """
+from __future__ import annotations
+
 import argparse
-import hashlib
 import os
-import subprocess
-import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
-from lib.output_layout import DEFAULT_KONG2022_MANIFEST_ROOT, DEFAULT_KONG2022_ROUTEA_ROOT
-from lib.io_utils import is_persistent_concat_path, load_run_artifact_manifest, load_run_segment_metadata, load_subject_ids
-from lib.path_templates import format_subject_path_template
-
+from lib.extract_cortex_kong2022_routeb_roi_timeseries import build_kong2022_reference
+from lib.io_utils import _sha256_file as file_sha256
+from lib.io_utils import load_subject_ids
+from lib.kong2022_reference import ReferenceRequest, resolve_batch_subject_dtseries
+from lib.output_layout import (
+    DEFAULT_KONG2022_MANIFEST_ROOT,
+    DEFAULT_KONG2022_ROUTEB_ROOT,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-PYTHON_EXE = sys.executable or "python"
-EXTRACT_MODULE = "scripts.core_workflow.lib.extract_cortex_kong2022_routeb_roi_timeseries"
-DEFAULT_SHARED_ROOT = DEFAULT_KONG2022_ROUTEA_ROOT
+DEFAULT_SHARED_ROOT = DEFAULT_KONG2022_ROUTEB_ROOT
 DEFAULT_DATA_ROOT = REPO_ROOT / "data" / "hippunfold_input"
 DEFAULT_DTSERIES_TEMPLATE = "{data_root}/{sub_subject}/func/{sub_subject}_task-rest_run-concat.dtseries.nii"
 DEFAULT_MANIFEST = DEFAULT_KONG2022_MANIFEST_ROOT / "hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt"
 MAX_CONCURRENCY = 10
-
-
-
-def file_sha256(path: Path) -> str:
-    h = hashlib.sha256()
-    with path.open("rb") as f:
-        for chunk in iter(lambda: f.read(1024 * 1024), b""):
-            h.update(chunk)
-    return h.hexdigest()
 
 
 def migrate_tree_with_conflict_guard(legacy_dir: Path, common_dir: Path) -> tuple[int, int]:
@@ -117,86 +107,26 @@ def run_subject(
     cross_atlas_merge_json: Path | None,
     run_metadata_template: str | None = None,
 ) -> tuple[str, bool, str]:
-    cmd = [
-        PYTHON_EXE,
-        "-m",
-        EXTRACT_MODULE,
-        "--subject",
-        str(subject),
-        "--shared-root",
-        str(shared_root),
-    ]
-    if run_artifact_manifest_template:
-        manifest_path = Path(
-            format_subject_path_template(
-                run_artifact_manifest_template,
-                data_root=data_root,
-                subject=subject,
-            )
-        ).resolve()
-        try:
-            records = load_run_artifact_manifest(
-                manifest_path,
-                subject=subject,
-                required_artifacts=("dtseries",),
-            )
-        except (FileNotFoundError, ValueError, KeyError, TypeError) as exc:
-            return subject, False, str(exc)
-        dtseries_paths = [record["artifacts"]["dtseries"] for record in records]
-        run_ids = [str(record["run_id"]) for record in records]
-        cmd.extend(
-            [
-                "--run-dtseries",
-                *(str(path) for path in dtseries_paths),
-                "--run-ids",
-                *run_ids,
-                "--run-artifact-manifest",
-                str(manifest_path),
-            ]
-        )
-    else:
-        if run_metadata_template is None:
-            return subject, False, (
-                "Single CIFTI input requires --run-metadata-template"
-            )
-        dtseries = format_subject_path_template(
-            dtseries_template,
-            data_root=data_root,
+    options: dict[str, object] = {"subject": subject, "shared_root": shared_root}
+    try:
+        dt_options, _expected = resolve_batch_subject_dtseries(
             subject=subject,
+            data_root=data_root,
+            dtseries_template=dtseries_template,
+            run_artifact_manifest_template=run_artifact_manifest_template,
+            run_metadata_template=run_metadata_template,
         )
-        if is_persistent_concat_path(dtseries):
-            return subject, False, (
-                "Iowa persistent concat input is not allowed; pass "
-                "--run-artifact-manifest-template for canonical run-level files: "
-                f"{dtseries}"
-            )
-        metadata_path = Path(
-            format_subject_path_template(
-                run_metadata_template,
-                data_root=data_root,
-                subject=subject,
-            )
-        ).resolve()
-        try:
-            load_run_segment_metadata(metadata_path)
-        except (FileNotFoundError, ValueError, KeyError, TypeError) as exc:
-            return subject, False, str(exc)
-        cmd.extend(
-            [
-                "--dtseries",
-                str(dtseries),
-                "--run-metadata-template",
-                str(metadata_path),
-            ]
-        )
+    except (FileNotFoundError, ValueError, KeyError, TypeError) as exc:
+        return subject, False, str(exc)
+    options.update(dt_options)
     if kong2022_dlabel is not None:
-        cmd.extend(["--kong2022-dlabel", str(kong2022_dlabel)])
+        options["kong2022_dlabel"] = kong2022_dlabel
     if cross_atlas_merge_json is not None:
-        cmd.extend(["--cross-atlas-merge-json", str(cross_atlas_merge_json)])
-    proc = subprocess.run(cmd, capture_output=True, text=True)
-    if proc.returncode != 0:
-        tail = (proc.stderr or proc.stdout)[-4000:]
-        return subject, False, tail
+        options["cross_atlas_merge_json"] = cross_atlas_merge_json
+    try:
+        build_kong2022_reference(request=ReferenceRequest(**options))  # type: ignore[arg-type]
+    except Exception as exc:
+        return subject, False, str(exc)[-4000:]
     return subject, True, "ok"
 
 

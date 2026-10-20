@@ -7,10 +7,9 @@ import json
 import re
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
-
 
 _RUN_ID_RE = re.compile(r"(?:^|[_-])run-(?P<run>\d+)(?:[_\-.]|$)")
 _PERSISTENT_CONCAT_COMPONENT_RE = re.compile(r"^xcpd_surf_concat$", re.IGNORECASE)
@@ -53,7 +52,7 @@ def run_ids_from_paths(
     ]
     if any(run_id is None for run_id in run_ids):
         return []
-    normalized = [int(run_id) for run_id in run_ids]
+    normalized = [int(run_id) for run_id in run_ids if run_id is not None]
     if len(set(normalized)) != len(normalized):
         raise ValueError(f"Duplicate numeric run IDs in paths: {list(paths)}")
     return normalized
@@ -84,6 +83,7 @@ def resolve_run_paths_by_id(
     by_id: dict[int, Path] = {}
     for path in sorted(matched, key=_natural_path_sort_key):
         run_id = run_id_from_path(path)
+        assert run_id is not None
         if run_id in by_id:
             raise ValueError(
                 f"Duplicate run-{run_id:02d} {label} files: {by_id[run_id]} and {path}"
@@ -260,6 +260,16 @@ def load_run_segment_metadata(path: Path) -> tuple[tuple[int, ...], tuple[int, .
             raise ValueError(f"Run metadata requires integer IDs and lengths: {source}")
         return int(value)
 
+    def record_length(row: Mapping[str, object]) -> int | None:
+        declared = [integer(row[key]) for key in (
+            "run_length", "n_timepoints", "volume_timepoints", "dtseries_timepoints"
+        ) if key in row]
+        if not declared:
+            return None
+        if len(set(declared)) != 1:
+            raise ValueError(f"Run metadata timepoints disagree: {source}")
+        return declared[0]
+
     def parse(obj: object) -> tuple[tuple[int, ...], tuple[int, ...]] | None:
         if not isinstance(obj, Mapping):
             return None
@@ -283,9 +293,9 @@ def load_run_segment_metadata(path: Path) -> tuple[tuple[int, ...], tuple[int, .
             if records is not None:
                 ids = tuple(integer(row["run_id"]) for row in records if "run_id" in row)
                 lengths_from_records = tuple(
-                    integer(row.get("run_length", row.get("n_timepoints")))
+                    integer(record_length(row))
                     for row in records
-                    if row.get("run_length", row.get("n_timepoints")) is not None
+                    if record_length(row) is not None
                 )
                 if len(ids) != len(records) or len(lengths_from_records) != len(records):
                     raise ValueError(f"Run metadata records lack explicit IDs or lengths: {source}")
@@ -297,20 +307,21 @@ def load_run_segment_metadata(path: Path) -> tuple[tuple[int, ...], tuple[int, .
                 raise ValueError(f"Run metadata lacks explicit run IDs matching lengths: {source}")
         elif records:
             if not all(
-                "run_id" in row and row.get("run_length", row.get("n_timepoints")) is not None
+                "run_id" in row and record_length(row) is not None
                 for row in records
             ):
                 raise ValueError(f"Run metadata records lack explicit IDs or lengths: {source}")
             ids = tuple(integer(row["run_id"]) for row in records)
             lengths = tuple(
-                integer(row.get("run_length", row.get("n_timepoints"))) for row in records
+                integer(record_length(row)) for row in records
             )
         else:
             return None
 
-        if raw_ids is not None:
-            if not isinstance(raw_ids, list) or tuple(integer(value) for value in raw_ids) != ids:
-                raise ValueError(f"run_ids and run records disagree: {source}")
+        if raw_ids is not None and (
+            not isinstance(raw_ids, list) or tuple(integer(value) for value in raw_ids) != ids
+        ):
+            raise ValueError(f"run_ids and run records disagree: {source}")
         if len(ids) != len(lengths) or not ids:
             raise ValueError(f"run_ids/run_lengths mismatch in run metadata: {source}")
         if any(run_id <= 0 for run_id in ids) or any(length <= 0 for length in lengths):
@@ -410,7 +421,7 @@ def load_cifti_dtseries_inputs(
     for path in input_paths:
         if not path.is_file():
             raise FileNotFoundError(f"Missing CIFTI dtseries input: {path}")
-        image = nib.load(str(path))
+        image = cast(Any, nib.load(str(path)))
         data = np.asarray(image.dataobj, dtype=np.float32)
         if data.ndim != 2:
             raise ValueError(
@@ -484,12 +495,18 @@ def compute_cortex_tsnr_gate(
     subject: str | None = None,
     vertex_ids: np.ndarray | None = None,
 ) -> Path:
-    from .task_quality import parse_tsnr_threshold, signal_validity_policy, rest_signal_validity
+    from .task_quality import (
+        parse_tsnr_threshold,
+        rest_signal_validity,
+        signal_validity_policy,
+    )
+
     policy = signal_validity_policy(dataset, task)
     cutoff = parse_tsnr_threshold(threshold)
     if policy != "hcp_10000_over_std":
         from .task_design import normalize_task_branch
-        from .tsnr import task_tsnr, rest_tsnr_input
+        from .tsnr import rest_tsnr_input, task_tsnr
+
         if task != "rest":
             task = normalize_task_branch(task)
             scores, valid = task_tsnr(data, [] if run_lengths is None else run_lengths,
@@ -525,7 +542,10 @@ def compute_cortex_tsnr_gate(
         return mask_path
     sd = np.nanstd(np.asarray(data, dtype=np.float64), axis=1, ddof=1)
     tsnr = np.where(sd > 0, hcp_mode / sd, np.nan).astype(np.float32)
-    valid = np.isfinite(tsnr) & (tsnr >= float(threshold))
+    valid = (
+        rest_signal_validity(data) if cutoff is None
+        else np.isfinite(tsnr) & (tsnr >= float(cutoff))
+    )
     outdir.mkdir(parents=True, exist_ok=True)
     np.save(outdir / f"cortex_{hemi.lower()}_tsnr.npy", tsnr)
     mask_path = outdir / f"cortex_{hemi.lower()}_valid_mask.npy"
@@ -534,7 +554,10 @@ def compute_cortex_tsnr_gate(
     # Write json directly
     gate_summary = {
         "hemi": hemi,
-        "threshold": float(threshold),
+        "dataset": dataset,
+        "task": task,
+        "validity_policy": policy,
+        "threshold": None if cutoff is None else float(cutoff),
         "tsnr_definition": f"{int(hcp_mode)}/std",
         "n_grayordinates_total": int(valid.size),
         "n_grayordinates_valid": int(valid.sum()),
@@ -596,3 +619,78 @@ def parse_run_segments(
             f"Run lengths do not sum to concat length: sum={offset} concat={expected_total_tp}"
         )
     return segments
+
+
+def validate_run_segment_order(
+    segments: list[dict[str, int]],
+    *,
+    source: Path,
+) -> list[dict[str, int]]:
+    if not segments:
+        raise ValueError(f"Run metadata is empty: {source}")
+    out: list[dict[str, int]] = []
+    previous_id = 0
+    previous_stop = 0
+    for index, raw in enumerate(segments, start=1):
+        try:
+            run_id = int(raw["run_id"])
+            start = int(raw["run_start"])
+            stop = int(raw["run_stop"])
+            length = int(raw["run_length"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError(f"Malformed run segment at index {index}: {raw}; source={source}") from exc
+        if run_id <= previous_id:
+            raise ValueError(f"Run IDs must be strictly increasing: {source}")
+        if index == 1 and start != 0:
+            raise ValueError(f"Run segments must start at frame 0: {source}")
+        if start != previous_stop:
+            raise ValueError(f"Run segments must be contiguous: {source}")
+        if start < 0 or stop <= start or length != stop - start:
+            raise ValueError(f"Invalid run segment: {raw}; source={source}")
+        out.append({"run_id": run_id, "run_start": start, "run_stop": stop, "run_length": length})
+        previous_id = run_id
+        previous_stop = stop
+    return out
+
+
+def segments_from_explicit_metadata(path: Path) -> list[dict[str, int]]:
+    resolved = Path(path).resolve()
+    run_ids, run_lengths = load_run_segment_metadata(resolved)
+    segments: list[dict[str, int]] = []
+    offset = 0
+    for run_id, run_length in zip(run_ids, run_lengths, strict=True):
+        stop = offset + int(run_length)
+        segments.append({"run_id": int(run_id), "run_start": int(offset), "run_stop": int(stop), "run_length": int(run_length)})
+        offset = stop
+    return validate_run_segment_order(segments, source=resolved)
+
+
+def load_optional_cortex_valid_mask(
+    reference_root: Path,
+    subject: str,
+    cortex_counts: Mapping[str, int],
+    *,
+    require_explicit: bool = True,
+) -> np.ndarray:
+    """Load explicit cortical validity masks; no implicit mask is default."""
+    subject = str(subject).replace("sub-", "")
+    gate = Path(reference_root) / f"sub-{subject}" / "reference" / "common" / "tsnr_gate"
+    pieces: list[np.ndarray] = []
+    missing: list[Path] = []
+    for hemi_name, key in [("left", "CORTEX_LEFT"), ("right", "CORTEX_RIGHT")]:
+        path = gate / f"cortex_{hemi_name}_valid_mask.npy"
+        if path.is_file():
+            arr = np.load(path).astype(bool)
+            if int(arr.size) != int(cortex_counts[key]):
+                raise ValueError(f"Cortex valid mask size mismatch: {path} size={arr.size} expected={cortex_counts[key]}")
+            pieces.append(arr)
+        else:
+            missing.append(path)
+            if not require_explicit:
+                pieces.append(np.ones((int(cortex_counts[key]),), dtype=bool))
+    if missing and require_explicit:
+        raise FileNotFoundError(
+            "Missing explicit cortical validity mask(s) required for cortex/FC processing: "
+            + ", ".join(str(path) for path in missing)
+        )
+    return np.concatenate(pieces).astype(bool)
