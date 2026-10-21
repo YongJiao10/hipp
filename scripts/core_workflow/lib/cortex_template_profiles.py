@@ -13,7 +13,7 @@ import numpy as np
 from .fc_math import center_run_timeseries, corrcoef_rows, fisher_z_transform_fc
 from .io_utils import load_run_segment_metadata, read_tsv_rows
 from .kong2022_label_utils import KONG2022_DLABEL_PATH, load_kong2022_merge_mapping
-from .workbench import REPO_ROOT, run_workbench
+from .workbench import run_workbench
 
 
 WTA_NETWORK_COLUMNS = {
@@ -307,75 +307,40 @@ compute_subject_cluster_roi_profiles = compute_subject_label_roi_profiles
 def resolve_cortex_assets(
     subject: str,
     data_root: Path,
-    assets_root: Path,
     scene: Path,
     dlabel: Path = KONG2022_DLABEL_PATH,
     *,
-    public_root: Path | None = None,
+    sulc_dir: Path,
 ) -> dict[str, Path]:
+    """Load exact subject assets and split their declared sulc into render assets."""
     subject = str(subject).removeprefix("sub-")
-    anat = data_root / f"sub-{subject}" / "anat"
-    asset_subject = assets_root / f"sub-{subject}" / "assets"
-    pub = (public_root or (REPO_ROOT / "external")).resolve()
-    fastans_tpl = pub / "FASTANS" / "resources" / "templates"
-
-    def first_existing(paths: Iterable[Path]) -> Path | None:
-        for path in paths:
-            if path.exists():
-                return path.resolve()
-        return None
-
-    left_inflated = first_existing((
-        anat / f"sub-{subject}_hemi-L_space-fsLR_den-32k_desc-MSMAll_inflated.surf.gii",
-        assets_root / f"sub-{subject}_hemi-L_space-fsLR_den-32k_desc-MSMAll_inflated.surf.gii",
-        pub / f"sub-{subject}_hemi-L_space-fsLR_den-32k_desc-MSMAll_inflated.surf.gii",
-    ))
-    right_inflated = first_existing((
-        anat / f"sub-{subject}_hemi-R_space-fsLR_den-32k_desc-MSMAll_inflated.surf.gii",
-        assets_root / f"sub-{subject}_hemi-R_space-fsLR_den-32k_desc-MSMAll_inflated.surf.gii",
-        pub / f"sub-{subject}_hemi-R_space-fsLR_den-32k_desc-MSMAll_inflated.surf.gii",
-    ))
-    sulc_dscalar = first_existing((
-        anat / f"sub-{subject}_space-fsLR_den-32k_desc-MSMAll_sulc.dscalar.nii",
-        assets_root / f"sub-{subject}_space-fsLR_den-32k_desc-MSMAll_sulc.dscalar.nii",
-        pub / f"sub-{subject}_space-fsLR_den-32k_desc-MSMAll_sulc.dscalar.nii",
-    ))
-    left_sulc = first_existing((
-        asset_subject / f"sub-{subject}_hemi-L_space-fsLR_den-32k_desc-MSMAll_sulc.func.gii",
-        assets_root / f"sub-{subject}_hemi-L_space-fsLR_den-32k_desc-MSMAll_sulc.func.gii",
-        fastans_tpl / "CORTEX_LEFT.32k_fs_LR..func.gii",
-    ))
-    right_sulc = first_existing((
-        asset_subject / f"sub-{subject}_hemi-R_space-fsLR_den-32k_desc-MSMAll_sulc.func.gii",
-        assets_root / f"sub-{subject}_hemi-R_space-fsLR_den-32k_desc-MSMAll_sulc.func.gii",
-        fastans_tpl / "CORTEX_RIGHT.32k_fs_LR.func.gii",
-    ))
-    if (left_sulc is None or right_sulc is None) and sulc_dscalar is not None:
-        cache_dir = (REPO_ROOT / "tmp" / "cortex_template_cache" / f"sub-{subject}").resolve()
-        cache_dir.mkdir(parents=True, exist_ok=True)
-        left_gen = cache_dir / f"sub-{subject}_hemi-L_space-fsLR_den-32k_desc-MSMAll_sulc.func.gii"
-        right_gen = cache_dir / f"sub-{subject}_hemi-R_space-fsLR_den-32k_desc-MSMAll_sulc.func.gii"
-        if not left_gen.exists() or not right_gen.exists():
-            run_workbench([
-                "-cifti-separate", str(sulc_dscalar), "COLUMN",
-                "-metric", "CORTEX_LEFT", str(left_gen),
-                "-metric", "CORTEX_RIGHT", str(right_gen),
-            ])
-        left_sulc = left_sulc or left_gen.resolve()
-        right_sulc = right_sulc or right_gen.resolve()
-
-    required: dict[str, Path | None] = {
-        "left_inflated": left_inflated,
-        "right_inflated": right_inflated,
-        "left_sulc": left_sulc,
-        "right_sulc": right_sulc,
-        "sulc_dscalar": sulc_dscalar,
-        "scene": scene.resolve() if scene.exists() else None,
-        "dlabel": dlabel.resolve() if dlabel.exists() else None,
+    anat = Path(data_root) / f"sub-{subject}" / "anat"
+    required = {
+        "left_inflated": anat / f"sub-{subject}_hemi-L_space-fsLR_den-32k_desc-MSMAll_inflated.surf.gii",
+        "right_inflated": anat / f"sub-{subject}_hemi-R_space-fsLR_den-32k_desc-MSMAll_inflated.surf.gii",
+        "sulc_dscalar": anat / f"sub-{subject}_space-fsLR_den-32k_desc-MSMAll_sulc.dscalar.nii",
+        "scene": Path(scene),
+        "dlabel": Path(dlabel),
     }
-    missing = [name for name, path in required.items() if path is None]
+    required = {name: path.resolve() for name, path in required.items()}
+    missing = [f"{name}: {path}" for name, path in required.items() if not path.is_file()]
     if missing:
         raise FileNotFoundError(
-            f"Missing cortex rendering assets for sub-{subject}: {', '.join(missing)}"
+            f"Missing cortex rendering assets for sub-{subject}: {'; '.join(missing)}"
         )
-    return {name: path for name, path in required.items() if path is not None}
+
+    sulc_dir = Path(sulc_dir).resolve()
+    sulc_dir.mkdir(parents=True, exist_ok=True)
+    derived = {
+        "left_sulc": sulc_dir / f"sub-{subject}_hemi-L_space-fsLR_den-32k_desc-MSMAll_sulc.func.gii",
+        "right_sulc": sulc_dir / f"sub-{subject}_hemi-R_space-fsLR_den-32k_desc-MSMAll_sulc.func.gii",
+    }
+    run_workbench([
+        "-cifti-separate", str(required["sulc_dscalar"]), "COLUMN",
+        "-metric", "CORTEX_LEFT", str(derived["left_sulc"]),
+        "-metric", "CORTEX_RIGHT", str(derived["right_sulc"]),
+    ])
+    for path in derived.values():
+        if not path.is_file():
+            raise FileNotFoundError(f"Workbench did not create cortex sulc metric: {path}")
+    return {**required, **derived}

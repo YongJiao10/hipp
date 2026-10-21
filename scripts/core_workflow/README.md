@@ -72,6 +72,15 @@ Shared implementation boundaries:
   `lib.render_cortex_pfm_scene.render_cortex_pfm_scene` directly. Workbench
   remains an external process; scene paths, view rotations and image sizes
   are unchanged. `05_03` and `07_01` retain process-level job orchestration.
+  `06_03` and `06_10` read cortex assets only from
+  `<data-root>/sub-<cortex-template-subject>/anat/`, using the exact filenames
+  `sub-<id>_hemi-{L,R}_space-fsLR_den-32k_desc-MSMAll_inflated.surf.gii` and
+  `sub-<id>_space-fsLR_den-32k_desc-MSMAll_sulc.dscalar.nii`. Missing inputs
+  report their expected paths. Each invocation splits both sulc metrics from
+  that declared dscalar into its existing render runtime's `cortex_assets/`
+  directory, replacing the derived pair rather than reusing a global cache.
+  `--scene` and the Kong2022 dlabel remain explicit inputs; `06_10` exposes
+  `--dlabel`, while `06_03` uses the maintained Kong2022 dlabel.
 - `06_04`, `06_06` and `06_07` share HippoMaps loading, screenshot return-type
   handling and bilateral image assembly in `lib.hippomaps_adapter`; each stage
   supplies its own data, colour ranges and annotations.

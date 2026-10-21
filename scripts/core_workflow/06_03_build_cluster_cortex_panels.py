@@ -21,17 +21,17 @@ Inputs:
   - --fdr-q: FDR q-threshold for one-sample t-test (default: 0.05).
   - --max-rois-per-sign: Maximum cortical ROIs to display per positive/negative sign (default: 20).
   - --cortex-template-subject: Subject ID used as cortical template (default: "100610").
-  - --data-root: Directory for core data, containing subject lists/manifests (default: `data/hippunfold_input`).
-  - --cortex-assets-root: Directory for template cortex surfaces (default: `data/cortex_assets`).
+  - --data-root: Source of exact `sub-<cortex-template-subject>/anat/` rendering inputs (default: `data/hippunfold_input`).
   - --scene: Cortical workbench manual scene template (default: `config/manual_wb_scenes/cortex_manual.scene`).
 - Physical inputs:
   - Shared network colors: `config/hipp_network_style.json`
   - Group-level clusters: `group_labels_final.npy` under `{group_root}/{method}/smooth-{smoothing}_hemi-{hemi}_cov-{threshold}/`.
   - Subject-level cluster-to-cortex functional connectivity matrices.
-  - Cortex surface files (`*.surf.gii`) and ROI maps under `--cortex-assets-root`.
+  - Bilateral fsLR den-32k MSMAll inflated surfaces and sulc dscalar under `{data_root}/sub-<cortex-template-subject>/anat/`.
 
 Outputs:
 - File outputs:
+  - Bilateral sulc metrics split from that subject's dscalar: `{runtime_root}/cortex_assets/`.
   - Standalone cortical projection panel figures: `{runtime_root}/combos/{combo_id}/cluster_{cluster_id:02d}_panel.png`
   - ROI statistical outputs: `{runtime_root}/combos/{combo_id}/cluster_{cluster_id:02d}_stats.tsv` and `.json`
   - Combination-level manifest: `{runtime_root}/combos/{combo_id}/cortex_panel_combo_manifest.json`
@@ -66,9 +66,6 @@ from lib.io_utils import load_json, write_tsv
 from lib.kong2022_label_utils import load_kong2022_bundle
 from lib.network_colors import load_network_colors
 from lib.output_layout import (
-    DEFAULT_CORTEX_ASSETS_ROOT as CORE_CORTEX_ASSETS_ROOT,
-)
-from lib.output_layout import (
     DEFAULT_CORTEX_PANELS_DIR,
     DEFAULT_KONG2022_ROUTEA_ROOT,
     DEFAULT_ROUTEA_GROUP_ATLAS_ROOT,
@@ -92,8 +89,6 @@ DEFAULT_GROUP_ROOT = DEFAULT_ROUTEA_GROUP_ATLAS_ROOT
 DEFAULT_SHARED_ROOT = DEFAULT_KONG2022_ROUTEA_ROOT
 DEFAULT_PRESENT_DIR = DEFAULT_CORTEX_PANELS_DIR
 DEFAULT_DATA_ROOT = REPO_ROOT / "data" / "hippunfold_input"
-DEFAULT_CORTEX_ASSETS_ROOT = CORE_CORTEX_ASSETS_ROOT
-DEFAULT_PUBLIC_TEMPLATE_ROOT = REPO_ROOT / "external"
 DEFAULT_SCENE = REPO_ROOT / "config" / "manual_wb_scenes" / "cortex_manual.scene"
 DEFAULT_HIPP_SCENE = REPO_ROOT / "config" / "wb_locked_native_view_lateral_medial.scene"
 
@@ -217,8 +212,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--fdr-q", type=float, default=0.05)
     parser.add_argument("--max-rois-per-sign", type=int, default=20)
     parser.add_argument("--cortex-template-subject", default="100610")
-    parser.add_argument("--data-root", default=str(DEFAULT_DATA_ROOT))
-    parser.add_argument("--cortex-assets-root", default=str(DEFAULT_CORTEX_ASSETS_ROOT))
+    parser.add_argument("--data-root", default=str(DEFAULT_DATA_ROOT),
+                        help="Root of exact sub-<cortex-template-subject>/anat cortex rendering inputs.")
     parser.add_argument("--scene", default=str(DEFAULT_SCENE))
     return parser.parse_args()
 
@@ -956,9 +951,11 @@ def main() -> int:
     viewer_combo_manifest_dir.mkdir(parents=True, exist_ok=True)
 
     data_root = Path(args.data_root).resolve()
-    cortex_assets_root = Path(args.cortex_assets_root).resolve()
     scene = Path(args.scene).resolve()
-    cortex_assets = resolve_cortex_assets(str(args.cortex_template_subject), data_root, cortex_assets_root, scene)
+    cortex_assets = resolve_cortex_assets(
+        subject=str(args.cortex_template_subject), data_root=data_root, scene=scene,
+        sulc_dir=runtime_root / "cortex_assets",
+    )
 
     tau_tag = coverage_tag(float(args.coverage_threshold))
     network_colors = load_shared_network_colors()

@@ -22,7 +22,6 @@ from lib.cortex_template_profiles import (
 from lib.gifti_labels import make_named_label_gifti
 from lib.kong2022_label_utils import KONG2022_DLABEL_PATH, load_kong2022_bundle
 from lib.output_layout import (
-    DEFAULT_CORTEX_ASSETS_ROOT,
     DEFAULT_CORTEX_PANELS_DIR,
     DEFAULT_GROUP_ATLAS_ROOT,
     DEFAULT_KONG2022_ROUTEA_ROOT,
@@ -98,8 +97,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-png", default=None)
     parser.add_argument("--output-manifest", default=None)
     parser.add_argument("--cortex-template-subject", default="100610")
-    parser.add_argument("--data-root", default=str(DEFAULT_DATA_ROOT))
-    parser.add_argument("--cortex-assets-root", default=str(DEFAULT_CORTEX_ASSETS_ROOT))
+    parser.add_argument("--data-root", default=str(DEFAULT_DATA_ROOT),
+                        help="Root of exact sub-<cortex-template-subject>/anat cortex rendering inputs.")
     parser.add_argument("--scene", default=str(DEFAULT_SCENE))
     parser.add_argument("--dlabel", default=str(KONG2022_DLABEL_PATH))
     parser.add_argument("--wta-root", default=str(DEFAULT_WTA_ROOT))
@@ -565,13 +564,6 @@ def render_wta_overview(args: argparse.Namespace) -> dict[str, Any]:
             raise ValueError(f"ROI registry mismatch for {key}: expected Kong2022 400 IDs")
 
     vmax = compute_global_symmetric_scale(all_profiles)
-    cortex_assets = resolve_cortex_assets(
-        subject=str(args.cortex_template_subject),
-        data_root=Path(args.data_root).resolve(),
-        assets_root=Path(args.cortex_assets_root).resolve(),
-        scene=Path(args.scene).resolve(),
-        dlabel=Path(args.dlabel).resolve(),
-    )
     present_dir = Path(args.present_dir).resolve()
     runtime_base = (
         Path(args.runtime_root).resolve()
@@ -579,6 +571,13 @@ def render_wta_overview(args: argparse.Namespace) -> dict[str, Any]:
         else present_dir / "runtime" / "cluster_roi_strength" / "wta_normalized"
     )
     runtime_root = runtime_base / taxonomy
+    cortex_assets = resolve_cortex_assets(
+        subject=str(args.cortex_template_subject),
+        data_root=Path(args.data_root).resolve(),
+        scene=Path(args.scene).resolve(),
+        dlabel=Path(args.dlabel).resolve(),
+        sulc_dir=runtime_root / "cortex_assets",
+    )
     output_png = (
         Path(args.output_png).resolve()
         if args.output_png
@@ -735,18 +734,18 @@ def main() -> int:
         if registry_ids != expected_ids:
             raise ValueError(f"ROI registry mismatch for {key}: expected Kong2022 400 IDs")
 
-    cortex_assets = resolve_cortex_assets(
-        subject=str(args.cortex_template_subject),
-        data_root=Path(args.data_root).resolve(),
-        assets_root=Path(args.cortex_assets_root).resolve(),
-        scene=Path(args.scene).resolve(),
-        dlabel=Path(args.dlabel).resolve(),
-    )
     present_dir = Path(args.present_dir).resolve()
     runtime_root = (
         Path(args.runtime_root).resolve()
         if args.runtime_root
         else present_dir / "runtime" / "cluster_roi_strength" / str(route_tag)
+    )
+    cortex_assets = resolve_cortex_assets(
+        subject=str(args.cortex_template_subject),
+        data_root=Path(args.data_root).resolve(),
+        scene=Path(args.scene).resolve(),
+        dlabel=Path(args.dlabel).resolve(),
+        sulc_dir=runtime_root / "cortex_assets",
     )
     output_png = (
         Path(args.output_png).resolve()
