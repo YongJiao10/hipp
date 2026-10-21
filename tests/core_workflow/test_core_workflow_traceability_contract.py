@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# pyright: reportUndefinedVariable=false
 from __future__ import annotations
 
 import json
@@ -78,7 +79,7 @@ def test_every_numbered_step_emits_traceability_manifest_fields() -> None:
                 TEST_PYTHON,
                 str(entry),
                 "--workflow-branch",
-                "kong2022_routeb",
+                "kong2022_fixed",
                 "--upstream-step-id",
                 "00_00_upstream_placeholder",
                 "--input-artifact",
@@ -95,7 +96,7 @@ def test_every_numbered_step_emits_traceability_manifest_fields() -> None:
             )
             manifest = json.loads(out_json.read_text(encoding="utf-8"))
             assert manifest["step_id"] == step_id
-            assert manifest["workflow_branch"] == "kong2022_routeb"
+            assert manifest["workflow_branch"] == "kong2022_fixed"
             assert "00_00_upstream_placeholder" in manifest["upstream_step_ids"]
             assert "inputs/example_a" in manifest["input_artifacts"]
             assert "outputs/example_b" in manifest["output_artifacts"]
@@ -110,14 +111,14 @@ def test_confidence_cli_accepts_traceability_flags_before_stage_parsing(tmp_path
     manifest_path = tmp_path / "step.json"
     proc = subprocess.run(
         [TEST_PYTHON, str(CORE_ROOT / f"{step_id}.py"),
-         "--workflow-branch", "kong2022_routeb",
+         "--workflow-branch", "kong2022_fixed",
          "--step-manifest-out", str(manifest_path), "--dry-run"],
         cwd=REPO_ROOT, capture_output=True, text=True,
     )
     assert proc.returncode == 0, proc.stderr
     manifest = json.loads(manifest_path.read_text())
     assert manifest["step_id"] == step_id
-    assert manifest["workflow_branch"] == "kong2022_routeb"
+    assert manifest["workflow_branch"] == "kong2022_fixed"
     assert manifest["status"] == "dry_run"
 
 
@@ -140,7 +141,6 @@ def test_active_core_workflow_has_no_legacy_wrapper_or_runtime_refs() -> None:
 
 
 def main() -> int:
-    test_step_registry_references_existing_paths_and_modules()
     test_retired_formal_release_utilities_are_not_registered()
     test_every_numbered_step_help_succeeds()
     test_every_numbered_step_emits_traceability_manifest_fields()

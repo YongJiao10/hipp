@@ -10,26 +10,27 @@ Main Flow Path:
 Inputs:
 - Command-line arguments:
   - --gradient-root: Root directory containing gradient data outputs (default: `outputs_hcp/work/hippomaps_gradients`).
+  - --cohort / --variant: Select the same cohort and 36p|22p gradient bank as 05_01 and 05_02.
   - --present-root: Root directory for saving presentation figures (default: `outputs_hcp/present/gradients`).
   - --hippomaps-root: Root directory for the HippoMaps repository package (default: `external/HippoMaps`).
-  - --routes: Routes to process (choices: "routea", "routea_ctxreg", "routea_ctxdrop", "routeb"; default: all).
+  - --routes: Routes to process (choices: "pfm", "pfm_ctxreg", "pfm_ctxdrop", "fixed"; default: all).
   - --smoothings: Smoothing kernel values to process (default: ["2mm", "4mm"]).
   - --den: Output density resolution (default: "512").
   - --components: Comma-separated list of gradient components to plot (default: "1,2,3").
   - --hemis: Hemispheres to process (default: ["L", "R"]).
-  - --cross-route-display-reference: Route used as the display-only sign reference (default: "routea").
+  - --cross-route-display-reference: Route used as the display-only sign reference (default: "pfm").
   - --no-cross-route-display-alignment: Disable cross-route display sign alignment and shared color ranges.
   - --display-color-trim-fraction: Quantile trim for shared per-component color ranges (default: 0.05).
 - Physical inputs:
-  - Gradient output arrays and manifests: `{gradient_root}/{route}/{smoothing}/hemi_{hemi}/hippomaps_gradient_manifest.json` and matching `*.npy`/`*.gii` files.
+  - Gradient output arrays and manifests: `{gradient_root}/{route}[_22p]/[<cohort>/]{smoothing}/hemi_{hemi}/hippomaps_gradient_manifest.json` and matching `*.npy`/`*.gii` files.
   - Group-level FC matrix: `{routes_root}/intrinsic_group_fc_smooth-{smoothing}_hemi-{hemi}.npy` or matching path.
 
 Outputs:
 - File outputs:
-  - Folded/Unfolded gradient surface rendering PNG: `{present_root}/{route}/{smoothing}/hippomaps_gradients_{route}_{smoothing}_{out_tag}_g1g2g3.png`
-  - Explained variance fraction plot PNG: `{present_root}/{route}/{smoothing}/hippomaps_ev_{route}_{smoothing}_{out_tag}.png`
-  - Endpoint FC contrast plot PNG: `{present_root}/{route}/{smoothing}/hippomaps_endpoint_fc_contrast_{route}_{smoothing}_{out_tag}.png`
-  - Manifest JSON: `{present_root}/{route}/{smoothing}/hippomaps_gradient_products_{route}_{smoothing}_{out_tag}_manifest.json`
+  - Folded/Unfolded gradient surface rendering PNG: `{present_root}/{route}[_22p]/[<cohort>/]{smoothing}/hippomaps_gradients_{route}_{smoothing}_{out_tag}_g1g2g3.png`
+  - Explained variance fraction plot PNG: `{present_root}/{route}[_22p]/[<cohort>/]{smoothing}/hippomaps_ev_{route}_{smoothing}_{out_tag}.png`
+  - Endpoint FC contrast plot PNG: `{present_root}/{route}[_22p]/[<cohort>/]{smoothing}/hippomaps_endpoint_fc_contrast_{route}_{smoothing}_{out_tag}.png`
+  - Manifest JSON: `{present_root}/{route}[_22p]/[<cohort>/]{smoothing}/hippomaps_gradient_products_{route}_{smoothing}_{out_tag}_manifest.json`
 """
 from __future__ import annotations
 
@@ -57,7 +58,7 @@ from lib.hippomaps_adapter import (
     stitch_hemi_images as stitch_hemi_gradient_images,
 )
 from lib.io_utils import load_json
-from lib.output_layout import DEFAULT_GRADIENTS_DIR, DEFAULT_HIPPOMAPS_GRADIENT_ROOT
+from lib.output_layout import DEFAULT_GRADIENTS_DIR, DEFAULT_HIPPOMAPS_GRADIENT_ROOT, resolve_cohort_gradient_root
 from lib.traceability import StageSpec, run_stage
 from lib.workflow_utils import write_json
 from PIL import Image, ImageDraw, ImageFont
@@ -68,7 +69,7 @@ import matplotlib.pyplot as plt  # type: ignore[import-untyped]  # noqa: E402
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_GRADIENT_ROOT = DEFAULT_HIPPOMAPS_GRADIENT_ROOT
 DEFAULT_PRESENT_ROOT = DEFAULT_GRADIENTS_DIR
-ROUTES = ("routea", "routea_ctxreg", "routea_ctxdrop", "routeb")
+ROUTES = ("pfm", "pfm_ctxreg", "pfm_ctxdrop", "fixed")
 SMOOTHINGS = ("2mm", "4mm")
 HEMIS = ("L", "R")
 
@@ -105,7 +106,7 @@ def align_display_gradients_to_reference(
     gradients_by_hemi: dict[str, np.ndarray],
     reference_by_hemi: dict[str, np.ndarray],
     selected_components: list[int],
-    reference_route: str = "routea",
+    reference_route: str = "pfm",
 ) -> tuple[dict[str, np.ndarray], dict[str, Any]]:
     display = {hemi: np.asarray(arr, dtype=np.float32).copy() for hemi, arr in gradients_by_hemi.items()}
     decisions: list[dict[str, Any]] = []
@@ -191,10 +192,14 @@ def format_color_ranges_for_components(
 
 
 def load_gradient_arrays_for_display(
-    *, gradient_root: Path, route: str, smoothing: str, hemis: list[str]
+    *, gradient_root: Path, route: str, smoothing: str, hemis: list[str],
+    cohort: str | None = None, variant: str = "36p",
 ) -> dict[str, np.ndarray]:
+    branch_root = resolve_cohort_gradient_root(
+        route=route, cohort=cohort, variant=variant, base_root=gradient_root,
+    )
     return {
-        hemi: np.load(gradient_root / route / smoothing / f"hemi_{hemi}" / "hippomaps_gradients_full.npy").astype(np.float32)
+        hemi: np.load(branch_root / smoothing / f"hemi_{hemi}" / "hippomaps_gradients_full.npy").astype(np.float32)
         for hemi in hemis
     }
 
@@ -208,6 +213,8 @@ def build_cross_route_display_specs(
     selected_components: list[int],
     reference_route: str,
     trim_fraction: float = 0.05,
+    cohort: str | None = None,
+    variant: str = "36p",
 ) -> dict[tuple[str, str], dict[str, Any]]:
     specs: dict[tuple[str, str], dict[str, Any]] = {}
     for smoothing in smoothings:
@@ -216,6 +223,8 @@ def build_cross_route_display_specs(
             route=reference_route,
             smoothing=smoothing,
             hemis=hemis,
+            cohort=cohort,
+            variant=variant,
         )
         aligned_sets: list[dict[str, np.ndarray]] = []
         pending: dict[str, tuple[dict[str, np.ndarray], dict[str, Any]]] = {}
@@ -225,6 +234,8 @@ def build_cross_route_display_specs(
                 route=route,
                 smoothing=smoothing,
                 hemis=hemis,
+                cohort=cohort,
+                variant=variant,
             )
             display_by_hemi, alignment_meta = align_display_gradients_to_reference(
                 route=route,
@@ -497,15 +508,22 @@ def render_combo(
     selected_components: list[int],
     hemis: list[str],
     display_spec: dict[str, Any] | None = None,
+    cohort: str | None = None,
+    variant: str = "36p",
 ) -> Path:
     hemis = normalize_hemis(hemis)
-    combo_root = present_root / route / smoothing
+    branch_root = resolve_cohort_gradient_root(
+        route=route, cohort=cohort, variant=variant, base_root=gradient_root,
+    )
+    combo_root = resolve_cohort_gradient_root(
+        route=route, cohort=cohort, variant=variant, base_root=present_root,
+    ) / smoothing
     manifests: dict[str, dict[str, Any]] = {}
     gradients_by_hemi: dict[str, np.ndarray] = {}
     support_by_hemi: dict[str, np.ndarray] = {}
     group_fc_by_hemi: dict[str, np.ndarray] = {}
     for hemi in hemis:
-        run_dir = gradient_root / route / smoothing / f"hemi_{hemi}"
+        run_dir = branch_root / smoothing / f"hemi_{hemi}"
         manifest_path = run_dir / "hippomaps_gradient_manifest.json"
         if not manifest_path.exists():
             raise FileNotFoundError(f"Missing HippoMaps gradient manifest: {manifest_path}")
@@ -605,7 +623,9 @@ def render_combo(
             "status": "ok",
             "route": route,
             "smoothing": smoothing,
-            "source_manifests": {hemi: str((gradient_root / route / smoothing / f"hemi_{hemi}" / "hippomaps_gradient_manifest.json").resolve()) for hemi in hemis},
+            "cohort": cohort,
+            "variant": variant,
+            "source_manifests": {hemi: str((branch_root / smoothing / f"hemi_{hemi}" / "hippomaps_gradient_manifest.json").resolve()) for hemi in hemis},
             "hippomaps_repo": str(Path(hippomaps_root).resolve()),
             "hippomaps_commit": hippomaps_commit(hippomaps_root),
             "plotter": "hippomaps.plotting.surfplot_canonical_foldunfold",
@@ -668,6 +688,8 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Render HippoMaps-style continuous gradient products.")
     parser.add_argument("--gradient-root", default=str(DEFAULT_GRADIENT_ROOT))
     parser.add_argument("--present-root", default=str(DEFAULT_PRESENT_ROOT))
+    parser.add_argument("--cohort", default=None, help="Cohort directory below each route; omit for HCP.")
+    parser.add_argument("--variant", choices=("36p", "22p"), default="36p", help="22p selects <route>_22p/<cohort> for inputs and figures.")
     parser.add_argument("--hippomaps-root", default=str(DEFAULT_HIPPOMAPS_ROOT))
     parser.add_argument("--routes", nargs="+", choices=ROUTES, default=list(ROUTES))
     parser.add_argument("--smoothings", nargs="+", choices=SMOOTHINGS, default=list(SMOOTHINGS))
@@ -677,7 +699,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--cross-route-display-reference",
         choices=ROUTES,
-        default="routea",
+        default="pfm",
         help="Reference route used for display-only sign alignment across branches.",
     )
     parser.add_argument(
@@ -711,6 +733,8 @@ def main() -> int:
             selected_components=components,
             reference_route=str(args.cross_route_display_reference),
             trim_fraction=float(args.display_color_trim_fraction),
+            cohort=args.cohort,
+            variant=args.variant,
         )
     for route in args.routes:
         for smoothing in args.smoothings:
@@ -724,6 +748,8 @@ def main() -> int:
                 selected_components=components,
                 hemis=hemis,
                 display_spec=display_specs.get((route, smoothing)),
+                cohort=args.cohort,
+                variant=args.variant,
             )
     return 0
 

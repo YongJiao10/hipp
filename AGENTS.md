@@ -50,8 +50,8 @@
 ## HippUnfold Density Guardrail
 ## HCP Cortex-Control Naming Contract
 
-- The only formal HCP cortex-control branch names are `routea_ctxdrop` and
-  `routea_ctxreg`. Active resolvers, launchers, consumers, manifests, and
+- The only formal HCP cortex-control branch names are `pfm_ctxdrop` and
+  `pfm_ctxreg`. Active resolvers, launchers, consumers, manifests, and
   documentation must use these names without `recovered`, `regenerated`, dates,
   run IDs, or `_full_k3_fisherz` suffixes.
 - The formal HCP roots, relative to `outputs_hcp/`, are:
@@ -148,10 +148,11 @@ NTS Pure MDD, TIS, and TIS PTSD.
 ## Iowa 3T JJ_TMS subgroup density naming
 
 For Iowa 3T JJ_TMS subgroup products, an unversioned path is the default 36P
-branch: `routea_pure_mdd` and `routea_comorbid_mdd`. The corresponding 22P
-branch must append _22p everywhere: `routea_pure_mdd_22p` and
-`routea_comorbid_mdd_22p`, including FC, gradient, group-atlas, weighted, and
-presentation roots. Never describe an unversioned Iowa subgroup result as 22P.
+branch: `pfm/pure_mdd` and `pfm/comorbid_mdd` (gradient roots `pfm_pure_mdd` and
+`pfm_comorbid_mdd` where flat). The corresponding 22P branch must append `_22p`
+everywhere: `pfm_22p/pure_mdd` and `pfm_22p/comorbid_mdd`, including FC,
+gradient, group-atlas, weighted, and presentation roots. Never describe an
+unversioned Iowa subgroup result as 22P.
 
 ### Local Repository / Core Workflow Context
 

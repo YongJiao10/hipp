@@ -14,19 +14,19 @@ Inputs:
   - --python-exe: Explicit python interpreter path used to execute child scripts (default: `/home/yojiao/.conda/envs/py314/bin/python`).
   - --group-atlas-root: Base directory containing branch-level group-atlas outputs (default: `outputs_hcp/work/group_atlas`).
   - --present-dir: Output directory for final matrix presentation figures and manifest (default: `outputs_hcp/present/overviews`).
-  - --routes: Routes/branches to process (choices: "routea", "routea_ctxreg", "routea_ctxdrop", "routeb", default: ["routea"]).
+  - --routes: Routes/branches to process (choices: "pfm", "pfm_17net", "pfm_ctxreg", "pfm_ctxdrop", "fixed", "fixed_17net", default: ["pfm"]).
   - --methods: Methods to export (default: all supported methods).
   - --coverage-threshold: Coverage threshold used to filter outputs (default: 0.80).
   - --manifest-name: Filename for the generated overview matrix manifest JSON (default: "group_overview_matrix_manifest.json").
   - --scene: Connectome Workbench template scene file override path.
 - Physical inputs:
-  - Group atlas directories: maintained science branches keep their method/taxonomy suffixes; the HCP cortex-control routes resolve explicitly to the formal direct roots `routea_ctxreg` and `routea_ctxdrop`.
+  - Group atlas directories: maintained science branches keep their method/taxonomy suffixes; the HCP cortex-control routes resolve explicitly to the formal direct roots `pfm_ctxreg` and `pfm_ctxdrop`.
   - Scripts to execute:
     - `scripts/core_workflow/06_01_build_group_overview.py`
 
 Outputs:
 - File outputs:
-  - Overview panel PNG figures for each method and route combination under `{present_dir}/`.
+  - Overview panel PNG figures for each method and route combination under `{present_dir}/{route}/`.
   - Group overview matrix manifest JSON file: `{present_dir}/{manifest_name}`.
   - Matrix comparison index file: `{present_dir}/README.md`.
 """
@@ -39,14 +39,15 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 from lib.output_layout import (
+    DEFAULT_FIXED_17NET_GROUP_ATLAS_ROOT,
+    DEFAULT_FIXED_GROUP_ATLAS_ROOT,
     DEFAULT_GROUP_ATLAS_ROOT,
     DEFAULT_KONG2022_ROOT,
     DEFAULT_OVERVIEWS_DIR,
-    DEFAULT_ROUTEA_CTXDROP_GROUP_ATLAS_ROOT,
-    DEFAULT_ROUTEA_CTXREG_GROUP_ATLAS_ROOT,
-    DEFAULT_ROUTEA_GROUP_ATLAS_ROOT,
-    DEFAULT_ROUTEA_17NET_GROUP_ATLAS_ROOT,
-    DEFAULT_ROUTEB_GROUP_ATLAS_ROOT,
+    DEFAULT_PFM_17NET_GROUP_ATLAS_ROOT,
+    DEFAULT_PFM_CTXDROP_GROUP_ATLAS_ROOT,
+    DEFAULT_PFM_CTXREG_GROUP_ATLAS_ROOT,
+    DEFAULT_PFM_GROUP_ATLAS_ROOT,
 )
 BUILD_PRESENT_SCRIPT = REPO_ROOT / "scripts" / "core_workflow" / "06_01_build_group_overview.py"
 DEFAULT_PYTHON = "/home/yojiao/.conda/envs/py314/bin/python"
@@ -54,8 +55,8 @@ DEFAULT_GROUP_ATLAS_BASE_ROOT = DEFAULT_GROUP_ATLAS_ROOT
 DEFAULT_CORE_GROUP_ATLAS_ROOT = DEFAULT_GROUP_ATLAS_ROOT
 DEFAULT_PRESENT_DIR = DEFAULT_OVERVIEWS_DIR
 DEFAULT_MANIFEST_NAME = "group_overview_matrix_manifest.json"
-DEFAULT_ROUTES = ("routea",)
-ROUTE_CHOICES = ("routea", "routea_17net", "routea_ctxreg", "routea_ctxdrop", "routeb")
+DEFAULT_ROUTES = ("pfm",)
+ROUTE_CHOICES = ("pfm", "pfm_17net", "pfm_ctxreg", "pfm_ctxdrop", "fixed", "fixed_17net")
 METHODS = ["intrinsic-spectral", "network-spectral", "gradient-spectral", "wta-top"]
 ATLAS = "kong2022"
 CLUSTERLESS_METHODS = {"wta-top"}
@@ -85,18 +86,20 @@ def canonical_group_roots(group_atlas_root: Path) -> dict[str, Path]:
     default_base = DEFAULT_CORE_GROUP_ATLAS_ROOT.resolve()
     if base == default_base:
         return {
-            "routea": DEFAULT_ROUTEA_GROUP_ATLAS_ROOT.resolve(),
-            "routea_17net": DEFAULT_ROUTEA_17NET_GROUP_ATLAS_ROOT.resolve(),
-            "routea_ctxreg": DEFAULT_ROUTEA_CTXREG_GROUP_ATLAS_ROOT.resolve(),
-            "routea_ctxdrop": DEFAULT_ROUTEA_CTXDROP_GROUP_ATLAS_ROOT.resolve(),
-            "routeb": DEFAULT_ROUTEB_GROUP_ATLAS_ROOT.resolve(),
+            "pfm": DEFAULT_PFM_GROUP_ATLAS_ROOT.resolve(),
+            "pfm_17net": DEFAULT_PFM_17NET_GROUP_ATLAS_ROOT.resolve(),
+            "pfm_ctxreg": DEFAULT_PFM_CTXREG_GROUP_ATLAS_ROOT.resolve(),
+            "pfm_ctxdrop": DEFAULT_PFM_CTXDROP_GROUP_ATLAS_ROOT.resolve(),
+            "fixed": DEFAULT_FIXED_GROUP_ATLAS_ROOT.resolve(),
+            "fixed_17net": DEFAULT_FIXED_17NET_GROUP_ATLAS_ROOT.resolve(),
         }
     return {
-        "routea": (base / "routea_full_k3_fisherz").resolve(),
-        "routea_17net": (base / "routea_17net_full_k3_fisherz").resolve(),
-        "routea_ctxreg": (base / "routea_ctxreg_full_k3_fisherz").resolve(),
-        "routea_ctxdrop": (base / "routea_ctxdrop_full_k3_fisherz").resolve(),
-        "routeb": (base / "routeb_full_k3_fisherz").resolve(),
+        "pfm": (base / "pfm").resolve(),
+        "pfm_17net": (base / "pfm_17net").resolve(),
+        "pfm_ctxreg": (base / "pfm_ctxreg").resolve(),
+        "pfm_ctxdrop": (base / "pfm_ctxdrop").resolve(),
+        "fixed": (base / "fixed").resolve(),
+        "fixed_17net": (base / "fixed_17net").resolve(),
     }
 
 
@@ -116,10 +119,17 @@ def build_render_jobs(
     jobs: list[RenderJob] = []
     route_roots = canonical_group_roots(Path(group_atlas_root))
     route_roots_by_method = {
-        "intrinsic-spectral": [("routea", None, route_roots["routea"]), ("routea_ctxreg", None, route_roots["routea_ctxreg"]), ("routeb", None, route_roots["routeb"])],
-        "network-spectral": [("routea", None, route_roots["routea"]), ("routea_ctxreg", None, route_roots["routea_ctxreg"]), ("routeb", None, route_roots["routeb"])],
-        "gradient-spectral": [("routea", None, route_roots["routea"]), ("routea_17net", None, route_roots["routea_17net"]), ("routea_ctxreg", None, route_roots["routea_ctxreg"]), ("routea_ctxdrop", None, route_roots["routea_ctxdrop"]), ("routeb", None, route_roots["routeb"])],
-        "wta-top": [("routea", None, route_roots["routea"]), ("routea_ctxreg", None, route_roots["routea_ctxreg"]), ("routea_ctxdrop", None, route_roots["routea_ctxdrop"]), ("routeb", None, route_roots["routeb"])],
+        "intrinsic-spectral": [("pfm", None, route_roots["pfm"]), ("pfm_ctxreg", None, route_roots["pfm_ctxreg"]), ("fixed", None, route_roots["fixed"])],
+        "network-spectral": [("pfm", None, route_roots["pfm"]), ("pfm_ctxreg", None, route_roots["pfm_ctxreg"]), ("fixed", None, route_roots["fixed"])],
+        "gradient-spectral": [
+            ("pfm", None, route_roots["pfm"]),
+            ("pfm_17net", None, route_roots["pfm_17net"]),
+            ("pfm_ctxreg", None, route_roots["pfm_ctxreg"]),
+            ("pfm_ctxdrop", None, route_roots["pfm_ctxdrop"]),
+            ("fixed", None, route_roots["fixed"]),
+            ("fixed_17net", None, route_roots["fixed_17net"]),
+        ],
+        "wta-top": [("pfm", None, route_roots["pfm"]), ("pfm_ctxreg", None, route_roots["pfm_ctxreg"]), ("pfm_ctxdrop", None, route_roots["pfm_ctxdrop"]), ("fixed", None, route_roots["fixed"])],
     }
     for method in requested_methods:
         for route_tag, mode_tag, group_root in route_roots_by_method[method]:
@@ -128,7 +138,7 @@ def build_render_jobs(
             variants: tuple[str | None, ...]
             if method in CLUSTERLESS_METHODS:
                 variants = (None,)
-            elif str(route_tag) in {"routea", "routea_17net", "routea_ctxreg", "routea_ctxdrop"}:
+            elif str(route_tag) in {"pfm", "pfm_17net", "pfm_ctxreg", "pfm_ctxdrop"}:
                 variants = ASSIGNMENT_VARIANTS
             else:
                 variants = ASSIGNMENT_VARIANTS
@@ -161,7 +171,7 @@ def expected_overview_path(
         bits.append(mode_tag)
     if assignment_variant:
         bits.append(assignment_variant)
-    return present_dir / f"{'_'.join(bits)}.png"
+    return present_dir / route_tag / f"{'_'.join(bits)}.png"
 
 
 def write_readme(present_dir: Path, items: list[dict[str, str]]) -> None:
@@ -171,13 +181,13 @@ def write_readme(present_dir: Path, items: list[dict[str, str]]) -> None:
         "This directory is the canonical maintained overview export root for all methods.",
         "All maintained presentation outputs are rendered from core_workflow-produced work roots by default.",
         "No 10perc/full, legacy fixedk_work, or auto-K presentation split is maintained in this exporter.",
-        "Each method exports one overview per route into this directory.",
+        "Each method exports its overviews into the corresponding route subdirectory.",
         "",
         "| route | mode | assignment | method | overview | source_group_root |",
         "|---|---|---|---|---|---|",
     ]
     for item in items:
-        png_name = Path(item["overview_png"]).name
+        png_name = Path(item["overview_png"]).relative_to(present_dir).as_posix()
         lines.append(
             f"| {item['route_tag']} | {item['mode_tag']} | {item.get('assignment_variant', '')} | {item['method']} | "
             f"[{png_name}]({png_name}) | `{item['source_group_root']}` |"
@@ -208,13 +218,14 @@ def main() -> int:
         group_root = Path(job.group_root).resolve()
         if not group_root.exists():
             raise FileNotFoundError(f"Missing group_root: {group_root}")
+        route_present_dir = present_dir / job.route_tag
         cmd = [
             args.python_exe,
             str(BUILD_PRESENT_SCRIPT),
             "--group-root",
             str(group_root),
             "--present-dir",
-            str(present_dir),
+            str(route_present_dir),
             "--atlases",
             ATLAS,
             "--methods",

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# pyright: reportMissingImports=false
 from __future__ import annotations
 
 import csv
@@ -211,27 +212,27 @@ def test_lynch_reference_rejects_incomplete_formal_network_coverage(tmp_path: Pa
 
 def test_lynch_routes_and_roots_are_distinct_from_kong_routea() -> None:
     shared = resolve_lynch2024_shared_inputs_root()
-    assert shared.parts[-3:] == ("lynch2024_fast_pfm_t1only", "shared_inputs", "pfm_hcp151")
-    assert resolve_lynch2024_nsi043_shared_inputs_root().name == "pfm_nsi043_78"
-    assert resolve_lynch2024_20net_group_atlas_root().name == "lynch2024_20net_hcp151_full_k3_fisherz"
+    assert shared.parts[-3:] == ("lynch2024", "shared_inputs", "pfm")
+    assert resolve_lynch2024_nsi043_shared_inputs_root().name == "pfm_nsi043"
+    assert resolve_lynch2024_20net_group_atlas_root().name == "lynch2024_20net"
     assert route_tags.infer_route_tag_from_shared_root(shared) == "lynch2024_20net"
     assert route_tags.infer_route_tag_from_group_root(resolve_lynch2024_20net_group_atlas_root()) == "lynch2024_20net"
     lynch7_root = output_layout.resolve_lynch2024_7net_group_atlas_root()
     assert route_tags.infer_route_tag_from_group_root(lynch7_root) == "lynch2024_7net"
     route_tags.validate_group_atlas_root_for_route(lynch7_root, "lynch2024_7net")
     with pytest.raises(ValueError, match="Provenance discrepancy"):
-        route_tags.validate_group_atlas_root_for_route(lynch7_root, "routea")
+        route_tags.validate_group_atlas_root_for_route(lynch7_root, "pfm")
 
 
 def test_05_01_resolves_lynch_shared_fc_roots_and_atlas_slug() -> None:
     shared_root = Path("/tmp/shared_inputs")
     route_shared = compute_mod.resolve_gradient_shared_root(shared_root, "lynch2024_7net")
-    assert route_shared == shared_root / "pfm_hcp151"
+    assert route_shared == shared_root / "pfm"
     assert compute_mod.atlas_for_gradient_route("lynch2024_20net") == "lynch2024_20net"
     assert compute_mod.atlas_for_gradient_route("lynch2024_7net") == "lynch2024_20net"
     fc_path = compute_mod.subject_fc_path(route_shared, "1001", "lynch2024_20net", "2mm", "L")
     assert fc_path.as_posix().endswith(
-        "/pfm_hcp151/sub-1001/fc/lynch2024_20net/2mm/hemi_L/hipp_vertex_to_network_fc.npy"
+        "/pfm/sub-1001/fc/lynch2024_20net/2mm/hemi_L/hipp_vertex_to_network_fc.npy"
     )
 
 

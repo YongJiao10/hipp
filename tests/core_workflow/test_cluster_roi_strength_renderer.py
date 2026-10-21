@@ -1,3 +1,4 @@
+# pyright: reportAttributeAccessIssue=false, reportArgumentType=false
 from __future__ import annotations
 
 import importlib.util
@@ -123,7 +124,26 @@ def test_blank_opposite_hemi_label_keeps_surface_vertex_count(tmp_path: Path) ->
     assert np.all(data == 0)
 
 
-def test_template_surface_path_rejects_legacy_fallback_path() -> None:
+def test_template_surface_path_rejects_legacy_fallback_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    canonical_root = tmp_path / "hipp_group_average"
+    canonical_surface = (
+        canonical_root
+        / "group_average_surfaces"
+        / "group-average_hemi-L_space-corobl_den-512_label-hipp_midthickness.surf.gii"
+    )
+    canonical_surface.parent.mkdir(parents=True)
+    canonical_surface.write_bytes(b"canonical")
+    monkeypatch.setattr(
+        renderer.validate_template_surface_path.__globals__["resolve_kong2022_template_root"],
+        "__code__",
+        (lambda dataset="hcp", variant="36p": canonical_root).__code__,
+    ) if False else monkeypatch.setitem(
+        renderer.validate_template_surface_path.__globals__,
+        "resolve_kong2022_template_root",
+        lambda dataset="hcp", variant="36p": canonical_root,
+    )
     with pytest.raises(ValueError, match="not canonical"):
         renderer.validate_template_surface_path(
             Path("/old/hcp7t_hippocampus/group-average_hemi-L_space-corobl_den-512_label-hipp_midthickness.surf.gii"),
@@ -249,7 +269,7 @@ def test_render_panel_invalidates_stale_png_when_label_content_changes(
         "L": (np.asarray([0, 1], dtype=np.int32), np.asarray([1, 2], dtype=np.int32)),
         "R": (np.asarray([0, 1], dtype=np.int32), np.asarray([201, 202], dtype=np.int32)),
     }
-    calls: list[list[str]] = []
+    calls: list[dict[str, object]] = []
 
     def fake_render(**kwargs):
         calls.append(kwargs)

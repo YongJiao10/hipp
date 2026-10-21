@@ -1,3 +1,4 @@
+# pyright: reportMissingImports=false, reportPossiblyUnboundVariable=false
 """Centralized multi-dataset cohort metadata and 2x2 grid path resolution.
 
 Supported grid dimensions:
@@ -12,7 +13,6 @@ Excluded from the 2x2 grid matrix:
   - multidataset_cluster_confidence_negative_stacked
   - multidataset_subfield_composition_2mm_2col/archive_v1_v3
 """
-
 from __future__ import annotations
 
 import json
@@ -72,9 +72,9 @@ class GridSpec:
             )
         if self.variant not in ("36p", "22p"):
             raise ValueError(f"variant must be '36p' or '22p', got {self.variant!r}")
-        if self.atlas not in ("kong2022", "7net", "canonical7", "canonical8"):
+        if self.atlas not in ("kong2022", "7net", "canonical7"):
             raise ValueError(
-                f"atlas must be 'kong2022' or a canonical taxonomy alias, got {self.atlas!r}"
+                f"atlas must be 'kong2022' or a canonical7 taxonomy alias, got {self.atlas!r}"
             )
         branch = self.signal_branch
         if branch not in SIGNAL_BRANCHES:
@@ -110,7 +110,7 @@ class GridSpec:
 
     @property
     def file_tag(self) -> str:
-        return f"8net_{self.tag}" if self.atlas == "canonical8" else self.tag
+        return self.tag
 
     @classmethod
     def from_tag(cls, tag: str, atlas: str | None = None) -> GridSpec:
@@ -316,20 +316,20 @@ def _resolve_ctxreg_cohort_paths(cohort_id: str, spec: GridSpec) -> dict[str, Pa
     """Resolve the explicit ctxreg branch without consulting standard paths."""
     if cohort_id == "hcp_7t":
         dataset_root = REPO_ROOT / "outputs_hcp"
-        group_root = dataset_root / "work" / "group_atlas" / "routea_ctxreg"
-        present_dir = dataset_root / "present" / "overviews" / "routea_ctxreg"
+        group_root = dataset_root / "work" / "group_atlas" / "pfm_ctxreg"
+        present_dir = dataset_root / "present" / "overviews" / "pfm_ctxreg"
         shared_root = (
             dataset_root
             / "inputs"
             / "kong2022"
             / "shared_inputs"
-            / "routea_ctxreg"
+            / "pfm_ctxreg"
         )
         standard_surface_root = (
             dataset_root / "inputs" / "kong2022" / "shared_inputs" / "surface"
         )
         reference_root = (
-            dataset_root / "inputs" / "kong2022" / "shared_inputs" / "routea"
+            dataset_root / "inputs" / "kong2022" / "shared_inputs" / "pfm"
         )
         hippunfold_root = (
             dataset_root / "inputs" / "hippunfold" / "dense_corobl_batch"
@@ -338,14 +338,14 @@ def _resolve_ctxreg_cohort_paths(cohort_id: str, spec: GridSpec) -> dict[str, Pa
     elif cohort_id in _CTXREG_IOWA_STEMS:
         dataset_root = REPO_ROOT / "outputs_iowa_jj_tms"
         stem = _CTXREG_IOWA_STEMS[cohort_id]
-        group_root = dataset_root / "work" / "group_atlas" / "routea_ctxreg" / stem
-        present_dir = dataset_root / "present" / "overviews" / "routea_ctxreg" / stem
+        group_root = dataset_root / "work" / "group_atlas" / "pfm_ctxreg" / stem
+        present_dir = dataset_root / "present" / "overviews" / "pfm_ctxreg" / stem
         shared_root = (
             dataset_root
             / "inputs"
             / "kong2022"
             / "shared_inputs"
-            / "routea_ctxreg"
+            / "pfm_ctxreg"
         )
         standard_surface_root = (
             dataset_root
@@ -359,7 +359,7 @@ def _resolve_ctxreg_cohort_paths(cohort_id: str, spec: GridSpec) -> dict[str, Pa
             / "inputs"
             / "kong2022"
             / "shared_inputs"
-            / "routea"
+            / "pfm"
         )
         hippunfold_root = (
             dataset_root
@@ -370,14 +370,14 @@ def _resolve_ctxreg_cohort_paths(cohort_id: str, spec: GridSpec) -> dict[str, Pa
     elif cohort_id in _CTXREG_STANFORD_STEMS:
         dataset_root = REPO_ROOT / "outputs_stanford"
         stem = _CTXREG_STANFORD_STEMS[cohort_id]
-        group_root = dataset_root / "work" / "group_atlas" / "routea_ctxreg" / stem
-        present_dir = dataset_root / "present" / "overviews" / "routea_ctxreg" / stem
+        group_root = dataset_root / "work" / "group_atlas" / "pfm_ctxreg" / stem
+        present_dir = dataset_root / "present" / "overviews" / "pfm_ctxreg" / stem
         shared_root = (
             dataset_root
             / "inputs"
             / "kong2022"
             / "shared_inputs"
-            / "routea_ctxreg"
+            / "pfm_ctxreg"
             / stem
         )
         standard_surface_root = (
@@ -392,7 +392,7 @@ def _resolve_ctxreg_cohort_paths(cohort_id: str, spec: GridSpec) -> dict[str, Pa
             / "inputs"
             / "kong2022"
             / "shared_inputs"
-            / "routea"
+            / "pfm"
             / stem
         )
         hippunfold_root = (
@@ -413,14 +413,14 @@ def _resolve_ctxreg_cohort_paths(cohort_id: str, spec: GridSpec) -> dict[str, Pa
     overview_prefix = "kong2022"
     overview_grad_name = (
         f"{overview_prefix}_gradient-spectral_group_overview_g1g2g3_"
-        "routea_ctxreg_fisherz.png"
+        "pfm_ctxreg_fisherz.png"
     )
     overview_grad_normalized_name = (
         f"{overview_prefix}_gradient-spectral_group_overview_g1g2g3_"
-        "routea_ctxreg_normalized_top20_count.png"
+        "pfm_ctxreg_normalized_top20_count.png"
     )
     overview_wta_name = (
-        f"{overview_prefix}_wta-top_group_overview_routea_ctxreg_"
+        f"{overview_prefix}_wta-top_group_overview_pfm_ctxreg_"
         "normalized_top20_count.png"
     )
     return {
@@ -451,152 +451,10 @@ def resolve_cohort_paths(cohort_id: str, spec: GridSpec) -> dict[str, Path]:
     if spec.signal_branch == "ctxreg":
         return _resolve_ctxreg_cohort_paths(cohort_id, spec)
 
-    if spec.is_7net:
-        if cohort_id == "hcp_7t":
-            grp_base = (
-                REPO_ROOT / "outputs_hcp/work/group_atlas/kong2022_7net_full_k3_fisherz"
-            )
-            pres_base = REPO_ROOT / "outputs_hcp/present/overviews/kong2022_7net"
-            return {
-                "group_root": grp_base,
-                "group_root_grad": grp_base,
-                "group_root_wta": grp_base,
-                "grad_subpath": grp_base
-                / f"gradient-spectral/kong2022/{sm}/cov_0p80/g1g2g3",
-                "wta_subpath": grp_base / f"wta-top/kong2022/{sm}/cov_0p80",
-                "present_dir": pres_base,
-                "overview_grad": pres_base
-                / "kong2022_7net_gradient-spectral_group_overview_g1g2g3_kong2022_7net_fisherz.png",
-                "overview_grad_normalized_top20_count": pres_base
-                / "kong2022_7net_gradient-spectral_group_overview_g1g2g3_kong2022_7net_normalized_top20_count.png",
-                "overview_wta": pres_base
-                / "kong2022_7net_wta-top_group_overview_kong2022_7net_normalized_top20_count.png",
-                "hippunfold_root": REPO_ROOT
-                / "outputs_hcp/inputs/hippunfold/dense_corobl_batch",
-            }
-
-        iowa_map = {
-            "iowa_hc": "hc",
-            "iowa_pat": "patient",
-            "iowa_pure_mdd": "pure_mdd",
-            "iowa_comorbid_mdd": "comorbid_mdd",
-        }
-        if cohort_id in iowa_map:
-            stem = iowa_map[cohort_id]
-            iowa_var_suffix = "_22p" if var == "22p" else ""
-            # Patient was rebuilt in the retained routea_patient roots; the
-            # other Iowa seven-network cohorts keep their kong2022_7net roots.
-            branch = (
-                f"routea_patient{iowa_var_suffix}_full_k3_fisherz"
-                if cohort_id == "iowa_pat"
-                else f"kong2022_7net_{stem}{iowa_var_suffix}_full_k3_fisherz"
-            )
-            grp_base = REPO_ROOT / f"outputs_iowa_jj_tms/work/group_atlas/{branch}"
-            pres_variant = "22p" if var == "22p" else "36p"
-            pres_base = (
-                REPO_ROOT
-                / f"outputs_iowa_jj_tms/present/overviews/kong2022_7net/{pres_variant}/{stem}"
-            )
-
-            return {
-                "group_root": grp_base,
-                "group_root_grad": grp_base,
-                "group_root_wta": grp_base,
-                "grad_subpath": grp_base
-                / f"gradient-spectral/kong2022/{sm}/cov_0p80/g1g2g3",
-                "wta_subpath": grp_base / f"wta-top/kong2022/{sm}/cov_0p80",
-                "present_dir": pres_base,
-                "overview_grad": pres_base
-                / "kong2022_7net_gradient-spectral_group_overview_g1g2g3_kong2022_7net_fisherz.png",
-                "overview_grad_normalized_top20_count": pres_base
-                / "kong2022_7net_gradient-spectral_group_overview_g1g2g3_kong2022_7net_normalized_top20_count.png",
-                "overview_wta": pres_base
-                / "kong2022_7net_wta-top_group_overview_kong2022_7net_normalized_top20_count.png",
-                "hippunfold_root": REPO_ROOT
-                / "outputs_iowa_jj_tms/inputs/hippunfold/dense_corobl_batch",
-            }
-
-        stan_map = {
-            "stan_nthc": "nthc",
-            "stan_tehc": "tehc",
-            "stan_nts": "nts",
-            "stan_nts_mdd": "nts_any_mdd",
-            "stan_nts_pure": "nts_pure_mdd",
-            "stan_tis": "tis",
-            "stan_tis_ptsd": "tis_ptsd",
-        }
-        if cohort_id in stan_map:
-            stem = stan_map[cohort_id]
-            stan_var_suffix = "_22p" if var == "22p" else ""
-            branch = f"routea_7net_{stem}{stan_var_suffix}_full_k3_fisherz"
-            grp_base = REPO_ROOT / f"outputs_stanford/work/group_atlas/{branch}"
-            pres_dir_name = "routea_7net_22p" if var == "22p" else "routea_7net"
-            pres_base = (
-                REPO_ROOT / f"outputs_stanford/present/overviews/{pres_dir_name}/{stem}"
-            )
-
-            return {
-                "group_root": grp_base,
-                "group_root_grad": grp_base,
-                "group_root_wta": grp_base,
-                "grad_subpath": grp_base
-                / f"gradient-spectral/kong2022/{sm}/cov_0p80/g1g2g3",
-                "wta_subpath": grp_base / f"wta-top/kong2022/{sm}/cov_0p80",
-                "present_dir": pres_base,
-                "overview_grad": pres_base
-                / "kong2022_gradient-spectral_group_overview_g1g2g3_routea_7net_fisherz.png",
-                "overview_grad_normalized_top20_count": pres_base
-                / "kong2022_gradient-spectral_group_overview_g1g2g3_routea_7net_normalized_top20_count.png",
-                "overview_wta": pres_base
-                / "kong2022_wta-top_group_overview_routea_7net_normalized_top20_count.png",
-                "hippunfold_root": REPO_ROOT
-                / "outputs_stanford/inputs/hippunfold/dense_corobl_batch",
-            }
-
-        raise ValueError(f"Unknown cohort id: {cohort_id!r}")
-
+    route_dir = "pfm_22p" if var == "22p" else "pfm"
     if cohort_id == "hcp_7t":
-        archive_root = REPO_ROOT / "wrong/outputs_hcp/work/archive/8net_20260909/group_atlas"
-        grp_base = archive_root / "routea_full_k3_fisherz"
-        wta_base = archive_root / "routea_wta_normalized_top20_count_full_k3"
-        return {
-            "group_root": grp_base,
-            "group_root_grad": grp_base,
-            "group_root_wta": wta_base,
-            "grad_subpath": grp_base
-            / f"gradient-spectral/kong2022/{sm}/cov_0p80/g1g2g3",
-            "wta_subpath": wta_base / f"wta-top/kong2022/{sm}/cov_0p80",
-            "present_dir": REPO_ROOT / "outputs_hcp/present/overviews",
-            "overview_grad": REPO_ROOT
-            / "outputs_hcp/present/overviews/gradient_spectral/g1g2g3_bilateral.png",
-            "overview_grad_normalized_top20_count": REPO_ROOT
-            / "outputs_hcp/present/overviews/kong2022_gradient-spectral_group_overview_g1g2g3_routea_normalized_top20_count.png",
-            "overview_wta": REPO_ROOT
-            / "outputs_hcp/present/overviews/wta_normalized/top20_count.png",
-            "hippunfold_root": REPO_ROOT
-            / "outputs_hcp/inputs/hippunfold/dense_corobl_batch",
-        }
-
-    # Iowa 3T cohorts: HC, Patient, Pure MDD, Comorbid MDD
-    iowa_map = {
-        "iowa_hc": "hc",
-        "iowa_pat": "patient",
-        "iowa_pure_mdd": "pure_mdd",
-        "iowa_comorbid_mdd": "comorbid_mdd",
-    }
-    if cohort_id in iowa_map:
-        stem = iowa_map[cohort_id]
-        iowa_var_suffix = "_22p" if var == "22p" else ""
-        branch = f"routea_{stem}{iowa_var_suffix}_full_k3_fisherz"
-        grp_base = (
-            REPO_ROOT
-            / f"wrong/outputs_iowa_jj_tms/work/archive/8net_20260909/group_atlas/{branch}"
-        )
-        pres_base = (
-            REPO_ROOT
-            / f"outputs_iowa_jj_tms/present/overviews/routea_{stem}{iowa_var_suffix}"
-        )
-
+        grp_base = REPO_ROOT / "outputs_hcp/work/group_atlas/pfm"
+        pres_base = REPO_ROOT / "outputs_hcp/present/overviews/pfm"
         return {
             "group_root": grp_base,
             "group_root_grad": grp_base,
@@ -606,16 +464,46 @@ def resolve_cohort_paths(cohort_id: str, spec: GridSpec) -> dict[str, Path]:
             "wta_subpath": grp_base / f"wta-top/kong2022/{sm}/cov_0p80",
             "present_dir": pres_base,
             "overview_grad": pres_base
-            / "kong2022_gradient-spectral_group_overview_g1g2g3_routea_fisherz.png",
+            / "kong2022_gradient-spectral_group_overview_g1g2g3_pfm_fisherz.png",
             "overview_grad_normalized_top20_count": pres_base
-            / "kong2022_gradient-spectral_group_overview_g1g2g3_routea_normalized_top20_count.png",
+            / "kong2022_gradient-spectral_group_overview_g1g2g3_pfm_normalized_top20_count.png",
             "overview_wta": pres_base
-            / "kong2022_wta-top_group_overview_routea_normalized_top20_count.png",
+            / "kong2022_wta-top_group_overview_pfm_normalized_top20_count.png",
+            "hippunfold_root": REPO_ROOT
+            / "outputs_hcp/inputs/hippunfold/dense_corobl_batch",
+        }
+
+    iowa_map = {
+        "iowa_hc": "hc",
+        "iowa_pat": "patient",
+        "iowa_pure_mdd": "pure_mdd",
+        "iowa_comorbid_mdd": "comorbid_mdd",
+    }
+    if cohort_id in iowa_map:
+        stem = iowa_map[cohort_id]
+        grp_base = REPO_ROOT / f"outputs_iowa_jj_tms/work/group_atlas/{route_dir}/{stem}"
+        pres_base = (
+            REPO_ROOT
+            / f"outputs_iowa_jj_tms/present/overviews/{route_dir}/{stem}"
+        )
+        return {
+            "group_root": grp_base,
+            "group_root_grad": grp_base,
+            "group_root_wta": grp_base,
+            "grad_subpath": grp_base
+            / f"gradient-spectral/kong2022/{sm}/cov_0p80/g1g2g3",
+            "wta_subpath": grp_base / f"wta-top/kong2022/{sm}/cov_0p80",
+            "present_dir": pres_base,
+            "overview_grad": pres_base
+            / "kong2022_gradient-spectral_group_overview_g1g2g3_pfm_fisherz.png",
+            "overview_grad_normalized_top20_count": pres_base
+            / "kong2022_gradient-spectral_group_overview_g1g2g3_pfm_normalized_top20_count.png",
+            "overview_wta": pres_base
+            / "kong2022_wta-top_group_overview_pfm_normalized_top20_count.png",
             "hippunfold_root": REPO_ROOT
             / "outputs_iowa_jj_tms/inputs/hippunfold/dense_corobl_batch",
         }
 
-    # Stanford cohorts
     stan_map = {
         "stan_nthc": "nthc",
         "stan_tehc": "tehc",
@@ -627,31 +515,10 @@ def resolve_cohort_paths(cohort_id: str, spec: GridSpec) -> dict[str, Path]:
     }
     if cohort_id in stan_map:
         stem = stan_map[cohort_id]
-        stan_var_suffix = "_22p" if var == "22p" else ""
-        branch_22p = f"routea_{stem}_22p_full_k3_fisherz"
-        branch_36p = f"routea_{stem}_full_k3_fisherz"
-
-        # Resolve primary group root
-        target_branch = branch_22p if var == "22p" else branch_36p
-        grp_base = (
-            REPO_ROOT
-            / f"wrong/outputs_stanford/work/archive/8net_20260909/group_atlas/{target_branch}"
-        )
-
+        grp_base = REPO_ROOT / f"outputs_stanford/work/group_atlas/{route_dir}/{stem}"
         pres_base = (
-            REPO_ROOT
-            / f"outputs_stanford/present/overviews/routea_{stem}{stan_var_suffix}"
+            REPO_ROOT / f"outputs_stanford/present/overviews/{route_dir}/{stem}"
         )
-
-        overview_grad = (
-            pres_base
-            / "kong2022_gradient-spectral_group_overview_g1g2g3_routea_fisherz.png"
-        )
-        overview_wta = (
-            pres_base
-            / "kong2022_wta-top_group_overview_routea_normalized_top20_count.png"
-        )
-
         return {
             "group_root": grp_base,
             "group_root_grad": grp_base,
@@ -660,10 +527,12 @@ def resolve_cohort_paths(cohort_id: str, spec: GridSpec) -> dict[str, Path]:
             / f"gradient-spectral/kong2022/{sm}/cov_0p80/g1g2g3",
             "wta_subpath": grp_base / f"wta-top/kong2022/{sm}/cov_0p80",
             "present_dir": pres_base,
-            "overview_grad": overview_grad,
+            "overview_grad": pres_base
+            / "kong2022_gradient-spectral_group_overview_g1g2g3_pfm_fisherz.png",
             "overview_grad_normalized_top20_count": pres_base
-            / "kong2022_gradient-spectral_group_overview_g1g2g3_routea_normalized_top20_count.png",
-            "overview_wta": overview_wta,
+            / "kong2022_gradient-spectral_group_overview_g1g2g3_pfm_normalized_top20_count.png",
+            "overview_wta": pres_base
+            / "kong2022_wta-top_group_overview_pfm_normalized_top20_count.png",
             "hippunfold_root": REPO_ROOT
             / "outputs_stanford/inputs/hippunfold/dense_corobl_batch",
         }
@@ -925,14 +794,14 @@ def _resolve_comparison_ctxreg_paths(
         atlas_folder = "kong2022"
         reference_root = base["reference_root"]
         overview_grad_name = (
-            "kong2022_gradient-spectral_group_overview_g1g2g3_routea_ctxreg_fisherz.png"
+            "kong2022_gradient-spectral_group_overview_g1g2g3_pfm_ctxreg_fisherz.png"
         )
         overview_grad_normalized_name = (
             "kong2022_gradient-spectral_group_overview_g1g2g3_"
-            "routea_ctxreg_normalized_top20_count.png"
+            "pfm_ctxreg_normalized_top20_count.png"
         )
         overview_wta_name = (
-            "kong2022_wta-top_group_overview_routea_ctxreg_normalized_top20_count.png"
+            "kong2022_wta-top_group_overview_pfm_ctxreg_normalized_top20_count.png"
         )
     else:
         atlas_folder = "lynch2024_7net"
@@ -940,31 +809,31 @@ def _resolve_comparison_ctxreg_paths(
             reference_root = (
                 dataset_root
                 / "inputs"
-                / "lynch2024_fast_pfm_t1only"
+                / "lynch2024"
                 / "shared_inputs"
-                / "pfm_hcp151"
+                / "pfm"
             )
         else:
             reference_root = (
                 dataset_root
                 / "inputs"
-                / "lynch2024_fast_pfm_t1only"
+                / "lynch2024"
                 / "shared_inputs"
-                / "pfm_nsi043_78"
+                / "pfm_nsi043"
             )
         # HCP and Iowa Lynch overviews carry different gradient-component tags
         # upstream: HCP embeds g1g2g3, Iowa does not. Match the manifest-declared
         # artifact exactly; never substitute across datasets.
         overview_grad_name = (
             "lynch2024_7net_gradient-spectral_group_overview_g1g2g3_"
-            "routea_ctxreg_fisherz.png"
+            "pfm_ctxreg_fisherz.png"
             if dataset_key == "hcp"
             else "lynch2024_7net_gradient-spectral_group_overview_"
-            "routea_ctxreg_fisherz.png"
+            "pfm_ctxreg_fisherz.png"
         )
         overview_grad_normalized_name = None
         overview_wta_name = (
-            "lynch2024_7net_wta-top_group_overview_routea_ctxreg_fisherz.png"
+            "lynch2024_7net_wta-top_group_overview_pfm_ctxreg_fisherz.png"
         )
 
     grad_subpath = (
@@ -1038,26 +907,27 @@ def resolve_comparison_paths(
         "outputs_hcp" if cohort["dataset_key"] == "hcp" else "outputs_iowa_jj_tms"
     )
 
+    overview_grad_normalized_name: str | None = None
     if cohort["dataset_key"] == "hcp":
         if method == "kong2022_7net":
-            group_root = dataset_root / "work/group_atlas/kong2022_7net_full_k3_fisherz"
-            present_dir = dataset_root / "present/overviews/kong2022_7net"
+            group_root = dataset_root / "work/group_atlas/pfm"
+            present_dir = dataset_root / "present/overviews/pfm"
             shared_root = dataset_root / "inputs/kong2022/shared_inputs"
             # The producer keeps cortex FC/reference exports in the explicit
-            # routea branch; the parent shared_inputs directory is not an
+            # pfm branch; the parent shared_inputs directory is not an
             # input root and must never be used for subject resolution.
-            reference_root = shared_root / "routea"
-            overview_grad_name = "kong2022_7net_gradient-spectral_group_overview_g1g2g3_kong2022_7net_fisherz.png"
-            overview_grad_normalized_name = "kong2022_7net_gradient-spectral_group_overview_g1g2g3_kong2022_7net_normalized_top20_count.png"
-            overview_wta_name = "kong2022_7net_wta-top_group_overview_kong2022_7net_normalized_top20_count.png"
+            reference_root = shared_root / "pfm"
+            overview_grad_name = "kong2022_gradient-spectral_group_overview_g1g2g3_pfm_fisherz.png"
+            overview_grad_normalized_name = "kong2022_gradient-spectral_group_overview_g1g2g3_pfm_normalized_top20_count.png"
+            overview_wta_name = "kong2022_wta-top_group_overview_pfm_normalized_top20_count.png"
         else:
             group_root = (
-                dataset_root / "work/group_atlas/lynch2024_7net_hcp151_full_k3_fisherz"
+                dataset_root / "work/group_atlas/lynch2024_7net"
             )
             present_dir = dataset_root / "present/overviews/lynch2024_7net"
             shared_root = (
                 dataset_root
-                / "inputs/lynch2024_fast_pfm_t1only/shared_inputs/pfm_hcp151"
+                / "inputs/lynch2024/shared_inputs/pfm"
             )
             overview_grad_name = "lynch2024_7net_gradient-spectral_group_overview_g1g2g3_lynch2024_7net_fisherz.png"
             overview_wta_name = (
@@ -1068,41 +938,36 @@ def resolve_comparison_paths(
         hippunfold_root = dataset_root / "inputs/hippunfold/dense_corobl_batch"
     else:
         stem = _COMPARISON_IOWA_STEMS[cohort_id]
-        present_variant = "22p" if var == "22p" else "36p"
+        kong_input_dir = f"kong2022{var_suffix}"
+        lynch_input_dir = f"lynch2024{var_suffix}"
         surface_root = (
             dataset_root
-            / f"inputs/kong2022/shared_inputs{var_suffix}/surface"
+            / f"inputs/{kong_input_dir}/shared_inputs/surface"
         )
         if method == "kong2022_7net":
-            # Patient uses the explicitly rebuilt routea_patient root; the
-            # other Iowa cohorts retain their kong2022_7net group roots.
-            branch = (
-                f"routea_patient{var_suffix}_full_k3_fisherz"
-                if cohort_id == "iowa_pat"
-                else f"kong2022_7net_{stem}{var_suffix}_full_k3_fisherz"
-            )
-            group_root = dataset_root / f"work/group_atlas/{branch}"
+            route_dir = f"pfm{var_suffix}"
+            group_root = dataset_root / f"work/group_atlas/{route_dir}/{stem}"
             present_dir = (
                 dataset_root
-                / f"present/overviews/kong2022_7net/{present_variant}/{stem}"
+                / f"present/overviews/{route_dir}/{stem}"
             )
             shared_root = (
-                dataset_root / f"inputs/kong2022/shared_inputs{var_suffix}"
+                dataset_root / f"inputs/{kong_input_dir}/shared_inputs"
             )
-            reference_root = shared_root / "routea"
-            overview_grad_name = "kong2022_7net_gradient-spectral_group_overview_g1g2g3_kong2022_7net_fisherz.png"
-            overview_grad_normalized_name = "kong2022_7net_gradient-spectral_group_overview_g1g2g3_kong2022_7net_normalized_top20_count.png"
-            overview_wta_name = "kong2022_7net_wta-top_group_overview_kong2022_7net_normalized_top20_count.png"
+            reference_root = shared_root / "pfm"
+            overview_grad_name = "kong2022_gradient-spectral_group_overview_g1g2g3_pfm_fisherz.png"
+            overview_grad_normalized_name = "kong2022_gradient-spectral_group_overview_g1g2g3_pfm_normalized_top20_count.png"
+            overview_wta_name = "kong2022_wta-top_group_overview_pfm_normalized_top20_count.png"
         else:
-            branch = f"lynch2024_7net_iowa3t_{stem}{var_suffix}_full_k3_fisherz_wta"
-            group_root = dataset_root / f"work/group_atlas/{branch}"
+            route_dir = f"lynch2024_7net{var_suffix}"
+            group_root = dataset_root / f"work/group_atlas/{route_dir}/{stem}"
             present_dir = (
                 dataset_root
-                / f"present/overviews/lynch2024_7net/{present_variant}/{stem}"
+                / f"present/overviews/{route_dir}/{stem}"
             )
             shared_root = (
                 dataset_root
-                / f"inputs/lynch2024_fast_pfm_t1only/shared_inputs{var_suffix}/pfm_nsi043_78"
+                / f"inputs/{lynch_input_dir}/shared_inputs/pfm_nsi043"
             )
             reference_root = shared_root
             overview_grad_name = "lynch2024_7net_gradient-spectral_group_overview_g1g2g3_lynch2024_7net_fisherz.png"
@@ -1148,7 +1013,7 @@ def resolve_comparison_paths(
                 "overview_grad_normalized_top20_count": present_dir
                 / overview_grad_normalized_name
             }
-            if method == "kong2022_7net"
+            if method == "kong2022_7net" and overview_grad_normalized_name is not None
             else {}
         ),
         "overview_wta": present_dir / overview_wta_name,
@@ -1228,12 +1093,13 @@ def has_explicit_legacy_hcp_ctxreg_provenance(
     """Recognize the pre-``signal_branch`` HCP Kong CtxReg contract explicitly."""
     if method != "kong2022_7net" or manifest.get("dataset") != "outputs_hcp":
         return False
-    if "routea_ctxreg" not in path.parts or manifest.get("atlas") != "kong2022":
+    if not any(part in {"pfm_ctxreg", "routea_ctxreg"} for part in path.parts) or manifest.get("atlas") != "kong2022":
         return False
 
     def _is_ctxreg_path(value: object) -> bool:
         return (
-            isinstance(value, str) and "routea_ctxreg" in Path(value).expanduser().parts
+            isinstance(value, str)
+            and any(part in {"pfm_ctxreg", "routea_ctxreg"} for part in Path(value).expanduser().parts)
         )
 
     for key in ("shared_root", "profile_surface_root"):
@@ -1242,7 +1108,7 @@ def has_explicit_legacy_hcp_ctxreg_provenance(
     reference_root = manifest.get("reference_root")
     if (
         not isinstance(reference_root, str)
-        or "routea_ctxreg" in Path(reference_root).expanduser().parts
+        or any(part in {"pfm_ctxreg", "routea_ctxreg"} for part in Path(reference_root).expanduser().parts)
     ):
         return False
     consumed = manifest.get("actual_consumed_input_paths")
@@ -1255,7 +1121,7 @@ def has_explicit_legacy_hcp_ctxreg_provenance(
         if value is not None and not _is_ctxreg_path(value):
             return False
     signal_control_route = manifest.get("signal_control_route")
-    return signal_control_route in (None, "routea_ctxreg")
+    return signal_control_route in (None, "pfm_ctxreg", "routea_ctxreg")
 
 
 _EPHEMERAL_PATH_COMPONENT_RE = re.compile(

@@ -86,11 +86,11 @@ def test_downstream_renderers_do_not_accept_legacy_group_prefixed_intermediates(
 
 def test_overview_matrix_uses_core_work_fixed_k3_fisherz_root_for_all_routea_methods() -> None:
     jobs = build_render_jobs(REPO_ROOT / "outputs_hcp" / "inputs" / "kong2022")
-    by_method = {job.method: job for job in jobs if job.route_tag == "routea"}
+    by_method = {job.method: job for job in jobs if job.route_tag == "pfm"}
     assert set(by_method) == {"intrinsic-spectral", "network-spectral", "gradient-spectral", "wta-top"}
     for method in ("intrinsic-spectral", "network-spectral", "gradient-spectral", "wta-top"):
         root_text = str(by_method[method].group_root)
-        assert "outputs_hcp/work/group_atlas/routea_full_k3_fisherz" in root_text
+        assert root_text.endswith("outputs_hcp/work/group_atlas/pfm")
         assert "fixedk_work" not in root_text
         assert "hipp_group_merged_canonical_atlas_routea_full" not in root_text
 
@@ -98,12 +98,12 @@ def test_overview_matrix_uses_core_work_fixed_k3_fisherz_root_for_all_routea_met
 def test_routeb_group_atlas_root_is_core_work_fixed_k3_fisherz() -> None:
     jobs = build_render_jobs(
         REPO_ROOT / "outputs_hcp" / "work" / "group_atlas",
-        routes=("routeb",),
+        routes=("fixed",),
     )
-    assert {job.route_tag for job in jobs} == {"routeb"}
+    assert {job.route_tag for job in jobs} == {"fixed"}
     for job in jobs:
         root_text = str(job.group_root)
-        assert "outputs_hcp/work/group_atlas/routeb_full_k3_fisherz" in root_text
+        assert root_text.endswith("outputs_hcp/work/group_atlas/fixed")
         assert "outputs_hcp/inputs" not in root_text
         assert "hipp_group_merged_canonical_atlas_routeb_full" not in root_text
         assert "routeb_auto" not in root_text
@@ -112,60 +112,59 @@ def test_routeb_group_atlas_root_is_core_work_fixed_k3_fisherz() -> None:
 def test_overview_matrix_uses_formal_hcp_control_roots() -> None:
     jobs = build_render_jobs(
         REPO_ROOT / "outputs_hcp" / "work" / "group_atlas",
-        routes=("routea_ctxreg", "routea_ctxdrop"),
+        routes=("pfm_ctxreg", "pfm_ctxdrop"),
         methods=("gradient-spectral", "wta-top"),
     )
     expected = {
-        "routea_ctxreg": "routea_ctxreg",
-        "routea_ctxdrop": "routea_ctxdrop",
+        "pfm_ctxreg": "pfm_ctxreg",
+        "pfm_ctxdrop": "pfm_ctxdrop",
     }
     assert jobs
     for job in jobs:
         assert expected[job.route_tag] in str(job.group_root)
-        assert "routea_ctxreg_full_k3_fisherz" not in str(job.group_root)
-        assert "routea_ctxdrop_full_k3_fisherz" not in str(job.group_root)
+        assert "_full_k3_fisherz" not in str(job.group_root)
 
 
 def test_default_control_out_root_uses_formal_kong400_roots() -> None:
     from scripts.core_workflow.lib.route_tags import canonical_group_atlas_root_for_route
 
-    assert str(canonical_group_atlas_root_for_route("routea_ctxreg")).endswith(
-        "routea_ctxreg"
+    assert str(canonical_group_atlas_root_for_route("pfm_ctxreg")).endswith(
+        "pfm_ctxreg"
     )
-    assert str(canonical_group_atlas_root_for_route("routea_ctxdrop")).endswith(
-        "routea_ctxdrop"
+    assert str(canonical_group_atlas_root_for_route("pfm_ctxdrop")).endswith(
+        "pfm_ctxdrop"
     )
 
 
 def test_non_hcp_control_roots_keep_their_dataset_generic_contract() -> None:
     from scripts.core_workflow.lib.route_tags import canonical_group_atlas_root_for_route
 
-    assert str(canonical_group_atlas_root_for_route("routea_ctxreg", dataset="stanford")).endswith(
-        "routea_ctxreg_full_k3_fisherz"
+    assert str(canonical_group_atlas_root_for_route("pfm_ctxreg", dataset="stanford")).endswith(
+        "pfm_ctxreg"
     )
-    assert str(canonical_group_atlas_root_for_route("routea_ctxdrop", dataset="iowa_jj_tms")).endswith(
-        "routea_ctxdrop_full_k3_fisherz"
+    assert str(canonical_group_atlas_root_for_route("pfm_ctxdrop", dataset="iowa_jj_tms")).endswith(
+        "pfm_ctxdrop"
     )
 
 
 def test_group_atlas_default_out_root_matches_routea_fixed_k3_contract() -> None:
     root_text = str(atlas_mod.DEFAULT_OUT_ROOT)
-    assert root_text.endswith("outputs_hcp/work/group_atlas/routea_full_k3_fisherz")
+    assert root_text.endswith("outputs_hcp/work/group_atlas/pfm")
     assert "routea_auto" not in root_text
 
 
 def test_overview_matrix_custom_group_atlas_root_uses_canonical_branch_children() -> None:
     custom_root = Path("/tmp/custom_group_atlas")
-    jobs = build_render_jobs(custom_root, routes=("routea", "routeb"), methods=("wta-top",))
+    jobs = build_render_jobs(custom_root, routes=("pfm", "fixed"), methods=("wta-top",))
     by_route = {job.route_tag: job for job in jobs}
-    assert by_route["routea"].group_root == (custom_root / "routea_full_k3_fisherz").resolve()
-    assert by_route["routeb"].group_root == (custom_root / "routeb_full_k3_fisherz").resolve()
+    assert by_route["pfm"].group_root == (custom_root / "pfm").resolve()
+    assert by_route["fixed"].group_root == (custom_root / "fixed").resolve()
 
 
 def test_overview_matrix_does_not_create_family17_wta_jobs() -> None:
     jobs = build_render_jobs(
         REPO_ROOT / "outputs_hcp" / "work" / "group_atlas",
-        routes=("routea_17net",),
+        routes=("pfm_17net", "fixed_17net"),
         methods=("wta-top",),
     )
     assert jobs == []
@@ -173,7 +172,7 @@ def test_overview_matrix_does_not_create_family17_wta_jobs() -> None:
 
 def test_overview_matrix_defaults_to_routea_only() -> None:
     jobs = build_render_jobs(REPO_ROOT / "outputs_hcp" / "inputs" / "kong2022")
-    assert {job.route_tag for job in jobs} == {"routea"}
+    assert {job.route_tag for job in jobs} == {"pfm"}
     assert len(jobs) == 7
 
 
@@ -182,7 +181,7 @@ def test_overview_matrix_can_filter_methods_for_gradient_and_wta_only() -> None:
         REPO_ROOT / "outputs_hcp" / "inputs" / "kong2022",
         methods=("gradient-spectral", "wta-top"),
     )
-    assert {job.route_tag for job in jobs} == {"routea"}
+    assert {job.route_tag for job in jobs} == {"pfm"}
     assert {job.method for job in jobs} == {"gradient-spectral", "wta-top"}
     assert len(jobs) == 3
 
@@ -200,21 +199,23 @@ def test_overview_matrix_keeps_normalized_top20_and_fisherz_assignment_variants(
     out = expected_overview_path(
         Path("/tmp/present"),
         method="network-spectral",
-        route_tag="routea",
+        route_tag="pfm",
         mode_tag=None,
         assignment_variant="normalized_top20_count",
     )
-    assert out.name == "kong2022_network-spectral_group_overview_routea_normalized_top20_count.png"
+    assert out.name == "kong2022_network-spectral_group_overview_pfm_normalized_top20_count.png"
+    assert out.parent == Path("/tmp/present/pfm")
 
 
     grad_out = expected_overview_path(
         Path("/tmp/present"),
         method="gradient-spectral",
-        route_tag="routea_ctxreg",
+        route_tag="pfm_ctxreg",
         mode_tag=None,
         assignment_variant="fisherz",
     )
-    assert grad_out.name == "kong2022_gradient-spectral_group_overview_g1g2g3_routea_ctxreg_fisherz.png"
+    assert grad_out.name == "kong2022_gradient-spectral_group_overview_g1g2g3_pfm_ctxreg_fisherz.png"
+    assert grad_out.parent == Path("/tmp/present/pfm_ctxreg")
 
 
 def test_group_overview_direct_renderer_keeps_gradient_variants_but_wta_is_canonical() -> None:
@@ -233,9 +234,12 @@ def test_group_overview_direct_renderer_keeps_gradient_variants_but_wta_is_canon
 
 
 def test_group_overview_rejects_family17_wta_route() -> None:
-    with pytest.raises(ValueError, match="routea_17net/family17"):
-        present_mod.validate_method_route_compatibility("wta-top", "routea_17net")
-    present_mod.validate_method_route_compatibility("gradient-spectral", "routea_17net")
+    with pytest.raises(ValueError, match="pfm_17net/family17"):
+        present_mod.validate_method_route_compatibility("wta-top", "pfm_17net")
+    with pytest.raises(ValueError, match="fixed_17net/family17"):
+        present_mod.validate_method_route_compatibility("wta-top", "fixed_17net")
+    present_mod.validate_method_route_compatibility("gradient-spectral", "pfm_17net")
+    present_mod.validate_method_route_compatibility("gradient-spectral", "fixed_17net")
 
 
 def test_group_overview_direct_renderer_accepts_weighted_fisherz_without_changing_both() -> None:
@@ -359,12 +363,12 @@ def test_gradient_matrix_jobs_are_route_only_and_core_rooted_for_routea() -> Non
     jobs = build_render_jobs(REPO_ROOT / "outputs_hcp" / "inputs" / "kong2022")
     gradient_jobs = [job for job in jobs if job.method == GRADIENT_METHOD]
     assert gradient_jobs
-    assert set(job.route_tag for job in gradient_jobs).issubset({"routea", "routeb"})
-    assert "routea" in {job.route_tag for job in gradient_jobs}
+    assert {job.route_tag for job in gradient_jobs}.issubset({"pfm", "fixed"})
+    assert "pfm" in {job.route_tag for job in gradient_jobs}
     assert all(job.mode_tag is None for job in gradient_jobs)
-    routea_jobs = [job for job in gradient_jobs if job.route_tag == "routea"]
-    assert routea_jobs
-    assert all("outputs_hcp/work/group_atlas/routea_full_k3_fisherz" in str(job.group_root) for job in routea_jobs)
+    pfm_jobs = [job for job in gradient_jobs if job.route_tag == "pfm"]
+    assert pfm_jobs
+    assert all(str(job.group_root).endswith("outputs_hcp/work/group_atlas/pfm") for job in pfm_jobs)
     assert all("10perc" not in str(job.group_root) for job in gradient_jobs)
 
 

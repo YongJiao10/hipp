@@ -56,13 +56,13 @@ DEFAULT_CMAP = "RdBu_r"
 DEFAULT_DATA_ROOT = REPO_ROOT / "data" / "hippunfold_input"
 DEFAULT_SCENE = REPO_ROOT / "config" / "manual_wb_scenes" / "cortex_manual.scene"
 DEFAULT_OUTPUT_NAME = "cortex_kong2022_gradient-spectral_2mm4mm_template_strength_overview.png"
-DEFAULT_WTA_ROOT = DEFAULT_GROUP_ATLAS_ROOT / "routea_wta_normalized_top20_count_full_k3"
+DEFAULT_WTA_ROOT = DEFAULT_GROUP_ATLAS_ROOT / "pfm"
 DEFAULT_WTA_SHARED_ROOT = DEFAULT_KONG2022_SURFACE_ROOT
 DEFAULT_WTA_REFERENCE_ROOT = DEFAULT_KONG2022_ROUTEA_ROOT
 if not (DEFAULT_WTA_SHARED_ROOT / "sub-100610").exists():
     DEFAULT_WTA_SHARED_ROOT = DEFAULT_KONG2022_SHARED_INPUTS_ROOT / "surface"
 if not (DEFAULT_WTA_REFERENCE_ROOT / "sub-100610").exists():
-    DEFAULT_WTA_REFERENCE_ROOT = DEFAULT_KONG2022_SHARED_INPUTS_ROOT / "routea"
+    DEFAULT_WTA_REFERENCE_ROOT = DEFAULT_KONG2022_SHARED_INPUTS_ROOT / "pfm"
 DEFAULT_WTA_OUTPUT_NAMES = {
     "canonical7": "cortex_kong2022_wta-normalized_7net_2mm4mm_template_strength_overview.png",
 }

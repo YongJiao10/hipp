@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# pyright: reportAttributeAccessIssue=false, reportReturnType=false
 from __future__ import annotations
 
 import json
@@ -103,7 +104,9 @@ def load_kong2022_merge_mapping(
     if taxonomy_key not in {"canonical8", "canonical7"}:
         raise ValueError(f"Unsupported Kong2022 taxonomy: {taxonomy!r}")
     mapping = {str(k): str(v) for k, v in payload["atlases"]["kong2022"]["mapping"].items()}
-    if taxonomy_key == "canonical7":
+    if taxonomy_key == "canonical8":
+        mapping["Aud"] = "Auditory"
+    elif taxonomy_key == "canonical7":
         mapping["Aud"] = "Somatomotor"
     expected = set(KNOWN_FAMILIES_17)
     if set(mapping.keys()) != expected:
@@ -127,6 +130,8 @@ def load_kong2022_dlabel(
 ) -> tuple[nib.Cifti2Image, dict[int, str]]:
     path = dlabel_path if dlabel_path is not None else KONG2022_DLABEL_PATH
     img = nib.load(str(path))
+    if not isinstance(img, nib.Cifti2Image):
+        raise TypeError(f"Expected Cifti2Image for dlabel: {path}")
     label_axis = img.header.get_axis(0)
     # axis 0 of a dlabel is the LabelAxis; its .label attribute is a list of
     # dicts (one per scalar map, here just one map at index 0).

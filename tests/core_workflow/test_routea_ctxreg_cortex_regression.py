@@ -227,19 +227,19 @@ def test_local_cortex_neighbor_renderer_uses_shallow_neutral_present_path() -> N
     assert not any(part in {"gradients", "diagnostics", "ctxdrop", "ctxreg"} for part in neighbors_mod.DEFAULT_OUT_DIR.parts)
 
     ctxdrop_path = neighbors_mod.count_path(
-        shared_root=Path("/tmp/shared/routea_ctxdrop"),
+        shared_root=Path("/data/shared/pfm_ctxdrop"),
         subject="100610",
         hemi="L",
-        source_branch="routea_ctxdrop",
+        source_branch="pfm_ctxdrop",
     )
     ctxreg_path = neighbors_mod.count_path(
-        shared_root=Path("/tmp/shared/routea_ctxreg"),
+        shared_root=Path("/data/shared/pfm_ctxreg"),
         subject="100610",
         hemi="L",
-        source_branch="routea_ctxreg",
+        source_branch="pfm_ctxreg",
     )
-    assert ctxdrop_path.as_posix() == "/tmp/shared/routea_ctxdrop/sub-100610/surface/local_cortex_neighbors/hemi_L/neighbor_counts.npy"
-    assert ctxreg_path.as_posix() == "/tmp/shared/routea_ctxreg/sub-100610/surface/local_cortex_neighbors/hemi_L/neighbor_counts.npy"
+    assert ctxdrop_path.as_posix() == "/data/shared/pfm_ctxdrop/sub-100610/surface/local_cortex_neighbors/hemi_L/neighbor_counts.npy"
+    assert ctxreg_path.as_posix() == "/data/shared/pfm_ctxreg/sub-100610/surface/local_cortex_neighbors/hemi_L/neighbor_counts.npy"
 
 
 def test_local_cortex_neighbor_manifest_omits_smoothing_semantics() -> None:
@@ -247,7 +247,7 @@ def test_local_cortex_neighbor_manifest_omits_smoothing_semantics() -> None:
         summaries=[],
         subjects=[],
         subjects_manifest=Path("/tmp/subjects.txt"),
-        source_branch="routea_ctxdrop",
+        source_branch="pfm_ctxdrop",
         distance_mm=20.0,
         display_vmin=1.0,
         display_vmax=2.0,
@@ -264,8 +264,8 @@ def test_local_cortex_neighbor_manifest_omits_smoothing_semantics() -> None:
 
 def test_local_cortex_neighbor_output_names_are_smoothing_independent() -> None:
     paths = neighbors_mod.output_paths(Path("/tmp/present/local_cortex_neighbors"), distance_mm=20.0)
-    assert paths["png"].name == "kong2022_routea_local_cortex_neighbors_mean20mm.png"
-    assert paths["manifest"].name == "kong2022_routea_local_cortex_neighbors_mean20mm_manifest.json"
+    assert paths["png"].name == "kong2022_pfm_local_cortex_neighbors_mean20mm.png"
+    assert paths["manifest"].name == "kong2022_pfm_local_cortex_neighbors_mean20mm_manifest.json"
     assert paths["tsv"].name == "group_mean_local_cortex_neighbors.tsv"
     assert paths["mean_array"].name == "group_mean_local_cortex_neighbors_hemi-{hemi}.npy"
     assert "2mm" not in paths["png"].name
@@ -349,48 +349,55 @@ def test_ctxdrop_vertex_to_roi_fc_excludes_only_each_hipp_vertex_local_cortex() 
 
 
 def test_routea_ctx_control_route_contracts_and_paths() -> None:
-    assert compute_mod.ROUTE_TO_SHARED_DIR["routea_ctxreg"] == "routea_ctxreg"
-    assert compute_mod.ROUTE_TO_SHARED_DIR["routea_ctxdrop"] == "routea_ctxdrop"
-    assert atlas_mod.infer_route_tag(Path("/tmp/kong2022/shared_inputs/routea_ctxreg"), "auto") == "routea_ctxreg"
-    assert atlas_mod.infer_route_tag(Path("/tmp/kong2022/shared_inputs/routea_ctxdrop"), "auto") == "routea_ctxdrop"
-    assert "routea_ctxreg" in overview_mod.ROUTE_TAG_CHOICES
-    assert "routea_ctxdrop" in overview_mod.ROUTE_TAG_CHOICES
-    assert "routea_ctxreg" in grad_render_mod.ROUTES
-    assert "routea_ctxdrop" in grad_render_mod.ROUTES
-    assert "routea_ctxreg" in matrix_mod.ROUTE_CHOICES
-    assert "routea_ctxdrop" in matrix_mod.ROUTE_CHOICES
+    assert compute_mod.ROUTE_TO_SHARED_DIR["pfm_ctxreg"] == "pfm_ctxreg"
+    assert compute_mod.ROUTE_TO_SHARED_DIR["pfm_ctxdrop"] == "pfm_ctxdrop"
+    assert atlas_mod.infer_route_tag(Path("/data/kong2022/shared_inputs/pfm_ctxreg"), "auto") == "pfm_ctxreg"
+    assert atlas_mod.infer_route_tag(Path("/data/kong2022/shared_inputs/pfm_ctxdrop"), "auto") == "pfm_ctxdrop"
+    assert "pfm_ctxreg" in overview_mod.ROUTE_TAG_CHOICES
+    assert "pfm_ctxdrop" in overview_mod.ROUTE_TAG_CHOICES
+    assert "pfm_ctxreg" in grad_render_mod.ROUTES
+    assert "pfm_ctxdrop" in grad_render_mod.ROUTES
+    assert "pfm_ctxreg" in matrix_mod.ROUTE_CHOICES
+    assert "pfm_ctxdrop" in matrix_mod.ROUTE_CHOICES
 
     overview_path = matrix_mod.expected_overview_path(
         Path("/tmp/present"),
         method="network-spectral",
-        route_tag="routea_ctxreg",
+        route_tag="pfm_ctxreg",
         mode_tag=None,
         assignment_variant="fisherz",
     )
-    assert overview_path.name == "kong2022_network-spectral_group_overview_routea_ctxreg_fisherz.png"
+    assert overview_path.name == "kong2022_network-spectral_group_overview_pfm_ctxreg_fisherz.png"
 
     ctxdrop_overview_path = matrix_mod.expected_overview_path(
         Path("/tmp/present"),
         method="gradient-spectral",
-        route_tag="routea_ctxdrop",
+        route_tag="pfm_ctxdrop",
         mode_tag=None,
         assignment_variant="fisherz",
     )
-    assert ctxdrop_overview_path.name == "kong2022_gradient-spectral_group_overview_g1g2g3_routea_ctxdrop_fisherz.png"
+    assert ctxdrop_overview_path.name == "kong2022_gradient-spectral_group_overview_g1g2g3_pfm_ctxdrop_fisherz.png"
 
 
 
 
 def test_routea_17net_reuses_routea_inputs_and_has_shallow_output_contract() -> None:
-    assert "routea_17net" not in compute_mod.ROUTE_TO_SHARED_DIR
-    assert atlas_mod.gradient_route_for_route_tag("routea_17net") == "routea"
-    assert "routea_17net" in atlas_mod.ROUTE_TAG_CHOICES
-    assert "routea_17net" in overview_mod.ROUTE_TAG_CHOICES
-    assert "routea_17net" in matrix_mod.ROUTE_CHOICES
+    assert "pfm_17net" not in compute_mod.ROUTE_TO_SHARED_DIR
+    assert atlas_mod.gradient_route_for_route_tag("pfm_17net") == "pfm"
+    assert atlas_mod.gradient_route_for_route_tag("fixed_17net") == "fixed"
+    assert "pfm_17net" in atlas_mod.ROUTE_TAG_CHOICES
+    assert "fixed_17net" in atlas_mod.ROUTE_TAG_CHOICES
+    assert "pfm_17net" in overview_mod.ROUTE_TAG_CHOICES
+    assert "fixed_17net" in overview_mod.ROUTE_TAG_CHOICES
+    assert "pfm_17net" in matrix_mod.ROUTE_CHOICES
+    assert "fixed_17net" in matrix_mod.ROUTE_CHOICES
 
     route_roots = matrix_mod.canonical_group_roots(REPO_ROOT / "outputs_hcp" / "work" / "group_atlas")
-    assert route_roots["routea_17net"] == (
-        REPO_ROOT / "outputs_hcp" / "work" / "group_atlas" / "routea_17net_full_k3_fisherz"
+    assert route_roots["pfm_17net"] == (
+        REPO_ROOT / "outputs_hcp" / "work" / "group_atlas" / "pfm_17net"
+    ).resolve()
+    assert route_roots["fixed_17net"] == (
+        REPO_ROOT / "outputs_hcp" / "work" / "group_atlas" / "fixed_17net"
     ).resolve()
 
 
@@ -544,16 +551,16 @@ def test_hcp_control_writer_defaults_use_dated_400_roi_roots() -> None:
     assert ctxreg_mod.DEFAULT_OUT_SHARED_ROOT == expected_ctxreg
     assert roi_fc_mod.resolve_shared_root_for_mode(None, ctxdrop=True) == expected_ctxdrop
     assert roi_fc_mod.resolve_reference_root_for_mode(None, ctxdrop=True) == roi_fc_mod.DEFAULT_SHARED_ROOT.resolve()
-    assert neighbors_mod.resolve_neighbor_shared_root(None, source_branch="routea_ctxreg") == expected_ctxreg
-    assert neighbors_mod.resolve_neighbor_shared_root(None, source_branch="routea_ctxdrop") == expected_ctxdrop
+    assert neighbors_mod.resolve_neighbor_shared_root(None, source_branch="pfm_ctxreg") == expected_ctxreg
+    assert neighbors_mod.resolve_neighbor_shared_root(None, source_branch="pfm_ctxdrop") == expected_ctxdrop
 
 
 def test_hcp_gradient_control_routes_use_dated_400_roi_roots() -> None:
     assert compute_mod.resolve_gradient_shared_root(
         compute_mod.DEFAULT_SHARED_INPUTS,
-        "routea_ctxreg",
+        "pfm_ctxreg",
     ) == compute_mod.DEFAULT_KONG400_CTXREG_SHARED_ROOT.resolve()
     assert compute_mod.resolve_gradient_shared_root(
         compute_mod.DEFAULT_SHARED_INPUTS,
-        "routea_ctxdrop",
+        "pfm_ctxdrop",
     ) == compute_mod.DEFAULT_KONG400_CTXDROP_SHARED_ROOT.resolve()

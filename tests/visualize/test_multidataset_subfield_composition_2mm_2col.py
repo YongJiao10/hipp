@@ -47,10 +47,10 @@ def test_comparison_signal_branch_resolves_formal_roots_without_reference_worktr
         standard_columns[0][0], spec, "ctxreg"
     )
     assert ctxreg["signal_branch"] == "ctxreg"
-    assert ctxreg["group_root"] == REPO_ROOT / "outputs_hcp/work/group_atlas/routea_ctxreg"
+    assert ctxreg["group_root"] == REPO_ROOT / "outputs_hcp/work/group_atlas/pfm_ctxreg"
     assert ctxreg["grad_subpath"] == (
         REPO_ROOT
-        / "outputs_hcp/work/group_atlas/routea_ctxreg/gradient-spectral/kong2022/2mm/cov_0p80/g1g2g3"
+        / "outputs_hcp/work/group_atlas/pfm_ctxreg/gradient-spectral/kong2022/2mm/cov_0p80/g1g2g3"
     )
     assert "ctxreg_worktree" not in str(ctxreg["group_root"])
 
@@ -58,7 +58,7 @@ def test_comparison_signal_branch_resolves_formal_roots_without_reference_worktr
         standard_columns[0][1], spec, "ctxreg"
     )
     assert iowa["group_root"] == (
-        REPO_ROOT / "outputs_iowa_jj_tms/work/group_atlas/routea_ctxreg/hc"
+        REPO_ROOT / "outputs_iowa_jj_tms/work/group_atlas/pfm_ctxreg/hc"
     )
 
 

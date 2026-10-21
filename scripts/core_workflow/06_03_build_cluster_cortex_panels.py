@@ -944,7 +944,7 @@ def main() -> int:
     mask_root = Path(args.mask_root).resolve() if args.mask_root else shared_root
     present_dir = Path(args.present_dir).resolve()
     present_dir.mkdir(parents=True, exist_ok=True)
-    runtime_root = Path(args.runtime_root).resolve() if args.runtime_root else ((present_dir / "runtime") if str(args.route_tag) == "routea" else (present_dir / str(args.route_tag) / "runtime"))
+    runtime_root = Path(args.runtime_root).resolve() if args.runtime_root else ((present_dir / "runtime") if str(args.route_tag) == "pfm" else (present_dir / str(args.route_tag) / "runtime"))
     viewer_root = runtime_root
     runtime_root.mkdir(parents=True, exist_ok=True)
     viewer_combo_manifest_dir = runtime_root / "combo_manifests"

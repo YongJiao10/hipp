@@ -4,16 +4,16 @@ This document defines branch semantics for the active core workflow surface.
 
 ## Branch Mainlines
 
-- `kong2019`
-- `kong2022_routea`
-- `kong2022_routea_17net`
-- `kong2022_routea_ctxreg`
-- `kong2022_routea_ctxdrop`
-- `kong2022_routeb`
+- `kong2022_pfm`
+- `kong2022_pfm_17net`
+- `kong2022_pfm_ctxreg`
+- `kong2022_pfm_ctxdrop`
+- `kong2022_fixed`
+- `kong2022_fixed_17net`
 - `lynch2024_20net`
 - `lynch2024_7net`
 
-`kong2019` and `kong2022` are treated as parallel mainlines. Within `kong2022`, unsuffixed RouteA is the canonical7 default; the RouteA 17-net taxonomy variant, RouteA cortex-regression control, RouteA cortex-drop control, and RouteB remain explicit parallel branches. The cortex-control branches are isolated from uncontrolled RouteA outputs. Lynch2024 branches are all-base-subject FASTANS/PFM comparison routes against Kong2022 RouteA with separate input and group-atlas roots; their NSI table is audit metadata, not a selection gate.
+Within `kong2022`, unsuffixed `pfm` is the canonical7 individualized default; the PFM 17-net taxonomy variant (`pfm_17net`), PFM cortex-regression control (`pfm_ctxreg`), PFM cortex-drop control (`pfm_ctxdrop`), Fixed standard template (`fixed`, canonical7), and Fixed 17-net (`fixed_17net`) remain explicit parallel branches. The cortex-control branches are isolated from uncontrolled PFM outputs. Lynch2024 branches are all-base-subject FASTANS/PFM comparison routes against Kong2022 PFM with separate input and group-atlas roots; their NSI table is audit metadata, not a selection gate.
 
 ## Pipeline Order
 
@@ -29,54 +29,50 @@ Use numbered public entrypoints in `scripts/core_workflow/`:
 
 ## Branch Applicability
 
-- Kong2019 branch:
-  - shared input root uses Kong2019 FC banks (`04_03_materialize_kong2019_fc`)
-  - uses `05_02_run_group_atlas` for group outputs
-- Kong2022 RouteA branch:
-  - requires generated RouteA ArealMSHBM individualized cortex labels before `03_02`; see `core_workflow_artifact_lineage.md` for the external-backend artifact contract and evidence requirements
-  - runs RouteA reference build (`03_02_build_kong2022_routea_reference`) from generated RouteA label files
+- Kong2022 PFM (`pfm`) branch:
+  - requires generated PFM ArealMSHBM individualized cortex labels before `03_02`; see `core_workflow_artifact_lineage.md` for the external-backend artifact contract and evidence requirements
+  - runs PFM reference build (`03_02_build_kong2022_routea_reference`) from generated PFM label files
   - uses `04_01`, `04_02`, `05_01`, then `05_02`; `05_03` is optional rerun orchestration
   - runs `05_01` HippoMaps gradients before `gradient-spectral` in `05_02`
-- Kong2022 RouteA 17-net taxonomy branch:
-  - reuses `shared_inputs/routea`, `surface`, RouteA 400-ROI FC caches, and RouteA HippoMaps gradients; it does not create a separate input tree or gradient tree
-  - `03_02_build_kong2022_routea_reference.py` also writes compact `cortex_family17_networks.tsv` and `cortex_family17_network_timeseries.npy` summaries under each existing RouteA subject reference
-  - runs `05_02_run_group_atlas.py` with `--route-tag routea_17net --network-taxonomy family17 --methods gradient-spectral`, writing only taxonomy-dependent group outputs under `outputs_hcp/work/group_atlas/routea_17net_full_k3_fisherz`; WTA is not valid for family17
-- Kong2022 RouteA canonical7 default:
-  - is the existing RouteA numbered workflow, not a separate `_7net` pipeline or code folder
-  - uses `03_02 --atlas-slug kong2022` to write direct `reference/kong2022/` artifacts from Route-A labels/dtseries
-  - runs existing `04_01`, `05_01`, and `05_02` with unsuffixed `kong2022` / `routea`; FC, gradients, clustering, and K selection all record `network_taxonomy=canonical7`
+- Kong2022 17-net taxonomy branches (`pfm_17net` and `fixed_17net`):
+  - reuse `shared_inputs/pfm` (or `shared_inputs/fixed`), `surface`, 400-ROI FC caches, and `pfm` (or `fixed`) HippoMaps gradients; they do not create a separate input tree or gradient tree
+  - `03_02_build_kong2022_routea_reference.py` (and `03_01`) write compact `cortex_family17_networks.tsv` and `cortex_family17_network_timeseries.npy` summaries under each subject reference
+  - run `05_02_run_group_atlas.py` with `--route-tag pfm_17net` (or `fixed_17net`) `--network-taxonomy family17 --methods gradient-spectral`, writing only taxonomy-dependent group outputs under `outputs_hcp/work/group_atlas/pfm_17net` (or `fixed_17net`); WTA is not valid for family17
+- Kong2022 PFM canonical7 default:
+  - is the existing PFM numbered workflow, not a separate `_7net` pipeline or code folder
+  - uses `03_02 --atlas-slug kong2022` to write direct `reference/kong2022/` artifacts from PFM labels/dtseries
+  - runs existing `04_01`, `05_01`, and `05_02` with unsuffixed `kong2022` / `pfm`; FC, gradients, clustering, and K selection all record `network_taxonomy=canonical7`
   - keeps the direct 7-network FC cache separate from the 400-ROI cache used by ROI/WTA methods and renders through the existing overview entrypoints
 
 Kong2022 WTA output uses the single direct ROI-registry path with
-`normalized_top20_count`; canonical7 and canonical8 are taxonomy views of that
-same assignment, while family17 remains gradient-only. Lynch2024 supports both
+`normalized_top20_count` for `canonical7`, while `family17` remains gradient-only. Lynch2024 supports both
 `gradient-spectral` and direct-network `wta-top`; Lynch WTA assigns supported
 vertices by top-1 Fisher-z network value and uses the Fisher-z margin as
 confidence, without a Kong ROI registry.
-- Kong2022 RouteA cortex-control branch:
-  - starts from RouteA references and `surface` hippocampal time series
-  - runs `04_00_materialize_cortex_regressed_surface_timeseries.py` to write controlled time series and diagnostics under the formal `outputs_hcp/inputs/kong2022/shared_inputs/routea_ctxreg` root after run-wise local cortex regression
-  - then runs `04_01`, `04_02`, `05_01`, and `05_02` with `--route-tag routea_ctxreg`; static RouteA references are read from `routea` and masks from `surface` through explicit root arguments rather than being copied
-  - gradients are maintained under `outputs_hcp/work/hippomaps_gradients/routea_ctxreg` and group atlases under `outputs_hcp/work/group_atlas/routea_ctxreg`; run identifiers and validation evidence belong in manifests and logs, while legacy suffixed trees remain migration sources until the approved cleanup
-  - controls local cortical smear before FC materialization and does not redefine or overwrite uncontrolled RouteA outputs
-- Kong2022 RouteA cortex-drop branch:
-  - starts from RouteA references, `surface` hippocampal time series, subject cortex dtseries, generated RouteA individualized Kong2022 labels, and the same 20 mm local cortex-neighborhood definition used by `routea_ctxreg`
-  - runs `04_01_materialize_kong2022_roi_fc.py --ctxdrop` to write isolated vertex-to-ROI FC caches under the formal `outputs_hcp/inputs/kong2022/shared_inputs/routea_ctxdrop` root; hippocampal time series are not rewritten
+- Kong2022 PFM cortex-control (`pfm_ctxreg`) branch:
+  - starts from PFM references and `surface` hippocampal time series
+  - runs `04_00_materialize_cortex_regressed_surface_timeseries.py` to write controlled time series and diagnostics under the formal `outputs_hcp/inputs/kong2022/shared_inputs/pfm_ctxreg` root after run-wise local cortex regression
+  - then runs `04_01`, `04_02`, `05_01`, and `05_02` with `--route-tag pfm_ctxreg`; static PFM references are read from `pfm` and masks from `surface` through explicit root arguments rather than being copied
+  - gradients are maintained under `outputs_hcp/work/hippomaps_gradients/pfm_ctxreg` and group atlases under `outputs_hcp/work/group_atlas/pfm_ctxreg`
+  - controls local cortical smear before FC materialization and does not redefine or overwrite uncontrolled PFM outputs
+- Kong2022 PFM cortex-drop (`pfm_ctxdrop`) branch:
+  - starts from PFM references, `surface` hippocampal time series, subject cortex dtseries, generated PFM individualized Kong2022 labels, and the same 20 mm local cortex-neighborhood definition used by `pfm_ctxreg`
+  - runs `04_01_materialize_kong2022_roi_fc.py --ctxdrop` to write isolated vertex-to-ROI FC caches under the formal `outputs_hcp/inputs/kong2022/shared_inputs/pfm_ctxdrop` root; hippocampal time series are not rewritten
   - for each hippocampal vertex and ROI, excludes valid cortex vertices within the 20 mm local neighborhood before computing that ROI mean time series and Pearson FC
-  - maintained downstream outputs are `gradient-spectral` and `wta-top` only, with gradients under `outputs_hcp/work/hippomaps_gradients/routea_ctxdrop`, group atlases under `outputs_hcp/work/group_atlas/routea_ctxdrop`, and shared local-neighbor hippocampal surface overlays rendered by `06_07_render_ctxdrop_neighbor_counts.py` under `outputs_hcp/present/local_cortex_neighbors/`. Legacy suffixed trees are migration sources only and are not active resolver targets
+  - maintained downstream outputs are `gradient-spectral` and `wta-top` only, with gradients under `outputs_hcp/work/hippomaps_gradients/pfm_ctxdrop`, group atlases under `outputs_hcp/work/group_atlas/pfm_ctxdrop`, and shared local-neighbor hippocampal surface overlays rendered by `06_07_render_ctxdrop_neighbor_counts.py` under `outputs_hcp/present/local_cortex_neighbors/`
 - Lynch2024 FASTANS/PFM branches:
-  - start from the full 151-subject base QC manifest via `02_03`; retain the NSI TSV/CSV only as an audit table, with no threshold or expected-count rule, and use external local FASTANS priors under `external/FASTANS/resources/PFM/priors/Lynch2024/`
-  - run `03_04_run_lynch2024_fastans_pfm.py` to create official per-subject hard-label PFM dlabel/dscalar assets and hard-label component time series under `outputs_hcp/work/cortex_pfm/sub-<id>/lynch2024/`, then write current shared inputs under `outputs_hcp/inputs/lynch2024_fast_pfm_t1only/shared_inputs/pfm_hcp151/`
+  - start from the full base QC manifest via `02_03`; retain the NSI TSV/CSV only as an audit table, with no threshold or expected-count rule, and use external local FASTANS priors under `external/FASTANS/resources/PFM/priors/Lynch2024/`
+  - run `03_04_run_lynch2024_fastans_pfm.py` to create official per-subject hard-label PFM dlabel/dscalar assets and hard-label component time series under `outputs_hcp/work/cortex_pfm/sub-<id>/lynch2024/`, then write current shared inputs under `outputs_hcp/inputs/lynch2024/shared_inputs/pfm/`
   - `lynch2024_20net` keeps exactly 20 unique Lynch parent networks after excluding `Noise`; `lynch2024_7net` uses the canonical merge from `config/cross_atlas_network_merge.json`
-  - `gradient-spectral` uses one shared non-Noise Lynch20 component gradient bank with shifted-cosine surface affinity; `lynch2024_7net` does not keep a separate 8-column gradient bank
-  - `05_02` passes `--profile-surface-root outputs_hcp/inputs/kong2022/shared_inputs/routea_ctxreg` for cluster-network profile annotation, matching Kong RouteA's cluster-mean hippocampal time-series correlation while leaving Lynch masks, FC caches, references, and gradient inputs under the Lynch shared root
+  - `gradient-spectral` uses one shared non-Noise Lynch20 component gradient bank with shifted-cosine surface affinity; `lynch2024_7net` does not keep a separate gradient bank
+  - `05_02` passes `--profile-surface-root outputs_hcp/inputs/kong2022/shared_inputs/pfm_ctxreg` for cluster-network profile annotation, matching Kong PFM's cluster-mean hippocampal time-series correlation while leaving Lynch masks, FC caches, references, and gradient inputs under the Lynch shared root
   - Lynch K diagnostics use the same full-sample cluster-to-network FC redundancy gate as Kong2022; summaries record finite maximum profile similarity and redundant-pair counts
-  - the maintained downstream outputs are `gradient-spectral` and direct-network `wta-top`, with current full-cohort group roots `outputs_hcp/work/group_atlas/lynch2024_20net_hcp151_full_k3_fisherz/` and `outputs_hcp/work/group_atlas/lynch2024_7net_hcp151_full_k3_fisherz/`; when `--methods` is omitted, both methods are generated for a Lynch atlas. Lynch WTA uses direct vertex-to-network Fisher-z profiles rather than the Kong ROI-registry normalized Top-20 contract.
-- Kong2022 RouteB branch:
+  - the maintained downstream outputs are `gradient-spectral` and direct-network `wta-top`, with current full-cohort group roots `outputs_hcp/work/group_atlas/lynch2024_20net/` and `outputs_hcp/work/group_atlas/lynch2024_7net/`; when `--methods` is omitted, both methods are generated for a Lynch atlas. Lynch WTA uses direct vertex-to-network Fisher-z profiles rather than the Kong ROI-registry normalized Top-20 contract.
+- Kong2022 Fixed (`fixed` / `fixed_17net`) branch:
   - uses shared Kong2022 reference build (`03_01`) and standard FC stages
   - uses `05_01`, then `05_02`; `05_03` is optional rerun orchestration
   - runs `05_01` HippoMaps gradients before `gradient-spectral` in `05_02`
-  - writes maintained fixed-K=3 group atlas outputs under `outputs_hcp/work/group_atlas/routeb_full_k3_fisherz`
+  - writes maintained fixed-K=3 group atlas outputs under `outputs_hcp/work/group_atlas/fixed` (and `fixed_17net` for original 17 networks)
 
 ## Gradient-Spectral Branch
 
@@ -86,9 +82,9 @@ confidence, without a Kong ROI registry.
 
 ## Confidence And Presentation
 
-`06_06_render_confidence_maps.py` renders silhouette maps under `outputs_hcp/present/gradients/{route_tag}/{smoothing}/`. `06_04_render_hippomaps_gradient_products.py` renders continuous gradients for `routea`, `routea_ctxreg`, `routea_ctxdrop`, and `routeb` from `outputs_hcp/work/hippomaps_gradients/{route}`. Continuous gradient PNGs are display-aligned across branches by default: `routea` is the sign reference, non-reference route/hemi/component maps are flipped only for rendering when their correlation to the matching `routea` component is negative, and per-component color ranges are shared across rendered routes within each smoothing level. The display decisions are recorded in the `06_04` manifests; the saved `05_01` arrays and downstream clustering inputs are not rewritten.
+`06_06_render_confidence_maps.py` renders silhouette maps under `outputs_hcp/present/gradients/{route_tag}/{smoothing}/`. `06_04_render_hippomaps_gradient_products.py` renders continuous gradients for `pfm`, `pfm_ctxreg`, `pfm_ctxdrop`, and `fixed` from `outputs_hcp/work/hippomaps_gradients/{route}`. Continuous gradient PNGs are display-aligned across branches by default: `pfm` is the sign reference, non-reference route/hemi/component maps are flipped only for rendering when their correlation to the matching `pfm` component is negative, and per-component color ranges are shared across rendered routes within each smoothing level. The display decisions are recorded in the `06_04` manifests; the saved `05_01` arrays and downstream clustering inputs are not rewritten.
 
-Canonical presentation outputs live under `outputs_hcp/present/`: maintained method overview PNGs in `overviews/`, continuous gradient products in `gradients/`, and cortex panels in `cortex_panels/`. For direct method-overview rendering, pass `--assignment-variant both` to `06_01_build_group_overview.py` when cluster-based outputs should include both `fisherz` and `normalized_top20_count`, including `gradient-spectral`; the only clusterless WTA overview is the Kong2022 ROI-registry `normalized_top20_count` product. The WTA-top overview uses a compact first column, an embedded fixed 20-bin transposed long-axis network profile in the second column, and the hippocampal surface render in the third column; standalone WTA long-axis profile code and PNG/TSV products are removed from the maintained workflow. Smoke tests stay isolated under `outputs_hcp/smoke_runs/<run_id>/`.
+Canonical presentation outputs live under `outputs_hcp/present/`: maintained method overview PNGs in `overviews/<route>/`, continuous gradient products in `gradients/`, and cortex panels in `cortex_panels/`. For direct method-overview rendering, pass `--assignment-variant both` to `06_01_build_group_overview.py` when cluster-based outputs should include both `fisherz` and `normalized_top20_count`, including `gradient-spectral`; the only clusterless WTA overview is the Kong2022 ROI-registry `normalized_top20_count` product. The WTA-top overview uses a compact first column, an embedded fixed 20-bin transposed long-axis network profile in the second column, and the hippocampal surface render in the third column; standalone WTA long-axis profile code and PNG/TSV products are removed from the maintained workflow. Smoke tests stay isolated under `outputs_hcp/smoke_runs/<run_id>/`.
 
 Full-cohort group-atlas intermediates owned by the active core workflow live under `outputs_hcp/work/group_atlas/`. The post-hoc `weighted_fisherz` comparison branch is generated by `05_05_build_weighted_fisherz_branch.py` under `outputs_hcp/work/group_atlas/routea_weighted_fisherz_full_k3/`; it preserves existing RouteA `fisherz` files and adds a `weighted_fisherz` assignment variant for `gradient-spectral` only. The maintained multi-dataset canonical7 resolver keeps the published comparison namespaces (`kong2022_7net_*` for HCP/Iowa and `routea_7net_*` for Stanford), but every active Kong gradient/WTA input resolves inside `gradient-spectral/kong2022` or `wta-top/kong2022`; taxonomy is read from the manifest. The former unsuffixed canonical8 gradient/WTA subtrees used by that resolver were moved under `wrong/outputs_<dataset>/work/archive/8net_20260909/`; only an explicit `canonical8` request may address that historical namespace. The RouteA 17-net taxonomy root is `outputs_hcp/work/group_atlas/routea_17net_full_k3_fisherz/`; the RouteB fixed-K=3 root is `outputs_hcp/work/group_atlas/routeb_full_k3_fisherz/`; HCP cortex-control branches use the formal direct roots `outputs_hcp/work/group_atlas/routea_ctxreg/` and `outputs_hcp/work/group_atlas/routea_ctxdrop/`. Kong2022 cluster-level functional atlas labels retain `fisherz` (`top1_fisher_z`) and `normalized_top20_count` (`top20_count_normalized_by_network_roi_count`) for cluster-based methods; these are not alternative WTA definitions. The only WTA assignment is the Kong2022 ROI-registry `normalized_top20_count` product: top-20 positive ROI/component counts divided by finite available ROI/component counts in each network. Raw `count` is neither registered nor generated.
 

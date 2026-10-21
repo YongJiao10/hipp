@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from pathlib import Path
 
 from .workflow_utils import utc_timestamp_for_filename
 
-
 REPO_ROOT = Path(__file__).resolve().parents[3]
+LEGACY_WRONG_PATH_MAPPING_JSON = REPO_ROOT / "config" / "legacy_wrong_path_mapping.json"
 
 DATASET_KEYS = (
     "hcp",
@@ -253,7 +254,7 @@ def resolve_hippunfold_batch_root(dataset: str = DEFAULT_DATASET) -> Path:
 
 
 def resolve_qc_root(dataset: str = DEFAULT_DATASET) -> Path:
-    return resolve_inputs_root(dataset) / "qc" / "vertex_qc_t1only"
+    return resolve_inputs_root(dataset) / "qc"
 
 
 KONG2022_VARIANTS = ("36p", "22p")
@@ -280,10 +281,8 @@ def resolve_kong2022_variant_root(
     variant_key = _validate_kong2022_variant(variant)
     if variant_key == "36p":
         return resolve_inputs_root(dataset_key) / "kong2022"
-    if dataset_key == "stanford":
+    if dataset_key in {"stanford", "iowa_jj_tms"}:
         return resolve_inputs_root(dataset_key) / "kong2022_22p"
-    if dataset_key == "iowa_jj_tms":
-        return resolve_inputs_root(dataset_key) / "kong2022"
     raise ValueError(
         f"Kong2022 {variant_key} has no supported native input layout for "
         f"dataset={dataset_key!r}"
@@ -296,8 +295,6 @@ def resolve_kong2022_shared_inputs_root(
 ) -> Path:
     dataset_key = _validate_dataset(dataset)
     root = resolve_kong2022_variant_root(dataset_key, variant)
-    if _validate_kong2022_variant(variant) == "22p" and dataset_key == "iowa_jj_tms":
-        return root / "shared_inputs_22p"
     return root / "shared_inputs"
 
 
@@ -308,23 +305,35 @@ def resolve_kong2022_surface_root(
     return resolve_kong2022_shared_inputs_root(dataset, variant) / "surface"
 
 
-def resolve_kong2022_routea_root(
+def resolve_kong2022_pfm_root(
     dataset: str = DEFAULT_DATASET,
     variant: str = "36p",
 ) -> Path:
-    return resolve_kong2022_shared_inputs_root(dataset, variant) / "routea"
+    return resolve_kong2022_shared_inputs_root(dataset, variant) / "pfm"
 
 
-def resolve_kong2022_routea_ctxreg_root(dataset: str = DEFAULT_DATASET) -> Path:
-    return resolve_kong2022_shared_inputs_root(dataset) / "routea_ctxreg"
+resolve_kong2022_routea_root = resolve_kong2022_pfm_root
 
 
-def resolve_kong2022_routea_ctxdrop_root(dataset: str = DEFAULT_DATASET) -> Path:
-    return resolve_kong2022_shared_inputs_root(dataset) / "routea_ctxdrop"
+def resolve_kong2022_pfm_ctxreg_root(dataset: str = DEFAULT_DATASET) -> Path:
+    return resolve_kong2022_shared_inputs_root(dataset) / "pfm_ctxreg"
 
 
-def resolve_kong2022_routeb_root(dataset: str = DEFAULT_DATASET) -> Path:
-    return resolve_kong2022_shared_inputs_root(dataset) / "routeb"
+resolve_kong2022_routea_ctxreg_root = resolve_kong2022_pfm_ctxreg_root
+
+
+def resolve_kong2022_pfm_ctxdrop_root(dataset: str = DEFAULT_DATASET) -> Path:
+    return resolve_kong2022_shared_inputs_root(dataset) / "pfm_ctxdrop"
+
+
+resolve_kong2022_routea_ctxdrop_root = resolve_kong2022_pfm_ctxdrop_root
+
+
+def resolve_kong2022_fixed_root(dataset: str = DEFAULT_DATASET) -> Path:
+    return resolve_kong2022_shared_inputs_root(dataset) / "fixed"
+
+
+resolve_kong2022_routeb_root = resolve_kong2022_fixed_root
 
 
 def resolve_kong2022_template_root(
@@ -333,15 +342,10 @@ def resolve_kong2022_template_root(
 ) -> Path:
     dataset_key = _validate_dataset(dataset)
     variant_key = _validate_kong2022_variant(variant)
-    if variant_key == "22p" and dataset_key == "stanford":
-        return (
-            resolve_kong2022_shared_inputs_root(dataset_key, variant_key)
-            / "template"
-        )
     return (
         resolve_kong2022_variant_root(dataset_key, variant_key)
         / "templates"
-        / "hipp_group_average_t1only_151"
+        / "hipp_group_average"
     )
 
 
@@ -353,12 +357,15 @@ def resolve_kong2022_qc_root(dataset: str = DEFAULT_DATASET) -> Path:
     return resolve_kong2022_root(dataset) / "qc"
 
 
-def resolve_cortex_routea_root(dataset: str = DEFAULT_DATASET) -> Path:
-    return resolve_kong2022_root(dataset) / "cortex_references" / "routea_areal_mshbm"
+def resolve_cortex_pfm_root(dataset: str = DEFAULT_DATASET) -> Path:
+    return resolve_kong2022_root(dataset) / "cortex_references" / "pfm_areal_mshbm"
+
+
+resolve_cortex_routea_root = resolve_cortex_pfm_root
 
 
 def resolve_lynch2024_root(dataset: str = DEFAULT_DATASET) -> Path:
-    return resolve_inputs_root(dataset) / "lynch2024_fast_pfm_t1only"
+    return resolve_inputs_root(dataset) / "lynch2024"
 
 
 def resolve_lynch2024_manifest_root(dataset: str = DEFAULT_DATASET) -> Path:
@@ -371,12 +378,12 @@ def resolve_lynch2024_shared_inputs_base(dataset: str = DEFAULT_DATASET) -> Path
 
 def resolve_lynch2024_shared_inputs_root(dataset: str = DEFAULT_DATASET) -> Path:
     """Return the current all-base-subject Lynch2024 shared-input root."""
-    return resolve_lynch2024_shared_inputs_base(dataset) / "pfm_hcp151"
+    return resolve_lynch2024_shared_inputs_base(dataset) / "pfm"
 
 
 def resolve_lynch2024_nsi043_shared_inputs_root(dataset: str = DEFAULT_DATASET) -> Path:
-    """Return the historical 78-subject input root in the legacy namespace."""
-    return resolve_lynch2024_shared_inputs_base(dataset) / "pfm_nsi043_78"
+    """Return the retained NSI-0.43 Lynch2024 input root (not part of active reruns)."""
+    return resolve_lynch2024_shared_inputs_base(dataset) / "pfm_nsi043"
 
 
 # ── work subtree resolvers ────────────────────────────────────────────
@@ -385,40 +392,90 @@ def resolve_group_atlas_root(dataset: str = DEFAULT_DATASET) -> Path:
     return resolve_work_root(dataset) / "group_atlas"
 
 
-def resolve_routea_group_atlas_root(dataset: str = DEFAULT_DATASET) -> Path:
-    return resolve_group_atlas_root(dataset) / "routea_full_k3_fisherz"
+def resolve_pfm_group_atlas_root(dataset: str = DEFAULT_DATASET) -> Path:
+    return resolve_group_atlas_root(dataset) / "pfm"
 
 
-
-def resolve_routea_17net_group_atlas_root(dataset: str = DEFAULT_DATASET) -> Path:
-    return resolve_group_atlas_root(dataset) / "routea_17net_full_k3_fisherz"
+resolve_routea_group_atlas_root = resolve_pfm_group_atlas_root
 
 
-def resolve_routea_ctxreg_group_atlas_root(dataset: str = DEFAULT_DATASET) -> Path:
-    dataset_key = _validate_dataset(dataset)
-    if dataset_key == "hcp":
-        return resolve_group_atlas_root(dataset_key) / "routea_ctxreg"
-    return resolve_group_atlas_root(dataset_key) / "routea_ctxreg_full_k3_fisherz"
+def resolve_pfm_17net_group_atlas_root(dataset: str = DEFAULT_DATASET) -> Path:
+    return resolve_group_atlas_root(dataset) / "pfm_17net"
 
 
-def resolve_routea_ctxdrop_group_atlas_root(dataset: str = DEFAULT_DATASET) -> Path:
-    dataset_key = _validate_dataset(dataset)
-    if dataset_key == "hcp":
-        return resolve_group_atlas_root(dataset_key) / "routea_ctxdrop"
-    return resolve_group_atlas_root(dataset_key) / "routea_ctxdrop_full_k3_fisherz"
+resolve_routea_17net_group_atlas_root = resolve_pfm_17net_group_atlas_root
 
 
+def resolve_pfm_ctxreg_group_atlas_root(dataset: str = DEFAULT_DATASET) -> Path:
+    return resolve_group_atlas_root(dataset) / "pfm_ctxreg"
 
-def resolve_routeb_group_atlas_root(dataset: str = DEFAULT_DATASET) -> Path:
-    return resolve_group_atlas_root(dataset) / "routeb_full_k3_fisherz"
+
+resolve_routea_ctxreg_group_atlas_root = resolve_pfm_ctxreg_group_atlas_root
+
+
+def resolve_pfm_ctxdrop_group_atlas_root(dataset: str = DEFAULT_DATASET) -> Path:
+    return resolve_group_atlas_root(dataset) / "pfm_ctxdrop"
+
+
+resolve_routea_ctxdrop_group_atlas_root = resolve_pfm_ctxdrop_group_atlas_root
+
+
+def resolve_fixed_group_atlas_root(dataset: str = DEFAULT_DATASET) -> Path:
+    return resolve_group_atlas_root(dataset) / "fixed"
+
+
+resolve_routeb_group_atlas_root = resolve_fixed_group_atlas_root
+
+
+def resolve_fixed_17net_group_atlas_root(dataset: str = DEFAULT_DATASET) -> Path:
+    return resolve_group_atlas_root(dataset) / "fixed_17net"
 
 
 def resolve_lynch2024_20net_group_atlas_root(dataset: str = DEFAULT_DATASET) -> Path:
-    return resolve_group_atlas_root(dataset) / "lynch2024_20net_hcp151_full_k3_fisherz"
+    return resolve_group_atlas_root(dataset) / "lynch2024_20net"
 
 
 def resolve_lynch2024_7net_group_atlas_root(dataset: str = DEFAULT_DATASET) -> Path:
-    return resolve_group_atlas_root(dataset) / "lynch2024_7net_hcp151_full_k3_fisherz"
+    return resolve_group_atlas_root(dataset) / "lynch2024_7net"
+
+
+def _variant_suffixed_route(route: str, variant: str = "36p") -> str:
+    route_key = str(route).strip().lower()
+    variant_key = _validate_kong2022_variant(variant)
+    return f"{route_key}_22p" if variant_key == "22p" else route_key
+
+
+def resolve_cohort_group_atlas_root(
+    dataset: str = DEFAULT_DATASET,
+    route: str = "pfm",
+    cohort: str | None = None,
+    variant: str = "36p",
+) -> Path:
+    base = resolve_group_atlas_root(dataset) / _variant_suffixed_route(route, variant)
+    return base if cohort is None else base / str(cohort).strip()
+
+
+def resolve_cohort_gradient_root(
+    dataset: str = DEFAULT_DATASET,
+    route: str = "pfm",
+    cohort: str | None = None,
+    variant: str = "36p",
+    *,
+    base_root: Path | None = None,
+) -> Path:
+    stage_root = resolve_hippomaps_gradient_root(dataset) if base_root is None else Path(base_root)
+    base = stage_root / _variant_suffixed_route(route, variant)
+    return base if cohort is None else base / str(cohort).strip()
+
+
+def resolve_cohort_overview_root(
+    dataset: str = DEFAULT_DATASET,
+    route: str = "pfm",
+    cohort: str | None = None,
+    variant: str = "36p",
+) -> Path:
+    base = resolve_overviews_dir(dataset) / _variant_suffixed_route(route, variant)
+    return base if cohort is None else base / str(cohort).strip()
 
 
 def resolve_hippomaps_gradient_root(dataset: str = DEFAULT_DATASET) -> Path:
@@ -471,25 +528,36 @@ DEFAULT_QC_ROOT = resolve_qc_root()
 DEFAULT_KONG2022_ROOT = resolve_kong2022_root()
 DEFAULT_KONG2022_SHARED_INPUTS_ROOT = resolve_kong2022_shared_inputs_root()
 DEFAULT_KONG2022_SURFACE_ROOT = resolve_kong2022_surface_root()
-DEFAULT_KONG2022_ROUTEA_ROOT = resolve_kong2022_routea_root()
-DEFAULT_KONG2022_ROUTEA_CTXREG_ROOT = resolve_kong2022_routea_ctxreg_root()
-DEFAULT_KONG2022_ROUTEA_CTXDROP_ROOT = resolve_kong2022_routea_ctxdrop_root()
-DEFAULT_KONG2022_ROUTEB_ROOT = resolve_kong2022_routeb_root()
+DEFAULT_KONG2022_PFM_ROOT = resolve_kong2022_pfm_root()
+DEFAULT_KONG2022_PFM_CTXREG_ROOT = resolve_kong2022_pfm_ctxreg_root()
+DEFAULT_KONG2022_PFM_CTXDROP_ROOT = resolve_kong2022_pfm_ctxdrop_root()
+DEFAULT_KONG2022_FIXED_ROOT = resolve_kong2022_fixed_root()
+DEFAULT_KONG2022_ROUTEA_ROOT = DEFAULT_KONG2022_PFM_ROOT
+DEFAULT_KONG2022_ROUTEA_CTXREG_ROOT = DEFAULT_KONG2022_PFM_CTXREG_ROOT
+DEFAULT_KONG2022_ROUTEA_CTXDROP_ROOT = DEFAULT_KONG2022_PFM_CTXDROP_ROOT
+DEFAULT_KONG2022_ROUTEB_ROOT = DEFAULT_KONG2022_FIXED_ROOT
 DEFAULT_KONG2022_TEMPLATE_ROOT = resolve_kong2022_template_root()
 DEFAULT_KONG2022_MANIFEST_ROOT = resolve_kong2022_manifest_root()
 DEFAULT_KONG2022_QC_ROOT = resolve_kong2022_qc_root()
-DEFAULT_CORTEX_ROUTEA_ROOT = resolve_cortex_routea_root()
+DEFAULT_CORTEX_PFM_ROOT = resolve_cortex_pfm_root()
+DEFAULT_CORTEX_ROUTEA_ROOT = DEFAULT_CORTEX_PFM_ROOT
 DEFAULT_LYNCH2024_ROOT = resolve_lynch2024_root()
 DEFAULT_LYNCH2024_MANIFEST_ROOT = resolve_lynch2024_manifest_root()
 DEFAULT_LYNCH2024_SHARED_INPUTS_BASE = resolve_lynch2024_shared_inputs_base()
 DEFAULT_LYNCH2024_SHARED_INPUTS_ROOT = resolve_lynch2024_shared_inputs_root()
 DEFAULT_WORK_ROOT = resolve_work_root()
 DEFAULT_GROUP_ATLAS_ROOT = resolve_group_atlas_root()
-DEFAULT_ROUTEA_GROUP_ATLAS_ROOT = resolve_routea_group_atlas_root()
-DEFAULT_ROUTEA_17NET_GROUP_ATLAS_ROOT = resolve_routea_17net_group_atlas_root()
-DEFAULT_ROUTEA_CTXREG_GROUP_ATLAS_ROOT = resolve_routea_ctxreg_group_atlas_root()
-DEFAULT_ROUTEA_CTXDROP_GROUP_ATLAS_ROOT = resolve_routea_ctxdrop_group_atlas_root()
-DEFAULT_ROUTEB_GROUP_ATLAS_ROOT = resolve_routeb_group_atlas_root()
+DEFAULT_PFM_GROUP_ATLAS_ROOT = resolve_pfm_group_atlas_root()
+DEFAULT_PFM_17NET_GROUP_ATLAS_ROOT = resolve_pfm_17net_group_atlas_root()
+DEFAULT_PFM_CTXREG_GROUP_ATLAS_ROOT = resolve_pfm_ctxreg_group_atlas_root()
+DEFAULT_PFM_CTXDROP_GROUP_ATLAS_ROOT = resolve_pfm_ctxdrop_group_atlas_root()
+DEFAULT_FIXED_GROUP_ATLAS_ROOT = resolve_fixed_group_atlas_root()
+DEFAULT_FIXED_17NET_GROUP_ATLAS_ROOT = resolve_fixed_17net_group_atlas_root()
+DEFAULT_ROUTEA_GROUP_ATLAS_ROOT = DEFAULT_PFM_GROUP_ATLAS_ROOT
+DEFAULT_ROUTEA_17NET_GROUP_ATLAS_ROOT = DEFAULT_PFM_17NET_GROUP_ATLAS_ROOT
+DEFAULT_ROUTEA_CTXREG_GROUP_ATLAS_ROOT = DEFAULT_PFM_CTXREG_GROUP_ATLAS_ROOT
+DEFAULT_ROUTEA_CTXDROP_GROUP_ATLAS_ROOT = DEFAULT_PFM_CTXDROP_GROUP_ATLAS_ROOT
+DEFAULT_ROUTEB_GROUP_ATLAS_ROOT = DEFAULT_FIXED_GROUP_ATLAS_ROOT
 DEFAULT_LYNCH2024_20NET_GROUP_ATLAS_ROOT = resolve_lynch2024_20net_group_atlas_root()
 DEFAULT_LYNCH2024_7NET_GROUP_ATLAS_ROOT = resolve_lynch2024_7net_group_atlas_root()
 DEFAULT_HIPPOMAPS_GRADIENT_ROOT = resolve_hippomaps_gradient_root()
@@ -535,9 +603,7 @@ def run_layout(run_id: str, dataset: str = DEFAULT_DATASET) -> dict[str, Path]:
         "cortex_panels": present / "cortex_panels",
         "gradient_products": present / "gradients",
     }
-KONG400_CONTROL_ROUTES = ("routea_ctxreg", "routea_ctxdrop")
-
-
+KONG400_CONTROL_ROUTES = ("pfm_ctxreg", "pfm_ctxdrop")
 
 
 def resolve_hcp_kong400_control_shared_root(
@@ -558,5 +624,51 @@ def resolve_hcp_kong400_control_shared_root(
     return resolve_kong2022_shared_inputs_root(dataset_key) / route_key
 
 
-DEFAULT_KONG400_CTXREG_SHARED_ROOT = resolve_hcp_kong400_control_shared_root("routea_ctxreg")
-DEFAULT_KONG400_CTXDROP_SHARED_ROOT = resolve_hcp_kong400_control_shared_root("routea_ctxdrop")
+DEFAULT_KONG400_CTXREG_SHARED_ROOT = resolve_hcp_kong400_control_shared_root("pfm_ctxreg")
+DEFAULT_KONG400_CTXDROP_SHARED_ROOT = resolve_hcp_kong400_control_shared_root("pfm_ctxdrop")
+
+
+def load_legacy_wrong_path_mapping(
+    config_path: Path | None = None,
+) -> dict[str, str]:
+    """Load the explicit new-path to wrong/-archive path mapping table."""
+    path = Path(config_path) if config_path is not None else LEGACY_WRONG_PATH_MAPPING_JSON
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    mappings = payload.get("mappings")
+    if not isinstance(mappings, dict) or not mappings:
+        raise ValueError(f"Invalid legacy wrong path mapping config: {path}")
+    return {str(k): str(v) for k, v in mappings.items()}
+
+
+def resolve_legacy_wrong_path(
+    new_path: Path | str,
+    *,
+    repo_root: Path | None = None,
+    config_path: Path | None = None,
+) -> Path:
+    """Resolve the exact archived path under wrong/ corresponding to a new outputs_* path."""
+    root = (Path(repo_root) if repo_root is not None else REPO_ROOT).resolve()
+    candidate = Path(new_path)
+    abs_candidate = (candidate if candidate.is_absolute() else root / candidate).resolve()
+    try:
+        rel_str = abs_candidate.relative_to(root).as_posix()
+    except ValueError as exc:
+        raise ValueError(
+            f"Cannot map path outside repository root {root}: {abs_candidate}"
+        ) from exc
+
+    mappings = load_legacy_wrong_path_mapping(config_path)
+    if rel_str in mappings:
+        return (root / mappings[rel_str]).resolve()
+
+    # Check longest matching registered prefix so subdirectories inside a mapped
+    # branch (e.g. gradient-spectral/kong2022/2mm/...) map deterministically.
+    for prefix in sorted(mappings, key=len, reverse=True):
+        if rel_str.startswith(f"{prefix}/"):
+            suffix = rel_str[len(prefix) + 1 :]
+            return (root / mappings[prefix] / suffix).resolve()
+
+    raise KeyError(
+        f"No declared legacy wrong/ mapping for path: {rel_str} "
+        f"(declare it in {LEGACY_WRONG_PATH_MAPPING_JSON.relative_to(REPO_ROOT)})"
+    )

@@ -37,6 +37,7 @@ from multidataset_cohorts import (
     get_comparison_output_tag,
     get_comparison_visual_columns,
     get_multidataset_cohorts,
+    resolve_comparison_paths,
 )
 from surface_panel_cache import cache_matches, panel_inputs, publish_cache
 
@@ -1254,12 +1255,6 @@ CANONICAL_NETWORK_ORDER = (
     "Control",
     "Language",
 )
-_CTXREG_IOWA_STEMS = {
-    "iowa_hc": "hc",
-    "iowa_pat": "patient",
-    "iowa_pure_mdd": "pure_mdd",
-    "iowa_comorbid_mdd": "comorbid_mdd",
-}
 
 
 def _coerce_comparison_spec(spec: GridSpec | str) -> GridSpec:
@@ -1299,109 +1294,13 @@ def comparison_output_tag(spec: GridSpec | str, signal_branch: str) -> str:
 
 
 def _ctxreg_comparison_paths(
-    cohort_id: str,
-    method: str,
-    spec: GridSpec,
+    cohort_id: str, method: str, spec: GridSpec,
 ) -> dict[str, Path]:
-    """Resolve formal ctxreg paths without consulting Standard paths."""
-    if method not in COMPARISON_METHODS:
-        raise ValueError(
-            f"Unknown comparison method {method!r}; expected {COMPARISON_METHODS}"
-        )
-
-    if cohort_id == "hcp_7t":
-        dataset_root = REPO_ROOT / "outputs_hcp"
-        group_root = dataset_root / "work/group_atlas/routea_ctxreg"
-        present_dir = dataset_root / "present/overviews/routea_ctxreg"
-        signal_root = dataset_root / "inputs/kong2022/shared_inputs/routea_ctxreg"
-        standard_surface_root = (
-            dataset_root / "inputs/kong2022/shared_inputs/surface"
-        )
-        if method == "kong2022_7net":
-            reference_root = dataset_root / "inputs/kong2022/shared_inputs/routea"
-        else:
-            reference_root = (
-                dataset_root
-                / "inputs/lynch2024_fast_pfm_t1only/shared_inputs/pfm_hcp151"
-            )
-        hippunfold_root = dataset_root / "inputs/hippunfold/dense_corobl_batch"
-    elif cohort_id in _CTXREG_IOWA_STEMS:
-        dataset_root = REPO_ROOT / "outputs_iowa_jj_tms"
-        stem = _CTXREG_IOWA_STEMS[cohort_id]
-        group_root = dataset_root / "work/group_atlas/routea_ctxreg" / stem
-        present_dir = dataset_root / "present/overviews/routea_ctxreg" / stem
-        signal_root = (
-            dataset_root / "inputs/kong2022/shared_inputs/routea_ctxreg"
-        )
-        standard_surface_root = (
-            dataset_root / "inputs/kong2022/shared_inputs/surface"
-        )
-        if method == "kong2022_7net":
-            reference_root = (
-                dataset_root / "inputs/kong2022/shared_inputs/routea"
-            )
-        else:
-            reference_root = (
-                dataset_root
-                / "inputs/lynch2024_fast_pfm_t1only/shared_inputs/pfm_nsi043_78"
-            )
-        hippunfold_root = (
-            dataset_root / "inputs/hippunfold/dense_corobl_batch"
-        )
-    else:
-        raise ValueError(f"Unknown HCP/JJ_TMS comparison cohort id: {cohort_id!r}")
-
-    atlas_folder = "kong2022" if method == "kong2022_7net" else method
-    grad_subpath = (
-        group_root
-        / f"gradient-spectral/{atlas_folder}/{spec.smoothing}/cov_0p80/g1g2g3"
+    """Use the shared formal CtxReg paths for both comparison atlases."""
+    return resolve_comparison_paths(
+        cohort_id, method,
+        GridSpec(spec.smoothing, spec.variant, atlas="7net", signal_branch="ctxreg"),
     )
-    wta_subpath = group_root / f"wta-top/{atlas_folder}/{spec.smoothing}/cov_0p80"
-    if method == "kong2022_7net":
-        overview_grad_name = (
-            "kong2022_gradient-spectral_group_overview_g1g2g3_routea_ctxreg_fisherz.png"
-        )
-        overview_grad_normalized_name = "kong2022_gradient-spectral_group_overview_g1g2g3_routea_ctxreg_normalized_top20_count.png"
-        overview_wta_name = (
-            "kong2022_wta-top_group_overview_routea_ctxreg_normalized_top20_count.png"
-        )
-    else:
-        # Upstream Lynch overviews differ by dataset: HCP embeds the g1g2g3
-        # component tag while Iowa does not. Resolve the manifest-declared name.
-        overview_grad_name = (
-            "lynch2024_7net_gradient-spectral_group_overview_g1g2g3_routea_ctxreg_fisherz.png"
-            if cohort_id == "hcp_7t"
-            else "lynch2024_7net_gradient-spectral_group_overview_routea_ctxreg_fisherz.png"
-        )
-        overview_grad_normalized_name = None
-        overview_wta_name = (
-            "lynch2024_7net_wta-top_group_overview_routea_ctxreg_fisherz.png"
-        )
-
-    return {
-        "group_root": group_root,
-        "group_root_grad": group_root,
-        "group_root_wta": group_root,
-        "grad_subpath": grad_subpath,
-        "wta_subpath": wta_subpath,
-        "present_dir": present_dir,
-        "overview_grad": present_dir / overview_grad_name,
-        "overview_wta": present_dir / overview_wta_name,
-        "shared_root": signal_root,
-        "reference_root": reference_root,
-        "surface_root": signal_root,
-        "mask_root": standard_surface_root,
-        "hippunfold_root": hippunfold_root,
-        "signal_branch": "ctxreg",
-        **(
-            {
-                "overview_grad_normalized_top20_count": present_dir
-                / overview_grad_normalized_name
-            }
-            if overview_grad_normalized_name is not None
-            else {}
-        ),
-    }
 
 
 def resolve_comparison_visual_columns(

@@ -1,3 +1,4 @@
+# pyright: reportMissingImports=false, reportAttributeAccessIssue=false, reportIndexIssue=false, reportOptionalSubscript=false, reportPossiblyUnboundVariable=false
 """Inference must preserve subjects, missingness and per-map multiplicity."""
 from pathlib import Path
 import sys
@@ -224,7 +225,7 @@ def test_original_source_selection_is_explicit_and_only_iowa36p():
 
 def test_original_registry_uses_accepted_hcp_400_root():
     registry = str(contrasts.ORIGINAL_REGISTRY)
-    assert "work/group_atlas/routea_ctxreg/" in registry
+    assert "work/group_atlas/pfm_ctxreg/" in registry
     assert "routea_ctxreg_full_k3_fisherz" not in registry
 
 

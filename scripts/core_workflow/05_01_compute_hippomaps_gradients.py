@@ -9,7 +9,7 @@ Main Flow Path:
 
 Inputs:
 - Command-line arguments:
-  - --routes: Workflow branches to process (choices include routea, routea_ctxreg, routea_ctxdrop, routeb, lynch2024_20net, lynch2024_7net; default: routea and routeb).
+  - --routes: Workflow branches to process (choices include pfm, pfm_ctxreg, pfm_ctxdrop, fixed, lynch2024_20net, lynch2024_7net; default: pfm and fixed).
   - --shared-inputs-root: Directory containing route-specific shared reference inputs (default: `outputs_hcp/inputs/kong2022/shared_inputs`).
   - --surface-root: Path to BOLD surfaces root directory (default: `outputs_hcp/inputs/kong2022/shared_inputs/surface`).
   - --subjects-manifest: Path to QC-passed subject list manifest (default: `outputs_hcp/inputs/kong2022/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt`).
@@ -17,7 +17,8 @@ Inputs:
   - --hemis: Hemispheres to process: "L", "R".
   - --coverage-threshold: Minimum coverage fraction to include vertices (default: 0.80).
   - --group-average-surfaces-dir: Path to template midthickness surfaces (default: `outputs_hcp/inputs/kong2022/shared_inputs/template`).
-  - --out-root: Directory where computed gradients will be saved (default: `outputs_hcp/work/hippomaps_gradients`).
+  - --cohort / --variant: Explicit cohort and 36p|22p selection; HCP omits the cohort and defaults to 36p.
+  - --out-root: Stage root above route and optional cohort directories (default: `outputs_hcp/work/hippomaps_gradients`).
   - --hippomaps-root: Root path to external HippoMaps codebase (default: `external/hippomaps`).
   - --n-components: Number of gradient components to fit in BrainSpace (default: 5).
   - --selected-components: Comma-separated components to save in output GIFTI (default: "1,2,3").
@@ -30,10 +31,10 @@ Inputs:
 
 Outputs:
 - Command-line output / file outputs:
-  - Gradient GIFTI file: `{out_root}/{route}/smooth-{smoothing}_hemi-{hemi}/group_gradients.func.gii` (containing selected gradient maps).
-  - Gradient eigenvalues fractions JSON: `{out_root}/{route}/smooth-{smoothing}_hemi-{hemi}/group_gradients_eigenvalues.json`.
-  - Group mean Fisher-z FC matrix: `{out_root}/{route}/smooth-{smoothing}_hemi-{hemi}/group_mean_fisherz_fc_active.npy`.
-  - Gradient stage manifest: `{out_root}/{route}/smooth-{smoothing}_hemi-{hemi}/group_gradients_manifest.json`.
+  - Gradient arrays: `{out_root}/{route}[_22p]/[<cohort>/]{smoothing}/hemi_{hemi}/hippomaps_gradients_{active|full}.npy`.
+  - Eigenvalues and variance fractions: `hippomaps_lambdas.npy` and `hippomaps_ev_fractions.npy` in the same run directory.
+  - Group mean Fisher-z FC matrices: `group_mean_fisherz_fc_{active|full}.npy` in the same run directory.
+  - Gradient manifest: `hippomaps_gradient_manifest.json`, recording cohort, variant, and consumed inputs.
 """
 from __future__ import annotations
 
@@ -72,6 +73,7 @@ from lib.output_layout import (
     DEFAULT_KONG2022_SHARED_INPUTS_ROOT,
     DEFAULT_KONG2022_SURFACE_ROOT,
     DEFAULT_KONG2022_TEMPLATE_ROOT,
+    resolve_cohort_gradient_root,
 )
 from lib.surface_utils import read_surface_vertex_count
 from lib.traceability import StageSpec, run_stage
@@ -86,18 +88,18 @@ DEFAULT_GROUP_AVG_SURFACES_DIR = DEFAULT_KONG2022_TEMPLATE_ROOT / "group_average
 DEFAULT_OUT_ROOT = DEFAULT_HIPPOMAPS_GRADIENT_ROOT
 DEFAULT_LYNCH2024_MERGE_CONFIG = REPO_ROOT / "config" / "cross_atlas_network_merge.json"
 ROUTE_TO_SHARED_DIR = {
-    "routea": "routea",
-    "routea_ctxreg": "routea_ctxreg",
-    "routea_ctxdrop": "routea_ctxdrop",
-    "routeb": "routeb",
-    "lynch2024_20net": "pfm_hcp151",
-    "lynch2024_7net": "pfm_hcp151",
+    "pfm": "pfm",
+    "pfm_ctxreg": "pfm_ctxreg",
+    "pfm_ctxdrop": "pfm_ctxdrop",
+    "fixed": "fixed",
+    "lynch2024_20net": "pfm",
+    "lynch2024_7net": "pfm",
 }
 ROUTE_TO_ATLAS = {
-    "routea": "kong2022",
-    "routea_ctxreg": "kong2022",
-    "routea_ctxdrop": "kong2022",
-    "routeb": "kong2022",
+    "pfm": "kong2022",
+    "pfm_ctxreg": "kong2022",
+    "pfm_ctxdrop": "kong2022",
+    "fixed": "kong2022",
     "lynch2024_20net": "lynch2024_20net",
     # 7net changes only the downstream reference/assignment taxonomy.  The
     # continuous gradient bank is the same Lynch20 FC-derived upstream product.
@@ -134,6 +136,8 @@ class GradientComboResult:
     n_components: int
     gradient_random_state: int | None
     network_order: list[str] | None
+    cohort: str | None = None
+    variant: str = "36p"
 
 
 def finite_pearson_corr(a: np.ndarray, b: np.ndarray) -> float:
@@ -263,15 +267,15 @@ def resolve_gradient_shared_root(shared_inputs_root: Path, route: str) -> Path:
         raise ValueError(f"Unsupported gradient route: {route!r}")
     root = Path(shared_inputs_root).resolve()
     if root == DEFAULT_SHARED_INPUTS.resolve():
-        if route_key == "routea_ctxreg":
+        if route_key == "pfm_ctxreg":
             return DEFAULT_KONG400_CTXREG_SHARED_ROOT.resolve()
-        if route_key == "routea_ctxdrop":
+        if route_key == "pfm_ctxdrop":
             return DEFAULT_KONG400_CTXDROP_SHARED_ROOT.resolve()
     # An explicitly selected branch root is already final.  Patient and
     # subgroup roots use the same convention, while a shared-inputs parent
     # still expands to its named route below.
-    direct_names = {"routea", "routea_ctxreg", "routea_ctxdrop", "routeb", "pfm_hcp151", "pfm_nsi043_78"}
-    if root.name in direct_names or root.name.startswith("routea_patient") or root.name.startswith("routea_pure_mdd") or root.name.startswith("routea_comorbid_mdd"):
+    direct_names = {"pfm", "pfm_ctxreg", "pfm_ctxdrop", "fixed", "pfm_nsi043"}
+    if root.name in direct_names or root.name.startswith(("pfm_patient", "pfm_pure_mdd", "pfm_comorbid_mdd")):
         return root
     return root / ROUTE_TO_SHARED_DIR[route_key]
 
@@ -285,7 +289,7 @@ def resolve_gradient_reference_root(
     """Resolve the cortex-reference root explicitly for a gradient route.
 
     Cortex-control FC is written into a controlled branch, while its Kong
-    400-ROI reference remains in the selected RouteA root.  The returned path
+    400-ROI reference remains in the selected PFM root.  The returned path
     is a deterministic convention or the caller's explicit path; no sibling
     cache is searched by existence order.
     """
@@ -293,12 +297,12 @@ def resolve_gradient_reference_root(
         return Path(explicit_reference_root).resolve()
     root = Path(shared_inputs_root).resolve()
     route_key = str(route).strip().lower()
-    if route_key in {"routea_ctxreg", "routea_ctxdrop"}:
-        if root.name in {"routea_ctxreg", "routea_ctxdrop"} or root.name.startswith("routea_patient"):
-            return root.parent / "routea"
-        return root / "routea"
-    if route_key in {"routea", "routeb"} and (root.name.startswith("routea_patient") or root.name.startswith("routea_pure_mdd") or root.name.startswith("routea_comorbid_mdd")):
-        return root.parent / "routea"
+    if route_key in {"pfm_ctxreg", "pfm_ctxdrop"}:
+        if root.name in {"pfm_ctxreg", "pfm_ctxdrop"} or root.name.startswith("pfm_patient"):
+            return root.parent / "pfm"
+        return root / "pfm"
+    if route_key in {"pfm", "fixed"} and root.name.startswith(("pfm_patient", "pfm_pure_mdd", "pfm_comorbid_mdd")):
+        return root.parent / "pfm"
     return Path(shared_root).resolve()
 
 
@@ -417,6 +421,8 @@ def compute_combo(
     selected_components: list[int],
     gradient_random_state: int | None,
     force: bool,
+    cohort: str | None = None,
+    variant: str = "36p",
 ) -> GradientComboResult:
     surface_path = (
         group_average_surfaces_dir
@@ -439,7 +445,7 @@ def compute_combo(
     for subject in subjects:
         fc, fc_path = load_subject_fc(
             shared_root, subject, atlas, smoothing, hemi, valid_masks[subject],
-            require_canonical7=(route == "routea"),
+            require_canonical7=(route == "pfm"),
             reference_root=reference_root,
         )
         if atlas == "lynch2024_20net":
@@ -480,7 +486,9 @@ def compute_combo(
     gradients_full = reconstruct_full_surface(gradients_active, support_mask, vertex_count)
     group_fc_full = reconstruct_full_surface(group_fc_active, support_mask, vertex_count)
 
-    run_dir = out_root / route / smoothing / f"hemi_{hemi}"
+    run_dir = resolve_cohort_gradient_root(
+        route=route, cohort=cohort, variant=variant, base_root=out_root,
+    ) / smoothing / f"hemi_{hemi}"
     manifest_path = run_dir / "hippomaps_gradient_manifest.json"
     if manifest_path.exists() and not force:
         raise FileExistsError(f"Output manifest exists; pass --force to overwrite: {manifest_path}")
@@ -511,6 +519,8 @@ def compute_combo(
         n_components=int(n_components),
         gradient_random_state=gradient_random_state,
         network_order=network_order,
+        cohort=cohort,
+        variant=variant,
     )
 
 
@@ -553,7 +563,7 @@ def write_aligned_combo_outputs(
         np.save(run_dir / f"hippomaps_gradient_G{comp}_full.npy", gradients_full[:, comp_idx].astype(np.float32))
 
     selected_labels = [f"G{c}" for c in selected_components]
-    if result.route in {"lynch2024_20net", "routea"} and result.network_order is None:
+    if result.route in {"lynch2024_20net", "pfm"} and result.network_order is None:
         raise ValueError(f"{result.route} gradient result is missing consumed FC network-order provenance")
     if result.route == "lynch2024_20net":
         taxonomy_evidence = {
@@ -583,6 +593,8 @@ def write_aligned_combo_outputs(
         "status": "ok",
         "route": result.route,
         "signal_branch": result.signal_branch,
+        "cohort": result.cohort,
+        "variant": result.variant,
         "atlas": result.atlas,
         "smoothing": result.smoothing,
         "hemi": result.hemi,
@@ -672,12 +684,12 @@ def align_and_write_route_results(*, results: list[GradientComboResult], selecte
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Compute HippoMaps-style continuous gradients from Kong2022 FC caches.")
-    parser.add_argument("--routes", nargs="+", choices=sorted(ROUTE_TO_SHARED_DIR), default=["routea", "routeb"])
+    parser.add_argument("--routes", nargs="+", choices=sorted(ROUTE_TO_SHARED_DIR), default=["pfm", "fixed"])
     parser.add_argument(
         "--signal-branch",
         choices=SIGNAL_BRANCH_CHOICES,
         default=None,
-        help="Explicit standard/ctxreg signal branch for routea or routea_ctxreg.",
+        help="Explicit standard/ctxreg signal branch for pfm or pfm_ctxreg.",
     )
     parser.add_argument("--shared-inputs-root", default=str(DEFAULT_SHARED_INPUTS))
     parser.add_argument(
@@ -692,6 +704,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--coverage-threshold", type=float, default=0.80)
     parser.add_argument("--group-average-surfaces-dir", default=str(DEFAULT_GROUP_AVG_SURFACES_DIR))
     parser.add_argument("--out-root", default=str(DEFAULT_OUT_ROOT))
+    parser.add_argument("--cohort", default=None, help="Cohort directory below the route; omit for HCP.")
+    parser.add_argument("--variant", choices=("36p", "22p"), default="36p", help="22p appends _22p to the output route directory.")
     parser.add_argument("--hippomaps-root", default=str(DEFAULT_HIPPOMAPS_ROOT))
     parser.add_argument("--n-components", type=int, default=5)
     parser.add_argument(
@@ -750,6 +764,8 @@ def main() -> int:
                         selected_components=selected_components,
                         gradient_random_state=int(args.gradient_random_state),
                         force=bool(args.force),
+                        cohort=args.cohort,
+                        variant=args.variant,
                     )
                 )
         align_and_write_route_results(results=route_results, selected_components=selected_components)

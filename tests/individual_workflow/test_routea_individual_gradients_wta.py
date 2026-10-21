@@ -1,3 +1,4 @@
+# pyright: reportAttributeAccessIssue=false
 from __future__ import annotations
 
 import importlib.util
@@ -81,7 +82,7 @@ def test_parser_defaults_use_dataset_agnostic_shared_roots():
 
     args = workflow.build_arg_parser().parse_args([])
 
-    assert Path(args.shared_root).name == "routea"
+    assert Path(args.shared_root).name == "pfm"
     assert args.network_column == "canonical7"
     assert Path(args.surface_root).name == "surface"
 

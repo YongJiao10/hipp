@@ -62,7 +62,7 @@ from lib.io_utils import (
     validate_run_segment_order as _validate_run_segments,
 )
 from lib.kong2022_fc_contract import (
-    authoritative_kong2022_roi_registry,
+    authoritative_kong2022_roi_registry,  # noqa: F401
     kong2022_registry_digest,
     read_kong2022_roi_registry,
     validate_kong2022_roi_registry,
@@ -99,7 +99,7 @@ from lib.workflow_utils import capped_jobs, utc_now_iso, write_json
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_ROUTE_ROOT = DEFAULT_KONG2022_ROOT
 DEFAULT_SHARED_INPUTS_ROOT = DEFAULT_ROUTE_ROOT / "shared_inputs"
-DEFAULT_SHARED_ROOT = DEFAULT_SHARED_INPUTS_ROOT / "routea"
+DEFAULT_SHARED_ROOT = DEFAULT_SHARED_INPUTS_ROOT / "pfm"
 DEFAULT_KONG400_CTXDROP_SHARED_ROOT = DEFAULT_HCP_KONG400_CTXDROP_SHARED_ROOT
 DEFAULT_SURFACE_ROOT = DEFAULT_SHARED_INPUTS_ROOT / "surface"
 DEFAULT_SUBJECTS = DEFAULT_KONG2022_MANIFEST_ROOT / "hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt"
@@ -211,9 +211,8 @@ def compute_ctxdrop_vertex_to_roi_fc(
 
     for vertex_idx, raw_neighbors in enumerate(neighbor_indices):
         neigh = np.asarray(raw_neighbors, dtype=np.int64).reshape(-1)
-        if neigh.size:
-            if int(np.min(neigh)) < 0 or int(np.max(neigh)) >= int(cortex.shape[0]):
-                raise ValueError(f"Cortex neighbor index out of bounds for hippocampal vertex {vertex_idx}")
+        if neigh.size and (int(np.min(neigh)) < 0 or int(np.max(neigh)) >= int(cortex.shape[0])):
+            raise ValueError(f"Cortex neighbor index out of bounds for hippocampal vertex {vertex_idx}")
         neigh = neigh[valid[neigh]] if neigh.size else neigh
         neigh_cols = roi_col_for_cortex[neigh] if neigh.size else np.asarray([], dtype=np.int32)
         keep_neigh = neigh_cols >= 0
@@ -340,7 +339,7 @@ def materialize_ctxdrop_fc_from_arrays(
             "atlas_slug": atlas_slug,
             "smooth": smoothing,
             "hemi": hemi,
-            "route_tag": "routea_ctxdrop",
+            "route_tag": "pfm_ctxdrop",
             "ctxdrop_distance_mm": float(distance_mm),
             "ctxdrop_policy": "per_hippocampal_vertex_exclude_valid_cortex_vertices_within_radius_before_roi_mean",
             "fc_shape": [int(pearson_full.shape[0]), int(pearson_full.shape[1])],
@@ -375,7 +374,7 @@ def materialize_ctxdrop_fc_from_arrays(
                 "atlas_slug": atlas_slug,
                 "smooth": smoothing,
                 "hemi": hemi,
-                "route_tag": "routea_ctxdrop",
+                "route_tag": "pfm_ctxdrop",
                 "distance_mm": float(distance_mm),
                 "fc_definition": "pearson_vertex_to_kong2022_roi_timeseries_ctxdrop_local20mm",
             },

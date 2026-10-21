@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# pyright: reportArgumentType=false, reportIndexIssue=false, reportAttributeAccessIssue=false, reportUndefinedVariable=false, reportCallIssue=false
 from __future__ import annotations
 
 import importlib.util
@@ -77,6 +78,67 @@ smoke_mod = _load_module(
 )
 
 
+@pytest.mark.parametrize("variant,branch", [("36p", "pfm"), ("22p", "pfm_22p")])
+def test_cohort_gradient_producer_and_consumers_share_layout(tmp_path, monkeypatch, variant, branch):
+    surface_dir = tmp_path / "surfaces"
+    surface_dir.mkdir()
+    (surface_dir / "group-average_hemi-L_space-corobl_den-512_label-hipp_midthickness.surf.gii").touch()
+    support = np.ones(3, dtype=bool)
+    gradients = np.arange(9, dtype=np.float32).reshape(3, 3)
+    monkeypatch.setattr(compute_mod, "read_surface_vertex_count", lambda _path: 3)
+    monkeypatch.setattr(compute_mod, "subject_valid_mask", lambda *_args: support)
+    monkeypatch.setattr(compute_mod, "load_subject_fc", lambda *_args, **_kwargs: (np.zeros((3, 400)), tmp_path / "fc.npy"))
+    monkeypatch.setattr(compute_mod, "load_kong2022_roi_fc_contract", lambda *_args, **_kwargs: {"roi_names": [str(i) for i in range(400)]})
+    monkeypatch.setattr(compute_mod, "fit_gradientmaps_pearson", lambda *_args, **_kwargs: (gradients, np.ones(3), np.ones(3) / 3))
+
+    result = compute_mod.compute_combo(
+        route="pfm", signal_branch="standard", shared_root=tmp_path, reference_root=tmp_path,
+        atlas="kong2022", surface_root=tmp_path, subjects=["01"], subjects_manifest=tmp_path / "subjects.txt",
+        smoothing="2mm", hemi="L", coverage_threshold=0.8, group_average_surfaces_dir=surface_dir,
+        out_root=tmp_path / "gradients", hippomaps_root=tmp_path, n_components=3,
+        selected_components=[1, 2, 3], gradient_random_state=0, force=False,
+        cohort="nthc", variant=variant,
+    )
+    run_dir = tmp_path / "gradients" / branch / "nthc/2mm/hemi_L"
+    assert result.run_dir == run_dir
+    run_dir.mkdir(parents=True)
+    np.save(run_dir / "hippomaps_gradients_full.npy", result.gradients_full)
+    (run_dir / "hippomaps_gradient_manifest.json").write_text(atlas_mod.json.dumps({
+        "status": "ok", "route": "pfm", "signal_branch": "standard", "cohort": "nthc", "variant": variant,
+        "group_fc_shape": [3, 400], "feature_count": 400,
+        "outputs": {"hippomaps_gradients_full": str(run_dir / "hippomaps_gradients_full.npy")},
+    }), encoding="utf-8")
+    selected, _ = atlas_mod.load_hippomaps_gradient_features(
+        gradient_root=tmp_path / "gradients", route="pfm", smoothing="2mm", hemi="L",
+        support_mask=support, cohort="nthc", variant=variant,
+    )
+    assert np.array_equal(selected, gradients)
+    displayed = render_mod.load_gradient_arrays_for_display(
+        gradient_root=tmp_path / "gradients", route="pfm", smoothing="2mm", hemis=["L"],
+        cohort="nthc", variant=variant,
+    )
+    assert np.array_equal(displayed["L"], gradients)
+
+
+@pytest.mark.parametrize("cohort,variant,can_resume", [
+    ("nthc", "36p", True), ("tehc", "36p", False), ("nthc", "22p", False),
+])
+def test_gradient_resume_rejects_a_different_cohort_or_variant(tmp_path, cohort, variant, can_resume):
+    recorded = atlas_mod.gradient_resume_inputs(
+        gradient_root=tmp_path, cohort="nthc", variant="36p",
+    )
+    requested = atlas_mod.gradient_resume_inputs(
+        gradient_root=tmp_path, cohort=cohort, variant=variant,
+    )
+    manifest = tmp_path / "group_atlas_manifest.json"
+    manifest.write_text(atlas_mod.json.dumps({
+        "resume_input_signature_version": atlas_mod.RESUME_SIGNATURE_VERSION,
+        "resume_input_signature": atlas_mod.canonical_json_sha256(recorded),
+    }), encoding="utf-8")
+    matches, _ = atlas_mod.resume_manifest_matches(manifest, atlas_mod.canonical_json_sha256(requested))
+    assert matches is can_resume
+
+
 def test_group_mean_fc_applies_fisher_z_before_averaging() -> None:
     support = np.asarray([True, False, True], dtype=bool)
     subj_a = np.asarray(
@@ -116,30 +178,30 @@ def test_group_mean_fc_applies_fisher_z_before_averaging() -> None:
 
 def test_control_routes_use_routea_reference_root_without_fallback_search() -> None:
     shared_parent = Path("/data/inputs/shared_inputs")
-    ctxreg_root = shared_parent / "routea_ctxreg"
-    ctxdrop_root = shared_parent / "routea_ctxdrop"
-    assert compute_mod.resolve_gradient_shared_root(shared_parent, "routea_ctxreg") == ctxreg_root.resolve()
-    assert compute_mod.resolve_gradient_reference_root(shared_parent, ctxreg_root, "routea_ctxreg") == (shared_parent / "routea").resolve()
-    assert compute_mod.resolve_gradient_reference_root(shared_parent, ctxdrop_root, "routea_ctxdrop") == (shared_parent / "routea").resolve()
-    explicit = Path("/data/inputs/references/routea")
-    assert compute_mod.resolve_gradient_reference_root(shared_parent, ctxreg_root, "routea_ctxreg", explicit) == explicit.resolve()
+    ctxreg_root = shared_parent / "pfm_ctxreg"
+    ctxdrop_root = shared_parent / "pfm_ctxdrop"
+    assert compute_mod.resolve_gradient_shared_root(shared_parent, "pfm_ctxreg") == ctxreg_root.resolve()
+    assert compute_mod.resolve_gradient_reference_root(shared_parent, ctxreg_root, "pfm_ctxreg") == (shared_parent / "pfm").resolve()
+    assert compute_mod.resolve_gradient_reference_root(shared_parent, ctxdrop_root, "pfm_ctxdrop") == (shared_parent / "pfm").resolve()
+    explicit = Path("/data/inputs/references/pfm")
+    assert compute_mod.resolve_gradient_reference_root(shared_parent, ctxreg_root, "pfm_ctxreg", explicit) == explicit.resolve()
 
 
 def test_gradient_signal_branch_is_explicit_only_for_routea_controls() -> None:
-    assert compute_mod.resolve_signal_branch_for_route("routea") == "standard"
-    assert compute_mod.resolve_signal_branch_for_route("routea_ctxreg") == "ctxreg"
+    assert compute_mod.resolve_signal_branch_for_route("pfm") == "standard"
+    assert compute_mod.resolve_signal_branch_for_route("pfm_ctxreg") == "ctxreg"
     with pytest.raises(ValueError, match="Signal branch/route mismatch"):
-        compute_mod.resolve_signal_branch_for_route("routea", "ctxreg")
-    with pytest.raises(ValueError, match="only RouteA controls"):
+        compute_mod.resolve_signal_branch_for_route("pfm", "ctxreg")
+    with pytest.raises(ValueError, match="only PFM controls"):
         compute_mod.resolve_signal_branch_for_route("lynch2024_20net", "ctxreg")
 
 
 def test_group_atlas_signal_branch_is_explicit_only_for_routea_controls() -> None:
-    assert atlas_mod.resolve_signal_branch_for_route("routea") == "standard"
-    assert atlas_mod.resolve_signal_branch_for_route("routea_ctxreg") == "ctxreg"
+    assert atlas_mod.resolve_signal_branch_for_route("pfm") == "standard"
+    assert atlas_mod.resolve_signal_branch_for_route("pfm_ctxreg") == "ctxreg"
     with pytest.raises(ValueError, match="Signal branch/route mismatch"):
-        atlas_mod.resolve_signal_branch_for_route("routea", "ctxreg")
-    with pytest.raises(ValueError, match="only RouteA controls"):
+        atlas_mod.resolve_signal_branch_for_route("pfm", "ctxreg")
+    with pytest.raises(ValueError, match="only PFM controls"):
         atlas_mod.resolve_signal_branch_for_route("lynch2024_7net", "ctxreg")
 
 
@@ -1006,21 +1068,21 @@ def test_ensure_bilateral_gradient_annotations_repairs_late_raw_screenshot() -> 
 
 def test_route_tag_auto_detection_and_validation() -> None:
     # Test 05_02 infer_route_tag function
-    assert atlas_mod.infer_route_tag(Path("/path/to/routea"), "auto") == "routea"
-    assert atlas_mod.infer_route_tag(Path("/path/to/routea_ctxreg"), "auto") == "routea_ctxreg"
-    assert atlas_mod.infer_route_tag(Path("/path/to/routeb"), "auto") == "routeb"
-    assert atlas_mod.infer_route_tag(Path("/path/to/any"), "routea") == "routea"
+    assert atlas_mod.infer_route_tag(Path("/path/to/pfm"), "auto") == "pfm"
+    assert atlas_mod.infer_route_tag(Path("/path/to/pfm_ctxreg"), "auto") == "pfm_ctxreg"
+    assert atlas_mod.infer_route_tag(Path("/path/to/fixed"), "auto") == "fixed"
+    assert atlas_mod.infer_route_tag(Path("/path/to/any"), "pfm") == "pfm"
 
     # Test that mismatched out-root under group_atlas raises ValueError
     try:
         route_tags.validate_group_atlas_root_for_route(
-            Path("outputs_hcp/work/group_atlas/routeb_full_k3_fisherz"),
-            "routea",
+            Path("outputs_hcp/work/group_atlas/fixed"),
+            "pfm",
         )
     except ValueError as exc:
         assert "Provenance discrepancy" in str(exc)
     else:
-        raise AssertionError("routea must not validate against routeb group atlas root")
+        raise AssertionError("pfm must not validate against fixed group atlas root")
 
     # Verify main arg parser in 06_03 defaults to auto for route-tag
     with patch("sys.argv", ["06_03_build_cluster_cortex_panels.py"]):
@@ -1030,60 +1092,60 @@ def test_route_tag_auto_detection_and_validation() -> None:
 
 def test_route_tag_exact_group_root_validation_rejects_prefix_collisions() -> None:
     route_tags.validate_group_atlas_root_for_route(
-        Path("outputs_hcp/work/group_atlas/routea_full_k3_fisherz"),
-        "routea",
+        Path("outputs_hcp/work/group_atlas/pfm"),
+        "pfm",
     )
     route_tags.validate_group_atlas_root_for_route(
-        Path("outputs_hcp/work/group_atlas/routea_17net_full_k3_fisherz"),
-        "routea_17net",
+        Path("outputs_hcp/work/group_atlas/pfm_17net"),
+        "pfm_17net",
     )
 
     try:
         route_tags.validate_group_atlas_root_for_route(
-            Path("outputs_hcp/work/group_atlas/routea_17net_full_k3_fisherz"),
-            "routea",
+            Path("outputs_hcp/work/group_atlas/pfm_17net"),
+            "pfm",
         )
     except ValueError as exc:
         assert "Provenance discrepancy" in str(exc)
     else:
-        raise AssertionError("routea must not validate against routea_17net group atlas root")
+        raise AssertionError("pfm must not validate against pfm_17net group atlas root")
 
 
 def test_family17_auto_route_requires_explicit_routea_17net() -> None:
     try:
         route_tags.resolve_route_tag_for_group_atlas_run(
-            shared_root=Path("outputs_hcp/inputs/kong2022/shared_inputs/routea"),
+            shared_root=Path("outputs_hcp/inputs/kong2022/shared_inputs/pfm"),
             explicit_route="auto",
             network_taxonomy="family17",
         )
     except ValueError as exc:
-        assert "routea_17net" in str(exc)
+        assert "pfm_17net" in str(exc)
     else:
-        raise AssertionError("family17 auto route must refuse to silently use routea")
+        raise AssertionError("family17 auto route must refuse to silently use pfm")
 
     assert (
         route_tags.resolve_route_tag_for_group_atlas_run(
-            shared_root=Path("outputs_hcp/inputs/kong2022/shared_inputs/routea"),
-            explicit_route="routea_17net",
+            shared_root=Path("outputs_hcp/inputs/kong2022/shared_inputs/pfm"),
+            explicit_route="pfm_17net",
             network_taxonomy="family17",
         )
-        == "routea_17net"
+        == "pfm_17net"
     )
 
 
 def test_route_auto_helpers_cover_renderers_and_confidence_choices() -> None:
     assert (
-        route_tags.infer_route_tag_from_group_root(Path("outputs_hcp/work/group_atlas/routea_ctxdrop_full_k3_fisherz"))
-        == "routea_ctxdrop"
+        route_tags.infer_route_tag_from_group_root(Path("outputs_hcp/work/group_atlas/pfm_ctxdrop"))
+        == "pfm_ctxdrop"
     )
     assert (
-        route_tags.infer_route_tag_from_group_root(Path("outputs_hcp/work/group_atlas/routea_17net_full_k3_fisherz"))
-        == "routea_17net"
+        route_tags.infer_route_tag_from_group_root(Path("outputs_hcp/work/group_atlas/pfm_17net"))
+        == "pfm_17net"
     )
 
     confidence_args = confidence_mod.build_arg_parser().parse_args([])
     assert confidence_args.route_tag == "auto"
-    assert "routea_17net" in confidence_mod.build_arg_parser()._option_string_actions["--route-tag"].choices
+    assert "pfm_17net" in confidence_mod.build_arg_parser()._option_string_actions["--route-tag"].choices
 
 
 def main() -> int:

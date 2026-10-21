@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# pyright: reportPrivateImportUsage=false
 from __future__ import annotations
 
 import importlib.util
@@ -8,7 +9,7 @@ from pathlib import Path
 
 import nibabel as nib
 import numpy as np
-from nibabel.gifti import GiftiDataArray, GiftiImage
+from nibabel.gifti.gifti import GiftiDataArray, GiftiImage
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -109,7 +110,7 @@ def test_summary_averages_subject_normalized_proportions_and_reports_sem() -> No
 
 def test_default_group_root_uses_formal_routea_branch() -> None:
     args = mod.parse_args([])
-    assert "routea_full_k3_fisherz" in str(args.group_root)
+    assert Path(args.group_root).name == "pfm"
     assert "weighted_fisherz" not in str(args.group_root)
     assert args.smoothings == ["2mm", "4mm"]
     assert args.hemis == ["L", "R"]

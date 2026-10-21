@@ -79,8 +79,8 @@ def test_kong2022_canonical7_is_the_unsuffixed_routea_branch() -> None:
         "05_05_build_weighted_fisherz_branch",
         "06_01_build_group_overview",
     ):
-        assert "kong2022_routea_7net" not in steps[step_id]["branches"]
-        assert "kong2022_routea" in steps[step_id]["branches"]
+        assert "kong2022_pfm_7net" not in steps[step_id]["branches"]
+        assert "kong2022_pfm" in steps[step_id]["branches"]
 
 
 def main() -> int:

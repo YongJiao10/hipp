@@ -48,13 +48,13 @@ def test_missing_network_never_wins_over_negative_observed_fc():
 
 
 def test_ctxdrop_default_methods_only_request_materialized_inputs():
-    args = atlas.build_arg_parser().parse_args(["--route-tag", "routea_ctxdrop"])
+    args = atlas.build_arg_parser().parse_args(["--route-tag", "pfm_ctxdrop"])
     atlas._resolve_methods_and_taxonomy(args)
     assert set(args.methods) == {"gradient-spectral", "wta-top"}
 
 
 def test_ctxdrop_rejects_explicit_unsupported_method():
-    args = atlas.build_arg_parser().parse_args(["--route-tag", "routea_ctxdrop", "--methods", "group-roi-sim-spectral"])
+    args = atlas.build_arg_parser().parse_args(["--route-tag", "pfm_ctxdrop", "--methods", "group-roi-sim-spectral"])
     with pytest.raises(ValueError, match="ctxdrop"):
         atlas._resolve_methods_and_taxonomy(args)
 

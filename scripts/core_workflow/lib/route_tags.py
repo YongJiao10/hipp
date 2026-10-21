@@ -4,44 +4,49 @@ from pathlib import Path
 
 from .output_layout import (
     DEFAULT_DATASET,
-    resolve_routea_group_atlas_root,
-    resolve_routea_17net_group_atlas_root,
-    resolve_routea_ctxreg_group_atlas_root,
-    resolve_routea_ctxdrop_group_atlas_root,
-    resolve_routeb_group_atlas_root,
+    resolve_fixed_17net_group_atlas_root,
+    resolve_fixed_group_atlas_root,
     resolve_lynch2024_20net_group_atlas_root,
     resolve_lynch2024_7net_group_atlas_root,
+    resolve_pfm_17net_group_atlas_root,
+    resolve_pfm_ctxdrop_group_atlas_root,
+    resolve_pfm_ctxreg_group_atlas_root,
+    resolve_pfm_group_atlas_root,
 )
 
 ROUTE_TAG_CHOICES = (
-    "routea",
-    "routea_17net",
-    "routea_ctxreg",
-    "routea_ctxdrop",
-    "routeb",
+    "pfm",
+    "pfm_17net",
+    "pfm_ctxreg",
+    "pfm_ctxdrop",
+    "fixed",
+    "fixed_17net",
     "lynch2024_20net",
     "lynch2024_7net",
 )
-NETWORK_TAXONOMY_CHOICES = ("canonical7", "canonical8", "family17", "lynch20", "lynch7")
-_CANONICAL7_ROUTE_TAGS = frozenset({"routea", "routea_ctxreg", "routea_ctxdrop"})
+NETWORK_TAXONOMY_CHOICES = ("canonical7", "family17", "lynch20", "lynch7")
+_CANONICAL7_ROUTE_TAGS = frozenset({"pfm", "pfm_ctxreg", "pfm_ctxdrop", "fixed"})
+_FAMILY17_ROUTE_TAGS = frozenset({"pfm_17net", "fixed_17net"})
 
 
 _ROUTE_DETECTION_ORDER = (
     "lynch2024_20net",
     "lynch2024_7net",
-    "routea_ctxreg",
-    "routea_ctxdrop",
-    "routea_17net",
-    "routeb",
-    "routea",
+    "pfm_ctxreg",
+    "pfm_ctxdrop",
+    "pfm_17net",
+    "fixed_17net",
+    "fixed",
+    "pfm",
 )
 
 ROUTE_TO_GROUP_ATLAS_ROOT = {
-    "routea": resolve_routea_group_atlas_root,
-    "routea_17net": resolve_routea_17net_group_atlas_root,
-    "routea_ctxreg": resolve_routea_ctxreg_group_atlas_root,
-    "routea_ctxdrop": resolve_routea_ctxdrop_group_atlas_root,
-    "routeb": resolve_routeb_group_atlas_root,
+    "pfm": resolve_pfm_group_atlas_root,
+    "pfm_17net": resolve_pfm_17net_group_atlas_root,
+    "pfm_ctxreg": resolve_pfm_ctxreg_group_atlas_root,
+    "pfm_ctxdrop": resolve_pfm_ctxdrop_group_atlas_root,
+    "fixed": resolve_fixed_group_atlas_root,
+    "fixed_17net": resolve_fixed_17net_group_atlas_root,
     "lynch2024_20net": resolve_lynch2024_20net_group_atlas_root,
     "lynch2024_7net": resolve_lynch2024_7net_group_atlas_root,
 }
@@ -56,10 +61,10 @@ def _normalize_route_tag(route_tag: str) -> str:
 
 def _route_from_name(name: str) -> str | None:
     value = str(name).strip().lower()
-    if value == "lynch2024_fast_pfm_t1only":
+    if value in {"lynch2024", "lynch2024_22p"}:
         return "lynch2024_20net"
-    if value == "routea_7net" or value.startswith("routea_7net_"):
-        raise ValueError("The removed routea_7net namespace is not an active route; use unsuffixed routea.")
+    if value in {"pfm_7net", "routea_7net"} or value.startswith(("pfm_7net_", "routea_7net_")):
+        raise ValueError("The suffixed *_7net namespace is not an active route; use unsuffixed pfm.")
     for route in _ROUTE_DETECTION_ORDER:
         if value == route or value.startswith(f"{route}_"):
             return route
@@ -68,6 +73,14 @@ def _route_from_name(name: str) -> str | None:
 
 def infer_route_tag_from_path(path: Path, *, arg_name: str) -> str:
     candidate = Path(path)
+    lowered_parts = [str(part).strip().lower() for part in candidate.parts]
+    if any(part in {"lynch2024", "lynch2024_22p"} for part in lowered_parts):
+        for part in reversed(lowered_parts):
+            if part == "lynch2024_7net" or part.startswith("lynch2024_7net_"):
+                return "lynch2024_7net"
+            if part == "lynch2024_20net" or part.startswith("lynch2024_20net_"):
+                return "lynch2024_20net"
+        return "lynch2024_20net"
     for part in reversed(candidate.parts):
         route = _route_from_name(part)
         if route is not None:
@@ -90,7 +103,7 @@ def canonical_group_atlas_root_for_route(route_tag: str, dataset: str = DEFAULT_
 def validate_group_atlas_root_for_route(group_root: Path, route_tag: str) -> None:
     root = Path(group_root).resolve()
     route = _normalize_route_tag(route_tag)
-    if root.parent.name != "group_atlas":
+    if "group_atlas" not in root.parts:
         return
     actual = infer_route_tag_from_group_root(root)
     if actual != route:
@@ -106,21 +119,21 @@ def resolve_route_tag_for_group_atlas_run(*, shared_root: Path, explicit_route: 
     if explicit == "auto":
         if taxonomy == "family17":
             raise ValueError(
-                "--network-taxonomy family17 reuses the RouteA input root, so --route-tag cannot be inferred. "
-                "Pass --route-tag routea_17net explicitly."
+                "--network-taxonomy family17 reuses the PFM/Fixed input root, so --route-tag cannot be inferred. "
+                "Pass --route-tag pfm_17net or fixed_17net explicitly."
             )
         route = infer_route_tag_from_shared_root(shared_root)
     else:
         route = _normalize_route_tag(explicit)
 
-    if route == "routea_17net" and taxonomy != "family17":
-        raise ValueError("--route-tag routea_17net requires --network-taxonomy family17.")
-    if taxonomy == "family17" and route != "routea_17net":
-        raise ValueError("--network-taxonomy family17 requires --route-tag routea_17net.")
+    if route in _FAMILY17_ROUTE_TAGS and taxonomy != "family17":
+        raise ValueError(f"--route-tag {route} requires --network-taxonomy family17.")
+    if taxonomy == "family17" and route not in _FAMILY17_ROUTE_TAGS:
+        raise ValueError("--network-taxonomy family17 requires --route-tag pfm_17net or fixed_17net.")
     if route in _CANONICAL7_ROUTE_TAGS and taxonomy != "canonical7":
         raise ValueError(f"--route-tag {route} requires --network-taxonomy canonical7.")
     if taxonomy == "canonical7" and route not in _CANONICAL7_ROUTE_TAGS:
-        raise ValueError("--network-taxonomy canonical7 requires a RouteA canonical7 route.")
+        raise ValueError("--network-taxonomy canonical7 requires a Kong2022 canonical7 route (pfm, pfm_ctxreg, pfm_ctxdrop, or fixed).")
     if route == "lynch2024_20net" and taxonomy != "lynch20":
         raise ValueError("--route-tag lynch2024_20net requires --network-taxonomy lynch20.")
     if route == "lynch2024_7net" and taxonomy != "lynch7":
@@ -134,6 +147,6 @@ def resolve_route_tag_for_group_atlas_run(*, shared_root: Path, explicit_route: 
 
 def resolve_group_atlas_out_root(out_root: Path | str, route_tag: str, *, default_routea_out_root_selected: bool, dataset: str = DEFAULT_DATASET) -> tuple[Path, bool]:
     route = _normalize_route_tag(route_tag)
-    if default_routea_out_root_selected and route != "routea":
+    if default_routea_out_root_selected and route != "pfm":
         return canonical_group_atlas_root_for_route(route, dataset=dataset).resolve(), True
     return Path(out_root).resolve(), False

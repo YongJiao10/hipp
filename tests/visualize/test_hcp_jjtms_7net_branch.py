@@ -1,3 +1,4 @@
+# pyright: reportMissingImports=false
 """Contract tests for the additive HCP/JJ_TMS method-comparison view."""
 from __future__ import annotations
 
@@ -30,6 +31,27 @@ from multidataset_cohorts import (  # noqa: E402
     get_comparison_visual_columns,
     resolve_comparison_paths,
 )
+
+@pytest.mark.parametrize("cohort_id,cohort_suffix", [("hcp_7t", ""), ("iowa_pat", "/patient")])
+@pytest.mark.parametrize("method", COMPARISON_METHODS)
+def test_ctxreg_renderers_use_formal_pfm_paths(cohort_id, cohort_suffix, method):
+    spec = GridSpec("2mm", "36p")
+    source = dict(resolve_comparison_paths(cohort_id, method, spec))
+    source.update(id=cohort_id, method=method)
+    source["dataset_key"] = "hcp" if cohort_id == "hcp_7t" else "iowa_jj_tms"
+    dataset = "outputs_hcp" if cohort_id == "hcp_7t" else "outputs_iowa_jj_tms"
+    expected = REPO_ROOT / f"{dataset}/work/group_atlas/pfm_ctxreg{cohort_suffix}"
+
+    subfield = _SUBFIELD_RENDERER.resolve_comparison_signal_branch_cohort(source, spec, "ctxreg")
+    confidence = _CLUSTER_RENDERER._ctxreg_comparison_paths(cohort_id, method, spec)
+    for paths in (subfield, confidence):
+        assert paths["group_root"] == expected
+        assert paths["grad_subpath"] == expected / (
+            f"gradient-spectral/{'kong2022' if method == 'kong2022_7net' else method}/2mm/cov_0p80/g1g2g3"
+        )
+        assert paths["shared_root"].name == "pfm_ctxreg"
+        assert "pfm_ctxreg" in paths["overview_grad"].name
+
 
 _TOP20_RENDERER_PATH = (
     REPO_ROOT
@@ -233,7 +255,7 @@ def test_comparison_paths_are_method_and_grid_specific(tag: str, method: str):
         assert "routea_7net" not in str(paths)
         if method == "kong2022_7net":
             if cohort_id == "hcp_7t":
-                assert paths["group_root"].name == "kong2022_7net_full_k3_fisherz"
+                assert paths["group_root"].name == "pfm"
             assert paths["atlas_folder"] == "kong2022"
             assert "/kong2022/" in str(paths["grad_subpath"])
             assert "/kong2022/" in str(paths["wta_subpath"])
@@ -250,26 +272,30 @@ def test_comparison_paths_are_method_and_grid_specific(tag: str, method: str):
             assert paths["overview_wta"].name.endswith("_fisherz.png")
 
         if cohort_id != "hcp_7t":
-            expected_present_namespace = "kong2022_7net" if method == "kong2022_7net" else "lynch2024_7net"
-            assert paths["present_dir"].parent.parent.name == expected_present_namespace
-            assert paths["present_dir"].parent.name == ("22p" if spec.variant == "22p" else "36p")
+            variant_suffix = "_22p" if spec.variant == "22p" else ""
+            expected_present_namespace = (
+                f"pfm{variant_suffix}"
+                if method == "kong2022_7net"
+                else f"lynch2024_7net{variant_suffix}"
+            )
+            assert paths["present_dir"].parent.name == expected_present_namespace
             assert "iowa3t" not in str(paths["present_dir"])
 
         if cohort_id == "iowa_pat" and method == "kong2022_7net":
             variant_suffix = "_22p" if spec.variant == "22p" else ""
-            expected_root = f"routea_patient{variant_suffix}_full_k3_fisherz"
-            assert paths["group_root"].name == expected_root
+            assert paths["group_root"].name == "patient"
+            assert paths["group_root"].parent.name == f"pfm{variant_suffix}"
 
 
 @pytest.mark.parametrize("tag", GRID_VARIANTS)
 def test_standard_kong_reference_inputs_use_exact_routea_roots(tag: str):
-    """Standard FC extraction must use the producer's explicit routea tree."""
+    """Standard FC extraction must use the producer's explicit pfm tree."""
     spec = GridSpec.from_tag(tag)
     for cohort_id in EXPECTED_COHORTS:
         paths = resolve_comparison_paths(cohort_id, "kong2022_7net", spec)
         if cohort_id == "hcp_7t":
             expected_reference = (
-                REPO_ROOT / "outputs_hcp/inputs/kong2022/shared_inputs/routea"
+                REPO_ROOT / "outputs_hcp/inputs/kong2022/shared_inputs/pfm"
             )
             expected_surface = (
                 REPO_ROOT / "outputs_hcp/inputs/kong2022/shared_inputs/surface"
@@ -277,12 +303,12 @@ def test_standard_kong_reference_inputs_use_exact_routea_roots(tag: str):
         else:
             suffix = "_22p" if spec.variant == "22p" else ""
             expected_reference = REPO_ROOT / (
-                "outputs_iowa_jj_tms/inputs/kong2022/"
-                f"shared_inputs{suffix}/routea"
+                f"outputs_iowa_jj_tms/inputs/kong2022{suffix}/"
+                "shared_inputs/pfm"
             )
             expected_surface = REPO_ROOT / (
-                "outputs_iowa_jj_tms/inputs/kong2022/"
-                f"shared_inputs{suffix}/surface"
+                f"outputs_iowa_jj_tms/inputs/kong2022{suffix}/"
+                "shared_inputs/surface"
             )
         assert Path(paths["reference_root"]).resolve() == expected_reference.resolve()
         assert Path(paths["surface_root"]).resolve() == expected_surface.resolve()
@@ -568,7 +594,7 @@ def test_hcp_comparison_uses_the_full_qc_cohort():
 
     assert hcp["n_subjects"] == 151
     assert hcp["shared_root"].name == "shared_inputs"
-    assert hcp["group_root"].name == "kong2022_7net_full_k3_fisherz"
+    assert hcp["group_root"].name == "pfm"
 
 
 def test_comparison_readiness_reports_two_canonical_method_columns_and_ten_entries():

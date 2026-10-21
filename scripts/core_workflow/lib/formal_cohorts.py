@@ -41,13 +41,13 @@ def cohort_key_for_group(dataset: str, branch: str) -> str:
         return "lynch78" if "nsi043" in branch else "lynch151"
     if dataset == "outputs_hcp":
         return "hcp151"
-    if dataset == "outputs_stanford" and branch.startswith("routea_hc"):
+    if dataset == "outputs_stanford" and (branch.startswith(("pfm_hc", "routea_hc")) or branch == "hc"):
         return "stanford_hc91"
-    if dataset == "outputs_stanford" and branch.startswith("routea_symp"):
+    if dataset == "outputs_stanford" and (branch.startswith(("pfm_symp", "routea_symp")) or branch == "symp"):
         return "stanford_symp103"
-    if dataset in ("outputs_iowa_jj_tms", "iowa_jj_tms") and (branch.startswith("routea_hc") or "hc" in branch):
+    if dataset in ("outputs_iowa_jj_tms", "iowa_jj_tms") and (branch.startswith(("pfm_hc", "routea_hc")) or "hc" in branch):
         return "jjtms_hc67"
-    if dataset in ("outputs_iowa_jj_tms", "iowa_jj_tms") and (branch.startswith("routea_patient") or branch.startswith("routea_symp") or "patient" in branch or "symp" in branch):
+    if dataset in ("outputs_iowa_jj_tms", "iowa_jj_tms") and (branch.startswith(("pfm_patient", "pfm_symp", "routea_patient", "routea_symp")) or "patient" in branch or "symp" in branch):
         return "jjtms_patient26"
     if dataset in ("outputs_iowa_jj_tms", "iowa_jj_tms"):
         return "jjtms94"

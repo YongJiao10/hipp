@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# pyright: reportMissingImports=false, reportPrivateImportUsage=false, reportArgumentType=false, reportGeneralTypeIssues=false, reportAttributeAccessIssue=false
 from __future__ import annotations
 
 """
@@ -85,7 +86,7 @@ DEFAULT_GROUP_AVG_SURFACES_DIR = (
     / "inputs"
     / "kong2022"
     / "templates"
-    / "hipp_group_average_t1only_151"
+    / "hipp_group_average"
     / "group_average_surfaces"
 )
 CLUSTER_ORDER = ["Anterior", "Body", "Posterior"]

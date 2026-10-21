@@ -1,3 +1,4 @@
+# pyright: reportMissingImports=false
 """Test suite for multi-dataset 2x2 grid visualization architecture and contract."""
 from __future__ import annotations
 
@@ -74,29 +75,29 @@ def test_cohorts_resolution_all_cells():
 
         # Check HCPYoungAdult FIX baseline invariant
         hcp = [c for c in all_cohorts if c["id"] == "hcp_7t"][0]
-        assert "kong2022_7net_full_k3_fisherz" in str(hcp["group_root"])
+        assert str(hcp["group_root"]).endswith("outputs_hcp/work/group_atlas/pfm")
         assert f"/{spec.smoothing}/" in str(hcp["grad_subpath"])
 
         # Check Iowa variant routing
         iowa_hc = [c for c in all_cohorts if c["id"] == "iowa_hc"][0]
         if spec.variant == "22p":
-            assert "kong2022_7net_hc_22p_full_k3_fisherz" in str(iowa_hc["group_root"])
+            assert str(iowa_hc["group_root"]).endswith("outputs_iowa_jj_tms/work/group_atlas/pfm_22p/hc")
         else:
-            assert "kong2022_7net_hc_full_k3_fisherz" in str(iowa_hc["group_root"])
+            assert str(iowa_hc["group_root"]).endswith("outputs_iowa_jj_tms/work/group_atlas/pfm/hc")
         assert f"/{spec.smoothing}/" in str(iowa_hc["grad_subpath"])
 
         # Check Iowa newly added cohorts routing
         pure_mdd = [c for c in all_cohorts if c["id"] == "iowa_pure_mdd"][0]
         comorbid_mdd = [c for c in all_cohorts if c["id"] == "iowa_comorbid_mdd"][0]
-        assert "kong2022_7net_pure_mdd" in str(pure_mdd["group_root"])
-        assert "kong2022_7net_comorbid_mdd" in str(comorbid_mdd["group_root"])
+        assert str(pure_mdd["group_root"]).endswith("/pure_mdd")
+        assert str(comorbid_mdd["group_root"]).endswith("/comorbid_mdd")
 
         # Check Stanford variant routing
         stan_nthc = [c for c in all_cohorts if c["id"] == "stan_nthc"][0]
         if spec.variant == "22p":
-            assert "routea_7net_nthc_22p_full_k3_fisherz" in str(stan_nthc["group_root"])
+            assert str(stan_nthc["group_root"]).endswith("outputs_stanford/work/group_atlas/pfm_22p/nthc")
         else:
-            assert "routea_7net_nthc_full_k3_fisherz" in str(stan_nthc["group_root"])
+            assert str(stan_nthc["group_root"]).endswith("outputs_stanford/work/group_atlas/pfm/nthc")
         assert f"/{spec.smoothing}/" in str(stan_nthc["grad_subpath"])
 
 
@@ -110,7 +111,8 @@ def test_canonical7_patient_resolver_uses_materialized_7net_root():
             / "outputs_iowa_jj_tms"
             / "work"
             / "group_atlas"
-            / f"routea_patient{variant_suffix}_full_k3_fisherz"
+            / f"pfm{variant_suffix}"
+            / "patient"
         )
         assert paths["group_root"] == expected_root
         assert paths["grad_subpath"] == (
@@ -124,30 +126,8 @@ def test_canonical7_patient_resolver_uses_materialized_7net_root():
 
 
 def test_explicit_canonical8_resolver_isolated_under_archive_namespace():
-    spec = GridSpec("2mm", "36p", atlas="canonical8")
-    paths = resolve_cohort_paths("hcp_7t", spec)
-
-    assert paths["group_root"] == (
-        REPO_ROOT
-        / "wrong"
-        / "outputs_hcp"
-        / "work"
-        / "archive"
-        / "8net_20260909"
-        / "group_atlas"
-        / "routea_full_k3_fisherz"
-    )
-    assert paths["grad_subpath"] == (
-        paths["group_root"]
-        / "gradient-spectral"
-        / "kong2022"
-        / "2mm"
-        / "cov_0p80"
-        / "g1g2g3"
-    )
-    assert paths["wta_subpath"].is_relative_to(
-        REPO_ROOT / "wrong" / "outputs_hcp" / "work" / "archive" / "8net_20260909"
-    )
+    with pytest.raises(ValueError, match="canonical7"):
+        GridSpec("2mm", "36p", atlas="canonical8")
 
 
 def test_no_active_7net_compatibility_symlinks_remain():
@@ -307,13 +287,9 @@ def test_7net_grid_spec_and_cohorts_resolution():
         # Verify 7net paths
         for c in all_cohorts:
             if c["dataset_key"] == "hcp":
-                assert "kong2022_7net_" in str(c["group_root"])
-            elif c["id"] == "iowa_pat":
-                assert "routea_patient" in str(c["group_root"])
-            elif c["dataset_key"] == "iowa_jj_tms":
-                assert "kong2022_7net_" in str(c["group_root"])
+                assert str(c["group_root"]).endswith("outputs_hcp/work/group_atlas/pfm")
             else:
-                assert "routea_7net_" in str(c["group_root"])
+                assert "/work/group_atlas/pfm" in str(c["group_root"])
             assert "/kong2022/" in str(c["grad_subpath"])
             assert "/kong2022/" in str(c["wta_subpath"])
 

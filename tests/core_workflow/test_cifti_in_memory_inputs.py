@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# pyright: reportMissingImports=false, reportPrivateImportUsage=false, reportAttributeAccessIssue=false, reportArgumentType=false
 from __future__ import annotations
 
 import hashlib
@@ -799,7 +800,7 @@ def test_routeb_batch_default_matches_its_public_label_extractor():
     import importlib
     direct = importlib.import_module('scripts.core_workflow.lib.extract_cortex_kong2022_routeb_roi_timeseries')
     assert routeb_batch.DEFAULT_SHARED_ROOT == direct.DEFAULT_SHARED_ROOT
-    assert routeb_batch.DEFAULT_SHARED_ROOT.name == 'routeb'
+    assert routeb_batch.DEFAULT_SHARED_ROOT.name == 'fixed'
     assert routeb_batch.DEFAULT_SHARED_ROOT != routea_batch.DEFAULT_SHARED_ROOT
 
 

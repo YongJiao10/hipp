@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# pyright: reportMissingImports=false
 from __future__ import annotations
 
 """
@@ -40,7 +41,7 @@ DEFAULT_SHARED_ROOT = DEFAULT_KONG400_CTXDROP_SHARED_ROOT
 DEFAULT_SUBJECTS = DEFAULT_KONG2022_MANIFEST_ROOT / "hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt"
 DEFAULT_OUT_DIR = DEFAULT_LOCAL_CORTEX_NEIGHBORS_DIR
 HEMIS = ("L", "R")
-SOURCE_BRANCHES = ("routea_ctxdrop", "routea_ctxreg")
+SOURCE_BRANCHES = ("pfm_ctxdrop", "pfm_ctxreg")
 
 
 def resolve_neighbor_shared_root(
@@ -50,9 +51,9 @@ def resolve_neighbor_shared_root(
 ) -> Path:
     if shared_root is not None:
         return Path(shared_root).resolve()
-    if source_branch == "routea_ctxreg":
+    if source_branch == "pfm_ctxreg":
         return DEFAULT_KONG400_CTXREG_SHARED_ROOT.resolve()
-    if source_branch == "routea_ctxdrop":
+    if source_branch == "pfm_ctxdrop":
         return DEFAULT_KONG400_CTXDROP_SHARED_ROOT.resolve()
     raise ValueError(f"Unsupported source_branch: {source_branch!r}")
 
@@ -66,7 +67,7 @@ class HemiSummary:
     n_subjects: np.ndarray
 
 
-def count_path(shared_root: Path, subject: str, hemi: str, source_branch: str = "routea_ctxdrop") -> Path:
+def count_path(shared_root: Path, subject: str, hemi: str, source_branch: str = "pfm_ctxdrop") -> Path:
     subject = str(subject).replace("sub-", "")
     if source_branch not in SOURCE_BRANCHES:
         raise ValueError(f"Unsupported source_branch: {source_branch}")
@@ -106,8 +107,8 @@ def output_paths(out_dir: Path, *, distance_mm: float) -> dict[str, Path]:
         "sd_array": out_dir / "group_sd_local_cortex_neighbors_hemi-{hemi}.npy",
         "n_array": out_dir / "group_n_local_cortex_neighbors_hemi-{hemi}.npy",
         "tsv": out_dir / "group_mean_local_cortex_neighbors.tsv",
-        "png": out_dir / f"kong2022_routea_local_cortex_neighbors_mean{distance_tag}mm.png",
-        "manifest": out_dir / f"kong2022_routea_local_cortex_neighbors_mean{distance_tag}mm_manifest.json",
+        "png": out_dir / f"kong2022_pfm_local_cortex_neighbors_mean{distance_tag}mm.png",
+        "manifest": out_dir / f"kong2022_pfm_local_cortex_neighbors_mean{distance_tag}mm_manifest.json",
     }
 
 
@@ -257,7 +258,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--subjects", nargs="*", default=None)
     parser.add_argument("--hemis", nargs="+", default=list(HEMIS), choices=HEMIS)
     parser.add_argument("--distance-mm", type=float, default=20.0)
-    parser.add_argument("--source-branch", default="routea_ctxdrop", choices=SOURCE_BRANCHES)
+    parser.add_argument("--source-branch", default="pfm_ctxdrop", choices=SOURCE_BRANCHES)
     parser.add_argument("--out-dir", default=str(DEFAULT_OUT_DIR))
     parser.add_argument("--hippomaps-root", default=str(DEFAULT_HIPPOMAPS_ROOT))
     parser.add_argument("--den", default="512")
@@ -273,7 +274,7 @@ def parse_args_for_test(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--subjects", nargs="*", default=None)
     parser.add_argument("--hemis", nargs="+", default=list(HEMIS), choices=HEMIS)
     parser.add_argument("--distance-mm", type=float, default=20.0)
-    parser.add_argument("--source-branch", default="routea_ctxdrop", choices=SOURCE_BRANCHES)
+    parser.add_argument("--source-branch", default="pfm_ctxdrop", choices=SOURCE_BRANCHES)
     parser.add_argument("--out-dir", default=str(DEFAULT_OUT_DIR))
     parser.add_argument("--hippomaps-root", default=str(DEFAULT_HIPPOMAPS_ROOT))
     parser.add_argument("--den", default="512")
@@ -298,7 +299,7 @@ def manifest_payload(
         "stage": "06_07_render_local_cortex_neighbors",
         "status": "done",
         "timestamp_utc": utc_now_iso(),
-        "route_tag": "routea",
+        "route_tag": "pfm",
         "source_branch": str(source_branch),
         "distance_mm": float(distance_mm),
         "plot_type": "hippocampal_surface_overlay",

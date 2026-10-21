@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# pyright: reportMissingImports=false, reportAttributeAccessIssue=false
 from __future__ import annotations
 
 """
@@ -30,7 +31,7 @@ from lib.workflow_utils import write_json
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_GROUP_ROOT = REPO_ROOT / "outputs_hcp" / "work" / "group_atlas" / "routea_full_k3_fisherz"
+DEFAULT_GROUP_ROOT = REPO_ROOT / "outputs_hcp" / "work" / "group_atlas" / "pfm"
 DEFAULT_HIPPUNFOLD_ROOT = REPO_ROOT / "outputs_hcp" / "inputs" / "hippunfold" / "dense_corobl_batch"
 DEFAULT_OUT_DIR = REPO_ROOT / "outputs_hcp" / "present" / "subfield_composition"
 METHOD = "gradient-spectral"
@@ -444,7 +445,7 @@ def plot_stacked_bars(
 
 
 def output_stem() -> str:
-    return "hcp151_routea_weighted-fisherz_gradient-spectral_k3_g1g2g3_subfield_composition"
+    return "hcp_pfm_weighted-fisherz_gradient-spectral_k3_g1g2g3_subfield_composition"
 
 
 def run(args: argparse.Namespace) -> dict[str, Path]:
@@ -522,7 +523,7 @@ def run(args: argparse.Namespace) -> dict[str, Path]:
             "atlas": args.atlas,
             "coverage_tag": args.coverage_tag,
             "gradient_components": args.gradient_components,
-            "gradient_default_policy": "unqualified gradient uses routea_full_k3_fisherz",
+            "gradient_default_policy": "unqualified gradient uses pfm",
             "smoothings": list(args.smoothings),
             "hemis": [h.upper() for h in args.hemis],
             "cluster_display_names": CLUSTER_NAMES,

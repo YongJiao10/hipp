@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# pyright: reportMissingImports=false, reportPrivateImportUsage=false, reportAttributeAccessIssue=false, reportGeneralTypeIssues=false, reportArgumentType=false
 from __future__ import annotations
 
 """
@@ -11,8 +12,8 @@ Main Flow Path:
 
 Inputs:
 - Command-line arguments:
-  - --group-root: Directory where group-atlas intermediate files are saved (default: `outputs_hcp/work/group_atlas/routea`).
-  - --present-dir: Directory where final presentation figures will be saved (default: `outputs_hcp/present/overviews`).
+  - --group-root: Directory where group-atlas intermediate files are saved (default: `outputs_hcp/work/group_atlas/pfm`).
+  - --present-dir: Exact presentation directory; by default mirror the group root below `present/overviews/<route>[/<cohort>]`.
   - --methods: Parcellation methods to process: "intrinsic-spectral", "network-spectral", "gradient-spectral", "wta-top".
   - --atlases: Cortical atlases to process (default: Kong2022); Lynch2024 atlases support gradient-spectral and direct-network wta-top.
   - --coverage-threshold: Selected coverage threshold for overview outputs (default: 0.80).
@@ -141,14 +142,14 @@ def ctxdrop_original_fc_annotation_provenance(
             "2mm/4mm by L/R manifests"
         )
 
-    known_routes = ("routea_ctxdrop", "routea_ctxreg", "routea")
+    known_routes = ("pfm_ctxdrop", "pfm_ctxreg", "pfm")
     path_route_hints: list[str | None] = []
     for path in manifest_paths:
         matches = [route for route in known_routes if route in Path(path).parts]
         path_route_hints.append(matches[0] if len(matches) == 1 else None)
-    if "routea_ctxdrop" not in path_route_hints:
+    if "pfm_ctxdrop" not in path_route_hints:
         return {}
-    if any(route != "routea_ctxdrop" for route in path_route_hints):
+    if any(route != "pfm_ctxdrop" for route in path_route_hints):
         raise ValueError(
             "ctxdrop original-FC annotation provenance mismatch: mixed route paths; "
             f"paths={[str(path) for path in manifest_paths]}"
@@ -164,7 +165,7 @@ def ctxdrop_original_fc_annotation_provenance(
             )
         route_tag = str(payload["route_tag"]).strip()
         route_tags.append(route_tag)
-    if set(route_tags) != {"routea_ctxdrop"}:
+    if set(route_tags) != {"pfm_ctxdrop"}:
         raise ValueError(
             "ctxdrop original-FC annotation provenance mismatch: route tags="
             f"{route_tags}"
@@ -210,7 +211,7 @@ def ctxdrop_original_fc_annotation_provenance(
     if (
         profile_surface_root.name != "surface"
         or profile_surface_root.parent.name != "shared_inputs"
-        or any(route in profile_surface_root.parts for route in ("routea_ctxdrop", "routea_ctxreg"))
+        or any(route in profile_surface_root.parts for route in ("pfm_ctxdrop", "pfm_ctxreg"))
     ):
         raise ValueError(
             "ctxdrop original-FC annotation provenance mismatch: expected the canonical "
@@ -282,21 +283,21 @@ def infer_group_name_from_path(path: Path | str | None) -> str | None:
     if path is None:
         return None
     p_str = str(path).lower()
-    if "routea_nthc" in p_str or "_nthc" in p_str or "/nthc" in p_str or "1xxx" in p_str:
+    if "pfm_nthc" in p_str or "_nthc" in p_str or "/nthc" in p_str or "1xxx" in p_str:
         return "NTHC"
-    if "routea_tehc" in p_str or "_tehc" in p_str or "/tehc" in p_str or "2xxx" in p_str:
+    if "pfm_tehc" in p_str or "_tehc" in p_str or "/tehc" in p_str or "2xxx" in p_str:
         return "TEHC"
-    if "routea_nts" in p_str or "_nts" in p_str or "/nts" in p_str or "3xxx" in p_str:
+    if "pfm_nts" in p_str or "_nts" in p_str or "/nts" in p_str or "3xxx" in p_str:
         return "NTS"
-    if "routea_tis" in p_str or "_tis" in p_str or "/tis" in p_str or "4xxx" in p_str:
+    if "pfm_tis" in p_str or "_tis" in p_str or "/tis" in p_str or "4xxx" in p_str:
         return "TIS"
     if "nontrauma" in p_str or "non_trauma" in p_str:
         return "Non-Trauma"
     if "trauma" in p_str:
         return "Trauma"
-    if "routea_hc" in p_str or "_hc_" in p_str or p_str.endswith("_hc") or "/hc/" in p_str or p_str.endswith("/hc"):
+    if "pfm_hc" in p_str or "_hc_" in p_str or "/hc/" in p_str or p_str.endswith(("_hc", "/hc")):
         return "HC"
-    if "routea_symp" in p_str or "_symp_" in p_str or p_str.endswith("_symp") or "/symp/" in p_str or p_str.endswith("/symp"):
+    if "pfm_symp" in p_str or "_symp_" in p_str or "/symp/" in p_str or p_str.endswith(("_symp", "/symp")):
         return "Symp"
     if "patient" in p_str:
         return "Patient"
@@ -413,9 +414,9 @@ def resolve_overview_mode_tag(group_root: Path, explicit_mode_tag: str | None) -
 
 
 def validate_method_route_compatibility(method: str, route_tag: str | None) -> None:
-    if str(method) == "wta-top" and str(route_tag) == "routea_17net":
+    if str(method) == "wta-top" and str(route_tag) in {"pfm_17net", "fixed_17net"}:
         raise ValueError(
-            "WTA is not valid for the routea_17net/family17 gradient-only branch; "
+            f"WTA is not valid for the {route_tag}/family17 gradient-only branch; "
             "use a canonical7 Kong2022 route."
         )
 
@@ -2012,7 +2013,7 @@ def ensure_combo_ready(
 def main() -> int:
     p = argparse.ArgumentParser(description="Build canonical HCP 7T hippocampus group overviews from group atlas outputs.")
     p.add_argument("--group-root", default=str(DEFAULT_GROUP_ROOT))
-    p.add_argument("--present-dir", default=str(DEFAULT_PRESENT_DIR))
+    p.add_argument("--present-dir", default=None, help="Exact overview destination; defaults to the group root's matching present/overviews/<route>[/<cohort>] directory.")
     p.add_argument(
         "--methods",
         nargs="+",
@@ -2063,7 +2064,15 @@ def main() -> int:
     else:
         validate_group_atlas_root_for_route(group_root, str(args.route_tag))
 
-    present_dir = Path(args.present_dir).resolve()
+    if args.present_dir is None:
+        parts = group_root.parts
+        if "group_atlas" not in parts or parts[parts.index("group_atlas") - 1] != "work":
+            raise ValueError(f"Cannot derive overview destination from group root {group_root}; pass --present-dir explicitly.")
+        stage_index = parts.index("group_atlas")
+        dataset_root = Path(*parts[:stage_index - 1])
+        present_dir = dataset_root / "present" / "overviews" / Path(*parts[stage_index + 1:])
+    else:
+        present_dir = Path(args.present_dir).resolve()
     present_dir.mkdir(parents=True, exist_ok=True)
     tau_tag = f"cov_{args.coverage_threshold:.2f}".replace(".", "p")
 

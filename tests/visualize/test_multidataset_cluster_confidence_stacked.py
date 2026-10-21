@@ -33,8 +33,8 @@ def test_comparison_branch_resolver_keeps_standard_and_ctxreg_paths_disjoint():
 
     assert all(entry["signal_branch"] == "standard" for column in standard for entry in column)
     assert all(entry["signal_branch"] == "ctxreg" for column in ctxreg for entry in column)
-    assert all("routea_ctxreg" not in str(entry["grad_subpath"]) for column in standard for entry in column)
-    assert all("routea_ctxreg" in str(entry["grad_subpath"]) for column in ctxreg for entry in column)
+    assert all("pfm_ctxreg" not in str(entry["grad_subpath"]) for column in standard for entry in column)
+    assert all("pfm_ctxreg" in str(entry["grad_subpath"]) for column in ctxreg for entry in column)
     assert RENDERER.comparison_output_tag(spec, "standard") == "hcp_jjtms_7net_2mm_36p_standard"
     assert RENDERER.comparison_output_tag(spec, "ctxreg") == "hcp_jjtms_7net_2mm_36p_ctxreg"
 

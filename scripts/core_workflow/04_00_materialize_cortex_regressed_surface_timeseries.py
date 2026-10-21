@@ -64,8 +64,8 @@ DEFAULT_RIGHT_CORTEX_SURFACE_TEMPLATE = (
 SMOOTHINGS = ("2mm", "4mm")
 HEMIS = ("L", "R")
 HIPPOCAMPAL_VERTEX_COUNT = 512
-ROUTE_TAG = "routea_ctxreg"
-SOURCE_ROUTE_TAG = "routea"
+ROUTE_TAG = "pfm_ctxreg"
+SOURCE_ROUTE_TAG = "pfm"
 
 
 @dataclass(frozen=True)
@@ -488,7 +488,7 @@ def write_regression_outputs(
     write_json(
         diag_dir / "stage_manifest.json",
         {
-            "stage": "routea_ctxreg_local_cortex_regression",
+            "stage": "pfm_ctxreg_local_cortex_regression",
             "status": "done",
             "timestamp_utc": utc_now_iso(),
             "params": {

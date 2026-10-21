@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# pyright: reportArgumentType=false, reportGeneralTypeIssues=false, reportAttributeAccessIssue=false, reportIndexIssue=false, reportCallIssue=false, reportOperatorIssue=false, reportReturnType=false, reportOptionalSubscript=false, reportPrivateImportUsage=false, reportOptionalIterable=false, reportOptionalMemberAccess=false, reportPossiblyUnboundVariable=false
 from __future__ import annotations
 
 """
@@ -69,6 +70,7 @@ import json
 import math
 import os
 import warnings
+from collections.abc import Iterable  # noqa: E402
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
@@ -137,6 +139,7 @@ from lib.output_layout import (
     DEFAULT_KONG2022_SURFACE_ROOT,
     DEFAULT_KONG2022_TEMPLATE_ROOT,
     DEFAULT_ROUTEA_GROUP_ATLAS_ROOT,
+    resolve_cohort_gradient_root,
 )
 from lib.route_tags import (
     ROUTE_TAG_CHOICES,
@@ -306,6 +309,17 @@ def file_state_list(paths: list[Path]) -> list[dict[str, object]]:
         rp = Path(p).resolve()
         uniq[str(rp)] = rp
     return [file_state(uniq[k]) for k in sorted(uniq.keys())]
+
+
+def gradient_resume_inputs(
+    *, gradient_root: Path, cohort: str | None, variant: str,
+) -> dict[str, object]:
+    """Record the explicit gradient bank in the existing resume contract."""
+    return {
+        "gradient_root": str(gradient_root),
+        "gradient_cohort": cohort,
+        "gradient_variant": variant,
+    }
 
 
 def resume_manifest_matches(manifest_path: Path, expected_signature: str) -> tuple[bool, str]:
@@ -566,8 +580,10 @@ def load_kong2022_network_reference(
 
 def gradient_route_for_route_tag(route_tag: str) -> str:
     route = str(route_tag)
-    if route == "routea_17net":
-        return "routea"
+    if route == "pfm_17net":
+        return "pfm"
+    if route == "fixed_17net":
+        return "fixed"
     if route == "lynch2024_7net":
         return "lynch2024_20net"
     return route
@@ -577,18 +593,18 @@ def standard_reference_root_for_signal_branch(
     shared_root: Path,
     signal_branch: str | None,
 ) -> Path:
-    """Map a CtxReg shared-input root to its explicit RouteA reference root."""
+    """Map a CtxReg shared-input root to its explicit PFM reference root."""
     root = Path(shared_root).resolve()
     if signal_branch != "ctxreg":
         return root
-    matches = [idx for idx, part in enumerate(root.parts) if part == "routea_ctxreg"]
+    matches = [idx for idx, part in enumerate(root.parts) if part == "pfm_ctxreg"]
     if len(matches) != 1:
         raise ValueError(
             "CtxReg group-atlas runs require a shared root containing exactly one "
-            f"routea_ctxreg path component or an explicit --reference-root: {root}"
+            f"pfm_ctxreg path component or an explicit --reference-root: {root}"
         )
     parts = list(root.parts)
-    parts[matches[0]] = "routea"
+    parts[matches[0]] = "pfm"
     return Path(*parts)
 
 
@@ -1113,9 +1129,13 @@ def load_hippomaps_gradient_features(
     support_mask: np.ndarray,
     gradient_components: tuple[int, ...] = DEFAULT_GRADIENT_COMPONENTS,
     expected_signal_branch: str | None = None,
+    cohort: str | None = None,
+    variant: str = "36p",
 ) -> tuple[np.ndarray, dict[str, object]]:
     comps = parse_gradient_components(",".join(str(c) for c in gradient_components))
-    run_dir = Path(gradient_root).resolve() / route / smoothing / f"hemi_{hemi}"
+    run_dir = resolve_cohort_gradient_root(
+        route=route, cohort=cohort, variant=variant, base_root=Path(gradient_root).resolve(),
+    ) / smoothing / f"hemi_{hemi}"
     manifest_path = run_dir / "hippomaps_gradient_manifest.json"
     if not manifest_path.exists():
         raise FileNotFoundError(
@@ -1123,6 +1143,13 @@ def load_hippomaps_gradient_features(
             "Run 05_01_compute_hippomaps_gradients.py before 05_02_run_group_atlas.py."
         )
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if cohort is not None or variant != "36p":
+        for key, expected in (("cohort", cohort), ("variant", variant)):
+            if manifest.get(key) != expected:
+                raise ValueError(
+                    f"Gradient {key} mismatch: expected={expected!r} "
+                    f"manifest={manifest.get(key)!r} path={manifest_path}"
+                )
     if str(manifest.get("status", "ok")) != "ok":
         raise RuntimeError(f"HippoMaps gradient manifest is not ok: {manifest_path} status={manifest.get('status')}")
     if expected_signal_branch is not None:
@@ -1149,7 +1176,7 @@ def load_hippomaps_gradient_features(
                 "Gradient atlas route mismatch: "
                 f"expected={route!r} manifest={manifest_route!r} path={manifest_path}"
             )
-    if str(route) in {"routea", "routea_ctxreg", "routea_ctxdrop", "routeb"}:
+    if str(route) in {"pfm", "pfm_ctxreg", "pfm_ctxdrop", "fixed"}:
         group_fc_shape = manifest.get("group_fc_shape")
         feature_count = manifest.get("feature_count")
         if not (isinstance(group_fc_shape, list) and len(group_fc_shape) == 2 and int(group_fc_shape[1]) == 400):
@@ -1199,6 +1226,8 @@ def load_hippomaps_gradient_features(
     labels = [f"G{int(c)}" for c in comps]
     meta = {
         "gradient_source": "hippomaps_gradient_artifacts",
+        "cohort": manifest.get("cohort"),
+        "variant": manifest.get("variant"),
         "hippomaps_gradient_manifest": str(manifest_path.resolve()),
         "hippomaps_gradients_full": str(gradients_path.resolve()),
         "route": route,
@@ -4251,13 +4280,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--reference-root", default=None, help="Read cortex reference metadata/time series from this root; defaults to --shared-root.")
     parser.add_argument("--gradient-root", default=str(DEFAULT_GRADIENT_ROOT))
+    parser.add_argument("--cohort", default=None, help="Cohort directory below the selected gradient route; omit for HCP.")
+    parser.add_argument("--variant", choices=("36p", "22p"), default="36p", help="Input gradient variant; 22p reads <route>_22p/<cohort>.")
     parser.add_argument("--hippomaps-root", default=str(DEFAULT_HIPPOMAPS_ROOT))
     parser.add_argument("--route-tag", choices=["auto", *ROUTE_TAG_CHOICES], default="auto")
     parser.add_argument(
         "--signal-branch",
         choices=SIGNAL_BRANCH_CHOICES,
         default=None,
-        help="Explicit standard/ctxreg signal branch for routea or routea_ctxreg.",
+        help="Explicit standard/ctxreg signal branch for pfm or pfm_ctxreg.",
     )
     class _StoreExplicitNetworkTaxonomy(argparse.Action):
         def __call__(self, parser, namespace, values, option_string=None):
@@ -4377,15 +4408,15 @@ def _resolve_methods_and_taxonomy(args: argparse.Namespace) -> str:
     if route == "auto":
         route = infer_route_tag_from_shared_root(Path(args.shared_root))
     if args.methods is None:
-        args.methods = ["gradient-spectral", "wta-top"] if route == "routea_ctxdrop" else list(
+        args.methods = ["gradient-spectral", "wta-top"] if route == "pfm_ctxdrop" else list(
             dict.fromkeys(
                 method
                 for atlas in args.atlases
                 for method in default_methods_for_atlas(atlas)
             )
         )
-    if route == "routea_ctxdrop" and set(args.methods) - {"gradient-spectral", "wta-top"}:
-        raise ValueError("routea_ctxdrop supports only gradient-spectral and wta-top")
+    if route == "pfm_ctxdrop" and set(args.methods) - {"gradient-spectral", "wta-top"}:
+        raise ValueError("pfm_ctxdrop supports only gradient-spectral and wta-top")
     network_taxonomy = str(args.network_taxonomy)
     if not getattr(args, "_network_taxonomy_explicit", False):
         network_taxonomy = default_network_taxonomy_for_atlases(args.atlases)
@@ -4469,13 +4500,13 @@ def main() -> int:
     if args.reuse_fixed_cluster_root is not None:
         if route_tag == "lynch2024_7net":
             allowed_taxonomies = {"lynch7"}
-        elif route_tag in {"routea", "routea_ctxreg", "routea_ctxdrop"}:
+        elif route_tag in {"pfm", "pfm_ctxreg", "pfm_ctxdrop"}:
             # canonical8 is retired upstream (see _resolve_methods_and_taxonomy),
             # so it can never reach this reuse-fixed validation.
             allowed_taxonomies = {"canonical7"}
         else:
             raise ValueError(
-                "--reuse-fixed-cluster-root is supported only for explicit Kong RouteA/control "
+                "--reuse-fixed-cluster-root is supported only for explicit Kong PFM/control "
                 "or Lynch canonical7 routes"
             )
         if network_taxonomy not in allowed_taxonomies:
@@ -4700,7 +4731,13 @@ def main() -> int:
                                 if method == "gradient-spectral"
                                 else None
                             ),
-                            "gradient_root": str(gradient_root) if method == "gradient-spectral" else None,
+                            **(
+                                gradient_resume_inputs(
+                                    gradient_root=gradient_root, cohort=args.cohort, variant=args.variant,
+                                )
+                                if method == "gradient-spectral"
+                                else {"gradient_root": None}
+                            ),
                             "route_tag": route_tag if method == "gradient-spectral" else None,
                             **signal_provenance,
                             "reuse_fixed_cluster_root": (
@@ -5087,6 +5124,8 @@ def main() -> int:
                                 support_mask=support,
                                 gradient_components=gradient_components,
                                 expected_signal_branch=config.signal_branch,
+                                cohort=args.cohort,
+                                variant=args.variant,
                             )
                             np.save(run_dir / "group_gradient_features_active.npy", group_features_active.astype(np.float32))
                             write_json(run_dir / "group_gradient_feature_summary.json", group_gradient_meta)

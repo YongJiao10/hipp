@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# pyright: reportMissingImports=false
 from __future__ import annotations
 
 import importlib.util
@@ -89,17 +90,17 @@ def _ctxdrop_manifest(smoothing: str, hemi: str) -> dict[str, object]:
         "profile_source_root": None,
         "profile_source_registry": None,
         "profile_surface_root": "/outputs_hcp/inputs/kong2022/shared_inputs/surface",
-        "reference_root": "/outputs_hcp/inputs/kong2022/shared_inputs/routea_ctxdrop",
-        "resume_input_signature_payload": {"route_tag": "routea_ctxdrop"},
+        "reference_root": "/outputs_hcp/inputs/kong2022/shared_inputs/pfm_ctxdrop",
+        "resume_input_signature_payload": {"route_tag": "pfm_ctxdrop"},
     }
 
 
 def _ctxreg_manifest(smoothing: str, hemi: str) -> dict[str, object]:
     return {
         **_ctxdrop_manifest(smoothing, hemi),
-        "profile_surface_root": "/outputs_hcp/inputs/kong2022/shared_inputs/routea_ctxreg",
-        "reference_root": "/outputs_hcp/inputs/kong2022/shared_inputs/routea_ctxreg",
-        "resume_input_signature_payload": {"route_tag": "routea_ctxreg"},
+        "profile_surface_root": "/outputs_hcp/inputs/kong2022/shared_inputs/pfm_ctxreg",
+        "reference_root": "/outputs_hcp/inputs/kong2022/shared_inputs/pfm_ctxreg",
+        "resume_input_signature_payload": {"route_tag": "pfm_ctxreg"},
     }
 
 
@@ -115,7 +116,7 @@ def test_gradient_overview_item_records_four_shifted_cosine_sources() -> None:
     rendered_title = overview_mod.overview_title(
         atlas="kong2022",
         method="gradient-spectral",
-        route_tag="routea",
+        route_tag="pfm",
         mode_tag=None,
         assignment_variant="fisherz",
         surface_affinity=item["surface_affinity"],
@@ -130,7 +131,7 @@ def test_gradient_overview_item_records_four_shifted_cosine_sources() -> None:
 def test_ctxdrop_gradient_provenance_records_original_fc_annotation() -> None:
     pairs = [("2mm", "L"), ("2mm", "R"), ("4mm", "L"), ("4mm", "R")]
     paths = [
-        Path(f"/group/routea_ctxdrop/{smoothing}/{hemi}/group_atlas_manifest.json")
+        Path(f"/group/pfm_ctxdrop/{smoothing}/{hemi}/group_atlas_manifest.json")
         for smoothing, hemi in pairs
     ]
     manifests = [_ctxdrop_manifest(smoothing, hemi) for smoothing, hemi in pairs]
@@ -153,17 +154,17 @@ def test_ctxdrop_gradient_provenance_records_original_fc_annotation() -> None:
 
 def test_standard_and_ctxreg_gradient_provenance_do_not_get_ctxdrop_raw_note() -> None:
     pairs = [("2mm", "L"), ("2mm", "R"), ("4mm", "L"), ("4mm", "R")]
-    standard_paths = [Path(f"/group/routea/{smoothing}/{hemi}/group_atlas_manifest.json") for smoothing, hemi in pairs]
+    standard_paths = [Path(f"/group/pfm/{smoothing}/{hemi}/group_atlas_manifest.json") for smoothing, hemi in pairs]
     standard = [
         {
             **_shifted_manifest(),
             "smoothing": smoothing,
             "hemi": hemi,
-            "resume_input_signature_payload": {"route_tag": "routea"},
+            "resume_input_signature_payload": {"route_tag": "pfm"},
         }
         for smoothing, hemi in pairs
     ]
-    ctxreg_paths = [Path(f"/group/routea_ctxreg/{smoothing}/{hemi}/group_atlas_manifest.json") for smoothing, hemi in pairs]
+    ctxreg_paths = [Path(f"/group/pfm_ctxreg/{smoothing}/{hemi}/group_atlas_manifest.json") for smoothing, hemi in pairs]
     ctxreg = [_ctxreg_manifest(smoothing, hemi) for smoothing, hemi in pairs]
 
     for paths, manifests in ((standard_paths, standard), (ctxreg_paths, ctxreg)):
@@ -179,14 +180,14 @@ def test_standard_and_ctxreg_gradient_provenance_do_not_get_ctxdrop_raw_note() -
 @pytest.mark.parametrize(
     "mutator",
     [
-        lambda manifest: manifest.update({"profile_surface_root": "/outputs_hcp/inputs/kong2022/shared_inputs/routea_ctxreg"}),
-        lambda manifest: manifest["resume_input_signature_payload"].update({"route_tag": "routea_ctxreg"}),
+        lambda manifest: manifest.update({"profile_surface_root": "/outputs_hcp/inputs/kong2022/shared_inputs/pfm_ctxreg"}),
+        lambda manifest: manifest["resume_input_signature_payload"].update({"route_tag": "pfm_ctxreg"}),
         lambda manifest: manifest.update({"profile_fc_mode": "pearson"}),
     ],
 )
 def test_ctxdrop_gradient_provenance_rejects_mismatched_annotation_source(mutator) -> None:
     pairs = [("2mm", "L"), ("2mm", "R"), ("4mm", "L"), ("4mm", "R")]
-    paths = [Path(f"/group/routea_ctxdrop/{smoothing}/{hemi}/group_atlas_manifest.json") for smoothing, hemi in pairs]
+    paths = [Path(f"/group/pfm_ctxdrop/{smoothing}/{hemi}/group_atlas_manifest.json") for smoothing, hemi in pairs]
     manifests = [_ctxdrop_manifest(smoothing, hemi) for smoothing, hemi in pairs]
     mutator(manifests[-1])
 

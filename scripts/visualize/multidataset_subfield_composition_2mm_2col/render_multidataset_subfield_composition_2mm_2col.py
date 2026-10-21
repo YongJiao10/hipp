@@ -56,16 +56,11 @@ from multidataset_cohorts import (
     format_comparison_column_title,
     get_comparison_visual_columns,
     get_multidataset_cohorts,
+    resolve_comparison_paths,
 )
 from surface_panel_cache import cache_matches, panel_inputs, publish_cache
 
 SIGNAL_BRANCHES = ("standard", "ctxreg")
-_COMPARISON_IOWA_STEMS = {
-    "iowa_hc": "hc",
-    "iowa_pat": "patient",
-    "iowa_pure_mdd": "pure_mdd",
-    "iowa_comorbid_mdd": "comorbid_mdd",
-}
 # MultiHist7 Subfield Definitions on midthickness surface
 SUBFIELD_ORDER = (1, 2, 3, 4, 5)
 SUBFIELD_NAMES = {
@@ -143,35 +138,10 @@ def resolve_comparison_signal_branch_cohort(
         raise ValueError(
             f"ctxreg is supported only for comparison methods {COMPARISON_METHODS}; got {method!r}"
         )
-    dataset_key = resolved.get("dataset_key")
-    if dataset_key == "hcp":
-        group_root = REPO_ROOT / "outputs_hcp/work/group_atlas/routea_ctxreg"
-    elif dataset_key == "iowa_jj_tms":
-        cohort_id = str(resolved.get("id"))
-        try:
-            stem = _COMPARISON_IOWA_STEMS[cohort_id]
-        except KeyError as exc:
-            raise ValueError(
-                f"No formal ctxreg path mapping for Iowa cohort {cohort_id!r}"
-            ) from exc
-        group_root = (
-            REPO_ROOT / f"outputs_iowa_jj_tms/work/group_atlas/routea_ctxreg/{stem}"
-        )
-    else:
-        raise ValueError(f"No formal ctxreg path mapping for dataset {dataset_key!r}")
-    atlas_folder = "kong2022" if method == "kong2022_7net" else "lynch2024_7net"
-    grad_subpath = (
-        group_root
-        / f"gradient-spectral/{atlas_folder}/{spec.smoothing}/cov_0p80/g1g2g3"
-    )
-    resolved.update(
-        {
-            "group_root": group_root,
-            "group_root_grad": group_root,
-            "group_root_wta": group_root,
-            "grad_subpath": grad_subpath,
-        }
-    )
+    resolved.update(resolve_comparison_paths(
+        str(resolved["id"]), str(method),
+        GridSpec(spec.smoothing, spec.variant, atlas="7net", signal_branch=branch),
+    ))
     return resolved
 
 

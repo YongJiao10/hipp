@@ -96,23 +96,23 @@ def test_canonical7_network_timeseries_uses_unweighted_roi_means() -> None:
 
 
 def test_unsuffixed_routea_is_the_default_canonical7_branch() -> None:
-    assert "routea_7net" not in route_tags.ROUTE_TAG_CHOICES
+    assert "pfm_7net" not in route_tags.ROUTE_TAG_CHOICES
     assert "canonical7" in route_tags.NETWORK_TAXONOMY_CHOICES
     assert (
         route_tags.resolve_route_tag_for_group_atlas_run(
-            shared_root=Path("outputs_hcp/inputs/kong2022/shared_inputs/routea"),
-            explicit_route="routea",
+            shared_root=Path("outputs_hcp/inputs/kong2022/shared_inputs/pfm"),
+            explicit_route="pfm",
             network_taxonomy="canonical7",
         )
-        == "routea"
+        == "pfm"
     )
     with pytest.raises(ValueError, match="canonical7"):
         route_tags.resolve_route_tag_for_group_atlas_run(
-            shared_root=Path("outputs_hcp/inputs/kong2022/shared_inputs/routea"),
-            explicit_route="routea",
+            shared_root=Path("outputs_hcp/inputs/kong2022/shared_inputs/pfm"),
+            explicit_route="pfm",
             network_taxonomy="canonical8",
         )
-    assert output_layout.resolve_routea_group_atlas_root("stanford").name == "routea_full_k3_fisherz"
+    assert output_layout.resolve_routea_group_atlas_root("stanford").name == "pfm"
 
 
 
@@ -223,8 +223,8 @@ def test_group_atlas_and_weighted_helpers_accept_canonical7() -> None:
     assert atlas.fc_mode_for_method("gradient-spectral", "kong2022") == (
         "pearson_vertex_to_kong2022_400roi_group_average_then_diffusion_gradients"
     )
-    assert gradients.atlas_for_gradient_route("routea") == "kong2022"
-    assert atlas.gradient_route_for_route_tag("routea") == "routea"
+    assert gradients.atlas_for_gradient_route("pfm") == "kong2022"
+    assert atlas.gradient_route_for_route_tag("pfm") == "pfm"
     assert materializer.reference_fc_target_files("kong2022") == (
         "cortex_roi_parcels.tsv",
         "cortex_roi_parcel_timeseries.npy",
@@ -234,8 +234,8 @@ def test_group_atlas_and_weighted_helpers_accept_canonical7() -> None:
     assert materializer.roi_fc_filename_for_method("wta-top") == "hipp_vertex_to_roi_fc.npy"
     assert weighted._network_column("canonical7") == "canonical7"
     assert "kong2022" in overview.ATLASES
-    assert "routea" in overview.ROUTE_TAG_CHOICES
-    assert "routea_7net" not in overview.ROUTE_TAG_CHOICES
+    assert "pfm" in overview.ROUTE_TAG_CHOICES
+    assert "pfm_7net" not in overview.ROUTE_TAG_CHOICES
 
 
 def test_kong2022_default_has_the_roi_profile_contract() -> None:
@@ -311,18 +311,18 @@ def test_kong2022_default_is_a_direct_canonical7_05_02_branch() -> None:
             "--network-taxonomy",
             "canonical7",
             "--route-tag",
-            "routea",
+            "pfm",
         ]
     )
 
     assert args.atlases == ["kong2022"]
     assert args.network_taxonomy == "canonical7"
-    assert args.route_tag == "routea"
+    assert args.route_tag == "pfm"
     assert not hasattr(args, "reuse_source_root")
 
 
 def test_default_parsers_select_canonical7_without_a_7net_suffix() -> None:
-    assert reference_builder.DEFAULT_SHARED_ROOT.name == "routea"
+    assert reference_builder.DEFAULT_SHARED_ROOT.name == "pfm"
     assert extractor.build_arg_parser().parse_args(["--subject", "01", "--dataset", "hcp"]).atlas_slug == "kong2022"
     assert atlas.build_arg_parser().parse_args([]).network_taxonomy == "canonical7"
     assert weighted_branch.build_arg_parser().parse_args([]).network_column == "canonical7"
@@ -679,7 +679,7 @@ def test_05_02_group_atlas_rejects_retired_canonical8_taxonomy(monkeypatch) -> N
         [
             "05_02_run_group_atlas.py",
             "--shared-root",
-            "outputs_hcp/inputs/kong2022/shared_inputs/routea",
+            "outputs_hcp/inputs/kong2022/shared_inputs/pfm",
             "--network-taxonomy",
             "canonical8",
             "--atlases",

@@ -1,15 +1,24 @@
 from __future__ import annotations
 
-DEFAULT_BRANCH = "kong2022_routea"
-BRANCH_CHOICES = ("kong2022_routea", "kong2022_routea_17net", "kong2022_routea_ctxreg", "kong2022_routea_ctxdrop", "kong2022_routeb", "lynch2024_20net", "lynch2024_7net")
+DEFAULT_BRANCH = "kong2022_pfm"
+BRANCH_CHOICES = (
+    "kong2022_pfm",
+    "kong2022_pfm_17net",
+    "kong2022_pfm_ctxreg",
+    "kong2022_pfm_ctxdrop",
+    "kong2022_fixed",
+    "kong2022_fixed_17net",
+    "lynch2024_20net",
+    "lynch2024_7net",
+)
 
 
 # Signal branches are orthogonal to the cortical atlas/taxonomy.  The
 # visualization release maintains only these two 2mm/36P choices; core control
 # routes retain the separate ctxdrop route for its own explicit workflow.
 SIGNAL_BRANCH_CHOICES = ("standard", "ctxreg")
-SIGNAL_BRANCH_TO_ROUTE = {"standard": "routea", "ctxreg": "routea_ctxreg"}
-ROUTE_TO_SIGNAL_BRANCH = {"routea": "standard", "routea_ctxreg": "ctxreg"}
+SIGNAL_BRANCH_TO_ROUTE = {"standard": "pfm", "ctxreg": "pfm_ctxreg"}
+ROUTE_TO_SIGNAL_BRANCH = {"pfm": "standard", "pfm_ctxreg": "ctxreg"}
 
 
 def normalize_signal_branch(signal_branch: str) -> str:
@@ -50,9 +59,9 @@ def validate_signal_branch_route(signal_branch: str, route_tag: str) -> str:
 def resolve_signal_branch_for_route(
     route: str, explicit_signal_branch: str | None = None,
 ) -> str | None:
-    """Resolve standard/ctxreg only for the maintained RouteA controls."""
+    """Resolve standard/ctxreg only for the maintained PFM controls."""
     route_key = str(route).strip().lower()
-    if route_key in {"routea", "routea_ctxreg"}:
+    if route_key in {"pfm", "pfm_ctxreg"}:
         if explicit_signal_branch is None:
             return signal_branch_for_route(route_key)
         return validate_signal_branch_route(
@@ -60,7 +69,7 @@ def resolve_signal_branch_for_route(
         )
     if explicit_signal_branch is not None:
         raise ValueError(
-            "--signal-branch applies only RouteA controls; "
+            "--signal-branch applies only PFM controls; "
             f"route={route!r} has no maintained {SIGNAL_BRANCH_CHOICES} signal branch"
         )
     return None

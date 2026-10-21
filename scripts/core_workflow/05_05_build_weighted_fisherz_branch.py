@@ -47,8 +47,8 @@ from lib.weighted_fisherz import (
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_SOURCE_ROOT = DEFAULT_ROUTEA_GROUP_ATLAS_ROOT
-DEFAULT_OUT_ROOT = REPO_ROOT / "outputs_hcp" / "work" / "group_atlas" / "routea_weighted_fisherz_full_k3"
-DEFAULT_ROUTEA_ROOT = REPO_ROOT / "outputs_hcp" / "inputs" / "kong2022" / "shared_inputs" / "routea"
+DEFAULT_OUT_ROOT = REPO_ROOT / "outputs_hcp" / "work" / "group_atlas" / "pfm_weighted"
+DEFAULT_ROUTEA_ROOT = REPO_ROOT / "outputs_hcp" / "inputs" / "kong2022" / "shared_inputs" / "pfm"
 DEFAULT_REFERENCE_ROOT = DEFAULT_ROUTEA_ROOT if DEFAULT_ROUTEA_ROOT.exists() else DEFAULT_KONG2022_ROUTEA_ROOT
 DEFAULT_ROUTEA_SURFACE_TIMESERIES_ROOT = DEFAULT_KONG2022_SURFACE_ROOT
 DEFAULT_SURFACE_ROOT = DEFAULT_ROUTEA_SURFACE_TIMESERIES_ROOT
@@ -107,7 +107,10 @@ def weighted_gradient_provenance(manifest: dict[str, object]) -> dict[str, objec
 
 def read_tsv(path: Path) -> list[dict[str, object]]:
     with path.open("r", encoding="utf-8", newline="") as f:
-        rows = [dict(row) for row in csv.DictReader(f, delimiter="\t")]
+        rows: list[dict[str, object]] = [
+            {str(k): v for k, v in row.items()}
+            for row in csv.DictReader(f, delimiter="\t")
+        ]
     mapping7: dict[str, str] | None = None
     for row in rows:
         if not str(row.get("canonical7", "")).strip():
@@ -400,10 +403,10 @@ def write_comparison_summary(source_root: Path, out_root: Path, present_dir: Pat
     ]
     for row in rows:
         delta = row["mean_abs_profile_delta"]
-        delta_text = "" if delta == "" else f"{float(delta):.6f}"
+        delta_text = "" if delta == "" else f"{float(str(delta)):.6f}"
         lines.append(
             f"| {row['method']} | {row.get('component', '')} | {row['smoothing']} | {row['hemi']} | {row['n_vertices_compared']} | "
-            f"{row['n_vertices_changed']} | {float(row['fraction_changed']):.6f} | {delta_text} |"
+            f"{row['n_vertices_changed']} | {float(str(row['fraction_changed'])):.6f} | {delta_text} |"
         )
     lines.extend(
         [
@@ -505,7 +508,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
 def main() -> int:
     args = build_arg_parser().parse_args()
     manifest = build_branch(args)
-    print(json.dumps({"status": manifest["status"], "out_root": manifest["out_root"], "runs": len(manifest["runs"])}, indent=2))
+    runs = manifest.get("runs")
+    run_count = len(runs) if isinstance(runs, list) else 0
+    print(json.dumps({"status": manifest["status"], "out_root": manifest["out_root"], "runs": run_count}, indent=2))
     return 0
 
 

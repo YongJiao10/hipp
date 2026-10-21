@@ -98,7 +98,7 @@ def detect_route_source(shared_root: Path, manifest: Path) -> str:
             raise FileNotFoundError(f"Missing reference summary for source detection: {ref}")
         payload = json.loads(ref.read_text(encoding="utf-8"))
         src = str(payload.get("reference_label_source", "")).lower()
-        tags.add("routea" if "route_a" in src else "routeb")
+        tags.add("pfm" if "route_a" in src or "pfm" in src else "fixed")
     if len(tags) != 1:
         raise RuntimeError(f"Mixed route sources detected in shared_root={shared_root}: {sorted(tags)}")
     return next(iter(tags))
@@ -378,7 +378,7 @@ def main() -> int:
     parser.add_argument("--combo-jobs", type=int, default=DEFAULT_COMBO_JOBS)
     parser.add_argument(
         "--route-source",
-        choices=["auto", "routea", "routeb"],
+        choices=["auto", "pfm", "fixed"],
         default="auto",
         help="Expected upstream source. `auto` detects from shared_root reference summaries.",
     )
@@ -398,7 +398,7 @@ def main() -> int:
             f"Requested --route-source={args.route_source} but detected upstream source={route_tag_detected}. "
             "Refusing to run with mismatched route provenance."
         )
-    if route_tag == "routea":
+    if route_tag == "pfm":
         enforce_routea_path_compliance(shared_root, manifest, group_root_raw)
     present_dir = Path(args.present_dir).resolve()
     group_avg = Path(args.group_average_surfaces_dir).resolve()

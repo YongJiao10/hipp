@@ -78,7 +78,7 @@ DEFAULT_GROUP_ATLAS_ROOT = (
     / "outputs_hcp"
     / "work"
     / "group_atlas"
-    / "routea_17net_full_k3_fisherz"
+    / "pfm_17net"
 )
 DEFAULT_GROUP_AVG_SURFACES_DIR = (
     DEFAULT_KONG2022_TEMPLATE_ROOT / "group_average_surfaces"
@@ -608,7 +608,7 @@ def main() -> int:
                     "hemi": str(row["hemi"]),
                     "parcellation": str(row["parcellation"]),
                     "cluster_name": str(row["cluster_name"]),
-                    "valid_area_fraction": float(row["valid_area_fraction"]),
+                    "valid_area_fraction": float(str(row["valid_area_fraction"])),
                 }
             )
     write_tsv(
@@ -639,14 +639,14 @@ def main() -> int:
         "group_p",
         "group_p_fdr",
     ]
-    fdr_values = fdr_adjust([float(r["group_p"]) for r in group_rows])
+    fdr_values = fdr_adjust([float(str(r["group_p"])) for r in group_rows])
     for row, adjusted in zip(group_rows, fdr_values):
         row["group_p_fdr"] = adjusted
     write_tsv(out_root / "group_cluster_summary.tsv", group_rows, group_fields)
     # One family across all 2mm task contrasts, hemispheres and bins.
     # Condition betas supply the colored profile lines and are not tested here.
     contrast_bin_rows = [r for r in bin_rows if r["contrast"] in TASK_CONTRASTS[task]]
-    bin_adjusted = fdr_adjust([float(r["group_p"]) for r in contrast_bin_rows])
+    bin_adjusted = fdr_adjust([float(str(r["group_p"])) for r in contrast_bin_rows])
     for row, adjusted in zip(contrast_bin_rows, bin_adjusted):
         row["group_p_fdr"] = adjusted
     bin_path = out_root / "group_bin_summary.tsv"
@@ -654,7 +654,7 @@ def main() -> int:
         "task", "smoothing", "hemi", "contrast", "bin", "n_subjects",
         "group_mean", "group_t", "group_p", "group_p_fdr",
     ])
-    all_subjects = sorted({r["subject"] for r in subject_rows})
+    all_subjects = sorted({str(r["subject"]) for r in subject_rows})
     write_json(
         out_root / "group_build_manifest.json",
         {

@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
-
 """
 Process Step Description:
 Materialize intrinsic functional connectivity. Computes the intrinsic functional connectivity matrix between vertices within the hippocampus itself.
@@ -11,7 +9,7 @@ Main Flow Path:
 
 Inputs:
 - Command-line arguments:
-  - --shared-root: Path to shared outputs root (default: `outputs_hcp/inputs/kong2022/shared_inputs/routeb`).
+  - --shared-root: Path to shared outputs root (default: `outputs_hcp/inputs/kong2022/shared_inputs/fixed`).
   - --surface-root: Path to shared BOLD surfaces (default: `outputs_hcp/inputs/kong2022/shared_inputs/surface`).
   - --subjects-manifest: Path to QC-passed subject list manifest (default: `outputs_hcp/inputs/kong2022/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt`).
   - --subjects: Space-separated list of explicit subject IDs.
@@ -27,23 +25,30 @@ Outputs:
   - Active-only vertex-to-vertex hippocampal functional connectivity matrix: `{shared_root}/sub-<subject>/fc/intrinsic/{smoothing}/hemi_{hemi}/hipp_vertex_to_vertex_fc_active.npy`.
   - Intrinsic FC step manifest: `{shared_root}/sub-<subject>/fc/intrinsic/{smoothing}/hemi_{hemi}/stage_manifest.json`.
 """
+from __future__ import annotations
+
 import argparse
 import json
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
-
-from lib.output_layout import DEFAULT_KONG2022_MANIFEST_ROOT, DEFAULT_KONG2022_ROOT
-from lib.workflow_utils import capped_jobs, utc_now_iso, write_json
-from lib.io_utils import load_run_segment_metadata, load_subject_ids
-from lib.fc_math import corrcoef_rows
+from typing import TypedDict
 
 import numpy as np
+from lib.fc_math import corrcoef_rows
+from lib.io_utils import load_run_segment_metadata, load_subject_ids
+from lib.output_layout import DEFAULT_KONG2022_MANIFEST_ROOT, DEFAULT_KONG2022_ROOT
+from lib.workflow_utils import capped_jobs, utc_now_iso, write_json
+
+
+class SubjectResult(TypedDict):
+    subject: str
+    combos: int
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_ROUTE_ROOT = DEFAULT_KONG2022_ROOT
 DEFAULT_SHARED_INPUTS_ROOT = DEFAULT_ROUTE_ROOT / "shared_inputs"
-DEFAULT_SHARED_ROOT = DEFAULT_SHARED_INPUTS_ROOT / "routeb"
+DEFAULT_SHARED_ROOT = DEFAULT_SHARED_INPUTS_ROOT / "fixed"
 DEFAULT_SURFACE_ROOT = DEFAULT_SHARED_INPUTS_ROOT / "surface"
 DEFAULT_SUBJECTS = DEFAULT_KONG2022_MANIFEST_ROOT / "hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt"
 SMOOTHINGS = ["2mm", "4mm"]
@@ -59,7 +64,7 @@ def materialize_subject(
     hemis: list[str],
     reference_root: Path | None = None,
     mask_root: Path | None = None,
-) -> dict[str, object]:
+) -> SubjectResult:
     reference_root = reference_root or shared_root
     mask_root = mask_root or surface_root
     run_metadata = reference_root / f"sub-{subject}" / "reference" / "kong2022" / "reference_summary.json"
