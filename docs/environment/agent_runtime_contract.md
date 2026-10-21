@@ -14,7 +14,7 @@ inverts the image pullback at the required points with a 0.001-mm residual
 tolerance. Workbench remains single threaded, including registration calls.
 No package installation or Python environment change is required.
 Iowa derived cortex surfaces and their explicitly selected manifest belong in
-`outputs_iowa_jj_tms/inputs/iowa_jj_tms/cortex_surfaces/fsLR32k/`, not `/tmp`.
+`outputs_iowa_jj_tms/inputs/cortex_surfaces/fsLR32k/`, not `/tmp`.
 Lynch PFM concatenates explicit run inputs in memory. Worktree asset links and
 parent-directory output fallbacks are not part of the formal runtime contract.
 
@@ -44,6 +44,20 @@ their cortical models as fsLR32k. No new environment or dependency is needed.
 Use the shared `scripts/ArealMSHBM_Kong2022/` interface and its README for
 manifest preparation and SGE execution; local py314 paths do not apply to
 these Argon launchers.
+
+## VS Code Workspace
+
+Open the repository root as the workspace folder. The tracked
+`.vscode/settings.json` sets `git.repositoryScanMaxDepth` to `0` so repository
+discovery checks the workspace root. File watching excludes generated
+`outputs_*`, `wrong`, and `.cache` trees. Refresh or reopen generated files when
+inspecting updated results.
+
+If Source Control remains at "Scanning folder for Git repositories", run
+`Developer: Reload Window` from the Command Palette. The Git extension must
+start again before Source Control can show changes. `git status --short`
+reports source and documentation changes; generated outputs and archives are
+excluded by `.gitignore`.
 
 ## One-Shot Preflight (Run First)
 

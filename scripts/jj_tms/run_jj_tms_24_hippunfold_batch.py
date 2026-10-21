@@ -22,7 +22,7 @@ MISSING_24 = [
 
 LOG_DIR = REPO_ROOT / "outputs_iowa_jj_tms" / "logs" / "hippunfold_24_batch"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
-BATCH_DIR = REPO_ROOT / "outputs_iowa_jj_tms" / "inputs" / "iowa_jj_tms" / "hippunfold" / "dense_corobl_batch"
+BATCH_DIR = REPO_ROOT / "outputs_iowa_jj_tms" / "inputs" / "hippunfold" / "dense_corobl_batch"
 
 
 def is_already_done(subject: str) -> bool:

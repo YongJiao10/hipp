@@ -16,21 +16,21 @@ HippUnfold anatomy uses 512 vertices per hippocampal hemisphere.
 The task run manifests are the authoritative declarations of run identity,
 order, length, BOLD/CIFTI paths, EVs, and motion files:
 
-- `outputs_hcp/inputs/hcp/kong2022/manifests/task-emotion/sub-*.json`
-- `outputs_hcp/inputs/hcp/kong2022/manifests/task-wm/sub-*.json`
+- `outputs_hcp/inputs/kong2022/manifests/task-emotion/sub-*.json`
+- `outputs_hcp/inputs/kong2022/manifests/task-wm/sub-*.json`
 
 Each directory contains the full task cohort. Use the complete QC-passed
 subject file for all subject-level and group commands:
-`outputs_hcp/inputs/hcp/kong2022/shared_inputs/task-<task>/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_144.txt`.
+`outputs_hcp/inputs/kong2022/shared_inputs/task-<task>/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_144.txt`.
 
 The HCP 7T reference roster is
-`outputs_hcp/inputs/hcp/qc/vertex_qc_t1only/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_151.txt`.
+`outputs_hcp/inputs/qc/vertex_qc_t1only/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_151.txt`.
 
 ## Input and output layout
 
 For `task-emotion` or `task-wm`, use:
 
-- Task root: `outputs_hcp/inputs/hcp/kong2022/shared_inputs/task-<task>/`.
+- Task root: `outputs_hcp/inputs/kong2022/shared_inputs/task-<task>/`.
 - Hippocampal preparation root: `<task-root>/surface/`.
 - Activation products: `<task-root>/sub-<id>/task/<task>/<smoothing>/hemi_<L|R>/`.
 - QC reports: `<task-root>/qc/`.
@@ -49,7 +49,7 @@ misordered, or mismatched inputs are errors.
 
 Task preparation uses its own `--route-root` and `--shared-root`. The
 151-participant reference surfaces are reused from
-`outputs_hcp/inputs/hcp/kong2022/templates/hipp_group_average_t1only_151/group_average_surfaces/`.
+`outputs_hcp/inputs/kong2022/templates/hipp_group_average_t1only_151/group_average_surfaces/`.
 
 ## Preparation and QC
 
@@ -134,7 +134,7 @@ Run from the repository root. Set `task_name` to `emotion` or `wm`:
 export OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1
 task_python=/home/yojiao/.conda/envs/py314/bin/python
 task_name=emotion
-task_root="outputs_hcp/inputs/hcp/kong2022/shared_inputs/task-${task_name}"
+task_root="outputs_hcp/inputs/kong2022/shared_inputs/task-${task_name}"
 subject_roster="${task_root}/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_144.txt"
 
 "$task_python" scripts/core_workflow/05_06_build_task_activation_group.py \

@@ -16,7 +16,7 @@ Main Flow Path:
 Inputs:
 - Command-line arguments:
   - --task: Task branch (required: emotion | wm | relational).
-  - --shared-root: Task shared root holding per-subject contrasts (default: `outputs_hcp/inputs/hcp/kong2022/shared_inputs/task-<task>`).
+  - --shared-root: Task shared root holding per-subject contrasts (default: `outputs_hcp/inputs/kong2022/shared_inputs/task-<task>`).
   - --subjects / --subjects-manifest: Required complete analysis roster; missing subject products are errors.
   - --smoothings / --hemis / --contrasts: Combos to build; --contrasts defaults to all maintained contrasts.
   - --zones: Subregion branches: hcp151_atlas (rest group K=3), template_matching (crossfit individualized K=3). Default: both.
@@ -95,7 +95,6 @@ def default_shared_root(task: str) -> Path:
         REPO_ROOT
         / "outputs_hcp"
         / "inputs"
-        / "hcp"
         / "kong2022"
         / "shared_inputs"
         / f"task-{task}"

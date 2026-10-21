@@ -88,8 +88,8 @@ def _ctxdrop_manifest(smoothing: str, hemi: str) -> dict[str, object]:
         "profile_source_mode": "canonical",
         "profile_source_root": None,
         "profile_source_registry": None,
-        "profile_surface_root": "/outputs_hcp/inputs/hcp/kong2022/shared_inputs/surface",
-        "reference_root": "/outputs_hcp/inputs/hcp/kong2022/shared_inputs/routea_ctxdrop",
+        "profile_surface_root": "/outputs_hcp/inputs/kong2022/shared_inputs/surface",
+        "reference_root": "/outputs_hcp/inputs/kong2022/shared_inputs/routea_ctxdrop",
         "resume_input_signature_payload": {"route_tag": "routea_ctxdrop"},
     }
 
@@ -97,8 +97,8 @@ def _ctxdrop_manifest(smoothing: str, hemi: str) -> dict[str, object]:
 def _ctxreg_manifest(smoothing: str, hemi: str) -> dict[str, object]:
     return {
         **_ctxdrop_manifest(smoothing, hemi),
-        "profile_surface_root": "/outputs_hcp/inputs/hcp/kong2022/shared_inputs/routea_ctxreg",
-        "reference_root": "/outputs_hcp/inputs/hcp/kong2022/shared_inputs/routea_ctxreg",
+        "profile_surface_root": "/outputs_hcp/inputs/kong2022/shared_inputs/routea_ctxreg",
+        "reference_root": "/outputs_hcp/inputs/kong2022/shared_inputs/routea_ctxreg",
         "resume_input_signature_payload": {"route_tag": "routea_ctxreg"},
     }
 
@@ -179,7 +179,7 @@ def test_standard_and_ctxreg_gradient_provenance_do_not_get_ctxdrop_raw_note() -
 @pytest.mark.parametrize(
     "mutator",
     [
-        lambda manifest: manifest.update({"profile_surface_root": "/outputs_hcp/inputs/hcp/kong2022/shared_inputs/routea_ctxreg"}),
+        lambda manifest: manifest.update({"profile_surface_root": "/outputs_hcp/inputs/kong2022/shared_inputs/routea_ctxreg"}),
         lambda manifest: manifest["resume_input_signature_payload"].update({"route_tag": "routea_ctxreg"}),
         lambda manifest: manifest.update({"profile_fc_mode": "pearson"}),
     ],

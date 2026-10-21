@@ -50,7 +50,7 @@ PYTHON_EXE = "/home/yojiao/.conda/envs/py314/bin/python"
 DEFAULT_SOURCE_SUBJECTS = DEFAULT_QC_ROOT / "manifests" / "hcp_7t_hippocampus_fmri_qc_pass_t1only_151.txt"
 DEFAULT_FALLBACK_SMOKE_SUBJECTS = ("100610", "102311", "104416", "105923", "108323")
 DEFAULT_INPUT_DIR = REPO_ROOT / "data" / "hippunfold_input"
-CANONICAL_HIPPUNFOLD_BATCH_ROOT = REPO_ROOT / "outputs_hcp/inputs/hcp/hippunfold/dense_corobl_batch"
+CANONICAL_HIPPUNFOLD_BATCH_ROOT = REPO_ROOT / "outputs_hcp/inputs/hippunfold/dense_corobl_batch"
 DEFAULT_BOLD_ROOT = Path("/home/yojiao/LSS/jianglab/3_Data_Working/HCP_7T_Hippocampus/rsfmri_volume")
 DEFAULT_HIPPOMAPS_ROOT = REPO_ROOT / "external" / "hippomaps"
 

@@ -28,7 +28,7 @@ from lib.kong2022_label_utils import (
 
 DEFAULT_MAT_PATH = (
     REPO_ROOT
-    / "outputs_stanford/inputs/stanford/tmsfmri_fmriprep/targetInfo_11sites_wMNI_20211230.mat"
+    / "outputs_stanford/inputs/tmsfmri_fmriprep/targetInfo_11sites_wMNI_20211230.mat"
 )
 DEFAULT_LSS_ROOT = Path(
     "/home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_CausalConnectome/rest_fmriprep"

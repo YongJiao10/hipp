@@ -85,7 +85,7 @@ def test_downstream_renderers_do_not_accept_legacy_group_prefixed_intermediates(
 
 
 def test_overview_matrix_uses_core_work_fixed_k3_fisherz_root_for_all_routea_methods() -> None:
-    jobs = build_render_jobs(REPO_ROOT / "outputs_hcp" / "inputs" / "hcp" / "kong2022")
+    jobs = build_render_jobs(REPO_ROOT / "outputs_hcp" / "inputs" / "kong2022")
     by_method = {job.method: job for job in jobs if job.route_tag == "routea"}
     assert set(by_method) == {"intrinsic-spectral", "network-spectral", "gradient-spectral", "wta-top"}
     for method in ("intrinsic-spectral", "network-spectral", "gradient-spectral", "wta-top"):
@@ -172,14 +172,14 @@ def test_overview_matrix_does_not_create_family17_wta_jobs() -> None:
 
 
 def test_overview_matrix_defaults_to_routea_only() -> None:
-    jobs = build_render_jobs(REPO_ROOT / "outputs_hcp" / "inputs" / "hcp" / "kong2022")
+    jobs = build_render_jobs(REPO_ROOT / "outputs_hcp" / "inputs" / "kong2022")
     assert {job.route_tag for job in jobs} == {"routea"}
     assert len(jobs) == 7
 
 
 def test_overview_matrix_can_filter_methods_for_gradient_and_wta_only() -> None:
     jobs = build_render_jobs(
-        REPO_ROOT / "outputs_hcp" / "inputs" / "hcp" / "kong2022",
+        REPO_ROOT / "outputs_hcp" / "inputs" / "kong2022",
         methods=("gradient-spectral", "wta-top"),
     )
     assert {job.route_tag for job in jobs} == {"routea"}
@@ -188,7 +188,7 @@ def test_overview_matrix_can_filter_methods_for_gradient_and_wta_only() -> None:
 
 
 def test_overview_matrix_keeps_normalized_top20_and_fisherz_assignment_variants() -> None:
-    jobs = build_render_jobs(REPO_ROOT / "outputs_hcp" / "inputs" / "hcp" / "kong2022")
+    jobs = build_render_jobs(REPO_ROOT / "outputs_hcp" / "inputs" / "kong2022")
     by_method = {}
     for job in jobs:
         by_method.setdefault(job.method, []).append(job.assignment_variant)
@@ -356,7 +356,7 @@ def test_gradient_subject_fc_preprocessing_manifest_is_mode_neutral() -> None:
 
 
 def test_gradient_matrix_jobs_are_route_only_and_core_rooted_for_routea() -> None:
-    jobs = build_render_jobs(REPO_ROOT / "outputs_hcp" / "inputs" / "hcp" / "kong2022")
+    jobs = build_render_jobs(REPO_ROOT / "outputs_hcp" / "inputs" / "kong2022")
     gradient_jobs = [job for job in jobs if job.method == GRADIENT_METHOD]
     assert gradient_jobs
     assert set(job.route_tag for job in gradient_jobs).issubset({"routea", "routeb"})

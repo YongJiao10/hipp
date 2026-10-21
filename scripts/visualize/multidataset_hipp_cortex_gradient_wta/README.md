@@ -70,10 +70,10 @@ subject matrices.
 
 Standard subject-level FC extraction uses separate, explicit input roots. HCP
 surface time series and masks come from
-`outputs_hcp/inputs/hcp/kong2022/shared_inputs/surface`, while its Kong2022
+`outputs_hcp/inputs/kong2022/shared_inputs/surface`, while its Kong2022
 cortical reference arrays and registry come from
-`outputs_hcp/inputs/hcp/kong2022/shared_inputs/routea`. Iowa uses the matching
-`outputs_iowa_jj_tms/inputs/iowa_jj_tms/kong2022/shared_inputs{_22p}/surface`
+`outputs_hcp/inputs/kong2022/shared_inputs/routea`. Iowa uses the matching
+`outputs_iowa_jj_tms/inputs/kong2022/shared_inputs{_22p}/surface`
 and `.../shared_inputs{_22p}/routea` roots. The `shared_inputs` parent itself
 is not a subject-input root; resolving it directly is an error. CtxReg keeps
 its signal inputs under the explicit `routea_ctxreg` branch while retaining the

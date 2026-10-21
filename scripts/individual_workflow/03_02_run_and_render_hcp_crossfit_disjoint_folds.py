@@ -64,7 +64,6 @@ DEFAULT_SPEC = (
     REPO_ROOT
     / "outputs_hcp"
     / "inputs"
-    / "hcp"
     / "hippunfold"
     / "dense_corobl_batch"
     / "sub-100610"

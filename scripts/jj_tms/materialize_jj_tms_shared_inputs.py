@@ -29,8 +29,8 @@ from lib.task_quality import parse_tsnr_threshold, signal_validity_policy
 materialize_fc = importlib.import_module("04_01_materialize_kong2022_roi_fc").materialize_fc
 
 JJ_MATCH_ROOT = REPO_ROOT / "outputs_iowa_jj_tms/work/hcp151_fixed_template_matching/subjects"
-BATCH_ROOT = REPO_ROOT / "outputs_iowa_jj_tms/inputs/iowa_jj_tms/hippunfold/dense_corobl_batch"
-KONG_ROOT = REPO_ROOT / "outputs_iowa_jj_tms/inputs/iowa_jj_tms/kong2022"
+BATCH_ROOT = REPO_ROOT / "outputs_iowa_jj_tms/inputs/hippunfold/dense_corobl_batch"
+KONG_ROOT = REPO_ROOT / "outputs_iowa_jj_tms/inputs/kong2022"
 SHARED_SURFACE_ROOT = KONG_ROOT / "shared_inputs" / "surface"
 SHARED_ROUTEA_ROOT = KONG_ROOT / "shared_inputs" / "routea"
 TEMPLATE_ROOT = KONG_ROOT / "templates" / "hipp_group_average_t1only_151" / "group_average_surfaces"

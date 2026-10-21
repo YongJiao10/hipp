@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import subprocess
+import threading
+import time
 from pathlib import Path
+from types import ModuleType, SimpleNamespace
 
 import pytest
 
+from scripts.core_workflow.lib import hippunfold_run_contract as run_contract_module
 from scripts.core_workflow.lib.hippunfold_run_contract import (
     CANONICAL_ASSET_ROOT,
     CANONICAL_MODEL_PATH,
@@ -24,13 +29,28 @@ BASE_WRAPPER = REPO_ROOT / "scripts/core_workflow/lib/hippunfold_shell/run_hippu
 PY314 = Path("/home/yojiao/.conda/envs/py314/bin/python")
 
 
+@pytest.fixture
+def stage01(monkeypatch: pytest.MonkeyPatch) -> ModuleType:
+    monkeypatch.syspath_prepend(str(CORE_ENTRY.parent))
+    spec = importlib.util.spec_from_file_location("hippunfold_stage01", CORE_ENTRY)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    monkeypatch.setattr(module, "prepare_runtime_directories", lambda env: None)
+    monkeypatch.setattr(module, "prepare_runtime_python", lambda: None)
+    monkeypatch.setattr(module, "prepare_subject_environment", lambda contract, env: dict(env))
+    monkeypatch.setattr(module, "validate_local_assets", lambda env: None)
+    monkeypatch.setattr(module, "detect_system_name", lambda: "idas")
+    return module
+
+
 def test_hcp_preset_has_fixed_historical_paths_and_parameters() -> None:
     contract = resolve_run_contract("hcp", "102311")
 
     assert contract.bids_dir == REPO_ROOT / "data/hippunfold_input"
     assert contract.output_dir == (
         REPO_ROOT
-        / "outputs_hcp/inputs/hcp/hippunfold/dense_corobl_batch/sub-102311/hippunfold"
+        / "outputs_hcp/inputs/hippunfold/dense_corobl_batch/sub-102311/hippunfold"
     )
     assert contract.t1w_filter == "extension=.nii.gz"
     assert contract.hippunfold_argv[3:] == (
@@ -70,14 +90,14 @@ def test_hcp_preset_has_fixed_historical_paths_and_parameters() -> None:
             "stanford",
             "1001",
             "/home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_CausalConnectome/rest_fmriprep/DataOrg_PFM_36P",
-            "outputs_stanford/inputs/stanford/hippunfold/dense_corobl_batch/sub-1001/hippunfold",
+            "outputs_stanford/inputs/hippunfold/dense_corobl_batch/sub-1001/hippunfold",
             "extension=.nii.gz",
         ),
         (
             "iowa_jj_tms",
             "1028",
             "/home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_JJ_TMS/raw",
-            "outputs_iowa_jj_tms/inputs/iowa_jj_tms/hippunfold/dense_corobl_batch/sub-1028/hippunfold",
+            "outputs_iowa_jj_tms/inputs/hippunfold/dense_corobl_batch/sub-1028/hippunfold",
             "extension=.nii",
         ),
     ],
@@ -137,6 +157,43 @@ def test_environment_scrubs_all_free_form_hippunfold_overrides() -> None:
     assert not env["LD_LIBRARY_PATH"].startswith(":")
     assert "HIPPUNFOLD_EXTRA_ARGS" not in env
     assert "HIPPUNFOLD_OUTPUT_DENSITY" not in env
+
+
+def test_runtime_gate_uses_the_same_fixed_environment_as_the_run(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    executable = tmp_path / "hippo2" / "bin" / "hippunfold"
+    executable.parent.mkdir(parents=True)
+    executable.write_text("", encoding="utf-8")
+    monkeypatch.setattr(run_contract_module, "HIPPUNFOLD_EXECUTABLE", executable)
+    monkeypatch.setattr(run_contract_module, "HIPPO2_PREFIX", executable.parent.parent)
+
+    env = {
+        "HIPPUNFOLD_CACHE_DIR": str(tmp_path / "cache"),
+        "XDG_CACHE_HOME": str(tmp_path / "xdg"),
+        "PIP_CACHE_DIR": str(tmp_path / "pip"),
+        "TMPDIR": str(tmp_path / "tmp"),
+    }
+    received_envs: list[dict[str, str] | None] = []
+
+    def fake_run(args: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        received_envs.append(kwargs.get("env"))  # type: ignore[arg-type]
+        if args[0] == "/bin/bash":
+            stdout = str(executable)
+        elif args[-1] == "--version":
+            stdout = "2.0.0"
+        elif args[-1] == "--help":
+            stdout = "--output-density {native,512,2k}"
+        else:
+            stdout = ""
+        return subprocess.CompletedProcess(args, 0, stdout=stdout, stderr="")
+
+    monkeypatch.setattr(run_contract_module.subprocess, "run", fake_run)
+
+    run_contract_module.validate_local_assets(env)
+
+    assert len(received_envs) == 4
+    assert all(received is env for received in received_envs)
 
 
 def test_public_dry_run_emits_fixed_json_contract() -> None:
@@ -209,3 +266,180 @@ def test_bias_corrected_inputs_skip_n4_in_the_public_dry_run(
     assert payload.get("skip_preproc") is True
     assert payload["modality"] == "T1w"
     assert "--no-reg-template" not in payload["hippunfold_argv"]
+
+
+def test_manifest_mode_validates_once_and_checks_each_subject(
+    stage01: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    subjects = ["k0114s02", "k0114s03", "k0114s04"]
+    manifest = tmp_path / "subjects.txt"
+    manifest.write_text("\n".join(subjects), encoding="utf-8")
+    validated = []
+    executed = []
+    checked = []
+    monkeypatch.setattr(stage01, "_is_completed", lambda contract: False)
+    monkeypatch.setattr(stage01, "validate_local_assets", validated.append)
+    monkeypatch.setattr(stage01, "_run_subject", lambda contract, env: executed.append((contract.subject, env)))
+    monkeypatch.setattr(stage01, "_check_subject", lambda contract: checked.append(contract.subject))
+
+    assert stage01.run_t1w_local(["--dataset", "pdc", "--manifest", str(manifest)]) == 0
+
+    assert len(validated) == 1
+    assert executed[0][1] is validated[0]
+    assert [subject for subject, env in executed] == subjects
+    assert checked == subjects
+    assert [env["HIPPUNFOLD_CACHE_ROOT"] for subject, env in executed] == [
+        str(resolve_run_contract("pdc", subject).runtime_root) for subject in subjects
+    ]
+
+
+def test_batch_runs_three_subjects_and_checks_outputs_on_the_coordinator(
+    stage01: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    contracts = [resolve_run_contract("pdc", f"k0114s0{index}") for index in range(1, 6)]
+    lock = threading.Lock()
+    three_started = threading.Barrier(3)
+    active = 0
+    max_active = 0
+    check_threads = []
+    coordinator = threading.get_ident()
+    monkeypatch.setattr(stage01, "_is_completed", lambda contract: False)
+
+    def execute(contract, env) -> None:
+        nonlocal active, max_active
+        with lock:
+            active += 1
+            max_active = max(max_active, active)
+        if contract.subject in {"k0114s01", "k0114s02", "k0114s03"}:
+            three_started.wait(timeout=5)
+        time.sleep(0.02)
+        with lock:
+            active -= 1
+
+    monkeypatch.setattr(stage01, "_run_subject", execute)
+    monkeypatch.setattr(stage01, "_check_subject", lambda contract: check_threads.append(threading.get_ident()))
+
+    stage01._run_batch(contracts, jobs=3)
+
+    assert max_active == 3
+    assert check_threads == [coordinator] * len(contracts)
+
+
+def test_completed_batch_does_not_run_the_runtime_gate(
+    stage01: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    validated = []
+    monkeypatch.setattr(stage01, "_is_completed", lambda contract: True)
+    monkeypatch.setattr(stage01, "validate_local_assets", validated.append)
+
+    stage01._run_batch([resolve_run_contract("pdc", "k0114s01")], jobs=1)
+
+    assert validated == []
+
+
+@pytest.mark.parametrize(("dataset", "jobs", "limit"), [("pdc", 4, 3), ("banda", 2, 1)])
+def test_batch_rejects_excess_jobs_before_validation_or_execution(
+    stage01: ModuleType, monkeypatch: pytest.MonkeyPatch,
+    dataset: str, jobs: int, limit: int,
+) -> None:
+    calls = []
+    monkeypatch.setattr(stage01, "validate_local_assets", lambda env: calls.append("gate"))
+    monkeypatch.setattr(stage01, "_run_subject", lambda contract, env: calls.append("run"))
+
+    with pytest.raises(ValueError, match=f"{dataset} allows between 1 and {limit} jobs"):
+        stage01._run_batch([resolve_run_contract(dataset, "1001")], jobs=jobs)
+
+    assert calls == []
+
+
+@pytest.mark.parametrize("failure_stage", ["execution", "checking"])
+def test_batch_failure_stops_dispatching_new_subjects(
+    stage01: ModuleType, monkeypatch: pytest.MonkeyPatch, failure_stage: str,
+) -> None:
+    contracts = [resolve_run_contract("pdc", f"k0114s0{index}") for index in range(1, 4)]
+    executed = []
+    monkeypatch.setattr(stage01, "_is_completed", lambda contract: False)
+
+    def execute(contract, env) -> None:
+        executed.append(contract.subject)
+        if failure_stage == "execution":
+            raise RuntimeError("subject failed")
+
+    def check(contract) -> None:
+        raise RuntimeError("subject failed")
+
+    monkeypatch.setattr(stage01, "_run_subject", execute)
+    monkeypatch.setattr(stage01, "_check_subject", check)
+
+    with pytest.raises(RuntimeError, match="subject failed"):
+        stage01._run_batch(contracts, jobs=1)
+
+    assert executed == [contracts[0].subject]
+
+
+def test_single_subject_keeps_one_gate_and_returns_the_process_status(
+    stage01: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    validated = []
+    executed = []
+    monkeypatch.setattr(stage01, "validate_local_assets", validated.append)
+
+    def execute(contract, env) -> int:
+        executed.append((contract.subject, env))
+        return 7
+
+    monkeypatch.setattr(stage01, "run_hippunfold", execute)
+
+    assert stage01.run_t1w_local(["k0114s02", "--dataset", "pdc"]) == 7
+    assert len(validated) == 1
+    assert executed == [("k0114s02", validated[0])]
+
+
+def test_batch_checker_fails_on_missing_outputs(
+    stage01: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    contract = SimpleNamespace(subject="1001", preset=SimpleNamespace(output_root=tmp_path))
+    calls = []
+
+    def fail_check(args, **kwargs):
+        calls.append((args, kwargs))
+        raise subprocess.CalledProcessError(1, args)
+
+    monkeypatch.setattr(stage01.subprocess, "run", fail_check)
+
+    with pytest.raises(subprocess.CalledProcessError):
+        stage01._check_subject(contract)
+
+    assert "--fail-on-missing" in calls[0][0]
+    assert calls[0][1]["check"] is True
+    assert "[done" not in capsys.readouterr().out
+
+
+def test_manifest_dry_run_uses_the_existing_public_entry_point(tmp_path: Path) -> None:
+    manifest = tmp_path / "subjects.txt"
+    manifest.write_text("k0114s02\nk0114s03\n", encoding="utf-8")
+    proc = subprocess.run(
+        [str(PY314), str(CORE_ENTRY), "--dataset", "pdc", "--manifest", str(manifest),
+         "--jobs", "3", "--dry-run"],
+        cwd=REPO_ROOT, capture_output=True, text=True, check=False,
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    assert [row["subject"] for row in json.loads(proc.stdout)] == ["k0114s02", "k0114s03"]
+
+
+def test_surfaces_without_output_check_receipt_do_not_skip_a_subject(
+    stage01: ModuleType, tmp_path: Path,
+) -> None:
+    output_dir = tmp_path / "hippunfold"
+    surfaces = output_dir / "sub-1001" / "surf"
+    surfaces.mkdir(parents=True)
+    for hemi in ("L", "R"):
+        (surfaces / f"sub-1001_hemi-{hemi}_space-corobl_den-512_label-hipp_midthickness.surf.gii").write_text("", encoding="utf-8")
+    contract = SimpleNamespace(subject="1001", output_dir=output_dir)
+
+    assert stage01._is_completed(contract) is False
+
+    (output_dir / "core_workflow_cleanup_receipt.json").write_text("{}", encoding="utf-8")
+    assert stage01._is_completed(contract) is True

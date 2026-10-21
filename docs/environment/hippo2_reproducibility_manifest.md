@@ -430,13 +430,34 @@ also been checked with HTTP requests blocked in the validation process; this
 test does not set a network-blocking policy for production missing resources.
 
 The active public T1w launcher `scripts/core_workflow/01_01_run_hippunfold_t1w_local.py`
-accepts only `<subject> --dataset {hcp,stanford,iowa_jj_tms,banda,pdc}` plus `--dry-run`.
+accepts `<subject> --dataset {hcp,stanford,iowa_jj_tms,banda,pdc}` for one subject,
+or `--dataset <dataset> --manifest <subject-list.txt> --jobs <N>` for a batch.
+`--dry-run` prints one JSON contract in single-subject mode or an ordered JSON
+array in manifest mode, without running the gate or processing.
 The closed dataset preset fixes the input root, output root, T1w extension filter,
 T1w modality, `corobl` output space, density `512`, autotopology labels, GPU
 inference, one core, the N4 preprocessing choice, and the canonical shared local cache/model paths. All
 `HIPPUNFOLD_*` caller overrides are scrubbed; free-form Snakemake arguments are
 not accepted. The local model is consumed through the canonical cache output, so
-the workflow is never pruned with `--omit-from download_nnunet_model`. Before a real run, the launcher repeats the hippo2 gate: exact executable resolution, CLI version `2.0.0`, and T1w/512 help support.
+the workflow is never pruned with `--omit-from download_nnunet_model`. A direct
+one-subject run applies the complete hippo2 gate in the same fixed environment
+used for processing: exact executable resolution, CLI version `2.0.0`, and
+T1w/512 help support. The CLI version and help probes have a 60-second limit.
+BANDA/PDC batch drivers use manifest mode in this same entry point, which performs that
+gate once for each batch with pending subjects and reuses the result only for
+that batch process; the next batch checks again. This avoids repeated full CLI
+startup per subject without storing a persistent version marker. PDC uses three
+parallel HippUnfold jobs, while output checking and cleanup remain serial because
+they share the batch integrity manifest. BANDA remains serial.
+The runner enforces these dataset limits before validation or execution and
+identifies IDAS or Argon before parallel work. Processing or checking failures
+stop new subject dispatch while already running subjects finish and receive
+their serial output checks. The checker uses `--fail-on-missing`, so incomplete
+outputs cannot be reported as completed. Runtime setup, system detection, and
+execution helpers live in `lib/hippunfold_run_contract.py`.
+Manifest resume skips only subjects with an existing
+`core_workflow_cleanup_receipt.json`; surface files without that receipt go
+through HippUnfold resume and the complete checker.
 JJ_TMS is the only preset using `extension=.nii`; the other presets use
 `extension=.nii.gz`.
 
@@ -498,7 +519,7 @@ The local launcher was run with:
 ```text
 subject                     100610 / 102311 / 102816
 input_dir                   data/hippunfold_input
-output_dir                  outputs_hcp/inputs/hcp/hippunfold/dense_corobl_batch/sub-<id>/hippunfold
+output_dir                  outputs_hcp/inputs/hippunfold/dense_corobl_batch/sub-<id>/hippunfold
 workflow-profile            none
 sdm                         env-modules
 output-density              512
@@ -508,9 +529,9 @@ autotop_labels              hipp dentate
 
 This manifest records the environment only. The actual subject outputs live under:
 
-- `outputs_hcp/inputs/hcp/hippunfold/dense_corobl_batch/sub-100610/hippunfold`
-- `outputs_hcp/inputs/hcp/hippunfold/dense_corobl_batch/sub-102311/hippunfold`
-- `outputs_hcp/inputs/hcp/hippunfold/dense_corobl_batch/sub-102816/hippunfold`
+- `outputs_hcp/inputs/hippunfold/dense_corobl_batch/sub-100610/hippunfold`
+- `outputs_hcp/inputs/hippunfold/dense_corobl_batch/sub-102311/hippunfold`
+- `outputs_hcp/inputs/hippunfold/dense_corobl_batch/sub-102816/hippunfold`
 
 ## Known Footguns
 

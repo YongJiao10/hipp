@@ -16,8 +16,8 @@ Main Flow Path:
 Inputs:
 - Command-line arguments:
   - --task: Task branch: emotion | wm | relational (default: emotion).
-  - --surface-root: Task hippocampal surface root holding concatenated run timeseries (default: `outputs_hcp/inputs/hcp/kong2022/shared_inputs/task-emotion/surface`).
-  - --shared-root: Task activation output root (default: `outputs_hcp/inputs/hcp/kong2022/shared_inputs/task-emotion`).
+  - --surface-root: Task hippocampal surface root holding concatenated run timeseries (default: `outputs_hcp/inputs/kong2022/shared_inputs/task-emotion/surface`).
+  - --shared-root: Task activation output root (default: `outputs_hcp/inputs/kong2022/shared_inputs/task-emotion`).
   - --task-manifest-root: Root holding per-subject run-artifact manifests (required; run identity, order, and EV/motion paths come from the manifest, never from frame totals).
   - --subjects-manifest / --subjects / --smoothings / --hemis / --jobs / --tr.
 - Physical inputs:

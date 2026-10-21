@@ -614,7 +614,6 @@ def map_cohort(
                 REPO_ROOT
                 / "outputs_iowa_jj_tms"
                 / "inputs"
-                / "iowa_jj_tms"
                 / "surfaces_32k"
                 / f"sub-{subject}"
                 / "anat"

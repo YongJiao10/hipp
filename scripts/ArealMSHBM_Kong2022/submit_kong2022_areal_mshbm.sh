@@ -83,14 +83,14 @@ case "${dataset}" in
   iowa_hcp500)
     dataset_label="Iowa HCP500"
     default_data_root="/old_Users/yojiao/HCPpipeline500/work/qunex_iowa7t_hcppipeline500/sessions"
-    default_out_root="${repo_root}/outputs_iowa_hcp500/inputs/iowa_hcp500/kong2022/cortex_references/routea_areal_mshbm"
+    default_out_root="${repo_root}/outputs_iowa_hcp500/inputs/kong2022/cortex_references/routea_areal_mshbm"
     job_prefix="ia500_k22"
     manifest_prefix="iowa_hcp500"
     ;;
   pdc|banda)
     dataset_label="${dataset^^}"
     default_data_root="/Shared/jianglab/3_Data_Working/Depression/${dataset_label}/imaging"
-    default_out_root="${repo_root}/outputs_${dataset}/inputs/${dataset}/kong2022/cortex_references/routea_areal_mshbm"
+    default_out_root="${repo_root}/outputs_${dataset}/inputs/kong2022/cortex_references/routea_areal_mshbm"
     job_prefix="${dataset}_k22"
     manifest_prefix="${dataset}"
     ;;
@@ -368,7 +368,7 @@ if [ "${dataset}" = "pdc" ] || [ "${dataset}" = "banda" ]; then
     echo "ERROR: PDC/BANDA requires KEEP_TMP=1 OVERWRITE=0; existing outputs must remain protected." >&2
     exit 2
   fi
-  cohort_manifest="${COHORT_MANIFEST:-${repo_root}/outputs_${dataset}/inputs/${dataset}/kong2022/manifests/${dataset}_cortex_inputs.json}"
+  cohort_manifest="${COHORT_MANIFEST:-${repo_root}/outputs_${dataset}/inputs/kong2022/manifests/${dataset}_cortex_inputs.json}"
   cohort_text="$("${python_exe}" "${script_dir}/prepare_kong2022_areal_mshbm_subject_inputs.py" \
     --action list-cohort --dataset "${dataset}" --data-root "${data_root}" \
     --cohort-manifest "${cohort_manifest}")"

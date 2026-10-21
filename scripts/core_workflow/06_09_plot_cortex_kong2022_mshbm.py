@@ -26,7 +26,7 @@ from lib.traceability import StageSpec, run_stage
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_SCENE = REPO_ROOT / "config" / "manual_wb_scenes" / "cortex_manual.scene"
-DEFAULT_ROUTE_A_ROOT = REPO_ROOT / "outputs_hcp" / "inputs" / "hcp" / "kong2022" / "cortex_references" / "routea_areal_mshbm"
+DEFAULT_ROUTE_A_ROOT = REPO_ROOT / "outputs_hcp" / "inputs" / "kong2022" / "cortex_references" / "routea_areal_mshbm"
 DEFAULT_DATA_ROOT = REPO_ROOT / "data" / "hippunfold_input"
 DEFAULT_LEFT_SURFACE_TEMPLATE = "{data_root}/{sub_subject}/anat/{sub_subject}_hemi-L_space-fsLR_den-32k_desc-MSMAll_inflated.surf.gii"
 DEFAULT_RIGHT_SURFACE_TEMPLATE = "{data_root}/{sub_subject}/anat/{sub_subject}_hemi-R_space-fsLR_den-32k_desc-MSMAll_inflated.surf.gii"

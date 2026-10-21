@@ -66,7 +66,6 @@ DEFAULT_SULC_ASSETS_DIR = (
     REPO_ROOT
     / "outputs_hcp"
     / "inputs"
-    / "hcp"
     / "kong2022"
     / "cortex_references"
     / "routea_areal_mshbm"

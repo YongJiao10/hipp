@@ -46,7 +46,7 @@ surface-area fraction 仅保留为归一化上下文，不作为第四个 direct
 覆盖六个 contrast、两种 method、2/4 mm、L/R、三类 metric 和三个 system，共
 432 个 endpoint units。结果表保留 method 列。
 
-其中 `TIS PTSD` 是现有 47 人 TIS QC roster 与 `data/CC_RC_Master_Database_10.23.18_Data.csv` 中 `Current_PTSD_Diagnosis == 1` 的交集，按 `CC_Post_Intake_ID` 连接得到 35 人。清单为 `outputs_stanford/inputs/stanford/kong2022/manifests/stanford_tis_ptsd_4xxx_current_ptsd_qc_pass_t1only_35.txt`，稳定报告中的 `tis_ptsd_provenance.json` 记录连接规则和输入哈希。该组仅用于 nested direct workflow，不改变正式 NTHC/TEHC/NTS/TIS 四组 factorial 设计。
+其中 `TIS PTSD` 是现有 47 人 TIS QC roster 与 `data/CC_RC_Master_Database_10.23.18_Data.csv` 中 `Current_PTSD_Diagnosis == 1` 的交集，按 `CC_Post_Intake_ID` 连接得到 35 人。清单为 `outputs_stanford/inputs/kong2022/manifests/stanford_tis_ptsd_4xxx_current_ptsd_qc_pass_t1only_35.txt`，稳定报告中的 `tis_ptsd_provenance.json` 记录连接规则和输入哈希。该组仅用于 nested direct workflow，不改变正式 NTHC/TEHC/NTS/TIS 四组 factorial 设计。
 
 稳定目标位于 `kember_metrics/work/features/`、
 `kember_metrics/results/direct_contrasts/`、

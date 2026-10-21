@@ -1313,40 +1313,40 @@ def _ctxreg_comparison_paths(
         dataset_root = REPO_ROOT / "outputs_hcp"
         group_root = dataset_root / "work/group_atlas/routea_ctxreg"
         present_dir = dataset_root / "present/overviews/routea_ctxreg"
-        signal_root = dataset_root / "inputs/hcp/kong2022/shared_inputs/routea_ctxreg"
+        signal_root = dataset_root / "inputs/kong2022/shared_inputs/routea_ctxreg"
         standard_surface_root = (
-            dataset_root / "inputs/hcp/kong2022/shared_inputs/surface"
+            dataset_root / "inputs/kong2022/shared_inputs/surface"
         )
         if method == "kong2022_7net":
-            reference_root = dataset_root / "inputs/hcp/kong2022/shared_inputs/routea"
+            reference_root = dataset_root / "inputs/kong2022/shared_inputs/routea"
         else:
             reference_root = (
                 dataset_root
-                / "inputs/hcp/lynch2024_fast_pfm_t1only/shared_inputs/pfm_hcp151"
+                / "inputs/lynch2024_fast_pfm_t1only/shared_inputs/pfm_hcp151"
             )
-        hippunfold_root = dataset_root / "inputs/hcp/hippunfold/dense_corobl_batch"
+        hippunfold_root = dataset_root / "inputs/hippunfold/dense_corobl_batch"
     elif cohort_id in _CTXREG_IOWA_STEMS:
         dataset_root = REPO_ROOT / "outputs_iowa_jj_tms"
         stem = _CTXREG_IOWA_STEMS[cohort_id]
         group_root = dataset_root / "work/group_atlas/routea_ctxreg" / stem
         present_dir = dataset_root / "present/overviews/routea_ctxreg" / stem
         signal_root = (
-            dataset_root / "inputs/iowa_jj_tms/kong2022/shared_inputs/routea_ctxreg"
+            dataset_root / "inputs/kong2022/shared_inputs/routea_ctxreg"
         )
         standard_surface_root = (
-            dataset_root / "inputs/iowa_jj_tms/kong2022/shared_inputs/surface"
+            dataset_root / "inputs/kong2022/shared_inputs/surface"
         )
         if method == "kong2022_7net":
             reference_root = (
-                dataset_root / "inputs/iowa_jj_tms/kong2022/shared_inputs/routea"
+                dataset_root / "inputs/kong2022/shared_inputs/routea"
             )
         else:
             reference_root = (
                 dataset_root
-                / "inputs/iowa_jj_tms/lynch2024_fast_pfm_t1only/shared_inputs/pfm_nsi043_78"
+                / "inputs/lynch2024_fast_pfm_t1only/shared_inputs/pfm_nsi043_78"
             )
         hippunfold_root = (
-            dataset_root / "inputs/iowa_jj_tms/hippunfold/dense_corobl_batch"
+            dataset_root / "inputs/hippunfold/dense_corobl_batch"
         )
     else:
         raise ValueError(f"Unknown HCP/JJ_TMS comparison cohort id: {cohort_id!r}")

@@ -36,8 +36,8 @@ DEFAULT_OUT_ROOTS = {
     "jj_tms": REPO_ROOT / "outputs_iowa_jj_tms/work/sptms_hipp_cluster_surface_beta_native",
 }
 SURFACE_ROOTS = {
-    "stanford": REPO_ROOT / "outputs_stanford/inputs/stanford/hippunfold/dense_corobl_batch",
-    "jj_tms": REPO_ROOT / "outputs_iowa_jj_tms/inputs/iowa_jj_tms/hippunfold/dense_corobl_batch",
+    "stanford": REPO_ROOT / "outputs_stanford/inputs/hippunfold/dense_corobl_batch",
+    "jj_tms": REPO_ROOT / "outputs_iowa_jj_tms/inputs/hippunfold/dense_corobl_batch",
 }
 SURFACE_SPACES = {"stanford": "T1w", "jj_tms": "T1w"}
 MATCH_ROOTS = {

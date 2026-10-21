@@ -22,7 +22,6 @@ TIS_MANIFEST = (
     REPO_ROOT
     / "outputs_stanford"
     / "inputs"
-    / "stanford"
     / "kong2022"
     / "manifests"
     / "stanford_tis_4xxx_qc_pass_t1only_47.txt"

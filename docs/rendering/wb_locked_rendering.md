@@ -6,7 +6,7 @@ For active core-workflow RouteA gradient presentation, use:
 
 - `scripts/core_workflow/06_04_render_hippomaps_gradient_products.py`
 - scene template: `config/wb_locked_native_view_lateral_medial.scene`
-- active input root: `outputs_hcp/inputs/hcp/kong2022/hipp_group_merged_canonical_atlas_routea_full`
+- active input root: `outputs_hcp/inputs/kong2022/hipp_group_merged_canonical_atlas_routea_full`
 
 ## Gradient Assignment Contract
 
@@ -32,7 +32,7 @@ For the maintained multi-dataset canonical7 grid, the unqualified `gradient`
 group-atlas result resolves to
 `outputs_hcp/work/group_atlas/kong2022_7net_full_k3_fisherz/gradient-spectral/kong2022/`.
 The former `routea_full_k3_fisherz/gradient-spectral/kong2022/` canonical8
-subtree is archived under `outputs_hcp/work/archive/8net_20260909/`; it is not an
+subtree is archived under `wrong/outputs_hcp/work/archive/8net_20260909/`; it is not an
 active default. Retired weighted-fisherz/relu-cosine products are archival
 provenance, not active defaults.
 

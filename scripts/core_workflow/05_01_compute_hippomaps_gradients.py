@@ -10,13 +10,13 @@ Main Flow Path:
 Inputs:
 - Command-line arguments:
   - --routes: Workflow branches to process (choices include routea, routea_ctxreg, routea_ctxdrop, routeb, lynch2024_20net, lynch2024_7net; default: routea and routeb).
-  - --shared-inputs-root: Directory containing route-specific shared reference inputs (default: `outputs_hcp/inputs/hcp/kong2022/shared_inputs`).
-  - --surface-root: Path to BOLD surfaces root directory (default: `outputs_hcp/inputs/hcp/kong2022/shared_inputs/surface`).
-  - --subjects-manifest: Path to QC-passed subject list manifest (default: `outputs_hcp/inputs/hcp/kong2022/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt`).
+  - --shared-inputs-root: Directory containing route-specific shared reference inputs (default: `outputs_hcp/inputs/kong2022/shared_inputs`).
+  - --surface-root: Path to BOLD surfaces root directory (default: `outputs_hcp/inputs/kong2022/shared_inputs/surface`).
+  - --subjects-manifest: Path to QC-passed subject list manifest (default: `outputs_hcp/inputs/kong2022/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt`).
   - --smoothings: Smoothing levels to process: "2mm", "4mm".
   - --hemis: Hemispheres to process: "L", "R".
   - --coverage-threshold: Minimum coverage fraction to include vertices (default: 0.80).
-  - --group-average-surfaces-dir: Path to template midthickness surfaces (default: `outputs_hcp/inputs/hcp/kong2022/shared_inputs/template`).
+  - --group-average-surfaces-dir: Path to template midthickness surfaces (default: `outputs_hcp/inputs/kong2022/shared_inputs/template`).
   - --out-root: Directory where computed gradients will be saved (default: `outputs_hcp/work/hippomaps_gradients`).
   - --hippomaps-root: Root path to external HippoMaps codebase (default: `external/hippomaps`).
   - --n-components: Number of gradient components to fit in BrainSpace (default: 5).

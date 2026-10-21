@@ -17,8 +17,8 @@
 | 数据集 | 上游 CIFTI/volume 证据 | 代表性 CIFTI 结构/数量 | 实际消费的海马 surface | 上游是否已有 hippocampus-specific surface fMRI？ |
 |---|---|---|---|---|
 | HCP7T | `data/hippunfold_input/sub-100610/func/sub-100610_task-rest_run-concat.dtseries.nii`；另有完整 BOLD volume contract | shape `3600 × 91282`；CORTEX L/R = `29696/29716` 个 surface grayordinates，完整 fsLR 顶点各 `32492`；HIPPOCAMPUS L/R = `764/795` 个 subcortical grayordinates，无海马 surface vertex 数 | HippUnfold `space-corobl`, `den-512`, L/R 各 `512`；现存 QC raw summary 的代表 subject 为 `sub-102816` | **否**。CIFTI 有海马 subcortical grayordinates；实际海马 fMRI metric 由完整 volume 通过 Workbench 映射生成 |
-| Stanford | 上游 rest CIFTI：`.../DataOrg_PFM_36P/sub-2012/func/sub-2012_task-rest_space-fsLR_den-91k_desc-denoised_bold.dtseries.nii`；另有被采样流程消费的 MNI 2 mm denoised BOLD volume | shape `234 × 91282`；结构计数与上表相同（HIPPOCAMPUS L/R `764/795` 是 subcortical grayordinates） | `outputs_stanford/inputs/stanford/hippunfold/dense_corobl_batch/sub-2012/..._space-corobl_den-512_label-hipp_midthickness.surf.gii`，L/R 各 `512`；raw metric 的 summary 也记录 L/R 各 `512` | **否**。rest CIFTI 是 fsLR 皮层/皮层下 grayordinate 输入；现存海马 metric 由 volume→HippUnfold surface 生成 |
-| JJTMS（旧 36P canonical） | run-level CIFTI `xcpd_surf/sub-1001/func/...run-01...space-fsLR_den-91k...dtseries.nii`，concat CIFTI 及匹配 MNI 2 mm denoised BOLD volumes 均被 subject manifest 记录 | run-01 shape `230 × 91282`；concat `686 × 91282`；CORTEX L/R = `29696/29716` surface grayordinates，完整 fsLR 顶点各 `32492`；HIPPOCAMPUS L/R `764/795` 为 subcortical grayordinates | `outputs_iowa_jj_tms/inputs/iowa_jj_tms/hippunfold/dense_corobl_batch/sub-1001/..._space-corobl_den-512_label-hipp_midthickness.surf.gii`，L/R 各 `512`；run-level sampled GIFTI 由 Workbench 产生 | **否**。海马 fMRI 由匹配 volume 映射到 HippUnfold surface |
+| Stanford | 上游 rest CIFTI：`.../DataOrg_PFM_36P/sub-2012/func/sub-2012_task-rest_space-fsLR_den-91k_desc-denoised_bold.dtseries.nii`；另有被采样流程消费的 MNI 2 mm denoised BOLD volume | shape `234 × 91282`；结构计数与上表相同（HIPPOCAMPUS L/R `764/795` 是 subcortical grayordinates） | `outputs_stanford/inputs/hippunfold/dense_corobl_batch/sub-2012/..._space-corobl_den-512_label-hipp_midthickness.surf.gii`，L/R 各 `512`；raw metric 的 summary 也记录 L/R 各 `512` | **否**。rest CIFTI 是 fsLR 皮层/皮层下 grayordinate 输入；现存海马 metric 由 volume→HippUnfold surface 生成 |
+| JJTMS（旧 36P canonical） | run-level CIFTI `xcpd_surf/sub-1001/func/...run-01...space-fsLR_den-91k...dtseries.nii`，concat CIFTI 及匹配 MNI 2 mm denoised BOLD volumes 均被 subject manifest 记录 | run-01 shape `230 × 91282`；concat `686 × 91282`；CORTEX L/R = `29696/29716` surface grayordinates，完整 fsLR 顶点各 `32492`；HIPPOCAMPUS L/R `764/795` 为 subcortical grayordinates | `outputs_iowa_jj_tms/inputs/hippunfold/dense_corobl_batch/sub-1001/..._space-corobl_den-512_label-hipp_midthickness.surf.gii`，L/R 各 `512`；run-level sampled GIFTI 由 Workbench 产生 | **否**。海马 fMRI 由匹配 volume 映射到 HippUnfold surface |
 | JJTMS（22P 专用） | run-level CIFTI 在 `xcpd_surf_22P/sub-1001/func/`；`run_bold_glob=null`，没有被允许用于海马采样的完整 22P denoised volume | run-01 shape `230 × 91282`；三 run concat 后 `686` timepoints；CIFTI 仍有 HIPPOCAMPUS L/R `764/795` 体素结构 | HippUnfold 结构表面本身存在（L/R 各 `512`），但 `shared_inputs_22p/routea/sub-1001` 现存输出只有 cortex reference，无 hippocampal raw metric | **不能确认有有效的 22P hippocampus-specific surface fMRI**；README 明确禁止从 CIFTI subcortical grayordinates 重建稀疏 volume |
 
 ## CIFTI header 直接检查
@@ -45,7 +45,7 @@
 
 ### 上游路径与 CIFTI 使用
 
-- `scripts/core_workflow/README.md:28` 把 HCP HippUnfold structural 输入根定义为 `data/hippunfold_input`，输出为 `outputs_hcp/inputs/hcp/hippunfold/dense_corobl_batch/`；`:32-35` 固定 `density=512`、`space=corobl`。
+- `scripts/core_workflow/README.md:28` 把 HCP HippUnfold structural 输入根定义为 `data/hippunfold_input`，输出为 `outputs_hcp/inputs/hippunfold/dense_corobl_batch/`；`:32-35` 固定 `density=512`、`space=corobl`。
 - `scripts/core_workflow/02_01_prepare_group_inputs.py:18` 定义 HCP 默认完整 BOLD volume root 为 `/home/yojiao/LSS/jianglab/3_Data_Working/HCP_7T_Hippocampus/rsfmri_volume`；`:25-28` 明确 physical input 可以是完整 denoised run-level volume，dtseries 只定义 run roster/timepoint pairing。
 - `scripts/core_workflow/03_02_build_kong2022_routea_reference.py:23-33` 将 CIFTI 定义为 cortical network reference 的输入；`:216-220` 通过 `extract_structure_data` 只提取 `CORTEX_LEFT`/`CORTEX_RIGHT`。
 - `scripts/core_workflow/lib/extract_cortex_merged_network_timeseries.py:8-18` 要求被提取结构暴露 `vertex`，因此该提取器的目标是表面皮层结构；它没有把 `HIPPOCAMPUS_*` 转成 HippUnfold 海马表面。
@@ -59,7 +59,7 @@
 
 ### 现存输出元数据
 
-`outputs_hcp/inputs/hcp/qc/vertex_qc_t1only/shared_inputs_166/sub-102816/surface/raw/surface_sampling_summary.json:1-20` 记录：
+`outputs_hcp/inputs/qc/vertex_qc_t1only/shared_inputs_166/sub-102816/surface/raw/surface_sampling_summary.json:1-20` 记录：
 
 - L/R consumed geometry 是 `...sub-102816..._space-corobl_den-512_label-hipp_midthickness.surf.gii`（`:4`, `:14`）；
 - L/R raw metric 是 `...sub-102816..._space-corobl_den-512_label-hipp_bold.func.gii`（`:5`, `:15`）；
@@ -71,21 +71,21 @@
 
 ### 上游 CIFTI 与 volume
 
-- `scripts/core_workflow/README.md:29` 给出 Stanford structural input root 与 `outputs_stanford/inputs/stanford/hippunfold/dense_corobl_batch/`；上游 functional CIFTI 和 volume 的实际绝对路径由下方 output manifests 记录。
-- `outputs_stanford/inputs/stanford/kong2022/shared_inputs/surface/sub-2012/surface/raw/stage_manifest.json:2-12` 的 command 是 `lib.surface_sampling.sample_hipp_surface_timeseries`，实际输入是 `.../sub-2012/func/sub-2012_task-rest_space-MNI152NLin6Asym_res-2_desc-denoised_bold.nii.gz`。
-- `outputs_stanford/inputs/stanford/kong2022/shared_inputs/routea/sub-2012/reference/kong2022/reference_summary.json:6` 记录被 reference stage 消费的 fsLR 91k CIFTI；`:46` 记录其 `234` timepoints，`:54-66` 记录左右 cortex grayordinates。
+- `scripts/core_workflow/README.md:29` 给出 Stanford structural input root 与 `outputs_stanford/inputs/hippunfold/dense_corobl_batch/`；上游 functional CIFTI 和 volume 的实际绝对路径由下方 output manifests 记录。
+- `outputs_stanford/inputs/kong2022/shared_inputs/surface/sub-2012/surface/raw/stage_manifest.json:2-12` 的 command 是 `lib.surface_sampling.sample_hipp_surface_timeseries`，实际输入是 `.../sub-2012/func/sub-2012_task-rest_space-MNI152NLin6Asym_res-2_desc-denoised_bold.nii.gz`。
+- `outputs_stanford/inputs/kong2022/shared_inputs/routea/sub-2012/reference/kong2022/reference_summary.json:6` 记录被 reference stage 消费的 fsLR 91k CIFTI；`:46` 记录其 `234` timepoints，`:54-66` 记录左右 cortex grayordinates。
 
 ### 现存 consumed surface 与生成 metric
 
-`outputs_stanford/inputs/stanford/kong2022/shared_inputs/surface/sub-2012/surface/raw/surface_sampling_summary.json:1-20` 记录：
+`outputs_stanford/inputs/kong2022/shared_inputs/surface/sub-2012/surface/raw/surface_sampling_summary.json:1-20` 记录：
 
-- L/R consumed HippUnfold midthickness 分别在 `outputs_stanford/inputs/stanford/hippunfold/dense_corobl_batch/sub-2012/..._hemi-L/R_space-corobl_den-512_label-hipp_midthickness.surf.gii`（`:4`, `:14`）；
+- L/R consumed HippUnfold midthickness 分别在 `outputs_stanford/inputs/hippunfold/dense_corobl_batch/sub-2012/..._hemi-L/R_space-corobl_den-512_label-hipp_midthickness.surf.gii`（`:4`, `:14`）；
 - 生成的 raw GIFTI 为 `..._hemi-L/R_space-corobl_den-512_label-hipp_bold.func.gii`（`:5`, `:15`）；
 - L/R 均为 `n_vertices=512`、`n_timepoints=234`、`mapping_method=trilinear`（`:6-10`, `:16-20`）。
 
 因此 Stanford 的 rest CIFTI 虽然包含 `HIPPOCAMPUS_LEFT/RIGHT` grayordinates，但当前海马 surface fMRI 不是从这些 grayordinates 直接读出，而是从完整 MNI BOLD volume 生成。
 
-`outputs_stanford/inputs/stanford/kong2022/prepare_t1only_group_inputs_manifest.json:6-13` 记录 Stanford 的 HippUnfold/shared roots 和 194/194/194 的完成计数；其中 `shared_inputs/surface_151` 与实际 enumerated `shared_inputs/surface` 存在路径迁移/别名差异，不能据此把 CIFTI 误认为海马 surface。
+`outputs_stanford/inputs/kong2022/prepare_t1only_group_inputs_manifest.json:6-13` 记录 Stanford 的 HippUnfold/shared roots 和 194/194/194 的完成计数；其中 `shared_inputs/surface_151` 与实际 enumerated `shared_inputs/surface` 存在路径迁移/别名差异，不能据此把 CIFTI 误认为海马 surface。
 
 ## JJTMS 证据
 
@@ -97,7 +97,7 @@
 - 对 22P 专用分支，原 2026-08-30 记录中完整 denoised 22P volume 尚未到位；**[2026-09-12 状态更新]**：完整的 22P 去噪 BOLD volume 已生成并挂载于 `/home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_JJ_TMS/xcpd_vol_22P/restfmri`，覆盖全部 94 位受试者及其匹配 run。
 - 依据仓库规则，严禁把 generic `xcpd/restfmri` 36P derivative、raw fMRIPrep volume 或 CIFTI subcortical grayordinates 作为 22P 海马 volume 替代；若进行 22P 海马采样，必须使用上述合法的 `xcpd_vol_22P/restfmri`。
 - 因而 22P 的 `surface_functional_source="cifti-subcortex"` 只是现存 manifest 的标签，不足以证明已生成 hippocampus-specific surface fMRI；它必须服从 README 的 fail-closed 约束。
-- 22P reference manifest `outputs_iowa_jj_tms/inputs/iowa_jj_tms/kong2022/shared_inputs_22p/routea/sub-1001/reference/kong2022/reference_summary.json:7-27` 的实际输入只有三个 run-level CIFTI；该 subject 目录枚举到的输出只有 cortex reference/common 文件，没有 surface/raw metric。
+- 22P reference manifest `outputs_iowa_jj_tms/inputs/kong2022/shared_inputs_22p/routea/sub-1001/reference/kong2022/reference_summary.json:7-27` 的实际输入只有三个 run-level CIFTI；该 subject 目录枚举到的输出只有 cortex reference/common 文件，没有 surface/raw metric。
 - 22P 两份 prepare manifest 的 run_bold_glob=null、CIFTI root 和不同 QC 计数（kong2022 lines 1-18；kong2022_22p lines 1-20）应视为输出元数据差异，不能推翻“缺少合法完整 22P volume”的代码/README 约束。
 
 ### JJTMS 36P canonical manifest 的实际路径与数字

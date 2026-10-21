@@ -85,7 +85,7 @@ def dataset_registration(dataset: str, subject: str, *, root: Path | None = None
         if dataset == 'banda':
             directory = subject + '_MR'
         else:
-            mapping = REPO_ROOT/'outputs_pdc/inputs/pdc/manifests/session_mapping.tsv'
+            mapping = REPO_ROOT/'outputs_pdc/inputs/manifests/session_mapping.tsv'
             with mapping.open() as stream:
                 rows = [row for row in csv.DictReader(stream, delimiter='\t')
                         if row['bids_subject_id'] == subject]

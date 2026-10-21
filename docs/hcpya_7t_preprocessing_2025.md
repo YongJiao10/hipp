@@ -77,7 +77,7 @@ The current hippocampal GIFTI provenance for subject 878877 shows that the
 HCP variance-normalization map. It is therefore a misleading filename if read
 as “raw/unprocessed volume”; it is not the unprocessed acquisition:
 
-- `outputs_hcp/inputs/hcp/qc/vertex_qc_t1only/shared_inputs_166/sub-878877/surface/raw/sub-878877_hemi-L_space-corobl_den-512_label-hipp_bold.func.gii`
+- `outputs_hcp/inputs/qc/vertex_qc_t1only/shared_inputs_166/sub-878877/surface/raw/sub-878877_hemi-L_space-corobl_den-512_label-hipp_bold.func.gii`
 
 ## Analysis implication
 

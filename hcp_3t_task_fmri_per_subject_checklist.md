@@ -7,8 +7,8 @@ HCP 7T resting-state reference cohort; 151 is not the task denominator.
 
 Resolve every run from its exact subject declaration:
 
-- `outputs_hcp/inputs/hcp/kong2022/manifests/task-emotion/sub-<id>.json`
-- `outputs_hcp/inputs/hcp/kong2022/manifests/task-wm/sub-<id>.json`
+- `outputs_hcp/inputs/kong2022/manifests/task-emotion/sub-<id>.json`
+- `outputs_hcp/inputs/kong2022/manifests/task-wm/sub-<id>.json`
 
 Do not select another variant by filename order or existence. Current task
 rosters live in each task's `shared_inputs/task-<task>/manifests/` directory

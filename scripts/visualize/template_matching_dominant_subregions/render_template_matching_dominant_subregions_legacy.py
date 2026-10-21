@@ -66,7 +66,6 @@ DEFAULT_SPEC = (
     REPO_ROOT
     / "outputs_iowa_jj_tms"
     / "inputs"
-    / "iowa_jj_tms"
     / "hippunfold"
     / "dense_corobl_batch"
     / "sub-1001"
@@ -79,7 +78,6 @@ DEFAULT_SURF_L = (
     REPO_ROOT
     / "outputs_iowa_jj_tms"
     / "inputs"
-    / "iowa_jj_tms"
     / "kong2022"
     / "templates"
     / "hipp_group_average_t1only_151"
@@ -90,7 +88,6 @@ DEFAULT_SURF_R = (
     REPO_ROOT
     / "outputs_iowa_jj_tms"
     / "inputs"
-    / "iowa_jj_tms"
     / "kong2022"
     / "templates"
     / "hipp_group_average_t1only_151"

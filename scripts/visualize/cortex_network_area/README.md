@@ -6,7 +6,7 @@ Use the repository's explicit Python environment. Surface preparation requires
 persistent dataset inputs:
 
 ```bash
-/home/yojiao/.conda/envs/py314/bin/python -m scripts.visualize.cortex_network_area.prepare_iowa_surfaces --repo-root . --work-dir outputs_iowa_jj_tms/inputs/iowa_jj_tms/cortex_surfaces/fsLR32k --manifest outputs_iowa_jj_tms/inputs/iowa_jj_tms/cortex_surfaces/fsLR32k/surface_manifest.json
+/home/yojiao/.conda/envs/py314/bin/python -m scripts.visualize.cortex_network_area.prepare_iowa_surfaces --repo-root . --work-dir outputs_iowa_jj_tms/inputs/cortex_surfaces/fsLR32k --manifest outputs_iowa_jj_tms/inputs/cortex_surfaces/fsLR32k/surface_manifest.json
 ```
 
 Consumers must explicitly pass that persistent manifest via
@@ -15,8 +15,8 @@ targets; consumers reject `/tmp` entries and validate exact roster and hashes.
 This code integration does not authorize rebuilding existing surface products.
 
 ```bash
-/home/yojiao/.conda/envs/py314/bin/python scripts/visualize/cortex_network_area/run_area_analysis.py --variant all --check-readiness --iowa-surface-manifest outputs_iowa_jj_tms/inputs/iowa_jj_tms/cortex_surfaces/fsLR32k/surface_manifest.json
-/home/yojiao/.conda/envs/py314/bin/python scripts/visualize/cortex_network_area/run_area_analysis.py --variant 22p --iowa-surface-manifest outputs_iowa_jj_tms/inputs/iowa_jj_tms/cortex_surfaces/fsLR32k/surface_manifest.json
+/home/yojiao/.conda/envs/py314/bin/python scripts/visualize/cortex_network_area/run_area_analysis.py --variant all --check-readiness --iowa-surface-manifest outputs_iowa_jj_tms/inputs/cortex_surfaces/fsLR32k/surface_manifest.json
+/home/yojiao/.conda/envs/py314/bin/python scripts/visualize/cortex_network_area/run_area_analysis.py --variant 22p --iowa-surface-manifest outputs_iowa_jj_tms/inputs/cortex_surfaces/fsLR32k/surface_manifest.json
 /home/yojiao/.conda/envs/py314/bin/python scripts/visualize/cortex_network_area/plot_area_figures.py --stats scripts/visualize/cortex_network_area/stats/network_area_statistics.csv
 ```
 
@@ -43,11 +43,11 @@ Each patient plate has Iowa HC/HCP HC control rows and Patient/Pure MDD/Comorbid
 
 The first run incorrectly treated absent fsLR derivatives as unavailable subjects: Iowa HC 52/67, Patient 24/26, Comorbid MDD 17/19. Native midthickness anatomy and fsLR registration exist for all 17 omitted individuals (HC sub-1028 and sub-1055–1068; patients sub-3012 and sub-3028). This was an input-preparation omission, not a cohort exclusion.
 
-The explicit `iowa_fsLR_complete_roster_v1` profile retains the existing verified derivatives for the other subjects and generates those 17 derivatives using Workbench BARYCENTRIC resampling from each individual's native midthickness via `space-fsLR_desc-reg_sphere.surf.gii` onto the repository FASTANS standard 32k fsLR sphere. It never selects files by existence order. The older `outputs_iowa_jj_tms/inputs/iowa_jj_tms/surfaces_32k` cache is not used: its inspected provenance names `desc-reg_sphere` rather than the required fsLR-registered sphere.
+The explicit `iowa_fsLR_complete_roster_v1` profile retains the existing verified derivatives for the other subjects and generates those 17 derivatives using Workbench BARYCENTRIC resampling from each individual's native midthickness via `space-fsLR_desc-reg_sphere.surf.gii` onto the repository FASTANS standard 32k fsLR sphere. It never selects files by existence order. The older `outputs_iowa_jj_tms/inputs/surfaces_32k` cache is not used: its inspected provenance names `desc-reg_sphere` rather than the required fsLR-registered sphere.
 
 ```bash
-/home/yojiao/.conda/envs/py314/bin/python -m scripts.visualize.cortex_network_area.prepare_iowa_surfaces --repo-root . --work-dir outputs_iowa_jj_tms/inputs/iowa_jj_tms/cortex_surfaces/fsLR32k --manifest outputs_iowa_jj_tms/inputs/iowa_jj_tms/cortex_surfaces/fsLR32k/surface_manifest.json
-/home/yojiao/.conda/envs/py314/bin/python scripts/visualize/cortex_network_area/run_area_analysis.py --variant all --iowa-surface-manifest outputs_iowa_jj_tms/inputs/iowa_jj_tms/cortex_surfaces/fsLR32k/surface_manifest.json
+/home/yojiao/.conda/envs/py314/bin/python -m scripts.visualize.cortex_network_area.prepare_iowa_surfaces --repo-root . --work-dir outputs_iowa_jj_tms/inputs/cortex_surfaces/fsLR32k --manifest outputs_iowa_jj_tms/inputs/cortex_surfaces/fsLR32k/surface_manifest.json
+/home/yojiao/.conda/envs/py314/bin/python scripts/visualize/cortex_network_area/run_area_analysis.py --variant all --iowa-surface-manifest outputs_iowa_jj_tms/inputs/cortex_surfaces/fsLR32k/surface_manifest.json
 /home/yojiao/.conda/envs/py314/bin/python scripts/visualize/cortex_network_area/plot_area_figures.py --stats scripts/visualize/cortex_network_area/stats/network_area_statistics.csv
 ```
 

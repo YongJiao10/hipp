@@ -568,7 +568,7 @@ def calculate_area_metrics(
 
 def _formal_manifest_paths(root: Path) -> dict[str, Path]:
     return {
-        "HCP HC": root / "outputs_hcp" / "inputs" / "hcp" / "kong2022" / "manifests" / "hcp_7t_hippocampus_fmri_qc_pass_t1only_151.txt",
+        "HCP HC": root / "outputs_hcp" / "inputs" / "kong2022" / "manifests" / "hcp_7t_hippocampus_fmri_qc_pass_t1only_151.txt",
         "Iowa HC": root / "manifests" / "jj_tms_hc_67_subjects.txt",
         "Patient": root / "manifests" / "jj_tms_patient_26_subjects.txt",
         "Pure MDD": root / "manifests" / "jj_tms_pure_mdd_7_subjects.txt",
@@ -603,7 +603,7 @@ def default_input_layout(repo_root: Path) -> InputLayout:
     hcp_surface = str(root / "data" / "hippunfold_input" / "{sub_subject}" / "anat" / "{sub_subject}_hemi-{hemi}_space-fsLR_den-32k_desc-MSMAll_midthickness.surf.gii")
     hcp_manifest = str(root / "outputs_hcp" / "work" / "cortex_pfm" / "{sub_subject}" / "lynch2024" / "fastans_pfm_manifest.json")
     hcp_labels = {
-        "kong2022": str(root / "outputs_hcp" / "inputs" / "hcp" / "kong2022" / "cortex_references" / "routea_areal_mshbm" / "{sub_subject}" / "{hemi_lower}_labels.txt"),
+        "kong2022": str(root / "outputs_hcp" / "inputs" / "kong2022" / "cortex_references" / "routea_areal_mshbm" / "{sub_subject}" / "{hemi_lower}_labels.txt"),
         "lynch2024": str(root / "outputs_hcp" / "work" / "cortex_pfm" / "{sub_subject}" / "lynch2024" / "PFM_Lynch2024priors.dlabel.nii"),
     }
     iowa_surface = {

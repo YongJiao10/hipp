@@ -1967,41 +1967,41 @@ def resolve_cohort_inputs_roots(
     ds_key = cohort_spec["dataset_key"]
     if ds_key == "hcp":
         surface_root = (
-            REPO_ROOT / "outputs_hcp/inputs/hcp/kong2022/shared_inputs/surface"
+            REPO_ROOT / "outputs_hcp/inputs/kong2022/shared_inputs/surface"
         )
         reference_root = (
-            REPO_ROOT / "outputs_hcp/inputs/hcp/kong2022/shared_inputs/routea"
+            REPO_ROOT / "outputs_hcp/inputs/kong2022/shared_inputs/routea"
         )
         return surface_root, reference_root, surface_root
     elif ds_key == "iowa_jj_tms":
         var_suffix = "_22p" if variant == "22p" else ""
         surface_root = (
             REPO_ROOT
-            / f"outputs_iowa_jj_tms/inputs/iowa_jj_tms/kong2022/shared_inputs{var_suffix}/surface"
+            / f"outputs_iowa_jj_tms/inputs/kong2022/shared_inputs{var_suffix}/surface"
         )
         reference_root = (
             REPO_ROOT
-            / f"outputs_iowa_jj_tms/inputs/iowa_jj_tms/kong2022/shared_inputs{var_suffix}/routea"
+            / f"outputs_iowa_jj_tms/inputs/kong2022/shared_inputs{var_suffix}/routea"
         )
         return surface_root, reference_root, surface_root
     elif ds_key == "stanford":
         if variant == "22p":
             surface_root = (
                 REPO_ROOT
-                / "outputs_stanford/inputs/stanford/kong2022_22p/shared_inputs/surface"
+                / "outputs_stanford/inputs/kong2022_22p/shared_inputs/surface"
             )
             reference_root = (
                 REPO_ROOT
-                / "outputs_stanford/inputs/stanford/kong2022_22p/shared_inputs/routea"
+                / "outputs_stanford/inputs/kong2022_22p/shared_inputs/routea"
             )
         else:
             surface_root = (
                 REPO_ROOT
-                / "outputs_stanford/inputs/stanford/kong2022/shared_inputs/surface"
+                / "outputs_stanford/inputs/kong2022/shared_inputs/surface"
             )
             reference_root = (
                 REPO_ROOT
-                / "outputs_stanford/inputs/stanford/kong2022/shared_inputs/routea"
+                / "outputs_stanford/inputs/kong2022/shared_inputs/routea"
             )
         return surface_root, reference_root, surface_root
 

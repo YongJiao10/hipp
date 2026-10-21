@@ -90,7 +90,6 @@ DEFAULT_HIPPUNFOLD_ROOT = (
     Path("/home/yojiao/hpchome/hipp")
     / "outputs_iowa_jj_tms"
     / "inputs"
-    / "iowa_jj_tms"
     / "hippunfold"
     / "dense_corobl_batch"
 )

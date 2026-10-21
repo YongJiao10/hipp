@@ -83,7 +83,6 @@ DEFAULT_GROUP_AVG_SURFACES_DIR = (
     REPO_ROOT
     / "outputs_hcp"
     / "inputs"
-    / "hcp"
     / "kong2022"
     / "templates"
     / "hipp_group_average_t1only_151"

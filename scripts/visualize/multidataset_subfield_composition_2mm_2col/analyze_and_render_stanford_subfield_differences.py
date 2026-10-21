@@ -52,7 +52,7 @@ for p in (CORE_DIR, VIS_LIB_DIR):
 
 from multidataset_cohorts import GridSpec, GRID_VARIANTS
 
-HIPPUNFOLD_ROOT = REPO_ROOT / "outputs_stanford/inputs/stanford/hippunfold/dense_corobl_batch"
+HIPPUNFOLD_ROOT = REPO_ROOT / "outputs_stanford/inputs/hippunfold/dense_corobl_batch"
 HCP_GROUP_ROOT = REPO_ROOT / "outputs_hcp/work/group_atlas/kong2022_7net_full_k3_fisherz"
 
 BASE_COHORTS = [
@@ -140,13 +140,13 @@ def get_diff_cohorts(spec: GridSpec | None = None) -> list[dict]:
         cinfo = dict(c)
         if cinfo["id"] == "hcp_7t":
             cinfo["group_root"] = REPO_ROOT / "outputs_hcp/work/group_atlas/kong2022_7net_full_k3_fisherz"
-            cinfo["hippunfold_root"] = REPO_ROOT / "outputs_hcp/inputs/hcp/hippunfold/dense_corobl_batch"
+            cinfo["hippunfold_root"] = REPO_ROOT / "outputs_hcp/inputs/hippunfold/dense_corobl_batch"
             cinfo["n"] = 151
         else:
             stem = cinfo["stem"]
             var_sfx = "_22p" if spec.variant == "22p" else ""
             cinfo["group_root"] = REPO_ROOT / f"outputs_stanford/work/group_atlas/routea_{stem}{var_sfx}_full_k3_fisherz"
-            cinfo["hippunfold_root"] = REPO_ROOT / "outputs_stanford/inputs/stanford/hippunfold/dense_corobl_batch"
+            cinfo["hippunfold_root"] = REPO_ROOT / "outputs_stanford/inputs/hippunfold/dense_corobl_batch"
             default_ns = {
                 "nthc": 50 if spec.variant == "22p" else 51,
                 "tehc": 39 if spec.variant == "22p" else 40,

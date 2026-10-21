@@ -11,8 +11,8 @@ Main Flow Path:
 
 Inputs:
 - Command-line arguments:
-  - --shared-root: Path to shared processed files (default: `outputs_hcp/inputs/hcp/kong2022/shared_inputs/routea`).
-  - --surface-root: Path to BOLD surfaces root directory (default: `outputs_hcp/inputs/hcp/kong2022/shared_inputs/surface`).
+  - --shared-root: Path to shared processed files (default: `outputs_hcp/inputs/kong2022/shared_inputs/routea`).
+  - --surface-root: Path to BOLD surfaces root directory (default: `outputs_hcp/inputs/kong2022/shared_inputs/surface`).
   - --profile-surface-root: Optional root for hippocampal time series used only by cluster-network profile annotation; defaults to `--surface-root`.
   - --profile-source-mode: Profile source contract (`canonical` or the explicit `original-denoised` recovery source).
   - --profile-source-root: Required with `--profile-source-mode original-denoised`; root containing the approved fixed-template subject outputs.

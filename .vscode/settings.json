@@ -1,0 +1,8 @@
+{
+  "git.repositoryScanMaxDepth": 0,
+  "files.watcherExclude": {
+    "**/outputs_*/**": true,
+    "**/wrong/**": true,
+    "**/.cache/**": true
+  }
+}

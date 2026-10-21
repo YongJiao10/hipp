@@ -60,7 +60,6 @@ DEFAULT_TEMPLATE_ROOT = DEFAULT_HCP_OUTPUTS_ROOT / "templates" / TEMPLATE_ID
 DEFAULT_SHARED_FC_ROOT = (
     DEFAULT_IOWA_OUTPUTS_ROOT
     / "inputs"
-    / "iowa_jj_tms"
     / "kong2022"
     / "shared_inputs"
     / "routea_ctxreg"
@@ -68,7 +67,6 @@ DEFAULT_SHARED_FC_ROOT = (
 DEFAULT_SURFACE_INPUT_ROOT = (
     DEFAULT_IOWA_OUTPUTS_ROOT
     / "inputs"
-    / "iowa_jj_tms"
     / "kong2022"
     / "shared_inputs"
     / "surface"
@@ -76,7 +74,6 @@ DEFAULT_SURFACE_INPUT_ROOT = (
 DEFAULT_HIPPUNFOLD_ROOT = (
     DEFAULT_IOWA_OUTPUTS_ROOT
     / "inputs"
-    / "iowa_jj_tms"
     / "hippunfold"
     / "dense_corobl_batch"
 )

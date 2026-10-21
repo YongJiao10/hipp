@@ -51,18 +51,18 @@
         "TIS": 47
       },
       "rosters": {
-        "all_subjects": "outputs_stanford/inputs/stanford/kong2022/manifests/stanford_all_subjects.txt",
-        "healthy": "outputs_stanford/inputs/stanford/kong2022/manifests/stanford_hc_1xxx2xxx_qc_pass_t1only_91.txt",
-        "nontrauma": "outputs_stanford/inputs/stanford/kong2022/manifests/stanford_nontrauma_1xxx3xxx_qc_pass_t1only_107.txt",
-        "symptomatic": "outputs_stanford/inputs/stanford/kong2022/manifests/stanford_symp_3xxx4xxx_qc_pass_t1only_103.txt",
-        "trauma": "outputs_stanford/inputs/stanford/kong2022/manifests/stanford_trauma_2xxx4xxx_qc_pass_t1only_87.txt"
+        "all_subjects": "outputs_stanford/inputs/kong2022/manifests/stanford_all_subjects.txt",
+        "healthy": "outputs_stanford/inputs/kong2022/manifests/stanford_hc_1xxx2xxx_qc_pass_t1only_91.txt",
+        "nontrauma": "outputs_stanford/inputs/kong2022/manifests/stanford_nontrauma_1xxx3xxx_qc_pass_t1only_107.txt",
+        "symptomatic": "outputs_stanford/inputs/kong2022/manifests/stanford_symp_3xxx4xxx_qc_pass_t1only_103.txt",
+        "trauma": "outputs_stanford/inputs/kong2022/manifests/stanford_trauma_2xxx4xxx_qc_pass_t1only_87.txt"
       },
       "input_gate": {
         "status": "ready",
         "basis": "explicit existing Kong2022 rest-FC route-A root and QC manifests"
       },
       "fc_inputs": {
-        "root": "outputs_stanford/inputs/stanford/kong2022/shared_inputs/routea",
+        "root": "outputs_stanford/inputs/kong2022/shared_inputs/routea",
         "fisher_z_pattern": "{subject}/fc/kong2022/{smoothing}mm/hemi_{hemisphere}/hipp_vertex_to_network_fc.npy",
         "provenance_pattern": "{subject}/fc/kong2022/{smoothing}mm/hemi_{hemisphere}/fc_summary.json",
         "fc_estimator": "fisher_z",
@@ -72,12 +72,12 @@
         {
           "method": "hcp151_fixed",
           "availability": "available",
-          "fc_root": "outputs_stanford/inputs/stanford/kong2022/shared_inputs/routea",
+          "fc_root": "outputs_stanford/inputs/kong2022/shared_inputs/routea",
           "fisher_z_pattern": "{subject}/fc/kong2022/{smoothing}mm/hemi_{hemisphere}/hipp_vertex_to_network_fc.npy",
           "provenance_pattern": "{subject}/fc/kong2022/{smoothing}mm/hemi_{hemisphere}/fc_summary.json",
           "provenance_sidecar_patterns": [
             {
-              "root": "outputs_stanford/inputs/stanford/kong2022/shared_inputs/routea",
+              "root": "outputs_stanford/inputs/kong2022/shared_inputs/routea",
               "pattern": "{subject}/reference/kong2022/reference_summary.json"
             },
             {
@@ -135,7 +135,7 @@
               "pattern": "{subject}/subject_manifest.json"
             },
             {
-              "root": "outputs_stanford/inputs/stanford/kong2022/shared_inputs/routea",
+              "root": "outputs_stanford/inputs/kong2022/shared_inputs/routea",
               "pattern": "{subject}/reference/kong2022/reference_summary.json"
             }
           ],

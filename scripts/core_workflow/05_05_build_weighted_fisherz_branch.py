@@ -48,14 +48,14 @@ from lib.weighted_fisherz import (
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_SOURCE_ROOT = DEFAULT_ROUTEA_GROUP_ATLAS_ROOT
 DEFAULT_OUT_ROOT = REPO_ROOT / "outputs_hcp" / "work" / "group_atlas" / "routea_weighted_fisherz_full_k3"
-DEFAULT_ROUTEA_ROOT = REPO_ROOT / "outputs_hcp" / "inputs" / "hcp" / "kong2022" / "shared_inputs" / "routea"
+DEFAULT_ROUTEA_ROOT = REPO_ROOT / "outputs_hcp" / "inputs" / "kong2022" / "shared_inputs" / "routea"
 DEFAULT_REFERENCE_ROOT = DEFAULT_ROUTEA_ROOT if DEFAULT_ROUTEA_ROOT.exists() else DEFAULT_KONG2022_ROUTEA_ROOT
 DEFAULT_ROUTEA_SURFACE_TIMESERIES_ROOT = DEFAULT_KONG2022_SURFACE_ROOT
 DEFAULT_SURFACE_ROOT = DEFAULT_ROUTEA_SURFACE_TIMESERIES_ROOT
 DEFAULT_PRESENT_DIR = DEFAULT_OVERVIEWS_DIR / "weighted_fisherz"
 DEFAULT_STYLE = REPO_ROOT / "config" / "hipp_network_style.json"
 DEFAULT_TEMPLATE_SURFACE_DIR = DEFAULT_KONG2022_TEMPLATE_ROOT / "group_average_surfaces"
-DEFAULT_TEMPLATE_SPEC = REPO_ROOT / "outputs_hcp" / "inputs" / "hcp" / "hippunfold" / "dense_corobl_batch" / "sub-100610" / "hippunfold" / "sub-100610" / "surf" / "sub-100610_den-512_label-hipp_surfaces.spec"
+DEFAULT_TEMPLATE_SPEC = REPO_ROOT / "outputs_hcp" / "inputs" / "hippunfold" / "dense_corobl_batch" / "sub-100610" / "hippunfold" / "sub-100610" / "surf" / "sub-100610_den-512_label-hipp_surfaces.spec"
 METHODS = ("gradient-spectral",)
 SMOOTHINGS = ("2mm", "4mm")
 HEMIS = ("L", "R")

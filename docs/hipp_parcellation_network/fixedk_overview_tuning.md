@@ -24,9 +24,9 @@ Historical filename contract (retained for provenance; not used for new core out
 Canonical source roots:
 
 - RouteA 10perc:
-  - `outputs_hcp/inputs/hcp/kong2022/hipp_group_merged_canonical_atlas_routea_10perc`
+  - `outputs_hcp/inputs/kong2022/hipp_group_merged_canonical_atlas_routea_10perc`
 - RouteA full:
-  - `outputs_hcp/inputs/hcp/kong2022/hipp_group_merged_canonical_atlas_routea_full`
+  - `outputs_hcp/inputs/kong2022/hipp_group_merged_canonical_atlas_routea_full`
 
 Metric semantics:
 
@@ -64,7 +64,7 @@ This entrypoint performs, in order:
 ### 1) Create short work roots
 
 ```bash
-BASE=outputs_hcp/inputs/hcp/kong2022
+BASE=outputs_hcp/inputs/kong2022
 WORK=$BASE/fixedk_work
 mkdir -p "$WORK"
 
@@ -89,7 +89,7 @@ Shared arguments:
 - `--shared-root $BASE/shared_inputs/routea`
 - `--surface-root $BASE/shared_inputs/surface`
 - `--subjects-manifest $BASE/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_151.txt`
-- `--hippunfold-batch-root outputs_hcp/inputs/hcp/hippunfold/dense_corobl_batch`
+- `--hippunfold-batch-root outputs_hcp/inputs/hippunfold/dense_corobl_batch`
 - `--group-average-surfaces-dir $BASE/templates/hipp_group_average_t1only_151/group_average_surfaces`
 - `--k-selection-mode redundancy-aware`
 

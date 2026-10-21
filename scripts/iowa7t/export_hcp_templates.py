@@ -39,11 +39,11 @@ DISPLAY = {
     "8net": ("DMN", "VAN", "Aud", "SMN"),
     "17net": SELECTED["17net"],
 }
-COHORT = ROOT / "outputs_hcp/inputs/hcp/qc/vertex_qc_t1only/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_151.txt"
+COHORT = ROOT / "outputs_hcp/inputs/qc/vertex_qc_t1only/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_151.txt"
 FIXED = ROOT / "outputs_hcp/templates/hcp151_routea_full_k3_fisherz"
 BANK = ROOT / "outputs_hcp/work/group_atlas/kong2022_7net_full_k3_fisherz/wta-top/kong2022"
-SURFACE = ROOT / "outputs_hcp/inputs/hcp/kong2022/shared_inputs/surface"
-REFERENCE = ROOT / "outputs_hcp/inputs/hcp/kong2022/shared_inputs/routea"
+SURFACE = ROOT / "outputs_hcp/inputs/kong2022/shared_inputs/surface"
+REFERENCE = ROOT / "outputs_hcp/inputs/kong2022/shared_inputs/routea"
 
 
 @lru_cache(maxsize=1)

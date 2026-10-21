@@ -15,7 +15,7 @@
     {
       "step_id": "01_01_run_hippunfold_t1w_local",
       "stage": "01_hippunfold",
-      "purpose": "Run HippUnfold 2.0 through the closed HCP/Stanford/JJ-TMS T1w preset contract (density 512, corobl plus unfolded registration, canonical local cache/model; no free-form overrides).",
+      "purpose": "Run one subject or a manifest through the closed HCP/Stanford/JJ-TMS/BANDA/PDC HippUnfold T1w presets; validate hippo2 once per batch, enforce dataset concurrency limits, and serially check/clean completed batch subjects (density 512, corobl plus unfolded registration, canonical local cache/model; no free-form overrides).",
       "branches": [
         "kong2022_routea",
         "kong2022_routeb"
@@ -70,7 +70,7 @@
       ],
       "entry_script": "scripts/core_workflow/02_03_build_lynch2024_nsi_manifest.py",
       "implementation_script": "scripts/core_workflow/02_03_build_lynch2024_nsi_manifest.py",
-      "recommended_manifest": "outputs_hcp/inputs/hcp/lynch2024_fast_pfm_t1only/manifests/hcp_7t_lynch2024_manifest.json"
+      "recommended_manifest": "outputs_hcp/inputs/lynch2024_fast_pfm_t1only/manifests/hcp_7t_lynch2024_manifest.json"
     },
     {
       "step_id": "03_01_build_kong2022_reference",
@@ -106,7 +106,7 @@
       ],
       "entry_script": "scripts/core_workflow/03_03_build_lynch2024_reference.py",
       "implementation_script": "scripts/core_workflow/03_03_build_lynch2024_reference.py",
-      "recommended_manifest": "outputs_hcp/inputs/hcp/lynch2024_fast_pfm_t1only/shared_inputs/pfm_hcp151/sub-<id>/reference/lynch2024_20net/stage_manifest.json"
+      "recommended_manifest": "outputs_hcp/inputs/lynch2024_fast_pfm_t1only/shared_inputs/pfm_hcp151/sub-<id>/reference/lynch2024_20net/stage_manifest.json"
     },
     {
       "step_id": "03_04_run_lynch2024_fastans_pfm",

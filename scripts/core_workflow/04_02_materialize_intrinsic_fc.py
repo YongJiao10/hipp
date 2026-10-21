@@ -11,9 +11,9 @@ Main Flow Path:
 
 Inputs:
 - Command-line arguments:
-  - --shared-root: Path to shared outputs root (default: `outputs_hcp/inputs/hcp/kong2022/shared_inputs/routeb`).
-  - --surface-root: Path to shared BOLD surfaces (default: `outputs_hcp/inputs/hcp/kong2022/shared_inputs/surface`).
-  - --subjects-manifest: Path to QC-passed subject list manifest (default: `outputs_hcp/inputs/hcp/kong2022/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt`).
+  - --shared-root: Path to shared outputs root (default: `outputs_hcp/inputs/kong2022/shared_inputs/routeb`).
+  - --surface-root: Path to shared BOLD surfaces (default: `outputs_hcp/inputs/kong2022/shared_inputs/surface`).
+  - --subjects-manifest: Path to QC-passed subject list manifest (default: `outputs_hcp/inputs/kong2022/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt`).
   - --subjects: Space-separated list of explicit subject IDs.
   - --smoothings: Smoothing levels to process: "2mm", "4mm".
   - --hemis: Hemispheres to process: "L", "R".

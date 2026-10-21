@@ -60,7 +60,8 @@ def test_absent_model_can_reach_the_original_downloader(monkeypatch) -> None:
         return subprocess.CompletedProcess(argv, 0, output, "")
 
     monkeypatch.setattr(contract_module.subprocess, "run", run)
-    contract_module.validate_local_assets()
+    env = build_run_environment(resolve_run_contract("pdc", "k0114s02"))
+    contract_module.validate_local_assets(env)
 
 
 def test_unpatched_runtime_stops_before_a_production_run(monkeypatch) -> None:
@@ -78,5 +79,6 @@ def test_unpatched_runtime_stops_before_a_production_run(monkeypatch) -> None:
         return subprocess.CompletedProcess(argv, 0, output, "")
 
     monkeypatch.setattr(contract_module.subprocess, "run", run)
+    env = build_run_environment(resolve_run_contract("pdc", "k0114s02"))
     with pytest.raises(RuntimeError, match="hippunfold_local_assets.patch"):
-        contract_module.validate_local_assets()
+        contract_module.validate_local_assets(env)

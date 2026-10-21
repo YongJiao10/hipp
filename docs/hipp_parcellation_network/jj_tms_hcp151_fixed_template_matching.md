@@ -51,8 +51,8 @@ completed 22P subgroup rerun reads the versioned reference/surface/mask inputs
 from:
 
 ```text
-outputs_iowa_jj_tms/inputs/iowa_jj_tms/kong2022/shared_inputs_22p/routea/
-outputs_iowa_jj_tms/inputs/iowa_jj_tms/kong2022/shared_inputs_22p/surface/
+outputs_iowa_jj_tms/inputs/kong2022/shared_inputs_22p/routea/
+outputs_iowa_jj_tms/inputs/kong2022/shared_inputs_22p/surface/
 ```
 
 It writes the 22P subgroup FC caches under
@@ -139,11 +139,11 @@ directory, or a manifest with stale source fingerprints is rejected.
 The adapter consumes exactly:
 
 ```text
-outputs_iowa_jj_tms/inputs/iowa_jj_tms/kong2022/shared_inputs/routea_ctxreg/
+outputs_iowa_jj_tms/inputs/kong2022/shared_inputs/routea_ctxreg/
   sub-<id>/fc/kong2022/2mm/hemi_{L,R}/hipp_vertex_to_roi_fc.npy
-outputs_iowa_jj_tms/inputs/iowa_jj_tms/kong2022/shared_inputs/surface/
+outputs_iowa_jj_tms/inputs/kong2022/shared_inputs/surface/
   sub-<id>/surface/tsnr_gate/sub-<id>_hemi-{L,R}_valid_mask.npy
-outputs_iowa_jj_tms/inputs/iowa_jj_tms/hippunfold/dense_corobl_batch/
+outputs_iowa_jj_tms/inputs/hippunfold/dense_corobl_batch/
   sub-<id>/hippunfold/sub-<id>/surf/
   sub-<id>_hemi-{L,R}_space-corobl_den-512_label-hipp_midthickness.surf.gii
 ```

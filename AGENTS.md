@@ -21,6 +21,9 @@
 ## Archive Access
 
 - You MUST obtain explicit user permission before accessing or browsing any archive content.
+- Output archives belong under `wrong/outputs_<dataset>/<original-relative-path>`.
+  Preserve their names and internal hierarchy; keep new archives outside active
+  `outputs_*` trees. Existing migrations still require an exact approved path list.
 
 ## Doc Sync Rule
 
@@ -52,7 +55,7 @@
   documentation must use these names without `recovered`, `regenerated`, dates,
   run IDs, or `_full_k3_fisherz` suffixes.
 - The formal HCP roots, relative to `outputs_hcp/`, are:
-  `inputs/hcp/kong2022/shared_inputs/<route>/`,
+  `inputs/kong2022/shared_inputs/<route>/`,
   `work/hippomaps_gradients/<route>/`,
   `work/group_atlas/<route>/`, and
   `present/overviews/<route>/`. Method, atlas, smoothing, coverage, and

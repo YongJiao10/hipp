@@ -226,8 +226,8 @@ def resolve_outputs_root(dataset: str = DEFAULT_DATASET) -> Path:
 
 
 def resolve_inputs_root(dataset: str = DEFAULT_DATASET) -> Path:
-    """Return the dataset-scoped inputs root (e.g. outputs_hcp/inputs/hcp)."""
-    return resolve_outputs_root(dataset) / "inputs" / _validate_dataset(dataset)
+    """Return the dataset-scoped inputs root (e.g. outputs_hcp/inputs)."""
+    return resolve_outputs_root(dataset) / "inputs"
 
 
 def resolve_work_root(dataset: str = DEFAULT_DATASET) -> Path:

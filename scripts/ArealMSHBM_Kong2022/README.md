@@ -23,9 +23,9 @@ If unset,
 | `estt` + `ESTT_VARIANT=36p` | `/Shared/jianglab/3_Data_Working/fmriprep_processed_esTT/DataOrg_PFM_36P` | `/Shared/jianglab/3_Data_Working/fmriprep_processed_esTT/DataOrg_PFM_36P/hipp_outputs/cortex_kong2022_areal_mshbm` | `func/sub-<id>_task-rest_run-concat.dtseries.nii` |
 | `estt` + `ESTT_VARIANT=22p` | `/Shared/jianglab/3_Data_Working/fmriprep_processed_esTT/DataOrg_PFM_22P` | `/Shared/jianglab/3_Data_Working/fmriprep_processed_esTT/DataOrg_PFM_22P/hipp_outputs/cortex_kong2022_areal_mshbm` | `func/sub-<id>_task-rest_run-concat.dtseries.nii` |
 | `estt` + `ESTT_VARIANT=23p` | `/Shared/jianglab/3_Data_Working/fmriprep_processed_esTT/DataOrg_PFM_23P` | `/Shared/jianglab/3_Data_Working/fmriprep_processed_esTT/DataOrg_PFM_23P/hipp_outputs/cortex_kong2022_areal_mshbm` | `func/sub-<id>_task-rest_run-concat.dtseries.nii` |
-| `iowa_hcp500` | `/old_Users/yojiao/HCPpipeline500/work/qunex_iowa7t_hcppipeline500/sessions` | `${REPO_ROOT}/outputs_iowa_hcp500/inputs/iowa_hcp500/kong2022/cortex_references/routea_areal_mshbm` | `<subject>/hcp/<subject>/MNINonLinear/Results/REST/REST_Atlas_MSMAll_hp0_clean_rclean.dtseries.nii` |
-| `pdc` | `/Shared/jianglab/3_Data_Working/Depression/PDC/imaging` | `${REPO_ROOT}/outputs_pdc/inputs/pdc/kong2022/cortex_references/routea_areal_mshbm` | exact run filenames in `COHORT_MANIFEST`, mapped from `<base>_<visit>_MR/MNINonLinear/Results/` |
-| `banda` | `/Shared/jianglab/3_Data_Working/Depression/BANDA/imaging` | `${REPO_ROOT}/outputs_banda/inputs/banda/kong2022/cortex_references/routea_areal_mshbm` | exact run filenames in `COHORT_MANIFEST`, mapped from `BANDA<ID>_MR/MNINonLinear/Results/` |
+| `iowa_hcp500` | `/old_Users/yojiao/HCPpipeline500/work/qunex_iowa7t_hcppipeline500/sessions` | `${REPO_ROOT}/outputs_iowa_hcp500/inputs/kong2022/cortex_references/routea_areal_mshbm` | `<subject>/hcp/<subject>/MNINonLinear/Results/REST/REST_Atlas_MSMAll_hp0_clean_rclean.dtseries.nii` |
+| `pdc` | `/Shared/jianglab/3_Data_Working/Depression/PDC/imaging` | `${REPO_ROOT}/outputs_pdc/inputs/kong2022/cortex_references/routea_areal_mshbm` | exact run filenames in `COHORT_MANIFEST`, mapped from `<base>_<visit>_MR/MNINonLinear/Results/` |
+| `banda` | `/Shared/jianglab/3_Data_Working/Depression/BANDA/imaging` | `${REPO_ROOT}/outputs_banda/inputs/kong2022/cortex_references/routea_areal_mshbm` | exact run filenames in `COHORT_MANIFEST`, mapped from `BANDA<ID>_MR/MNINonLinear/Results/` |
 
 JJ_TMS and Stanford tasks scan one `sub-*` directory for the dataset's rest
 dtseries pattern. PDC/BANDA tasks consume only metadata-declared exact paths.
@@ -68,10 +68,10 @@ Build the complete input contracts on Argon:
 ```bash
 /Users/yojiao/miniconda3/envs/py313/bin/python scripts/ArealMSHBM_Kong2022/prepare_kong2022_areal_mshbm_subject_inputs.py --action build-cohort \
   --dataset pdc --data-root /Shared/jianglab/3_Data_Working/Depression/PDC/imaging \
-  --manifest /old_Users/yojiao/hipp/outputs_pdc/inputs/pdc/kong2022/manifests/pdc_cortex_inputs.json
+  --manifest /old_Users/yojiao/hipp/outputs_pdc/inputs/kong2022/manifests/pdc_cortex_inputs.json
 /Users/yojiao/miniconda3/envs/py313/bin/python scripts/ArealMSHBM_Kong2022/prepare_kong2022_areal_mshbm_subject_inputs.py --action build-cohort \
   --dataset banda --data-root /Shared/jianglab/3_Data_Working/Depression/BANDA/imaging \
-  --manifest /old_Users/yojiao/hipp/outputs_banda/inputs/banda/kong2022/manifests/banda_cortex_inputs.json
+  --manifest /old_Users/yojiao/hipp/outputs_banda/inputs/kong2022/manifests/banda_cortex_inputs.json
 ```
 
 The builder refuses to replace an existing manifest. It checks every selected

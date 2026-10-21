@@ -1,6 +1,6 @@
 # JJ_TMS Native-space hippocampal surface beta
 
-旧的 Standard/MNI-space beta 结果以及旧的 59 人 `all`/`healthy_1xxx` 运行已归档至 `outputs_iowa_jj_tms/archive/`。
+旧的 Standard/MNI-space beta 结果以及旧的 59 人 `all`/`healthy_1xxx` 运行已归档至 `wrong/outputs_iowa_jj_tms/archive/`。
 当前分析基于总样本 94 人中合格的 78 名被试（55 名健康被试 `healthy`，23 名患者被试 `patient`），使用 Native Float32 con 直接映射到同一被试的 HippUnfold 海马表面，并在 Healthy 与 Patient 双组下分别进行三网络海马激活与功能连接相关分析。
 
 ## 分析定义
@@ -21,7 +21,7 @@
 Native con：
 
 ```text
-outputs_iowa_jj_tms/inputs/iowa_jj_tms/spm_glm_output/
+outputs_iowa_jj_tms/inputs/spm_glm_output/
 summary_NativeSpace_Float32/baseline_spTMS/
 ```
 
@@ -138,7 +138,7 @@ display preset 等技术细节，这些信息只保留在 figure manifest。
 ## 旧结果归档
 
 ```text
-outputs_iowa_jj_tms/archive/20260820_59sub_beta_and_legacy_runs/
+wrong/outputs_iowa_jj_tms/archive/20260820_59sub_beta_and_legacy_runs/
 ```
 
 该目录保存旧版 59 人的 Standard-space 与 Native-space 运行记录、旧分组模型与历史图表。

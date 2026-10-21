@@ -99,12 +99,12 @@ The fixed subgroup labels are `pure MDD` (`n=7`) and `comorbid MDD` (`n=19`);
 
 The default unversioned subgroup branch is 36P. Its subgroup FC caches are
 isolated under
-`outputs_iowa_jj_tms/inputs/iowa_jj_tms/kong2022/shared_inputs/routea_{pure_mdd,comorbid_mdd}/`,
+`outputs_iowa_jj_tms/inputs/kong2022/shared_inputs/routea_{pure_mdd,comorbid_mdd}/`,
 with downstream roots under `outputs_iowa_jj_tms/{work,present}/` using the
 same unversioned subgroup names.
 
 The completed 22P subgroup rerun reads versioned inputs from
-`outputs_iowa_jj_tms/inputs/iowa_jj_tms/kong2022/shared_inputs_22p/{routea,surface}/`.
+`outputs_iowa_jj_tms/inputs/kong2022/shared_inputs_22p/{routea,surface}/`.
 Its subgroup FC, gradient, group-atlas, and weighted roots append `_22p`:
 `routea_pure_mdd_22p` and `routea_comorbid_mdd_22p`. The presentation roots
 use the explicit atlas/variant layout
@@ -143,7 +143,7 @@ is independent of 22P/36P because it is derived from structural images, but the
 sampled hippocampal BOLD time series are variant-specific and live under the
 dedicated root:
 
-`outputs_iowa_jj_tms/inputs/iowa_jj_tms/kong2022/shared_inputs_22p/surface/`
+`outputs_iowa_jj_tms/inputs/kong2022/shared_inputs_22p/surface/`
 
 The available JJ-TMS 22P sources are:
 

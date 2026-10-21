@@ -321,19 +321,18 @@ def _resolve_ctxreg_cohort_paths(cohort_id: str, spec: GridSpec) -> dict[str, Pa
         shared_root = (
             dataset_root
             / "inputs"
-            / "hcp"
             / "kong2022"
             / "shared_inputs"
             / "routea_ctxreg"
         )
         standard_surface_root = (
-            dataset_root / "inputs" / "hcp" / "kong2022" / "shared_inputs" / "surface"
+            dataset_root / "inputs" / "kong2022" / "shared_inputs" / "surface"
         )
         reference_root = (
-            dataset_root / "inputs" / "hcp" / "kong2022" / "shared_inputs" / "routea"
+            dataset_root / "inputs" / "kong2022" / "shared_inputs" / "routea"
         )
         hippunfold_root = (
-            dataset_root / "inputs" / "hcp" / "hippunfold" / "dense_corobl_batch"
+            dataset_root / "inputs" / "hippunfold" / "dense_corobl_batch"
         )
         stem = None
     elif cohort_id in _CTXREG_IOWA_STEMS:
@@ -344,7 +343,6 @@ def _resolve_ctxreg_cohort_paths(cohort_id: str, spec: GridSpec) -> dict[str, Pa
         shared_root = (
             dataset_root
             / "inputs"
-            / "iowa_jj_tms"
             / "kong2022"
             / "shared_inputs"
             / "routea_ctxreg"
@@ -352,7 +350,6 @@ def _resolve_ctxreg_cohort_paths(cohort_id: str, spec: GridSpec) -> dict[str, Pa
         standard_surface_root = (
             dataset_root
             / "inputs"
-            / "iowa_jj_tms"
             / "kong2022"
             / "shared_inputs"
             / "surface"
@@ -360,7 +357,6 @@ def _resolve_ctxreg_cohort_paths(cohort_id: str, spec: GridSpec) -> dict[str, Pa
         reference_root = (
             dataset_root
             / "inputs"
-            / "iowa_jj_tms"
             / "kong2022"
             / "shared_inputs"
             / "routea"
@@ -368,7 +364,6 @@ def _resolve_ctxreg_cohort_paths(cohort_id: str, spec: GridSpec) -> dict[str, Pa
         hippunfold_root = (
             dataset_root
             / "inputs"
-            / "iowa_jj_tms"
             / "hippunfold"
             / "dense_corobl_batch"
         )
@@ -380,7 +375,6 @@ def _resolve_ctxreg_cohort_paths(cohort_id: str, spec: GridSpec) -> dict[str, Pa
         shared_root = (
             dataset_root
             / "inputs"
-            / "stanford"
             / "kong2022"
             / "shared_inputs"
             / "routea_ctxreg"
@@ -389,7 +383,6 @@ def _resolve_ctxreg_cohort_paths(cohort_id: str, spec: GridSpec) -> dict[str, Pa
         standard_surface_root = (
             dataset_root
             / "inputs"
-            / "stanford"
             / "kong2022"
             / "shared_inputs"
             / "surface"
@@ -397,14 +390,13 @@ def _resolve_ctxreg_cohort_paths(cohort_id: str, spec: GridSpec) -> dict[str, Pa
         reference_root = (
             dataset_root
             / "inputs"
-            / "stanford"
             / "kong2022"
             / "shared_inputs"
             / "routea"
             / stem
         )
         hippunfold_root = (
-            dataset_root / "inputs" / "stanford" / "hippunfold" / "dense_corobl_batch"
+            dataset_root / "inputs" / "hippunfold" / "dense_corobl_batch"
         )
     else:
         raise ValueError(f"Unknown cohort id: {cohort_id!r}")
@@ -480,7 +472,7 @@ def resolve_cohort_paths(cohort_id: str, spec: GridSpec) -> dict[str, Path]:
                 "overview_wta": pres_base
                 / "kong2022_7net_wta-top_group_overview_kong2022_7net_normalized_top20_count.png",
                 "hippunfold_root": REPO_ROOT
-                / "outputs_hcp/inputs/hcp/hippunfold/dense_corobl_batch",
+                / "outputs_hcp/inputs/hippunfold/dense_corobl_batch",
             }
 
         iowa_map = {
@@ -521,7 +513,7 @@ def resolve_cohort_paths(cohort_id: str, spec: GridSpec) -> dict[str, Path]:
                 "overview_wta": pres_base
                 / "kong2022_7net_wta-top_group_overview_kong2022_7net_normalized_top20_count.png",
                 "hippunfold_root": REPO_ROOT
-                / "outputs_iowa_jj_tms/inputs/iowa_jj_tms/hippunfold/dense_corobl_batch",
+                / "outputs_iowa_jj_tms/inputs/hippunfold/dense_corobl_batch",
             }
 
         stan_map = {
@@ -558,13 +550,13 @@ def resolve_cohort_paths(cohort_id: str, spec: GridSpec) -> dict[str, Path]:
                 "overview_wta": pres_base
                 / "kong2022_wta-top_group_overview_routea_7net_normalized_top20_count.png",
                 "hippunfold_root": REPO_ROOT
-                / "outputs_stanford/inputs/stanford/hippunfold/dense_corobl_batch",
+                / "outputs_stanford/inputs/hippunfold/dense_corobl_batch",
             }
 
         raise ValueError(f"Unknown cohort id: {cohort_id!r}")
 
     if cohort_id == "hcp_7t":
-        archive_root = REPO_ROOT / "outputs_hcp/work/archive/8net_20260909/group_atlas"
+        archive_root = REPO_ROOT / "wrong/outputs_hcp/work/archive/8net_20260909/group_atlas"
         grp_base = archive_root / "routea_full_k3_fisherz"
         wta_base = archive_root / "routea_wta_normalized_top20_count_full_k3"
         return {
@@ -582,7 +574,7 @@ def resolve_cohort_paths(cohort_id: str, spec: GridSpec) -> dict[str, Path]:
             "overview_wta": REPO_ROOT
             / "outputs_hcp/present/overviews/wta_normalized/top20_count.png",
             "hippunfold_root": REPO_ROOT
-            / "outputs_hcp/inputs/hcp/hippunfold/dense_corobl_batch",
+            / "outputs_hcp/inputs/hippunfold/dense_corobl_batch",
         }
 
     # Iowa 3T cohorts: HC, Patient, Pure MDD, Comorbid MDD
@@ -598,7 +590,7 @@ def resolve_cohort_paths(cohort_id: str, spec: GridSpec) -> dict[str, Path]:
         branch = f"routea_{stem}{iowa_var_suffix}_full_k3_fisherz"
         grp_base = (
             REPO_ROOT
-            / f"outputs_iowa_jj_tms/work/archive/8net_20260909/group_atlas/{branch}"
+            / f"wrong/outputs_iowa_jj_tms/work/archive/8net_20260909/group_atlas/{branch}"
         )
         pres_base = (
             REPO_ROOT
@@ -620,7 +612,7 @@ def resolve_cohort_paths(cohort_id: str, spec: GridSpec) -> dict[str, Path]:
             "overview_wta": pres_base
             / "kong2022_wta-top_group_overview_routea_normalized_top20_count.png",
             "hippunfold_root": REPO_ROOT
-            / "outputs_iowa_jj_tms/inputs/iowa_jj_tms/hippunfold/dense_corobl_batch",
+            / "outputs_iowa_jj_tms/inputs/hippunfold/dense_corobl_batch",
         }
 
     # Stanford cohorts
@@ -643,7 +635,7 @@ def resolve_cohort_paths(cohort_id: str, spec: GridSpec) -> dict[str, Path]:
         target_branch = branch_22p if var == "22p" else branch_36p
         grp_base = (
             REPO_ROOT
-            / f"outputs_stanford/work/archive/8net_20260909/group_atlas/{target_branch}"
+            / f"wrong/outputs_stanford/work/archive/8net_20260909/group_atlas/{target_branch}"
         )
 
         pres_base = (
@@ -673,7 +665,7 @@ def resolve_cohort_paths(cohort_id: str, spec: GridSpec) -> dict[str, Path]:
             / "kong2022_gradient-spectral_group_overview_g1g2g3_routea_normalized_top20_count.png",
             "overview_wta": overview_wta,
             "hippunfold_root": REPO_ROOT
-            / "outputs_stanford/inputs/stanford/hippunfold/dense_corobl_batch",
+            / "outputs_stanford/inputs/hippunfold/dense_corobl_batch",
         }
 
     raise ValueError(f"Unknown cohort id: {cohort_id!r}")
@@ -948,7 +940,6 @@ def _resolve_comparison_ctxreg_paths(
             reference_root = (
                 dataset_root
                 / "inputs"
-                / "hcp"
                 / "lynch2024_fast_pfm_t1only"
                 / "shared_inputs"
                 / "pfm_hcp151"
@@ -957,7 +948,6 @@ def _resolve_comparison_ctxreg_paths(
             reference_root = (
                 dataset_root
                 / "inputs"
-                / "iowa_jj_tms"
                 / "lynch2024_fast_pfm_t1only"
                 / "shared_inputs"
                 / "pfm_nsi043_78"
@@ -1052,7 +1042,7 @@ def resolve_comparison_paths(
         if method == "kong2022_7net":
             group_root = dataset_root / "work/group_atlas/kong2022_7net_full_k3_fisherz"
             present_dir = dataset_root / "present/overviews/kong2022_7net"
-            shared_root = dataset_root / "inputs/hcp/kong2022/shared_inputs"
+            shared_root = dataset_root / "inputs/kong2022/shared_inputs"
             # The producer keeps cortex FC/reference exports in the explicit
             # routea branch; the parent shared_inputs directory is not an
             # input root and must never be used for subject resolution.
@@ -1067,21 +1057,21 @@ def resolve_comparison_paths(
             present_dir = dataset_root / "present/overviews/lynch2024_7net"
             shared_root = (
                 dataset_root
-                / "inputs/hcp/lynch2024_fast_pfm_t1only/shared_inputs/pfm_hcp151"
+                / "inputs/lynch2024_fast_pfm_t1only/shared_inputs/pfm_hcp151"
             )
             overview_grad_name = "lynch2024_7net_gradient-spectral_group_overview_g1g2g3_lynch2024_7net_fisherz.png"
             overview_wta_name = (
                 "lynch2024_7net_wta-top_group_overview_lynch2024_7net_fisherz.png"
             )
             reference_root = shared_root
-        surface_root = dataset_root / "inputs/hcp/kong2022/shared_inputs/surface"
-        hippunfold_root = dataset_root / "inputs/hcp/hippunfold/dense_corobl_batch"
+        surface_root = dataset_root / "inputs/kong2022/shared_inputs/surface"
+        hippunfold_root = dataset_root / "inputs/hippunfold/dense_corobl_batch"
     else:
         stem = _COMPARISON_IOWA_STEMS[cohort_id]
         present_variant = "22p" if var == "22p" else "36p"
         surface_root = (
             dataset_root
-            / f"inputs/iowa_jj_tms/kong2022/shared_inputs{var_suffix}/surface"
+            / f"inputs/kong2022/shared_inputs{var_suffix}/surface"
         )
         if method == "kong2022_7net":
             # Patient uses the explicitly rebuilt routea_patient root; the
@@ -1097,7 +1087,7 @@ def resolve_comparison_paths(
                 / f"present/overviews/kong2022_7net/{present_variant}/{stem}"
             )
             shared_root = (
-                dataset_root / f"inputs/iowa_jj_tms/kong2022/shared_inputs{var_suffix}"
+                dataset_root / f"inputs/kong2022/shared_inputs{var_suffix}"
             )
             reference_root = shared_root / "routea"
             overview_grad_name = "kong2022_7net_gradient-spectral_group_overview_g1g2g3_kong2022_7net_fisherz.png"
@@ -1112,7 +1102,7 @@ def resolve_comparison_paths(
             )
             shared_root = (
                 dataset_root
-                / f"inputs/iowa_jj_tms/lynch2024_fast_pfm_t1only/shared_inputs{var_suffix}/pfm_nsi043_78"
+                / f"inputs/lynch2024_fast_pfm_t1only/shared_inputs{var_suffix}/pfm_nsi043_78"
             )
             reference_root = shared_root
             overview_grad_name = "lynch2024_7net_gradient-spectral_group_overview_g1g2g3_lynch2024_7net_fisherz.png"
@@ -1120,7 +1110,7 @@ def resolve_comparison_paths(
                 "lynch2024_7net_wta-top_group_overview_lynch2024_7net_fisherz.png"
             )
         hippunfold_root = (
-            dataset_root / "inputs/iowa_jj_tms/hippunfold/dense_corobl_batch"
+            dataset_root / "inputs/hippunfold/dense_corobl_batch"
         )
 
     # ``kong2022_7net`` is the comparison-branch namespace, while the

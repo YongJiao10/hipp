@@ -6,24 +6,24 @@
 
 Stanford 194 名合格被试由 4 类号段组成：
 * `sub-1xxx` (51人): **NTHC** (Non-Trauma Healthy Control)
-  * 清单路径: `outputs_stanford/inputs/stanford/kong2022/manifests/stanford_nthc_1xxx_qc_pass_t1only_51.txt`
+  * 清单路径: `outputs_stanford/inputs/kong2022/manifests/stanford_nthc_1xxx_qc_pass_t1only_51.txt`
 * `sub-2xxx` (40人): **TEHC** (Trauma-Exposed Healthy Control)
-  * 清单路径: `outputs_stanford/inputs/stanford/kong2022/manifests/stanford_tehc_2xxx_qc_pass_t1only_40.txt`
+  * 清单路径: `outputs_stanford/inputs/kong2022/manifests/stanford_tehc_2xxx_qc_pass_t1only_40.txt`
 * `sub-3xxx` (56人): **NTS** (Non-Trauma Symptomatic)
-  * 清单路径: `outputs_stanford/inputs/stanford/kong2022/manifests/stanford_nts_3xxx_qc_pass_t1only_56.txt`
+  * 清单路径: `outputs_stanford/inputs/kong2022/manifests/stanford_nts_3xxx_qc_pass_t1only_56.txt`
 * `sub-4xxx` (47人): **TIS** (Trauma-Induced Symptomatic)
-  * 清单路径: `outputs_stanford/inputs/stanford/kong2022/manifests/stanford_tis_4xxx_qc_pass_t1only_47.txt`
+  * 清单路径: `outputs_stanford/inputs/kong2022/manifests/stanford_tis_4xxx_qc_pass_t1only_47.txt`
 
 ### 二分组合对照
-* **非创伤组 (Non-Trauma, NT)**: 107 人 (`1xxx` + `3xxx`) — `outputs_stanford/inputs/stanford/kong2022/manifests/stanford_nontrauma_1xxx3xxx_qc_pass_t1only_107.txt`
-* **创伤组 (Trauma, TE+TI)**: 87 人 (`2xxx` + `4xxx`) — `outputs_stanford/inputs/stanford/kong2022/manifests/stanford_trauma_2xxx4xxx_qc_pass_t1only_87.txt`
-* **健康组 (Healthy Control, HC)**: 91 人 (`1xxx` + `2xxx`) — `outputs_stanford/inputs/stanford/kong2022/manifests/stanford_hc_1xxx2xxx_qc_pass_t1only_91.txt`
-* **症状组 (Symptomatic, Symp)**: 103 人 (`3xxx` + `4xxx`) — `outputs_stanford/inputs/stanford/kong2022/manifests/stanford_symp_3xxx4xxx_qc_pass_t1only_103.txt`
+* **非创伤组 (Non-Trauma, NT)**: 107 人 (`1xxx` + `3xxx`) — `outputs_stanford/inputs/kong2022/manifests/stanford_nontrauma_1xxx3xxx_qc_pass_t1only_107.txt`
+* **创伤组 (Trauma, TE+TI)**: 87 人 (`2xxx` + `4xxx`) — `outputs_stanford/inputs/kong2022/manifests/stanford_trauma_2xxx4xxx_qc_pass_t1only_87.txt`
+* **健康组 (Healthy Control, HC)**: 91 人 (`1xxx` + `2xxx`) — `outputs_stanford/inputs/kong2022/manifests/stanford_hc_1xxx2xxx_qc_pass_t1only_91.txt`
+* **症状组 (Symptomatic, Symp)**: 103 人 (`3xxx` + `4xxx`) — `outputs_stanford/inputs/kong2022/manifests/stanford_symp_3xxx4xxx_qc_pass_t1only_103.txt`
 
 ### 诊断细分亚组 (Diagnostic Subgroups)
-* **NTS Any MDD (`nts_any_mdd`)**: 43 人 — `outputs_stanford/inputs/stanford/kong2022/manifests/stanford_nts_any_mdd_3xxx_qc_pass_t1only_43.txt`
-* **NTS Pure MDD (`nts_pure_mdd`)**: 11 人 — `outputs_stanford/inputs/stanford/kong2022/manifests/stanford_nts_pure_mdd_3xxx_qc_pass_t1only_11.txt`
-* **TIS PTSD (tis_ptsd)**: 35 人 — outputs_stanford/inputs/stanford/kong2022/manifests/stanford_tis_ptsd_4xxx_current_ptsd_qc_pass_t1only_35.txt
+* **NTS Any MDD (`nts_any_mdd`)**: 43 人 — `outputs_stanford/inputs/kong2022/manifests/stanford_nts_any_mdd_3xxx_qc_pass_t1only_43.txt`
+* **NTS Pure MDD (`nts_pure_mdd`)**: 11 人 — `outputs_stanford/inputs/kong2022/manifests/stanford_nts_pure_mdd_3xxx_qc_pass_t1only_11.txt`
+* **TIS PTSD (tis_ptsd)**: 35 人 — outputs_stanford/inputs/kong2022/manifests/stanford_tis_ptsd_4xxx_current_ptsd_qc_pass_t1only_35.txt
   * 溯源：在 data/CC_RC_Master_Database_10.23.18_Data.csv 中按 CC_Post_Intake_ID 连接现有 47 人 TIS QC roster，并筛选 Current_PTSD_Diagnosis == 1；机器可读证据见 stanford_jjtms_multiscale_hippocampal_exploration/fast_rest/reports/stanford_tis_ptsd_provenance.json。
 
 

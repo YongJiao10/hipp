@@ -37,7 +37,7 @@ extractor = importlib.import_module("scripts.core_workflow.lib.extract_cortex_ko
 
 
 def test_iowa_patient_manifest_contract_is_fixed26() -> None:
-    manifest_dir = REPO_ROOT / "outputs_iowa_jj_tms/inputs/iowa_jj_tms/kong2022/manifests"
+    manifest_dir = REPO_ROOT / "outputs_iowa_jj_tms/inputs/kong2022/manifests"
     subjects = formal_cohorts.load_formal_subjects(
         manifest_dir / "jj_tms_patient_26_subjects.txt",
         "jjtms_patient26",
@@ -100,7 +100,7 @@ def test_unsuffixed_routea_is_the_default_canonical7_branch() -> None:
     assert "canonical7" in route_tags.NETWORK_TAXONOMY_CHOICES
     assert (
         route_tags.resolve_route_tag_for_group_atlas_run(
-            shared_root=Path("outputs_hcp/inputs/hcp/kong2022/shared_inputs/routea"),
+            shared_root=Path("outputs_hcp/inputs/kong2022/shared_inputs/routea"),
             explicit_route="routea",
             network_taxonomy="canonical7",
         )
@@ -108,7 +108,7 @@ def test_unsuffixed_routea_is_the_default_canonical7_branch() -> None:
     )
     with pytest.raises(ValueError, match="canonical7"):
         route_tags.resolve_route_tag_for_group_atlas_run(
-            shared_root=Path("outputs_hcp/inputs/hcp/kong2022/shared_inputs/routea"),
+            shared_root=Path("outputs_hcp/inputs/kong2022/shared_inputs/routea"),
             explicit_route="routea",
             network_taxonomy="canonical8",
         )
@@ -478,8 +478,8 @@ def test_template_producer_canonicalizes_and_consumer_rejects_foreign_paths(
     monkeypatch,
 ) -> None:
     dataset_root = tmp_path / "outputs_iowa_estt"
-    template_root = dataset_root / "inputs" / "iowa_estt" / "kong2022" / "templates" / "hipp_group_average_t1only_151"
-    spec_root = dataset_root / "inputs" / "iowa_estt" / "hippunfold" / "dense_corobl_batch"
+    template_root = dataset_root / "inputs" / "kong2022" / "templates" / "hipp_group_average_t1only_151"
+    spec_root = dataset_root / "inputs" / "hippunfold" / "dense_corobl_batch"
     surface_name = "group-average_hemi-L_space-corobl_den-512_label-hipp_midthickness.surf.gii"
     spec_name = "sub-01_den-512_label-hipp_surfaces.spec"
     canonical_surface = template_root / "group_average_surfaces" / surface_name
@@ -569,9 +569,9 @@ def test_template_surface_validation_rejects_foreign_dataset_path(
     monkeypatch,
 ) -> None:
     dataset_root = tmp_path / "outputs_iowa_jj_tms"
-    canonical_root = dataset_root / "inputs" / "iowa_jj_tms" / "kong2022" / "templates" / "hipp_group_average_t1only_151"
+    canonical_root = dataset_root / "inputs" / "kong2022" / "templates" / "hipp_group_average_t1only_151"
     canonical_surface = canonical_root / "group_average_surfaces" / "group-average_hemi-L_space-corobl_den-512_label-hipp_midthickness.surf.gii"
-    foreign_surface = tmp_path / "outputs_hcp" / "inputs" / "hcp" / "kong2022" / "templates" / "hipp_group_average_t1only_151" / "group_average_surfaces" / canonical_surface.name
+    foreign_surface = tmp_path / "outputs_hcp" / "inputs" / "kong2022" / "templates" / "hipp_group_average_t1only_151" / "group_average_surfaces" / canonical_surface.name
     canonical_surface.parent.mkdir(parents=True)
     foreign_surface.parent.mkdir(parents=True)
     canonical_surface.write_bytes(b"iowa-canonical")
@@ -594,9 +594,9 @@ def test_template_producer_prefers_manifest_22p_root_over_36p_root(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    versioned_root = tmp_path / "outputs_stanford" / "inputs" / "stanford" / "kong2022_22p" / "shared_inputs" / "template"
+    versioned_root = tmp_path / "outputs_stanford" / "inputs" / "kong2022_22p" / "shared_inputs" / "template"
     generic_root = tmp_path / "generic_36p_template"
-    spec_root = tmp_path / "outputs_stanford" / "inputs" / "stanford" / "hippunfold" / "dense_corobl_batch"
+    spec_root = tmp_path / "outputs_stanford" / "inputs" / "hippunfold" / "dense_corobl_batch"
     surface_name = "group-average_hemi-L_space-corobl_den-512_label-hipp_midthickness.surf.gii"
     spec_name = "sub-01_den-512_label-hipp_surfaces.spec"
     versioned_surface = versioned_root / "group_average_surfaces" / surface_name
@@ -679,7 +679,7 @@ def test_05_02_group_atlas_rejects_retired_canonical8_taxonomy(monkeypatch) -> N
         [
             "05_02_run_group_atlas.py",
             "--shared-root",
-            "outputs_hcp/inputs/hcp/kong2022/shared_inputs/routea",
+            "outputs_hcp/inputs/kong2022/shared_inputs/routea",
             "--network-taxonomy",
             "canonical8",
             "--atlases",

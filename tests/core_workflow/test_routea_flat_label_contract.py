@@ -378,7 +378,7 @@ def test_iowa_hcp500_argon_preset_contract() -> None:
     required = [
         "iowa_hcp500",
         "/old_Users/yojiao/HCPpipeline500/work/qunex_iowa7t_hcppipeline500/sessions",
-        "outputs_iowa_hcp500/inputs/iowa_hcp500/kong2022/cortex_references/routea_areal_mshbm",
+        "outputs_iowa_hcp500/inputs/kong2022/cortex_references/routea_areal_mshbm",
     ]
     for path in checked:
         text = path.read_text(encoding="utf-8")
@@ -418,8 +418,8 @@ def test_iowa7t_argon_preset_contract_uses_subject_first_36p_layout() -> None:
         "provenance.json",
     ]
     forbidden = [
-        "outputs_iowa/inputs/iowa",
-        "outputs_iowa_hcp500/inputs/iowa_hcp500/kong2022/cortex_references/routea_areal_mshbm",
+        "outputs_iowa/inputs",
+        "outputs_iowa_hcp500/inputs/kong2022/cortex_references/routea_areal_mshbm",
     ]
     for token in required:
         assert token in combined, f"missing {token}"

@@ -20,13 +20,13 @@ OUT=HERE/'compact'; OUT.mkdir(exist_ok=True)
 ASSETS=OUT/'assets'; ASSETS.mkdir(exist_ok=True)
 def read(p): return json.loads(Path(p).read_text())
 def load(p): return np.load(p,allow_pickle=False)
-base=ROOT/'outputs_hcp/inputs/hcp/hippunfold/dense_corobl_batch/sub-100610/hippunfold/sub-100610'
+base=ROOT/'outputs_hcp/inputs/hippunfold/dense_corobl_batch/sub-100610/hippunfold/sub-100610'
 native=read_surface(str(base/'surf/sub-100610_hemi-L_space-T1w_den-512_label-hipp_midthickness.surf.gii'))
 hip=read_surface(str(ROOT/'external/hippomaps/hippomaps/resources/canonical_surfs/tpl-avg_space-canonical_den-512_label-hipp_midthickness.surf.gii'))
 hip.Points[:,0]*=-1
 # Mirrored canonical and native meshes have opposite winding but identical IDs.
 np.testing.assert_array_equal(np.sort(hip.GetCells2D(),axis=1),np.sort(native.GetCells2D(),axis=1))
-fc=load(ROOT/'outputs_hcp/inputs/hcp/kong2022/shared_inputs/routea/sub-100610/fc/kong2022/2mm/hemi_L/hipp_vertex_to_network_fc.npy')
+fc=load(ROOT/'outputs_hcp/inputs/kong2022/shared_inputs/routea/sub-100610/fc/kong2022/2mm/hemi_L/hipp_vertex_to_network_fc.npy')
 ap=native.Points[:,1]
 
 def render(name,surface,values,cmap,limits,size,zoom,view=None):
@@ -76,8 +76,8 @@ highlight=np.zeros(512); highlight[vertex]=1
 assert np.count_nonzero(highlight)==1
 hipxy,_=render('hipp_neutral.png',hip,highlight,ListedColormap(['#D5DADE','#BB861C']),(0,1),(600,800),1.45)
 ctx=read_surface(str(ROOT/'data/hippunfold_input/sub-100610/anat/sub-100610_hemi-L_space-fsLR_den-32k_desc-MSMAll_inflated.surf.gii'))
-labels=np.loadtxt(ROOT/'outputs_hcp/inputs/hcp/kong2022/cortex_references/routea_areal_mshbm/sub-100610/lh_labels.txt',dtype=int)
-lut=nib.load(ROOT/'outputs_hcp/inputs/hcp/kong2022/cortex_references/routea_areal_mshbm/sub-100610/assets/sub-100610_atlas-kong2022_areal_mshbm.L.label.gii').labeltable.labels
+labels=np.loadtxt(ROOT/'outputs_hcp/inputs/kong2022/cortex_references/routea_areal_mshbm/sub-100610/lh_labels.txt',dtype=int)
+lut=nib.load(ROOT/'outputs_hcp/inputs/kong2022/cortex_references/routea_areal_mshbm/sub-100610/assets/sub-100610_atlas-kong2022_areal_mshbm.L.label.gii').labeltable.labels
 network={}
 for l in lut:
     if l.key: network[l.label.split('_')[2]]='#'+''.join(f'{round(c*255):02X}' for c in l.rgba[:3])

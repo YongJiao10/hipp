@@ -127,9 +127,9 @@ All metrics across the 16 cohort $\times$ grid combinations are recorded in `tem
   - `manifests/jj_tms_pure_mdd_7_subjects.txt`
   - `manifests/jj_tms_comorbid_mdd_19_subjects.txt`
 - **Group Template Surfaces**:
-  `outputs_iowa_jj_tms/inputs/iowa_jj_tms/kong2022/templates/hipp_group_average_t1only_151/group_average_surfaces/group-average_hemi-{hemi}_space-corobl_den-512_label-hipp_midthickness.surf.gii`
+  `outputs_iowa_jj_tms/inputs/kong2022/templates/hipp_group_average_t1only_151/group_average_surfaces/group-average_hemi-{hemi}_space-corobl_den-512_label-hipp_midthickness.surf.gii`
 - **Surface Spec File**:
-  `outputs_iowa_jj_tms/inputs/iowa_jj_tms/hippunfold/dense_corobl_batch/sub-1001/hippunfold/sub-1001/surf/sub-1001_den-512_label-hipp_surfaces.spec`
+  `outputs_iowa_jj_tms/inputs/hippunfold/dense_corobl_batch/sub-1001/hippunfold/sub-1001/surf/sub-1001_den-512_label-hipp_surfaces.spec`
 - **Workbench Locked Scene**:
   `config/wb_locked_native_view_lateral_medial.scene`
 

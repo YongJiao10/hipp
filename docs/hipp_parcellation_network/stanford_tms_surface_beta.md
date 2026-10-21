@@ -25,7 +25,7 @@ TMS network 和 group 已在 `native_jobs.csv` 中冻结。`targetBrainEnvLocMNI
 Native con：
 
 ```text
-outputs_stanford/inputs/stanford/tmsfmri_fmriprep/
+outputs_stanford/inputs/tmsfmri_fmriprep/
 group_con_results_NativeSpace/group_con_data_6P/
 ```
 

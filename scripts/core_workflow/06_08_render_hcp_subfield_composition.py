@@ -31,7 +31,7 @@ from lib.workflow_utils import write_json
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_GROUP_ROOT = REPO_ROOT / "outputs_hcp" / "work" / "group_atlas" / "routea_full_k3_fisherz"
-DEFAULT_HIPPUNFOLD_ROOT = REPO_ROOT / "outputs_hcp" / "inputs" / "hcp" / "hippunfold" / "dense_corobl_batch"
+DEFAULT_HIPPUNFOLD_ROOT = REPO_ROOT / "outputs_hcp" / "inputs" / "hippunfold" / "dense_corobl_batch"
 DEFAULT_OUT_DIR = REPO_ROOT / "outputs_hcp" / "present" / "subfield_composition"
 METHOD = "gradient-spectral"
 ATLAS = "kong2022"

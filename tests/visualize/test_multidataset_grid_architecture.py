@@ -129,6 +129,7 @@ def test_explicit_canonical8_resolver_isolated_under_archive_namespace():
 
     assert paths["group_root"] == (
         REPO_ROOT
+        / "wrong"
         / "outputs_hcp"
         / "work"
         / "archive"
@@ -145,7 +146,7 @@ def test_explicit_canonical8_resolver_isolated_under_archive_namespace():
         / "g1g2g3"
     )
     assert paths["wta_subpath"].is_relative_to(
-        REPO_ROOT / "outputs_hcp" / "work" / "archive" / "8net_20260909"
+        REPO_ROOT / "wrong" / "outputs_hcp" / "work" / "archive" / "8net_20260909"
     )
 
 

@@ -17,7 +17,7 @@ Main Flow Path:
 Inputs:
 - Command-line arguments:
   - --input-root: Input root containing structural raw sub-* directories (default: `data/hippunfold_input`).
-  - --batch-root: Batch output root containing sub-*/hippunfold outputs (default: `outputs_hcp/inputs/hcp/hippunfold/dense_corobl_batch`).
+  - --batch-root: Batch output root containing sub-*/hippunfold outputs (default: `outputs_hcp/inputs/hippunfold/dense_corobl_batch`).
   - --subject: Subject ID without "sub-" prefix. Can be specified multiple times.
   - --subjects-from-batch: Enumerate valid `sub-*` payloads from the selected
     batch instead of using the input-root roster.

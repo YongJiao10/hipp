@@ -33,7 +33,7 @@
 - 已有运行命令如下，**仅供识别，禁止直接再执行一遍**：
 
 ```text
-/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/04_00_materialize_cortex_regressed_surface_timeseries.py --source-shared-root /home/yojiao/hpchome/hipp/outputs_hcp/inputs/hcp/kong2022/shared_inputs/routea --source-surface-root /home/yojiao/hpchome/hipp/outputs_hcp/inputs/hcp/kong2022/shared_inputs/surface --out-shared-root /home/yojiao/hpchome/hipp/outputs_hcp/inputs/hcp/kong2022/shared_inputs/routea_ctxreg --jobs 8
+/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/04_00_materialize_cortex_regressed_surface_timeseries.py --source-shared-root /home/yojiao/hpchome/hipp/outputs_hcp/inputs/kong2022/shared_inputs/routea --source-surface-root /home/yojiao/hpchome/hipp/outputs_hcp/inputs/kong2022/shared_inputs/surface --out-shared-root /home/yojiao/hpchome/hipp/outputs_hcp/inputs/kong2022/shared_inputs/routea_ctxreg --jobs 8
 ```
 
 - 原 agent 会话 ID 45192 未必能跨 agent 使用。进程结束不等于成功，应检查日志和完整产物。此前没有保存全队列重建前的数值哈希，不能事后声称已经证明全队列重建前后完全一致。
@@ -102,7 +102,7 @@ M tests/core_workflow/test_kong400_subject_completeness.py
 
 ## Task 3：结束上游重建并核验正式路径
 
-**检查对象：** 两个控制分支 `outputs_hcp/inputs/hcp/kong2022/shared_inputs/<route>/` 内 04_00/04_01 summary、stage manifest 及被下游实际消费的路径。
+**检查对象：** 两个控制分支 `outputs_hcp/inputs/kong2022/shared_inputs/<route>/` 内 04_00/04_01 summary、stage manifest 及被下游实际消费的路径。
 
 - [ ] 等待已有 04_00 正常结束，或记录失败及具体 subjects。根据其真实目录结构和 subject manifest 枚举 151 subjects × 2 smoothing × 2 hemi = 604 个预期 regression 单元，不使用无范围全盘扫描。
 - [ ] 检查每个单元 residual、summary、manifest 存在且可读；状态、shape、subject、smoothing、hemi 与数据一致。把缺失/错误精确列出。

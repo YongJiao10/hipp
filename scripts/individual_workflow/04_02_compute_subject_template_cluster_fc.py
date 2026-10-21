@@ -63,10 +63,10 @@ DEFAULT_MATCH_ROOT = (
     REPO_ROOT / "outputs_stanford" / "work" / "hcp151_fixed_template_matching" / "subjects"
 )
 DEFAULT_SURFACE_ROOT = (
-    REPO_ROOT / "outputs_stanford" / "inputs" / "stanford" / "kong2022" / "shared_inputs" / "surface"
+    REPO_ROOT / "outputs_stanford" / "inputs" / "kong2022" / "shared_inputs" / "surface"
 )
 DEFAULT_ROI_ROOT = (
-    REPO_ROOT / "outputs_stanford" / "inputs" / "stanford" / "kong2022" / "shared_inputs" / "routea"
+    REPO_ROOT / "outputs_stanford" / "inputs" / "kong2022" / "shared_inputs" / "routea"
 )
 DEFAULT_EXTERNAL_ROOT = Path(
     "/home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_CausalConnectome/template_matched_profiles"

@@ -27,7 +27,7 @@ def digest(path):
 
 
 def validate_output_paths(repo_root: Path, work_dir: Path, manifest_path: Path):
-    base = repo_root.resolve() / 'outputs_iowa_jj_tms/inputs/iowa_jj_tms/cortex_surfaces'
+    base = repo_root.resolve() / 'outputs_iowa_jj_tms/inputs/cortex_surfaces'
     if not work_dir.resolve().is_relative_to(base) or not manifest_path.resolve().is_relative_to(work_dir.resolve()):
         raise ValueError(f'Derived surfaces and manifest must use persistent dataset inputs beneath {base}')
 

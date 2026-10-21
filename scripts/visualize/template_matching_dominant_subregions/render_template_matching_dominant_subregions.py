@@ -96,7 +96,6 @@ DEFAULT_SPEC = (
     REPO_ROOT
     / "outputs_iowa_jj_tms"
     / "inputs"
-    / "iowa_jj_tms"
     / "hippunfold"
     / "dense_corobl_batch"
     / "sub-1001"
@@ -109,7 +108,6 @@ DEFAULT_SURF_L = (
     REPO_ROOT
     / "outputs_iowa_jj_tms"
     / "inputs"
-    / "iowa_jj_tms"
     / "kong2022"
     / "templates"
     / "hipp_group_average_t1only_151"
@@ -120,7 +118,6 @@ DEFAULT_SURF_R = (
     REPO_ROOT
     / "outputs_iowa_jj_tms"
     / "inputs"
-    / "iowa_jj_tms"
     / "kong2022"
     / "templates"
     / "hipp_group_average_t1only_151"
@@ -163,7 +160,6 @@ HIPPUNFOLD_BATCH_ROOT = (
     REPO_ROOT
     / "outputs_iowa_jj_tms"
     / "inputs"
-    / "iowa_jj_tms"
     / "hippunfold"
     / "dense_corobl_batch"
 )
@@ -199,7 +195,6 @@ STANFORD_HIPPUNFOLD_BATCH_ROOT = (
     REPO_ROOT
     / "outputs_stanford"
     / "inputs"
-    / "stanford"
     / "hippunfold"
     / "dense_corobl_batch"
 )
@@ -207,7 +202,6 @@ STANFORD_MANIFEST_DIR = (
     REPO_ROOT
     / "outputs_stanford"
     / "inputs"
-    / "stanford"
     / "kong2022"
     / "manifests"
 )
@@ -219,7 +213,6 @@ STANFORD_SPEC = (
     REPO_ROOT
     / "outputs_stanford"
     / "inputs"
-    / "stanford"
     / "hippunfold"
     / "dense_corobl_batch"
     / "sub-1001"
@@ -232,7 +225,6 @@ STANFORD_SURF_L = (
     REPO_ROOT
     / "outputs_stanford"
     / "inputs"
-    / "stanford"
     / "kong2022"
     / "templates"
     / "hipp_group_average_t1only_151"
@@ -243,7 +235,6 @@ STANFORD_SURF_R = (
     REPO_ROOT
     / "outputs_stanford"
     / "inputs"
-    / "stanford"
     / "kong2022"
     / "templates"
     / "hipp_group_average_t1only_151"
@@ -1204,7 +1195,7 @@ def branch_matching_roots(data_root: Path) -> dict[str, Path]:
 
 def branch_surface_paths(data_root: Path) -> dict[str, Path]:
     inputs = (
-        Path(data_root).resolve() / "outputs_iowa_jj_tms" / "inputs" / "iowa_jj_tms"
+        Path(data_root).resolve() / "outputs_iowa_jj_tms" / "inputs"
     )
     return {
         "spec": inputs

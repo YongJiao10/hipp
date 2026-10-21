@@ -269,19 +269,19 @@ def test_standard_kong_reference_inputs_use_exact_routea_roots(tag: str):
         paths = resolve_comparison_paths(cohort_id, "kong2022_7net", spec)
         if cohort_id == "hcp_7t":
             expected_reference = (
-                REPO_ROOT / "outputs_hcp/inputs/hcp/kong2022/shared_inputs/routea"
+                REPO_ROOT / "outputs_hcp/inputs/kong2022/shared_inputs/routea"
             )
             expected_surface = (
-                REPO_ROOT / "outputs_hcp/inputs/hcp/kong2022/shared_inputs/surface"
+                REPO_ROOT / "outputs_hcp/inputs/kong2022/shared_inputs/surface"
             )
         else:
             suffix = "_22p" if spec.variant == "22p" else ""
             expected_reference = REPO_ROOT / (
-                "outputs_iowa_jj_tms/inputs/iowa_jj_tms/kong2022/"
+                "outputs_iowa_jj_tms/inputs/kong2022/"
                 f"shared_inputs{suffix}/routea"
             )
             expected_surface = REPO_ROOT / (
-                "outputs_iowa_jj_tms/inputs/iowa_jj_tms/kong2022/"
+                "outputs_iowa_jj_tms/inputs/kong2022/"
                 f"shared_inputs{suffix}/surface"
             )
         assert Path(paths["reference_root"]).resolve() == expected_reference.resolve()

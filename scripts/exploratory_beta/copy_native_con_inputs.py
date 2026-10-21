@@ -35,7 +35,7 @@ STANFORD_FLOW = (
 )
 STANFORD_DEST_ROOT = (
     REPO_ROOT
-    / "outputs_stanford/inputs/stanford/tmsfmri_fmriprep/"
+    / "outputs_stanford/inputs/tmsfmri_fmriprep/"
     / "group_con_results_NativeSpace/group_con_data_6P"
 )
 
@@ -45,12 +45,12 @@ JJ_SOURCE_ROOT = Path(
 )
 JJ_FLOW = (
     REPO_ROOT
-    / "outputs_iowa_jj_tms/archive/20260818_standard_space_beta_replaced_by_native/results/"
+    / "wrong/outputs_iowa_jj_tms/archive/20260818_standard_space_beta_replaced_by_native/results/"
     / "sptms_surface_grid2_20260811/cohort_flow.csv"
 )
 JJ_DEST_ROOT = (
     REPO_ROOT
-    / "outputs_iowa_jj_tms/inputs/iowa_jj_tms/spm_glm_output/"
+    / "outputs_iowa_jj_tms/inputs/spm_glm_output/"
     / "summary_NativeSpace_Float32/baseline_spTMS"
 )
 

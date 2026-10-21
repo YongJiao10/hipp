@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import os
 import re
+import socket
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
-from typing import Mapping
+from typing import Mapping, TextIO
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -22,6 +23,8 @@ CANONICAL_MODEL_PATH = (
     "trained_model.3d_fullres.Task101_hcp1200_T1w.nnUNetTrainerV2.model_best.tar"
 )
 RUNTIME_WORK_ROOT = REPO_ROOT / "runtime" / "hippunfold_workdirs"
+RUNTIME_PY = REPO_ROOT / ".runtime_py"
+DATASET_JOB_LIMITS = MappingProxyType({"banda": 1, "pdc": 3})
 _SAFE_SUBJECT = re.compile(r"^[0-9A-Za-z]+$")
 
 
@@ -41,7 +44,6 @@ DATASET_PRESETS = MappingProxyType({
         output_root=REPO_ROOT
         / "outputs_hcp"
         / "inputs"
-        / "hcp"
         / "hippunfold"
         / "dense_corobl_batch",
         t1w_filter="extension=.nii.gz",
@@ -55,7 +57,6 @@ DATASET_PRESETS = MappingProxyType({
         output_root=REPO_ROOT
         / "outputs_stanford"
         / "inputs"
-        / "stanford"
         / "hippunfold"
         / "dense_corobl_batch",
         t1w_filter="extension=.nii.gz",
@@ -69,7 +70,6 @@ DATASET_PRESETS = MappingProxyType({
         output_root=REPO_ROOT
         / "outputs_iowa_jj_tms"
         / "inputs"
-        / "iowa_jj_tms"
         / "hippunfold"
         / "dense_corobl_batch",
         t1w_filter="extension=.nii",
@@ -82,7 +82,6 @@ DATASET_PRESETS = MappingProxyType({
         output_root=REPO_ROOT
         / "outputs_banda"
         / "inputs"
-        / "banda"
         / "hippunfold"
         / "dense_corobl_batch",
         t1w_filter="extension=.nii.gz",
@@ -95,7 +94,6 @@ DATASET_PRESETS = MappingProxyType({
         output_root=REPO_ROOT
         / "outputs_pdc"
         / "inputs"
-        / "pdc"
         / "hippunfold"
         / "dense_corobl_batch",
         t1w_filter="extension=.nii.gz",
@@ -245,7 +243,7 @@ def build_run_environment(
     return env
 
 
-def validate_local_assets() -> None:
+def validate_local_assets(env: Mapping[str, str]) -> None:
     """Require the repository's validated hippo2 CLI before a real run."""
     if not HIPPUNFOLD_EXECUTABLE.is_file():
         raise FileNotFoundError(
@@ -264,6 +262,7 @@ def validate_local_assets() -> None:
         text=True,
         check=False,
         timeout=30,
+        env=env,
     )
     if resource_adapter.returncode != 0:
         raise RuntimeError(
@@ -285,6 +284,7 @@ def validate_local_assets() -> None:
         text=True,
         check=False,
         timeout=30,
+        env=env,
     )
     resolved = Path(which.stdout.strip()) if which.stdout.strip() else None
     if which.returncode != 0 or resolved is None or resolved.resolve() != HIPPUNFOLD_EXECUTABLE.resolve():
@@ -299,7 +299,8 @@ def validate_local_assets() -> None:
         capture_output=True,
         text=True,
         check=False,
-        timeout=30,
+        timeout=60,
+        env=env,
     )
     version_text = f"{version.stdout} {version.stderr}"
     if version.returncode != 0 or not re.search(r"\b2\.0\.0\b", version_text):
@@ -313,7 +314,8 @@ def validate_local_assets() -> None:
         capture_output=True,
         text=True,
         check=False,
-        timeout=30,
+        timeout=60,
+        env=env,
     )
     help_text = f"{help_run.stdout} {help_run.stderr}"
     if help_run.returncode != 0 or "512" not in help_text:
@@ -321,3 +323,86 @@ def validate_local_assets() -> None:
             "hippo2 gate failed: T1w/512 help probe did not succeed; "
             f"stdout={help_run.stdout.strip()!r}; stderr={help_run.stderr.strip()!r}"
         )
+
+
+def detect_system_name() -> str:
+    """Require a consistent IDAS or Argon declaration before parallel work."""
+    declared = {
+        os.environ[key].strip().lower()
+        for key in ("SYSTEM_NAME", "CLUSTER_NAME", "SGE_CLUSTER_NAME")
+        if os.environ.get(key, "").strip()
+    }
+    if declared:
+        if len(declared) != 1 or not declared.issubset({"idas", "argon"}):
+            raise RuntimeError(
+                "Conflicting or unsupported system declarations; set SYSTEM_NAME "
+                "to exactly 'idas' or 'argon'."
+            )
+        return declared.pop()
+
+    hostname = socket.gethostname().lower()
+    matches = [
+        name for name in ("idas", "argon")
+        if re.search(rf"(^|[-_.]){name}($|[-_.])", hostname)
+    ]
+    if len(matches) != 1:
+        raise RuntimeError(
+            f"Cannot identify IDAS or Argon from hostname {hostname!r}; "
+            "set SYSTEM_NAME explicitly."
+        )
+    return matches[0]
+
+
+def prepare_runtime_directories(env: Mapping[str, str]) -> None:
+    """Create the cache and temporary directories selected by the contract."""
+    for key in ("XDG_CACHE_HOME", "PIP_CACHE_DIR", "TMPDIR"):
+        Path(env[key]).mkdir(parents=True, exist_ok=True)
+
+
+def prepare_runtime_python() -> None:
+    """Install the Python startup settings used by local HippUnfold runs."""
+    RUNTIME_PY.mkdir(parents=True, exist_ok=True)
+    (RUNTIME_PY / "sitecustomize.py").write_text(
+        "import multiprocessing as mp\n"
+        "try:\n"
+        "    mp.set_start_method('fork')\n"
+        "except RuntimeError:\n"
+        "    pass\n"
+        "try:\n"
+        "    import torch.multiprocessing as tmp\n"
+        "    tmp.set_sharing_strategy('file_system')\n"
+        "except Exception:\n"
+        "    pass\n",
+        encoding="utf-8",
+    )
+
+
+def prepare_subject_environment(
+    contract: HippUnfoldRunContract,
+    base_env: Mapping[str, str],
+) -> dict[str, str]:
+    """Prepare one subject's runtime directories and Python startup hook."""
+    if not contract.bids_dir.is_dir():
+        raise FileNotFoundError(f"Dataset input directory is missing: {contract.bids_dir}")
+    contract.output_dir.mkdir(parents=True, exist_ok=True)
+    env = dict(base_env)
+    prepare_runtime_directories(env)
+    env["PYTHONPATH"] = _join_path(str(RUNTIME_PY), env.get("PYTHONPATH", ""))
+    return env
+
+
+def run_hippunfold(
+    contract: HippUnfoldRunContract,
+    env: Mapping[str, str],
+    *,
+    stdout: TextIO | None = None,
+) -> int:
+    """Execute the fixed command and return its exit status."""
+    return subprocess.run(
+        list(contract.hippunfold_argv),
+        cwd=str(REPO_ROOT),
+        env=dict(env),
+        check=False,
+        stdout=stdout,
+        stderr=subprocess.STDOUT if stdout is not None else None,
+    ).returncode

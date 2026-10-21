@@ -99,11 +99,11 @@ case "${dataset}" in
     esac
     ;;
   iowa_hcp500)
-    out_root="${OUT_ROOT:-/old_Users/yojiao/hipp/outputs_iowa_hcp500/inputs/iowa_hcp500/kong2022/cortex_references/routea_areal_mshbm}"
+    out_root="${OUT_ROOT:-/old_Users/yojiao/hipp/outputs_iowa_hcp500/inputs/kong2022/cortex_references/routea_areal_mshbm}"
     ;;
   pdc|banda)
     repo_root="${REPO_ROOT:-/old_Users/yojiao/hipp}"
-    out_root="${OUT_ROOT:-${repo_root}/outputs_${dataset}/inputs/${dataset}/kong2022/cortex_references/routea_areal_mshbm}"
+    out_root="${OUT_ROOT:-${repo_root}/outputs_${dataset}/inputs/kong2022/cortex_references/routea_areal_mshbm}"
     ;;
   *)
     echo "ERROR: unsupported DATASET=${DATASET:-}. Expected jj_tms, stanford, iowa7t, estt, iowa_hcp500, pdc, or banda." >&2

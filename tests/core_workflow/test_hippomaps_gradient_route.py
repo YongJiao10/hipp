@@ -1052,7 +1052,7 @@ def test_route_tag_exact_group_root_validation_rejects_prefix_collisions() -> No
 def test_family17_auto_route_requires_explicit_routea_17net() -> None:
     try:
         route_tags.resolve_route_tag_for_group_atlas_run(
-            shared_root=Path("outputs_hcp/inputs/hcp/kong2022/shared_inputs/routea"),
+            shared_root=Path("outputs_hcp/inputs/kong2022/shared_inputs/routea"),
             explicit_route="auto",
             network_taxonomy="family17",
         )
@@ -1063,7 +1063,7 @@ def test_family17_auto_route_requires_explicit_routea_17net() -> None:
 
     assert (
         route_tags.resolve_route_tag_for_group_atlas_run(
-            shared_root=Path("outputs_hcp/inputs/hcp/kong2022/shared_inputs/routea"),
+            shared_root=Path("outputs_hcp/inputs/kong2022/shared_inputs/routea"),
             explicit_route="routea_17net",
             network_taxonomy="family17",
         )
