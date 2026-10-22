@@ -87,37 +87,6 @@ def build_mappings(hipp_outputs_root: Path, subjects: Iterable[str]) -> list[Map
                 root / "subjects" / sub / "multiband" / "fc",
             )
         )
-        mappings.extend(
-            _map_tree(
-                root / "work/individual_atlas" / sub / "gradient",
-                root / "subjects" / sub / "multiband" / "atlas" / "gradient",
-            )
-        )
-        mappings.extend(
-            _map_tree(
-                root / "work/individual_atlas" / sub / "wta",
-                root / "subjects" / sub / "multiband" / "atlas" / "wta",
-            )
-        )
-        mappings.extend(
-            _map_tree(
-                root / "present/overviews/individual/gradient",
-                root / "subjects" / sub / "multiband" / "figures" / "gradient",
-            )
-        )
-        mappings.extend(
-            _map_tree(
-                root / "present/overviews/individual/wta",
-                root / "subjects" / sub / "multiband" / "figures" / "wta",
-            )
-        )
-    mappings.extend(
-        _map_tree(
-            root / "work/individual_atlas/_overview_core_adapter",
-            root / "runs/cache/overview_core_adapter",
-        )
-    )
-    mappings.extend(_map_tree(root / "work/individual_atlas/_runs", root / "runs"))
     mappings.extend(
         _map_tree(
             root / "inputs/kong2022/templates/hipp_group_average_t1only_151",

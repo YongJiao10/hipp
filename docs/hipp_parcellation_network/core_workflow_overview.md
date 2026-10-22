@@ -120,15 +120,17 @@ within the corresponding dataset root; versioned Stanford 22P templates use
 - canonical public interface (`NN_MM_*`)
 - active implementation home (`scripts/core_workflow/lib/*`)
 
-Subject-level RouteA gradient-spectral K=3 and WTA products are intentionally
-kept outside the group workflow in the sibling directory
-`scripts/individual_workflow/`. Those entrypoints reuse core workflow helpers.
-Computation outputs use the subject-first layout
-`outputs_hcp/work/individual_atlas/sub-<id>/{gradient,wta}/<smoothing>/<hemi>/`,
-with run metadata under `outputs_hcp/work/individual_atlas/_runs/`, while
-per-subject presentation surface overviews live in
-`outputs_hcp/present/overviews/individual/{gradient,wta}/`. See
-`docs/hipp_parcellation_network/individual_workflow_routea_gradients_wta.md`.
+Individual hippocampal parcellation uses group-trained template matching in
+`scripts/individual_workflow/`. HCP uses family-aware cross-validation:
+clustering fits the training cohort's group data, and held-out subjects are
+matched to that template. Never cluster an individual's hippocampal data or
+pass a single-subject cohort through a group-clustering entrypoint.
+Computation outputs live under
+`outputs_hcp/work/crossfit_template_matching/`, and presentation products under
+`outputs_hcp/present/overviews/crossfit_template_matching/`. Non-HCP matching
+adapters live under `scripts/<dataset>/`. See
+`docs/hipp_parcellation_network/crossfit_template_matching.md` and
+`scripts/individual_workflow/README.md`.
 
 RouteA reference construction has an explicit upstream label-generation dependency. The artifact-level contract for generated RouteA ArealMSHBM labels, local numbered-step products, presentation products, and required evidence is maintained in `docs/hipp_parcellation_network/core_workflow_artifact_lineage.md`.
 

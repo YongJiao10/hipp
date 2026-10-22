@@ -89,7 +89,7 @@ def test_validate_fold_assignment_rejects_families_split_across_folds():
         )
 
 
-def test_crossfit_output_roots_are_isolated_from_existing_individual_atlas():
+def test_crossfit_output_roots_use_crossfit_template_matching():
     assert output_layout.resolve_crossfit_template_matching_root().name == "crossfit_template_matching"
     assert output_layout.resolve_crossfit_template_matching_overview_root().name == "crossfit_template_matching"
 

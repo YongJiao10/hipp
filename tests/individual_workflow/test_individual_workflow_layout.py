@@ -37,5 +37,6 @@ def test_dataset_specific_and_individual_workflow_surfaces_are_explicit() -> Non
     readme = (SCRIPTS_ROOT / "individual_workflow" / "README.md").read_text(
         encoding="utf-8"
     )
-    assert "family-aware crossfit" in readme
-    assert "immutable HCP151 template" in readme
+    assert "family-aware cross-validation" in readme
+    assert "Never cluster an individual's hippocampal data" in readme
+    assert "HCP151 Template Builder for Non-HCP Datasets" in readme

@@ -43,7 +43,6 @@ hipp_outputs/
         │   │       └── provenance.json
         │   ├── surface/
         │   ├── fc/
-        │   ├── atlas/
         │   ├── qc/
         │   ├── figures/
         │   └── provenance.json
@@ -55,7 +54,6 @@ hipp_outputs/
             │       └── provenance.json
             ├── surface/
             ├── fc/
-            ├── atlas/
             ├── qc/
             ├── figures/
             └── provenance.json
@@ -101,6 +99,9 @@ Migration helper:
 `dry-run` writes only a concrete migration manifest under `runs/manifests/`.
 `copy` copies or recreates symlinks into canonical locations and leaves legacy
 paths in place. Deletion is a separate user-approved operation.
+Migration preserves structural, surface, cortex-reference, FC, and group
+assets. Individual-clustering labels, figures, overview-adapter caches, and
+their run metadata are excluded; the migration does not delete those files.
 
 ## 0P, 22P, and 32P Variants
 
@@ -124,14 +125,11 @@ selected `hipp_outputs/subjects/sub-<ID>/hippunfold/`. Use an isolated BIDS
 staging root for anatomical inputs before running HippUnfold so SnakeBIDS does
 not scan existing `hipp_outputs` as inputs.
 
-Example 06122026 downstream, overview, and FC heatmap reruns:
+Example 06122026 downstream and FC heatmap runs:
 
 ```bash
 /home/yojiao/.conda/envs/py314/bin/python scripts/iowa7t/run_branch_downstream.py --variant 0p --job 06122026:multiband --job 06122026:multi_echo --stage all --run-metadata-template '/absolute/path/to/run_metadata/{sub_subject}.json' --overwrite
 /home/yojiao/.conda/envs/py314/bin/python scripts/iowa7t/run_branch_downstream.py --variant 32p --job 06122026:multiband --job 06122026:multi_echo --stage all --run-metadata-template '/absolute/path/to/run_metadata/{sub_subject}.json' --overwrite
-
-/home/yojiao/.conda/envs/py314/bin/python scripts/iowa7t/run_branch_overviews.py --variant 0p --job 06122026:multiband --job 06122026:multi_echo --jobs 4 --overwrite
-/home/yojiao/.conda/envs/py314/bin/python scripts/iowa7t/run_branch_overviews.py --variant 32p --job 06122026:multiband --job 06122026:multi_echo --jobs 4 --overwrite
 
 /home/yojiao/.conda/envs/py314/bin/python scripts/iowa7t/generate_all_subject_plots.py --variant 0p --variant 32p --subject 06122026 --branch multiband --branch multi_echo
 ```
@@ -166,26 +164,9 @@ Example downstream rerun:
 /home/yojiao/.conda/envs/py314/bin/python scripts/iowa7t/run_branch_downstream.py   --variant noxcpd   --job 06112026:multiband   --job 06112026:multi_echo   --job 06122026:multiband   --job 06122026:multi_echo   --run-metadata-template '/absolute/path/to/run_metadata/{sub_subject}.json'
 ```
 
-NoXCPD is complete only when each corresponding branch has the same relative
-overview PNG inventory as 36P under `figures/gradient/` and `figures/wta/`.
-The images are expected to differ in content; completion means the same named
-products exist in the NoXCPD tree.
-
-Audit the completed overview inventory with:
-
-```bash
-/home/yojiao/.conda/envs/py314/bin/python scripts/iowa7t/audit_branch_completion.py   --variant noxcpd   --compare-variant 36p   --job 06112026:multiband   --job 06112026:multi_echo   --job 06122026:multiband   --job 06122026:multi_echo
-```
-
-Regenerate overview figures with the same wrapper used for 36P, adding
-`--variant noxcpd`. Run the default canonical7 and family17 when the 36P branch has
-both figure families:
-
-```bash
-/home/yojiao/.conda/envs/py314/bin/python scripts/iowa7t/run_branch_overviews.py   --variant noxcpd   --job 06112026:multiband   --job 06112026:multi_echo   --job 06122026:multiband   --job 06122026:multi_echo   --jobs 4   --overwrite
-
-/home/yojiao/.conda/envs/py314/bin/python scripts/iowa7t/run_branch_overviews.py   --variant noxcpd   --network-column family17   --job 06112026:multiband   --job 06112026:multi_echo   --job 06122026:multiband   --job 06122026:multi_echo   --jobs 4   --overwrite
-```
+Each NoXCPD branch must produce its own surface, cortex-reference, and FC
+outputs under the selected NoXCPD root. Individual-clustering atlas and
+overview products are not branch completion requirements.
 
 ## Cortex ArealMSHBM
 
@@ -288,93 +269,16 @@ Output tree per run:
 - `run-XX/fc/`: `2mm/` and `4mm/` FC matrices (`hipp_vertex_to_network_fc.npy`, `hipp_vertex_to_network_fc_active.npy`, and `hippo512_to_kong400_corr.npy`)
 
 
-## Branch Overview Figures
+## Individual Hippocampal Labels
 
-Use the predefined overview wrapper for Iowa7T branch-level overview
-regeneration:
+Individual labels must come from matching to a declared group-trained
+template. Never fit clustering to an individual hippocampus, including
+through a group entrypoint supplied with a single-subject cohort. Group
+clustering and training-cohort clustering within cross-validation remain
+supported; held-out individuals receive labels only by template matching.
 
-```bash
-/home/yojiao/.conda/envs/py314/bin/python scripts/iowa7t/run_branch_overviews.py --job 04172026:multiband --overwrite
-```
-
-The wrapper adapts branch-scoped individual products to
-`scripts/individual_workflow/02_build_individual_overviews.py` and the shared
-core overview renderer. It renders the maintained four method panels:
-
-- `gradient_spectral_k3`
-- `gradient_count`
-- `gradient_weighted_fisherz`
-- `wta_normalized_top20_count`
-
-Final subject-facing PNGs are copied back to the existing branch figure roots. The wrapper preserves copy errors instead of falling back to content-only copying, and it skips notebook checkpoint artifacts because they are transient, non-output files:
-
-- `subjects/sub-<ID>/<branch>/figures/gradient/`
-- `subjects/sub-<ID>/<branch>/figures/wta/`
-
-The weighted Fisher-z gradient panel reuses existing weighted gradient atlas
-products from `subjects/sub-<ID>/<branch>/atlas/gradient/` and synchronizes them
-into the existing overview compatibility cache under `runs/cache/`; no weighted
-WTA output is produced. Kong2022 weighted
-profiles, status JSON, label maps, and rendered heatmap columns must use the
-canonical7 network order `Default`, `Visual`, `Somatomotor`,
-`DorsalAttention`, `VentralAttention`, `Control`, `Language`. Run
-the audit before trusting or publishing regenerated weighted panels:
-
-```bash
-/home/yojiao/.conda/envs/py314/bin/python scripts/iowa7t/audit_repair_weighted_network_order.py --output-root /home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_36P/hipp_outputs
-```
-
-Use `--repair` only when the audit reports mismatched derived products. The
-repair rewrites weighted Fisher-z profiles/status/label products in canonical
-network order and does not delete files. The overview adapter stores
-method-isolated renderer inputs under `overview_core_adapter/<method>/` so
-parallel rendering cannot mix `fisherz`, `normalized_top20_count`, and
-`weighted_fisherz` profiles. Stale or missing manifest paths fail instead of falling back to
-same-run-dir variant files. For `gradient_fisherz`, the rendered heatmap is the same
-Kong2022 ROI-mean Fisher-z network profile used by confidence/status, not a
-separate direct cluster-to-network timeseries profile. For `gradient_weighted_fisherz`,
-the adapter recomputes network time series from ROI time series using
-`n_grayordinates_used` weights, then correlates cluster time series with those
-weighted network time series; it is not copied from `gradient_fisherz`. The
-normalized WTA panel is the canonical8 top-20 positive ROI-count assignment,
-normalized by the finite available ROI count in each network, not Fisher-z
-averaging. It is written as
-`wta_top_labels_normalized_top20_count.npy`.
-
-For Kong2022 17-network gradient overviews, run the same wrapper with
-`--network-column family17`. This uses an isolated cache named
-`runs/cache/iowa7t_branch_individual_overviews_family17/` and publishes only
-the three gradient PNGs with explicit family17 filenames, leaving the default
-default canonical7 atlas and overview outputs untouched:
-
-```bash
-/home/yojiao/.conda/envs/py314/bin/python scripts/iowa7t/run_branch_overviews.py \
-  --network-column family17 \
-  --job 04172026:multiband \
-  --job 06112026:multiband \
-  --job 06112026:multi_echo \
-  --job 06122026:multiband \
-  --job 06122026:multi_echo \
-  --output-root /home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_36P/hipp_outputs \
-  --jobs 4 \
-  --overwrite
-```
-
-The family17 gradient files are written under
-`subjects/sub-<ID>/<branch>/figures/gradient/` as
-`sub-<ID>_gradient_family17_fisherz_overview.png`,
-`sub-<ID>_gradient_family17_count_overview.png`, and
-`sub-<ID>_gradient_family17_weighted_fisherz_overview.png`. For family17, the
-weighted Fisher-z overview is recomputed from ROI time series and ROI
-grayordinate weights for the 17-network taxonomy; it is not copied from
-`gradient_fisherz` or from canonical8 weighted products. Identical surface
-colors can still occur when the weighted and unweighted profiles choose the
-same top-1 network, but the audit checks the underlying Fisher-z profile and
-status values. The legacy `gradient_count` overview alias uses the normalized
-Top-20 ROI profile and `normalized_top20_count` status rows. Audit all five
-branch outputs before using them:
-
-```bash
-/home/yojiao/.conda/envs/py314/bin/python scripts/iowa7t/audit_family17_gradient_overviews.py \
-  --output-root /home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_36P/hipp_outputs
-```
+The branch downstream entrypoints documented here produce surface, cortex,
+and FC products. They do not produce individual parcellation labels. The
+retained HCP family-aware cross-validation and template-matching workflow is
+documented in `docs/hipp_parcellation_network/crossfit_template_matching.md`;
+non-HCP template-matching adapters belong under `scripts/<dataset>/`.

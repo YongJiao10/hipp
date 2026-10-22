@@ -141,39 +141,6 @@ def test_subject_loader_fails_for_missing_run_metadata(tmp_path):
         _load_subject(surface_root, reference_root)
 
 
-def test_individual_weighted_writer_uses_declared_run_lengths(tmp_path):
-    individual = importlib.import_module("scripts.individual_workflow.lib.routea_individual_gradients_wta")
-    signal = np.array([-1, 1, 0, -1, 0, 1], dtype=np.float32)
-    individual.write_weighted_fisherz_outputs(
-        gradient_dir=tmp_path, subject="01", smoothing="2mm", hemi="L",
-        labels_k3=np.array([1]), valid_mask=np.array([True]),
-        hippocampal_timeseries=(signal + [20, 20, 20, 40, 40, 40])[None, :],
-        roi_timeseries=CORTEX[None, :], roi_rows=ROI_ROWS,
-        network_names=["A"], network_column="canonical7", color_map={"A": (1, 2, 3, 255)},
-        run_lengths=[3, 3],
-    )
-    expected = np.arctanh(np.corrcoef(signal, [4/3, -5/3, 1/3, 5/3, -7/3, 2/3])[0, 1])
-    np.testing.assert_allclose(
-        np.load(tmp_path / "cluster_network_profile_weighted_fisherz.npy"), [[expected]], atol=2e-7
-    )
-
-
-def test_individual_overview_recompute_reads_reference_run_lengths(tmp_path):
-    overview = importlib.import_module("scripts.individual_workflow.02_build_individual_overviews")
-    signal = np.array([-1, 1, 0, -1, 0, 1], dtype=np.float32)
-    surface_root, reference_root, _, summary = _write_subject(
-        tmp_path, hipp=np.array([signal + [20, 20, 20, 40, 40, 40], CORTEX])
-    )
-    summary.write_text(json.dumps({"run_ids": [1, 2], "run_lengths": [3, 3]}), encoding="utf-8")
-    actual = overview.weighted_gradient_profile_from_reference(
-        core=None, labels=np.array([1, 1]), valid_mask=np.array([True, False]),
-        subject="01", shared_root=reference_root, surface_root=surface_root,
-        smoothing="2mm", hemi="L", network_names=["A"], network_column="canonical7",
-    )
-    expected = np.arctanh(np.corrcoef(signal, [4/3, -5/3, 1/3, 5/3, -7/3, 2/3])[0, 1])
-    np.testing.assert_allclose(actual, [[expected]], atol=2e-7)
-
-
 def test_group_writer_preserves_missing_cells_for_assignment(tmp_path, monkeypatch):
     monkeypatch.setattr(branch, "ATLAS", "kong2022")
     monkeypatch.setattr(branch, "NETWORK_COLUMN", "canonical7")

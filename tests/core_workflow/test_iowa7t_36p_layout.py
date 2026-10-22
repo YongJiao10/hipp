@@ -140,3 +140,34 @@ def test_iowa7t_layout_rejects_bad_variant():
             variant="xcpd-lite",
             jianglab_root=Path("/tmp/jianglab"),
         )
+
+
+def test_iowa7t_migration_preserves_fc_without_restoring_individual_clustering(tmp_path):
+    from scripts.iowa7t.migrate_hipp_outputs_layout import build_mappings
+
+    subject = "06112026"
+    current_fc = (
+        tmp_path / "inputs/kong2022/shared_inputs/routea"
+        / f"sub-{subject}" / "fc/kong2022/2mm/L/fc.npy"
+    )
+    retired = [
+        tmp_path / f"work/individual_atlas/sub-{subject}/gradient/2mm/L/labels.npy",
+        tmp_path / f"work/individual_atlas/sub-{subject}/wta/2mm/L/labels.npy",
+        tmp_path / f"present/overviews/individual/gradient/sub-{subject}_overview.png",
+        tmp_path / f"present/overviews/individual/wta/sub-{subject}_overview.png",
+        tmp_path / "work/individual_atlas/_overview_core_adapter/manifest.json",
+        tmp_path / "work/individual_atlas/_runs/log.json",
+    ]
+    for path in [current_fc, *retired]:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"fixture")
+
+    mappings = build_mappings(tmp_path, [subject])
+
+    assert [(item.source, item.destination) for item in mappings] == [
+        (
+            current_fc,
+            tmp_path / f"subjects/sub-{subject}/multiband/fc/kong2022/2mm/L/fc.npy",
+        )
+    ]
+    assert all(path.is_file() for path in retired)
