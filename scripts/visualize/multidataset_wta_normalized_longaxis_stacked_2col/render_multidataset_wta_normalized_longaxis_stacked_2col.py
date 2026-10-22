@@ -106,7 +106,7 @@ COHORTS_COL1 = [
         "cohort_desc": "Healthy Young Adults",
         "n_subjects": 151,
         "group_root": REPO_ROOT
-        / "outputs_hcp/work/group_atlas/kong2022_7net_full_k3_fisherz",
+        / "outputs_hcp/work/group_atlas/pfm",
         "bg_color": "#ffffff",
         "badge_bg": "#0b3c5d",
         "badge_fg": "#ffffff",
@@ -117,7 +117,7 @@ COHORTS_COL1 = [
         "cohort_desc": "Healthy Controls",
         "n_subjects": 67,
         "group_root": REPO_ROOT
-        / "outputs_iowa_jj_tms/work/group_atlas/kong2022_7net_hc_full_k3_fisherz",
+        / "outputs_iowa_jj_tms/work/group_atlas/pfm/hc",
         "bg_color": "#f7faff",
         "badge_bg": "#1d5b79",
         "badge_fg": "#ffffff",
@@ -128,7 +128,7 @@ COHORTS_COL1 = [
         "cohort_desc": "Depression Patients",
         "n_subjects": 26,
         "group_root": REPO_ROOT
-        / "outputs_iowa_jj_tms/work/group_atlas/routea_patient_full_k3_fisherz",
+        / "outputs_iowa_jj_tms/work/group_atlas/pfm/patient",
         "bg_color": "#f7faff",
         "badge_bg": "#1d5b79",
         "badge_fg": "#ffffff",
@@ -139,7 +139,7 @@ COHORTS_COL1 = [
         "cohort_desc": "Non-Trauma Controls",
         "n_subjects": 51,
         "group_root": REPO_ROOT
-        / "outputs_stanford/work/group_atlas/routea_7net_nthc_full_k3_fisherz",
+        / "outputs_stanford/work/group_atlas/pfm/nthc",
         "bg_color": "#fffdf8",
         "badge_bg": "#8c4600",
         "badge_fg": "#ffffff",
@@ -150,7 +150,7 @@ COHORTS_COL1 = [
         "cohort_desc": "Trauma-Exposed Controls",
         "n_subjects": 40,
         "group_root": REPO_ROOT
-        / "outputs_stanford/work/group_atlas/routea_7net_tehc_full_k3_fisherz",
+        / "outputs_stanford/work/group_atlas/pfm/tehc",
         "bg_color": "#fffdf8",
         "badge_bg": "#8c4600",
         "badge_fg": "#ffffff",
@@ -164,7 +164,7 @@ COHORTS_COL2 = [
         "cohort_desc": "Non-Trauma Symptomatic",
         "n_subjects": 56,
         "group_root": REPO_ROOT
-        / "outputs_stanford/work/group_atlas/routea_7net_nts_full_k3_fisherz",
+        / "outputs_stanford/work/group_atlas/pfm/nts",
         "bg_color": "#fffdf8",
         "badge_bg": "#8c4600",
         "badge_fg": "#ffffff",
@@ -175,7 +175,7 @@ COHORTS_COL2 = [
         "cohort_desc": "Non-Trauma MDD (All)",
         "n_subjects": 43,
         "group_root": REPO_ROOT
-        / "outputs_stanford/work/group_atlas/routea_7net_nts_any_mdd_full_k3_fisherz",
+        / "outputs_stanford/work/group_atlas/pfm/nts_any_mdd",
         "bg_color": "#fffdf8",
         "badge_bg": "#8c4600",
         "badge_fg": "#ffffff",
@@ -186,7 +186,7 @@ COHORTS_COL2 = [
         "cohort_desc": "Non-Trauma Pure MDD",
         "n_subjects": 11,
         "group_root": REPO_ROOT
-        / "outputs_stanford/work/group_atlas/routea_7net_nts_pure_mdd_full_k3_fisherz",
+        / "outputs_stanford/work/group_atlas/pfm/nts_pure_mdd",
         "bg_color": "#fffdf8",
         "badge_bg": "#8c4600",
         "badge_fg": "#ffffff",
@@ -197,7 +197,7 @@ COHORTS_COL2 = [
         "cohort_desc": "Trauma Symptomatic",
         "n_subjects": 47,
         "group_root": REPO_ROOT
-        / "outputs_stanford/work/group_atlas/routea_7net_tis_full_k3_fisherz",
+        / "outputs_stanford/work/group_atlas/pfm/tis",
         "bg_color": "#fffdf8",
         "badge_bg": "#8c4600",
         "badge_fg": "#ffffff",
@@ -208,7 +208,7 @@ COHORTS_COL2 = [
         "cohort_desc": "Trauma-Informed PTSD",
         "n_subjects": 35,
         "group_root": REPO_ROOT
-        / "outputs_stanford/work/group_atlas/routea_7net_tis_ptsd_full_k3_fisherz",
+        / "outputs_stanford/work/group_atlas/pfm/tis_ptsd",
         "bg_color": "#fffdf8",
         "badge_bg": "#8c4600",
         "badge_fg": "#ffffff",

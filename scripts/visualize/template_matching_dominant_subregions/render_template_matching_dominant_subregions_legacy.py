@@ -80,7 +80,7 @@ DEFAULT_SURF_L = (
     / "inputs"
     / "kong2022"
     / "templates"
-    / "hipp_group_average_t1only_151"
+    / "hipp_group_average"
     / "group_average_surfaces"
     / "group-average_hemi-L_space-corobl_den-512_label-hipp_midthickness.surf.gii"
 )
@@ -90,7 +90,7 @@ DEFAULT_SURF_R = (
     / "inputs"
     / "kong2022"
     / "templates"
-    / "hipp_group_average_t1only_151"
+    / "hipp_group_average"
     / "group_average_surfaces"
     / "group-average_hemi-R_space-corobl_den-512_label-hipp_midthickness.surf.gii"
 )

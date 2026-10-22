@@ -229,7 +229,7 @@ def compute_cohort_subfield_composition(
     legacy_7net_namespace = bool(cinfo.get("legacy_7net_namespace", False))
     atlas_folder = "kong2022_7net" if legacy_7net_namespace else "kong2022"
     hcp_grp_root = (
-        REPO_ROOT / "outputs_hcp/work/group_atlas/kong2022_7net_full_k3_fisherz"
+        REPO_ROOT / "outputs_hcp/work/group_atlas/pfm"
     )
 
     for hemi in ["L", "R"]:

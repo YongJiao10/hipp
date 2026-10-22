@@ -115,7 +115,7 @@ All metrics across the 16 cohort $\times$ grid combinations are recorded in `tem
   `outputs_iowa_jj_tms/work/hcp151_fixed_template_matching/subjects/sub-{id}/matching/{smoothing}/hemi-{hemi}/labels.npy`
 - **Explicit 2mm/36P signal branches**:
   - Standard: `outputs_iowa_jj_tms/work/hcp151_fixed_template_matching/subjects/...`
-  - CtxReg: `outputs_iowa_jj_tms/work/hcp151_fixed_template_matching/routea_ctxreg/subjects/...`
+  - CtxReg: `outputs_iowa_jj_tms/work/hcp151_fixed_template_matching/pfm_ctxreg/subjects/...`
   Both branches require the exact per-hemisphere `combo_manifest.json` contract;
   the renderer resolves the manifest-declared `labels` and `scores` artifacts
   and validates the fixed-template label semantics before rendering.
@@ -127,7 +127,7 @@ All metrics across the 16 cohort $\times$ grid combinations are recorded in `tem
   - `manifests/jj_tms_pure_mdd_7_subjects.txt`
   - `manifests/jj_tms_comorbid_mdd_19_subjects.txt`
 - **Group Template Surfaces**:
-  `outputs_iowa_jj_tms/inputs/kong2022/templates/hipp_group_average_t1only_151/group_average_surfaces/group-average_hemi-{hemi}_space-corobl_den-512_label-hipp_midthickness.surf.gii`
+  `outputs_iowa_jj_tms/inputs/kong2022/templates/hipp_group_average/group_average_surfaces/group-average_hemi-{hemi}_space-corobl_den-512_label-hipp_midthickness.surf.gii`
 - **Surface Spec File**:
   `outputs_iowa_jj_tms/inputs/hippunfold/dense_corobl_batch/sub-1001/hippunfold/sub-1001/surf/sub-1001_den-512_label-hipp_surfaces.spec`
 - **Workbench Locked Scene**:

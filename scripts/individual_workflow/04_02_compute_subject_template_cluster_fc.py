@@ -66,7 +66,7 @@ DEFAULT_SURFACE_ROOT = (
     REPO_ROOT / "outputs_stanford" / "inputs" / "kong2022" / "shared_inputs" / "surface"
 )
 DEFAULT_ROI_ROOT = (
-    REPO_ROOT / "outputs_stanford" / "inputs" / "kong2022" / "shared_inputs" / "routea"
+    REPO_ROOT / "outputs_stanford" / "inputs" / "kong2022" / "shared_inputs" / "pfm"
 )
 DEFAULT_EXTERNAL_ROOT = Path(
     "/home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_CausalConnectome/template_matched_profiles"

@@ -405,7 +405,7 @@ def resolve_overview_mode_tag(group_root: Path, explicit_mode_tag: str | None) -
     # All maintained formal runs are full computations; there is no sparse
     # overview mode in production. Only honor an explicit caller override
     # (e.g. side-by-side comparisons). Never infer "sparse" from the
-    # directory name: formal roots such as work/group_atlas/routea_ctxdrop
+    # directory name: formal roots such as work/group_atlas/pfm_ctxdrop
     # omit the legacy _full_k3_fisherz suffix by contract yet remain full.
     if explicit_mode_tag is not None:
         text = str(explicit_mode_tag).strip()

@@ -37,10 +37,10 @@ DEFAULT_GROUP_ROOT = (
     / "outputs_hcp"
     / "work"
     / "group_atlas"
-    / "kong2022_7net_full_k3_fisherz"
+    / "pfm"
 )
 DEFAULT_GRADIENT_ROOT = (
-    REPO_ROOT / "outputs_hcp" / "work" / "hippomaps_gradients" / "routea"
+    REPO_ROOT / "outputs_hcp" / "work" / "hippomaps_gradients" / "pfm"
 )
 DEFAULT_OUT_ROOT = REPO_ROOT / "outputs_hcp" / "templates" / TEMPLATE_ID
 
@@ -163,18 +163,18 @@ def _validate_template_source_identity(
     _require_manifest_value(
         gradient_manifest,
         "route",
-        "routea_ctxreg",
+        "pfm_ctxreg",
         gradient_manifest_path,
     )
     group_signature = group_manifest.get("resume_input_signature_payload")
     if not isinstance(group_signature, Mapping):
         raise ValueError(
             "CtxReg template requires resume_input_signature_payload.route_tag="
-            f"'routea_ctxreg' in {group_manifest_path}"
+            f"'pfm_ctxreg' in {group_manifest_path}"
         )
-    if group_signature.get("route_tag") != "routea_ctxreg":
+    if group_signature.get("route_tag") != "pfm_ctxreg":
         raise ValueError(
-            "CtxReg template requires group source route_tag='routea_ctxreg' "
+            "CtxReg template requires group source route_tag='pfm_ctxreg' "
             f"in {group_manifest_path}, got {group_signature.get('route_tag')!r}"
         )
     for manifest, path in (
@@ -466,7 +466,7 @@ def build_template(
         "template_id": template_id,
         "signal_branch": _signal_branch_for_template(template_id),
         "signal_control_route": (
-            "routea_ctxreg" if template_id == CTXREG_TEMPLATE_ID else "routea"
+            "pfm_ctxreg" if template_id == CTXREG_TEMPLATE_ID else "pfm"
         ),
         "n_subjects": N_SUBJECTS,
         "density": N_VERTICES,
@@ -583,7 +583,7 @@ def validate_template(
             f"!= {expected_signal_branch!r}"
         )
     expected_route = (
-        "routea_ctxreg" if expected_template_id == CTXREG_TEMPLATE_ID else "routea"
+        "pfm_ctxreg" if expected_template_id == CTXREG_TEMPLATE_ID else "pfm"
     )
     if manifest.get("signal_control_route") is not None and manifest.get(
         "signal_control_route"

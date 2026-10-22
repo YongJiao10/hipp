@@ -57,3 +57,9 @@ reuse. A changed gate also invalidates existing smoothing during the surface
 stage. FC refuses old surface/cortex gates and recomputes old FC summaries.
 For changing baseline samples under the same policy, explicitly use
 `--overwrite` on the approved output tree.
+
+The branch-overview adapter stores shared cortical inputs under
+`runs/cache/<cache-name>/sub-<subject>_<branch>/inputs/pfm/` within the selected
+`hipp_outputs` root. HCP source references use
+`outputs_hcp/inputs/kong2022/shared_inputs/pfm/`, and the exported HCP template
+bank reads `outputs_hcp/work/group_atlas/pfm/wta-top/kong2022/`.

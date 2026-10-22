@@ -196,7 +196,7 @@ def vertex_colors(values, limit):
 
 
 def display_geometry():
-    base = ROOT / 'outputs_hcp/work/group_atlas/routea_full_k3_fisherz/gradient-spectral/kong2022/2mm/cov_0p80/g1g2g3'
+    base = ROOT / 'outputs_hcp/work/group_atlas/pfm/gradient-spectral/kong2022/2mm/cov_0p80/g1g2g3'
     manifests = [json.loads((base / f'hemi_{h}/group_atlas_manifest.json').read_text()) for h in ('L', 'R')]
     return {h: Path(m['template_left_or_right_surface']) for h,m in zip(('L','R'), manifests)}, Path(manifests[0]['template_spec_path'])
 

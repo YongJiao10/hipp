@@ -13,11 +13,11 @@ Use the explicit 151-subject QC roster:
 
 - Gradient prototypes: `outputs_hcp/templates/hcp151_routea_full_k3_fisherz/`.
 - Retained 400-ROI group WTA FC and support:
-  `outputs_hcp/work/group_atlas/kong2022_7net_full_k3_fisherz/wta-top/kong2022/`.
+  `outputs_hcp/work/group_atlas/pfm/wta-top/kong2022/`.
 - Original hippocampal time series/masks:
   `outputs_hcp/inputs/kong2022/shared_inputs/surface/`.
 - Cortical ROI time series and subject ROI registries:
-  `outputs_hcp/inputs/kong2022/shared_inputs/routea/`.
+  `outputs_hcp/inputs/kong2022/shared_inputs/pfm/`.
 
 ## Template recipes
 

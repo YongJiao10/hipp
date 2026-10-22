@@ -82,13 +82,13 @@ COHORTS_COL1_SPEC = [
         "cohort_desc": "Healthy Young Adults",
         "n_subjects": 151,
         "group_root_grad": REPO_ROOT
-        / "outputs_hcp/work/group_atlas/kong2022_7net_full_k3_fisherz",
+        / "outputs_hcp/work/group_atlas/pfm",
         "group_root_wta": REPO_ROOT
-        / "outputs_hcp/work/group_atlas/kong2022_7net_full_k3_fisherz",
+        / "outputs_hcp/work/group_atlas/pfm",
         "overview_grad": REPO_ROOT
-        / "outputs_hcp/present/overviews/kong2022_7net/kong2022_7net_gradient-spectral_group_overview_g1g2g3_kong2022_7net_fisherz.png",
+        / "outputs_hcp/present/overviews/pfm/kong2022_gradient-spectral_group_overview_g1g2g3_pfm_fisherz.png",
         "overview_wta": REPO_ROOT
-        / "outputs_hcp/present/overviews/kong2022_7net/kong2022_7net_wta-top_group_overview_kong2022_7net_normalized_top20_count.png",
+        / "outputs_hcp/present/overviews/pfm/kong2022_wta-top_group_overview_pfm_normalized_top20_count.png",
         "bg_color": "#ffffff",
         "badge_bg": "#0b3c5d",
         "badge_fg": "#ffffff",
@@ -102,13 +102,13 @@ COHORTS_COL1_SPEC = [
         "cohort_desc": "Healthy Controls",
         "n_subjects": 67,
         "group_root_grad": REPO_ROOT
-        / "outputs_iowa_jj_tms/work/group_atlas/kong2022_7net_hc_full_k3_fisherz",
+        / "outputs_iowa_jj_tms/work/group_atlas/pfm/hc",
         "group_root_wta": REPO_ROOT
-        / "outputs_iowa_jj_tms/work/group_atlas/kong2022_7net_hc_full_k3_fisherz",
+        / "outputs_iowa_jj_tms/work/group_atlas/pfm/hc",
         "overview_grad": REPO_ROOT
-        / "outputs_iowa_jj_tms/present/overviews/kong2022_7net/36p/hc/kong2022_7net_gradient-spectral_group_overview_g1g2g3_kong2022_7net_fisherz.png",
+        / "outputs_iowa_jj_tms/present/overviews/pfm/hc/kong2022_gradient-spectral_group_overview_g1g2g3_pfm_fisherz.png",
         "overview_wta": REPO_ROOT
-        / "outputs_iowa_jj_tms/present/overviews/kong2022_7net/36p/hc/kong2022_7net_wta-top_group_overview_kong2022_7net_normalized_top20_count.png",
+        / "outputs_iowa_jj_tms/present/overviews/pfm/hc/kong2022_wta-top_group_overview_pfm_normalized_top20_count.png",
         "bg_color": "#f7faff",
         "badge_bg": "#1d5b79",
         "badge_fg": "#ffffff",
@@ -122,13 +122,13 @@ COHORTS_COL1_SPEC = [
         "cohort_desc": "Depression Patients",
         "n_subjects": 26,
         "group_root_grad": REPO_ROOT
-        / "outputs_iowa_jj_tms/work/group_atlas/routea_patient_full_k3_fisherz",
+        / "outputs_iowa_jj_tms/work/group_atlas/pfm/patient",
         "group_root_wta": REPO_ROOT
-        / "outputs_iowa_jj_tms/work/group_atlas/routea_patient_full_k3_fisherz",
+        / "outputs_iowa_jj_tms/work/group_atlas/pfm/patient",
         "overview_grad": REPO_ROOT
-        / "outputs_iowa_jj_tms/present/overviews/kong2022_7net/36p/patient/kong2022_7net_gradient-spectral_group_overview_g1g2g3_kong2022_7net_fisherz.png",
+        / "outputs_iowa_jj_tms/present/overviews/pfm/patient/kong2022_gradient-spectral_group_overview_g1g2g3_pfm_fisherz.png",
         "overview_wta": REPO_ROOT
-        / "outputs_iowa_jj_tms/present/overviews/kong2022_7net/36p/patient/kong2022_7net_wta-top_group_overview_kong2022_7net_normalized_top20_count.png",
+        / "outputs_iowa_jj_tms/present/overviews/pfm/patient/kong2022_wta-top_group_overview_pfm_normalized_top20_count.png",
         "bg_color": "#f7faff",
         "badge_bg": "#1d5b79",
         "badge_fg": "#ffffff",
@@ -142,13 +142,13 @@ COHORTS_COL1_SPEC = [
         "cohort_desc": "Non-Trauma Controls",
         "n_subjects": 51,
         "group_root_grad": REPO_ROOT
-        / "outputs_stanford/work/group_atlas/routea_7net_nthc_full_k3_fisherz",
+        / "outputs_stanford/work/group_atlas/pfm/nthc",
         "group_root_wta": REPO_ROOT
-        / "outputs_stanford/work/group_atlas/routea_7net_nthc_full_k3_fisherz",
+        / "outputs_stanford/work/group_atlas/pfm/nthc",
         "overview_grad": REPO_ROOT
-        / "outputs_stanford/present/overviews/routea_7net/nthc/kong2022_gradient-spectral_group_overview_g1g2g3_routea_7net_fisherz.png",
+        / "outputs_stanford/present/overviews/pfm/nthc/kong2022_gradient-spectral_group_overview_g1g2g3_pfm_fisherz.png",
         "overview_wta": REPO_ROOT
-        / "outputs_stanford/present/overviews/routea_7net/nthc/kong2022_wta-top_group_overview_routea_7net_normalized_top20_count.png",
+        / "outputs_stanford/present/overviews/pfm/nthc/kong2022_wta-top_group_overview_pfm_normalized_top20_count.png",
         "bg_color": "#fffdf8",
         "badge_bg": "#8c4600",
         "badge_fg": "#ffffff",
@@ -162,13 +162,13 @@ COHORTS_COL1_SPEC = [
         "cohort_desc": "Trauma-Exposed Controls",
         "n_subjects": 40,
         "group_root_grad": REPO_ROOT
-        / "outputs_stanford/work/group_atlas/routea_7net_tehc_full_k3_fisherz",
+        / "outputs_stanford/work/group_atlas/pfm/tehc",
         "group_root_wta": REPO_ROOT
-        / "outputs_stanford/work/group_atlas/routea_7net_tehc_full_k3_fisherz",
+        / "outputs_stanford/work/group_atlas/pfm/tehc",
         "overview_grad": REPO_ROOT
-        / "outputs_stanford/present/overviews/routea_7net/tehc/kong2022_gradient-spectral_group_overview_g1g2g3_routea_7net_fisherz.png",
+        / "outputs_stanford/present/overviews/pfm/tehc/kong2022_gradient-spectral_group_overview_g1g2g3_pfm_fisherz.png",
         "overview_wta": REPO_ROOT
-        / "outputs_stanford/present/overviews/routea_7net/tehc/kong2022_wta-top_group_overview_routea_7net_normalized_top20_count.png",
+        / "outputs_stanford/present/overviews/pfm/tehc/kong2022_wta-top_group_overview_pfm_normalized_top20_count.png",
         "bg_color": "#fffdf8",
         "badge_bg": "#8c4600",
         "badge_fg": "#ffffff",
@@ -185,13 +185,13 @@ COHORTS_COL2_SPEC = [
         "cohort_desc": "Non-Trauma Symptomatic",
         "n_subjects": 56,
         "group_root_grad": REPO_ROOT
-        / "outputs_stanford/work/group_atlas/routea_7net_nts_full_k3_fisherz",
+        / "outputs_stanford/work/group_atlas/pfm/nts",
         "group_root_wta": REPO_ROOT
-        / "outputs_stanford/work/group_atlas/routea_7net_nts_full_k3_fisherz",
+        / "outputs_stanford/work/group_atlas/pfm/nts",
         "overview_grad": REPO_ROOT
-        / "outputs_stanford/present/overviews/routea_7net/nts/kong2022_gradient-spectral_group_overview_g1g2g3_routea_7net_fisherz.png",
+        / "outputs_stanford/present/overviews/pfm/nts/kong2022_gradient-spectral_group_overview_g1g2g3_pfm_fisherz.png",
         "overview_wta": REPO_ROOT
-        / "outputs_stanford/present/overviews/routea_7net/nts/kong2022_wta-top_group_overview_routea_7net_normalized_top20_count.png",
+        / "outputs_stanford/present/overviews/pfm/nts/kong2022_wta-top_group_overview_pfm_normalized_top20_count.png",
         "bg_color": "#fffdf8",
         "badge_bg": "#8c4600",
         "badge_fg": "#ffffff",
@@ -205,13 +205,13 @@ COHORTS_COL2_SPEC = [
         "cohort_desc": "Non-Trauma MDD",
         "n_subjects": 43,
         "group_root_grad": REPO_ROOT
-        / "outputs_stanford/work/group_atlas/routea_7net_nts_any_mdd_full_k3_fisherz",
+        / "outputs_stanford/work/group_atlas/pfm/nts_any_mdd",
         "group_root_wta": REPO_ROOT
-        / "outputs_stanford/work/group_atlas/routea_7net_nts_any_mdd_full_k3_fisherz",
+        / "outputs_stanford/work/group_atlas/pfm/nts_any_mdd",
         "overview_grad": REPO_ROOT
-        / "outputs_stanford/present/overviews/routea_7net/nts_any_mdd/kong2022_gradient-spectral_group_overview_g1g2g3_routea_7net_fisherz.png",
+        / "outputs_stanford/present/overviews/pfm/nts_any_mdd/kong2022_gradient-spectral_group_overview_g1g2g3_pfm_fisherz.png",
         "overview_wta": REPO_ROOT
-        / "outputs_stanford/present/overviews/routea_7net/nts_any_mdd/kong2022_wta-top_group_overview_routea_7net_normalized_top20_count.png",
+        / "outputs_stanford/present/overviews/pfm/nts_any_mdd/kong2022_wta-top_group_overview_pfm_normalized_top20_count.png",
         "bg_color": "#fffdf8",
         "badge_bg": "#8c4600",
         "badge_fg": "#ffffff",
@@ -225,13 +225,13 @@ COHORTS_COL2_SPEC = [
         "cohort_desc": "Non-Trauma Pure MDD",
         "n_subjects": 11,
         "group_root_grad": REPO_ROOT
-        / "outputs_stanford/work/group_atlas/routea_7net_nts_pure_mdd_full_k3_fisherz",
+        / "outputs_stanford/work/group_atlas/pfm/nts_pure_mdd",
         "group_root_wta": REPO_ROOT
-        / "outputs_stanford/work/group_atlas/routea_7net_nts_pure_mdd_full_k3_fisherz",
+        / "outputs_stanford/work/group_atlas/pfm/nts_pure_mdd",
         "overview_grad": REPO_ROOT
-        / "outputs_stanford/present/overviews/routea_7net/nts_pure_mdd/kong2022_gradient-spectral_group_overview_g1g2g3_routea_7net_fisherz.png",
+        / "outputs_stanford/present/overviews/pfm/nts_pure_mdd/kong2022_gradient-spectral_group_overview_g1g2g3_pfm_fisherz.png",
         "overview_wta": REPO_ROOT
-        / "outputs_stanford/present/overviews/routea_7net/nts_pure_mdd/kong2022_wta-top_group_overview_routea_7net_normalized_top20_count.png",
+        / "outputs_stanford/present/overviews/pfm/nts_pure_mdd/kong2022_wta-top_group_overview_pfm_normalized_top20_count.png",
         "bg_color": "#fffdf8",
         "badge_bg": "#8c4600",
         "badge_fg": "#ffffff",
@@ -245,13 +245,13 @@ COHORTS_COL2_SPEC = [
         "cohort_desc": "Trauma Symptomatic",
         "n_subjects": 47,
         "group_root_grad": REPO_ROOT
-        / "outputs_stanford/work/group_atlas/routea_7net_tis_full_k3_fisherz",
+        / "outputs_stanford/work/group_atlas/pfm/tis",
         "group_root_wta": REPO_ROOT
-        / "outputs_stanford/work/group_atlas/routea_7net_tis_full_k3_fisherz",
+        / "outputs_stanford/work/group_atlas/pfm/tis",
         "overview_grad": REPO_ROOT
-        / "outputs_stanford/present/overviews/routea_7net/tis/kong2022_gradient-spectral_group_overview_g1g2g3_routea_7net_fisherz.png",
+        / "outputs_stanford/present/overviews/pfm/tis/kong2022_gradient-spectral_group_overview_g1g2g3_pfm_fisherz.png",
         "overview_wta": REPO_ROOT
-        / "outputs_stanford/present/overviews/routea_7net/tis/kong2022_wta-top_group_overview_routea_7net_normalized_top20_count.png",
+        / "outputs_stanford/present/overviews/pfm/tis/kong2022_wta-top_group_overview_pfm_normalized_top20_count.png",
         "bg_color": "#fffdf8",
         "badge_bg": "#8c4600",
         "badge_fg": "#ffffff",
@@ -265,13 +265,13 @@ COHORTS_COL2_SPEC = [
         "cohort_desc": "Trauma PTSD",
         "n_subjects": 35,
         "group_root_grad": REPO_ROOT
-        / "outputs_stanford/work/group_atlas/routea_7net_tis_ptsd_full_k3_fisherz",
+        / "outputs_stanford/work/group_atlas/pfm/tis_ptsd",
         "group_root_wta": REPO_ROOT
-        / "outputs_stanford/work/group_atlas/routea_7net_tis_ptsd_full_k3_fisherz",
+        / "outputs_stanford/work/group_atlas/pfm/tis_ptsd",
         "overview_grad": REPO_ROOT
-        / "outputs_stanford/present/overviews/routea_7net/tis_ptsd/kong2022_gradient-spectral_group_overview_g1g2g3_routea_7net_fisherz.png",
+        / "outputs_stanford/present/overviews/pfm/tis_ptsd/kong2022_gradient-spectral_group_overview_g1g2g3_pfm_fisherz.png",
         "overview_wta": REPO_ROOT
-        / "outputs_stanford/present/overviews/routea_7net/tis_ptsd/kong2022_wta-top_group_overview_routea_7net_normalized_top20_count.png",
+        / "outputs_stanford/present/overviews/pfm/tis_ptsd/kong2022_wta-top_group_overview_pfm_normalized_top20_count.png",
         "bg_color": "#fffdf8",
         "badge_bg": "#8c4600",
         "badge_fg": "#ffffff",
@@ -1970,18 +1970,18 @@ def resolve_cohort_inputs_roots(
             REPO_ROOT / "outputs_hcp/inputs/kong2022/shared_inputs/surface"
         )
         reference_root = (
-            REPO_ROOT / "outputs_hcp/inputs/kong2022/shared_inputs/routea"
+            REPO_ROOT / "outputs_hcp/inputs/kong2022/shared_inputs/pfm"
         )
         return surface_root, reference_root, surface_root
     elif ds_key == "iowa_jj_tms":
         var_suffix = "_22p" if variant == "22p" else ""
         surface_root = (
             REPO_ROOT
-            / f"outputs_iowa_jj_tms/inputs/kong2022/shared_inputs{var_suffix}/surface"
+            / f"outputs_iowa_jj_tms/inputs/kong2022{var_suffix}/shared_inputs/surface"
         )
         reference_root = (
             REPO_ROOT
-            / f"outputs_iowa_jj_tms/inputs/kong2022/shared_inputs{var_suffix}/routea"
+            / f"outputs_iowa_jj_tms/inputs/kong2022{var_suffix}/shared_inputs/pfm"
         )
         return surface_root, reference_root, surface_root
     elif ds_key == "stanford":
@@ -1992,7 +1992,7 @@ def resolve_cohort_inputs_roots(
             )
             reference_root = (
                 REPO_ROOT
-                / "outputs_stanford/inputs/kong2022_22p/shared_inputs/routea"
+                / "outputs_stanford/inputs/kong2022_22p/shared_inputs/pfm"
             )
         else:
             surface_root = (
@@ -2001,7 +2001,7 @@ def resolve_cohort_inputs_roots(
             )
             reference_root = (
                 REPO_ROOT
-                / "outputs_stanford/inputs/kong2022/shared_inputs/routea"
+                / "outputs_stanford/inputs/kong2022/shared_inputs/pfm"
             )
         return surface_root, reference_root, surface_root
 

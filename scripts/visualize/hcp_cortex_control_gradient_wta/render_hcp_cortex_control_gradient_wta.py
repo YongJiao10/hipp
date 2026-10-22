@@ -125,7 +125,7 @@ BRANCHES: list[dict[str, Any]] = [
         "badge_bg": "#0b3c5d",
         "badge_fg": "#ffffff",
         "bg_color": "#ffffff",
-        "group_root": REPO_ROOT / "outputs_hcp" / "work" / "group_atlas" / "kong2022_7net_full_k3_fisherz",
+        "group_root": REPO_ROOT / "outputs_hcp" / "work" / "group_atlas" / "pfm",
     },
     {
         "id": "ctxdrop",
@@ -136,7 +136,7 @@ BRANCHES: list[dict[str, Any]] = [
         "badge_bg": "#1d5b79",
         "badge_fg": "#ffffff",
         "bg_color": "#f7faff",
-        "group_root": REPO_ROOT / "outputs_hcp" / "work" / "group_atlas" / "routea_ctxdrop",
+        "group_root": REPO_ROOT / "outputs_hcp" / "work" / "group_atlas" / "pfm_ctxdrop",
     },
     {
         "id": "ctxreg",
@@ -147,7 +147,7 @@ BRANCHES: list[dict[str, Any]] = [
         "badge_bg": "#8c4600",
         "badge_fg": "#ffffff",
         "bg_color": "#fffdf8",
-        "group_root": REPO_ROOT / "outputs_hcp" / "work" / "group_atlas" / "routea_ctxreg",
+        "group_root": REPO_ROOT / "outputs_hcp" / "work" / "group_atlas" / "pfm_ctxreg",
     },
 ]
 

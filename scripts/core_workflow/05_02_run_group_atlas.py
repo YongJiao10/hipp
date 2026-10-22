@@ -12,16 +12,16 @@ Main Flow Path:
 
 Inputs:
 - Command-line arguments:
-  - --shared-root: Path to shared processed files (default: `outputs_hcp/inputs/kong2022/shared_inputs/routea`).
+  - --shared-root: Path to shared processed files (default: `outputs_hcp/inputs/kong2022/shared_inputs/pfm`).
   - --surface-root: Path to BOLD surfaces root directory (default: `outputs_hcp/inputs/kong2022/shared_inputs/surface`).
   - --profile-surface-root: Optional root for hippocampal time series used only by cluster-network profile annotation; defaults to `--surface-root`.
   - --profile-source-mode: Profile source contract (`canonical` or the explicit `original-denoised` recovery source).
   - --profile-source-root: Required with `--profile-source-mode original-denoised`; root containing the approved fixed-template subject outputs.
   - --profile-source-registry: Required with `--profile-source-mode original-denoised`; the verified ordered 400-ROI registry TSV.
-  - --out-root: Directory where group-atlas intermediate files will be saved (default: `outputs_hcp/work/group_atlas/routea_full_k3_fisherz`).
+  - --out-root: Directory where group-atlas intermediate files will be saved (default: `outputs_hcp/work/group_atlas/pfm`).
   - --gradient-root: Directory containing computed continuous gradients (default: `outputs_hcp/work/hippomaps_gradients`).
   - --hippomaps-root: Root path to external HippoMaps codebase (default: `external/hippomaps`).
-  - --route-tag: Expected workflow branch tag, e.g., "routea", "routea_ctxreg", "routea_ctxdrop", or "routeb".
+  - --route-tag: Expected workflow branch tag, e.g., "pfm", "pfm_ctxreg", "pfm_ctxdrop", or "fixed".
   - --subjects-manifest: Path to QC-passed subject list manifest.
   - --hippunfold-batch-root: Batch output root containing sub-*/hippunfold outputs.
   - --kong2022-dlabel: Path to standard Kong2022 dlabel.nii cortical atlas file.

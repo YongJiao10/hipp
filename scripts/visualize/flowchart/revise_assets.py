@@ -26,7 +26,7 @@ hip=read_surface(str(ROOT/'external/hippomaps/hippomaps/resources/canonical_surf
 hip.Points[:,0]*=-1
 # Mirrored canonical and native meshes have opposite winding but identical IDs.
 np.testing.assert_array_equal(np.sort(hip.GetCells2D(),axis=1),np.sort(native.GetCells2D(),axis=1))
-fc=load(ROOT/'outputs_hcp/inputs/kong2022/shared_inputs/routea/sub-100610/fc/kong2022/2mm/hemi_L/hipp_vertex_to_network_fc.npy')
+fc=load(ROOT/'outputs_hcp/inputs/kong2022/shared_inputs/pfm/sub-100610/fc/kong2022/2mm/hemi_L/hipp_vertex_to_network_fc.npy')
 ap=native.Points[:,1]
 
 def render(name,surface,values,cmap,limits,size,zoom,view=None):

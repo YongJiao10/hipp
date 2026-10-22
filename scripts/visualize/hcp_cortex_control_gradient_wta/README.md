@@ -10,16 +10,16 @@ Cortical functional connectivity profiles of the hippocampus can be influenced b
 
 ### The 3 Cortex-Control Branches
 1. **Standard (Baseline Reference)**:
-   - Group Atlas Root: `outputs_hcp/work/group_atlas/kong2022_7net_full_k3_fisherz`
-   - Overview Root: `outputs_hcp/present/overviews/kong2022_7net`
+   - Group Atlas Root: `outputs_hcp/work/group_atlas/pfm`
+   - Overview Root: `outputs_hcp/present/overviews/pfm`
    - Description: Unconstrained full-cortex connectivity matrix ($N=151$, Young Adults, ICA-FIX).
 2. **CtxDrop (Adjacent Vertices Dropped)**:
-   - Group Atlas Root: `outputs_hcp/work/group_atlas/routea_ctxdrop`
-   - Overview Root: `outputs_hcp/present/overviews/routea_ctxdrop`
+   - Group Atlas Root: `outputs_hcp/work/group_atlas/pfm_ctxdrop`
+   - Overview Root: `outputs_hcp/present/overviews/pfm_ctxdrop`
    - Description: Cortical vertices within spatial proximity to the hippocampus are completely excluded prior to gradient decomposition and parcellation.
 3. **CtxReg (Adjacent Vertices Regressed)**:
-   - Group Atlas Root: `outputs_hcp/work/group_atlas/routea_ctxreg`
-   - Overview Root: `outputs_hcp/present/overviews/routea_ctxreg`
+   - Group Atlas Root: `outputs_hcp/work/group_atlas/pfm_ctxreg`
+   - Overview Root: `outputs_hcp/present/overviews/pfm_ctxreg`
    - Description: Cortical time-series are residualized against adjacent proximity signals prior to gradient calculation and parcellation.
 
 ---

@@ -9,7 +9,7 @@ Main Flow Path:
 
 Inputs:
 - Command-line arguments:
-  - --shared-root: Explicit FC output root; when omitted, normal runs use `outputs_hcp/inputs/kong2022/shared_inputs/routea` and `--ctxdrop` uses the canonical `.../shared_inputs/routea_ctxdrop` root.
+  - --shared-root: Explicit FC output root; when omitted, normal runs use `outputs_hcp/inputs/kong2022/shared_inputs/pfm` and `--ctxdrop` uses the canonical `.../shared_inputs/pfm_ctxdrop` root.
   - --surface-root: Path to shared BOLD surfaces (default: `outputs_hcp/inputs/kong2022/shared_inputs/surface`).
   - --subjects-manifest: Path to QC-passed subject list manifest (default: `outputs_hcp/inputs/kong2022/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt`).
   - --subjects: Space-separated list of explicit subject IDs.

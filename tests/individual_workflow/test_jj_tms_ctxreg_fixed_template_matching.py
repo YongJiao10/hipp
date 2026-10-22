@@ -120,7 +120,7 @@ def _write_template_fixture(module, root: Path, *, template_id: str):
                         "group_labels_final": str(source_labels.resolve()),
                         "group_support_mask": str(source_support.resolve()),
                         "resume_input_signature_payload": {
-                            "route_tag": "routea_ctxreg"
+                            "route_tag": "pfm_ctxreg"
                         },
                     }
                 ),
@@ -135,7 +135,7 @@ def _write_template_fixture(module, root: Path, *, template_id: str):
                         "hemi": hemi,
                         "n_subjects": 151,
                         "subjects": subjects,
-                        "route": "routea_ctxreg",
+                        "route": "pfm_ctxreg",
                     }
                 ),
                 encoding="utf-8",
@@ -180,7 +180,7 @@ def _write_template_fixture(module, root: Path, *, template_id: str):
         "workflow": "build_hcp151_fixed_template",
         "template_id": template_id,
         "signal_branch": "ctxreg",
-        "signal_control_route": "routea_ctxreg",
+        "signal_control_route": "pfm_ctxreg",
         "n_subjects": 151,
         "density": 512,
         "k": 3,

@@ -72,7 +72,7 @@ Standard subject-level FC extraction uses separate, explicit input roots. HCP
 surface time series and masks come from
 `outputs_hcp/inputs/kong2022/shared_inputs/surface`, while its Kong2022
 cortical reference arrays and registry come from
-`outputs_hcp/inputs/kong2022/shared_inputs/routea`. Iowa uses the matching
+`outputs_hcp/inputs/kong2022/shared_inputs/pfm`. Iowa uses the matching
 `outputs_iowa_jj_tms/inputs/kong2022/shared_inputs{_22p}/surface`
 and `.../shared_inputs{_22p}/routea` roots. The `shared_inputs` parent itself
 is not a subject-input root; resolving it directly is an error. CtxReg keeps
@@ -105,7 +105,7 @@ frame counts must match its denoised run evidence. HCP and Iowa22P keep their
 canonical inputs. No upstream reference file is overwritten or truncated.
 
 The formal ROI registry path is
-`outputs_hcp/work/group_atlas/routea_ctxreg/gradient-spectral/kong2022/2mm/cov_0p80/g1g2g3/hemi_L/cluster_roi_registry.tsv`.
+`outputs_hcp/work/group_atlas/pfm_ctxreg/gradient-spectral/kong2022/2mm/cov_0p80/g1g2g3/hemi_L/cluster_roi_registry.tsv`.
 A migrated registry is reusable only when its SHA-256 matches the
 authoritative registry hash recorded in the manifest:
 `6063230dde6afdb161ab45871fda25fa3e3df1ca2d36632f9b12058596871cee`.

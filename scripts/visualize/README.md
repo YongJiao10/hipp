@@ -239,9 +239,9 @@ traceability records and are not accepted as active comparison inputs.
 Comprehensive multi-modal combination figure directly evaluating hippocampal functional connectivity under cortical proximity controls in HCP 7T Young Adults ($N=151$) across the $2\times2$ grid matrix (`2mm_36p`, `2mm_22p`, `4mm_36p`, `4mm_22p`):
 
 - **Branches Compared**:
-  1. `Standard`: Unconstrained RouteA baseline reference (`outputs_hcp/work/group_atlas/kong2022_7net_full_k3_fisherz`)
-  2. `CtxDrop`: Proximity control dropping adjacent cortical vertices (`outputs_hcp/work/group_atlas/routea_ctxdrop`)
-  3. `CtxReg`: Proximity control regressing adjacent cortical vertex signals (`outputs_hcp/work/group_atlas/routea_ctxreg`)
+  1. `Standard`: Unconstrained RouteA baseline reference (`outputs_hcp/work/group_atlas/pfm`)
+  2. `CtxDrop`: Proximity control dropping adjacent cortical vertices (`outputs_hcp/work/group_atlas/pfm_ctxdrop`)
+  3. `CtxReg`: Proximity control regressing adjacent cortical vertex signals (`outputs_hcp/work/group_atlas/pfm_ctxreg`)
 
 - **Subfigures & Modalities Displayed**:
   1. **Subfig 1: Gradient Spectral Clustering — Positive Fisher-z Profiles**:

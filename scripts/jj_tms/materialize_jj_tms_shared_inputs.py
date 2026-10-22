@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Materialize shared_inputs (surface, routea) and group average template surfaces for JJ_TMS."""
+"""Materialize shared_inputs (surface, pfm) and group average template surfaces for JJ_TMS."""
 
 from __future__ import annotations
 
@@ -32,8 +32,8 @@ JJ_MATCH_ROOT = REPO_ROOT / "outputs_iowa_jj_tms/work/hcp151_fixed_template_matc
 BATCH_ROOT = REPO_ROOT / "outputs_iowa_jj_tms/inputs/hippunfold/dense_corobl_batch"
 KONG_ROOT = REPO_ROOT / "outputs_iowa_jj_tms/inputs/kong2022"
 SHARED_SURFACE_ROOT = KONG_ROOT / "shared_inputs" / "surface"
-SHARED_ROUTEA_ROOT = KONG_ROOT / "shared_inputs" / "routea"
-TEMPLATE_ROOT = KONG_ROOT / "templates" / "hipp_group_average_t1only_151" / "group_average_surfaces"
+SHARED_ROUTEA_ROOT = KONG_ROOT / "shared_inputs" / "pfm"
+TEMPLATE_ROOT = KONG_ROOT / "templates" / "hipp_group_average" / "group_average_surfaces"
 MANIFEST_94 = REPO_ROOT / "manifests" / "jj_tms_94_subjects.txt"
 
 HEMIS = ["L", "R"]

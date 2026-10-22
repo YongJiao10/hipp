@@ -84,28 +84,28 @@ DATASET_CONFIG = [
     {
         "dataset_name": "HCP 7T",
         "cohorts": [
-            ("HCP 7T", 151, REPO_ROOT / "outputs_hcp/work/group_atlas/routea_full_k3_fisherz"),
+            ("HCP 7T", 151, REPO_ROOT / "outputs_hcp/work/group_atlas/pfm"),
         ],
         "bg_color": "#fafafa",
     },
     {
         "dataset_name": "Iowa 3T",
         "cohorts": [
-            ("HC", 67, REPO_ROOT / "outputs_iowa_jj_tms/work/group_atlas/routea_hc_full_k3_fisherz"),
-            ("Patient", 26, REPO_ROOT / "outputs_iowa_jj_tms/work/group_atlas/routea_patient_full_k3_fisherz"),
+            ("HC", 67, REPO_ROOT / "outputs_iowa_jj_tms/work/group_atlas/pfm/hc"),
+            ("Patient", 26, REPO_ROOT / "outputs_iowa_jj_tms/work/group_atlas/pfm/patient"),
         ],
         "bg_color": "#f2f7fc",
     },
     {
         "dataset_name": "Stanford",
         "cohorts": [
-            ("NTHC", 51, REPO_ROOT / "outputs_stanford/work/group_atlas/routea_nthc_full_k3_fisherz"),
-            ("TEHC", 40, REPO_ROOT / "outputs_stanford/work/group_atlas/routea_tehc_full_k3_fisherz"),
-            ("NTS",  56, REPO_ROOT / "outputs_stanford/work/group_atlas/routea_nts_full_k3_fisherz"),
-            ("NTS Any MDD", 43, REPO_ROOT / "outputs_stanford/work/group_atlas/routea_nts_any_mdd_full_k3_fisherz"),
-            ("NTS Pure MDD", 11, REPO_ROOT / "outputs_stanford/work/group_atlas/routea_nts_pure_mdd_full_k3_fisherz"),
-            ("TIS",  47, REPO_ROOT / "outputs_stanford/work/group_atlas/routea_tis_full_k3_fisherz"),
-            ("TIS PTSD", 35, REPO_ROOT / "outputs_stanford/work/group_atlas/routea_tis_ptsd_full_k3_fisherz"),
+            ("NTHC", 51, REPO_ROOT / "outputs_stanford/work/group_atlas/pfm/nthc"),
+            ("TEHC", 40, REPO_ROOT / "outputs_stanford/work/group_atlas/pfm/tehc"),
+            ("NTS",  56, REPO_ROOT / "outputs_stanford/work/group_atlas/pfm/nts"),
+            ("NTS Any MDD", 43, REPO_ROOT / "outputs_stanford/work/group_atlas/pfm/nts_any_mdd"),
+            ("NTS Pure MDD", 11, REPO_ROOT / "outputs_stanford/work/group_atlas/pfm/nts_pure_mdd"),
+            ("TIS",  47, REPO_ROOT / "outputs_stanford/work/group_atlas/pfm/tis"),
+            ("TIS PTSD", 35, REPO_ROOT / "outputs_stanford/work/group_atlas/pfm/tis_ptsd"),
         ],
         "bg_color": "#fbf9f4",
     },

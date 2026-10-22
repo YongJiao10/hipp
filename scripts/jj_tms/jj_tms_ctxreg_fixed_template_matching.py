@@ -62,7 +62,7 @@ DEFAULT_SHARED_FC_ROOT = (
     / "inputs"
     / "kong2022"
     / "shared_inputs"
-    / "routea_ctxreg"
+    / "pfm_ctxreg"
 )
 DEFAULT_SURFACE_INPUT_ROOT = (
     DEFAULT_IOWA_OUTPUTS_ROOT
@@ -81,7 +81,7 @@ DEFAULT_OUT_ROOT = (
     DEFAULT_IOWA_OUTPUTS_ROOT
     / "work"
     / "hcp151_fixed_template_matching"
-    / "routea_ctxreg"
+    / "pfm_ctxreg"
 )
 DEFAULT_MANIFESTS = (
     REPO_ROOT / "manifests" / "jj_tms_hc_67_subjects.txt",
@@ -338,7 +338,7 @@ def _validate_ctxreg_source_manifests(
         ("smoothing", smoothing),
         ("hemi", hemi),
         ("n_subjects", 151),
-        ("route", "routea_ctxreg"),
+        ("route", "pfm_ctxreg"),
     ):
         if gradient.get(key) != expected:
             raise ValueError(
@@ -346,9 +346,9 @@ def _validate_ctxreg_source_manifests(
                 f"{gradient.get(key)!r} != {expected!r}"
             )
     signature = group.get("resume_input_signature_payload")
-    if not isinstance(signature, Mapping) or signature.get("route_tag") != "routea_ctxreg":
+    if not isinstance(signature, Mapping) or signature.get("route_tag") != "pfm_ctxreg":
         raise ValueError(
-            f"CtxReg template group source lacks routea_ctxreg provenance: {group_path}"
+            f"CtxReg template group source lacks pfm_ctxreg provenance: {group_path}"
         )
     group_subjects = _normalize_template_subjects(
         group.get("subjects"), path=group_path
@@ -385,7 +385,7 @@ def load_template(template_root: Path) -> dict[str, object]:
             f"CtxReg template signal_branch is incompatible: "
             f"{manifest.get('signal_branch')!r}"
         )
-    if manifest.get("signal_control_route") not in (None, "routea_ctxreg"):
+    if manifest.get("signal_control_route") not in (None, "pfm_ctxreg"):
         raise ValueError(
             f"CtxReg template route is incompatible: "
             f"{manifest.get('signal_control_route')!r}"

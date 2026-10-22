@@ -275,6 +275,19 @@ canonical7 column remain valid, while direct seven-network files are never used
 as a fallback or replacement for the 400-ROI FC bank.
 HCP has no native 22P input branch.
 
+Iowa JJ_TMS 22P retains its ordered 400-ROI references under
+`outputs_iowa_jj_tms/inputs/kong2022_22p/shared_inputs/pfm/`. Its separate
+saved direct-seven-network package remains under
+`pfm/variants/canonical7_direct/`, preserving its original `kong2022_7net`
+atlas directory and scientific metadata. This package is an explicit retained
+variant; the current 400-ROI workflow does not select it by filesystem presence.
+
+Cortex references are derived from cortical CIFTI time series and cortical
+labels, independently of hippocampal sampling coordinates. A hippocampal
+coordinate correction does not require regenerating those references. Path
+cleanup preserves existing reference arrays, network summaries, and QC
+provenance; it changes their locations rather than their scientific content.
+
 `03_02`, the direct RouteA extractor, and `04_01` require explicit `--dataset`
 selection (`hcp`, `stanford`, `iowa_jj_tms`, `iowa7t`, `banda`, or `pdc`).
 Reference resume compares the selected source paths, run IDs/lengths, baseline
@@ -567,7 +580,7 @@ That source is preserved as
 `cluster_network_profile_roi_equal_fisherz_baseline.npy` and is recorded in
 the `fisherz` variant metadata; a missing label or baseline fails closed.
 
-For Stanford subgroup reruns, keep the weighted outputs in separate branch roots and pass Stanford shared-input/template roots explicitly so manifests do not fall back to HCP assets. HC uses `outputs_stanford/work/group_atlas/routea_hc_weighted_fisherz_full_k3/`; Symp uses `outputs_stanford/work/group_atlas/routea_symp_weighted_fisherz_full_k3/`. Both should pass `--surface-root outputs_stanford/inputs/kong2022/shared_inputs/surface`, `--reference-root outputs_stanford/inputs/kong2022/shared_inputs/routea`, and `--template-surface-dir outputs_stanford/inputs/kong2022/templates/hipp_group_average_t1only_151/group_average_surfaces`, and `--template-spec outputs_stanford/inputs/hippunfold/dense_corobl_batch/sub-1001/hippunfold/sub-1001/surf/sub-1001_den-512_label-hipp_surfaces.spec`. The Stanford validation script supports `--analysis-version weighted_fisherz` to compare HCP weighted, Stanford HC weighted, and Stanford Symp weighted branches and to recompute subject-level endpoints from weighted network time series rather than equal ROI Fisher-z averaging. All ROI-registry WTA runs use normalized top20-count labels; no weighted or historical WTA assignment is produced.
+For Stanford subgroup reruns, keep the weighted outputs in separate branch roots and pass Stanford shared-input/template roots explicitly so manifests do not fall back to HCP assets. HC uses `outputs_stanford/work/group_atlas/pfm_weighted/hc/`; Symp uses `outputs_stanford/work/group_atlas/pfm_weighted/symp/`. Both should pass `--surface-root outputs_stanford/inputs/kong2022/shared_inputs/surface`, `--reference-root outputs_stanford/inputs/kong2022/shared_inputs/pfm`, and `--template-surface-dir outputs_stanford/inputs/kong2022/templates/hipp_group_average/group_average_surfaces`, and `--template-spec outputs_stanford/inputs/hippunfold/dense_corobl_batch/sub-1001/hippunfold/sub-1001/surf/sub-1001_den-512_label-hipp_surfaces.spec`. The Stanford validation script supports `--analysis-version weighted_fisherz` to compare HCP weighted, Stanford HC weighted, and Stanford Symp weighted branches and to recompute subject-level endpoints from weighted network time series rather than equal ROI Fisher-z averaging. All ROI-registry WTA runs use normalized top20-count labels; no weighted or historical WTA assignment is produced.
 
 The cortex-control materializer (`04_00`) and ROI-FC materializer (`04_01`)
 accept an explicit `--run-metadata-template` for recorded run IDs and lengths;
@@ -659,7 +672,7 @@ inputs. Each task uses its complete roster and explicitly selects its own
 QC-passed task cohort; the HCP rest cohort authority is the explicit
 151-subject file below.
 
-The formal average at `kong2022/templates/hipp_group_average_t1only_151`
+The formal average at `kong2022/templates/hipp_group_average`
 accepts only the exact roster in
 `outputs_hcp/inputs/qc/vertex_qc_t1only/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_151.txt`,
 even if an existing average has missing or incorrect metadata. Other analyses

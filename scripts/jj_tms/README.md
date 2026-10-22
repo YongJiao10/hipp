@@ -39,7 +39,7 @@ correlation. This adapter does not choose a new hippocampal QC policy.
 `scripts/jj_tms/jj_tms_ctxreg_fixed_template_matching.py` is a separate
 CtxReg adapter. It requires the exact template identity
 `hcp151_routea_ctxreg`, exact 2mm CtxReg FC caches under
-`shared_inputs/routea_ctxreg/`, the standard validity masks under
+`shared_inputs/pfm_ctxreg/`, the standard validity masks under
 `shared_inputs/surface/`, and the consumed HippUnfold
 `space-T1w_den-512` surfaces. It does not substitute the standard
 `routea` FC branch or select an alternate file by existence order.
@@ -67,8 +67,8 @@ The CtxReg template builder must be called with the explicit identity:
 /home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/05_01_build_hcp151_fixed_template.py \
   --mode preflight \
   --template-id hcp151_routea_ctxreg \
-  --group-root outputs_hcp/work/group_atlas/routea_ctxreg \
-  --gradient-root outputs_hcp/work/hippomaps_gradients/routea_ctxreg \
+  --group-root outputs_hcp/work/group_atlas/pfm_ctxreg \
+  --gradient-root outputs_hcp/work/hippomaps_gradients/pfm_ctxreg \
   --out-root outputs_hcp/templates/hcp151_routea_ctxreg
 ```
 
@@ -99,16 +99,17 @@ The fixed subgroup labels are `pure MDD` (`n=7`) and `comorbid MDD` (`n=19`);
 
 The default unversioned subgroup branch is 36P. Its subgroup FC caches are
 isolated under
-`outputs_iowa_jj_tms/inputs/kong2022/shared_inputs/routea_{pure_mdd,comorbid_mdd}/`,
+`outputs_iowa_jj_tms/inputs/kong2022/shared_inputs/pfm/{pure_mdd,comorbid_mdd}/`,
 with downstream roots under `outputs_iowa_jj_tms/{work,present}/` using the
 same unversioned subgroup names.
 
 The completed 22P subgroup rerun reads versioned inputs from
-`outputs_iowa_jj_tms/inputs/kong2022/shared_inputs_22p/{routea,surface}/`.
-Its subgroup FC, gradient, group-atlas, and weighted roots append `_22p`:
-`routea_pure_mdd_22p` and `routea_comorbid_mdd_22p`. The presentation roots
-use the explicit atlas/variant layout
-`outputs_iowa_jj_tms/present/overviews/kong2022/22p/{pure_mdd,comorbid_mdd}/`.
+`outputs_iowa_jj_tms/inputs/kong2022_22p/shared_inputs/{pfm,surface}/`.
+Its FC caches use `inputs/kong2022_22p/shared_inputs/pfm/{pure_mdd,comorbid_mdd}/`.
+Gradients and base group atlases use `pfm_22p/{pure_mdd,comorbid_mdd}/`
+under their respective work roots; weighted group atlases use
+`pfm_weighted_22p/{pure_mdd,comorbid_mdd}/`. Presentation roots use
+`outputs_iowa_jj_tms/present/overviews/pfm_22p/{pure_mdd,comorbid_mdd}/`.
 Each presentation directory contains four PNGs:
 Fisher-z gradient-spectral, normalized Top-20 gradient-spectral, normalized
 Top-20 WTA, and weighted-Fisher-z gradient-spectral.
@@ -117,22 +118,23 @@ Top-20 WTA, and weighted-Fisher-z gradient-spectral.
 ## JJ_TMS canonical7 branch
 
 The JJ_TMS canonical7 output is the default branch of the existing numbered
-core workflow. The unsuffixed `kong2022`/`routea` roots are canonical7; the
+core workflow. The unsuffixed `kong2022`/`pfm` roots are canonical7; the
 canonical7 reference, FC, gradient, and group-atlas products are computed
 directly from the same raw Route-A labels/dtseries as canonical8; canonical7
 must not consume canonical8 FC, gradients, clustering, or K-selection outputs.
 Pass `--atlas-slug kong2022` to `03_02`, `--atlas kong2022` to `04_01`,
-`--routes routea` to `05_01`, and
-`--atlases kong2022 --network-taxonomy canonical7 --route-tag routea` to
+`--routes pfm` to `05_01`, and
+`--atlases kong2022 --network-taxonomy canonical7 --route-tag pfm` to
 `05_02`. The existing renderers then consume the resulting direct branch.
 
 The fixed Iowa Patient cohort is 26 subjects with sub-3003 excluded. The
 active Patient branch uses the standard names
-`routea_patient_full_k3_fisherz` and
-`routea_patient_22p_full_k3_fisherz`; Lynch2024 7net uses the
+`pfm/patient` and
+`pfm_22p/patient`; Lynch2024 7net uses the
 corresponding `lynch2024_7net_iowa3t_patient*` roots. There is no parallel
 27-person Patient branch.
-The 22P roots retain `shared_inputs_22p` and `_22p` suffixes; unversioned roots are the 36P branch.
+The 22P inputs use `kong2022_22p/shared_inputs/`; downstream roots use
+`pfm_22p/<cohort>/`. Unversioned inputs and `pfm/<cohort>/` are the 36P branch.
 
 ## JJ-TMS 22P core-workflow contract
 
@@ -143,7 +145,7 @@ is independent of 22P/36P because it is derived from structural images, but the
 sampled hippocampal BOLD time series are variant-specific and live under the
 dedicated root:
 
-`outputs_iowa_jj_tms/inputs/kong2022/shared_inputs_22p/surface/`
+`outputs_iowa_jj_tms/inputs/kong2022_22p/shared_inputs/surface/`
 
 The available JJ-TMS 22P sources are:
 
@@ -169,19 +171,18 @@ the versioned 22P surface/reference roots explicitly to downstream commands.
 The subject-level invalid-vertex threshold remains the standard 0.20. Do not
 apply a sparse-CIFTI-specific threshold override.
 
-Keep versioned outputs isolated. The 22P branch uses `shared_inputs_22p/`,
-group/gradient roots containing `_22p`, and presentation directories under
-`kong2022/22p/{hc,pure_mdd,comorbid_mdd}/`. The fixed-26 Patient
-overview is under `kong2022/22p/patient/`. The corresponding default 36P
-presentation directories are under `kong2022/36p/`, with the fixed-26
-Patient overview under `kong2022/36p/patient/`.
+Keep versioned outputs isolated. The 22P inputs use
+`kong2022_22p/shared_inputs/`; gradients, group atlases, and presentations use
+`pfm_22p/{hc,patient,pure_mdd,comorbid_mdd}/` under their stage roots.
+The corresponding 36P roots use `pfm/{hc,patient,pure_mdd,comorbid_mdd}/`.
+The Patient cohort contains the fixed 26 subjects.
 
 For the complete HC/patient 22P overview rerun, use these isolated roots:
 
-- gradients: `outputs_iowa_jj_tms/work/hippomaps_gradients/routea_{hc,patient}_22p/`
-- base group atlases: `outputs_iowa_jj_tms/work/group_atlas/routea_{hc,patient}_22p_full_k3_fisherz/`
-- weighted Fisher-z comparison: `outputs_iowa_jj_tms/work/group_atlas/routea_{hc,patient}_22p_weighted_fisherz_full_k3/`
-- overviews: `outputs_iowa_jj_tms/present/overviews/kong2022/22p/{hc,patient}/`
+- gradients: `outputs_iowa_jj_tms/work/hippomaps_gradients/pfm_22p/{hc,patient}/`
+- base group atlases: `outputs_iowa_jj_tms/work/group_atlas/pfm_22p/{hc,patient}/`
+- weighted Fisher-z comparison: `outputs_iowa_jj_tms/work/group_atlas/pfm_weighted_22p/{hc,patient}/`
+- overviews: `outputs_iowa_jj_tms/present/overviews/pfm_22p/{hc,patient}/`
 
 Each cohort presentation directory contains four maintained products:
 gradient-spectral `fisherz`, gradient-spectral `normalized_top20_count`,

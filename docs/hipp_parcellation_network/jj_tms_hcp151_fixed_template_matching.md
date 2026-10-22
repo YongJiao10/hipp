@@ -51,27 +51,27 @@ completed 22P subgroup rerun reads the versioned reference/surface/mask inputs
 from:
 
 ```text
-outputs_iowa_jj_tms/inputs/kong2022/shared_inputs_22p/routea/
-outputs_iowa_jj_tms/inputs/kong2022/shared_inputs_22p/surface/
+outputs_iowa_jj_tms/inputs/kong2022_22p/shared_inputs/pfm/
+outputs_iowa_jj_tms/inputs/kong2022_22p/shared_inputs/surface/
 ```
 
 It writes the 22P subgroup FC caches under
-`shared_inputs/routea_pure_mdd_22p/` and
-`shared_inputs/routea_comorbid_mdd_22p/`, then writes gradients,
-base/weighted group atlases, and four overviews per label under matching
-`routea_pure_mdd_22p` and `routea_comorbid_mdd_22p` roots. The final 22P
+`inputs/kong2022_22p/shared_inputs/pfm/{pure_mdd,comorbid_mdd}/`.
+Gradients and base group atlases use `pfm_22p/{pure_mdd,comorbid_mdd}/`
+under their stage roots; weighted atlases use
+`pfm_weighted_22p/{pure_mdd,comorbid_mdd}/`. The final 22P
 presentation directories are:
 
 ```text
-outputs_iowa_jj_tms/present/overviews/kong2022/22p/pure_mdd/
-outputs_iowa_jj_tms/present/overviews/kong2022/22p/comorbid_mdd/
+outputs_iowa_jj_tms/present/overviews/pfm_22p/pure_mdd/
+outputs_iowa_jj_tms/present/overviews/pfm_22p/comorbid_mdd/
 ```
 
 The corresponding default 36P presentation directories are:
 
 ```text
-outputs_iowa_jj_tms/present/overviews/kong2022/36p/pure_mdd/
-outputs_iowa_jj_tms/present/overviews/kong2022/36p/comorbid_mdd/
+outputs_iowa_jj_tms/present/overviews/pfm/pure_mdd/
+outputs_iowa_jj_tms/present/overviews/pfm/comorbid_mdd/
 ```
 
 All repository Python commands use:
@@ -92,14 +92,14 @@ definition.
 ```bash
 /home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/05_01_build_hcp151_fixed_template.py \
   --mode preflight \
-  --group-root /home/yojiao/hpchome/hipp/outputs_hcp/work/group_atlas/kong2022_7net_full_k3_fisherz \
-  --gradient-root /home/yojiao/hpchome/hipp/outputs_hcp/work/hippomaps_gradients/routea \
+  --group-root /home/yojiao/hpchome/hipp/outputs_hcp/work/group_atlas/pfm \
+  --gradient-root /home/yojiao/hpchome/hipp/outputs_hcp/work/hippomaps_gradients/pfm \
   --out-root /home/yojiao/hpchome/hipp/outputs_hcp/templates/hcp151_routea_full_k3_fisherz
 
 /home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/05_01_build_hcp151_fixed_template.py \
   --mode build \
-  --group-root /home/yojiao/hpchome/hipp/outputs_hcp/work/group_atlas/kong2022_7net_full_k3_fisherz \
-  --gradient-root /home/yojiao/hpchome/hipp/outputs_hcp/work/hippomaps_gradients/routea \
+  --group-root /home/yojiao/hpchome/hipp/outputs_hcp/work/group_atlas/pfm \
+  --gradient-root /home/yojiao/hpchome/hipp/outputs_hcp/work/hippomaps_gradients/pfm \
   --out-root /home/yojiao/hpchome/hipp/outputs_hcp/templates/hcp151_routea_full_k3_fisherz
 
 /home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/05_01_build_hcp151_fixed_template.py \
@@ -132,14 +132,14 @@ CtxReg matching is maintained by the separate
 `template_manifest.json` to declare exactly
 `template_id=hcp151_routea_ctxreg`, complete 2mm L/R prototypes, the fixed
 400-ROI registry, and source manifests whose gradient route is
-`routea_ctxreg` and whose group resume provenance has
-`route_tag=routea_ctxreg`. A standard RouteA template, a renamed output
+`pfm_ctxreg` and whose group resume provenance has
+`route_tag=pfm_ctxreg`. A standard RouteA template, a renamed output
 directory, or a manifest with stale source fingerprints is rejected.
 
 The adapter consumes exactly:
 
 ```text
-outputs_iowa_jj_tms/inputs/kong2022/shared_inputs/routea_ctxreg/
+outputs_iowa_jj_tms/inputs/kong2022/shared_inputs/pfm_ctxreg/
   sub-<id>/fc/kong2022/2mm/hemi_{L,R}/hipp_vertex_to_roi_fc.npy
 outputs_iowa_jj_tms/inputs/kong2022/shared_inputs/surface/
   sub-<id>/surface/tsnr_gate/sub-<id>_hemi-{L,R}_valid_mask.npy
@@ -154,7 +154,7 @@ selected subjects before creating any `subjects/sub-<id>/` output directory.
 Its canonical output root is:
 
 ```text
-outputs_iowa_jj_tms/work/hcp151_fixed_template_matching/routea_ctxreg/
+outputs_iowa_jj_tms/work/hcp151_fixed_template_matching/pfm_ctxreg/
   subjects/sub-<id>/matching/2mm/hemi-{L,R}/
   runs/<run_id>/
 ```
@@ -172,8 +172,8 @@ The CtxReg builder is selected explicitly:
 /home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/05_01_build_hcp151_fixed_template.py \
   --mode preflight \
   --template-id hcp151_routea_ctxreg \
-  --group-root outputs_hcp/work/group_atlas/routea_ctxreg \
-  --gradient-root outputs_hcp/work/hippomaps_gradients/routea_ctxreg \
+  --group-root outputs_hcp/work/group_atlas/pfm_ctxreg \
+  --gradient-root outputs_hcp/work/hippomaps_gradients/pfm_ctxreg \
   --out-root outputs_hcp/templates/hcp151_routea_ctxreg
 ```
 
@@ -183,11 +183,11 @@ overwriting an existing formal template or matching output tree.
 ## Iowa Functional-Organization Branch Identity
 
 The dedicated Iowa functional-organization report uses two fixed source
-identities: `standard → routea` and `ctxreg → routea_ctxreg`. Standard is the
+identities: `standard → pfm` and `ctxreg → pfm_ctxreg`. Standard is the
 explicit original RouteA branch used by its producer schema; it is not selected
 by filesystem fallback, and its original matching manifests deliberately omit
 `signal_branch`. CtxReg matching must explicitly declare its CtxReg contract.
-`routea_ctxdrop` is the separate local-cortex-exclusion control and is not a
+`pfm_ctxdrop` is the separate local-cortex-exclusion control and is not a
 substitute for the standard branch in this report.
 
 ## JJ_TMS Method

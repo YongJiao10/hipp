@@ -21,7 +21,7 @@ are read from manifest-declared paths. The NPY and GIFTI labels must have the
 same shape and values. Surface cache directories and cache manifests include
 the signal branch, so Standard and CtxReg panels cannot reuse one another's
 products. The ctxreg WTA path is
-work/group_atlas/routea_ctxreg[/cohort]/wta-top/kong2022/...; no extra
+work/group_atlas/pfm_ctxreg[/cohort]/wta-top/kong2022/...; no extra
 wta-top level is valid.
 The `hcp_jjtms_7net` branch adds Kong2022 7-Network and Lynch2024 7-Network method columns while preserving the original WTA layout, dataset grouping, panel styling, and Workbench rendering. The fixed common roster is HCP 7T `N=151`, Iowa HC `N=67`, Iowa Patient `N=26` (sub-3003 excluded), Pure MDD `N=7`, and Comorbid MDD `N=19`; Stanford is retained only by the legacy branch.
 

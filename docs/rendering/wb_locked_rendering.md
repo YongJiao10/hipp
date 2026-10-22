@@ -30,7 +30,7 @@ never replaced with ctxreg paths because a branch directory happens to exist.
 
 For the maintained multi-dataset canonical7 grid, the unqualified `gradient`
 group-atlas result resolves to
-`outputs_hcp/work/group_atlas/kong2022_7net_full_k3_fisherz/gradient-spectral/kong2022/`.
+`outputs_hcp/work/group_atlas/pfm/gradient-spectral/kong2022/`.
 The former `routea_full_k3_fisherz/gradient-spectral/kong2022/` canonical8
 subtree is archived under `wrong/outputs_hcp/work/archive/8net_20260909/`; it is not an
 active default. Retired weighted-fisherz/relu-cosine products are archival
@@ -96,7 +96,7 @@ The legacy locked-scene heatmap artifact has been retired and removed.
 Do not use `06_05_render_group_gradient_heatmaps.py` for active outputs.
 Use `06_04_render_hippomaps_gradient_products.py` and consume:
 
-- `outputs_hcp/present/gradients/routea/{2mm,4mm}/`
-- `outputs_hcp/present/gradients/routeb/{2mm,4mm}/`
+- `outputs_hcp/present/gradients/pfm/{2mm,4mm}/`
+- `outputs_hcp/present/gradients/fixed/{2mm,4mm}/`
 
 These are the maintained final gradient products (G1-G3 figure, EV plot, endpoint FC contrast, and manifest).

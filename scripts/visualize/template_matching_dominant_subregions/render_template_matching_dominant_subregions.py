@@ -110,7 +110,7 @@ DEFAULT_SURF_L = (
     / "inputs"
     / "kong2022"
     / "templates"
-    / "hipp_group_average_t1only_151"
+    / "hipp_group_average"
     / "group_average_surfaces"
     / "group-average_hemi-L_space-corobl_den-512_label-hipp_midthickness.surf.gii"
 )
@@ -120,7 +120,7 @@ DEFAULT_SURF_R = (
     / "inputs"
     / "kong2022"
     / "templates"
-    / "hipp_group_average_t1only_151"
+    / "hipp_group_average"
     / "group_average_surfaces"
     / "group-average_hemi-R_space-corobl_den-512_label-hipp_midthickness.surf.gii"
 )
@@ -227,7 +227,7 @@ STANFORD_SURF_L = (
     / "inputs"
     / "kong2022"
     / "templates"
-    / "hipp_group_average_t1only_151"
+    / "hipp_group_average"
     / "group_average_surfaces"
     / "group-average_hemi-L_space-corobl_den-512_label-hipp_midthickness.surf.gii"
 )
@@ -237,7 +237,7 @@ STANFORD_SURF_R = (
     / "inputs"
     / "kong2022"
     / "templates"
-    / "hipp_group_average_t1only_151"
+    / "hipp_group_average"
     / "group_average_surfaces"
     / "group-average_hemi-R_space-corobl_den-512_label-hipp_midthickness.surf.gii"
 )
@@ -1189,7 +1189,7 @@ def branch_matching_roots(data_root: Path) -> dict[str, Path]:
     base = root / "outputs_iowa_jj_tms" / "work" / "hcp151_fixed_template_matching"
     return {
         "standard": base / "subjects",
-        "ctxreg": base / "routea_ctxreg" / "subjects",
+        "ctxreg": base / "pfm_ctxreg" / "subjects",
     }
 
 
@@ -1209,13 +1209,13 @@ def branch_surface_paths(data_root: Path) -> dict[str, Path]:
         "surf_l": inputs
         / "kong2022"
         / "templates"
-        / "hipp_group_average_t1only_151"
+        / "hipp_group_average"
         / "group_average_surfaces"
         / "group-average_hemi-L_space-corobl_den-512_label-hipp_midthickness.surf.gii",
         "surf_r": inputs
         / "kong2022"
         / "templates"
-        / "hipp_group_average_t1only_151"
+        / "hipp_group_average"
         / "group_average_surfaces"
         / "group-average_hemi-R_space-corobl_den-512_label-hipp_midthickness.surf.gii",
     }

@@ -585,7 +585,7 @@ def test_legacy_iowa_hc_overview_refs_use_canonical7_layout():
     for renderer_path in renderer_paths:
         source = renderer_path.read_text(encoding="utf-8")
         assert "outputs_iowa_jj_tms/present/overviews/routea_hc" not in source
-        assert "outputs_iowa_jj_tms/present/overviews/kong2022_7net/36p/hc" in source
+        assert "outputs_iowa_jj_tms/present/overviews/pfm/hc" in source
 
 
 def test_hcp_comparison_uses_the_full_qc_cohort():

@@ -1,86 +1,69 @@
-# Active Group-Atlas Inventory
+# Formal Group-Atlas Layout
 
-Read-only inventory baseline captured on 2026-09-12 on IDAS. This note covers
-active output roots only; no archive content was opened. The HCP control roots
-were subsequently rebuilt under their approved formal names, and the six
-approved dated/recovered migration roots were removed after validation.
+The active layout is defined by `scripts/core_workflow/lib/output_layout.py`
+and `route_tags.py`. A listed path describes the formal destination; its name
+alone does not establish that a scientific product is present or valid.
 
 ## HCP
 
 Root: `outputs_hcp/work/group_atlas/`.
 
-- Retain as active science branches: `kong2022_7net_full_k3_fisherz`,
-  `routea_17net_full_k3_fisherz`,
-  `routea_7net_weighted_fisherz_full_k3`,
-  `routeb_full_k3_fisherz` (when present), and the maintained
-  `lynch2024_20net_hcp151_full_k3_fisherz` /
-  `lynch2024_7net_hcp151_full_k3_fisherz` roots. Their manifests identify
-  the expected Kong canonical7, family17, weighted, or Lynch taxonomy and
-  their consumers are the numbered overview/matrix steps plus the
-  multidataset visualizers.
-- Formal HCP control roots `outputs_hcp/work/group_atlas/routea_ctxreg/` and
-  `outputs_hcp/work/group_atlas/routea_ctxdrop/` are the only active control
-  entrances. Each has four gradient combinations and four rebuilt WTA
-  combinations (2 mm/4 mm × L/R). The WTA manifests use canonical7, have
-  assigned support on every combination, and feed the three validated
-  overview variants under the matching formal present root.
-- The active consumers are `06_01_build_group_overview.py`,
-  `06_03_build_cluster_cortex_panels.py`, `06_06_render_confidence_maps.py`,
-  `07_01_build_group_matrix.py`, and the multidataset cortex-gradient/WTA
-  visualizers. The formal resolver now selects the direct route roots, not
-  the dated source trees.
+- Kong2022 canonical7: `pfm/`, `fixed/`, `pfm_ctxreg/`, `pfm_ctxdrop/`.
+- Kong2022 family17: `pfm_17net/`, `fixed_17net/`.
+- Post-hoc weighted assignment comparison: `pfm_weighted/`.
+- Lynch2024 comparison: `lynch2024_20net/`, `lynch2024_7net/`.
 
-Recommendation: retain the valid science branches and the two formal control
-roots. The dated/recovered control trees listed in the approved cleanup record
-were removed after their valid inputs were migrated or numerically verified.
-Do not infer that a control product is valid from its directory name.
+HCP has no native 22P branch. Family17 products reuse the corresponding PFM or
+Fixed input and gradient banks. Assignment variants such as `fisherz` and
+`normalized_top20_count` remain explicit files and manifest entries inside
+these roots.
 
-## Iowa JJ_TMS
+## Iowa JJ_TMS and Stanford
 
-Root: `outputs_iowa_jj_tms/work/group_atlas/` (24 direct roots).
+Roots: `outputs_iowa_jj_tms/work/group_atlas/` and
+`outputs_stanford/work/group_atlas/`.
 
-- Kong canonical7 roots:
-  `kong2022_7net_{hc,patient,pure_mdd,comorbid_mdd}{,_22p}_full_k3_fisherz`.
-- Lynch canonical7 WTA roots:
-  `lynch2024_7net_iowa3t_{hc,patient,pure_mdd,comorbid_mdd}{,_22p}_full_k3_fisherz_wta`.
-- Weighted RouteA roots:
-  `routea_7net_{hc,pure_mdd,comorbid_mdd}{,_22p}_weighted_fisherz_full_k3`.
-- Patient RouteA roots:
-  `routea_patient{,_22p}_full_k3_fisherz`.
+Canonical7 cohort products use `pfm/<cohort>/` for 36P and
+`pfm_22p/<cohort>/` for 22P. Iowa cohorts are `hc`, `patient`, `pure_mdd`, and
+`comorbid_mdd`. Stanford cohorts are `nthc`, `tehc`, `nts`, `nts_any_mdd`,
+`nts_pure_mdd`, `tis`, and `tis_ptsd`. A signal control retains its explicit
+route identity, such as `pfm_ctxreg/<cohort>/`. Scientific variants and cohorts
+must remain separate.
 
-The read-only WTA audit found valid assigned support in the named canonical7
-roots. The `_22p` roots are scientific branches and must remain separate from
-the unversioned 36P roots. Consumers are the numbered overview/matrix steps,
-weighted-comparison workflows, and the multidataset visualizers.
+## Retained validation and cortex-PFM workspaces
 
-Recommendation: retain all named roots. This round proposes no Iowa rename or
-cleanup; any root lacking a future manifest/consumer proof should be marked
-待核实 in a separate change rather than selected by name.
+Stanford's saved canonical8 validation workspaces are
+`outputs_stanford/work/validation_gradient_cluster_stats/` and
+`outputs_stanford/work/validation_gradient_cluster_stats_weighted/`. They retain
+the Auditory-versus-VentralAttention analysis contract and its separate weighted
+comparison. Their group-input definitions remain distinct from the current
+canonical7 group-atlas roots; relocating the workspaces does not retarget or
+rerun that analysis.
 
-## Stanford
+Iowa JJ_TMS's separate 70-subject single-run PFM package is retained under
+`outputs_iowa_jj_tms/work/cortex_pfm/pfm_nsi_v0p1p0_sparse0p25_single_run01/`.
+Its subjects, model settings, logs, and acquisition records remain together.
+It is a distinct scientific run and is not merged into the main PFM package.
 
-Root: `outputs_stanford/work/group_atlas/` (29 direct roots).
+## Inputs and readiness
 
-- Seven maintained cohorts (`nthc`, `tehc`, `nts`, `nts_any_mdd`,
-  `nts_pure_mdd`, `tis`, `tis_ptsd`) each have `routea_7net_<cohort>` full
-  and `_22p` roots, plus the corresponding
-  `weighted_fisherz_full_k3` roots. These are real cohort and 22P/36P
-  scientific branches, not old/new aliases.
-- `routea_full_k3_fisherz` is present with zero manifests and has no proven
-  active consumer in this inventory; status is 待核实.
+Kong reference inputs use `inputs/kong2022/shared_inputs/pfm/` or `fixed/`;
+the supported 22P input branch uses `inputs/kong2022_22p/shared_inputs/pfm/`.
+Lynch references use `inputs/lynch2024/shared_inputs/pfm/` for the HCP base
+cohort, with explicit `pfm_nsi043/` roots for retained NSI-filtered comparisons.
+Iowa 22P Lynch references use `inputs/lynch2024_22p/shared_inputs/pfm_nsi043/`.
 
-The named cohort roots contain Kong canonical7 gradient/WTA manifests and the
-read-only WTA audit found assigned support. Consumers are the numbered
-overview/matrix steps and weighted comparison/visualization workflows.
+Reference path cleanup preserves the original cortex reference files and QC
+provenance. Hippocampal coordinate corrections do not require cortex reference
+regeneration: the references use cortical CIFTI time series and cortical labels.
+Existing consumers validate the declared subject roster, taxonomy, and artifact
+lineage under their documented analysis contract.
+Archived FC, gradients, group atlases, and presentation products remain
+archived until an exact restoration or rebuild scope is approved. Missing
+formal products must fail closed rather than select a historical tree.
 
-Recommendation: retain the named cohort and weighted roots. Do not remove or
-rename the empty `routea_full_k3_fisherz` root without a separate consumer
-decision and an exact approved cleanup list.
-
-## Evidence boundary
-
-Manifest status, taxonomy, support-domain status, and direct consumer
-references were checked read-only. All sixteen HCP formal group-atlas
-manifests and six control overview images were then content-checked; the
-formal control WTA products are no longer blocked by the former unassigned
-support-domain failure.
+The numbered overview and matrix steps and multi-dataset visualizers consume
+these formal roots. Use their existing readiness checks to assess actual
+products. Archive mappings are declared explicitly in
+`config/legacy_wrong_path_mapping.json`; archive inspection and filesystem
+changes remain subject to the repository's explicit approval rules.

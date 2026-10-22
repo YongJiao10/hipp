@@ -39,7 +39,7 @@ def test_branch_matching_roots_are_explicit_and_distinct(tmp_path):
     roots = RENDERER.branch_matching_roots(tmp_path)
     assert roots == {
         "standard": tmp_path / "outputs_iowa_jj_tms" / "work" / "hcp151_fixed_template_matching" / "subjects",
-        "ctxreg": tmp_path / "outputs_iowa_jj_tms" / "work" / "hcp151_fixed_template_matching" / "routea_ctxreg" / "subjects",
+        "ctxreg": tmp_path / "outputs_iowa_jj_tms" / "work" / "hcp151_fixed_template_matching" / "pfm_ctxreg" / "subjects",
     }
     assert roots["standard"] != roots["ctxreg"]
 

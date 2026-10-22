@@ -16,7 +16,7 @@ Inputs:
   - --smoothings: Smoothing levels to process: "2mm", "4mm".
   - --hemis: Hemispheres to process: "L", "R".
   - --coverage-threshold: Minimum coverage fraction to include vertices (default: 0.80).
-  - --group-average-surfaces-dir: Path to template midthickness surfaces (default: `outputs_hcp/inputs/kong2022/shared_inputs/template`).
+  - --group-average-surfaces-dir: Path to template midthickness surfaces (default: `outputs_hcp/inputs/kong2022/templates/hipp_group_average/group_average_surfaces`).
   - --cohort / --variant: Explicit cohort and 36p|22p selection; HCP omits the cohort and defaults to 36p.
   - --out-root: Stage root above route and optional cohort directories (default: `outputs_hcp/work/hippomaps_gradients`).
   - --hippomaps-root: Root path to external HippoMaps codebase (default: `external/hippomaps`).

@@ -96,10 +96,11 @@ The overview builder reads completed label arrays from `outputs_hcp/work/individ
 ## HCP151 Template Builder for Non-HCP Datasets
 
 `05_01_build_hcp151_fixed_template.py` builds an immutable HCP151 template
-from the formal 151-subject group artifacts. Its default identity is
+from `outputs_hcp/work/group_atlas/pfm/` and the matching
+`work/hippomaps_gradients/pfm/` artifacts for 151 subjects. Its default identity is
 `hcp151_routea_full_k3_fisherz`; the explicit
 `--template-id hcp151_routea_ctxreg` identity is allowed only when all source
-manifests prove `routea_ctxreg`. The template identity is recorded in the
+manifests prove `pfm_ctxreg`. The template identity is recorded in the
 manifest and cannot be changed by renaming an output directory. It is a
 reusable template-building step, not a JJ_TMS adapter. Non-HCP datasets
 consume a validated template through dataset-specific direct-matching code
@@ -120,7 +121,7 @@ provenance, and colleague-copy contract is documented in
 
 ## Method Notes
 
-- Route: RouteA only, from `shared_inputs/routea`.
+- Route: PFM only, from `shared_inputs/pfm`.
 - Subject count: 151 by default.
 - Combos: `2mm`, `4mm`, `L`, `R`, for 604 total subject-combos.
 - Gradient-spectral uses each subject's own valid mask and `space-corobl_den-512` HippUnfold hippocampal surface.

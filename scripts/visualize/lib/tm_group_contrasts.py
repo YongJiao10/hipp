@@ -122,7 +122,7 @@ def _branch_matching_roots(data_root: Path = ROOT) -> dict[str, Path]:
     base = root / "outputs_iowa_jj_tms" / "work" / "hcp151_fixed_template_matching"
     return {
         "standard": base / "subjects",
-        "ctxreg": base / "routea_ctxreg" / "subjects",
+        "ctxreg": base / "pfm_ctxreg" / "subjects",
     }
 
 

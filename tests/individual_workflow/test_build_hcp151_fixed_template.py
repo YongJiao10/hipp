@@ -204,7 +204,7 @@ def test_build_supports_explicit_ctxreg_template_identity_only_with_ctxreg_sourc
             )
             group_manifest = json.loads(group_manifest_path.read_text(encoding="utf-8"))
             group_manifest["resume_input_signature_payload"] = {
-                "route_tag": "routea_ctxreg"
+                "route_tag": "pfm_ctxreg"
             }
             group_manifest_path.write_text(json.dumps(group_manifest), encoding="utf-8")
 
@@ -214,7 +214,7 @@ def test_build_supports_explicit_ctxreg_template_identity_only_with_ctxreg_sourc
             gradient_manifest = json.loads(
                 gradient_manifest_path.read_text(encoding="utf-8")
             )
-            gradient_manifest["route"] = "routea_ctxreg"
+            gradient_manifest["route"] = "pfm_ctxreg"
             gradient_manifest_path.write_text(
                 json.dumps(gradient_manifest), encoding="utf-8"
             )
@@ -239,7 +239,7 @@ def test_ctxreg_template_identity_rejects_standard_route_sources(tmp_path: Path)
     workflow = load_module()
     group_root, gradient_root = _write_sources(tmp_path / "sources")
 
-    with pytest.raises(ValueError, match="routea_ctxreg"):
+    with pytest.raises(ValueError, match="pfm_ctxreg"):
         workflow.preflight_sources(
             group_root=group_root,
             gradient_root=gradient_root,

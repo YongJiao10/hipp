@@ -9,7 +9,7 @@ Main Flow Path:
 
 Inputs:
 - Command-line arguments:
-  - --shared-root: Path to output shared processed files (default: `outputs_hcp/inputs/kong2022/shared_inputs/routeb`).
+  - --shared-root: Path to output shared processed files (default: `outputs_hcp/inputs/kong2022/shared_inputs/fixed`).
   - --data-root: Root directory containing raw structural BIDS folders (default: `data/hippunfold_input`).
   - --subjects-manifest: Path to QC-passed subject list manifest (default: `outputs_hcp/inputs/kong2022/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt`).
   - --subjects: Space-separated list of explicit subject IDs.

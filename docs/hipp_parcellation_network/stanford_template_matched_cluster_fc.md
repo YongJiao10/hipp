@@ -12,7 +12,7 @@ The default source roots are the current materialized Stanford HCP151 inputs:
 ```text
 outputs_stanford/work/hcp151_fixed_template_matching/subjects/
 outputs_stanford/inputs/kong2022/shared_inputs/surface/
-outputs_stanford/inputs/kong2022/shared_inputs/routea/
+outputs_stanford/inputs/kong2022/shared_inputs/pfm/
 ```
 
 The surface arrays are `512 x T` and the ROI arrays are `400 x T`. The script
