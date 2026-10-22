@@ -1,8 +1,25 @@
 {
-  "git.repositoryScanMaxDepth": 0,
+  "git.autoRepositoryDetection": "workspace",
+  "git.repositoryScanMaxDepth": 1,
+  "git.untrackedChanges": "separate",
   "files.watcherExclude": {
-    "**/outputs_*/**": true,
+    "**/.git/objects/**": true,
+    "**/.git/subtree-cache/**": true,
+    "**/node_modules/**": true,
+    "**/outputs*/**": true,
     "**/wrong/**": true,
-    "**/.cache/**": true
+    "**/.cache/**": true,
+    "**/tmp/**": true,
+    "**/temp_*/**": true,
+    "**/logs/**": true,
+    "**/data/**": true,
+    "**/runtime/**": true,
+    "**/.runtime_py/**": true
+  },
+  "search.exclude": {
+    "**/outputs*/**": true,
+    "**/wrong/**": true,
+    "**/.cache/**": true,
+    "**/tmp/**": true
   }
 }
