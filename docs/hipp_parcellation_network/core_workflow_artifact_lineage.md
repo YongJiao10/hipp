@@ -48,7 +48,7 @@ Local execution status terms:
 | Confidence maps | `06_06_render_confidence_maps.py` | Vertex-level silhouette confidence arrays from `05_04_compute_confidence_maps.py` | `outputs_hcp/present/gradients/{route_tag}/{smoothing}/` | Confidence-map figures and QC review | `derived_presentation` | Confidence-map manifest plus source confidence arrays |
 | Local cortex-neighbor overlays | `06_07_render_ctxdrop_neighbor_counts.py` | `routea_ctxdrop` or `routea_ctxreg` neighbor-count diagnostics | `outputs_hcp/present/local_cortex_neighbors/` | ctxreg/ctxdrop smear-control review and presentation products | `derived_presentation` | Renderer manifest, TSV summaries, source diagnostic paths |
 | Presentation matrix/index | `07_01_build_group_matrix.py` | Canonical group-atlas roots and method overview products | `outputs_hcp/present/overviews/group_overview_matrix_manifest.json` plus overview README | Final active presentation index | `derived_presentation` | Matrix manifest listing included routes, methods, roots, and skipped/missing products |
-| Smoke-run plans and isolated smoke outputs | `tests/core_workflow/smoke_prepare_run.py` plus selected numbered steps | Smoke-run parameters and validated source roots | `outputs_hcp/smoke_runs/<run_id>/` | Development validation only; not official full-cohort products | `utility` | Smoke command plan, smoke manifests, run ID, subject subset evidence |
+| Smoke-run plans and isolated smoke outputs | `tests/core_workflow/smoke_prepare_run.py` plus selected numbered steps | Smoke-run parameters and validated source roots | `outputs_hcp/runs/<run_id>/` | Development validation only; not official full-cohort products | `utility` | Smoke command plan, smoke manifests, run ID, subject subset evidence |
 
 ## Traceability Rules
 
@@ -92,7 +92,7 @@ Local execution status terms:
 - For local numbered steps, prefer the emitted `--step-manifest-out` JSON as the
   run-specific lineage record. This document defines the maintained artifact
   families and expected evidence when a local manifest is absent.
-- Smoke products under `outputs_hcp/smoke_runs/<run_id>/` are isolated test
+- Smoke products under `outputs_hcp/runs/<run_id>/` are isolated test
   products and must not be cited as official full-cohort outputs.
 - Treat the external HCP family map as a runtime input rather than a repository
   artifact. Cross-fitted labels use full concat FC intentionally and make no

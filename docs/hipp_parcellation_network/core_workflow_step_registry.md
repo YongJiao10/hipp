@@ -37,7 +37,7 @@ Canonical public entrypoints are under `scripts/core_workflow/`. The numeric pre
 
 | Utility ID | Purpose | Entrypoint | Output Root |
 |---|---|---|---|
-| `smoke_prepare_run` | Prepare an isolated smoke-run command plan; not a numbered pipeline step | `tests/core_workflow/smoke_prepare_run.py` | `outputs_hcp/smoke_runs/<run_id>/` |
+| `smoke_prepare_run` | Prepare an isolated smoke-run command plan; not a numbered pipeline step | `tests/core_workflow/smoke_prepare_run.py` | `outputs_hcp/runs/<run_id>/` |
 
 The former formal-release maintenance utilities were retired from this
 checkout. Their old registry entries and launch instructions are intentionally

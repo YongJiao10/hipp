@@ -69,8 +69,10 @@ shared color ranges.
 Canonical presentation outputs live under `outputs_hcp/present/`. All maintained
 method overview PNGs are written to `outputs_hcp/present/overviews/<route>/`.
 Supplementary continuous-gradient products live in `outputs_hcp/present/gradients/`,
-and cortex panels live in `outputs_hcp/present/cortex_panels/`. Smoke tests stay
-isolated under `outputs_hcp/smoke_runs/<run_id>/`.
+and cortex panels live in `outputs_hcp/present/cortex_panels/`. Run-owned smoke
+outputs, independent validation, and non-official execution records use
+`outputs_hcp/runs/<run_id>/`. See [Output Layout](output_layout.md) for the
+complete directory contract and the canonical Stage 01 asset boundary.
 For the cross-dataset 7-network renderer, the producer must write the
 long-axis-relabelled `(3, 400)` profile and register it in the group-atlas
 manifest with contract tag `roi_ap`. Consumers fail closed when that

@@ -30,7 +30,7 @@ Canonical7 cohort products use `pfm/<cohort>/` for 36P and
 route identity, such as `pfm_ctxreg/<cohort>/`. Scientific variants and cohorts
 must remain separate.
 
-## Retained validation and cortex-PFM workspaces
+## Retained validation and NSI workspaces
 
 Stanford's saved canonical8 validation workspaces are
 `outputs_stanford/work/validation_gradient_cluster_stats/` and
@@ -40,10 +40,13 @@ comparison. Their group-input definitions remain distinct from the current
 canonical7 group-atlas roots; relocating the workspaces does not retarget or
 rerun that analysis.
 
-Iowa JJ_TMS's separate 70-subject single-run PFM package is retained under
-`outputs_iowa_jj_tms/work/cortex_pfm/pfm_nsi_v0p1p0_sparse0p25_single_run01/`.
-Its subjects, model settings, logs, and acquisition records remain together.
-It is a distinct scientific run and is not merged into the main PFM package.
+NSI quality-analysis packages belong under
+`outputs_<dataset>/work/pfm_nsi/<original_package_name>/`. Their subject-level
+scores, group summaries, figures, and original execution records remain together.
+Iowa JJ_TMS's separate 70-subject single-run NSI package is retained under
+`outputs_iowa_jj_tms/work/pfm_nsi/pfm_nsi_v0p1p0_sparse0p25_single_run01/`,
+separate from the main NSI package. Parameter and acquisition variants remain
+distinct. See [Output Layout](output_layout.md) for the full directory contract.
 
 ## Inputs and readiness
 

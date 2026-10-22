@@ -433,14 +433,14 @@
     {
       "step_id": "smoke_prepare_run",
       "stage": "utility_smoke_test",
-      "purpose": "Prepare an isolated 5-subject smoke run directory, subject manifest, and command manifest under outputs_hcp/smoke_runs/<run_id>.",
+      "purpose": "Prepare a 5-subject smoke command plan and run-owned output directories under outputs_hcp/runs/<run_id>.",
       "branches": [
         "kong2022_pfm",
         "kong2022_fixed"
       ],
       "entry_script": "tests/core_workflow/smoke_prepare_run.py",
       "implementation_script": "tests/core_workflow/smoke_prepare_run.py",
-      "recommended_manifest": "outputs_hcp/smoke_runs/<run_id>/manifests/smoke_command_manifest.json"
+      "recommended_manifest": "outputs_hcp/runs/<run_id>/manifests/smoke_command_manifest.json"
     }
   ]
 }

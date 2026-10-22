@@ -167,7 +167,7 @@ These products are derived from group atlas and gradient work and can be refresh
 
 ## Utilities
 
-- `tests/core_workflow/smoke_prepare_run.py` prepares isolated smoke-run command plans under `outputs_hcp/smoke_runs/<run_id>/`. It is not part of the numbered pipeline.
+- `tests/core_workflow/smoke_prepare_run.py` prepares smoke command plans and run-owned outputs under `outputs_hcp/runs/<run_id>/`. Stage 01 retains its canonical HippUnfold batch root. The utility is outside the numbered pipeline.
 
 Maintained active output roots:
 
@@ -175,8 +175,9 @@ Maintained active output roots:
 - Lynch2024 inputs: `outputs_hcp/inputs/lynch2024/`
 - Lynch2024 cortex PFM work: `outputs_hcp/work/cortex_pfm/`
 - Presentation: `outputs_hcp/present/`
-- Smoke tests: `outputs_hcp/smoke_runs/<run_id>/`
-- Non-official reruns: `outputs_hcp/reruns/<run_id>/`
+- Execution records and non-official products: `outputs_hcp/runs/<run_id>/`
+
+The complete directory contract is maintained in [Output Layout](output_layout.md).
 
 For branch flags, path roots, and exact artifact contracts, use:
 

@@ -239,12 +239,8 @@ def resolve_present_root(dataset: str = DEFAULT_DATASET) -> Path:
     return resolve_outputs_root(dataset) / "present"
 
 
-def resolve_reruns_root(dataset: str = DEFAULT_DATASET) -> Path:
-    return resolve_outputs_root(dataset) / "reruns"
-
-
-def resolve_smoke_runs_root(dataset: str = DEFAULT_DATASET) -> Path:
-    return resolve_outputs_root(dataset) / "smoke_runs"
+def resolve_runs_root(dataset: str = DEFAULT_DATASET) -> Path:
+    return resolve_outputs_root(dataset) / "runs"
 
 
 # ── inputs subtree resolvers ──────────────────────────────────────────
@@ -562,8 +558,7 @@ DEFAULT_LYNCH2024_20NET_GROUP_ATLAS_ROOT = resolve_lynch2024_20net_group_atlas_r
 DEFAULT_LYNCH2024_7NET_GROUP_ATLAS_ROOT = resolve_lynch2024_7net_group_atlas_root()
 DEFAULT_HIPPOMAPS_GRADIENT_ROOT = resolve_hippomaps_gradient_root()
 DEFAULT_CORTEX_ASSETS_ROOT = resolve_cortex_assets_root()
-SMOKE_RUNS_ROOT = resolve_smoke_runs_root()
-RERUNS_ROOT = resolve_reruns_root()
+RUNS_ROOT = resolve_runs_root()
 DEFAULT_PRESENT_ROOT = resolve_present_root()
 DEFAULT_OVERVIEWS_DIR = resolve_overviews_dir()
 DEFAULT_GRADIENTS_DIR = resolve_gradients_dir()
@@ -583,7 +578,7 @@ def run_root(run_id: str, dataset: str = DEFAULT_DATASET) -> Path:
     clean = str(run_id).strip()
     if not clean or "/" in clean or clean in {".", ".."}:
         raise ValueError(f"Invalid run_id: {run_id!r}")
-    return resolve_smoke_runs_root(dataset) / clean
+    return resolve_runs_root(dataset) / clean
 
 
 def run_layout(run_id: str, dataset: str = DEFAULT_DATASET) -> dict[str, Path]:

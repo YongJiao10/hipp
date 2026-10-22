@@ -388,9 +388,15 @@ overview PNGs use `outputs_hcp/present/overviews/<route>/`. Supplementary
 continuous-gradient products live in `outputs_hcp/present/gradients/`, and
 cortex panels live in `outputs_hcp/present/cortex_panels/`. Directory names
 intentionally omit `t1only`, `present_fixedk`, and `10perc`; fixed K=3 is the
-default presentation policy. Use `tests/core_workflow/smoke_prepare_run.py` only for isolated
-5-subject tests under `outputs_hcp/smoke_runs/<run_id>/`, and use
-`outputs_hcp/reruns/<run_id>/` for non-official render-only records. Subject-specific cortical parcellation map rendering for Kong2022 ArealMSHBM is performed by `06_09_plot_cortex_kong2022_mshbm.py`, storing GIfTI and CIFTI assets under `outputs_hcp/inputs/kong2022/cortex_references/pfm_areal_mshbm/sub-<subject>/assets/` and composed 2x2 overview PNGs under `outputs_hcp/inputs/kong2022/cortex_references/pfm_areal_mshbm/sub-<subject>/figures/`.
+default presentation policy. Use `tests/core_workflow/smoke_prepare_run.py` to
+prepare a 5-subject command plan and run-owned outputs under
+`outputs_hcp/runs/<run_id>/`. Independent validation, non-official rendering,
+and execution records also use `runs/<run_id>/`. Stage 01 retains its canonical
+HippUnfold batch root, and scientific packages can retain their own logs.
+The complete directory contract is documented in
+[`output_layout.md`](../../docs/hipp_parcellation_network/output_layout.md).
+
+Subject-specific cortical parcellation map rendering for Kong2022 ArealMSHBM is performed by `06_09_plot_cortex_kong2022_mshbm.py`, storing GIfTI and CIFTI assets under `outputs_hcp/inputs/kong2022/cortex_references/pfm_areal_mshbm/sub-<subject>/assets/` and composed 2x2 overview PNGs under `outputs_hcp/inputs/kong2022/cortex_references/pfm_areal_mshbm/sub-<subject>/figures/`.
 
 The saved gradient-spectral cluster-to-cortex template can be rendered with `06_10_render_cluster_roi_strength_panels.py`. It reads `gradient-spectral/kong2022/{2mm,4mm}/cov_0p80/g1g2g3/hemi_{L,R}/cluster_roi_profile.npy`, keeps Fisher-z values, paints all 400 parcels with a shared blue-white-red scale, and writes `cortex_kong2022_gradient-spectral_2mm4mm_template_strength_overview.png` plus a manifest under `outputs_hcp/present/cortex_panels/`. The four rows are 2mm-L, 2mm-R, 4mm-L, and 4mm-R for the source hippocampus; every panel colors bilateral L/R cortex, and K=3 columns use validated Anterior/Body/Posterior names.
 

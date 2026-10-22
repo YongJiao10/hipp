@@ -3,7 +3,7 @@ from __future__ import annotations
 
 """
 Process Step Description:
-Prepare smoke run files and commands. Prepares an isolated, sub-selected subject cohort directory (default: 5 subjects) and builds the sequential command manifests (shell script and JSON command plans) to run a complete, isolated smoke test execution of the entire core workflow pipeline.
+Prepare a selected-subject smoke command plan and its run-owned output directories (default: 5 subjects). Formal upstream assets retain their existing canonical paths, including the Stage 01 HippUnfold batch root.
 
 Main Flow Path:
 - None (utility/helper script for isolated smoke test runs; not part of the mainline sequence).
@@ -11,7 +11,7 @@ Main Flow Path:
 Inputs:
 - Command-line arguments:
   - --run-id: Unique identifier for the smoke run directory (default: `smoke5_<timestamp>`).
-  - --source-subjects: Text file list containing bare source subject IDs to choose from (default: `outputs_experiments/hippunfold_recommended_t1w_20260423/vertex_qc_t1only/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_151.txt`).
+  - --source-subjects: Text file list containing bare source subject IDs to choose from (default: `outputs_hcp/inputs/qc/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_151.txt`).
   - --subjects: Explicit space-separated subject list to override --source-subjects.
   - --subject-count: Number of subjects to include in the smoke run (default: 5).
   - --python-exe: Explicit python interpreter path for commands (default: `/home/yojiao/.conda/envs/py314/bin/python`).
@@ -23,7 +23,7 @@ Inputs:
   - Core directory layouts and environment references.
 
 Outputs:
-- File outputs (generated under `outputs_hcp/smoke_runs/{run_id}/`):
+- File outputs (generated under `outputs_hcp/runs/{run_id}/`):
   - Selected subjects list: `inputs/subjects_smoke5.txt`
   - Sequential pipeline shell script: `manifests/run_smoke_commands.sh`
   - Sequential pipeline command manifest JSON: `manifests/smoke_command_manifest.json`
@@ -365,7 +365,7 @@ def write_command_script(path: Path, records: list[dict[str, Any]]) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Prepare an isolated 5-subject core-workflow smoke run directory and command manifest.")
-    parser.add_argument("--run-id", default=None, help="Run ID under outputs_hcp/smoke_runs/. Defaults to smoke5_<UTC timestamp>.")
+    parser.add_argument("--run-id", default=None, help="Run ID under outputs_hcp/runs/. Defaults to smoke5_<UTC timestamp>.")
     parser.add_argument("--source-subjects", default=str(DEFAULT_SOURCE_SUBJECTS))
     parser.add_argument("--subjects", nargs="*", default=None, help="Explicit smoke subject IDs. Overrides --source-subjects.")
     parser.add_argument("--subject-count", type=int, default=5)

@@ -735,14 +735,14 @@ def test_canonical_present_defaults_use_outputs_hcp_layout() -> None:
 
 def test_run_layout_keeps_smoke_outputs_in_dedicated_run_tree() -> None:
     layout = output_layout.run_layout("smoke5_test")
-    assert layout["run_root"] == REPO_ROOT / "outputs_hcp" / "smoke_runs" / "smoke5_test"
+    assert layout["run_root"] == REPO_ROOT / "outputs_hcp" / "runs" / "smoke5_test"
     assert layout["overviews"] == layout["present"] / "overviews"
     assert layout["gradient_products"] == layout["present"] / "gradients"
     assert layout["cortex_panels"] == layout["present"] / "cortex_panels"
 
 
 def test_smoke_command_plan_uses_isolated_fixedk_full_layout() -> None:
-    base = REPO_ROOT / "outputs_hcp" / "smoke_runs" / "smoke5_test"
+    base = REPO_ROOT / "outputs_hcp" / "runs" / "smoke5_test"
     present = base / "present"
     layout = {
         "run_root": base,
