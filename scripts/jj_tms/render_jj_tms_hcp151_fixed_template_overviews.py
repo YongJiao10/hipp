@@ -107,7 +107,7 @@ _CROSSFIT_PATH = (
     REPO_ROOT
     / "scripts"
     / "individual_workflow"
-    / "04_01_render_hcp_crossfit_individual_overviews.py"
+    / "02_01_render_hcp_crossfit_individual_overviews.py"
 )
 _CROSSFIT_SPEC = importlib.util.spec_from_file_location(
     "_fixed_template_shared_overview_renderer", _CROSSFIT_PATH

@@ -20,7 +20,7 @@ MODULE_PATH = (
     REPO_ROOT
     / "scripts"
     / "individual_workflow"
-    / "03_00_run_hcp_crossfit_template_matching.py"
+    / "01_01_run_hcp_crossfit_template_matching.py"
 )
 DOC_PATH = (
     REPO_ROOT

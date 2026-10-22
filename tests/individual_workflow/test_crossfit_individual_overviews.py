@@ -18,7 +18,7 @@ MODULE_PATH = (
     REPO_ROOT
     / "scripts"
     / "individual_workflow"
-    / "04_01_render_hcp_crossfit_individual_overviews.py"
+    / "02_01_render_hcp_crossfit_individual_overviews.py"
 )
 
 

@@ -16,7 +16,7 @@ MODULE_PATH = (
     REPO_ROOT
     / "scripts"
     / "individual_workflow"
-    / "05_01_build_hcp151_fixed_template.py"
+    / "03_01_build_hcp151_fixed_template.py"
 )
 
 

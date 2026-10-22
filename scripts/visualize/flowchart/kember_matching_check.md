@@ -25,7 +25,7 @@
 
 ## HCP151 模板来源与差异
 
-- [固定模板构建器:398](/home/yojiao/hpchome/hipp/scripts/individual_workflow/05_01_build_hcp151_fixed_template.py:398)第 415–418 行载入群体标签、support 和 group FC，调用 `build_cluster_prototypes`；[模板均值函数:6](/home/yojiao/hpchome/hipp/scripts/core_workflow/lib/template_matching.py:6)按簇对 supported 顶点逐 ROI 求有限均值。
+- [固定模板构建器:398](/home/yojiao/hpchome/hipp/scripts/individual_workflow/03_01_build_hcp151_fixed_template.py:398)第 415–418 行载入群体标签、support 和 group FC，调用 `build_cluster_prototypes`；[模板均值函数:6](/home/yojiao/hpchome/hipp/scripts/core_workflow/lib/template_matching.py:6)按簇对 supported 顶点逐 ROI 求有限均值。
 - [模板 manifest:52](/home/yojiao/hpchome/hipp/outputs_hcp/templates/hcp151_routea_full_k3_fisherz/template_manifest.json:52)明确列出 HCP 的 `group_mean_fisherz_fc_full.npy`、`group_labels_final.npy`、support 和 ROI registry；[第 314–327 行](/home/yojiao/hpchome/hipp/outputs_hcp/templates/hcp151_routea_full_k3_fisherz/template_manifest.json:314)记录 subject-mean Fisher-z FC、151 人及均值定义，随后列出 HCP subject IDs。[上游 gradient manifest:16](/home/yojiao/hpchome/hipp/outputs_hcp/work/hippomaps_gradients/routea/2mm/hemi_L/hippomaps_gradient_manifest.json:16)声明先对每人 FC 做 clipped arctanh，再跨人平均。
 - 因而这是预先由 HCP151 构建、应用到 Stanford 个体的外部固定模板；所查构建链不使用 Stanford 组均值重新训练。这里的“独立”指模板构建数据源与 Stanford 应用数据源分开，不是已完成跨库受试者身份审计。
 - 论文使用 7262×32492 顶点 FC、前 100 个 diffusion gradients、GMM 三类；本地使用 512×400 ROI FC，[群体 atlas manifest:382](/home/yojiao/hpchome/hipp/outputs_hcp/work/group_atlas/kong2022_7net_full_k3_fisherz/gradient-spectral/kong2022/2mm/cov_0p80/g1g2g3/hemi_L/group_atlas_manifest.json:382)明确为 spectral clustering、梯度 1/2/3、K=3、coverage 0.8。这些是特征空间、模板来源和建模算法的实质差异。

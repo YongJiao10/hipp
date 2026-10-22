@@ -13,7 +13,7 @@ MODULE_PATH = (
     REPO_ROOT
     / "scripts"
     / "individual_workflow"
-    / "04_02_compute_subject_template_cluster_fc.py"
+    / "02_02_compute_subject_template_cluster_fc.py"
 )
 
 

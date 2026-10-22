@@ -12,13 +12,21 @@ The root contains numbered entrypoints only. Shared individual implementation
 code belongs in `lib/`; maintenance and migration utilities belong in
 `scripts/maintenance/`.
 
+Entry points use consecutive stage and step numbers:
+
+| Stage | Entry points | Purpose |
+| --- | --- | --- |
+| `01` | `01_01`–`01_04` | HCP cross-fit matching, robustness, and cohort/run comparisons |
+| `02` | `02_01`–`02_02` | Individual surface overviews and subject-template cluster FC |
+| `03` | `03_01` | Reusable HCP151 fixed-template construction |
+
 Native-space beta extraction, modeling, and figures remain exploratory and
 live in `scripts/exploratory_beta/`. Do not add beta entry points to this
 formal individual-workflow surface until that analysis is explicitly promoted.
 
 ## HCP151 Template Builder for Non-HCP Datasets
 
-`05_01_build_hcp151_fixed_template.py` builds an immutable HCP151 template
+`03_01_build_hcp151_fixed_template.py` builds an immutable HCP151 template
 from `outputs_hcp/work/group_atlas/pfm/` and the matching
 `work/hippomaps_gradients/pfm/` artifacts for 151 subjects. Its default identity is
 `hcp151_routea_full_k3_fisherz`; the explicit
@@ -35,7 +43,7 @@ in `docs/hipp_parcellation_network/jj_tms_hcp151_fixed_template_matching.md`.
 
 For Stanford's existing HCP151 template-matching labels, the subject-specific
 cluster-mean 400-ROI FC stage is
-`04_02_compute_subject_template_cluster_fc.py`. It is restricted to `2mm` and
+`02_02_compute_subject_template_cluster_fc.py`. It is restricted to `2mm` and
 uses each subject's own labels to average the raw hippocampal surface time
 series before calculating the `3 x 400` Pearson and Fisher-z matrices. It never
 averages the existing `512 x 400` vertex-FC matrix. The full input, output,
@@ -45,7 +53,7 @@ provenance, and colleague-copy contract is documented in
 ## Family-Aware Cross-Fitted Labels
 
 For reviewer-defensible individualized K=3 labels without run-level splitting,
-use `03_00_run_hcp_crossfit_template_matching.py`. Five family-grouped folds learn
+use `01_01_run_hcp_crossfit_template_matching.py`. Five family-grouped folds learn
 training-only group templates and AP-ordered FC profiles; each held-out subject
 is then matched using their full concat FC. HCP production requires an external
 `subject,family_id` family map. The explicit `--allow-subject-only-folds`
@@ -61,11 +69,11 @@ outputs. Resume uses atomic in-progress state plus SHA-256 fingerprints for
 inputs and saved artifacts, and subject surfaces are vertex-count validated.
 
 ```bash
-/home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/03_00_run_hcp_crossfit_template_matching.py --family-map /home/yojiao/hpchome/hipp/data/HCP_YA_subjects_2026_04_09_16_01_42.csv --dry-run
-/home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/03_00_run_hcp_crossfit_template_matching.py --family-map /home/yojiao/hpchome/hipp/data/HCP_YA_subjects_2026_04_09_16_01_42.csv --resume
-/home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/03_01_validate_hcp_crossfit_robustness.py
-/home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/03_02_run_and_render_hcp_crossfit_disjoint_folds.py
-/home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/03_03_render_hcp_runs_comparison.py
+/home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/01_01_run_hcp_crossfit_template_matching.py --family-map /home/yojiao/hpchome/hipp/data/HCP_YA_subjects_2026_04_09_16_01_42.csv --dry-run
+/home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/01_01_run_hcp_crossfit_template_matching.py --family-map /home/yojiao/hpchome/hipp/data/HCP_YA_subjects_2026_04_09_16_01_42.csv --resume
+/home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/01_02_validate_hcp_crossfit_robustness.py
+/home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/01_03_run_and_render_hcp_crossfit_disjoint_folds.py
+/home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/01_04_render_hcp_runs_comparison.py
 ```
 
 Fixed-template overview inputs declare native `space-T1w_den-512`
@@ -94,7 +102,7 @@ non-circularity argument, artifacts, and interpretation.
 Render a compact subject-level comparison of the cross-fitted labels. To
 replace the prior AP-labelled PNGs with the Fisher-z network legend, run:
 
-    /home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/04_01_render_hcp_crossfit_individual_overviews.py --jobs 4 --resume --refresh-visuals
+    /home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/02_01_render_hcp_crossfit_individual_overviews.py --jobs 4 --resume --refresh-visuals
 
 The immutable source codes remain AP-ordered (`1=Anterior`, `2=Body`,
 `3=Posterior`) in cross-fit labels and source manifests. Only the display layer

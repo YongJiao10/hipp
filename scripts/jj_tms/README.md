@@ -8,7 +8,7 @@ mapping, HCP151 direct-template matcher, and fixed-template overview renderer.
 JJ_TMS code does not belong in the protected multi-dataset numbered surfaces
 `scripts/core_workflow/` or `scripts/individual_workflow/`. The reusable
 HCP151 template builder remains numbered at
-`scripts/individual_workflow/05_01_build_hcp151_fixed_template.py`.
+`scripts/individual_workflow/03_01_build_hcp151_fixed_template.py`.
 
 See:
 
@@ -64,7 +64,7 @@ incompatible or malformed state fails closed. There is no `--overwrite`.
 The CtxReg template builder must be called with the explicit identity:
 
 ```bash
-/home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/05_01_build_hcp151_fixed_template.py \
+/home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/03_01_build_hcp151_fixed_template.py \
   --mode preflight \
   --template-id hcp151_routea_ctxreg \
   --group-root outputs_hcp/work/group_atlas/pfm_ctxreg \

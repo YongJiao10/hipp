@@ -130,7 +130,7 @@ V2 先完整讲流程与代码，再讲数据、进展和计划。页数故意�
 
 | # | English title | 必须承载的技术信息 | 版式 |
 |---:|---|---|---|
-| 22 | Individual Mapping and Cross-Fitted Template Matching | `scripts/individual_workflow/` 与 core workflow 的关系；`individual_workflow/lib/routea_individual_gradients_wta.py`、`03_00_run_hcp_crossfit_template_matching.py`；五 folds、family kept together、K=3 AP labels、604 subject×hemisphere×smoothing combinations；给实际运行命令。 | workflow card + exact run cards |
+| 22 | Individual Mapping and Cross-Fitted Template Matching | `scripts/individual_workflow/` 与 core workflow 的关系；`individual_workflow/lib/routea_individual_gradients_wta.py`、`01_01_run_hcp_crossfit_template_matching.py`；五 folds、family kept together、K=3 AP labels、604 subject×hemisphere×smoothing combinations；给实际运行命令。 | workflow card + exact run cards |
 | 23 | Completed Example — Five-Fold Template Robustness | 完整 crossfit robustness overview；说明 Macro-Dice、ARI、prototype correlation、vertex agreement；保持它仅为模板 robustness 而非 behavior/clinical validity。 | 全图完整显示 + concise interpretation |
 | 24 | Data Locations and Dataset-Specific Entry Points | 表中列 HCP 7T、Stanford、ESTT、Iowa7T、HCP3T、future iEEG：local path、current state、dataset-specific entrypoint/branch。数据独立成节，不能和流程图混放。 | 6-row location matrix |
 | 25 | Current Status and Immediate Handover Priorities | Complete：HCP group, gradient-spectral/WTA products, individual/crossfit; Available：Stanford products, Lynch branch; Pending：HCP3T integration, ESTT run, clinical iEEG. 每行有“next concrete action”。 | high-density status table |
@@ -189,7 +189,7 @@ Slide 13 必须在命令旁明确标注：在正式 run 中，`--shared-root`、
 
 ```bash
 /home/yojiao/.conda/envs/py314/bin/python \
-  scripts/individual_workflow/03_00_run_hcp_crossfit_template_matching.py \
+  scripts/individual_workflow/01_01_run_hcp_crossfit_template_matching.py \
   --family-map data/HCP_YA_subjects_2026_04_09_16_01_42.csv --resume
 ```
 

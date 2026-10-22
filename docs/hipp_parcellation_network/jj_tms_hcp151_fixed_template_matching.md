@@ -90,19 +90,19 @@ matching full-cohort group mean Fisher-z FC bank. Do not substitute
 definition.
 
 ```bash
-/home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/05_01_build_hcp151_fixed_template.py \
+/home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/03_01_build_hcp151_fixed_template.py \
   --mode preflight \
   --group-root /home/yojiao/hpchome/hipp/outputs_hcp/work/group_atlas/pfm \
   --gradient-root /home/yojiao/hpchome/hipp/outputs_hcp/work/hippomaps_gradients/pfm \
   --out-root /home/yojiao/hpchome/hipp/outputs_hcp/templates/hcp151_routea_full_k3_fisherz
 
-/home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/05_01_build_hcp151_fixed_template.py \
+/home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/03_01_build_hcp151_fixed_template.py \
   --mode build \
   --group-root /home/yojiao/hpchome/hipp/outputs_hcp/work/group_atlas/pfm \
   --gradient-root /home/yojiao/hpchome/hipp/outputs_hcp/work/hippomaps_gradients/pfm \
   --out-root /home/yojiao/hpchome/hipp/outputs_hcp/templates/hcp151_routea_full_k3_fisherz
 
-/home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/05_01_build_hcp151_fixed_template.py \
+/home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/03_01_build_hcp151_fixed_template.py \
   --mode validate \
   --out-root /home/yojiao/hpchome/hipp/outputs_hcp/templates/hcp151_routea_full_k3_fisherz
 ```
@@ -169,7 +169,7 @@ The adapter has no `--overwrite` mode.
 The CtxReg builder is selected explicitly:
 
 ```bash
-/home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/05_01_build_hcp151_fixed_template.py \
+/home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/03_01_build_hcp151_fixed_template.py \
   --mode preflight \
   --template-id hcp151_routea_ctxreg \
   --group-root outputs_hcp/work/group_atlas/pfm_ctxreg \

@@ -24,7 +24,7 @@
 ## File Structure
 
 - Modify: `scripts/core_workflow/lib/output_layout.py` — expose the canonical individual cross-fit overview resolver.
-- Create: `scripts/individual_workflow/04_01_render_hcp_crossfit_individual_overviews.py` — validate input labels, invoke the locked renderer, compose 2 mm/4 mm rows, and write status/provenance outputs.
+- Create: `scripts/individual_workflow/02_01_render_hcp_crossfit_individual_overviews.py` — validate input labels, invoke the locked renderer, compose 2 mm/4 mm rows, and write status/provenance outputs.
 - Create: `tests/individual_workflow/test_crossfit_individual_overviews.py` — test manifest validation, compact two-row composition, non-overwrite/resume behavior, and aggregate status output without invoking Workbench.
 - Modify: `scripts/individual_workflow/README.md` — add the supported renderer and its command/output contract.
 - Modify: `docs/hipp_parcellation_network/crossfit_template_matching.md` — document the individual visual-output layout and interpretation.
@@ -65,7 +65,7 @@ Run:
 /home/yojiao/.conda/envs/py314/bin/python -m pytest tests/individual_workflow/test_crossfit_individual_overviews.py -q
 ```
 
-Expected: collection/import failure naming `04_01_render_hcp_crossfit_individual_overviews.py` or `render_individual_overviews`.
+Expected: collection/import failure naming `02_01_render_hcp_crossfit_individual_overviews.py` or `render_individual_overviews`.
 
 - [ ] **Step 3: Add failing assertions for provenance and overwrite protection**
 
@@ -93,7 +93,7 @@ Expected: FAIL at the requested renderer API, not at fixture creation.
 
 **Files:**
 - Modify: `scripts/core_workflow/lib/output_layout.py`
-- Create: `scripts/individual_workflow/04_01_render_hcp_crossfit_individual_overviews.py`
+- Create: `scripts/individual_workflow/02_01_render_hcp_crossfit_individual_overviews.py`
 - Test: `tests/individual_workflow/test_crossfit_individual_overviews.py`
 
 **Interfaces:**
@@ -174,7 +174,7 @@ Expected: all new tests pass with no actual Workbench invocation.
 - [ ] **Step 1: Add the documented production command**
 
 ```bash
-/home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/04_01_render_hcp_crossfit_individual_overviews.py --jobs 4 --resume
+/home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/02_01_render_hcp_crossfit_individual_overviews.py --jobs 4 --resume
 ```
 
 - [ ] **Step 2: Add the documented output contract**
@@ -201,7 +201,7 @@ Expected: PASS.
 Run:
 
 ```bash
-/home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/04_01_render_hcp_crossfit_individual_overviews.py --subjects 115825 --jobs 1
+/home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/02_01_render_hcp_crossfit_individual_overviews.py --subjects 115825 --jobs 1
 ```
 
 Expected: one non-empty canonical PNG and an `ok` row in `individual_overview_status.tsv`.
@@ -211,7 +211,7 @@ Expected: one non-empty canonical PNG and an `ok` row in `individual_overview_st
 Run:
 
 ```bash
-/home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/04_01_render_hcp_crossfit_individual_overviews.py --jobs 4 --resume
+/home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/02_01_render_hcp_crossfit_individual_overviews.py --jobs 4 --resume
 ```
 
 Expected: `ok=151`, `failed=0`, and 151 output PNGs in the canonical `individual/` subtree.

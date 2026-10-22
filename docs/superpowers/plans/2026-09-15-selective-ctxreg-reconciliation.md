@@ -195,7 +195,7 @@ Expected: every requested branch/variant is explicit; mismatch, missing GIFTI/NP
 
 **Files:**
 
-- Modify: `scripts/individual_workflow/05_01_build_hcp151_fixed_template.py`
+- Modify: `scripts/individual_workflow/03_01_build_hcp151_fixed_template.py`
 - Create: `scripts/jj_tms/jj_tms_ctxreg_fixed_template_matching.py`
 - Modify: `scripts/jj_tms/README.md`
 - Test: `tests/individual_workflow/test_jj_tms_ctxreg_fixed_template_matching.py`

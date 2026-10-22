@@ -1,6 +1,6 @@
 # Stanford 2 mm template-matched cluster FC
 
-`04_02_compute_subject_template_cluster_fc.py` produces the subject-level FC
+`02_02_compute_subject_template_cluster_fc.py` produces the subject-level FC
 needed after HCP151 template matching. It uses each subject's own
 `matching/2mm/hemi-{L|R}/labels.npy` and `valid_mask.npy`, averages the
 subject's 2 mm hippocampal surface time series within labels 1, 2, and 3, and
@@ -23,8 +23,8 @@ partial output trees.
 Run the full 194-subject job serially after the dry-run passes:
 
 ```bash
-/home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/04_02_compute_subject_template_cluster_fc.py --dry-run
-/home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/04_02_compute_subject_template_cluster_fc.py --resume
+/home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/02_02_compute_subject_template_cluster_fc.py --dry-run
+/home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/02_02_compute_subject_template_cluster_fc.py --resume
 ```
 
 `--resume` reuses only a complete subject whose current input fingerprints and
@@ -36,7 +36,7 @@ numeric inputs and outputs remain valid, refresh only the recorded fingerprints
 with:
 
 ```bash
-/home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/04_02_compute_subject_template_cluster_fc.py --refresh-provenance
+/home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/02_02_compute_subject_template_cluster_fc.py --refresh-provenance
 ```
 
 This mode validates all existing matrices and their copies first, then updates

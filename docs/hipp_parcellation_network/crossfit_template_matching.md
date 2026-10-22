@@ -43,13 +43,13 @@ assignments contain only subject and fold identifiers.
 Audit all expected inputs without writing workflow products:
 
 ```bash
-/home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/03_00_run_hcp_crossfit_template_matching.py --family-map /home/yojiao/hpchome/hipp/data/HCP_YA_subjects_2026_04_09_16_01_42.csv --dry-run
+/home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/01_01_run_hcp_crossfit_template_matching.py --family-map /home/yojiao/hpchome/hipp/data/HCP_YA_subjects_2026_04_09_16_01_42.csv --dry-run
 ```
 
 Run the computation, or resume an exactly matching partial/completed run:
 
 ```bash
-/home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/03_00_run_hcp_crossfit_template_matching.py --family-map /home/yojiao/hpchome/hipp/data/HCP_YA_subjects_2026_04_09_16_01_42.csv --resume
+/home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/01_01_run_hcp_crossfit_template_matching.py --family-map /home/yojiao/hpchome/hipp/data/HCP_YA_subjects_2026_04_09_16_01_42.csv --resume
 ```
 
 Resume validation locks the cohort, family/fold assignment, input and output
@@ -62,7 +62,7 @@ manifest is rejected rather than guessed or overwritten.
 After all five fold templates exist, render the quantitative robustness review:
 
 ```bash
-/home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/03_01_validate_hcp_crossfit_robustness.py
+/home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/01_02_validate_hcp_crossfit_robustness.py
 /home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/03_02_render_hcp_crossfit_folds_comparison.py
 ```
 
@@ -72,7 +72,7 @@ All commands accept explicit root overrides. Run `--help` for the complete
 interface. The default production combinations are 2 mm and 4 mm smoothing,
 left and right hemispheres, fixed K=3, and five folds.
 
-The session-split comparison (`03_03_render_hcp_runs_comparison.py`) reads the
+The session-split comparison (`01_04_render_hcp_runs_comparison.py`) reads the
 explicit QC roster selected by `--subjects-manifest`, defaulting to the current
 Kong2022 QC pass list. Retained reference directories do not determine analysis
 participation. Rebuild its session templates when the declared cohort changes.
@@ -81,7 +81,7 @@ Render one compact 2 mm/4 mm standard-Workbench hippocampal figure per subject. 
 replace the existing AP-labelled PNGs with the Fisher-z network display, use the
 explicit refresh request:
 
-    /home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/04_01_render_hcp_crossfit_individual_overviews.py --jobs 4 --resume --refresh-visuals
+    /home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/02_01_render_hcp_crossfit_individual_overviews.py --jobs 4 --resume --refresh-visuals
 
 
 Fold-template gradient-spectral clustering uses the same fixed affinity as the
@@ -142,13 +142,13 @@ outputs_hcp/present/overviews/crossfit_template_matching/
 
 The 3D Workbench overviews provide direct qualitative and quantitative
 verification of template stability:
-- `03_02_run_and_render_hcp_crossfit_disjoint_folds.py`: independently fits and
+- `01_03_run_and_render_hcp_crossfit_disjoint_folds.py`: independently fits and
   renders K=3 gradient-spectral templates for all 5 completely disjoint cohorts
   (n≈30 each, 0% sample overlap, 0% family leakage). Even with only ~30 subjects
   and zero shared subjects, pairwise Macro-Dice exceeds 0.954–0.972 and
   long-axis modal vertex agreement exceeds 97.4%–98.4%, demonstrating robust
   biological replication across independent cohorts.
-- `03_03_render_hcp_runs_comparison.py`: renders comparative K=3 templates
+- `01_04_render_hcp_runs_comparison.py`: renders comparative K=3 templates
   across independent acquisition sessions and spatial smoothing scales in a 2×2
   factorial layout (Rows: 2 mm vs 4 mm; Columns: Day 1 Runs 1+2 vs Day 2 Runs 3+4).
   Across all n=151 subjects, Day 1 vs Day 2 Macro-Dice averages 0.9777 (2 mm: L 0.9924,

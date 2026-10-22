@@ -512,7 +512,7 @@ def main() -> None:
     manifest_path = overview_root / DEFAULT_MANIFEST_NAME
     summary_tsv_path = overview_root / DEFAULT_SUMMARY_TSV_NAME
 
-    cf = load_module("crossfit", INDIVIDUAL_WORKFLOW_DIR / "03_00_run_hcp_crossfit_template_matching.py")
+    cf = load_module("crossfit", INDIVIDUAL_WORKFLOW_DIR / "01_01_run_hcp_crossfit_template_matching.py")
     core = cf.load_group_atlas_module()
     group_grad = cf.load_group_gradient_module()
 

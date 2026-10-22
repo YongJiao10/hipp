@@ -17,7 +17,7 @@
 
 ## File Structure
 
-- Modify: `scripts/individual_workflow/04_01_render_hcp_crossfit_individual_overviews.py` — derive/validate the Fisher-z network mapping, generate temporary network-labelled GIFTIs, record the visual contract, and add guarded refresh behavior.
+- Modify: `scripts/individual_workflow/02_01_render_hcp_crossfit_individual_overviews.py` — derive/validate the Fisher-z network mapping, generate temporary network-labelled GIFTIs, record the visual contract, and add guarded refresh behavior.
 - Modify: `tests/individual_workflow/test_crossfit_individual_overviews.py` — add failing coverage for the stable mapping, standardized colors, temporary label-table rendering, and stale visual-contract handling.
 - Modify: `scripts/individual_workflow/README.md` — state the network-labelled legend and refresh command.
 - Modify: `docs/hipp_parcellation_network/crossfit_template_matching.md` — distinguish immutable AP source codes from Fisher-z network display labels and record the corresponding colors/evidence.

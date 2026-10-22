@@ -77,10 +77,10 @@
 - Update JJ-TMS documentation and focused tests to use the new paths.
 
 Mature reusable individual entrypoints are numbered in place:
-`03_00_run_hcp_crossfit_template_matching.py`,
-`03_01_validate_hcp_crossfit_robustness.py`,
-`04_01_render_hcp_crossfit_individual_overviews.py`,
-`05_01_build_hcp151_fixed_template.py`, and the `01_*` RouteA individual
+`01_01_run_hcp_crossfit_template_matching.py`,
+`01_02_validate_hcp_crossfit_robustness.py`,
+`02_01_render_hcp_crossfit_individual_overviews.py`,
+`03_01_build_hcp151_fixed_template.py`, and the `01_*` RouteA individual
 runner/launcher. The large RouteA implementation is kept in
 `individual_workflow/lib/` rather than as an unnumbered root entrypoint.
 

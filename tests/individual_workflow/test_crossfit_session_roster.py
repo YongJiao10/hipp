@@ -9,7 +9,7 @@ import pytest
 
 
 def test_session_comparison_uses_explicit_qc_roster_not_reference_directories(tmp_path, monkeypatch):
-    source = Path(__file__).resolve().parents[2] / "scripts/individual_workflow/03_03_render_hcp_runs_comparison.py"
+    source = Path(__file__).resolve().parents[2] / "scripts/individual_workflow/01_04_render_hcp_runs_comparison.py"
     spec = importlib.util.spec_from_file_location("session_roster_comparison", source)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
