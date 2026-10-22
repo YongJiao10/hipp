@@ -72,6 +72,11 @@ All commands accept explicit root overrides. Run `--help` for the complete
 interface. The default production combinations are 2 mm and 4 mm smoothing,
 left and right hemispheres, fixed K=3, and five folds.
 
+The session-split comparison (`03_03_render_hcp_runs_comparison.py`) reads the
+explicit QC roster selected by `--subjects-manifest`, defaulting to the current
+Kong2022 QC pass list. Retained reference directories do not determine analysis
+participation. Rebuild its session templates when the declared cohort changes.
+
 Render one compact 2 mm/4 mm standard-Workbench hippocampal figure per subject. To
 replace the existing AP-labelled PNGs with the Fisher-z network display, use the
 explicit refresh request:

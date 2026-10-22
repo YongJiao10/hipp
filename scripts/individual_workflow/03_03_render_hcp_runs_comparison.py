@@ -32,12 +32,14 @@ if str(INDIVIDUAL_WORKFLOW_DIR) not in sys.path:
     sys.path.insert(0, str(INDIVIDUAL_WORKFLOW_DIR))
 
 from lib.output_layout import (
+    DEFAULT_KONG2022_MANIFEST_ROOT,
     DEFAULT_KONG2022_ROUTEA_ROOT,
     DEFAULT_KONG2022_SURFACE_ROOT,
     DEFAULT_KONG2022_TEMPLATE_ROOT,
     resolve_crossfit_template_matching_overview_root,
     resolve_crossfit_template_matching_root,
 )
+from lib.io_utils import load_subject_ids
 from lib.surface_utils import long_axis_order, render_locked_grid
 from lib.workbench_grid import build_grid_canvas, load_font
 
@@ -481,6 +483,12 @@ def main() -> None:
         description="Compute and render 2x2 split-half comparison: (2mm, 4mm) x (Runs 1+2, Runs 3+4) for HCP."
     )
     parser.add_argument(
+        "--subjects-manifest",
+        type=Path,
+        default=DEFAULT_KONG2022_MANIFEST_ROOT / "hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt",
+        help="Exact QC participant roster; reference-directory membership does not select participants.",
+    )
+    parser.add_argument(
         "--overview-root",
         type=Path,
         default=resolve_crossfit_template_matching_overview_root(),
@@ -508,13 +516,9 @@ def main() -> None:
     core = cf.load_group_atlas_module()
     group_grad = cf.load_group_gradient_module()
 
-    # Get all subjects
-    shared_root = DEFAULT_KONG2022_ROUTEA_ROOT
-    subjects = sorted([
-        d.name.replace("sub-", "")
-        for d in shared_root.iterdir()
-        if d.is_dir() and d.name.startswith("sub-")
-    ])
+    subjects = load_subject_ids(args.subjects_manifest.resolve())
+    if len(subjects) < 2:
+        raise ValueError(f"Session comparison requires a group QC roster: {args.subjects_manifest}")
     n_subjects = len(subjects)
     print(f"[info] Total subjects for split-half comparison: n = {n_subjects}")
 

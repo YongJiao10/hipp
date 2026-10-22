@@ -4,10 +4,23 @@
 
 The user approved this policy on 20 October 2026 for HCP7T rest, HCP3T
 EMOTION/WM, Stanford 36P, BANDA and PDC. This is the current QC decision.
-Production entry points have not yet been updated to implement all three
-criteria. Their inherited tSNR defaults and HCP151 destination contracts do
-not establish compliance with this policy. The research counts below are not
-new formal rosters; the historical HCP151 reference is not the new QC result.
+The HCP7T roster entry point, `02_02_build_qc_manifest.py`, now applies all
+three criteria in order. It reads exact physical-run `Movement_Regressors.txt`
+paths from `--motion-manifest` and each subject's declared
+`surface/raw/sub-<subject>_coverage_summary.json`. It validates coverage run IDs,
+labels and lengths against the motion frames, and checks recorded actual den-512
+vertex counts. Missing inputs receive `unassessable` status; malformed or
+mismatched declarations stop the operation before reports are written.
+
+The passing roster is derived from current inputs, without a fixed subject
+count or historical ID requirement. Established report filenames containing
+`tsnr` remain an output interface, but no tSNR numerical gate is applied.
+This roster implementation does not establish that all production sampling,
+mask consumers, or other dataset entry points have been updated or rerun.
+Group-input `qc` and `all` stages for other datasets or tasks stop before writing
+until their production QC input contracts are implemented.
+The research counts below are not new formal rosters; the historical HCP151
+reference is not the new QC result.
 
 ## Participant and visit selection
 

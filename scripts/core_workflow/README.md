@@ -12,7 +12,15 @@ Formal reference input contracts:
   memory. A single CIFTI requires an explicit `--run-metadata-template`.
 - `02_01_prepare_group_inputs.py` uses the same artifact manifest template for
   exact BOLD/dtseries pairing and validates both modalities before creating
-  surface outputs.
+  surface outputs. For HCP7T rest's existing concatenated inputs, select the
+  exact BOLD with `--bold-template`, the supplied hippocampal CIFTI with
+  `--dtseries-template`, and physical-run boundaries with
+  `--run-metadata-template`. The two latter options are required together.
+  Metadata records `subject`, ordered `run_ids`, `run_lengths`, and `runs`
+  entries with `run_id`, `run_label`, and `n_timepoints`; lengths must match
+  both image headers before sampling. These inputs are read in place. Set
+  `--log-dir outputs_hcp/runs/<run_id>/prepare` for rerun logs; the existing
+  route-local log directory remains the CLI default.
   Sampling starts from native `space-T1w_den-512` meshes, transforms their
   vertices into the declared MNI152NLin6Asym BOLD space, and saves those meshes
   under `surface/raw/sampling_surfaces/`. The core workflow, Iowa7T and
@@ -31,6 +39,18 @@ Formal reference input contracts:
   point mapping. An old corobl raw summary causes resume to stop with a rebuild
   instruction. See `docs/hipp_parcellation_network/step_by_step_flows.md` for
   the coordinate contract; QC cutoffs are selected independently.
+  HCP7T rest intersects finite, nonconstant hippocampal BrainModel source
+  voxels across declared physical runs before projecting the common mask
+  with trilinear weights at the registered vertices. It writes
+  `surface/raw/sub-<subject>_coverage_summary.json` and exact per-hemisphere
+  `sub-<subject>_hemi-<hemi>_gm_weight.npy` arrays. The summary records actual
+  consumed vertex counts, source meshes, run IDs, labels, and lengths.
+  The downstream `tsnr_gate/` mask requires positive GM weight and a finite,
+  nonconstant consumed analysis series. HCP rest requires
+  `--tsnr-threshold none` (the default); its retained score arrays contain
+  NaN and do not impose a numerical tSNR gate. Smoothing applies this mask
+  on the native T1w mesh. Registered caches without this GM contract must
+  be rebuilt with `--no-resume`.
 - `03_04_run_lynch2024_fastans_pfm.py --run-artifact-manifest-template`
   selects one exact per-subject manifest, preserves its declared order, and
   records input paths, run IDs, and receipts. All consumed production inputs
@@ -667,24 +687,23 @@ or non-HCP preparation that uses either HCP rest default before creating
 directories or running any stage. For `--stage all` or `--stage group-average`,
 it also requires a separate `--template-root`; routine task prep can select
 only `raw`, `tsnr`, `qc`, and `smooth` to reuse the existing formal anatomy.
-Before writing either a QC report or a pass list to a formal HCP rest
-destination, `02_02` requires the final QC-passed subject IDs to match the
-exact HCP151 roster below. Protected destinations include the Kong2022
-default `qc`/`manifests` directories and the branch-neutral
-`qc/vertex_qc_t1only/qc` and `qc/vertex_qc_t1only/manifests` directories.
-Default Kong2022 QC destinations also require the default rest surface
-inputs. Each task uses its complete roster and explicitly selects its own
-`--out-dir` and `--manifest-dir`. Its `latest` list contains the complete
-QC-passed task cohort; the HCP rest cohort authority is the explicit
-151-subject file below.
+Participant QC currently implements HCP7T rest. `02_01 --stage qc|all`
+rejects other datasets and tasks before creating outputs because their
+approved motion/Dice/GM-coverage policy is not yet implemented. Their raw,
+vertex diagnostic, smoothing, and group-average stages remain separately
+available with explicit branch roots. HCP rest forwards its exact
+`--motion-manifest` to `02_02`; the QC stage applies overall mean Power FD
+<=0.30 mm, bilateral Dice >=0.70, and at most 20 zero-GM-weight vertices per
+consumed den-512 hemisphere. Missing required evidence is unassessable.
+The resulting `latest` roster is authoritative for the rerun, with no fixed
+151- or 148-subject requirement.
 
-The formal average at `kong2022/templates/hipp_group_average`
-accepts only the exact roster in
-`outputs_hcp/inputs/qc/vertex_qc_t1only/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_151.txt`,
-even if an existing average has missing or incorrect metadata. Other analyses
-use their own explicit `--template-root`. Raw surface samples
-can be reused. Do not feed old masked/smoothed arrays into a new gate. Rest
-branches retain their existing signal-validity formula.
+The average at `kong2022/templates/hipp_group_average` is rebuilt from the
+explicit current QC-passed subjects and records their IDs in its existing
+stage manifest. Other analyses use their own explicit `--template-root`.
+Rebuild raw samples that lack the registered functional-GM contract, then
+rebuild masks and smoothing. Do not feed old masked/smoothed arrays into a new
+gate. Cortex references and NSI inputs are separate upstream products.
 
 Task group analysis (`05_06`) requires the complete analysis roster through
 `--subjects-manifest` or `--subjects`. The default contrast set contains all
@@ -768,10 +787,10 @@ existing tSNR machinery and inherited defaults, not the accepted QC selection.
 
 The implementation is in `lib/tsnr.py`, called by hippocampal preparation
 `02_01`, cortex extraction (`03_02` / `lib/io_utils.py`), and Iowa adapters.
-HCP rest retains the inherited `10000 / SD` metric and requires a finite,
-nonconstant complete analysis series. The numerical cutoff remains configurable;
-the default 25 is an inherited comparison setting, not the proposed primary
-hippocampal exclusion rule.
+HCP rest hippocampal preparation uses the functional-GM and consumed-signal
+mask described above, with no numerical tSNR gate. The cortex-reference
+implementation retains its existing `10000 / SD` diagnostic and cutoff;
+the hippocampal rerun does not rebuild cortex references or NSI inputs.
 
 HCP task computes the original mean divided by task-model residual sample SD
 (ddof=1), separately for every declared run, before smoothing or masking. The

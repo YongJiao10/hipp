@@ -12,9 +12,99 @@ import nibabel as nib
 import numpy as np
 
 from lib.hipp_density_assets import find_surface_asset_strict, subject_surf_dir
+from lib.io_utils import _cifti_axes_equal
 from lib.surface_coordinates import (METRIC_SPACE, REPO_ROOT, SurfaceRegistration,
                                      registered_sampling_surfaces)
 from lib.workbench import run_workbench
+
+
+FUNCTIONAL_GM_POLICY = "cifti_hippocampal_common_run_gm_trilinear"
+
+
+def _trilinear_mask_weights(mask: np.ndarray, affine: np.ndarray, points: np.ndarray) -> np.ndarray:
+    voxel = nib.affines.apply_affine(np.linalg.inv(affine), points)
+    if not np.isfinite(voxel).all():
+        raise ValueError("Registered sampling vertices contain nonfinite coordinates")
+    lower = np.floor(voxel).astype(np.int64)
+    fraction = voxel - lower
+    weights = np.zeros(len(points), dtype=np.float64)
+    for x in (0, 1):
+        for y in (0, 1):
+            for z in (0, 1):
+                offset = np.asarray([x, y, z])
+                corner = lower + offset
+                inside = np.all((corner >= 0) & (corner < np.asarray(mask.shape)), axis=1)
+                contribution = np.prod(np.where(offset, fraction, 1 - fraction), axis=1)
+                weights[inside] += contribution[inside] * mask[tuple(corner[inside].T)]
+    return weights.astype(np.float32)
+
+
+def sample_hippocampal_gm_support(
+    *, dtseries_inputs: Sequence[Path], run_ids: Sequence[int],
+    run_lengths: Sequence[int], sampling_surfaces: dict[str, Path],
+) -> tuple[dict[str, np.ndarray], dict[str, dict[str, object]]]:
+    """Project common physical-run CIFTI hippocampal GM onto registered meshes.
+
+    Inputs are either one explicitly selected concatenated CIFTI partitioned by
+    declared physical-run lengths, or one CIFTI per declared physical run.
+    Only the hippocampal columns are read; no concatenated image is written.
+    """
+    paths = [Path(path) for path in dtseries_inputs]
+    ids, lengths = list(run_ids), list(run_lengths)
+    if (not paths or not ids or len(ids) != len(lengths)
+            or ids != sorted(set(ids))
+            or any(not isinstance(n, (int, np.integer)) or isinstance(n, bool) or n < 2 for n in lengths)
+            or len(paths) not in (1, len(ids))):
+        raise ValueError(f"CIFTI inputs require explicit physical run IDs and lengths: ids={ids}, lengths={lengths}, paths={paths}")
+    common: dict[str, np.ndarray] = {}
+    per_run: dict[str, list[int]] = {hemi: [] for hemi in ("L", "R")}
+    structures: dict[str, tuple[slice, np.ndarray]] = {}
+    reference_axis = None
+    for index, path in enumerate(paths):
+        image = nib.load(path)
+        if not isinstance(image, nib.Cifti2Image) or len(image.shape) != 2:
+            raise ValueError(f"Expected a CIFTI dtseries with hippocampal BrainModels: {path}")
+        blocks = lengths if len(paths) == 1 else [lengths[index]]
+        if sum(blocks) != image.shape[0]:
+            raise ValueError(f"Physical run timepoints do not cover CIFTI frames at {path}: lengths={blocks}, frames={image.shape[0]}")
+        axis = image.header.get_axis(1)
+        if not isinstance(axis, nib.cifti2.BrainModelAxis) or axis.volume_shape is None or axis.affine is None:
+            raise ValueError(f"Missing hippocampal voxel BrainModel grid at {path}")
+        if reference_axis is None:
+            reference_axis = axis
+            for hemi, name in (("L", "CIFTI_STRUCTURE_HIPPOCAMPUS_LEFT"), ("R", "CIFTI_STRUCTURE_HIPPOCAMPUS_RIGHT")):
+                matches = [(selection, model) for structure, selection, model in axis.iter_structures() if structure == name]
+                if len(matches) != 1 or not np.all(matches[0][1].volume_mask):
+                    raise ValueError(f"Expected one voxel {name} BrainModel at {path}")
+                selection, model = matches[0]
+                structures[hemi] = (selection, model.voxel)
+                common[hemi] = np.ones(len(model), dtype=bool)
+        elif not _cifti_axes_equal(reference_axis, axis):
+            raise ValueError(f"BrainModelAxis mismatch between CIFTI GM inputs: {paths[0]} vs {path}")
+        for hemi, (selection, _) in structures.items():
+            values = np.asarray(image.dataobj[:, selection], dtype=np.float32)
+            start = 0
+            for length in blocks:
+                block = values[start:start + length]
+                finite = np.isfinite(block).all(axis=0)
+                valid = np.zeros(values.shape[1], dtype=bool)
+                valid[finite] = np.max(block[:, finite], axis=0) > np.min(block[:, finite], axis=0)
+                common[hemi] &= valid
+                per_run[hemi].append(int(valid.sum()))
+                start += length
+    weights: dict[str, np.ndarray] = {}
+    summaries: dict[str, dict[str, object]] = {}
+    for hemi, (_, voxels) in structures.items():
+        mask = np.zeros(reference_axis.volume_shape, dtype=np.float32)
+        mask[tuple(voxels[common[hemi]].T)] = 1
+        points = np.asarray(nib.load(sampling_surfaces[hemi]).agg_data("pointset"), dtype=np.float64)
+        weights[hemi] = _trilinear_mask_weights(mask, reference_axis.affine, points)
+        summaries[hemi] = {
+            "n_source_voxels": int(len(voxels)),
+            "n_valid_source_voxels_per_run": per_run[hemi],
+            "n_common_source_voxels": int(common[hemi].sum()),
+        }
+    return weights, summaries
 
 
 def _load_metric_gifti(path: Path, *, n_vertices: int, expected_timepoints: int) -> np.ndarray:

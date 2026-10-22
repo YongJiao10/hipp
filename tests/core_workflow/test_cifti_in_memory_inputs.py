@@ -62,6 +62,7 @@ def test_single_volume_sampling_records_volume_in_stage_manifest(
         bold_root=str(tmp_path),
         bold_template="{bold_root}/sub-{subject}_bold.nii.gz",
         log_dir=str(log_dir),
+        dataset="stanford",
     )
 
     manifest_path = (
@@ -313,6 +314,7 @@ def test_run_raw_sampling_uses_manifest_declared_runs_and_receipts(
         bold_template="{bold_root}/sub-{subject}_bold.nii.gz",
         log_dir=str(log_dir),
         run_artifact_manifest_template="{bold_root}/{sub_subject}_run_artifacts.json",
+        dataset="stanford",
     )
 
     assert result["ok"] is True
