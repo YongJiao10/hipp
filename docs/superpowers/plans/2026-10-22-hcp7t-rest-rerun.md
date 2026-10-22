@@ -43,13 +43,18 @@ T1w surfaces use the declared HCP native-to-BOLD registration.
 6. Run focused tests, then start registered sampling in parallel. Evaluate QC
    for the complete source roster, smooth passing participants and rebuild
    group-average surfaces from that measured roster.
-7. Materialize PFM, fixed and cortex-regressed FC; compute group gradients and
-   gradient-spectral/WTA atlas products, family17 annotations and the weighted
-   Fisher-z comparison. Reuse base clustering for family17 annotations.
+7. Materialize PFM and cortex-regressed FC; compute their group gradients,
+   gradient-spectral/WTA atlas products, the PFM family17 atlas, and the
+   weighted Fisher-z comparison. The legacy `fixed` Route B and its
+   `fixed_17net` derivative are outside this rerun. Pass `--force-final-k 3`
+   explicitly to every applicable `05_02` call: K=3 is the fixed primary
+   output, while `--default-k 3` alone still allows candidate-selection
+   constraints to skip a combo with no surviving K. Run `pfm_17net` with its
+   documented family17 group-atlas route; do not pass fixed-cluster reuse.
 8. Render the base Fisher-z gradient, normalized Top-20 gradient, normalized
    Top-20 WTA, and weighted Fisher-z gradient overview products. Run family-aware
    cross-validation, held-out template matching and their robustness figures.
-9. Inspect active processes, progress and errors thirty minutes after launch.
+9. Inspect active processes, progress and errors every twenty minutes after launch.
    Report actual counts and incomplete dependencies without changing the roster
    to fit existing output availability.
 
