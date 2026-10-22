@@ -10,7 +10,7 @@
   from `SYSTEM_NAME`, `CLUSTER_NAME`, `SGE_CLUSTER_NAME`, or the hostname.
   Accept only `idas` or `argon`; if detection is ambiguous, stop and set
   `SYSTEM_NAME` explicitly.
-- On **IDAS**, the hard cap is **10 total concurrent jobs/tasks/processes**.
+- On **IDAS**, the hard cap is **16 total concurrent jobs/tasks/processes**.
 - On **Argon**, the Kong2022 ArealMSHBM standard is UI `-tc 5` plus PINC
   `-tc 20`, for a **20-task total cap**. Do not apply the IDAS 10-task cap to
   an Argon array.
