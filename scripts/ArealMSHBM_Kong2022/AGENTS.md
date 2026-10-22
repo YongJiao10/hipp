@@ -17,6 +17,8 @@ launches in this directory.
     `/Shared/jianglab/3_Data_Working/fmriprep_processed_CausalConnectome/rest_fmriprep/DataOrg_PFM_36P/sub-*/func/*_task-rest_space-fsLR_den-91k_desc-denoised_bold.dtseries.nii`
   - `DATASET=stanford STANFORD_VARIANT=22p`:
     `/Shared/jianglab/3_Data_Working/fmriprep_processed_CausalConnectome/rest_fmriprep/DataOrg_PFM_22P/sub-*/func/*_task-rest_space-fsLR_den-91k_desc-denoised_bold.dtseries.nii`
+  - `DATASET=hcp7t`:
+    `${REPO_ROOT}/data/hippunfold_input/sub-*/func/sub-*_task-rest_run-concat.dtseries.nii`, paired with the exact `outputs_hcp/inputs/qc/run_metadata/sub-*.json` record. Split each concatenated CIFTI into four MATLAB sessions using its recorded run lengths; write labels under `outputs_hcp/inputs/kong2022/cortex_references/pfm_areal_mshbm/sub-*/`.
 - `DATASET=iowa7t`:
   use the existing `IOWA7T_BRANCH=multiband|multi_echo` and
   `IOWA7T_VARIANT=0p|22p|32p|36p|noxcpd` contracts in the launcher. Iowa7T outputs
@@ -39,6 +41,11 @@ launches in this directory.
   cohort. Read the timepoint count separately from each selected 22P/23P/36P
   CIFTI; do not reuse one variant's session lengths for another. Do not route ESTT through the
   Iowa7T branch or output tree.
+- HCP7T uses the QC physical-run metadata as the authoritative four-session
+  boundary contract. Validate subject identity, run IDs 1–4, frame counts, and
+  total concatenated map count before splitting. Retain prepared split CIFTIs
+  and censors under `${REPO_ROOT}/tmp/`; do not overwrite existing HCP7T label
+  or provenance files through the standard launcher.
 - Do not use subject `surf.gii` files for JJ_TMS, Stanford, or Iowa7T path/data
   adaptation. The original dtseries-based flows do not require them. ESTT is
   the explicit exception because its established output evidence and label

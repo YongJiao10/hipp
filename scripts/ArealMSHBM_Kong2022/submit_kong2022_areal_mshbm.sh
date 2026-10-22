@@ -87,6 +87,13 @@ case "${dataset}" in
     job_prefix="ia500_k22"
     manifest_prefix="iowa_hcp500"
     ;;
+  hcp7t)
+    dataset_label="HCP7T"
+    default_data_root="${repo_root}/data/hippunfold_input"
+    default_out_root="${repo_root}/outputs_hcp/inputs/kong2022/cortex_references/pfm_areal_mshbm"
+    job_prefix="hcp7t_k22"
+    manifest_prefix="hcp7t"
+    ;;
   pdc|banda)
     dataset_label="${dataset^^}"
     default_data_root="/Shared/jianglab/3_Data_Working/Depression/${dataset_label}/imaging"
@@ -95,7 +102,7 @@ case "${dataset}" in
     manifest_prefix="${dataset}"
     ;;
   *)
-    echo "ERROR: unsupported DATASET=${DATASET:-}. Expected jj_tms, stanford, iowa7t, estt, iowa_hcp500, pdc, or banda." >&2
+    echo "ERROR: unsupported DATASET=${DATASET:-}. Expected jj_tms, stanford, iowa7t, estt, iowa_hcp500, hcp7t, pdc, or banda." >&2
     exit 2
     ;;
 esac
@@ -275,7 +282,8 @@ smoke_n="${SMOKE_N:-0}"
 subjects_csv="${SUBJECT_IDS_CSV:-}"
 subject_ids_file="${SUBJECT_IDS_FILE:-}"
 overwrite="${OVERWRITE:-0}"
-keep_tmp="${KEEP_TMP:-$([[ "${dataset}" = "iowa_hcp500" || "${dataset}" = "pdc" || "${dataset}" = "banda" ]] && printf 1 || printf 0)}"
+keep_tmp="${KEEP_TMP:-$([[ "${dataset}" = "iowa_hcp500" || "${dataset}" = "hcp7t" || "${dataset}" = "pdc" || "${dataset}" = "banda" ]] && printf 1 || printf 0)}"
+hcp_run_metadata_root="${HCP_RUN_METADATA_ROOT:-${repo_root}/outputs_hcp/inputs/qc/run_metadata}"
 cohort_manifest="${COHORT_MANIFEST:-}"
 hold_jid="${HOLD_JID:-}"
 ui_tc="${UI_TC:-${default_ui_tc}}"
@@ -295,7 +303,7 @@ usage() {
 Usage: $(basename "$0")
 
 Environment controls:
-  DATASET=jj_tms|stanford|iowa7t|estt|iowa_hcp500|pdc|banda
+  DATASET=jj_tms|stanford|iowa7t|estt|iowa_hcp500|hcp7t|pdc|banda
                         Dataset preset. Default: jj_tms.
   STANFORD_VARIANT=22p|36p
                         Stanford input version. Auto-detected from DATA_ROOT;
@@ -314,6 +322,8 @@ Environment controls:
   PINC_TC=N             PINC array throttle. IDAS default: 7; Argon default: 15.
   OVERWRITE=1           Recompute existing outputs.
   KEEP_TMP=1            Retain task temporary files. Required for pdc/banda.
+  HCP_RUN_METADATA_ROOT=... HCP7T physical-run metadata root; defaults to
+                        outputs_hcp/inputs/qc/run_metadata.
   COHORT_MANIFEST=...   Exact metadata-derived PDC/BANDA input manifest.
   HOLD_JID=...          Explicit comma-separated prerequisite SGE job IDs.
   IOWA7T_BRANCH=...     Required for DATASET=iowa7t: multiband or multi_echo.
@@ -444,6 +454,32 @@ if [ -n "${dup_ids}" ]; then
   exit 2
 fi
 
+if [ "${dataset}" = "hcp7t" ]; then
+  for sid in "${all_ids[@]}"; do
+    subject="sub-${sid}"
+    dtseries="${data_root}/${subject}/func/${subject}_task-rest_run-concat.dtseries.nii"
+    run_metadata="${hcp_run_metadata_root}/${subject}.json"
+    subject_out="${out_root}/${subject}"
+    if [ ! -s "${dtseries}" ] || [ ! -r "${dtseries}" ]; then
+      echo "ERROR: missing, empty, or unreadable HCP7T concatenated CIFTI for ${subject}: ${dtseries}" >&2
+      exit 2
+    fi
+    if [ ! -s "${run_metadata}" ] || [ ! -r "${run_metadata}" ]; then
+      echo "ERROR: missing, empty, or unreadable HCP7T physical-run metadata for ${subject}: ${run_metadata}" >&2
+      exit 2
+    fi
+    for existing in \
+      "${subject_out}/lh_labels.txt" \
+      "${subject_out}/rh_labels.txt" \
+      "${subject_out}/provenance.json"; do
+      if [ -e "${existing}" ]; then
+        echo "ERROR: refusing to reuse an existing HCP7T result for ${subject}: ${existing}" >&2
+        exit 2
+      fi
+    done
+  done
+fi
+
 if [ "${smoke_n}" -gt 0 ]; then
   if [ "${smoke_n}" -gt "${#all_ids[@]}" ]; then
     echo "ERROR: SMOKE_N ${smoke_n} > subject count ${#all_ids[@]}" >&2
@@ -492,6 +528,7 @@ write_job_wrapper() {
     printf "export SYSTEM_NAME=%s\n" "$(shell_quote "${system_name}")"
     printf "export SCRIPT_DIR=%s\n" "$(shell_quote "${script_dir}")"
     printf "export DATA_ROOT=%s\n" "$(shell_quote "${data_root}")"
+    printf "export HCP_RUN_METADATA_ROOT=%s\n" "$(shell_quote "${hcp_run_metadata_root}")"
     printf "export OUT_ROOT=%s\n" "$(shell_quote "${out_root}")"
     printf "export IOWA7T_BRANCH=%s\n" "$(shell_quote "${iowa7t_branch}")"
     printf "export IOWA7T_VARIANT=%s\n" "$(shell_quote "${iowa7t_variant}")"

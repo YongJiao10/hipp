@@ -4,6 +4,7 @@ export LANG=C
 export LC_ALL=C
 export LC_CTYPE=C
 
+repo_root="${REPO_ROOT:-/old_Users/yojiao/hipp}"
 dataset="$(printf '%s' "${DATASET:-jj_tms}" | tr '[:upper:]-' '[:lower:]_')"
 stanford_variant="${STANFORD_VARIANT:-}"
 stanford_variant="$(printf '%s' "${stanford_variant}" | tr '[:upper:]-' '[:lower:]_')"
@@ -101,12 +102,15 @@ case "${dataset}" in
   iowa_hcp500)
     out_root="${OUT_ROOT:-/old_Users/yojiao/hipp/outputs_iowa_hcp500/inputs/kong2022/cortex_references/routea_areal_mshbm}"
     ;;
+  hcp7t)
+    out_root="${OUT_ROOT:-${repo_root}/outputs_hcp/inputs/kong2022/cortex_references/pfm_areal_mshbm}"
+    ;;
   pdc|banda)
     repo_root="${REPO_ROOT:-/old_Users/yojiao/hipp}"
     out_root="${OUT_ROOT:-${repo_root}/outputs_${dataset}/inputs/kong2022/cortex_references/routea_areal_mshbm}"
     ;;
   *)
-    echo "ERROR: unsupported DATASET=${DATASET:-}. Expected jj_tms, stanford, iowa7t, estt, iowa_hcp500, pdc, or banda." >&2
+    echo "ERROR: unsupported DATASET=${DATASET:-}. Expected jj_tms, stanford, iowa7t, estt, iowa_hcp500, hcp7t, pdc, or banda." >&2
     exit 2
     ;;
 esac

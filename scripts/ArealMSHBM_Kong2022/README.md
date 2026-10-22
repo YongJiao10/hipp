@@ -1,7 +1,7 @@
 # Kong2022 ArealMSHBM
 
 This is the single maintained interface for subject-level Kong2022_ArealMSHBM
-parcellation on JJ_TMS, Stanford, Iowa7T, ESTT, Iowa HCP500, PDC, and BANDA. Dataset
+parcellation on JJ_TMS, Stanford, Iowa7T, ESTT, Iowa HCP500, HCP7T, PDC, and BANDA. Dataset
 selection, input adaptation, SGE submission, MATLAB execution, provenance, and
 status reporting live in this directory. It does not modify the
 Kong2022_ArealMSHBM algorithm logic.
@@ -9,7 +9,7 @@ Kong2022_ArealMSHBM algorithm logic.
 ## Datasets
 
 Select the dataset with `DATASET=jj_tms`, `DATASET=stanford`, `DATASET=iowa7t`,
-`DATASET=estt`, `DATASET=iowa_hcp500`, `DATASET=pdc`, or `DATASET=banda`. ESTT and Iowa7T are separate dataset
+`DATASET=estt`, `DATASET=iowa_hcp500`, `DATASET=hcp7t`, `DATASET=pdc`, or `DATASET=banda`. ESTT and Iowa7T are separate dataset
 branches with separate input/output roots; they are not aliases of one another.
 If unset,
 `DATASET=jj_tms` is used for backward compatibility.
@@ -24,6 +24,7 @@ If unset,
 | `estt` + `ESTT_VARIANT=22p` | `/Shared/jianglab/3_Data_Working/fmriprep_processed_esTT/DataOrg_PFM_22P` | `/Shared/jianglab/3_Data_Working/fmriprep_processed_esTT/DataOrg_PFM_22P/hipp_outputs/cortex_kong2022_areal_mshbm` | `func/sub-<id>_task-rest_run-concat.dtseries.nii` |
 | `estt` + `ESTT_VARIANT=23p` | `/Shared/jianglab/3_Data_Working/fmriprep_processed_esTT/DataOrg_PFM_23P` | `/Shared/jianglab/3_Data_Working/fmriprep_processed_esTT/DataOrg_PFM_23P/hipp_outputs/cortex_kong2022_areal_mshbm` | `func/sub-<id>_task-rest_run-concat.dtseries.nii` |
 | `iowa_hcp500` | `/old_Users/yojiao/HCPpipeline500/work/qunex_iowa7t_hcppipeline500/sessions` | `${REPO_ROOT}/outputs_iowa_hcp500/inputs/kong2022/cortex_references/routea_areal_mshbm` | `<subject>/hcp/<subject>/MNINonLinear/Results/REST/REST_Atlas_MSMAll_hp0_clean_rclean.dtseries.nii` |
+| `hcp7t` | `${REPO_ROOT}/data/hippunfold_input` | `${REPO_ROOT}/outputs_hcp/inputs/kong2022/cortex_references/pfm_areal_mshbm` | `func/sub-<id>_task-rest_run-concat.dtseries.nii`, split using `outputs_hcp/inputs/qc/run_metadata/sub-<id>.json` |
 | `pdc` | `/Shared/jianglab/3_Data_Working/Depression/PDC/imaging` | `${REPO_ROOT}/outputs_pdc/inputs/kong2022/cortex_references/routea_areal_mshbm` | exact run filenames in `COHORT_MANIFEST`, mapped from `<base>_<visit>_MR/MNINonLinear/Results/` |
 | `banda` | `/Shared/jianglab/3_Data_Working/Depression/BANDA/imaging` | `${REPO_ROOT}/outputs_banda/inputs/kong2022/cortex_references/routea_areal_mshbm` | exact run filenames in `COHORT_MANIFEST`, mapped from `BANDA<ID>_MR/MNINonLinear/Results/` |
 
@@ -35,6 +36,12 @@ matching all-ones censor file in `params.censor_list`. JJ_TMS and Stanford
 source runs are not merged before MATLAB. ESTT is the explicit compatibility
 exception: its single concatenated CIFTI is split into four sessions to match
 the established ESTT cohort contract.
+HCP7T reads the exact concatenated CIFTI and physical-run metadata, validates
+the declared run order and frame counts, then splits the CIFTI into four
+sessions using those recorded lengths before MATLAB. It writes individualized
+labels under the formal HCP PFM cortex-reference root and records the source
+CIFTI, run metadata, run ranges, and session files in provenance. Existing
+HCP7T labels or provenance cause the launcher to fail closed.
 The `iowa_hcp500` task resolves its fixed HCP REST path directly and obtains
 the timepoint count with `wb_command -file-information`; it does not require a
 Python runtime on Argon. The `iowa7t` task also resolves its fixed branch CIFTI
@@ -321,7 +328,8 @@ PDC/BANDA keeps its input lists and manifests under each formal subject's
 suffix. Automatic temporary-directory cleanup occurs only when `KEEP_TMP=0`.
 ESTT deliberately retains its subject-level work directory because that is
 part of the existing ESTT reproducibility contract.
-For `iowa_hcp500`, `KEEP_TMP=1` is the default. PDC/BANDA requires `KEEP_TMP=1`.
+For `iowa_hcp500` and `hcp7t`, `KEEP_TMP=1` is the default. HCP7T task work
+files are retained under `${REPO_ROOT}/tmp/`. PDC/BANDA requires `KEEP_TMP=1`.
 Set `KEEP_TMP=0` for a supported dataset only when deletion has been explicitly
 approved.
 
@@ -577,10 +585,12 @@ auditing a batch.
 
 ## Controls
 
-- `DATASET=jj_tms|stanford|iowa7t|estt|iowa_hcp500`: dataset preset and default path selector.
+- `DATASET=jj_tms|stanford|iowa7t|estt|iowa_hcp500|hcp7t`: dataset preset and default path selector.
 - `IOWA7T_BRANCH=multiband|multi_echo`: required with `DATASET=iowa7t`.
 - `DATA_ROOT`: override the selected dataset input root.
 - `OUT_ROOT`: override the selected dataset output root.
+- `HCP_RUN_METADATA_ROOT`: HCP7T physical-run metadata root; defaults to
+  `${REPO_ROOT}/outputs_hcp/inputs/qc/run_metadata`.
 - `STANFORD_VARIANT=22p|36p`: Stanford input/output version selector; it is
   auto-detected from a standard `DATA_ROOT` suffix and rejects known suffix
   conflicts.
@@ -609,7 +619,8 @@ auditing a batch.
 - `TASK_DRY_RUN=1`: task preflight only, no MATLAB.
 - `DRY_RUN=1`: launcher dry-run only, no qsub submit.
 - `OVERWRITE=1`: recompute existing outputs.
-- `KEEP_TMP=1`: retain task temporary files; default for `iowa_hcp500`.
+- `KEEP_TMP=1`: retain task temporary files; default for `iowa_hcp500` and
+  `hcp7t`.
 
 ## Status
 
@@ -632,6 +643,12 @@ For Iowa HCP500:
 
 ```bash
 DATASET=iowa_hcp500 scripts/ArealMSHBM_Kong2022/report_kong2022_areal_mshbm_status.sh <job_id> sub-04172026
+```
+
+For HCP7T:
+
+```bash
+DATASET=hcp7t scripts/ArealMSHBM_Kong2022/report_kong2022_areal_mshbm_status.sh <job_id> sub-102816
 ```
 
 For Iowa7T 36P:

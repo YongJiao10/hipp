@@ -63,6 +63,12 @@ case "${dataset}" in
     default_out_root="${repo_root}/outputs_iowa_hcp500/inputs/kong2022/cortex_references/routea_areal_mshbm"
     tmp_prefix="iowa_hcp500_kong2022"
     ;;
+  hcp7t)
+    dataset_label="HCP7T"
+    default_data_root="${repo_root}/data/hippunfold_input"
+    default_out_root="${repo_root}/outputs_hcp/inputs/kong2022/cortex_references/pfm_areal_mshbm"
+    tmp_prefix="hcp7t_kong2022"
+    ;;
   pdc|banda)
     dataset_label="${dataset^^}"
     default_data_root="/Shared/jianglab/3_Data_Working/Depression/${dataset_label}/imaging"
@@ -70,7 +76,7 @@ case "${dataset}" in
     tmp_prefix="${dataset}_kong2022"
     ;;
   *)
-    echo "ERROR: unsupported DATASET=${DATASET:-}. Expected jj_tms, stanford, iowa7t, estt, iowa_hcp500, pdc, or banda." >&2
+    echo "ERROR: unsupported DATASET=${DATASET:-}. Expected jj_tms, stanford, iowa7t, estt, iowa_hcp500, hcp7t, pdc, or banda." >&2
     exit 2
     ;;
 esac
@@ -247,7 +253,8 @@ group_prior="${GROUP_PRIOR:-${cbig_code_dir}/stable_projects/brain_parcellation/
 wb_command="${WB_COMMAND:-${repo_root}/software/workbench/bin_linux64/wb_command}"
 kong2022_dlabel="${KONG2022_DLABEL:-${repo_root}/external/Schaefer2018_Kong2022/Schaefer2018_400Parcels_Kong2022_17Networks_order.dlabel.nii}"
 overwrite="${OVERWRITE:-0}"
-keep_tmp="${KEEP_TMP:-$([[ "${dataset}" = "iowa_hcp500" || "${dataset}" = "pdc" || "${dataset}" = "banda" ]] && printf 1 || printf 0)}"
+keep_tmp="${KEEP_TMP:-$([[ "${dataset}" = "iowa_hcp500" || "${dataset}" = "hcp7t" || "${dataset}" = "pdc" || "${dataset}" = "banda" ]] && printf 1 || printf 0)}"
+hcp_run_metadata_root="${HCP_RUN_METADATA_ROOT:-${repo_root}/outputs_hcp/inputs/qc/run_metadata}"
 cohort_manifest="${COHORT_MANIFEST:-}"
 if [ "${dataset}" = "pdc" ] || [ "${dataset}" = "banda" ]; then
   if [ "${keep_tmp}" != "1" ] || [ "${overwrite}" != "0" ]; then
@@ -308,7 +315,11 @@ if [ "${dataset}" = "estt" ]; then
   tmp_root="${subject_out}/kong2022_areal_mshbm"
   project_dir="${tmp_root}/project_dir"
 else
-  tmp_root="/tmp/${tmp_prefix}_${job_id}_${task_id}_${subject}"
+  if [ "${dataset}" = "hcp7t" ]; then
+    tmp_root="${repo_root}/tmp/${tmp_prefix}_${run_id}_${job_id}_${task_id}_${subject}"
+  else
+    tmp_root="/tmp/${tmp_prefix}_${job_id}_${task_id}_${subject}"
+  fi
   if [ "${dataset}" = "pdc" ] || [ "${dataset}" = "banda" ]; then
     tmp_root="$(mktemp -d "/tmp/${tmp_prefix}_${job_id}_${task_id}_${subject}.XXXXXX")"
   fi
@@ -330,6 +341,14 @@ if [ "${dataset}" = "pdc" ] || [ "${dataset}" = "banda" ]; then
   run_list="${subject_out}/inputs/task_rest_dtseries.txt"
   censor_list="${subject_out}/inputs/task_rest_censors.txt"
   input_manifest="${subject_out}/inputs/input_manifest.json"
+fi
+if [ "${dataset}" = "hcp7t" ] && [ "${overwrite}" != "1" ]; then
+  for existing in "${lh_labels}" "${rh_labels}" "${provenance_path}"; do
+    if [ -e "${existing}" ]; then
+      echo "ERROR: refusing to reuse an existing HCP7T result: ${existing}; inspect its input provenance before resubmission." >&2
+      exit 2
+    fi
+  done
 fi
 run_start_utc="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 run_start_epoch="$(date -u +%s)"
@@ -398,6 +417,9 @@ if [ "${dataset}" = "pdc" ] || [ "${dataset}" = "banda" ]; then
 fi
 if [ "${dataset}" = "estt" ]; then
   required+=("${kong2022_dlabel}")
+fi
+if [ "${dataset}" = "hcp7t" ]; then
+  required+=("${hcp_run_metadata_root}")
 fi
 for path in "${required[@]}"; do
   if [ ! -e "${path}" ]; then
@@ -624,6 +646,119 @@ elif [ "${dataset}" = "iowa_hcp500" ]; then
   printf '%s\n' "${censor_path}" > "${censor_list}"
   awk -v count="${n_timepoints}" 'BEGIN { for (i = 0; i < count; i++) print 1 }' > "${censor_path}"
   echo "Prepared Iowa HCP500 dtseries=${dtseries} timepoints=${n_timepoints}"
+elif [ "${dataset}" = "hcp7t" ]; then
+  dtseries="${data_root}/${subject}/func/${subject}_task-rest_run-concat.dtseries.nii"
+  run_metadata="${hcp_run_metadata_root}/${subject}.json"
+  if [ ! -s "${dtseries}" ] || [ ! -r "${dtseries}" ]; then
+    echo "ERROR: missing, empty, or unreadable HCP7T concatenated CIFTI: ${dtseries}" >&2
+    exit 4
+  fi
+  if [ ! -s "${run_metadata}" ] || [ ! -r "${run_metadata}" ]; then
+    echo "ERROR: missing, empty, or unreadable HCP7T physical-run metadata: ${run_metadata}" >&2
+    exit 4
+  fi
+  hcp_metadata_text="$("${python_exe}" - "${run_metadata}" "${subject}" <<'PY'
+import json
+import sys
+
+path, expected_subject = sys.argv[1:]
+with open(path, encoding="utf-8") as stream:
+    metadata = json.load(stream)
+expected_ids = [1, 2, 3, 4]
+lengths = metadata.get("run_lengths")
+runs = metadata.get("runs")
+if metadata.get("subject") != expected_subject:
+    raise SystemExit(f"ERROR: subject mismatch in HCP7T run metadata: {path}")
+if metadata.get("run_ids") != expected_ids:
+    raise SystemExit(f"ERROR: expected physical run IDs {expected_ids} in {path}")
+if not isinstance(lengths, list) or len(lengths) != 4 or any(type(n) is not int or n <= 0 for n in lengths):
+    raise SystemExit(f"ERROR: invalid four-run lengths in {path}")
+if metadata.get("concat_timepoints") != sum(lengths):
+    raise SystemExit(f"ERROR: concatenated frame count disagrees with run lengths in {path}")
+if not isinstance(runs, list) or [row.get("run_id") for row in runs] != expected_ids:
+    raise SystemExit(f"ERROR: run records do not match the declared order in {path}")
+if [row.get("n_timepoints") for row in runs] != lengths:
+    raise SystemExit(f"ERROR: run frame counts disagree with run_lengths in {path}")
+labels = [row.get("run_label") for row in runs]
+if any(not isinstance(label, str) or not label for label in labels):
+    raise SystemExit(f"ERROR: missing physical run labels in {path}")
+print(metadata["concat_timepoints"])
+for length, label in zip(lengths, labels):
+    print(length)
+    print(label)
+PY
+)"
+  mapfile -t hcp_metadata_values <<< "${hcp_metadata_text}"
+  concat_timepoints="${hcp_metadata_values[0]}"
+  source_run_lengths=("${hcp_metadata_values[1]}" "${hcp_metadata_values[3]}" "${hcp_metadata_values[5]}" "${hcp_metadata_values[7]}")
+  run_labels=("${hcp_metadata_values[2]}" "${hcp_metadata_values[4]}" "${hcp_metadata_values[6]}" "${hcp_metadata_values[8]}")
+  n_timepoints="$("${wb_command}" -file-information "${dtseries}" -only-number-of-maps | tr -d '[:space:]')"
+  if ! [[ "${n_timepoints}" =~ ^[0-9]+$ ]] || [ "${n_timepoints}" -ne "${concat_timepoints}" ]; then
+    echo "ERROR: HCP7T CIFTI/metadata map-count mismatch for ${subject}: ${dtseries} maps=${n_timepoints}, metadata=${concat_timepoints}" >&2
+    exit 4
+  fi
+  inputs_dir="${tmp_root}/inputs"
+  run_dir="${inputs_dir}/runs"
+  censor_dir="${inputs_dir}/censors"
+  mkdir -p "${run_dir}" "${censor_dir}"
+  : > "${run_list}"
+  : > "${censor_list}"
+  run_lengths=()
+  start=1
+  for run_index in 1 2 3 4; do
+    length="${source_run_lengths[$((run_index - 1))]}"
+    end=$((start + length - 1))
+    run_path="${run_dir}/${subject}_task-rest_run-${run_index}.dtseries.nii"
+    censor_path="${censor_dir}/${subject}_task-rest_run-${run_index}_censor.txt"
+    "${wb_command}" -cifti-merge "${run_path}" -direction ROW -cifti "${dtseries}" -index "${start}" -up-to "${end}"
+    split_timepoints="$("${wb_command}" -file-information "${run_path}" -only-number-of-maps | tr -d '[:space:]')"
+    if [ "${split_timepoints}" != "${length}" ]; then
+      echo "ERROR: HCP7T run split length mismatch for ${subject} run ${run_index}: expected=${length}, actual=${split_timepoints}" >&2
+      exit 4
+    fi
+    awk -v count="${length}" 'BEGIN { for (i = 1; i <= count; i++) print 1 }' > "${censor_path}"
+    printf '%s\n' "${run_path}" >> "${run_list}"
+    printf '%s\n' "${censor_path}" >> "${censor_list}"
+    run_lengths+=("${length}")
+    start=$((end + 1))
+  done
+  if [ "${start}" -ne "$((concat_timepoints + 1))" ]; then
+    echo "ERROR: HCP7T run split boundaries do not cover the concatenated CIFTI for ${subject}" >&2
+    exit 4
+  fi
+  run_lengths_json="$(printf '%s\n' "${run_lengths[@]}" | "${python_exe}" -c 'import json,sys; print(json.dumps([int(line) for line in sys.stdin if line.strip()]))')"
+  cat > "${input_manifest}" <<EOF
+{
+  "branch": null,
+  "censor_list": "$(json_escape "${censor_list}")",
+  "data_root": "$(json_escape "${data_root}")",
+  "dataset": "hcp7t",
+  "run_count": 4,
+  "run_lengths": ${run_lengths_json},
+  "run_list": "$(json_escape "${run_list}")",
+  "run_metadata": "$(json_escape "${run_metadata}")",
+  "source_dtseries": "$(json_escape "${dtseries}")",
+  "runs": [
+$(start=1
+for run_index in 1 2 3 4; do
+  length="${run_lengths[$((run_index - 1))]}"
+  end=$((start + length - 1))
+  run_path="${run_dir}/${subject}_task-rest_run-${run_index}.dtseries.nii"
+  censor_path="${censor_dir}/${subject}_task-rest_run-${run_index}_censor.txt"
+  run_label="${run_labels[$((run_index - 1))]}"
+  comma=","; [ "${run_index}" -eq 4 ] && comma=""
+  printf '    {"censor": "%s", "dtseries": "%s", "run_index": %d, "run_id": %d, "run_label": "%s", "source_end_index": %d, "source_start_index": %d, "timepoints": %d}%s\n' \
+    "$(json_escape "${censor_path}")" "$(json_escape "${run_path}")" "${run_index}" "${run_index}" \
+    "$(json_escape "${run_label}")" "${end}" "${start}" "${length}" "${comma}"
+  start=$((end + 1))
+done)
+  ],
+  "subject": "$(json_escape "${subject}")",
+  "subject_dir": "$(json_escape "${data_root}/${subject}")",
+  "concat_timepoints": ${concat_timepoints}
+}
+EOF
+  echo "Prepared HCP7T source=${dtseries} run_lengths=${run_lengths[*]} timepoints=${concat_timepoints}"
 else
   prep_args=(
     --dataset "${dataset}" \
@@ -700,6 +835,10 @@ if [ "${overwrite}" != "1" ] && [ -f "${lh_labels}" ] && [ -f "${rh_labels}" ]; 
     echo "RESUME: ESTT labels exist; finalizing missing provenance/materialized assets for ${subject}."
     write_estt_provenance
     exit 0
+  fi
+  if [ "${dataset}" = "hcp7t" ] && [ ! -s "${provenance_path}" ]; then
+    echo "ERROR: HCP7T labels exist without provenance; inspect ${subject_out} before retrying." >&2
+    exit 6
   fi
   echo "SKIP: label text outputs already exist for ${subject}; set OVERWRITE=1 to rerun."
   exit 0
