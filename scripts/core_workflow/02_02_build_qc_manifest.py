@@ -4,7 +4,7 @@ from __future__ import annotations
 """Build the accepted HCP7T participant QC roster.
 
 Apply frame-weighted physical-run Power FD <=0.30 mm, bilateral HippUnfold
-Dice >=0.70, and <=20 unsupported functional-GM vertices per consumed den-512
+Dice >=0.70, and <=20 unusable NIfTI-sampled vertices per consumed den-512
 hemisphere, in that order. Missing inputs are unassessable, not quality failures.
 No tSNR exclusion threshold or predetermined passing subject count is applied.
 
@@ -12,6 +12,8 @@ Motion is read only from exact Movement_Regressors.txt paths declared by
 --motion-manifest (TSV: subject, run_label, filename, lss_path). Coverage is
 read from shared-root/sub-ID/surface/raw/sub-ID_coverage_summary.json and must
 match the declared physical runs and actual consumed 512-node hemispheres.
+Counts use the current raw sampled signals and NIfTI support, with
+finite/nonconstant validity in every run.
 The established t1only_hippunfold_tsnr_qc report filenames and latest pass-list
 filename remain the downstream interface; their names do not imply a tSNR gate.
 """
@@ -31,6 +33,7 @@ from lib.output_layout import (
 )
 from lib.workflow_utils import file_meta, git_commit, utc_now_iso, write_json
 from lib.io_utils import write_tsv
+from lib.surface_sampling import NIFTI_COVERAGE_POLICY, load_hippocampal_coverage_validity
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -45,7 +48,7 @@ HCP_RUN_IDS = {
     "rfMRI_REST3_7T_PA": 3,
     "rfMRI_REST4_7T_AP": 4,
 }
-COVERAGE_POLICY = "cifti_hippocampal_common_run_gm_trilinear"
+COVERAGE_POLICY = NIFTI_COVERAGE_POLICY
 
 
 def load_subjects(batch_root: Path, explicit: list[str] | None) -> list[str]:
@@ -128,9 +131,9 @@ def coverage_summary_path(shared_root: Path, subject: str) -> Path:
     return shared_root / f"sub-{subject}/surface/raw/sub-{subject}_coverage_summary.json"
 
 
-def read_coverage(path: Path, subject: str, runs: list[dict[str, object]]) -> dict[str, int] | None:
+def read_coverage(path: Path, subject: str, runs: list[dict[str, object]]) -> tuple[dict[str, int] | None, list[Path]]:
     if not path.is_file():
-        return None
+        return None, []
     obj = json.loads(path.read_text(encoding="utf-8"))
     if obj.get("subject") != f"sub-{subject}" or obj.get("coverage_policy") != COVERAGE_POLICY:
         raise ValueError(f"Coverage subject/policy mismatch: {path}")
@@ -145,15 +148,15 @@ def read_coverage(path: Path, subject: str, runs: list[dict[str, object]]) -> di
     counts = evidence.get("n_vertices", {})
     hemispheres = obj.get("hemispheres", {})
     unsupported = {}
+    inputs = [path]
     for hemi in ("L", "R"):
         item = hemispheres.get(hemi, {})
         if evidence.get("density") != "512" or counts.get(hemi) != 512 or item.get("n_vertices_total") != 512:
             raise ValueError(f"Coverage requires actual consumed den-512 hemisphere {hemi}: density_evidence={evidence}, path={path}")
-        count = item.get("n_vertices_unsupported")
-        if isinstance(count, bool) or not isinstance(count, int) or not 0 <= count <= 512:
-            raise ValueError(f"Malformed unsupported-vertex count for hemisphere {hemi}: {path}")
-        unsupported[hemi] = count
-    return unsupported
+        valid, source_paths = load_hippocampal_coverage_validity(path.parent, subject, hemi, obj)
+        unsupported[hemi] = int(np.count_nonzero(~valid))
+        inputs.extend(source_paths)
+    return unsupported, inputs
 
 
 def assess_subject(subject: str, batch_root: Path, shared_root: Path, declared_runs: list[dict[str, object]],
@@ -193,11 +196,15 @@ def assess_subject(subject: str, batch_root: Path, shared_root: Path, declared_r
         row.update(qc_status="fail", exclude_reason="dice_lt_threshold")
         return row, inputs
     path = coverage_summary_path(shared_root, subject)
-    unsupported = read_coverage(path, subject, runs)
+    try:
+        unsupported, coverage_inputs = read_coverage(path, subject, runs)
+    except FileNotFoundError as exc:
+        row["unassessable_reason"] = f"missing_coverage_input:{exc}"
+        return row, inputs
     if unsupported is None:
         row["unassessable_reason"] = f"missing_coverage:{path}"
         return row, inputs
-    inputs.append(path)
+    inputs.extend(coverage_inputs)
     for hemi in ("L", "R"):
         row[f"unsupported_vertices_{hemi}"] = unsupported[hemi]
     row["pass_coverage"] = all(unsupported[h] <= max_unsupported_vertices for h in ("L", "R"))
@@ -209,7 +216,7 @@ def assess_subject(subject: str, batch_root: Path, shared_root: Path, declared_r
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Build HCP7T physical-run Power FD, Dice and functional-GM coverage QC roster.")
+    parser = argparse.ArgumentParser(description="Build HCP7T physical-run Power FD, Dice and NIfTI coverage QC roster.")
     parser.add_argument("--hippunfold-batch-root", default=str(DEFAULT_BATCH_ROOT))
     parser.add_argument("--shared-root", default=str(DEFAULT_SHARED_ROOT))
     parser.add_argument("--motion-manifest", default=str(DEFAULT_MOTION_MANIFEST))

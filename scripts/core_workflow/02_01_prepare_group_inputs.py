@@ -24,14 +24,14 @@ Inputs:
   - --dice-threshold: Dice overlap QC threshold (default: 0.70).
 - Physical inputs:
   - HippUnfold subject outputs (`*_hemi-{L|R}_desc-unetf3d_dice.tsv`, midthickness gifti surfaces, etc.) under `{hippunfold_batch_root}/`.
-  - Raw fMRI timeseries: an explicitly paired concatenated BOLD/CIFTI with physical-run metadata for HCP7T rest, or full denoised run-level volumes.
-  - Exact run-level BOLD and dtseries inputs are supplied through the per-subject JSON passed to `--run-artifact-manifest-template`; the manifest declares run IDs, paths, sizes, and SHA256 receipts, and neither modality is concatenated on disk.
+  - Raw fMRI timeseries: an explicitly declared concatenated BOLD NIfTI with physical-run metadata for HCP7T rest, or full denoised run-level volumes.
+  - Exact run-level BOLD NIfTI inputs are supplied through the per-subject JSON passed to `--run-artifact-manifest-template`; the manifest declares run IDs, paths, sizes, and SHA256 receipts, and no volume is concatenated on disk.
 
 Outputs:
 - Command-line output / file outputs:
   - Resampled hippocampal BOLD surface timeseries: `{shared_root}/sub-<subject>/surface/{smoothing}/sub-<subject>_hemi-{hemi}_timeseries.npy`.
-  - Vertex-mask summaries: `{shared_root}/sub-<subject>/surface/tsnr_gate/sub-<subject>_hemi-{hemi}_tsnr_gate_summary.json` and `valid_mask.npy`; HCP rest uses functional-GM and signal validity without a numerical tSNR gate.
-  - HCP functional-GM coverage: `{shared_root}/sub-<subject>/surface/raw/sub-<subject>_coverage_summary.json` and per-hemisphere `*_gm_weight.npy`.
+  - Vertex-mask summaries: `{shared_root}/sub-<subject>/surface/tsnr_gate/sub-<subject>_hemi-{hemi}_tsnr_gate_summary.json` and `valid_mask.npy`; HCP rest uses NIfTI support and runwise signal validity without a numerical tSNR gate.
+  - HCP BOLD NIfTI coverage: `{shared_root}/sub-<subject>/surface/raw/sub-<subject>_coverage_summary.json` and per-hemisphere `*_nifti_support.npy`.
   - Group average template surfaces under `{template_root}/`.
   - Run preparation manifest: `{route_root}/prepare_t1only_group_inputs_manifest.json`.
 """
@@ -49,14 +49,15 @@ import numpy as np
 from nibabel.gifti import GiftiDataArray, GiftiImage
 
 from lib.surface_sampling import (
-    FUNCTIONAL_GM_POLICY,
-    sample_hippocampal_gm_support,
+    NIFTI_COVERAGE_POLICY,
+    hippocampal_vertex_validity,
+    load_nifti_support,
+    sample_hippocampal_nifti_support,
     sample_hipp_surface_run_timeseries,
     sample_hipp_surface_timeseries,
 )
 from lib.surface_coordinates import dataset_registration, require_registered_sampling
 from lib.io_utils import (
-    build_run_level_input_summary,
     load_run_artifact_manifest,
     load_run_segment_metadata,
     load_subject_ids,
@@ -156,18 +157,18 @@ def raw_done(shared_root: Path, subject: str, dataset: str = "hcp", *, task: str
 def load_hcp_coverage(raw_dir: Path, subject: str) -> dict[str, object]:
     path = raw_dir / f"sub-{subject}_coverage_summary.json"
     if not path.is_file():
-        raise ValueError(f"Missing functional-GM coverage at {path}; rebuild raw sampling with explicit CIFTI/run metadata and --no-resume")
+        raise ValueError(f"Missing BOLD NIfTI coverage at {path}; rebuild raw sampling with explicit NIfTI/run metadata and --no-resume")
     coverage = json.loads(path.read_text())
     if (str(coverage.get("subject", "")).removeprefix("sub-") != str(subject).removeprefix("sub-")
-            or coverage.get("coverage_policy") != FUNCTIONAL_GM_POLICY
+            or coverage.get("coverage_policy") != NIFTI_COVERAGE_POLICY
             or coverage.get("sampling_space") != "MNI152NLin6Asym"):
-        raise ValueError(f"Invalid functional-GM coverage contract at {path}")
+        raise ValueError(f"Invalid BOLD NIfTI coverage contract at {path}; rebuild raw sampling with --no-resume")
     return coverage
 
 
 def require_hcp_validity_only(dataset: str, task: str, cutoff: float | None) -> None:
     if dataset == "hcp" and task == "rest" and cutoff is not None:
-        raise ValueError("HCP rest hippocampal QC uses functional-GM coverage and finite, nonconstant signals; use --tsnr-threshold none")
+        raise ValueError("HCP rest hippocampal QC uses BOLD NIfTI coverage and finite, nonconstant signals; use --tsnr-threshold none")
 
 
 def _recorded_files_current(records: list[dict[str, object]]) -> bool:
@@ -196,7 +197,7 @@ def tsnr_done(shared_root: Path, subject: str, dataset: str = "hcp", *,
         expected = {"threshold": cutoff, "dataset": dataset, "task": task,
                     "validity_policy": policy}
         if dataset == "hcp" and task == "rest":
-            expected["coverage_policy"] = FUNCTIONAL_GM_POLICY
+            expected["coverage_policy"] = NIFTI_COVERAGE_POLICY
         if any(summary.get(key) != value for key, value in expected.items()):
             return False
         baseline = None
@@ -246,7 +247,6 @@ def run_raw_sampling(
     task_manifest_root: str | None = None,
     dataset: str = 'hcp',
     registration_root: str | None = None,
-    dtseries_template: str | None = None,
     run_metadata_template: str | None = None,
 ) -> dict[str, object]:
     batch = Path(batch_root)
@@ -272,7 +272,7 @@ def run_raw_sampling(
             records = load_run_artifact_manifest(
                 manifest_source,
                 subject=subject,
-                required_artifacts=("bold", "dtseries"),
+                required_artifacts=("bold",),
             )
             manifest_path = manifest_source
         elif run_artifact_manifest_template:
@@ -285,43 +285,31 @@ def run_raw_sampling(
             records = load_run_artifact_manifest(
                 manifest_path,
                 subject=subject,
-                required_artifacts=("bold", "dtseries"),
+                required_artifacts=("bold",),
             )
         else:
             manifest_path = None
             records = []
         if manifest_path is not None:
             selected_runs: list[tuple[int, Path]] = []
-            selected_dtseries: list[Path] = []
             declared_run_ids: list[int] = []
+            declared_run_lengths: list[int] = []
             for record in records:
                 run_id = int(record["run_id"])
                 bold = Path(record["artifacts"]["bold"])
-                dtseries = Path(record["artifacts"]["dtseries"])
                 bold_img = nib.load(str(bold))
                 if len(bold_img.shape) != 4:
                     raise ValueError(
                         f"Expected 4D run BOLD volume for sub-{subject} run-{run_id}: {bold}"
                     )
                 volume_tp = int(bold_img.shape[3])
-                dtseries_img = nib.load(str(dtseries))
-                if len(dtseries_img.shape) != 2:
-                    raise ValueError(
-                        f"Expected 2D run dtseries for sub-{subject} run-{run_id}: {dtseries}"
-                    )
-                dtseries_tp = int(dtseries_img.shape[0])
-                if volume_tp != dtseries_tp:
-                    raise ValueError(
-                        f"Run timepoint mismatch for sub-{subject} run-{run_id}: "
-                        f"volume={volume_tp} dtseries={dtseries_tp}"
-                    )
                 if task_branch != "rest" and volume_tp != int(TASK_RUN_LENGTHS[task_branch]):
                     raise ValueError(
                         f"Task {task_branch} run-{run_id} expects "
                         f"{int(TASK_RUN_LENGTHS[task_branch])} frames, got {volume_tp}"
                     )
                 selected_runs.append((run_id, bold))
-                selected_dtseries.append(dtseries)
+                declared_run_lengths.append(volume_tp)
                 declared_run_ids.append(run_id)
             out_dir.mkdir(parents=True, exist_ok=True)
             surface_data, summary = sample_hipp_surface_run_timeseries(
@@ -335,18 +323,9 @@ def run_raw_sampling(
                 mapping_method="trilinear",
                 smooth_iters=0,
             )
-            dtseries_summary = build_run_level_input_summary(
-                selected_dtseries,
-                summary["run_lengths"],
-                run_ids=declared_run_ids,
-                input_mode="in_memory_run_volume_concat",
-            )
-            if dtseries_summary["run_ids"] != summary["run_ids"]:
-                raise ValueError(
-                    f"Surface/dtseries run ID mismatch for sub-{subject}: "
-                    f"surface={summary['run_ids']} dtseries={dtseries_summary['run_ids']}"
-                )
-            summary.update(dtseries_summary)
+            if summary["run_ids"] != declared_run_ids or summary["run_lengths"] != declared_run_lengths:
+                raise ValueError(f"Sampled physical runs disagree with the declared BOLD inputs: {manifest_path}")
+            summary["input_mode"] = "in_memory_run_volume_concat"
             summary["task"] = task_branch
             summary["surface_sampling_source"] = "volume"
             summary["run_artifact_manifest"] = str(manifest_path)
@@ -354,7 +333,6 @@ def run_raw_sampling(
                 {
                     "run_id": int(record["run_id"]),
                     "bold": dict(record["artifact_receipts"]["bold"]),
-                    "dtseries": dict(record["artifact_receipts"]["dtseries"]),
                 }
                 for record in records
             ]
@@ -363,10 +341,10 @@ def run_raw_sampling(
                 payload = json.loads(manifest_path.read_text())
                 summary["run_labels"] = [row["run_label"] for row in payload["runs"]]
             stage_command = "lib.surface_sampling.sample_hipp_surface_run_timeseries"
-            stage_inputs = [manifest_path] + [path for _, path in selected_runs] + selected_dtseries
+            stage_inputs = [manifest_path] + [path for _, path in selected_runs]
         else:
-            if dataset == "hcp" and task_branch == "rest" and (not dtseries_template or not run_metadata_template):
-                raise ValueError("HCP rest volume sampling requires both --dtseries-template and --run-metadata-template")
+            if dataset == "hcp" and task_branch == "rest" and not run_metadata_template:
+                raise ValueError("HCP rest volume sampling requires --run-metadata-template or a run-artifact manifest")
             bold = format_subject_path_template(
                 bold_template,
                 bold_root=bold_root,
@@ -375,15 +353,11 @@ def run_raw_sampling(
             if not bold.is_file():
                 raise FileNotFoundError(f"Missing declared BOLD volume for sub-{subject}: {bold}")
             if dataset == "hcp" and task_branch == "rest":
-                dtseries = format_subject_path_template(dtseries_template, bold_root=bold_root, data_root=bold_root, subject=subject)
                 metadata = format_subject_path_template(run_metadata_template, bold_root=bold_root, data_root=bold_root, subject=subject)
                 run_ids, run_lengths = load_run_segment_metadata(metadata)
-                dtseries_image = nib.load(dtseries)
                 bold_image = nib.load(bold)
-                if (len(bold_image.shape) != 4 or len(dtseries_image.shape) != 2
-                        or int(bold_image.shape[3]) != sum(run_lengths)
-                        or int(dtseries_image.shape[0]) != sum(run_lengths)):
-                    raise ValueError(f"Declared physical run lengths {run_lengths} disagree with BOLD/CIFTI timepoints: {bold}, {dtseries}")
+                if len(bold_image.shape) != 4 or int(bold_image.shape[3]) != sum(run_lengths):
+                    raise ValueError(f"Declared physical run lengths {run_lengths} disagree with BOLD NIfTI timepoints: {bold}")
                 metadata_payload = json.loads(metadata.read_text())
                 if str(metadata_payload.get("subject", "")).removeprefix("sub-") != str(subject).removeprefix("sub-"):
                     raise ValueError(f"Physical run metadata subject mismatch at {metadata}")
@@ -410,36 +384,35 @@ def run_raw_sampling(
                     "subject": subject, "task": "rest", "space": "T1w",
                     "sampling_space": "MNI152NLin6Asym", "sampling_surfaces": sampled,
                     "surface_sampling_source": "volume", "bold_inputs": [str(bold)],
-                    "dtseries_inputs": [str(dtseries)], "run_ids": list(run_ids),
+                    "run_ids": list(run_ids),
                     "run_lengths": list(run_lengths), "n_timepoints": sum(run_lengths),
                     "run_metadata": str(metadata),
                     "run_labels": run_labels,
                 }
-                selected_dtseries = [dtseries]
-                stage_inputs.extend([dtseries, metadata])
+                stage_inputs.append(metadata)
         if dataset == "hcp" and task_branch == "rest":
             sampled = summary["sampling_surfaces"]
-            weights, source_summary = sample_hippocampal_gm_support(
-                dtseries_inputs=selected_dtseries, run_ids=summary["run_ids"],
+            weights, source_summary = sample_hippocampal_nifti_support(
+                bold_inputs=[Path(path) for path in summary["bold_inputs"]], run_ids=summary["run_ids"],
                 run_lengths=summary["run_lengths"],
                 sampling_surfaces={record["hemi"]: Path(record["surface"]) for record in sampled},
             )
             hemispheres = {}
             for hemi in HEMIS:
-                weight_path = out_dir / f"sub-{subject}_hemi-{hemi}_gm_weight.npy"
+                weight_path = out_dir / f"sub-{subject}_hemi-{hemi}_nifti_support.npy"
                 np.save(weight_path, weights[hemi])
                 data = surface_data[hemi] if surface_data is not None else load_func_gii(out_dir / f"sub-{subject}_hemi-{hemi}_space-T1w_den-512_label-hipp_bold.func.gii")
                 if weights[hemi].shape != (data.shape[0],):
-                    raise ValueError(f"GM coverage/consumed surface shape mismatch for sub-{subject} hemi-{hemi}")
-                valid = (weights[hemi] > 0) & rest_signal_validity(data)
+                    raise ValueError(f"NIfTI coverage/consumed surface shape mismatch for sub-{subject} hemi-{hemi}")
+                valid = hippocampal_vertex_validity(data, summary["run_lengths"], weights[hemi])
                 hemispheres[hemi] = {
                     **source_summary[hemi], "n_vertices_total": int(data.shape[0]),
-                    "n_vertices_unsupported": int(np.count_nonzero(weights[hemi] == 0)),
-                    "n_vertices_valid": int(valid.sum()), "gm_weight_path": str(weight_path),
+                    "n_vertices_unsupported": int(np.count_nonzero(~valid)),
+                    "n_vertices_valid": int(valid.sum()), "nifti_support_path": str(weight_path),
                     "valid_mask_path": str(shared / f"sub-{subject}/surface/tsnr_gate/sub-{subject}_hemi-{hemi}_valid_mask.npy"),
                 }
             coverage = {
-                "subject": f"sub-{subject}", "coverage_policy": FUNCTIONAL_GM_POLICY,
+                "subject": f"sub-{subject}", "coverage_policy": NIFTI_COVERAGE_POLICY,
                 "sampling_space": summary["sampling_space"], "run_ids": summary["run_ids"],
                 "run_lengths": summary["run_lengths"],
                 "run_labels": summary["run_labels"],
@@ -449,7 +422,7 @@ def run_raw_sampling(
             }
             coverage_path = out_dir / f"sub-{subject}_coverage_summary.json"
             write_json(coverage_path, coverage)
-            summary["coverage_policy"] = FUNCTIONAL_GM_POLICY
+            summary["coverage_policy"] = NIFTI_COVERAGE_POLICY
             summary["coverage_summary"] = str(coverage_path)
     except Exception as exc:
         log_path.write_text(str(exc), encoding="utf-8")
@@ -552,14 +525,8 @@ def run_tsnr_gate(subject: str, batch_root: str, shared_root: str, task: str = "
             # HCP rest has no interpretable retained baseline and no numeric
             # tSNR gate. Retain the existing diagnostic path as an empty score.
             tsnr = np.full(data.shape[0], np.nan, dtype=np.float32)
-            weight_path = raw.parent / f"sub-{subject}_hemi-{hemi}_gm_weight.npy"
-            declared = Path(coverage["hemispheres"][hemi]["gm_weight_path"])
-            if declared.resolve() != weight_path.resolve():
-                raise ValueError(f"Coverage GM weight declaration mismatch for sub-{subject} hemi-{hemi}: {declared}; expected {weight_path}")
-            weight = np.load(weight_path)
-            if weight.shape != (data.shape[0],) or not np.isfinite(weight).all() or np.any(weight < 0):
-                raise ValueError(f"Invalid functional-GM weights at {weight_path}: shape={weight.shape}, vertices={data.shape[0]}")
-            valid = weight > 0
+            weight, weight_path = load_nifti_support(raw.parent, subject, hemi, coverage)
+            valid = hippocampal_vertex_validity(data, run_lengths, weight)
             hemi_inputs.extend([file_meta(raw.parent / f"sub-{subject}_coverage_summary.json"), file_meta(weight_path), file_meta(sampling_path)])
             np.save(gate_dir / f"sub-{subject}_hemi-{hemi}_tsnr.npy", tsnr)
         elif task == "rest":
@@ -599,9 +566,9 @@ def run_tsnr_gate(subject: str, batch_root: str, shared_root: str, task: str = "
             "invalid_fraction": float(invalid.sum() / max(1, valid.size)),
         }
         if coverage is not None:
-            summary["coverage_policy"] = FUNCTIONAL_GM_POLICY
+            summary["coverage_policy"] = NIFTI_COVERAGE_POLICY
             summary["tsnr_definition"] = None
-            summary["n_vertices_unsupported"] = int(np.count_nonzero(weight == 0))
+            summary["n_vertices_unsupported"] = int(np.count_nonzero(~valid))
         write_json(gate_dir / f"sub-{subject}_hemi-{hemi}_tsnr_gate_summary.json", summary)
         hemi_dir = gate_dir / f"hemi-{hemi}"
         write_json(
@@ -641,7 +608,7 @@ def smoothing_done(shared_root: Path, subject: str, dataset: str = "hcp", *, tas
     if params.get('smoothing_space') != 'T1w':
         raise ValueError(f'Smoothing cache lacks native T1w geometry: {stage_path}; rebuild smoothing with --no-resume')
     expected = {"dataset": dataset, "task": task, "validity_policy": signal_validity_policy(dataset, task)}
-    if dataset == "hcp" and task == "rest" and params.get("smoothing_roi_policy") != FUNCTIONAL_GM_POLICY:
+    if dataset == "hcp" and task == "rest" and params.get("smoothing_roi_policy") != NIFTI_COVERAGE_POLICY:
         return False
     if any(params.get(key) != value for key, value in expected.items()):
         return False
@@ -651,7 +618,7 @@ def smoothing_done(shared_root: Path, subject: str, dataset: str = "hcp", *, tas
         if not summary_path.is_file():
             return False
         gate = json.loads(summary_path.read_text())
-        if dataset == "hcp" and task == "rest" and (gate.get("coverage_policy") != FUNCTIONAL_GM_POLICY or gate.get("threshold") is not None):
+        if dataset == "hcp" and task == "rest" and (gate.get("coverage_policy") != NIFTI_COVERAGE_POLICY or gate.get("threshold") is not None):
             return False
         if any(gate.get(key) != value for key, value in expected.items()):
             return False
@@ -686,8 +653,8 @@ def run_smoothing(subject: str, batch_root: str, shared_root: str, task: str = "
             gate = json.loads(gate_summary.read_text(encoding="utf-8"))
             if gate.get("validity_policy") != policy or gate.get("task") != task or gate.get("dataset") != dataset:
                 raise ValueError(f"Rebuild {dataset}/{task} gate with policy={policy}: {gate_summary}")
-            if dataset == "hcp" and task == "rest" and (gate.get("coverage_policy") != FUNCTIONAL_GM_POLICY or gate.get("threshold") is not None):
-                raise ValueError(f"Rebuild HCP rest mask with functional-GM support and --tsnr-threshold none: {gate_summary}")
+            if dataset == "hcp" and task == "rest" and (gate.get("coverage_policy") != NIFTI_COVERAGE_POLICY or gate.get("threshold") is not None):
+                raise ValueError(f"Rebuild HCP rest mask with NIfTI support and --tsnr-threshold none: {gate_summary}")
             thresholds[hemi] = gate["threshold"]
             surf = surface_path(batch, subject, hemi)
             out_gii = out_dir / f"sub-{subject}_hemi-{hemi}_space-T1w_den-512_label-hipp_bold.func.gii"
@@ -721,7 +688,7 @@ def run_smoothing(subject: str, batch_root: str, shared_root: str, task: str = "
                        "validity_policy": policy,
                        "dataset": dataset,
                        "tsnr_thresholds": thresholds,
-                       "smoothing_roi_policy": FUNCTIONAL_GM_POLICY if dataset == "hcp" and task == "rest" else policy},
+                       "smoothing_roi_policy": NIFTI_COVERAGE_POLICY if dataset == "hcp" and task == "rest" else policy},
             "inputs": inputs,
             "outputs": outputs,
         },
@@ -839,12 +806,11 @@ def main() -> int:
         "--run-artifact-manifest-template",
         default=None,
         help=(
-            "Per-subject JSON receipt declaring the exact ordered BOLD/dtseries runs. "
+            "Per-subject JSON receipt declaring the exact ordered BOLD NIfTI runs. "
             "Variables: {bold_root}, {data_root}, {subject}, {sub_subject}."
         ),
     )
-    parser.add_argument("--dtseries-template", help="Exact per-subject HCP rest CIFTI template; use with --run-metadata-template for a concatenated BOLD/CIFTI pair.")
-    parser.add_argument("--run-metadata-template", help="Exact per-subject JSON declaring physical run IDs, labels and frame counts for the concatenated HCP rest pair.")
+    parser.add_argument("--run-metadata-template", help="Exact per-subject JSON declaring physical run IDs, labels and frame counts for the concatenated HCP rest BOLD NIfTI.")
     parser.add_argument("--motion-manifest", default=str(REPO_ROOT / "manifests/hcp7t_motion_transfer_20261019.tsv"), help="Exact HCP7T Power-FD motion table passed to the participant QC stage.")
     parser.add_argument(
         "--task",
@@ -865,7 +831,7 @@ def main() -> int:
     parser.add_argument(
         "--tsnr-threshold",
         default=None,
-        help="HCP rest uses 'none' and requires positive functional-GM support plus finite, nonconstant signal. Other branches retain a default cutoff of 25.",
+        help="HCP rest uses 'none' and requires positive NIfTI support plus finite, nonconstant signal. Other branches retain a default cutoff of 25.",
     )
     parser.add_argument("--tsnr-input-template", help="Rest baseline NPZ template containing {subject} and {hemi}; required outside HCP.")
     parser.add_argument("--subjects-manifest", default=None)
@@ -876,7 +842,7 @@ def main() -> int:
     parser.add_argument("--dice-threshold", type=float, default=0.70)
     args = parser.parse_args()
     if (args.dataset != "hcp" or args.task != "rest") and args.stage in {"all", "qc"}:
-        parser.error("Participant QC currently implements HCP7T rest only; the approved motion/Dice/GM-coverage policy is not yet implemented for this dataset/task. Run the other preparation stages explicitly.")
+        parser.error("Participant QC currently implements HCP7T rest only; the approved motion/Dice/NIfTI-coverage policy is not yet implemented for this dataset/task. Run the other preparation stages explicitly.")
     if args.tsnr_threshold is None:
         args.tsnr_threshold = "none" if args.dataset == "hcp" and args.task == "rest" else "25"
     from lib.task_quality import parse_tsnr_threshold
@@ -884,13 +850,11 @@ def main() -> int:
         require_hcp_validity_only(args.dataset, args.task, parse_tsnr_threshold(args.tsnr_threshold))
     except ValueError as exc:
         parser.error(str(exc))
-    if bool(args.dtseries_template) != bool(args.run_metadata_template):
-        parser.error("--dtseries-template and --run-metadata-template must be supplied together")
-    if args.run_artifact_manifest_template and args.dtseries_template:
-        parser.error("Choose the exact run-artifact manifest or the concatenated BOLD/CIFTI metadata mode")
+    if args.run_artifact_manifest_template and args.run_metadata_template:
+        parser.error("Choose the exact run-artifact manifest or concatenated BOLD NIfTI with physical-run metadata")
     if (args.dataset == "hcp" and args.task == "rest" and args.stage in {"all", "raw"}
-            and not args.run_artifact_manifest_template and not args.dtseries_template):
-        parser.error("HCP rest raw sampling requires --dtseries-template and --run-metadata-template, or --run-artifact-manifest-template")
+            and not args.run_artifact_manifest_template and not args.run_metadata_template):
+        parser.error("HCP rest raw sampling requires --run-metadata-template or --run-artifact-manifest-template")
 
     batch_root = Path(args.hippunfold_batch_root).resolve()
     route_root = Path(args.route_root).resolve()
@@ -962,7 +926,6 @@ def main() -> int:
             args.task_manifest_root,
             args.dataset,
             args.registration_root,
-            args.dtseries_template,
             args.run_metadata_template,
         )
     if args.stage in {"all", "tsnr"}:
@@ -1010,7 +973,6 @@ def main() -> int:
             "tsnr_input_template": args.tsnr_input_template,
             "task_manifest_root": args.task_manifest_root,
             "run_artifact_manifest_template": args.run_artifact_manifest_template,
-            "dtseries_template": args.dtseries_template,
             "run_metadata_template": args.run_metadata_template,
             "n_subjects_total": int(len(subjects)),
             "n_subjects_dice_pass": int(len(dice_subjects)),

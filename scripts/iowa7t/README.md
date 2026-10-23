@@ -1,65 +1,65 @@
-# Iowa7T utilities
+# Iowa7T Utilities
 
-## HCP7T spatial subregion atlas
+These dataset adapters handle acquisition-specific anatomy, sampled signals,
+cortical references, FC and figures. Run local Python commands with
+`/home/yojiao/.conda/envs/py314/bin/python` from the repository root.
 
-`export_hcp_subregion_atlas.py` exports the fixed 2mm HCP151 anterior/body/posterior
-labels for matching HippUnfold 512-vertex surfaces, with MATLAB and Python
-examples. The colleague-facing guide is
-[HCP7T subregion atlas](../../docs/hipp_parcellation_network/hcp7t_subregion_atlas.md).
-The requested delivery root is
-`/home/yojiao/LSS/jianglab/3_Data_Working/HCP7T_subregion_atlas/`.
+| Task | Entrypoint / guide |
+|---|---|
+| HippUnfold batch preparation | `run_iowa7t_hippunfold.py --help` |
+| Cortex ArealMSHBM submission | [Shared Argon interface](../ArealMSHBM_Kong2022/README.md#iowa7t-variants) |
+| Acquisition-level surface/cortex/FC stages | `run_branch_downstream.py --help` |
+| Run-level surface/cortex/FC stages | `run_runwise_downstream.py --help` |
+| Portable HCP151 template export | `export_hcp_templates.py --help`, [template guide](../../docs/hipp_parcellation_network/lss_hcp_templates.md) |
+| Production paths and usage | [Iowa7T output layout](../../docs/iowa7t_36p_hipp_outputs_layout.md) |
 
-Stage to a new directory with:
+Argon 36P inputs use
+`/Shared/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_36P`;
+production products use its `hipp_outputs/`, with qsub logs under
+`hipp_outputs/runs/logs/<run_id>/`. Use the local Jianglab prefix only when
+executing locally. Keep multiband/multi-echo and denoising variants distinct.
+
+## Downstream stages
+
+The two downstream adapters expose `surface`, `cortex`, `fc` and `all` stages.
+For runwise processing, pass an explicit `--run-tag` naming the intended
+`kong2022_runwise_<tag>/` tree. Runs remain distinct:
+`run-01=ME01`, `run-02=ME02`, `run-03=MB03`, `run-04=MB04`.
 
 ```bash
-OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1 /home/yojiao/.conda/envs/py314/bin/python scripts/iowa7t/export_hcp_subregion_atlas.py --out-root .cache/NEW_SPATIAL_ATLAS_DIRECTORY
+/home/yojiao/.conda/envs/py314/bin/python \
+  scripts/iowa7t/run_runwise_downstream.py \
+  --subject <subject> --variant 22p --run-tag <explicit_tag> --run all \
+  --tsnr-input-template '<baseline_root>/{subject}_{variant}_{run}_{domain}_{hemi}.npz' \
+  --stage all
 ```
 
-The exporter uses the formal fixed-template validator and manifest-declared
-label files, plus the exact standard unfolded surface declared by each
-hemisphere's 2mm group template spec. Both label grids must share its
-topology. It does not change `HCP_templates` or regenerate scientific
-results. The destination must not already exist.
+Native T1w hippocampal meshes are registered to the declared MNI BOLD using
+subject fMRIPrep MNI-to-T1w image composites and ANTs point mapping.
+Mapped meshes are saved under `surface/raw/sampling_surfaces/`; native T1w
+geometry defines physical smoothing and `space-T1w` metric filenames.
+Surface/gate summaries must record `sampling_space=MNI152NLin6Asym` and
+`smoothing_space=T1w`. Incompatible products require an explicit approved
+`--overwrite` rebuild.
 
-## Downstream tSNR
+## Baseline tSNR and FC
 
-Both downstream adapters import run-segment and TSV utilities directly from
-`core_workflow/lib/io_utils.py`; RouteA label helpers come from its extractor.
+Both adapters require `--tsnr-input-template`. Supported placeholders are
+`{subject}`, `{hemi}`, `{domain}` (hipp/cortex), `{variant}`, `{branch}` and
+`{run}` where supported. The NPZ format is defined in the
+[core input guide](../core_workflow/README.md#existing-rest-tsnr-baseline-inputs).
+Preserve acquisition-specific samples and variant-specific retained frames.
 
-Both downstream adapters register native T1w hippocampal vertices with the
-declared fMRIPrep MNI-to-T1w image composite before sampling MNI BOLD. The
-image transform is under `derivatives/sub-<id>/anat/` in the Iowa7T source
-tree. Mapped meshes are saved under `surface/raw/sampling_surfaces/`; native
-T1w geometry defines millimetre smoothing and `space-T1w` metric filenames.
-Resume rejects an unregistered corobl raw summary and requires an explicit
-`--overwrite` rebuild for those products.
-Gate summaries record `sampling_space=MNI152NLin6Asym` and surface-stage
-parameters record `smoothing_space=T1w`; QC and smoothing without those
-coordinate declarations cannot be reused after an interrupted repair.
+Per-run scores use original baseline mean divided by linearly detrended sample
+SD on retained frames. All included runs must reach the inherited comparison
+threshold 25 and have finite, nonconstant consumed analysis signals. Missing
+baselines fail. This setting does not establish a universal participant-QC
+cutoff; see [fMRI QC](../../docs/hipp_parcellation_network/fmri_qc.md).
 
-Both `run_branch_downstream.py` and `run_runwise_downstream.py` require explicit
-baseline QC inputs through `--tsnr-input-template`. Supported placeholders:
-`{subject}`, `{hemi}`, `{domain}` (hipp/cortex), `{variant}`, `{branch}` and `{run}`
-(runwise adapter only). Inputs use the NPZ format documented in
-`../core_workflow/README.md`. Preserve separate MB/ME baseline inputs and
-variant-specific retained frames.
-
-The gate computes per-run original mean / linearly detrended sample SD on
-retained frames, requiring all included runs to reach 25 and the analysis
-series to be finite and nonconstant. HCP's constant 10000 is removed. Missing
-baselines cause an error. Use `--overwrite` for an approved complete surface,
-cortex and dependent-FC rebuild; changing code alone does not change products.
-Threshold 25 remains an operational comparison value, not a validated
-cross-acquisition cutoff.
-
-Existing gate and FC summaries must identify the new tSNR policy before cache
-reuse. A changed gate also invalidates existing smoothing during the surface
-stage. FC refuses old surface/cortex gates and recomputes old FC summaries.
-For changing baseline samples under the same policy, explicitly use
-`--overwrite` on the approved output tree.
-
-The branch-overview adapter stores shared cortical inputs under
-`runs/cache/<cache-name>/sub-<subject>_<branch>/inputs/pfm/` within the selected
-`hipp_outputs` root. HCP source references use
-`outputs_hcp/inputs/kong2022/shared_inputs/pfm/`, and the exported HCP template
-bank reads `outputs_hcp/work/group_atlas/pfm/wta-top/kong2022/`.
+A changed gate invalidates smoothing. FC rejects incompatible surface/cortex
+gate metadata; use `--overwrite` for approved baseline/input replacement.
+Adapters import maintained run-segment/TSV and label helpers from the core
+workflow. Shared cortex inputs use the selected `hipp_outputs/runs/cache/`
+root, while HCP references and template banks use their explicit formal
+`pfm` paths. Existing production replacement follows the exact-path approval
+rules.

@@ -25,7 +25,7 @@ CANONICAL_MODEL_PATH = (
 )
 RUNTIME_WORK_ROOT = REPO_ROOT / "runtime" / "hippunfold_workdirs"
 RUNTIME_PY = REPO_ROOT / ".runtime_py"
-DATASET_JOB_LIMITS = MappingProxyType({"hcp": 8, "banda": 1, "pdc": 2})
+DATASET_JOB_LIMITS = MappingProxyType({"hcp": 12, "banda": 1, "pdc": 2})
 _SAFE_SUBJECT = re.compile(r"^[0-9A-Za-z]+$")
 
 

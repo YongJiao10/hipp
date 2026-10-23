@@ -1,4 +1,4 @@
-"""Functional-GM support must come from common physical-run source voxels."""
+"""NIfTI geometry and per-run sampled signals define hippocampal coverage."""
 from __future__ import annotations
 
 import importlib
@@ -20,76 +20,49 @@ def write_surface(path, points):
     )]), path)
 
 
-def write_cifti(path, values, *, affine=None):
-    mask = np.zeros((3, 3, 3), dtype=bool)
-    mask[0, 0, 0] = mask[1, 0, 0] = True
-    affine = np.eye(4) if affine is None else affine
-    left = nib.cifti2.BrainModelAxis.from_mask(mask, name="HippocampusLeft", affine=affine)
-    mask = np.zeros((3, 3, 3), dtype=bool)
-    mask[0, 1, 0] = mask[1, 1, 0] = True
-    right = nib.cifti2.BrainModelAxis.from_mask(mask, name="HippocampusRight", affine=affine)
-    nib.save(nib.Cifti2Image(np.asarray(values, dtype=np.float32), header=(
-        nib.cifti2.SeriesAxis(0, 1, len(values)), left + right,
-    )), path)
+def write_bold(path, frames=2, *, affine=None):
+    nib.save(nib.Nifti1Image(np.zeros((3, 3, 3, frames), dtype=np.float32),
+                            np.eye(4) if affine is None else affine), path)
 
 
-@pytest.mark.parametrize("separate", [False, True])
-def test_gm_support_intersects_source_voxels_before_trilinear_projection(tmp_path, separate):
-    # Left vertices have support in both runs, but from different voxels: the
-    # common source mask has no left support. Right retains only its first voxel.
-    first = np.asarray([[0, 4, 0, 0], [1, 4, 1, 1]], dtype=np.float32)
-    second = np.asarray([[4, 0, 2, np.nan], [4, 1, 3, 1]], dtype=np.float32)
-    paths = [tmp_path / "first.dtseries.nii"]
-    if separate:
-        write_cifti(paths[0], first)
-        paths.append(tmp_path / "second.dtseries.nii")
-        write_cifti(paths[1], second)
-    else:
-        write_cifti(paths[0], np.concatenate([first, second]))
-    surfaces = {hemi: tmp_path / f"hemi-{hemi}_space-T1w_midthickness.surf.gii" for hemi in ("L", "R")}
-    write_surface(surfaces["L"], [[.5, 0, 0], [2, 0, 0]])
-    write_surface(surfaces["R"], [[.5, 1, 0], [0, 1, 0]])
-
-    weights, summary = sampling.sample_hippocampal_gm_support(
-        dtseries_inputs=paths, run_ids=[1, 2], run_lengths=[2, 2],
-        sampling_surfaces=surfaces,
-    )
-
-    np.testing.assert_array_equal(weights["L"], [0, 0])
-    np.testing.assert_allclose(weights["R"], [.5, 1])
-    assert summary["L"]["n_common_source_voxels"] == 0
-    assert summary["R"]["n_common_source_voxels"] == 1
+def test_nifti_support_intersects_declared_volume_grids(tmp_path):
+    first, second = tmp_path / 'first.nii.gz', tmp_path / 'second.nii.gz'
+    write_bold(first)
+    affine = np.eye(4); affine[0, 3] = 2
+    write_bold(second, affine=affine)
+    surfaces = {h: tmp_path / f'{h}.surf.gii' for h in ('L', 'R')}
+    write_surface(surfaces['L'], [[.25, 0, 0], [1.5, 0, 0]])
+    write_surface(surfaces['R'], [[2.5, 1, 0], [2, 1, 0]])
+    weights, summary = sampling.sample_hippocampal_nifti_support(
+        bold_inputs=[first, second], run_ids=[1, 2], run_lengths=[2, 2], sampling_surfaces=surfaces)
+    np.testing.assert_allclose(weights['L'], [0, .5])
+    np.testing.assert_allclose(weights['R'], [.5, 1])
+    assert summary['L']['n_vertices_without_grid_support'] == 1
 
 
-def test_gm_support_uses_cifti_world_affine_at_registered_vertices(tmp_path):
-    affine = np.eye(4)
-    affine[:3, :3] *= 2
-    affine[:3, 3] = [10, 20, 30]
-    path = tmp_path / "run.dtseries.nii"
-    write_cifti(path, [[0, 5, 0, 0], [1, 5, 1, 1]], affine=affine)
-    surfaces = {hemi: tmp_path / f"{hemi}.surf.gii" for hemi in ("L", "R")}
-    write_surface(surfaces["L"], [[11, 20, 30]])
-    write_surface(surfaces["R"], [[11, 22, 30]])
-
-    weights, _ = sampling.sample_hippocampal_gm_support(
-        dtseries_inputs=[path], run_ids=[1], run_lengths=[2], sampling_surfaces=surfaces,
-    )
-
-    np.testing.assert_allclose(weights["L"], [.5])
-    np.testing.assert_allclose(weights["R"], [1])
+def test_nifti_support_uses_volume_affine_at_registered_vertices(tmp_path):
+    affine = np.eye(4); affine[:3, :3] *= 2; affine[:3, 3] = [10, 20, 30]
+    path = tmp_path / 'bold.nii.gz'
+    write_bold(path, affine=affine)
+    surfaces = {h: tmp_path / f'{h}.surf.gii' for h in ('L', 'R')}
+    write_surface(surfaces['L'], [[11, 20, 30], [15, 20, 30]])
+    write_surface(surfaces['R'], [[17, 22, 30]])
+    weights, _ = sampling.sample_hippocampal_nifti_support(
+        bold_inputs=[path], run_ids=[1], run_lengths=[2], sampling_surfaces=surfaces)
+    np.testing.assert_allclose(weights['L'], [1, .5])
+    np.testing.assert_array_equal(weights['R'], [0])
 
 
-def test_gm_support_rejects_run_boundaries_that_do_not_cover_the_cifti(tmp_path):
-    path = tmp_path / "run.dtseries.nii"
-    write_cifti(path, [[0, 0, 0, 0], [1, 1, 1, 1]])
-    with pytest.raises(ValueError, match="run|frame|timepoint"):
-        sampling.sample_hippocampal_gm_support(
-            dtseries_inputs=[path], run_ids=[1, 2], run_lengths=[2, 2],
-            sampling_surfaces={},
-        )
+def test_nifti_support_rejects_inconsistent_physical_run_frames(tmp_path):
+    path = tmp_path / 'bold.nii.gz'; write_bold(path)
+    surfaces = {h: tmp_path / f'{h}.surf.gii' for h in ('L', 'R')}
+    for surface in surfaces.values(): write_surface(surface, [[0, 0, 0]])
+    with pytest.raises(ValueError, match='run|frame|timepoint'):
+        sampling.sample_hippocampal_nifti_support(bold_inputs=[path], run_ids=[1, 2],
+            run_lengths=[2, 2], sampling_surfaces=surfaces)
 
 
-def test_hcp_vertex_mask_combines_gm_support_with_consumed_signal_validity(tmp_path):
+def test_hcp_vertex_mask_combines_nifti_support_with_consumed_signal_validity(tmp_path):
     shared = tmp_path / "shared"
     raw = shared / "sub-01/surface/raw"
     raw.mkdir(parents=True)
@@ -97,15 +70,15 @@ def test_hcp_vertex_mask_combines_gm_support_with_consumed_signal_validity(tmp_p
     records = {}
     for hemi in ("L", "R"):
         nib.save(prep.make_func_gifti(data), raw / f"sub-01_hemi-{hemi}_space-T1w_den-512_label-hipp_bold.func.gii")
-        weight = raw / f"sub-01_hemi-{hemi}_gm_weight.npy"
+        weight = raw / f"sub-01_hemi-{hemi}_nifti_support.npy"
         np.save(weight, np.asarray([0, .25, 1, 1], dtype=np.float32))
         records[hemi] = {"n_vertices_total": 4, "n_vertices_unsupported": 1,
-                         "gm_weight_path": str(weight), "n_vertices_valid": 1}
+                         "nifti_support_path": str(weight), "n_vertices_valid": 1}
         surface = prep.surface_path(tmp_path / "batch", "01", hemi)
         surface.parent.mkdir(parents=True, exist_ok=True)
         write_surface(surface, np.zeros((4, 3)))
     (raw / "sub-01_coverage_summary.json").write_text(json.dumps({
-        "subject": "01", "coverage_policy": "cifti_hippocampal_common_run_gm_trilinear",
+        "subject": "01", "coverage_policy": "bold_nifti_runwise_trilinear_validity",
         "sampling_space": "MNI152NLin6Asym", "run_ids": [1], "run_lengths": [3],
         "hemispheres": records,
     }))
@@ -117,15 +90,13 @@ def test_hcp_vertex_mask_combines_gm_support_with_consumed_signal_validity(tmp_p
     gate = shared / "sub-01/surface/tsnr_gate"
     np.testing.assert_array_equal(np.load(gate / "sub-01_hemi-L_valid_mask.npy"), [False, True, False, False])
     summary = json.loads((gate / "sub-01_hemi-L_tsnr_gate_summary.json").read_text())
-    assert summary["coverage_policy"] == "cifti_hippocampal_common_run_gm_trilinear"
+    assert summary["coverage_policy"] == "bold_nifti_runwise_trilinear_validity"
     assert summary["threshold"] is None
 
 
-def test_hcp_concat_sampling_records_common_gm_and_physical_runs(tmp_path, monkeypatch):
+def test_hcp_concat_sampling_records_nifti_support_and_physical_runs(tmp_path, monkeypatch):
     bold = tmp_path / "bold.nii.gz"
     nib.save(nib.Nifti1Image(np.zeros((3, 3, 3, 4), dtype=np.float32), np.eye(4)), bold)
-    cifti = tmp_path / "rest.dtseries.nii"
-    write_cifti(cifti, [[0, 4, 0, 0], [1, 4, 1, 1], [4, 0, 2, 2], [4, 1, 3, 3]])
     metadata = tmp_path / "runs.json"
     metadata.write_text(json.dumps({"subject": "sub-01", "run_ids": [1, 2], "run_lengths": [2, 2],
         "runs": [{"run_id": 1, "run_label": "first", "n_timepoints": 2},
@@ -148,7 +119,7 @@ def test_hcp_concat_sampling_records_common_gm_and_physical_runs(tmp_path, monke
     monkeypatch.setattr(prep, "sample_hipp_surface_timeseries", sample)
     result = prep.run_raw_sampling(
         "01", str(tmp_path / "batch"), str(tmp_path / "shared"), str(tmp_path),
-        str(bold), str(logs), dtseries_template=str(cifti), run_metadata_template=str(metadata),
+        str(bold), str(logs), run_metadata_template=str(metadata),
     )
 
     assert result["ok"], result
@@ -158,16 +129,14 @@ def test_hcp_concat_sampling_records_common_gm_and_physical_runs(tmp_path, monke
     assert coverage["run_lengths"] == [2, 2]
     assert coverage["run_labels"] == ["first", "second"]
     assert coverage["density_evidence"]["n_vertices"] == {"L": 2, "R": 2}
-    assert coverage["hemispheres"]["L"]["n_vertices_unsupported"] == 2
-    assert coverage["hemispheres"]["R"]["n_vertices_unsupported"] == 1
+    assert coverage["hemispheres"]["L"]["n_vertices_unsupported"] == 0
+    assert coverage["hemispheres"]["R"]["n_vertices_unsupported"] == 0
     assert prep.raw_done(tmp_path / "shared", "01")
 
 
 def test_hcp_concat_checks_declared_run_frames_before_sampling(tmp_path, monkeypatch):
     bold = tmp_path / "bold.nii.gz"
     nib.save(nib.Nifti1Image(np.zeros((3, 3, 3, 4), dtype=np.float32), np.eye(4)), bold)
-    cifti = tmp_path / "rest.dtseries.nii"
-    write_cifti(cifti, [[0, 0, 0, 0], [1, 1, 1, 1]])
     metadata = tmp_path / "runs.json"
     metadata.write_text(json.dumps({"subject": "01", "run_ids": [1], "run_lengths": [2],
                                    "runs": [{"run_id": 1, "run_label": "first", "n_timepoints": 2}]}))
@@ -180,7 +149,7 @@ def test_hcp_concat_checks_declared_run_frames_before_sampling(tmp_path, monkeyp
     monkeypatch.setattr(prep, "sample_hipp_surface_timeseries", cannot_sample)
     result = prep.run_raw_sampling(
         "01", str(tmp_path / "batch"), str(tmp_path / "shared"), str(tmp_path),
-        str(bold), str(logs), dtseries_template=str(cifti), run_metadata_template=str(metadata),
+        str(bold), str(logs), run_metadata_template=str(metadata),
     )
 
     assert not result["ok"]

@@ -67,7 +67,7 @@ Use the explicit py314 interpreter for the repository launcher:
 
 ```bash
 /home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/01_01_run_hippunfold_t1w_local.py 102311 --dataset hcp
-taskset --cpu-list 0-7,32-39 nice -n 10 /home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/01_01_run_hippunfold_t1w_local.py --dataset hcp --manifest manifests/hcp_7t_hippocampus_struct_complete_166.txt --jobs 8
+taskset --cpu-list 0-7,32-39 nice -n 10 /home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/01_01_run_hippunfold_t1w_local.py --dataset hcp --manifest manifests/hcp_7t_hippocampus_struct_complete_166.txt --jobs 12
 ```
 
 The closed presets select HCP, Stanford, JJ-TMS, BANDA or PDC input/output roots,
@@ -124,13 +124,14 @@ Other scientific processing files remain official v2.2.0 code.
 
 ## Batch resources and retained outputs
 
-The shared-host HCP profile runs eight subjects, one CPU core per subject,
-and two GPU inference slots. Its launch uses CPU affinity `0-7,32-39` (16 physical
+HCP manifest runs default to eight subjects; a per-run `--jobs` override may
+select up to twelve. The current run uses twelve subjects, one CPU core per
+subject and two GPU inference slots. Its launch uses CPU affinity `0-7,32-39` (16 physical
 cores on the current IDAS host) and niceness 10. The container has a 32-CPU quota;
 this profile leaves at least half that CPU capacity available to other tasks.
-Other datasets retain two subjects (BANDA one) and one GPU slot. This specifically
-approved HCP profile supersedes the earlier two-subject/ten-task budget for this
-workload; other repository task limits remain unchanged.
+Other datasets retain two subjects (BANDA one) and one GPU slot. The current
+HCP run uses the approved process-count exception; other repository task limits
+remain unchanged.
 
 GPU slots use the abstract Unix sockets `hippunfold-gpu0-<uid>` and
 `hippunfold-gpu0-<uid>-1`. Contending inference waits for a free declared slot;

@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 import sys
 
+import nibabel as nib
 import numpy as np
 import pytest
 
@@ -50,11 +51,17 @@ def make_inputs(anatomy: Path, shared: Path, subjects: list[str]) -> None:
         raw.mkdir(parents=True, exist_ok=True)
         (raw / f"sub-{subject}_coverage_summary.json").write_text(json.dumps({
             "subject": f"sub-{subject}",
-            "coverage_policy": "cifti_hippocampal_common_run_gm_trilinear",
+            "coverage_policy": "bold_nifti_runwise_trilinear_validity",
             "sampling_space": "MNI152NLin6Asym", "run_ids": [1], "run_lengths": [2], "run_labels": ["rfMRI_REST1_7T_PA"],
             "density_evidence": {"density": "512", "n_vertices": {"L": 512, "R": 512}},
-            "hemispheres": {h: {"n_vertices_total": 512, "n_vertices_unsupported": 0} for h in ("L", "R")},
+            "hemispheres": {h: {"n_vertices_total": 512, "n_vertices_unsupported": 0,
+                "nifti_support_path": str(raw / f"sub-{subject}_hemi-{h}_nifti_support.npy")}
+                for h in ("L", "R")},
         }))
+        for h in ("L", "R"):
+            np.save(raw / f"sub-{subject}_hemi-{h}_nifti_support.npy", np.ones(512, dtype=np.float32))
+            nib.save(PREP.make_func_gifti(np.tile([0., 1.], (512, 1))),
+                raw / f"sub-{subject}_hemi-{h}_space-T1w_den-512_label-hipp_bold.func.gii")
         motion = anatomy.parent / f"motion/sub-{subject}/Movement_Regressors.txt"
         motion.parent.mkdir(parents=True, exist_ok=True)
         np.savetxt(motion, np.zeros((2, 12)))
@@ -258,9 +265,8 @@ def test_standalone_qc_filters_failed_subjects_from_the_complete_dataset(tmp_pat
     subjects = FORMAL + ["199999"]
     make_inputs(tmp_path / "anatomy", shared, subjects)
     coverage = shared / "sub-199999/surface/raw/sub-199999_coverage_summary.json"
-    data = json.loads(coverage.read_text())
-    data["hemispheres"]["L"]["n_vertices_unsupported"] = 21
-    coverage.write_text(json.dumps(data))
+    support = np.ones(512, dtype=np.float32); support[:21] = 0
+    np.save(coverage.parent / 'sub-199999_hemi-L_nifti_support.npy', support)
     monkeypatch.setattr(sys, "argv", [
         "qc", "--hippunfold-batch-root", str(tmp_path / "anatomy"),
     ])

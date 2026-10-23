@@ -42,7 +42,7 @@ CtxReg adapter. It requires the exact template identity
 `shared_inputs/pfm_ctxreg/`, the standard validity masks under
 `shared_inputs/surface/`, and the consumed HippUnfold
 `space-T1w_den-512` surfaces. It does not substitute the standard
-`routea` FC branch or select an alternate file by existence order.
+`pfm` FC branch or select an alternate file by existence order.
 
 For run-level volume sampling, the native T1w mesh is transformed using
 `derivatives_surf/sub-<id>/anat/sub-<id>_from-MNI152NLin6Asym_to-T1w_mode-image_xfm.h5`
@@ -73,7 +73,7 @@ The CtxReg template builder must be called with the explicit identity:
 ```
 
 The builder verifies the source manifests themselves identify
-`routea_ctxreg`; changing only the output directory or template label cannot
+`pfm_ctxreg`; changing only the output directory or template label cannot
 turn standard RouteA artifacts into a CtxReg template. Rebuilding an existing
 formal template or running the full 93-subject matcher is a separate,
 explicitly reviewed product operation.

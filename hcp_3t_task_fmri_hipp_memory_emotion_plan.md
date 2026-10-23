@@ -57,17 +57,17 @@ The complete 144-participant EMOTION and WM cohorts are input rosters, not
 proof of passing the newly accepted selection. Use
 [the canonical fMRI QC document](docs/hipp_parcellation_network/fmri_qc.md)
 for the three ordered criteria: overall mean Power FD <=0.30 mm, bilateral
-HippUnfold Dice >=0.70, and <=20 unsupported functional-GM vertices per
-hemisphere. The evaluated final counts are 134 per task, with 133 passing
-both. Evaluate motion within each task; do not pool EMOTION and WM to pass FD.
+HippUnfold Dice >=0.70, and <=20 unusable NIfTI-sampled vertices per
+hemisphere. Current task entrypoints do not implement this participant-QC
+contract. Evaluate motion within each task; do not pool EMOTION and WM to pass FD.
 
-The existing preparation entry point uses the task-specific `--route-root`,
-`--shared-root` and `--task-manifest-root`; stages are `raw`, `tsnr`, `qc` and
-`smooth`. Its explicit `--tsnr-threshold none` mode checks finite, nonconstant
-signal without computing residual-tSNR scores. The inherited invalid-fraction
-checks and HCP151 destination contracts are not an implementation of the new
-motion/coverage policy. Production gates, masks and rosters still need that
-integration before the research counts can become formal outputs.
+The preparation entry point uses task-specific `--route-root`, `--shared-root`
+and `--task-manifest-root`. Select `raw`, `tsnr` and `smooth` separately;
+participant `qc` and `all` stop before writing until the task QC input contract
+is implemented. Its explicit `--tsnr-threshold none` mode checks finite,
+nonconstant signal without computing residual-tSNR scores. The inherited
+invalid-fraction checks and HCP151 destination contracts do not establish the
+accepted motion/NIfTI-coverage policy or a new formal roster.
 
 The task CIFTI headers declare a one-second SeriesAxis step, while paired BOLD
 headers and the hippocampal GLM use TR=0.72 seconds. The known EMOTION terminal

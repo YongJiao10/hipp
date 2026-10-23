@@ -3,8 +3,10 @@
 Measured on 2026-10-23 using the current official v2.2.0 scientific runtime.
 The complete structural roster remains `manifests/hcp_7t_hippocampus_struct_complete_166.txt`.
 The user requested acceleration while preserving capacity for other tasks.
-The user approved the eight-subject profile below. The scheduling changes are
-installed and the full-roster launcher runs with the approved resource limits.
+HCP manifest runs default to eight subjects and accept an explicit `--jobs`
+override up to twelve. The user approved twelve for the current full cohort. Its
+first eight-subject wave passed output checks, and the full-roster coordinator
+is now running with `--jobs 12`.
 
 ## Available resources and baseline
 
@@ -71,11 +73,12 @@ including native-unfold correspondence checks, remains necessary.
 
 ## Production profile
 
-Use eight subjects, one CPU core per subject and two GPU inference slots.
+For this run, use twelve subjects, one CPU core per subject and two GPU
+inference slots. Future batches can select their concurrency with `--jobs`.
 Restrict the complete process tree to 16 CPUs and use niceness 10:
 
 ```bash
-taskset --cpu-list 0-7,32-39 nice -n 10 /home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/01_01_run_hippunfold_t1w_local.py --dataset hcp --manifest manifests/hcp_7t_hippocampus_struct_complete_166.txt --jobs 8
+taskset --cpu-list 0-7,32-39 nice -n 10 /home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/01_01_run_hippunfold_t1w_local.py --dataset hcp --manifest manifests/hcp_7t_hippocampus_struct_complete_166.txt --jobs 12
 ```
 
 The listed CPUs are 16 distinct physical cores on the current IDAS host. The
@@ -85,37 +88,20 @@ model validation once per batch, complete cached-resource reuse, full output
 retention and completion contracts remain unchanged. Other dataset presets
 retain their current limits.
 
-The isolated proposal and exact source/doc changes are under
-`tmp/hippunfold_perf_20261023/proposed/` and `proposed_scheduling.patch`.
-Three new behavior tests failed against the original configuration as expected.
-The isolated proposed modules pass all 58 relevant tests, including actual
-two-slot contention/release. The complete 418-job DAG also builds successfully
-from the isolated proposed source with HTTP requests blocked; it executes no
-scientific jobs and does not replace installed code.
-The small lock helper uses `-S` before exec to avoid importing Torch twice;
-actual inference retains its normal Python startup hook.
+The eight-subject default passed 58 relevant tests and its full 418-job cached
+DAG built with HTTP requests blocked. The twelve-subject update makes the
+existing `--jobs` option adjustable up to twelve for HCP while keeping its
+default at eight. The one-core HippUnfold arguments, two-slot GPU inference
+lock, model gate, cache reuse and full-output checks remain unchanged. The
+The current coordinator started after the active eight-subject wave passed
+serial output checks.
 
-The user explicitly approved this profile and its process-count exception:
-helpers can bring the eight-subject process count to approximately 29, while
-CPU affinity limits CPU execution to 16 cores. No 32-worker full-quota benchmark
-was run. The user cancelled an additional pi/argon review for this scheduling
-change; the performance proposal was not sent to that service.
-
-The installed source passes all 58 relevant tests. The maintained local patch
-also recreates the installed four-file resource/runtime adaptation from clean
-official v2.2.0 source. Install runtime patches only after active HippUnfold
-subprocesses exit: Snakemake reloads rule files during execution.
-
-Two subjects encountered a missing scheduling environment variable during the
-runtime transition. Both then passed dry runs with the new environment, without
-requiring metadata cleanup or a recovery flag. Their retained preprocessing
-outputs are reused by the normal full-roster restart. The old coordinator has
-exited. The new coordinator executes the canonical 166-person manifest, skips
-completed subjects through the existing completion contract and checks new
-outputs serially with full retention.
-
-An eight-subject end-to-end wave has not yet been measured. Its actual
-subject/hour rate and remaining cohort time must be established after profile
-launch; stage measurements must not be presented as whole-workflow
-speedups. No scientific-method repair, functional downstream run or commit is
-part of this performance change.
+The first eight-subject full-run wave completed eight people in approximately
+50 minutes. This is the only whole-subject throughput measurement; the
+twelve-subject rate and total cohort time remain unknown until the next wave.
+The CPU stage benchmark at twelve workers measured 187.7 registration tasks per
+hour, but that is not a full-subject throughput estimate. The profile has more
+than 40 total worker/helper processes; user approval covers this HCP-specific
+process-count exception. Its affinity limits execution to 16 CPUs. The GPU
+label-repeat differences described above remain below 0.01% of foreground
+voxels; this profile still uses only two inference slots.

@@ -265,17 +265,12 @@ register t/p/masks, palette, statistical peak, display range, caption and code.
 Invalid panels are regenerated from validated inputs, never substituted as data
 sources.
 
-Two files named
-`panels/iowa_pat_36p_wta_pseudocluster_bilat_{2mm,4mm}.manifest.json` are
-retained historical four-network pseudo-cluster records. They are excluded from
-the active canonical suite and are never accepted as canonical inputs;
-their old provenance is kept only for traceability. The active suite uses the
-canonical `routea_patient*` group roots with the internal `wta-top/kong2022`
-producer path; the presentation directory remains named `kong2022_7net`.
+Patient inputs use the formal `pfm/patient` and `pfm_22p/patient` group roots
+with matching presentation roots. Kong WTA uses the internal
+`wta-top/kong2022` producer path and manifest-declared normalized Top-20 labels.
 The active contrast aggregate is
 `contrasts/canonical_all_grids.manifest.json`, whose four grids contain only
-`(N,7,400)` subject matrices. The complete six-figure audit is recorded in
-`docs/kong400_recovery_audit/visualization_7net_audit.json`.
+`(N,7,400)` subject matrices for the explicitly selected roster.
 
 ## Artifacts and verification
 

@@ -1,241 +1,128 @@
 # Repository Rules
 
-## Temporary Workspace
+## Workspace and execution context
 
-- `<repository>/tmp/` is the only temporary workspace for this project.
+- Determine the checkout root from the current working directory or
+  `git rev-parse --show-toplevel`. The local checkout is
+  `/home/yojiao/hpchome/hipp`; Argon uses `/old_Users/yojiao/hipp`.
+- `<repository>/tmp/` is the only temporary workspace for repository tasks.
+- Local `/home/yojiao/LSS/jianglab` and Argon `/Shared/jianglab` access the same
+  Jianglab storage. Use the prefix for the execution host; never put the local
+  prefix in Argon qsub commands, production manifests or production logs.
+- For Argon sessions, start from `/old_Users/yojiao/hipp` and use
+  `codex-argon`, `codex-argon resume`, or `codex-argon agents`. This personal
+  entrypoint connects to `argon-login-6.hpc` and preserves directory/arguments.
+  Its executable is `/Users/yojiao/.local/bin/codex-argon`; its runbook is
+  `/Users/yojiao/.local/share/codex-argon.md`. Existing sessions remain on the
+  node where they started.
 
-## Starting Codex on Argon
+## Concurrency
 
-From any Argon login node, use the personal fixed-host entry point:
+Identify `idas` or `argon` from `SYSTEM_NAME`, `CLUSTER_NAME`,
+`SGE_CLUSTER_NAME` or hostname before parallel work or an SGE array. If detection
+is ambiguous, stop until `SYSTEM_NAME` explicitly identifies the system. Count
+all intended jobs/tasks/processes, including child processes and other agents.
 
-```bash
-cd /old_Users/yojiao/hipp
-codex-argon          # Start a new session
-codex-argon resume   # Select and resume a previous session
-codex-argon agents   # View running sessions
-```
+| Scope | IDAS | Argon |
+|---|---|---|
+| General repository cap | 16 total | 20 total |
+| Kong2022 ArealMSHBM launcher | 10 total: UI `-tc 3`, PINC `-tc 7` | 20 total: UI `-tc 5`, PINC `-tc 15` |
 
-This entry automatically connects to `argon-login-6.hpc`, preserving the current
-directory and arguments. Use it again after reconnecting to Argon. The executable
-is `/Users/yojiao/.local/bin/codex-argon`; its runbook is
-`/Users/yojiao/.local/share/codex-argon.md`. These are personal tools outside this
-repository. Sessions already running on another node still require that node.
+Keep combined active batches within the applicable cap. The approved HCP
+HippUnfold profile is a process-count exception for that workload only; use its
+CPU affinity, GPU slots and launch command from the
+[runtime manifest](docs/environment/hippo2_reproducibility_manifest.md#batch-resources-and-retained-outputs).
+Other workflows retain their own limits.
 
-## Concurrency Limit — Identify the System First
+## Filesystem authorization
 
-- Before launching parallel work or an SGE array, identify the active system
-  from `SYSTEM_NAME`, `CLUSTER_NAME`, `SGE_CLUSTER_NAME`, or the hostname.
-  Accept only `idas` or `argon`; if detection is ambiguous, stop and set
-  `SYSTEM_NAME` explicitly.
-- On **IDAS**, the hard cap is **16 total concurrent jobs/tasks/processes**.
-- On **Argon**, the Kong2022 ArealMSHBM standard is UI `-tc 5` plus PINC
-  `-tc 20`, for a **20-task total cap**. Do not apply the IDAS 10-task cap to
-  an Argon array.
-- These limits apply to all agents (Codex, Claude, or any automated runner)
-  operating in this repository. Count intended concurrency before launching a
-  batch; user-provided overrides must remain within the detected system cap.
+- Do not access or browse archive contents without explicit user permission.
+- Before any file/directory deletion, present the exact target paths and reason,
+  verify that they resolve inside the current working directory, and wait for
+  explicit confirmation in the current session. Paths outside that tree require
+  explicit approval for those paths as well.
+- Production result-tree migration, rebuild, replacement or cleanup requires an
+  exact user-approved path list. Until approval, keep those trees read-only.
+- Output archives belong under
+  `wrong/outputs_<dataset>/<original-relative-path>`, outside active output
+  trees. Preserve names and internal hierarchy.
+- In planning mode, obtain explicit confirmation before creating a directory;
+  state its name, purpose/contents and disk location.
 
-## Archive Access
+## Documentation and scientific branches
 
-- You MUST obtain explicit user permission before accessing or browsing any archive content.
-- Output archives belong under `wrong/outputs_<dataset>/<original-relative-path>`.
-  Preserve their names and internal hierarchy; keep new archives outside active
-  `outputs_*` trees. Existing migrations still require an exact approved path list.
+- Write project documentation in English using current complete datasets and
+  authoritative analysis rosters. Keep active instructions about current
+  inputs, methods, outputs and usage; remove outdated text in place rather than
+  appending corrections or retaining batch/upload histories.
+- Behavior, path, cache, launcher, environment or output changes require matching
+  documentation in the same change. Runtime-stack changes also require an
+  environment-manifest update.
+- Preserve real scientific branches, including 22P/36P, method and atlas variants.
+  Dates and run IDs belong in logs/manifests, not formal result-root names.
+- HCP cortex-control routes are exactly `pfm_ctxreg` and `pfm_ctxdrop` below
+  `outputs_hcp/inputs/kong2022/shared_inputs/`, `work/hippomaps_gradients/`,
+  `work/group_atlas/` and `present/overviews/`. Keep method, atlas, smoothing,
+  coverage and hemisphere structure within the route. Assignment variants such
+  as `fisherz` and `normalized_top20_count` remain explicit files/metadata.
+  Repairs replace approved formal products in place; do not create dated,
+  recovered/regenerated roots or compatibility symlinks.
+- Stanford 22P uses `DataOrg_PFM_22P` and `ArealMSHBM_Kong2022_22P` beneath the
+  Causal-Connectome `rest_fmriprep` tree. Its `surf` input is an fsLR den-91k
+  time-series CIFTI. Use the exact paths and seven overview cohorts in the
+  [core workflow guide](scripts/core_workflow/README.md#dataset-and-preprocessing-variants).
+- Iowa JJ_TMS unversioned subgroup paths are 36P (`pfm/pure_mdd`,
+  `pfm/comorbid_mdd`); 22P uses `pfm_22p/` and `_22p` in flat route names.
+  Apply that distinction to FC, gradients, group atlases, weighted and
+  presentation products.
+- Establish density from consumed surface/CIFTI paths and recorded
+  `density_evidence`, not arguments alone. Report disagreements and treat
+  consumed assets as authoritative.
 
-## Doc Sync Rule
+## Runtime
 
-- Write project documentation in English, using the current complete datasets
-  and their authoritative analysis rosters. Keep instructions focused on current
-  inputs, methods, outputs, and usage.
-- Do not retain incremental-ingestion rosters, batch histories, or instructions
-  for partial uploads in active workflows or documentation.
-- Use subtractive updates (减法更新): delete or replace incorrect/outdated statements in
-  place. Do not retain them and append another statement explaining that they
-  are wrong; keep one current, correct instruction instead of accumulating
-  corrections.
-- Any code change that affects behavior, paths, caches, launchers, environment setup, or workflow outputs must be accompanied by a matching documentation update in the same change.
-- This includes edits to:
-  - launcher scripts
-  - wrapper scripts
-  - environment manifests
-  - runbooks
-  - flow docs
-  - reproducibility manifests
-- Do not leave code and docs out of sync for future agents to infer intent from stale text.
-- If a change touches the runtime stack, update the environment manifest as part of the same change.
-
-## HippUnfold Density Guardrail
-## HCP Cortex-Control Naming Contract
-
-- The only formal HCP cortex-control branch names are `pfm_ctxdrop` and
-  `pfm_ctxreg`. Active resolvers, launchers, consumers, manifests, and
-  documentation must use these names without `recovered`, `regenerated`, dates,
-  run IDs, or `_full_k3_fisherz` suffixes.
-- The formal HCP roots, relative to `outputs_hcp/`, are:
-  `inputs/kong2022/shared_inputs/<route>/`,
-  `work/hippomaps_gradients/<route>/`,
-  `work/group_atlas/<route>/`, and
-  `present/overviews/<route>/`. Method, atlas, smoothing, coverage, and
-  hemisphere structure remains inside those roots; assignment variants such as
-  `fisherz` and `normalized_top20_count` remain explicit files/metadata.
-- Dates and run identifiers belong in logs and manifests only. Do not create a
-  new dated/recovered/regenerated formal result tree, compatibility symlink, or
-  existence-order fallback. A repair replaces the formal product in place.
-- Real scientific branches, including 22P versus 36P and method or atlas
-  variants, remain distinct and must not be merged as old/new versions.
-- Any migration, rebuild, or cleanup of existing result trees requires an
-  exact user-approved path list for that operation. Until approval, keep the
-  output trees read-only and report unresolved or legacy paths explicitly.
-
-
-- For hippocampal density/resolution questions, do not infer actual density from command arguments alone.
-- Prefer the consumed surface/CIFTI asset path and recorded `density_evidence` when available.
-- If parameter density and consumed asset evidence disagree, report the mismatch and treat consumed assets as authoritative.
-
-## HippUnfold Environment Gate
-
-- For direct `hippunfold` runs in this repository, the canonical local runtime environment is `hippo2`.
-- Do not trust `conda list` or the environment name alone as proof of HippUnfold compatibility.
-- Required validation sequence before a direct HippUnfold run on the local host:
+- Use `/home/yojiao/.conda/envs/py314/bin/python` for local workflow scripts,
+  tests and documentation checks. Before a Python task, run
+  `python -c "import sys; print(sys.executable)"` for informational context only;
+  execute repository tasks with the explicit interpreter. Rewrite bare-Python
+  documentation examples at execution time. If the wrong interpreter was used,
+  stop and rerun correctly; do not mix environments.
+- Argon SGE/MATLAB launchers use their documented cluster runtime, normally
+  `/Users/yojiao/miniconda3/envs/py313/bin/python`. Preserve branches that do not
+  need Python rather than adding a local interpreter dependency.
+- Direct local HippUnfold runs require this gate in order:
   1. `source /opt/conda/bin/activate hippo2`
-  2. `which hippunfold` must resolve to `/home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2/bin/hippunfold`
-  3. `hippunfold --version` must return `2.2.0`
-  4. `hippunfold --modality T1w --output_density 512 --help` must succeed and show `512`
-- Validate the effective CLI and its loaded scientific source; package-manager metadata alone is insufficient.
-- The runtime uses official v2.2.0 source in the refreshed hippo2 dependency stack, with the local resource/runtime patch. Rebuild using `docs/environment/hippo2_reproducibility_manifest.md#rebuild-recipe`; do not reinstall an older HippUnfold package.
-- Stage 01 performs the environment/model/CUDA gate once per batch with pending subjects. CLI probes have a 300-second limit. The explicitly approved HCP performance profile uses eight concurrent subjects, one core per subject, two GPU inference slots, CPU affinity `0-7,32-39` (16 CPUs), and niceness 10; nnUNet preprocessing/save workers remain one each. This HCP profile supersedes the prior process-count cap for this workload while reserving at least half the 32-CPU quota for other tasks. Other datasets retain two subjects (BANDA one) and one GPU slot under the general system cap. See the runtime manifest for the exact launch command.
-- Stage-01 checks use `--no-cleanup`, retaining full structural outputs. A v2.0.0 cleanup receipt never establishes completion of the v2.2.0 run.
+  2. `which hippunfold` resolves to
+     `/home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2/bin/hippunfold`
+  3. `hippunfold --version` returns `2.2.0`
+  4. `hippunfold --modality T1w --output_density 512 --help` succeeds and shows `512`
+- Validate the effective CLI and scientific source; environment names,
+  `conda list` and `bioconda::hippunfold` alone are insufficient. Use official
+  v2.2.0 source plus the documented local resource/runtime patches. Do not use
+  workflow labels `1.5.2`, `1.5.2-pre.2` or `1.5.2rc2`.
+- Stage 01 gates the runtime/model/CUDA once per pending batch, with 300-second
+  CLI probes, and checks full outputs with `--no-cleanup`. Old cleanup receipts
+  do not establish completion. HCP defaults to eight subjects and accepts up to
+  twelve under its approved profile; other datasets use two (BANDA one).
+- Use the [agent runtime contract](docs/environment/agent_runtime_contract.md)
+  for preflight and [hippo2 manifest](docs/environment/hippo2_reproducibility_manifest.md)
+  for rebuilding, resource patches and launch parameters. Complete cached
+  resources must issue no HTTP requests; incomplete caches report exact missing
+  files. Reapply the documented patches after package reinstallations.
+- Iowa7T 36P Argon production root is
+  `/Shared/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_36P`;
+  outputs use `hipp_outputs/` and qsub logs `hipp_outputs/runs/logs/<run_id>/`.
 
-- The local runtime also requires the resource patches documented in
-  `docs/environment/hippo2_reproducibility_manifest.md#local-resource-resolution`.
-  Reapply the HippUnfold patch after reinstalling HippUnfold and the local-source
-  cache patch after reinstalling Snakemake. Complete cached resources must not
-  register remote dependencies or issue HTTP requests; absent resources use the
-  original declared download URL. Existing incomplete caches report the exact
-  missing files. Stage 01 checks that the resource adapter is installed.
-- Do not treat `bioconda::hippunfold` as sufficient evidence of native `512` support.
-- Avoid forbidden workflow version labels for this project: `1.5.2`, `1.5.2-pre.2`, `1.5.2rc2`.
+## Exact artifact selection
 
-## Agent Runtime Environment Contract (Hard)
+Resolve the exact manifest-declared filename and variant. Missing, stale,
+ambiguous, malformed or mismatched artifacts must stop with an actionable
+error naming the contract and path/metadata mismatch. Do not substitute another
+file, older cache, label variant, recomputed approximation or taxonomy.
 
-- Do not use bare `python` for repository tasks.
-- Always use an explicit interpreter path based on task type:
-  - Core workflow scripts/tests/doc-contract checks: `/home/yojiao/.conda/envs/py314/bin/python`
-  - Direct HippUnfold CLI runs: `hippo2` gate above (`/home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2/bin/hippunfold` after `/opt/conda` activation)
-- Before running any Python-based repo task, run `python -c "import sys; print(sys.executable)"` for informational context only; do not use this interpreter for repo tasks unless it exactly matches py314.
-- If command examples in docs use `python`, agents must rewrite them to the explicit interpreter path at execution time.
-- If an agent accidentally runs with the wrong interpreter, stop and rerun with the correct one; do not continue mixed-environment execution.
-
-Reference runbook: `docs/environment/agent_runtime_contract.md`
-
-## Local vs Argon Environment Boundary (Hard)
-
-This repository is used from two different execution contexts. Do not mix their
-paths or Python environments.
-
-## Stanford Causal-Connectome 22P core_workflow inputs
-
-The authoritative Stanford 22P source is the `DataOrg_PFM_22P` tree below.
-These are the three paths used by the core workflow input stage:
-
-- Local 22P CIFTI surface time series (for extracting cortex time series):
-  `/home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_CausalConnectome/rest_fmriprep/DataOrg_PFM_22P/sub-*/func/*_task-rest_space-fsLR_den-91k_desc-denoised_bold.dtseries.nii`
-- Local 22P denoised BOLD volume time series:
-  `/home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_CausalConnectome/rest_fmriprep/DataOrg_PFM_22P/sub-*/func/*_task-rest_space-MNI152NLin6Asym_res-2_desc-denoised_bold.nii.gz`
-- Local 22P Kong2022 labels:
-  `/home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_CausalConnectome/rest_fmriprep/ArealMSHBM_Kong2022_22P/sub-*/lh_labels.txt`
-  and
-  `/home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_CausalConnectome/rest_fmriprep/ArealMSHBM_Kong2022_22P/sub-*/rh_labels.txt`
-
-On Argon, replace the local Jianglab prefix with `/Shared/jianglab`:
-`/Shared/jianglab/3_Data_Working/fmriprep_processed_CausalConnectome/rest_fmriprep/DataOrg_PFM_22P/`
-and
-`/Shared/jianglab/3_Data_Working/fmriprep_processed_CausalConnectome/rest_fmriprep/ArealMSHBM_Kong2022_22P/`.
-
-For this dataset, `surf` means the cortex-extraction `fsLR den-91k`
-`dtseries.nii` file, not a structural `.surf.gii` file. Do not substitute
-`DataOrg_PFM_36P` or the unversioned `ArealMSHBM_Kong2022` tree when a 22P
-input is required.
-
-The canonical seven 22P overview cohorts are: NTHC, TEHC, NTS, NTS Any MDD,
-NTS Pure MDD, TIS, and TIS PTSD.
-
-## Iowa 3T JJ_TMS subgroup density naming
-
-For Iowa 3T JJ_TMS subgroup products, an unversioned path is the default 36P
-branch: `pfm/pure_mdd` and `pfm/comorbid_mdd` (gradient roots `pfm_pure_mdd` and
-`pfm_comorbid_mdd` where flat). The corresponding 22P branch must append `_22p`
-everywhere: `pfm_22p/pure_mdd` and `pfm_22p/comorbid_mdd`, including FC,
-gradient, group-atlas, weighted, and presentation roots. Never describe an
-unversioned Iowa subgroup result as 22P.
-
-### Local Repository / Core Workflow Context
-
-- Use this context for local code edits, tests, doc-contract checks, local
-  workflow scripts, and direct local HippUnfold runs.
-- Repository root in this context is `/old_Users/yojiao/hipp`.
-- Jianglab data may be visible through the local mount prefix:
-  `/home/yojiao/LSS/jianglab`.
-- For local core workflow Python tasks, use:
-  `/home/yojiao/.conda/envs/py314/bin/python`
-- For direct local HippUnfold CLI runs, use the `hippo2` gate above; do not use
-  py314 for HippUnfold CLI execution.
-
-### Argon SGE / MATLAB Launcher Context
-
-- Use this context for qsub jobs, MATLAB jobs, and scripts intended to execute
-  on Argon compute nodes.
-- Argon Jianglab data paths must use the `/Shared/jianglab` prefix.
-- Do not put the local mount prefix `/home/yojiao/LSS/jianglab` in Argon qsub
-  commands, qsub wrappers, production manifests, or production logs.
-- The local path `/home/yojiao/LSS/jianglab/...` is only the local equivalent of
-  `/Shared/jianglab/...`; it is not the Argon command path.
-- Do not apply the local py314 rule to Argon SGE MATLAB launchers.
-- Existing Argon Kong2022/ArealMSHBM launchers default to:
-  `/Users/yojiao/miniconda3/envs/py313/bin/python`
-- If an Argon launcher already avoids Python for a dataset branch, keep it that
-  way instead of introducing a local Python dependency.
-- For Iowa7T 36P fMRIPrep production paths on Argon, the project root is:
-  `/Shared/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_36P`
-- The Iowa7T 36P production output root on Argon is:
-  `/Shared/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_36P/hipp_outputs`
-- qsub logs for Iowa7T 36P production runs belong under:
-  `hipp_outputs/runs/logs/<run_id>/`
-
-## Planning Mode Folder Creation Guardrail
-
-- In planning mode (`plan mode`), if any new folder/directory needs to be created, the agent MUST explicitly ask the user for confirmation and clarify:
-  1. The folder name.
-  2. The folder contents/purpose.
-  3. The directory path (disk location) where the folder will be created.
-- Do not create any directory in planning mode without this explicit user confirmation.
-
-## No Silent Fallbacks — HARD RULE
-
-## Exact Artifact Selection — HARD RULE
-
-- Code MUST disable preference, priority, existence-order, glob-order, and first-available selectors for competing artifacts; resolve the exact manifest-declared filename.
-- Never use if-exists choice, next(...), glob()[0], directory iteration order, or an unsuffixed file as a substitute; missing, duplicate, or mismatched declarations MUST fail closed with path and variant.
-- Compatibility is allowed only in an explicit caller-selected mode with validation and provenance; existence and lexical order are never selection policies.
-
-- Rigorous analysis, workflow, and visualization code MUST NOT silently fall back
-  from a canonical artifact to another file, an older cache, a different label
-  variant, a recomputed approximation, or a different taxonomy merely because
-  the canonical input is missing.
-- Missing, stale, ambiguous, malformed, or mismatched artifacts MUST fail closed
-  with an actionable error that names the missing contract and the exact path or
-  metadata mismatch. Do not catch the error and continue with substitute data.
-- If a compatibility or migration path is genuinely required, it MUST be an
-  explicit, named command or configuration selected by the caller, separately
-  validated by tests, and provenance-recorded in its outputs. An implicit
-  `if missing: use other file` branch is prohibited.
-- When multiple artifact variants are supported, selection MUST be explicit and
-  contract-validated; filesystem existence order MUST NEVER choose the result.
-- Every new fallback-like branch proposed for existing code requires a documented
-  justification and explicit user approval before implementation.
-
-## Deletion Safeguard
-
-- Agents MUST NOT perform any file or directory deletion operations (e.g. `rm`, `rmdir`, `shutil.rmtree`, etc. in commands or scripts) without explicit confirmation from the user in the current session.
-
-- Before performing any deletion, the agent must ask the user for confirmation and explain the target path and the reason.
+Preference, priority, first-available, filesystem-existence and glob/directory
+order are not selection policies. Do not use `next(...)`, `glob()[0]`, an
+unsuffixed alias or `if missing: use other file` to select competing artifacts.
+Any compatibility mode must be explicitly caller-selected, separately tested,
+validated and provenance-recorded. New fallback-like branches require a
+documented justification and explicit user approval before implementation.

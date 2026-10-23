@@ -245,12 +245,13 @@ def _artifact_receipt(path: Path) -> dict[str, object]:
         "size_bytes": path.stat().st_size,
     }
 
+@pytest.mark.parametrize('extra_cifti_declaration', [False, True])
 def test_run_raw_sampling_uses_manifest_declared_runs_and_receipts(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    extra_cifti_declaration: bool,
 ) -> None:
     bolds: dict[int, Path] = {}
-    dtseries: dict[int, Path] = {}
     for run_id, n_timepoints in ((2, 2), (7, 3)):
         bold = tmp_path / f"bold-source-{run_id}.nii.gz"
         nib.save(
@@ -260,13 +261,7 @@ def test_run_raw_sampling_uses_manifest_declared_runs_and_receipts(
             ),
             bold,
         )
-        dtseries_path = tmp_path / f"cifti-source-{run_id}.dtseries.nii"
-        _write_test_dtseries(
-            dtseries_path,
-            np.zeros((n_timepoints, 8), dtype=np.float32),
-        )
         bolds[run_id] = bold
-        dtseries[run_id] = dtseries_path
 
     manifest = tmp_path / "sub-1027_run_artifacts.json"
     manifest.write_text(
@@ -277,7 +272,8 @@ def test_run_raw_sampling_uses_manifest_declared_runs_and_receipts(
                     {
                         "run_id": run_id,
                         "bold": _artifact_receipt(bolds[run_id]),
-                        "dtseries": _artifact_receipt(dtseries[run_id]),
+                        **({'dtseries': {'path': str(tmp_path / 'absent.dtseries.nii')}}
+                           if extra_cifti_declaration else {}),
                     }
                     for run_id in (2, 7)
                 ],
@@ -332,10 +328,13 @@ def test_run_raw_sampling_uses_manifest_declared_runs_and_receipts(
     )
     summary = json.loads(summary_path.read_text(encoding="utf-8"))
     assert summary["run_ids"] == [2, 7]
-    assert summary["dtseries_inputs"] == [
-        str(dtseries[2].resolve()),
-        str(dtseries[7].resolve()),
+    assert summary["bold_inputs"] == [
+        str(bolds[2].resolve()),
+        str(bolds[7].resolve()),
     ]
+    stage = json.loads((summary_path.parent / 'stage_manifest.json').read_text())
+    assert {row['path'] for row in stage['inputs']} == {
+        str(manifest.resolve()), str(bolds[2].resolve()), str(bolds[7].resolve())}
 
 
 def test_run_raw_sampling_missing_manifest_leaves_no_raw_output(tmp_path: Path) -> None:

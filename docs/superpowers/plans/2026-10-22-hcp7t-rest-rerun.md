@@ -1,7 +1,7 @@
 # HCP7T Rest Rerun Implementation Plan
 
 **Goal:** Rebuild the authorized HCP7T functional products using the accepted
-motion, anatomy and functional-GM coverage rules, then cross-validate and match
+motion, anatomy and NIfTI sampling-coverage rules, then cross-validate and match
 held-out individuals to group-trained templates.
 
 **Inputs:** The complete structural-source roster is
@@ -15,7 +15,10 @@ T1w surfaces use the declared HCP native-to-BOLD registration.
 - The user authorized an independent ten-process allowance for this HCP run.
   Pin numerical-library threads to one and count coordinators and subprocesses.
 - Apply overall frame-weighted Power FD <=0.30 mm, bilateral Dice >=0.70 and
-  at most 20 zero-GM-support vertices per consumed 512-vertex hemisphere.
+  at most 20 unusable NIfTI-sampled vertices per consumed 512-vertex hemisphere.
+  A vertex requires positive image-grid support and a finite, nonconstant
+  sampled signal in every declared physical run; no CIFTI hippocampal label
+  is an additional anatomical requirement.
 - Calculate participation from the rules. Neither 151 nor the previously
   observed 148 is an expected-result requirement.
 - Preserve reference arrays, masks and ROI tables. Correct only reference JSON
@@ -32,9 +35,10 @@ T1w surfaces use the declared HCP native-to-BOLD registration.
 1. Commit the completed removal of individual-clustering code and instructions.
    Completed in `b715994`.
 2. Implement and test HCP7T QC without the historical HCP151-result restriction.
-3. Integrate common-run CIFTI hippocampal GM support into registered sampling and
-   the consumed vertex mask. Keep unsupported vertices excluded from smoothing
-   and FC. Use explicit physical-run metadata for concatenated sources.
+3. Integrate actual BOLD NIfTI grid support and runwise sampled-signal validity
+   into registered sampling and the consumed vertex mask. Keep unusable
+   vertices excluded from smoothing and FC. Use explicit physical-run metadata
+   for concatenated NIfTI sources; CIFTI remains a separate cortical input.
 4. Correct retained reference JSON metadata from existing evidence. Populate
    missing reference inputs only when their declared cortical labels exist;
    missing scientific inputs must stop the affected branch.
@@ -61,5 +65,5 @@ T1w surfaces use the declared HCP native-to-BOLD registration.
 ## Validation
 
 Use focused existing tests plus behavior tests for motion aggregation,
-common-run GM support, QC output ownership and explicit session-split roster
+NIfTI support and runwise signal validity, QC output ownership and explicit session-split roster
 selection. No new hashes, receipts or verification framework are required.

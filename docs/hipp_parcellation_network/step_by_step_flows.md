@@ -13,24 +13,14 @@ canonical roots directly; no migration utility is part of the active workflow.
 1. `01_01_run_hippunfold_t1w_local.py`
 2. `01_02_check_hippunfold_outputs.py`
 
-`01_02` first validates every file in the cached full HippUnfold output
-contract. A complete subject is then automatically trimmed by removing only
-`sub-<id>/hippunfold/sub-<id>/{anat,coords,warps,cifti}`. The checker writes
-`sub-<id>/hippunfold/core_workflow_cleanup_receipt.json`, bound to the SHA-256
-of that full contract. Later checks validate all retained outputs, so approved
-trimming is not reported as missing. Historical schema-1 `cleanup_complete`
-receipts with an older contract fingerprint are reconciled only when their
-approved directory list and removal evidence are complete, no pruned directory
-remains, and every current retained output is present. `surf/`, `metric/`, and
-`qc/` remain required because maintained downstream workflows consume the
-den-512 surfaces, subfield labels, and Dice TSVs. Use `--no-cleanup` only for
-a validation-only diagnostic run.
-If a dataset has complete outputs but no retained Snakemake log or local cache,
-`--contract-source-cache <validated-cache.json>` seeds its dataset-local cache
-before validation; the seed path and contract SHA-256 are recorded.
-For an existing multi-dataset batch cleanup, `--subjects-from-batch` enumerates
-only `sub-<id>/hippunfold/sub-<id>` payloads in the explicitly selected
-`--batch-root`; malformed placeholder directories are ignored.
+`01_01` uses the closed HippUnfold 2.2.0 T1w/512 preset and invokes `01_02`
+with `--fail-on-missing --no-cleanup`. Validation checks the full output
+contract and retains `anat/`, `coords/`, `warps/`, `cifti/`, `surf/`, `metric/`
+and `qc/`. Resume requires `output_check.json` to match the current run
+contract and all declared files to remain present; an older cleanup receipt
+does not establish completion. The runtime gate, resource patches, dataset
+presets and current batch command are maintained in
+[the hippo2 runtime manifest](../environment/hippo2_reproducibility_manifest.md).
 
 ## 2. Group Inputs and QC Cohort
 
@@ -38,7 +28,7 @@ only `sub-<id>/hippunfold/sub-<id>` payloads in the explicitly selected
 2. `02_02_build_qc_manifest.py`
 3. `02_03_build_lynch2024_nsi_manifest.py` for the Lynch2024 all-base-subject comparison cohort and NSI audit table
 
-`02_01` derives shared signals, tSNR summaries, and display templates from validated HippUnfold outputs. Native T1w vertices are registered to MNI152NLin6Asym before volume sampling; the mapped surfaces are saved in `surface/raw/sampling_surfaces/`. Metrics use `space-T1w` filenames and retain the original vertex numbering. The native T1w mesh defines 2/4-mm smoothing, physical cortical-neighbour distances and subject-level vertex areas; corobl group-average surfaces serve display and vertex correspondence. Dataset registration is selected by `--dataset`, with an optional explicit `--registration-root` Jianglab prefix. Existing corobl raw-cache summaries fail resume. `02_02` combines HippUnfold Dice and tSNR gate summaries into the selected cohort manifest; the quarantined HCP151 decisions must be recomputed from registered signals before downstream execution. `02_03` reads an NSI TSV/CSV containing `subject,nsi`, normalizes `sub-` prefixes, includes every subject from that base manifest, and writes `hcp_7t_lynch2024_pass_151.txt`, `hcp_7t_lynch2024_nsi_audit_151.tsv`, and the run manifest under `outputs_hcp/inputs/lynch2024/manifests/`. NSI is audit metadata only; there is no NSI threshold or expected-count gate.
+`02_01` derives shared NIfTI-sampled signals, vertex masks, and display templates from validated HippUnfold outputs. Native T1w vertices are registered to MNI152NLin6Asym before volume sampling; the mapped surfaces are saved in `surface/raw/sampling_surfaces/`. Metrics use `space-T1w` filenames and retain the original vertex numbering. The native T1w mesh defines 2/4-mm smoothing, physical cortical-neighbour distances and subject-level vertex areas; corobl group-average surfaces serve display and vertex correspondence. Dataset registration is selected by `--dataset`, with an optional explicit `--registration-root` Jianglab prefix. Existing corobl raw-cache summaries fail resume. `02_02` applies physical-run Power FD, bilateral HippUnfold Dice, and NIfTI coverage using current sampled signals and NIfTI support arrays. Coverage requires positive image-grid support and a finite, nonconstant sampled signal in every physical run; CIFTI hippocampal membership is not required. The measured roster has no fixed historical subject count. Rebuild raw coverage and masks before recomputing a roster under the NIfTI policy. `02_03` reads an NSI TSV/CSV containing `subject,nsi`, normalizes `sub-` prefixes, includes every subject from that base manifest, and writes `hcp_7t_lynch2024_pass_151.txt`, `hcp_7t_lynch2024_nsi_audit_151.tsv`, and the run manifest under `outputs_hcp/inputs/lynch2024/manifests/`. NSI is audit metadata only; there is no NSI threshold or expected-count gate.
 
 `04_00` and `04_01 --ctxdrop` take `--cortex-coordinate-space`. The default
 `MNI152NLin6Asym` denotes the HCP MSMAll cortical surfaces; their coordinates
@@ -55,7 +45,7 @@ not itself specify the physical coordinate frame.
 
 - `03_01_build_kong2022_reference.py` for shared Kong2022 branch usage
 - RouteA ArealMSHBM individualized cortex label generation on Argon; this is an external-backend artifact prerequisite documented in `core_workflow_artifact_lineage.md`, not a local numbered entrypoint
-- `03_02_build_kong2022_routea_reference.py --dataset hcp` for RouteA-specific reference source, including compact 17-net summaries used by `kong2022_routea_17net`, consuming the generated RouteA label files above
+- `03_02_build_kong2022_routea_reference.py --dataset hcp` for individualized PFM references, including compact 17-net summaries used by `kong2022_pfm_17net`, consuming the generated PFM label files above
 - `03_04_run_lynch2024_fastans_pfm.py` for official FASTANS Lynch2024 hard-label PFM generation from local FASTANS priors and Workbench
 - `03_03_build_lynch2024_reference.py` for hard-label Lynch2024 component references, exact Lynch20 summaries containing 20 unique networks after excluding `Noise`, and canonical7 merged summaries from `config/cross_atlas_network_merge.json`
 
@@ -137,13 +127,6 @@ For Kong2022 cluster-based ROI-registry runs, `fisherz` and `normalized_top20_co
 /home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/06_01_build_group_overview.py --group-root outputs_hcp/work/group_atlas/lynch2024_20net --present-dir outputs_hcp/present/overviews/lynch2024_20net --route-tag lynch2024_20net --atlases lynch2024_20net --assignment-variant both
 /home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/06_01_build_group_overview.py --group-root outputs_hcp/work/group_atlas/lynch2024_7net --present-dir outputs_hcp/present/overviews/lynch2024_7net --route-tag lynch2024_7net --atlases lynch2024_7net --assignment-variant both
 ```
-
-## Formal Gradient-Spectral Release
-
-The former formal-release audit and refresh helpers were retired from this
-checkout. Do not invoke or restore deleted maintenance paths. Validate current
-products from the active numbered workflow, generated group manifests, and the
-multi-dataset suite readiness check.
 
 ## 6. Presentation Products
 

@@ -1,91 +1,45 @@
-# Scripts Layout
+# Scripts
 
-This directory is organized by layer.
+Run commands from the repository root with the runtime for the selected system.
+Use `/home/yojiao/.conda/envs/py314/bin/python` for local Python tasks;
+Argon launchers use their documented cluster runtime. See the
+[agent runtime contract](../docs/environment/agent_runtime_contract.md).
 
-- `core_workflow/`: protected canonical multi-dataset workflow (`NN_MM_<semantic_name>.py`) and shared implementation modules (`core_workflow/lib/`); its root must contain numbered steps only
-- `hipp_parcellation_network/`: legacy/auxiliary hippocampal scripts (active core entrypoints are archived)
-- `cortex/`: legacy/auxiliary cortex scripts (active core entrypoints are archived)
-- `common/`: shared numerical helpers
-- `workbench/`: rendering and figure assembly helpers
-- `individual_workflow/`: protected numbered mature multi-dataset individual
-  workflows. HCP uses family-aware five-fold crossfit; non-HCP datasets use
-  the immutable HCP151 template for direct matching. Dataset-specific adapters
-  belong under `scripts/<dataset>/` (JJ_TMS: `scripts/jj_tms/`).
-- `maintenance/`: formal audit, migration, promotion, and launch utilities;
-  these are not numbered workflow steps
-- `jj_tms/`: JJ_TMS-specific HippUnfold, HCP151 matching, overview, and target
-  mapping utilities; this is not a multi-dataset workflow surface
-- `exploratory_beta/`: non-numbered Stanford and JJ_TMS Native-space beta
-  extraction, models, and figures; these remain exploratory and are not formal
-  workflow steps
+## Entry points
 
-The active group workflow should be launched from `scripts/core_workflow/` and
-resolved within `scripts/core_workflow/lib/`. Do not add unnumbered dataset or
-maintenance entrypoints to `core_workflow/` or `individual_workflow/`.
-Active numbered core steps must stay self-contained in that tree and must not call legacy helper code
-from `common/`, `workbench/`, or the repo `wb_command` wrapper at runtime.
+| Directory | Purpose | Guide |
+|---|---|---|
+| `core_workflow/` | Multi-dataset anatomy, registered BOLD sampling, QC, cortical references, FC, gradients and group atlases | [Core workflow](core_workflow/README.md) |
+| `individual_workflow/` | HCP cross-fit matching and reusable fixed-template construction | [Individual workflows](individual_workflow/README.md) |
+| `ArealMSHBM_Kong2022/` | Dataset adapters and Argon SGE/MATLAB cortex parcellation | [ArealMSHBM](ArealMSHBM_Kong2022/README.md) |
+| `jj_tms/` | JJ_TMS preparation, direct template matching and target mapping | [JJ_TMS](jj_tms/README.md) |
+| `iowa7t/` | Iowa7T acquisition/run adapters, template exports and rendering | [Iowa7T](iowa7t/README.md) |
+| `nih_rtms/` | Argon fMRIPrep and XCP-D preprocessing | [NIH rTMS](nih_rtms/README.md) |
+| `visualize/` | Multi-dataset figure suites and specialized renderers | [Visualization](visualize/README.md) |
+| `exploratory_beta/` | Exploratory Stanford/JJ_TMS native-space beta extraction, models and figures | [Native beta analysis](exploratory_beta/README.md) |
 
-## Pipeline Stage Layers
+The numbered roots `core_workflow/` and `individual_workflow/` contain public
+`NN_MM_<semantic_name>` entrypoints; shared implementation belongs in their
+`lib/` directories. Dataset-specific adapters belong in `scripts/<dataset>/`.
+Keep unnumbered launch, audit and migration helpers out of the numbered roots.
+Core steps execute through their maintained implementation tree.
 
-The numbered `NN_MM` prefix reflects pipeline order, but scripts fall into two distinct layers:
+## Workflow selection
 
-| Layer | Steps | Role |
-|-------|-------|------|
-| **Core computation** | 01_xx – 05_xx | HippUnfold, surface sampling, tSNR/QC, cortex reference, FC materialization, gradients, group clustering — these produce the parcellation outputs and are required for every dataset. |
-| **Presentation / rendering** | 06_xx, 07_xx | Group overview figures, matrix summaries — these read finished group-atlas intermediates and produce PNG visualizations. They are **not** core computation; they are post-hoc viewers that can be re-run independently against any valid group-atlas root. |
+Group processing follows anatomy (`01`), shared inputs/QC (`02`), cortical
+references (`03`), FC or task activation (`04`), group analysis (`05`), then
+presentation (`06`/`07`). Rendering can reuse valid saved group intermediates.
+Select the dataset, physical-run metadata, preprocessing variant, analysis
+roster and output roots explicitly; the core guide describes which stages and
+QC contracts are implemented for each branch.
 
-## Typical Usage (non-HCP datasets)
+HCP individual labels use family-aware five-fold crossfit with an external
+`subject,family_id` map. Non-HCP datasets use the declared immutable HCP151
+fixed template through dataset adapters. Details are in the individual guide.
+Native-space beta work remains exploratory; its entrypoint is
+`scripts/exploratory_beta/run_native_surface_beta.py`.
 
-For a new dataset (Stanford, Iowa, …) that differs from the HCP file layout,
-use path-template arguments instead of broad symlink trees:
-
-```bash
-PY314=/home/yojiao/.conda/envs/py314/bin/python
-
-# Core computation:
-01_01_run_hippunfold_t1w_local.py  <subject> --dataset <hcp|stanford|iowa_jj_tms> [--dry-run]
-02_01_prepare_group_inputs.py      --bold-template "{bold_root}/{sub_subject}/func/…"
-                                    --hippunfold-batch-root …
-                                    --jobs 2
-03_01_build_kong2022_reference.py  --dtseries-template "{data_root}/{sub_subject}/func/…"
-04_01_materialize_kong2022_roi_fc.py  --dataset <dataset> --dtseries-template … --left-cortex-surface-template …
-05_01_compute_hippomaps_gradients.py  --routes … --shared-inputs-root … --surface-root …
-05_02_run_group_atlas.py           --shared-root … --gradient-root … --atlases kong2022
-
-# Presentation (optional, re-runnable):
-06_01_build_group_overview.py      --group-root … --atlases kong2022 --methods …
-06_10_render_cluster_roi_strength_panels.py --group-root ... --route-tag pfm
-06_10_render_cluster_roi_strength_panels.py --method wta-top --wta-root outputs_hcp/work/group_atlas/pfm
-07_01_build_group_matrix.py        --group-atlas-root … --routes … --methods …
-```
-
-Path-template helper: `scripts/core_workflow/lib/path_templates.py`.
-Supported variables: `{data_root}`, `{bold_root}`, `{subject}`, `{sub_subject}`, `{hemi}`, `{hemi_lower}`.
-
-Traceability contract for `core_workflow` entrypoints:
-
-- supports `--workflow-branch` with `kong2019`, `kong2022_routea`, `kong2022_routea_17net`, `kong2022_routea_ctxreg`, `kong2022_routea_ctxdrop`, `kong2022_routeb`
-- supports repeatable `--upstream-step-id`, `--input-artifact`, `--output-artifact`
-- supports `--step-manifest-out` emitting standardized JSON containing:
-  - `step_id`
-  - `workflow_branch`
-  - `upstream_step_ids`
-  - explicit input/output artifacts
-  - command and git commit
-
-Step inventory is in `scripts/core_workflow/step_registry.json`.
-Legacy or retired surfaces are preserved under `_archive/`.
-
-Interpreter contract:
-
-- Use explicit Python path for repo tasks: `/home/yojiao/.conda/envs/py314/bin/python`
-- Do not run core workflow checks with bare `python`
-- Full runbook: `docs/environment/agent_runtime_contract.md`
-
-The HCP cross-fitted template-matching workflow deliberately uses full concat
-FC rather than run-level splits. Its production family map is an external
-`subject,family_id` input, and its labels/templates are isolated under
-`outputs_hcp/work/crossfit_template_matching/`. Other datasets consume the
-immutable HCP151 template through their own direct-matching adapters. Usage
-and review outputs are documented in
-`docs/hipp_parcellation_network/crossfit_template_matching.md`.
+Use the [core registry](core_workflow/step_registry.json) for group-step and
+branch identities, the [artifact lineage](../docs/hipp_parcellation_network/core_workflow_artifact_lineage.md)
+for required upstream products, and [output layout](../docs/hipp_parcellation_network/output_layout.md)
+for formal result and execution-record roots.

@@ -160,8 +160,8 @@ def run_t1w_local(argv: list[str] | None = None) -> int:
     parser.add_argument("subject", nargs="?", help="Subject ID without the sub- prefix.")
     parser.add_argument("--manifest", type=Path, help="Subject list for batch execution.")
     parser.add_argument(
-        "--jobs", type=int, default=1,
-        help="Concurrent subjects (HCP max 8; others max 2; BANDA max 1).",
+        "--jobs", type=int, default=None,
+        help="Manifest concurrency (default: HCP 8, others 1; HCP max 12, others max 2, BANDA max 1).",
     )
     parser.add_argument(
         "--dataset",
@@ -177,7 +177,7 @@ def run_t1w_local(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if (args.subject is None) == (args.manifest is None):
         parser.error("Provide exactly one subject or --manifest.")
-    if args.manifest is None and args.jobs != 1:
+    if args.manifest is None and args.jobs not in (None, 1):
         parser.error("--jobs applies to --manifest mode only.")
 
     if args.manifest is not None:
@@ -199,7 +199,10 @@ def run_t1w_local(argv: list[str] | None = None) -> int:
         ))
         return 0
     if args.manifest is not None:
-        _run_batch(contracts, args.jobs)
+        jobs = args.jobs
+        if jobs is None:
+            jobs = 8 if args.dataset == "hcp" else 1
+        _run_batch(contracts, jobs)
         return 0
 
     contract = contracts[0]

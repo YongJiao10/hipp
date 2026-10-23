@@ -219,7 +219,7 @@ The group-differences renderer can render directly from existing exports (defaul
 
 ```bash
 # 1. Generate subfield composition panoramas for all four grids (standalone CLI removed):
-/home/yojiao/.conda/envs/py314/bin/python scripts/visualize/run_multidataset_suite.py --grid all --figures subfield_composition_2col
+/home/yojiao/.conda/envs/py314/bin/python scripts/visualize/run_multidataset_suite.py --figures subfield_composition_2col
 
 # 1b. Branch-pair mode (2mm/36p standard + ctxreg, branch-qualified names):
 /home/yojiao/.conda/envs/py314/bin/python scripts/visualize/run_multidataset_suite.py --version hcp_jjtms_7net --figures subfield_composition_2col --signal-branch all

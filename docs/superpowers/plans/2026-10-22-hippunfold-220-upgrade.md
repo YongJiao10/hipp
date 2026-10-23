@@ -17,7 +17,7 @@ The user confirmed continuing the complete structural batch after reviewing the 
 - [x] Upgrade the launch contract, non-deleting output checks and bounded batch dispatch; synchronize environment and usage documentation.
 - [x] Run focused behavior tests, real cached-resource DAG checks, and a GPU structural run of subject 102311 with geometry/QC inspection.
 - [x] Discuss actual changes and test evidence with pi/argon until all blocking findings are resolved.
-- [ ] Launch and monitor the complete HCP7T structural cohort, reporting execution completion separately from structural quality.
+- [x] Complete the 166-person HCP7T structural cohort and report execution completion separately from structural quality; finish the bilateral native-unfold correspondence assessment.
 
 ## Scientific and runtime requirements
 
@@ -39,4 +39,4 @@ A full scan of this test's native-to-atlas mapping finds 14 right atlas targets 
 
 The requested pi reviewer used `google-vertex/gemini-4-argon`, read 32 source/test/document files, found no blocking implementation issues and agreed to the structural-only launch. A follow-up discussion confirmed the difference between the 14 final-map conflict targets and the 12 raw pre-uniformization targets. The review and agreement are in `tmp/hippunfold_220_upgrade/pi_argon_review.log` and `pi_argon_agreement.log`.
 
-The full-roster coordinator launched on IDAS at 2026-10-23 02:55 UTC, PID 1562766, with two concurrent subjects and one GPU inference slot. Its log is `outputs_hcp/inputs/hippunfold/dense_corobl_batch/_batch_logs/hippunfold_220_structural_20261023T025501Z.log`. At the first 20-minute inspection (03:15 UTC), 102311 was skipped as complete and 100610/102816 were both active; the coordinator log reported no failure. GPU utilization was zero at that instant, so this observation does not establish that inference had run yet. Cohort execution and structural QC remain in progress; functional downstream processing has not started. No commits were made.
+The complete 166-person structural cohort has finished on IDAS. Every subject has complete retained outputs and a 2.2.0 run contract; the final subject completion is recorded in `outputs_hcp/inputs/hippunfold/dense_corobl_batch/_batch_logs/hippunfold_220_hcp12_20261023T064733Z.log`. Current motion QC passes 156/166, and adding bilateral Dice >=0.70 leaves 155. The complete bilateral native-unfold assessment checks 332 hemispheres and finds conflicts in 11 subjects, all on the right, involving 98 atlas targets; all 11 pass the first two participant-QC criteria. Maximum candidate physical separation is 13.582873 mm. Full results and runnable analysis are in `tmp/hcp7t_native_mapping_qc_20261023/`. Formal surfaces, subject output checks and analysis rosters remain unchanged; no scientific repair, automatic exclusion or functional-coverage completion is implied. Functional use of affected mappings still requires a validated resolution. No commits were made.

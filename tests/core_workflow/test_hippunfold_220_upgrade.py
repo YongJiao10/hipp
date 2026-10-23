@@ -78,15 +78,15 @@ def test_an_old_cleanup_marker_does_not_skip_the_upgrade(launcher, tmp_path):
     assert launcher._is_completed(contract) is False
 
 
-def test_hcp_batch_rejects_a_budget_above_eight_subjects(launcher, monkeypatch):
+def test_hcp_batch_rejects_a_budget_above_twelve_subjects(launcher, monkeypatch):
     monkeypatch.setattr(launcher, '_is_completed', lambda contract: False)
     monkeypatch.setattr(launcher, 'detect_system_name', lambda: 'idas')
     monkeypatch.setattr(launcher, 'prepare_runtime_directories', lambda env: None)
     def unexpected_gate(env):
         raise AssertionError('Oversized batch reached runtime validation')
     monkeypatch.setattr(launcher, 'validate_local_assets', unexpected_gate)
-    with pytest.raises(ValueError, match='between 1 and 8'):
-        launcher._run_batch([contract_module.resolve_run_contract('hcp', '102311')], jobs=9)
+    with pytest.raises(ValueError, match='between 1 and 12'):
+        launcher._run_batch([contract_module.resolve_run_contract('hcp', '102311')], jobs=13)
 
 
 def checked_subject(tmp_path, outputs):

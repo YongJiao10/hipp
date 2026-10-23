@@ -327,7 +327,7 @@ def test_batch_runs_two_subjects_and_checks_outputs_on_the_coordinator(
     assert check_threads == [coordinator] * len(contracts)
 
 
-def test_hcp_accepts_the_eight_subject_profile(stage01, monkeypatch):
+def test_hcp_accepts_the_twelve_subject_profile(stage01, monkeypatch):
     executed = []
     checked = []
     monkeypatch.setattr(stage01, "_is_completed", lambda contract: False)
@@ -344,7 +344,7 @@ def test_hcp_accepts_the_eight_subject_profile(stage01, monkeypatch):
 
     monkeypatch.setattr(stage01, "_start_subject", start)
     monkeypatch.setattr(stage01, "_check_subject", lambda contract: checked.append(contract.subject))
-    stage01._run_batch([resolve_run_contract("hcp", "1001")], jobs=8)
+    stage01._run_batch([resolve_run_contract("hcp", "1001")], jobs=12)
     assert executed == checked == ["1001"]
 
 

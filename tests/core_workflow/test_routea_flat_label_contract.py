@@ -227,7 +227,6 @@ def test_estt_23p_launcher_isolated_from_22p_and_36p(tmp_path: Path) -> None:
         "ESTT_VARIANT=22p|23p|36p",
         "DataOrg_PFM_23P",
         "ESTT_VARIANT=23p",
-        "estt_kong2022_23p_full_20260908",
     ]:
         assert token in combined, f"ESTT 23P isolation missing {token}"
 

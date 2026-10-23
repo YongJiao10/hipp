@@ -47,17 +47,17 @@ def workflow(tmp_path, monkeypatch):
     motion_manifest.write_text('subject\trun_label\tfilename\tlss_path\n'
                               f'01\trfMRI_REST1_7T_PA\tMovement_Regressors.txt\t{motion}\n')
 
-    def gm_weights(weights):
+    def nifti_support(weights):
         raw_dir = shared / f'sub-{subject}/surface/raw'
         records = {}
         for hemi in ('L', 'R'):
-            path = raw_dir / f'sub-{subject}_hemi-{hemi}_gm_weight.npy'
+            path = raw_dir / f'sub-{subject}_hemi-{hemi}_nifti_support.npy'
             np.save(path, np.asarray(weights, dtype=np.float32))
-            records[hemi] = {'gm_weight_path': str(path), 'n_vertices_total': 512,
+            records[hemi] = {'nifti_support_path': str(path), 'n_vertices_total': 512,
                              'n_vertices_unsupported': int(np.count_nonzero(np.asarray(weights) == 0))}
         (raw_dir / 'surface_sampling_summary.json').write_text(json.dumps({'run_ids': [1], 'run_lengths': [12]}))
         (raw_dir / f'sub-{subject}_coverage_summary.json').write_text(json.dumps({
-            'subject': f'sub-{subject}', 'coverage_policy': 'cifti_hippocampal_common_run_gm_trilinear',
+            'subject': f'sub-{subject}', 'coverage_policy': 'bold_nifti_runwise_trilinear_validity',
             'sampling_space': 'MNI152NLin6Asym', 'run_ids': [1], 'run_lengths': [12],
             'run_labels': ['rfMRI_REST1_7T_PA'], 'hemispheres': records,
             'density_evidence': {'density': '512', 'n_vertices': {'L': 512, 'R': 512}},
@@ -69,7 +69,7 @@ def workflow(tmp_path, monkeypatch):
             path = shared/f'sub-{subject}/surface/raw/sub-{subject}_hemi-{hemi}_space-T1w_den-512_label-hipp_bold.func.gii'
             path.parent.mkdir(parents=True, exist_ok=True)
             nib.save(PREP.make_func_gifti(data), path)
-        gm_weights(np.ones(512))
+        nifti_support(np.ones(512))
         return data
 
     def gate(threshold='none'):
@@ -94,7 +94,7 @@ def workflow(tmp_path, monkeypatch):
                 np.load(directory/f'sub-{subject}_hemi-L_valid_mask.npy'))
 
     return SimpleNamespace(batch=batch, shared=shared, route=route, subject=subject,
-                           raw=raw, gate=gate, run=run, state=state, gm_weights=gm_weights)
+                           raw=raw, gate=gate, run=run, state=state, nifti_support=nifti_support)
 
 
 def test_hcp_rejects_numeric_threshold_and_reuses_matching_validity_only_gate(workflow, capsys):
@@ -121,12 +121,12 @@ def test_replacing_raw_signal_recomputes_gate_with_unchanged_threshold(workflow)
     assert workflow.state()[1].sum() == 0
 
 
-def test_replacing_gm_support_recomputes_a_resumed_vertex_mask(workflow):
+def test_replacing_nifti_support_recomputes_a_resumed_vertex_mask(workflow):
     workflow.raw(np.full(512, 100))
     workflow.gate()
     weights = np.ones(512)
     weights[0] = 0
-    workflow.gm_weights(weights)
+    workflow.nifti_support(weights)
     workflow.run('tsnr')
     assert workflow.state()[1][:2].tolist() == [False, True]
 
@@ -140,16 +140,16 @@ def test_hcp_mask_rejects_a_consumed_series_with_stale_run_lengths(workflow):
         workflow.gate()
 
 
-def test_explicit_qc_stage_rebuilds_existing_roster_after_gm_coverage_changes(workflow):
+def test_explicit_qc_stage_rebuilds_existing_roster_after_nifti_coverage_changes(workflow):
     workflow.raw(np.full(512, 1000))
-    workflow.gm_weights(np.zeros(512))
+    workflow.nifti_support(np.zeros(512))
     workflow.gate()
     # Empty pass lists retain the existing explicit-stop behavior.
     with pytest.raises(RuntimeError, match='No subjects'):
         workflow.run('qc')
     roster = workflow.route/'manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt'
     assert roster.read_text().strip() == ''
-    workflow.gm_weights(np.ones(512))
+    workflow.nifti_support(np.ones(512))
     workflow.gate()
     workflow.run('qc')
     assert roster.read_text().split() == ['01']
@@ -161,14 +161,14 @@ def test_stage_separated_smoothing_updates_when_gate_roi_changes(workflow, capsy
     workflow.raw(amplitude)
     weights = np.ones(512)
     weights[0] = 0
-    workflow.gm_weights(weights)
+    workflow.nifti_support(weights)
     workflow.gate()
     workflow.run('qc')
     workflow.run('smooth')
     signal = workflow.shared/'sub-01/surface/2mm/sub-01_hemi-L_timeseries.npy'
     before = np.load(signal)
     np.testing.assert_allclose(before[0], 0)
-    workflow.gm_weights(np.ones(512))
+    workflow.nifti_support(np.ones(512))
     workflow.gate()
     workflow.run('qc')
     workflow.run('smooth')

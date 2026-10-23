@@ -12,16 +12,16 @@ import nibabel as nib
 import numpy as np
 
 from lib.hipp_density_assets import find_surface_asset_strict, subject_surf_dir
-from lib.io_utils import _cifti_axes_equal
+from lib.task_quality import task_signal_validity
 from lib.surface_coordinates import (METRIC_SPACE, REPO_ROOT, SurfaceRegistration,
                                      registered_sampling_surfaces)
 from lib.workbench import run_workbench
 
 
-FUNCTIONAL_GM_POLICY = "cifti_hippocampal_common_run_gm_trilinear"
+NIFTI_COVERAGE_POLICY = "bold_nifti_runwise_trilinear_validity"
 
 
-def _trilinear_mask_weights(mask: np.ndarray, affine: np.ndarray, points: np.ndarray) -> np.ndarray:
+def _trilinear_grid_support(shape: Sequence[int], affine: np.ndarray, points: np.ndarray) -> np.ndarray:
     voxel = nib.affines.apply_affine(np.linalg.inv(affine), points)
     if not np.isfinite(voxel).all():
         raise ValueError("Registered sampling vertices contain nonfinite coordinates")
@@ -33,78 +33,79 @@ def _trilinear_mask_weights(mask: np.ndarray, affine: np.ndarray, points: np.nda
             for z in (0, 1):
                 offset = np.asarray([x, y, z])
                 corner = lower + offset
-                inside = np.all((corner >= 0) & (corner < np.asarray(mask.shape)), axis=1)
+                inside = np.all((corner >= 0) & (corner < np.asarray(shape)), axis=1)
                 contribution = np.prod(np.where(offset, fraction, 1 - fraction), axis=1)
-                weights[inside] += contribution[inside] * mask[tuple(corner[inside].T)]
+                weights[inside] += contribution[inside]
     return weights.astype(np.float32)
 
 
-def sample_hippocampal_gm_support(
-    *, dtseries_inputs: Sequence[Path], run_ids: Sequence[int],
+def sample_hippocampal_nifti_support(
+    *, bold_inputs: Sequence[Path], run_ids: Sequence[int],
     run_lengths: Sequence[int], sampling_surfaces: dict[str, Path],
 ) -> tuple[dict[str, np.ndarray], dict[str, dict[str, object]]]:
-    """Project common physical-run CIFTI hippocampal GM onto registered meshes.
+    """Measure trilinear image-grid support from the exact consumed BOLD NIfTIs.
 
-    Inputs are either one explicitly selected concatenated CIFTI partitioned by
-    declared physical-run lengths, or one CIFTI per declared physical run.
-    Only the hippocampal columns are read; no concatenated image is written.
+    This is geometric support, not a tissue label. Actual sampled signals are
+    assessed separately within each physical run by hippocampal_vertex_validity.
+    Only image headers and the registered vertices are read here.
     """
-    paths = [Path(path) for path in dtseries_inputs]
+    paths = [Path(path) for path in bold_inputs]
     ids, lengths = list(run_ids), list(run_lengths)
     if (not paths or not ids or len(ids) != len(lengths)
             or ids != sorted(set(ids))
             or any(not isinstance(n, (int, np.integer)) or isinstance(n, bool) or n < 2 for n in lengths)
             or len(paths) not in (1, len(ids))):
-        raise ValueError(f"CIFTI inputs require explicit physical run IDs and lengths: ids={ids}, lengths={lengths}, paths={paths}")
-    common: dict[str, np.ndarray] = {}
-    per_run: dict[str, list[int]] = {hemi: [] for hemi in ("L", "R")}
-    structures: dict[str, tuple[slice, np.ndarray]] = {}
-    reference_axis = None
+        raise ValueError(f"NIfTI inputs require explicit physical run IDs and lengths: ids={ids}, lengths={lengths}, paths={paths}")
+    points = {hemi: np.asarray(nib.load(sampling_surfaces[hemi]).agg_data("pointset"), dtype=np.float64)
+              for hemi in ("L", "R")}
+    weights = {hemi: np.ones(len(points[hemi]), dtype=np.float32) for hemi in ("L", "R")}
+    per_input: dict[str, list[int]] = {hemi: [] for hemi in ("L", "R")}
     for index, path in enumerate(paths):
         image = nib.load(path)
-        if not isinstance(image, nib.Cifti2Image) or len(image.shape) != 2:
-            raise ValueError(f"Expected a CIFTI dtseries with hippocampal BrainModels: {path}")
+        if not isinstance(image, (nib.Nifti1Image, nib.Nifti2Image)) or len(image.shape) != 4:
+            raise ValueError(f"Expected a 4D BOLD NIfTI: {path}")
         blocks = lengths if len(paths) == 1 else [lengths[index]]
-        if sum(blocks) != image.shape[0]:
-            raise ValueError(f"Physical run timepoints do not cover CIFTI frames at {path}: lengths={blocks}, frames={image.shape[0]}")
-        axis = image.header.get_axis(1)
-        if not isinstance(axis, nib.cifti2.BrainModelAxis) or axis.volume_shape is None or axis.affine is None:
-            raise ValueError(f"Missing hippocampal voxel BrainModel grid at {path}")
-        if reference_axis is None:
-            reference_axis = axis
-            for hemi, name in (("L", "CIFTI_STRUCTURE_HIPPOCAMPUS_LEFT"), ("R", "CIFTI_STRUCTURE_HIPPOCAMPUS_RIGHT")):
-                matches = [(selection, model) for structure, selection, model in axis.iter_structures() if structure == name]
-                if len(matches) != 1 or not np.all(matches[0][1].volume_mask):
-                    raise ValueError(f"Expected one voxel {name} BrainModel at {path}")
-                selection, model = matches[0]
-                structures[hemi] = (selection, model.voxel)
-                common[hemi] = np.ones(len(model), dtype=bool)
-        elif not _cifti_axes_equal(reference_axis, axis):
-            raise ValueError(f"BrainModelAxis mismatch between CIFTI GM inputs: {paths[0]} vs {path}")
-        for hemi, (selection, _) in structures.items():
-            values = np.asarray(image.dataobj[:, selection], dtype=np.float32)
-            start = 0
-            for length in blocks:
-                block = values[start:start + length]
-                finite = np.isfinite(block).all(axis=0)
-                valid = np.zeros(values.shape[1], dtype=bool)
-                valid[finite] = np.max(block[:, finite], axis=0) > np.min(block[:, finite], axis=0)
-                common[hemi] &= valid
-                per_run[hemi].append(int(valid.sum()))
-                start += length
-    weights: dict[str, np.ndarray] = {}
+        if sum(blocks) != image.shape[3]:
+            raise ValueError(f"Physical run timepoints do not cover NIfTI frames at {path}: lengths={blocks}, frames={image.shape[3]}")
+        for hemi in ("L", "R"):
+            support = _trilinear_grid_support(image.shape[:3], image.affine, points[hemi])
+            weights[hemi] = np.minimum(weights[hemi], support)
+            per_input[hemi].append(int(np.count_nonzero(support > 0)))
     summaries: dict[str, dict[str, object]] = {}
-    for hemi, (_, voxels) in structures.items():
-        mask = np.zeros(reference_axis.volume_shape, dtype=np.float32)
-        mask[tuple(voxels[common[hemi]].T)] = 1
-        points = np.asarray(nib.load(sampling_surfaces[hemi]).agg_data("pointset"), dtype=np.float64)
-        weights[hemi] = _trilinear_mask_weights(mask, reference_axis.affine, points)
+    for hemi in ("L", "R"):
         summaries[hemi] = {
-            "n_source_voxels": int(len(voxels)),
-            "n_valid_source_voxels_per_run": per_run[hemi],
-            "n_common_source_voxels": int(common[hemi].sum()),
+            "n_vertices_with_grid_support_per_input": per_input[hemi],
+            "n_vertices_without_grid_support": int(np.count_nonzero(weights[hemi] == 0)),
+            "n_vertices_with_partial_grid_support": int(np.count_nonzero((weights[hemi] > 0) & (weights[hemi] < 1))),
         }
     return weights, summaries
+
+
+def hippocampal_vertex_validity(data: np.ndarray, run_lengths: Sequence[int], support: np.ndarray) -> np.ndarray:
+    """Use the same NIfTI support and per-run sampled-signal rule in all consumers."""
+    values = np.asarray(data)
+    weight = np.asarray(support)
+    if (values.ndim != 2 or weight.shape != (values.shape[0],)
+            or not np.isfinite(weight).all() or np.any((weight < 0) | (weight > 1))):
+        raise ValueError(f"Invalid NIfTI coverage support: support={weight.shape}, signal={values.shape}")
+    return (weight > 0) & task_signal_validity(values, run_lengths)
+
+
+def load_nifti_support(raw_dir: Path, subject: str, hemi: str, coverage: dict) -> tuple[np.ndarray, Path]:
+    path = raw_dir / f"sub-{subject}_hemi-{hemi}_nifti_support.npy"
+    declared = coverage['hemispheres'][hemi].get('nifti_support_path')
+    if not isinstance(declared, str) or Path(declared).resolve() != path.resolve():
+        raise ValueError(f"Coverage NIfTI support declaration mismatch for sub-{subject} hemi-{hemi}: {declared}; expected {path}")
+    return np.load(path), path
+
+
+def load_hippocampal_coverage_validity(raw_dir: Path, subject: str, hemi: str, coverage: dict) -> tuple[np.ndarray, list[Path]]:
+    support, support_path = load_nifti_support(raw_dir, subject, hemi, coverage)
+    signal_path = raw_dir / f"sub-{subject}_hemi-{hemi}_space-T1w_den-512_label-hipp_bold.func.gii"
+    data = _load_metric_gifti(signal_path,
+        n_vertices=coverage['hemispheres'][hemi]['n_vertices_total'],
+        expected_timepoints=sum(coverage['run_lengths']))
+    return hippocampal_vertex_validity(data, coverage['run_lengths'], support), [signal_path, support_path]
 
 
 def _load_metric_gifti(path: Path, *, n_vertices: int, expected_timepoints: int) -> np.ndarray:

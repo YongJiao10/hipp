@@ -2,21 +2,28 @@
 
 ## Accepted policy and implementation status
 
-The user approved this policy on 20 October 2026 for HCP7T rest, HCP3T
-EMOTION/WM, Stanford 36P, BANDA and PDC. This is the current QC decision.
+The current policy uses individual T1w/HippUnfold anatomy and the actually
+sampled BOLD NIfTI for hippocampal localization and functional coverage. A
+CIFTI hippocampal BrainModel is not an additional anatomical inclusion mask.
+Scope is HCP7T rest, HCP3T EMOTION/WM, Stanford 36P, BANDA and PDC.
 The HCP7T roster entry point, `02_02_build_qc_manifest.py`, now applies all
 three criteria in order. It reads exact physical-run `Movement_Regressors.txt`
-paths from `--motion-manifest` and each subject's declared
-`surface/raw/sub-<subject>_coverage_summary.json`. It validates coverage run IDs,
-labels and lengths against the motion frames, and checks recorded actual den-512
-vertex counts. Missing inputs receive `unassessable` status; malformed or
-mismatched declarations stop the operation before reports are written.
+paths from `--motion-manifest` and each subject's
+`surface/raw/sub-<subject>_coverage_summary.json`. It validates the NIfTI
+coverage policy, physical run IDs, labels and lengths against the motion
+frames, and actual den-512 vertex counts. It calculates unusable-vertex counts
+from the exact `*_nifti_support.npy` arrays and consumed raw GIFTI signals,
+using the same runwise validity calculation as the downstream vertex mask.
+Missing inputs receive `unassessable` status; malformed or mismatched
+declarations stop the operation before reports are written.
 
 The passing roster is derived from current inputs, without a fixed subject
 count or historical ID requirement. Established report filenames containing
 `tsnr` remain an output interface, but no tSNR numerical gate is applied.
-This roster implementation does not establish that all production sampling,
-mask consumers, or other dataset entry points have been updated or rerun.
+HCP7T rest raw sampling, vertex masking, participant QC and smoothing consume
+the NIfTI coverage contract. This source change does not establish that
+production outputs have been rebuilt or that other dataset entry points have
+been implemented.
 Group-input `qc` and `all` stages for other datasets or tasks stop before writing
 until their production QC input contracts are implemented.
 The research counts below are not new formal rosters; the historical HCP151
@@ -29,8 +36,10 @@ Apply these criteria in order, stopping at the first failure:
 1. **Motion:** overall mean Power FD <=0.30 mm. Perform this step before
    HippUnfold when processing new inputs.
 2. **Anatomy:** HippUnfold Dice >=0.70 in both hemispheres.
-3. **Hippocampal coverage:** at most 20 vertices without functional-GM support
-   in each consumed den-512 hippocampal hemisphere (20/512 = 3.90625%).
+3. **Hippocampal coverage:** at most 20 unusable vertices in each consumed
+   den-512 hippocampal hemisphere (20/512 = 3.90625%). A vertex is unusable
+   when it has no trilinear NIfTI image-grid support, or its sampled signal is
+   nonfinite or constant in any included physical run.
 
 Use one bilateral participant/visit roster per analysis branch. A failure on
 either side excludes that participant/visit from the branch. Missing required
@@ -56,17 +65,22 @@ Apply the 0.30-mm threshold once to this overall mean. There is no individual
 run veto; for example, equal-length runs with means 0.40 and 0.10 pass at 0.25.
 Dice is evaluated once per anatomical reconstruction, independently of run count.
 
-Coverage uses actual trilinear weights at the registered hippocampal vertices.
-The source GM set is the supplied CIFTI hippocampal BrainModel restricted to
-voxels with finite, nonconstant signals. For multiple declared runs, first
-intersect these valid source-voxel masks, then calculate their surface support.
-A vertex is unsupported when its total GM weight is zero. Count unsupported
-vertices once per hemisphere; do not add counts from different runs.
+Coverage uses the exact BOLD NIfTI shape and affine at the registered
+hippocampal vertices. Sum the nonzero trilinear contributions whose voxel
+indices lie inside each input volume. Save the minimum image-grid support
+over the explicitly declared volume inputs as `*_nifti_support.npy`.
+Positive support is required, but full support from all eight neighbours is
+not an additional gate. These weights describe image-grid support, not tissue
+membership or an independent gray-matter segmentation.
 
-In the evaluated data, the common-source-mask operation removed no hippocampal
-source voxels. All 166 HCP7T concatenated inputs were additionally checked in
-four 900-frame blocks, with no nonfinite or constant hippocampal source series
-in any block. Run count therefore added no coverage attrition in these records.
+Assess finite, nonconstant signals on the actual sampled vertex time series
+separately within every declared physical run. Intersect those vertex-validity
+masks with positive NIfTI support. A constant run does not become valid because
+another run varies or because their concatenation has a baseline jump. Count
+the union of unusable vertices once per hemisphere; do not add runwise counts.
+Zero-padded regions with constant sampled signals are invalid. This minimal
+data-availability criterion does not establish tissue purity, accurate
+registration or adequate BOLD sensitivity.
 
 EMOTION and WM are evaluated separately; use their intersection if an analysis
 requires both tasks. PDC is evaluated per visit, without pooling different
@@ -75,11 +89,19 @@ selection remain explicit.
 
 ## Vertex handling and coordinates
 
-Passing participant selection permits up to 20 unsupported vertices per side;
-it does not make those vertices usable. Downstream smoothing, FC and activation
-need an explicitly applied vertex mask combining positive GM support with
-finite, nonconstant consumed signal. This mask integration remains production
-work; the pass-count table does not demonstrate that it has been deployed.
+Passing participant selection permits up to 20 unusable vertices per side;
+it does not make those vertices usable. HCP7T downstream smoothing uses the
+same positive NIfTI support and runwise finite/nonconstant mask as participant
+QC. FC and activation must consume the resulting masked signals and declared
+support. Other dataset entry points still require their production contracts.
+
+The coverage policy is `bold_nifti_runwise_trilinear_validity`. Raw products,
+vertex gates or smoothing caches using the preceding CIFTI coverage policy
+must be rebuilt explicitly; they are not resumed or substituted. For one
+concatenated BOLD NIfTI, provide `--bold-template` and
+`--run-metadata-template`. For separate volumes, provide the exact
+`--run-artifact-manifest-template`; hippocampal preparation consumes only its
+declared BOLD artifacts. Cortical CIFTI reference extraction remains separate.
 
 Volume-to-surface sampling must use surfaces transformed into the exact BOLD
 volume space. A `space-corobl` mesh cannot be used directly to sample MNI or
@@ -88,11 +110,12 @@ displaying corresponding vertex values on a corobl mesh is a separate operation.
 Coordinate sampling code has been repaired, but affected formal functional
 products have not been rebuilt by this QC analysis.
 
-## Evaluated retention
+## Reference retention before NIfTI reassessment
 
-Rates below are cumulative percentages of the same complete-case N in each
-row, using existing registered coverage and motion records. Missing cases are
-not assigned an assumed final result.
+These existing measurements used the preceding CIFTI-based coverage
+definition. They are not new NIfTI-based pass counts and must be reassessed
+after rebuilding raw coverage and masks. Rates are cumulative percentages of
+the same complete-case N in each row. Missing cases have no assumed outcome.
 
 | Dataset / unit | Complete-case N | FD pass | FD + Dice pass | All three pass | New exclusions: FD / Dice / coverage |
 |---|---:|---:|---:|---:|---:|
@@ -120,9 +143,12 @@ mean FD can conceal brief large movements.
 [Kember et al., Nature Communications 2026](https://www.nature.com/articles/s41467-026-74572-1)
 provide the anatomical and functional-GM coverage precedent. Their published
 coverage criterion is >=20 mm² improperly interpolated surface, not 20 vertices.
-The project's vertex-count rule and zero-weight classifier are explicit
-adaptations for den-512 functional nodes. Positive support is not proof of
-adequate SNR or individual tissue purity.
+The project's vertex-count threshold and NIfTI sampled-signal validity rule
+are explicit adaptations for den-512 functional nodes. Kember's description
+does not identify its functional gray-matter mask as a CIFTI hippocampal
+BrainModel or specify the exact interpolation-support classifier. A NIfTI file
+format itself does not define gray matter. Positive support is not proof of
+adequate SNR or individual tissue purity; retain independent registration QC.
 
 Kember defines low-motion frames by FD <=0.25 mm and requires at least 10
 low-motion minutes. This duration rule was not adopted: the project's full

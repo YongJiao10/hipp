@@ -1,6 +1,6 @@
 # HippUnfold Performance Implementation Plan
 
-> **For agentic workers:** Use `executing-plans` for direct execution. No commits. The user approved eight subjects, a 16-CPU affinity limit, niceness 10 and two GPU inference slots. Additional pi/argon review was explicitly cancelled for this scheduling change.
+> **For agentic workers:** Use `executing-plans` for direct execution. No commits. The HCP manifest default remains eight; the user approved `--jobs 12` for the current run. Keep the 16-CPU affinity, niceness 10 and two GPU inference slots.
 
 **Goal:** Measure a balanced HCP7T concurrency on the available 32-CPU quota and L40S, leaving capacity for other tasks, and prepare the corresponding production settings.
 
@@ -32,12 +32,13 @@
 - [x] Establish the actual resource limits and completed-run timing baseline. Greedy registration consumes 974 s of the 44m35s run; the expensive dentate registrations take about 225 s each, whereas hippocampal registrations take about 15 s. Two nnUNet calls consume 42 s in total. Pause old coordinator PID 1562766 while its subjects finish.
 - [x] Run the expensive dentate registration: 4, 8 and 12 one-thread jobs, then six two-thread and three four-thread jobs. Throughputs are 63.4, 120.5, 187.7, 171.4 and 111.1 registration tasks/hour. Selected one-thread warp arrays are identical across parallelism levels. The smaller hippocampal replay also favors more single-thread processes.
 - [x] Measure real five-fold nnUNet inference at one, two and four simultaneous processes, with four independent repetitions per configuration. Wall times: 62.13, 32.72 and 19.07 s. GPU peaks: 2265, 4527 and 9051 MiB. Two slots are the proposed balance for other GPU tasks.
-- [x] Prepare and install the approved eight-subject/one-core/two-GPU-slot scheduling patch with matching docs. Three new tests failed on the original implementation as expected; all 58 relevant tests pass against the installed profile. The isolated full 418-job cached DAG builds with HTTP blocked. CPU affinity and niceness preserve capacity for other tasks; scientific completion contracts are unchanged. GPU serial/concurrent repeats show small label variability (at most 8/10/4 voxels at 1/2/4 processes).
-- [x] Obtain explicit approval for the measured profile and its process-count exception. The user cancelled additional pi/argon review; no new performance payload was sent externally.
-- [x] Retire the old dispatcher after both active subprocesses exit, then execute the full-roster eight-subject launcher. The two interrupted inference entries passed dry runs with the new environment and resume from retained preprocessing outputs.
-- [ ] Measure actual cohort throughput from subsequent completed waves.
+- [x] Measure actual CPU registration and GPU inference concurrency. One-thread Greedy registration throughput rose to 187.7 tasks/hour at twelve workers; selected outputs were identical across the 4-, 8- and 12-worker waves. Two GPU slots delivered 1.90 times single-slot throughput in the measured repetitions.
+- [x] Run the initial HCP roster at eight subjects; eight completed subjects passed the full output check in approximately 50 minutes.
+- [x] Keep the HCP manifest default at eight and make `--jobs` configurable up to twelve, retaining one CPU core per subject, the 16-CPU affinity, niceness 10 and two GPU slots.
+- [x] Obtain focused pi/argon review of the twelve-subject scheduling delta; the reviewer found no blockers.
+- [x] Switch after the currently running eight-subject wave exits and is checked; the new full-roster coordinator starts twelve subjects.
+- [ ] Measure actual throughput at twelve-subject concurrency; do not infer it from the registration-stage benchmark.
 
-The scheduling profile is installed and its 58 relevant tests pass. The old
-coordinator has exited. The canonical full-roster launcher now uses eight
-subjects, 16-CPU affinity, niceness 10 and two GPU slots. Existing completed
-outputs are retained. No commits or deletions were made.
+The twelve-subject run is active after a clean transition. The prior eight
+active subjects passed their serial output checks; 28 of 166 roster entries are
+now complete and twelve are running. No commits or deletions were made.
