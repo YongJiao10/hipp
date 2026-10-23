@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 import importlib.util
+import os
+import select
+import shlex
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -16,6 +20,61 @@ ADAPTER = (
     / "lib/python3.13/site-packages/hippunfold/workflow/lib/local_assets.py"
 )
 CACHE = Path("/hippunfold-unit-assets")
+
+
+def test_gpu_slot_serializes_commands_and_releases_on_exit(assets):
+    prefix = shlex.split(assets.gpu_inference_prefix(f'hippunfold-test-{os.getpid()}'))
+    first = subprocess.Popen(
+        prefix + [sys.executable, '-c', 'print("held", flush=True); input()'],
+        stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True,
+    )
+    second = None
+    try:
+        assert select.select([first.stdout], [], [], 10)[0], 'GPU lock acquisition stalled'
+        assert first.stdout.readline().strip() == 'held'
+        second = subprocess.Popen(
+            prefix + [sys.executable, '-c', 'print("acquired", flush=True)'],
+            stdout=subprocess.PIPE, text=True,
+        )
+        assert not select.select([second.stdout], [], [], 0.3)[0]
+        first.communicate('\n', timeout=10)
+        stdout, _ = second.communicate(timeout=10)
+        assert first.returncode == second.returncode == 0
+        assert stdout.strip() == 'acquired'
+    finally:
+        for process in (first, second):
+            if process is not None and process.poll() is None:
+                process.terminate()
+                process.wait(timeout=10)
+
+
+def test_two_gpu_slots_admit_two_commands_and_queue_the_third(assets):
+    prefix = shlex.split(assets.gpu_inference_prefix(f'hippunfold-pair-test-{os.getpid()}', slots=2))
+    processes = []
+    try:
+        for _ in range(2):
+            process = subprocess.Popen(
+                prefix + [sys.executable, '-c', 'print("held", flush=True); input()'],
+                stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True,
+            )
+            processes.append(process)
+            assert select.select([process.stdout], [], [], 10)[0], 'GPU slot acquisition stalled'
+            assert process.stdout.readline().strip() == 'held'
+        third = subprocess.Popen(
+            prefix + [sys.executable, '-c', 'print("acquired", flush=True)'],
+            stdout=subprocess.PIPE, text=True,
+        )
+        processes.append(third)
+        assert not select.select([third.stdout], [], [], 0.3)[0]
+        processes[0].communicate('\n', timeout=10)
+        stdout, _ = third.communicate(timeout=10)
+        assert third.returncode == 0
+        assert stdout.strip() == 'acquired'
+    finally:
+        for process in processes:
+            if process.poll() is None:
+                process.terminate()
+                process.wait(timeout=10)
 
 
 @pytest.fixture

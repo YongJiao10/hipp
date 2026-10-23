@@ -179,14 +179,17 @@ The presets are fixed and are not positional input/output arguments:
 - `banda`: `/home/yojiao/LSS/jianglab/3_Data_Working/Depression/BANDA/bids_input` → `outputs_banda/inputs/hippunfold/dense_corobl_batch/`, T1w `.nii.gz`.
 - `pdc`: `/home/yojiao/LSS/jianglab/3_Data_Working/Depression/PDC/bids_input` → `outputs_pdc/inputs/hippunfold/dense_corobl_batch/`, T1w `.nii.gz`.
 
-Every preset fixes HippUnfold 2.0 to modality `T1w`, density `512`, output
+Every preset fixes HippUnfold 2.2.0 to modality `T1w`, density `512`, output
 space `corobl`, autotopology `hipp dentate`, unfolded registration enabled,
-GPU inference, one core, and the canonical shared local model/cache. No
+GPU inference, one core, greedy inner/outer registration with smoothing variance
+3.0, and the canonical shared local model/cache. The official greedy iteration
+pyramid is `50x50x50`, with smoothing `sqrt(3.0)vox 0.707vox`. No
 `HIPPUNFOLD_*` override or `--omit-from`/free-form Snakemake argument is accepted.
 Use `--dry-run` to inspect the resolved JSON contract without creating outputs. A
 direct one-subject run gates the local `hippo2` executable in the same fixed
 environment used for processing, requiring exact executable resolution, CLI
-version `2.0.0`, and successful T1w/512 help.
+version `2.2.0`, CUDA availability, and successful T1w/512 help including the new
+inner/outer parameters. CLI probes have a 300-second limit.
 
 ### Input preprocessing
 
@@ -207,24 +210,38 @@ The same `01_01_run_hippunfold_t1w_local.py` entry point accepts either
 `--dataset <dataset> --manifest <subject-list.txt> --jobs <N>`.
 Single-subject `--dry-run` emits one JSON contract; manifest `--dry-run` emits
 an ordered JSON array without running the environment gate or processing.
-The BANDA/PDC batch scripts under `outputs_<dataset>/work/` use manifest mode.
 The batch gates the runtime once before its
 pending subjects; each direct one-subject invocation still performs its own
-gate, and a new batch checks again. PDC runs up to three HippUnfold subjects in
-parallel; BANDA remains serial. Output checking and automatic cleanup run one
-subject at a time because they share the batch integrity manifest. After
-successful output validation, the checker removes `anat/`, `coords/`, `warps/`,
-and `cifti/`, retaining `surf/`, `metric/`, and `qc/`.
+gate, and a new batch checks again. HCP supports eight concurrent subjects;
+other datasets retain two and BANDA remains serial. The HCP profile keeps one
+core per subject and two host-local GPU inference slots; other datasets retain
+one GPU slot. A single coordinator checks outputs serially. nnUNet preprocessing
+and save workers remain one each. The shared-host HCP launch restricts the whole
+process tree to 16 CPUs and lowers its CPU priority, preserving capacity for other
+tasks:
+
+```bash
+taskset --cpu-list 0-7,32-39 nice -n 10 /home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/01_01_run_hippunfold_t1w_local.py --dataset hcp --manifest manifests/hcp_7t_hippocampus_struct_complete_166.txt --jobs 8
+```
+
+This explicitly approved HCP profile replaces the earlier two-subject process
+budget for this workload. It does not change other workflows' concurrency limits.
+Install runtime patches only after all active HippUnfold subprocesses have
+exited: Snakemake may reload rule files while executing a subject.
+The launcher passes `--no-cleanup`, retaining full structural outputs,
+including `anat/`, `coords/`, `warps/`, and `cifti/`.
 
 After an interrupted run, Snakemake may report `IncompleteFilesException`.
-Recover the named subject with its validated preset command plus the explicit
-Snakemake argument `--rerun-incomplete`, then run `01_02` for that subject.
-Resume the normal manifest command after existing workers have exited; validated
-completion receipts let the batch skip finished subjects. The recovery argument
+Activate hippo2 and recover the named subject with the exact `hippunfold_argv`
+printed by the preset `--dry-run`, appending the explicit Snakemake argument
+`--rerun-incomplete`. Resume the normal manifest command after existing workers
+have exited; its `--no-cleanup` checks record completion and let later batches
+skip finished subjects. The recovery argument
 is a one-off operator action and is not added to the standard launch preset.
-Only subjects with an existing `core_workflow_cleanup_receipt.json` are skipped.
-Outputs without that receipt resume through HippUnfold and the complete output
-check; a pair of surface files alone does not establish completion.
+Completion requires `output_check.json` to match the current run contract and
+all declared full output files to remain present. Old cleanup receipts do not
+skip the upgrade. Incomplete outputs resume through HippUnfold and the complete
+output check; a pair of surface files alone does not establish completion.
 The batch invokes the checker with `--fail-on-missing`. A processing or checking
 failure stops dispatching new subjects; already running subjects finish and
 receive their serial output check before the batch reports the failure.

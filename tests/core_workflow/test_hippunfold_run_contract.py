@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import io
 import subprocess
 import threading
 import time
@@ -77,6 +78,10 @@ def test_hcp_preset_has_fixed_historical_paths_and_parameters() -> None:
         "--notemp",
         "--filter-T1w",
         "extension=.nii.gz",
+        "--inner_outer_reg_method",
+        "greedy",
+        "--inner_outer_reg_smoothing",
+        "3.0",
         "--use_gpu",
     )
     assert "--omit-from" not in contract.hippunfold_argv
@@ -115,8 +120,8 @@ def test_non_hcp_presets_only_change_dataset_paths_and_extension(
     assert str(contract.bids_dir) == bids_dir
     assert contract.output_dir == REPO_ROOT / output_dir
     assert contract.t1w_filter == filter_value
-    assert contract.hippunfold_argv[3:-2][:11] == hcp.hippunfold_argv[3:-2][:11]
-    assert contract.hippunfold_argv[3:-2][12:] == hcp.hippunfold_argv[3:-2][12:]
+    assert contract.hippunfold_argv[3:-6][:11] == hcp.hippunfold_argv[3:-6][:11]
+    assert contract.hippunfold_argv[3:-6][12:] == hcp.hippunfold_argv[3:-6][12:]
     assert "--omit-from" not in contract.hippunfold_argv
 
 
@@ -181,9 +186,9 @@ def test_runtime_gate_uses_the_same_fixed_environment_as_the_run(
         if args[0] == "/bin/bash":
             stdout = str(executable)
         elif args[-1] == "--version":
-            stdout = "2.0.0"
+            stdout = "2.2.0"
         elif args[-1] == "--help":
-            stdout = "--output-density {native,512,2k}"
+            stdout = "--output-density {native,512,2k} --inner_outer_reg_method --inner_outer_reg_smoothing"
         else:
             stdout = ""
         return subprocess.CompletedProcess(args, 0, stdout=stdout, stderr="")
@@ -279,7 +284,10 @@ def test_manifest_mode_validates_once_and_checks_each_subject(
     checked = []
     monkeypatch.setattr(stage01, "_is_completed", lambda contract: False)
     monkeypatch.setattr(stage01, "validate_local_assets", validated.append)
-    monkeypatch.setattr(stage01, "_run_subject", lambda contract, env: executed.append((contract.subject, env)))
+    def start(contract, env):
+        executed.append((contract.subject, env))
+        return subprocess.Popen([str(PY314), '-c', 'pass']), io.StringIO()
+    monkeypatch.setattr(stage01, "_start_subject", start)
     monkeypatch.setattr(stage01, "_check_subject", lambda contract: checked.append(contract.subject))
 
     assert stage01.run_t1w_local(["--dataset", "pdc", "--manifest", str(manifest)]) == 0
@@ -293,36 +301,58 @@ def test_manifest_mode_validates_once_and_checks_each_subject(
     ]
 
 
-def test_batch_runs_three_subjects_and_checks_outputs_on_the_coordinator(
+def test_batch_runs_two_subjects_and_checks_outputs_on_the_coordinator(
     stage01: ModuleType, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     contracts = [resolve_run_contract("pdc", f"k0114s0{index}") for index in range(1, 6)]
-    lock = threading.Lock()
-    three_started = threading.Barrier(3)
-    active = 0
+    processes = []
     max_active = 0
     check_threads = []
     coordinator = threading.get_ident()
     monkeypatch.setattr(stage01, "_is_completed", lambda contract: False)
 
-    def execute(contract, env) -> None:
-        nonlocal active, max_active
-        with lock:
-            active += 1
-            max_active = max(max_active, active)
-        if contract.subject in {"k0114s01", "k0114s02", "k0114s03"}:
-            three_started.wait(timeout=5)
-        time.sleep(0.02)
-        with lock:
-            active -= 1
+    def execute(contract, env):
+        nonlocal max_active
+        process = subprocess.Popen([str(PY314), '-c', 'import time; time.sleep(0.4)'])
+        processes.append(process)
+        max_active = max(max_active, sum(p.poll() is None for p in processes))
+        return process, io.StringIO()
 
-    monkeypatch.setattr(stage01, "_run_subject", execute)
+    monkeypatch.setattr(stage01, "_start_subject", execute)
     monkeypatch.setattr(stage01, "_check_subject", lambda contract: check_threads.append(threading.get_ident()))
 
-    stage01._run_batch(contracts, jobs=3)
+    stage01._run_batch(contracts, jobs=2)
 
-    assert max_active == 3
+    assert max_active == 2
     assert check_threads == [coordinator] * len(contracts)
+
+
+def test_hcp_accepts_the_eight_subject_profile(stage01, monkeypatch):
+    executed = []
+    checked = []
+    monkeypatch.setattr(stage01, "_is_completed", lambda contract: False)
+
+    class FinishedProcess:
+        returncode = 0
+
+        def poll(self):
+            return 0
+
+    def start(contract, env):
+        executed.append(contract.subject)
+        return FinishedProcess(), io.StringIO()
+
+    monkeypatch.setattr(stage01, "_start_subject", start)
+    monkeypatch.setattr(stage01, "_check_subject", lambda contract: checked.append(contract.subject))
+    stage01._run_batch([resolve_run_contract("hcp", "1001")], jobs=8)
+    assert executed == checked == ["1001"]
+
+
+def test_hcp_has_two_gpu_slots_while_other_presets_remain_serial_on_gpu():
+    hcp = build_run_environment(resolve_run_contract("hcp", "1001"))
+    pdc = build_run_environment(resolve_run_contract("pdc", "1001"))
+    assert hcp["HIPPUNFOLD_GPU_SLOTS"] == "2"
+    assert pdc["HIPPUNFOLD_GPU_SLOTS"] == "1"
 
 
 def test_completed_batch_does_not_run_the_runtime_gate(
@@ -337,14 +367,14 @@ def test_completed_batch_does_not_run_the_runtime_gate(
     assert validated == []
 
 
-@pytest.mark.parametrize(("dataset", "jobs", "limit"), [("pdc", 4, 3), ("banda", 2, 1)])
+@pytest.mark.parametrize(("dataset", "jobs", "limit"), [("pdc", 3, 2), ("banda", 2, 1)])
 def test_batch_rejects_excess_jobs_before_validation_or_execution(
     stage01: ModuleType, monkeypatch: pytest.MonkeyPatch,
     dataset: str, jobs: int, limit: int,
 ) -> None:
     calls = []
     monkeypatch.setattr(stage01, "validate_local_assets", lambda env: calls.append("gate"))
-    monkeypatch.setattr(stage01, "_run_subject", lambda contract, env: calls.append("run"))
+    monkeypatch.setattr(stage01, "_start_subject", lambda contract, env: calls.append("run"))
 
     with pytest.raises(ValueError, match=f"{dataset} allows between 1 and {limit} jobs"):
         stage01._run_batch([resolve_run_contract(dataset, "1001")], jobs=jobs)
@@ -360,15 +390,18 @@ def test_batch_failure_stops_dispatching_new_subjects(
     executed = []
     monkeypatch.setattr(stage01, "_is_completed", lambda contract: False)
 
-    def execute(contract, env) -> None:
+    def execute(contract, env):
         executed.append(contract.subject)
-        if failure_stage == "execution":
-            raise RuntimeError("subject failed")
+        return subprocess.Popen([str(PY314), '-c', 'pass']), io.StringIO()
 
     def check(contract) -> None:
         raise RuntimeError("subject failed")
 
-    monkeypatch.setattr(stage01, "_run_subject", execute)
+    if failure_stage == 'execution':
+        def execute(contract, env):
+            executed.append(contract.subject)
+            raise RuntimeError('subject failed')
+    monkeypatch.setattr(stage01, "_start_subject", execute)
     monkeypatch.setattr(stage01, "_check_subject", check)
 
     with pytest.raises(RuntimeError, match="subject failed"):
@@ -399,7 +432,7 @@ def test_batch_checker_fails_on_missing_outputs(
     stage01: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    contract = SimpleNamespace(subject="1001", preset=SimpleNamespace(output_root=tmp_path))
+    contract = SimpleNamespace(subject="1001", output_dir=tmp_path, preset=SimpleNamespace(output_root=tmp_path))
     calls = []
 
     def fail_check(args, **kwargs):
@@ -412,6 +445,7 @@ def test_batch_checker_fails_on_missing_outputs(
         stage01._check_subject(contract)
 
     assert "--fail-on-missing" in calls[0][0]
+    assert "--no-cleanup" in calls[0][0]
     assert calls[0][1]["check"] is True
     assert "[done" not in capsys.readouterr().out
 
@@ -421,7 +455,7 @@ def test_manifest_dry_run_uses_the_existing_public_entry_point(tmp_path: Path) -
     manifest.write_text("k0114s02\nk0114s03\n", encoding="utf-8")
     proc = subprocess.run(
         [str(PY314), str(CORE_ENTRY), "--dataset", "pdc", "--manifest", str(manifest),
-         "--jobs", "3", "--dry-run"],
+         "--jobs", "2", "--dry-run"],
         cwd=REPO_ROOT, capture_output=True, text=True, check=False,
     )
 
@@ -442,4 +476,4 @@ def test_surfaces_without_output_check_receipt_do_not_skip_a_subject(
     assert stage01._is_completed(contract) is False
 
     (output_dir / "core_workflow_cleanup_receipt.json").write_text("{}", encoding="utf-8")
-    assert stage01._is_completed(contract) is True
+    assert stage01._is_completed(contract) is False

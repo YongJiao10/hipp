@@ -15,6 +15,7 @@ from typing import Mapping, TextIO
 REPO_ROOT = Path(__file__).resolve().parents[3]
 HIPPO2_PREFIX = Path("/home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2")
 HIPPUNFOLD_EXECUTABLE = HIPPO2_PREFIX / "bin" / "hippunfold"
+HIPPUNFOLD_VERSION = "2.2.0"
 CANONICAL_ASSET_ROOT = "/home/yojiao/hpchome/hipp/runtime/hippunfold_asset_store_shared"
 CANONICAL_CACHE_DIR = f"{CANONICAL_ASSET_ROOT}/hippunfold_assets"
 CANONICAL_RUNTIME_SOURCE = f"{CANONICAL_ASSET_ROOT}/runtime_source_assets"
@@ -24,7 +25,7 @@ CANONICAL_MODEL_PATH = (
 )
 RUNTIME_WORK_ROOT = REPO_ROOT / "runtime" / "hippunfold_workdirs"
 RUNTIME_PY = REPO_ROOT / ".runtime_py"
-DATASET_JOB_LIMITS = MappingProxyType({"banda": 1, "pdc": 3})
+DATASET_JOB_LIMITS = MappingProxyType({"hcp": 8, "banda": 1, "pdc": 2})
 _SAFE_SUBJECT = re.compile(r"^[0-9A-Za-z]+$")
 
 
@@ -163,6 +164,10 @@ class HippUnfoldRunContract:
             "--notemp",
             "--filter-T1w",
             self.t1w_filter,
+            "--inner_outer_reg_method",
+            "greedy",
+            "--inner_outer_reg_smoothing",
+            "3.0",
             "--use_gpu",
         )
         return argv + (("--skip-preproc",) if self.preset.skip_preproc else ())
@@ -178,6 +183,9 @@ class HippUnfoldRunContract:
             "bids_dir": str(self.bids_dir),
             "output_dir": str(self.output_dir),
             "modality": "T1w",
+            "hippunfold_version": HIPPUNFOLD_VERSION,
+            "inner_outer_reg_method": "greedy",
+            "inner_outer_reg_smoothing": 3.0,
             "skip_preproc": self.preset.skip_preproc,
             "output_density": "512",
             "output_spaces": ["corobl"],
@@ -221,6 +229,8 @@ def build_run_environment(
             "HIPPUNFOLD_CACHE_DIR": CANONICAL_CACHE_DIR,
             "HIPPUNFOLD_RUNTIME_SOURCE_CACHE": CANONICAL_RUNTIME_SOURCE,
             "HIPPUNFOLD_MODEL_PATH": CANONICAL_MODEL_PATH,
+            "HIPPUNFOLD_GPU_SLOT": f"hippunfold-gpu0-{os.getuid()}",
+            "HIPPUNFOLD_GPU_SLOTS": "2" if contract.dataset == "hcp" else "1",
             "HIPPUNFOLD_CACHE_ROOT": str(contract.runtime_root),
             "XDG_CACHE_HOME": str(contract.runtime_root / "xdg_cache"),
             "PIP_CACHE_DIR": str(contract.runtime_root / "pip_cache"),
@@ -235,6 +245,9 @@ def build_run_environment(
             "MKL_NUM_THREADS": "1",
             "OPENBLAS_NUM_THREADS": "1",
             "VECLIB_MAXIMUM_THREADS": "1",
+            "NUMEXPR_NUM_THREADS": "1",
+            "ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS": "1",
+            "VTK_SMP_MAX_THREADS": "1",
             "nnUNet_n_proc_DA": "1",
             "KMP_DUPLICATE_LIB_OK": "TRUE",
             "TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD": "1",
@@ -256,17 +269,20 @@ def validate_local_assets(env: Mapping[str, str]) -> None:
             "-c",
             "from hippunfold.workflow.lib.local_assets import "
             "template_is_cached, atlas_copy_is_cached, atlas_extract_is_cached, "
-            "model_is_unpacked",
+            "model_is_unpacked, gpu_inference_prefix; "
+            "gpu_inference_prefix('hippunfold-gate', slots=2); "
+            "import torch; "
+            "assert torch.cuda.is_available(), 'GPU inference requires an available CUDA device'",
         ],
         capture_output=True,
         text=True,
         check=False,
-        timeout=30,
+        timeout=300,
         env=env,
     )
     if resource_adapter.returncode != 0:
         raise RuntimeError(
-            "hippo2 local-asset adaptation is missing. Apply "
+            "hippo2 local-asset/CUDA validation failed. Apply "
             "scripts/core_workflow/lib/hippunfold_local_assets.patch to the installed "
             "HippUnfold package, as documented in "
             "docs/environment/hippo2_reproducibility_manifest.md. "
@@ -299,13 +315,13 @@ def validate_local_assets(env: Mapping[str, str]) -> None:
         capture_output=True,
         text=True,
         check=False,
-        timeout=60,
+        timeout=300,
         env=env,
     )
     version_text = f"{version.stdout} {version.stderr}"
-    if version.returncode != 0 or not re.search(r"\b2\.0\.0\b", version_text):
+    if version.returncode != 0 or not re.search(r"(?<![\w.])2\.2\.0(?![\w.+-])", version_text):
         raise RuntimeError(
-            "hippo2 gate failed: HippUnfold CLI must report 2.0.0; "
+            "hippo2 gate failed: HippUnfold CLI must report 2.2.0; "
             f"stdout={version.stdout.strip()!r}; stderr={version.stderr.strip()!r}"
         )
 
@@ -314,11 +330,13 @@ def validate_local_assets(env: Mapping[str, str]) -> None:
         capture_output=True,
         text=True,
         check=False,
-        timeout=60,
+        timeout=300,
         env=env,
     )
     help_text = f"{help_run.stdout} {help_run.stderr}"
-    if help_run.returncode != 0 or "512" not in help_text:
+    if help_run.returncode != 0 or not all(
+        option in help_text for option in ("512", "inner_outer_reg_method", "inner_outer_reg_smoothing")
+    ):
         raise RuntimeError(
             "hippo2 gate failed: T1w/512 help probe did not succeed; "
             f"stdout={help_run.stdout.strip()!r}; stderr={help_run.stderr.strip()!r}"
@@ -391,6 +409,22 @@ def prepare_subject_environment(
     return env
 
 
+def start_hippunfold(
+    contract: HippUnfoldRunContract,
+    env: Mapping[str, str],
+    *,
+    stdout: TextIO | None = None,
+) -> subprocess.Popen:
+    """Start the fixed command without adding a coordinator worker thread."""
+    return subprocess.Popen(
+        list(contract.hippunfold_argv),
+        cwd=str(REPO_ROOT),
+        env=dict(env),
+        stdout=stdout,
+        stderr=subprocess.STDOUT if stdout is not None else None,
+    )
+
+
 def run_hippunfold(
     contract: HippUnfoldRunContract,
     env: Mapping[str, str],
@@ -398,11 +432,4 @@ def run_hippunfold(
     stdout: TextIO | None = None,
 ) -> int:
     """Execute the fixed command and return its exit status."""
-    return subprocess.run(
-        list(contract.hippunfold_argv),
-        cwd=str(REPO_ROOT),
-        env=dict(env),
-        check=False,
-        stdout=stdout,
-        stderr=subprocess.STDOUT if stdout is not None else None,
-    ).returncode
+    return start_hippunfold(contract, env, stdout=stdout).wait()

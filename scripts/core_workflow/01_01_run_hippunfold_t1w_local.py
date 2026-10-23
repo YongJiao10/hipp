@@ -7,10 +7,10 @@ import argparse
 import json
 import subprocess
 import sys
-from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
+import time
 from datetime import datetime
 from pathlib import Path
-from typing import Mapping
+from typing import Mapping, TextIO
 
 from lib.hippunfold_run_contract import (
     DATASET_JOB_LIMITS,
@@ -24,6 +24,7 @@ from lib.hippunfold_run_contract import (
     prepare_subject_environment,
     resolve_run_contract,
     run_hippunfold,
+    start_hippunfold,
     validate_local_assets,
 )
 
@@ -33,19 +34,48 @@ OUTPUT_CHECKER = REPO_ROOT / "scripts/core_workflow/01_02_check_hippunfold_outpu
 
 
 def _is_completed(contract: HippUnfoldRunContract) -> bool:
-    return (contract.output_dir / "core_workflow_cleanup_receipt.json").is_file()
+    report_path = contract.output_dir / "output_check.json"
+    if not report_path.is_file():
+        return False
+    try:
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"Malformed HippUnfold output check: {report_path}: {exc}") from exc
+    if not isinstance(report, list) or len(report) != 1:
+        raise RuntimeError(f"Malformed HippUnfold output check: {report_path}")
+    row = report[0]
+    if row.get("run_contract") != contract.as_json():
+        raise RuntimeError(f"HippUnfold output check has a mismatched run contract: {report_path}")
+    if row.get("status") != "complete_all_outputs_present" or row.get("missing_count") != 0:
+        return False
+    manifest_path = contract.preset.output_root / "_batch_logs/output_integrity_manifest.json"
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"Malformed HippUnfold output contract: {manifest_path}: {exc}") from exc
+    if not isinstance(manifest.get("expected_outputs"), list) or not manifest["expected_outputs"]:
+        raise RuntimeError(f"Empty or malformed HippUnfold output contract: {manifest_path}")
+    return all(
+        (contract.output_dir / template.format(subject=contract.subject)).is_file()
+        for template in manifest["expected_outputs"]
+    )
 
 
-def _run_subject(contract: HippUnfoldRunContract, base_env: Mapping[str, str]) -> None:
+def _start_subject(
+    contract: HippUnfoldRunContract, base_env: Mapping[str, str]
+) -> tuple[subprocess.Popen, TextIO]:
     subject = f"sub-{contract.subject}"
     env = prepare_subject_environment(contract, base_env)
     log_file = contract.preset.output_root / f"{subject}_hippunfold.log"
     now = datetime.now().astimezone().isoformat(timespec="seconds")
     print(f"[start] {subject} at {now}", flush=True)
-    with log_file.open("w", encoding="utf-8") as log:
-        returncode = run_hippunfold(contract, env, stdout=log)
-    if returncode != 0:
-        raise subprocess.CalledProcessError(returncode, contract.hippunfold_argv)
+    log = log_file.open("w", encoding="utf-8")
+    try:
+        process = start_hippunfold(contract, env, stdout=log)
+    except BaseException:
+        log.close()
+        raise
+    return process, log
 
 
 def _check_subject(contract: HippUnfoldRunContract) -> None:
@@ -56,20 +86,27 @@ def _check_subject(contract: HippUnfoldRunContract) -> None:
             [
                 str(PY314), str(OUTPUT_CHECKER),
                 "--batch-root", str(contract.preset.output_root),
-                "--subject", contract.subject, "--fail-on-missing",
+                "--subject", contract.subject, "--fail-on-missing", "--no-cleanup",
+                "--json-out", str(contract.output_dir / "output_check.json"),
             ],
             cwd=str(REPO_ROOT),
             stdout=log,
             stderr=subprocess.STDOUT,
             check=True,
         )
+    report_path = contract.output_dir / "output_check.json"
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    if len(report) != 1 or report[0].get("subject") != contract.subject:
+        raise RuntimeError(f"Unexpected subject in HippUnfold output check: {report_path}")
+    report[0]["run_contract"] = contract.as_json()
+    report_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     now = datetime.now().astimezone().isoformat(timespec="seconds")
     print(f"[done ] {subject} at {now}", flush=True)
 
 
 def _run_batch(contracts: list[HippUnfoldRunContract], jobs: int) -> None:
     dataset = contracts[0].dataset
-    limit = DATASET_JOB_LIMITS.get(dataset, 10)
+    limit = DATASET_JOB_LIMITS.get(dataset, 2)
     if not 1 <= jobs <= limit:
         raise ValueError(f"HippUnfold batch for {dataset} allows between 1 and {limit} jobs.")
     pending = []
@@ -88,22 +125,30 @@ def _run_batch(contracts: list[HippUnfoldRunContract], jobs: int) -> None:
     prepare_runtime_python()
     next_index = 0
     failure: Exception | None = None
-    with ThreadPoolExecutor(max_workers=jobs) as pool:
-        active = {}
-        while active or (failure is None and next_index < len(pending)):
-            while failure is None and next_index < len(pending) and len(active) < jobs:
-                contract, env = pending[next_index]
-                active[pool.submit(_run_subject, contract, env)] = contract
-                next_index += 1
-            finished, _ = wait(active, return_when=FIRST_COMPLETED)
-            for future in finished:
-                contract = active.pop(future)
-                try:
-                    future.result()
-                    _check_subject(contract)
-                except Exception as exc:
-                    if failure is None:
-                        failure = exc
+    active = {}
+    while active or (failure is None and next_index < len(pending)):
+        while failure is None and next_index < len(pending) and len(active) < jobs:
+            contract, env = pending[next_index]
+            try:
+                process, log = _start_subject(contract, env)
+            except Exception as exc:
+                failure = exc
+                break
+            active[process] = (contract, log)
+            next_index += 1
+        finished = [process for process in active if process.poll() is not None]
+        if not finished and active:
+            time.sleep(0.2)
+        for process in finished:
+            contract, log = active.pop(process)
+            log.close()
+            try:
+                if process.returncode != 0:
+                    raise subprocess.CalledProcessError(process.returncode, contract.hippunfold_argv)
+                _check_subject(contract)
+            except Exception as exc:
+                if failure is None:
+                    failure = exc
     if failure is not None:
         raise failure
 
@@ -116,7 +161,7 @@ def run_t1w_local(argv: list[str] | None = None) -> int:
     parser.add_argument("--manifest", type=Path, help="Subject list for batch execution.")
     parser.add_argument(
         "--jobs", type=int, default=1,
-        help="Batch workers (PDC max 3; BANDA max 1).",
+        help="Concurrent subjects (HCP max 8; others max 2; BANDA max 1).",
     )
     parser.add_argument(
         "--dataset",

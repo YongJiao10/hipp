@@ -1,6 +1,17 @@
+--- a/config/snakebids.yml
++++ b/config/snakebids.yml
+@@ -283,7 +283,7 @@
+   --version:
+     help: 'Print the version of HippUnfold'
+     action: version
+-    version: "2.0.0"
++    version: "2.2.0"
+ 
+ 
+ # --- surface specific configuration -- 
 --- a/workflow/rules/download.smk
 +++ b/workflow/rules/download.smk
-@@ -1,86 +1,116 @@
+@@ -1,105 +1,116 @@
 -# populate the HIPPUNFOLD_CACHE_DIR folder as needed
 +# Resolve declared local resources before any remote storage() input is registered.
  from lib import utils as utils
@@ -11,14 +22,24 @@
  download_dir = utils.get_download_dir()
 -
 -
+-# run on the host (not submitted to a cluster), since compute nodes may lack internet access
+-localrules:
+-    download_extract_template,
+-    download_surf_template_atlas,
+-    cp_atlas_surf_gii,
+-    cp_atlas_metric_gii,
+-
+-
 -rule download_extract_template:
--    """Note: OSF urls don't seem to be supported with snakemake storage plugin"""
--    params:
--        url=lambda wildcards: config["resource_urls"]["template"][wildcards.template],
 -    output:
 -        unzip_dir=directory(Path(download_dir) / "template" / "{template}"),
 -    shadow:
 -        "minimal"
+-    resources:
+-        mem_mb=scale_by_attempt(1000),
+-        runtime=scale_by_attempt(10),
+-    params:
+-        url=lambda wildcards: config["resource_urls"]["template"][wildcards.template],
 -    script:
 -        "../scripts/download.py"
 -
@@ -34,6 +55,9 @@
 -        atlas="|".join(config["builtin_atlases"]),
 -    shadow:
 -        "minimal"
+-    resources:
+-        mem_mb=scale_by_attempt(1000),
+-        runtime=scale_by_attempt(10),
 -    shell:
 -        "unzip {input} -d {output}"
 -
@@ -41,16 +65,6 @@
 -rule cp_atlas_surf_gii:
 -    input:
 -        unzip_dir=Path(download_dir) / "atlases_dl" / "tpl-{atlas}",
--    params:
--        path=lambda wildcards, input: bids_atlas(
--            root=Path(input.unzip_dir).parent,
--            template=wildcards.atlas,
--            hemi=wildcards.hemi,
--            label=wildcards.label,
--            den=wildcards.density,
--            space=wildcards.space,
--            suffix=f"{wildcards.surf_name}.surf.gii",
--        ),
 -    output:
 -        atlas_file=bids_atlas(
 -            root=get_atlas_dir(),
@@ -61,13 +75,9 @@
 -            space="{space}",
 -            suffix="{surf_name}.surf.gii",
 -        ),
--    shell:
--        "cp {params.path} {output}"
--
--
--rule cp_atlas_metric_gii:
--    input:
--        unzip_dir=Path(download_dir) / "atlases_dl" / "tpl-{atlas}",
+-    resources:
+-        mem_mb=scale_by_attempt(1000),
+-        runtime=scale_by_attempt(1),
 -    params:
 -        path=lambda wildcards, input: bids_atlas(
 -            root=Path(input.unzip_dir).parent,
@@ -75,8 +85,16 @@
 -            hemi=wildcards.hemi,
 -            label=wildcards.label,
 -            den=wildcards.density,
--            suffix=f"{wildcards.metricname}.{wildcards.metrictype}.gii",
+-            space=wildcards.space,
+-            suffix=f"{wildcards.surf_name}.surf.gii",
 -        ),
+-    shell:
+-        "cp {params.path} {output}"
+-
+-
+-rule cp_atlas_metric_gii:
+-    input:
+-        unzip_dir=Path(download_dir) / "atlases_dl" / "tpl-{atlas}",
 -    output:
 -        atlas_file=bids_atlas(
 -            root=get_atlas_dir(),
@@ -85,6 +103,18 @@
 -            label="{label}",
 -            den="{density}",
 -            suffix="{metricname}.{metrictype}.gii",
+-        ),
+-    resources:
+-        mem_mb=scale_by_attempt(1000),
+-        runtime=scale_by_attempt(1),
+-    params:
+-        path=lambda wildcards, input: bids_atlas(
+-            root=Path(input.unzip_dir).parent,
+-            template=wildcards.atlas,
+-            hemi=wildcards.hemi,
+-            label=wildcards.label,
+-            den=wildcards.density,
+-            suffix=f"{wildcards.metricname}.{wildcards.metrictype}.gii",
 -        ),
 -    shell:
 -        "cp {params.path} {output}"
@@ -199,21 +229,31 @@
  ## unpack template
 --- a/workflow/rules/nnunet.smk
 +++ b/workflow/rules/nnunet.smk
-@@ -1,4 +1,5 @@
+@@ -1,4 +1,6 @@
  import re
-+from lib.local_assets import file_is_present, model_is_unpacked
++import os
++from lib.local_assets import file_is_present, model_is_unpacked, gpu_inference_prefix
  
  
  def get_nnunet_input(wildcards):
-@@ -63,13 +64,18 @@
+@@ -63,22 +65,21 @@
      return get_model_tar().removesuffix(".gz").removesuffix(".tar")
  
  
+-# run on the host (not submitted to a cluster), since compute nodes may lack internet access
+-localrules:
+-    download_nnunet_model,
+-    unpack_nnunet_model,
+-
+-
 -rule download_nnunet_model:
 -    input:
 -        url=storage(model_dict["url"]),
 -    output:
 -        model_tar=temp(get_model_tar()),
+-    resources:
+-        mem_mb=scale_by_attempt(1000),
+-        runtime=scale_by_attempt(10),
 -    shell:
 -        "cp {input} {output}"
 +local_model_unpacked = model_is_unpacked(get_model_dir(), model_dict)
@@ -226,46 +266,74 @@
 +            url=storage(model_dict["url"]),
 +        output:
 +            model_tar=temp(get_model_tar()),
++        resources:
++            mem_mb=scale_by_attempt(1000),
++            runtime=scale_by_attempt(10),
 +        shell:
 +            "cp {input} {output}"
  
  
  def get_cmd_copy_inputs(wildcards, input):
-@@ -85,16 +91,18 @@
+@@ -94,19 +95,21 @@
          return " && ".join(cmd)
  
  
 -rule unpack_nnunet_model:
--    """ Unpack nnunet model tar to temp folder to check contents"""
+-    """Unpack nnunet model tar to temp folder to check contents"""
 -    input:
 -        tar=get_model_tar(),
--    params:
--        tar_opts=lambda wildcards, input: "-xzf" if input.tar[-2:] == "gz" else "-xf",
 -    output:
 -        directory(get_model_dir()),
+-    resources:
+-        mem_mb=scale_by_attempt(4000),
+-        runtime=scale_by_attempt(10),
+-    params:
+-        tar_opts=lambda wildcards, input: "-xzf" if input.tar[-2:] == "gz" else "-xf",
 -    shell:
 -        "mkdir -p {output} && tar {params.tar_opts} {input} -C {output}"
 +if not local_model_unpacked:
 +
 +    rule unpack_nnunet_model:
-+        """ Unpack nnunet model tar to temp folder to check contents"""
++        """Unpack nnunet model tar to temp folder to check contents"""
 +        input:
 +            tar=get_model_tar(),
-+        params:
-+            tar_opts=lambda wildcards, input: "-xzf" if input.tar[-2:] == "gz" else "-xf",
 +        output:
 +            directory(get_model_dir()),
++        resources:
++            mem_mb=scale_by_attempt(4000),
++            runtime=scale_by_attempt(10),
++        params:
++            tar_opts=lambda wildcards, input: "-xzf" if input.tar[-2:] == "gz" else "-xf",
 +        shell:
 +            "mkdir -p {output} && tar {params.tar_opts} {input} -C {output}"
  
  
  if model_dict["arch_version"] == "nnunet_v1":
+@@ -154,13 +157,14 @@
+             chkpnt=model_dict["checkpoint"],
+             trainer=model_dict["trainer"],
+             tta="" if config["nnunet_enable_tta"] else "--disable_tta",
+-            cuda_visible_devices="" if config["use_gpu"] else "CUDA_VISIBLE_DEVICES=-1",
++            inference_prefix=gpu_inference_prefix(os.environ["HIPPUNFOLD_GPU_SLOT"], slots=int(os.environ["HIPPUNFOLD_GPU_SLOTS"]))
++            if config["use_gpu"] else "env CUDA_VISIBLE_DEVICES=-1",
+         shell:
+             "mkdir -p {params.in_folder} {params.out_folder} && "
+             "{params.cmd_copy_inputs} && "
+             "export RESULTS_FOLDER={input.model_dir} && "
+             "export nnUNet_n_proc_DA={threads} && "
+-            "{params.cuda_visible_devices} nnUNet_predict -i {params.in_folder} -o {params.out_folder} -t {params.task} -chk {params.chkpnt} -tr {params.trainer} {params.tta} &> {log} && "
++            "{params.inference_prefix} nnUNet_predict -i {params.in_folder} -o {params.out_folder} -t {params.task} -chk {params.chkpnt} -tr {params.trainer} {params.tta} --num_threads_preprocessing 1 --num_threads_nifti_save 1 &> {log} && "
+             "cp {params.temp_lbl} {output.nnunet_seg}"
+ 
+ elif model_dict["arch_version"] == "nnunet_v2":
 --- /dev/null
 +++ b/workflow/lib/local_assets.py
-@@ -0,0 +1,99 @@
+@@ -0,0 +1,125 @@
 +"""Resolve the installed workflow's declared resources before registering downloads."""
 +
 +from itertools import product
++import shlex
++import sys
 +from pathlib import Path
 +from string import Formatter
 +
@@ -362,3 +430,27 @@
 +    for fold in folds:
 +        names.extend((f"{fold.name}/{checkpoint}.model", f"{fold.name}/{checkpoint}.model.pkl"))
 +    return directory_is_cached(training, names)
++
++
++def gpu_inference_prefix(slot_name, slots=1):
++    """Hold one of the declared host-local GPU slots through inference exec."""
++    if slots < 1:
++        raise ValueError("GPU slot count must be positive")
++    code = r'''import errno,os,socket,sys,time
++slot=socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
++while True:
++    for index in range(int(sys.argv[2])):
++        try:
++            slot.bind("\0" + sys.argv[1] + ("" if index == 0 else "-" + str(index)))
++            break
++        except OSError as exc:
++            if exc.errno != errno.EADDRINUSE:
++                raise
++    else:
++        time.sleep(0.2)
++        continue
++    break
++slot.set_inheritable(True)
++os.execvp(sys.argv[3], sys.argv[3:])
++'''
++    return shlex.join([sys.executable, "-S", "-c", code, slot_name, str(slots)])

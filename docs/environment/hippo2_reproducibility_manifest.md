@@ -1,274 +1,200 @@
-# `hippo2` Reproducibility Manifest
+# hippo2 runtime and reproducibility
 
-This document records the exact environment stack that was used to run HippUnfold successfully in this workspace, so a future agent can recreate the setup without rediscovering the same pitfalls.
+Runtime revision: 2026-10-22. The local structural workflow uses official
+HippUnfold v2.2.0 scientific source in the refreshed hippo2 dependency stack.
+The local resource/inference patch is required. The environment manager remains
+Conda; adopting the upstream Pixi dependency stack is outside this configuration.
 
-Snapshot date: `2026-04-13`
+## Runtime stack
 
-Related hard runtime rules for agents are in:
+| Component | Active version or location |
+| --- | --- |
+| Environment | `/home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2` |
+| Activation | `/opt/conda/bin/activate hippo2` |
+| Python | 3.13.13 |
+| HippUnfold | 2.2.0, official tagged source plus the documented local patch |
+| Snakemake / Snakebids | 9.27.1 / 0.15.0 |
+| nnUNet / PyTorch | 1.7.1 / 2.14.1+cu126, CUDA inference |
+| NumPy / SciPy / pandas | 2.5.4 / 1.18.1 / 3.1.0 |
+| PyVista / VTK | 0.49.1 / 9.7.0 |
+| nibabel / nilearn / pybids | 5.4.2 / 0.13.1 / 0.21.0 |
+| ANTs / Greedy / NiftyReg / LAYNII | 2.6.5 / 0.0.20250712 / 1.5.69.6 / 2.7.0 |
+| SQLite / libsqlite | 3.54.1, matching h9ffa6c4_0 / h13e7031_0 builds |
+| Convert3D / ITK | 1.4.2 (Khanlab h109cef4_0) / 5.4.7 |
+| Workbench | `/home/yojiao/FASTANS/workbench/bin_linux64/wb_command`, on PATH |
 
-- `docs/environment/agent_runtime_contract.md`
-- `AGENTS.md` (`Agent Runtime Environment Contract (Hard)`)
+`environment/hippo2_server.yml` declares the current package stack and installs
+HippUnfold from the official v2.2.0 tag. The old Conda HippUnfold package was removed through the package manager
+before reinstalling the official v2.2.0 wheel; its obsolete PyVista constraint
+no longer controls native-library updates. Python scientific packages are
+installed at the pip layer over the native Conda runtime. The effective CLI must report 2.2.0; verify its
+executable and loaded workflow rather than treating Conda metadata as the
+algorithm version. The Python package metadata now reports 2.2.0 as well.
 
-## What Is Recorded
+The PyTorch wheel uses CUDA 12.6 on driver 550.163.01 and an L40S.
+Snakemake 9.27.1 requires packaging below 26; nilearn 0.13.1 satisfies the
+HippUnfold range and that shared dependency. Eido 0.2.6 supports pandas 3.
+Greedy uses the Conda-forge heeecbdd_7 build; its CLI retains the generic
+1.3.0-alpha label but reports an August 26, 2026 build. Convert3D uses the
+explicit Khanlab h109cef4_0 build linked against ITK 5.4.7. The upstream
+Prefix.dev libitk547 build channel returned HTTP 403 on this host; the declared
+Khanlab artifact is selected explicitly instead. Reapply the local source-cache
+patch after updating Snakemake.
 
-This manifest captures the environment in layers:
+SQLite and libsqlite are pinned together. The matched library restores the
+SQLite API required by Python, PyBIDS and Snakemake; ncurses 6.6 and readline
+8.3 satisfy the selected SQLite CLI build.
 
-1. Host OS and architecture
-2. Conda environment `hippo2`
-3. Python packages visible inside `hippo2`
-4. External command-line binaries and wrappers
-5. Runtime/cache layout used by the launcher
-6. Known version mismatches and footguns
+The local stack retains Snakebids 0.15/PyBIDS 0.21 and unified nnUNet 1.7.1
+inference. Upstream declares Snakebids 0.14 and a separate legacy nnUNet
+environment. This repository validates its concrete local stack against the
+tagged scientific source before launching production.
 
-Raw snapshots are stored in:
+The Conda portion of the environment declaration passes a fresh-prefix dry run.
+The complete 102311 structural test finishes all 418 rules with 84 required
+outputs present and no output pruning. Both consumed T1w hippocampal surfaces
+have 512 finite vertices. Template-agreement Dice is 0.76279 (L) and 0.79944 (R).
+A complete atlas scan finds 14 right targets with candidate physical positions
+more than 1 mm apart (maximum separation 13.46 mm); no left target meets that
+criterion. The existing output check records a native-unfold correspondence
+conflict. The conflict precedes unfolded registration; candidate separation is
+not anatomical error against ground truth. Structural execution completion does
+not approve this hemisphere for functional downstream analysis.
 
-- `manifests/hippo2/uname.txt`
-- `manifests/hippo2/sw_vers.txt`
-- `manifests/hippo2/conda-info.json`
-- `manifests/hippo2/conda-explicit.txt`
-- `manifests/hippo2/conda-list.txt`
-- `manifests/hippo2/pip-freeze.txt`
+## Launch and environment gate
 
-Bootstrap sources for new servers:
-
-- `environment/hippo2_server.yml`
-- `_archive/deprecated_2026-05-20/scripts_pre_core_workflow/bootstrap_hippo2_server.sh`
-
-## Host Layer
-
-```text
-Item              Value
------------------ -------------------------------------------------
-OS                Linux
-Machine           x86_64
-Shell             bash/zsh
-Python runtime    /home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2/bin/python
-Conda base        /opt/conda
-Workspace root    /home/yojiao/hpchome/hipp
-```
-
-The launcher and wrappers assume this local Linux host uses `/opt/conda` to activate the repo-local `hippo2` environment.
-
-## Conda Layer
-
-The active environment used for HippUnfold runs is `hippo2`.
-
-```text
-Package      Version      Build / Channel          Notes
------------  -----------  -----------------------  ---------------------------
-bash         5.2.37       h5b2bd6a_0               Installed into hippo2 so
-                                                  Snakemake can use a Bash
-                                                  that supports the launcher
-                                                  shell features.
-c3d          0.6.0        pyhd8ed1ab_0             Present in conda list.
-mamba        2.3.2        hae34dd5_2 / conda-forge  Snakemake conda frontend
-                                                  when `--use-conda` is enabled.
-hippunfold   2.0.0        py_0 / khanlab           CLI version used in runs.
-nilearn      0.10.4       pyhd8ed1ab_0             Downgraded for compatibility.
-nnunet       1.7.1        pypi_0                   Used by HippUnfold inference.
-numpy        1.26.4       py311h7125741_0          Downstream numeric stack.
-pandas       1.5.3        py311h4eec4a9_1          Critical fix for removed
-                                                  `DataFrame.append`.
-pybids       0.16.5       pyhd8ed1ab_0             BIDS path handling.
-snakebids    0.15.0       pyhdfd78af_0             HippUnfold workflow glue.
-snakemake    9.19.0       hdfd78af_0               Workflow engine.
-torch        2.5.1        pip/conda mixed           Used by nnUNet.
-torchvision  0.26.0        pip/conda mixed           Used by nnUNet.
-```
-
-The full package inventory is in `manifests/hippo2/conda-list.txt`.
-
-The explicit conda lock snapshot is in `manifests/hippo2/conda-explicit.txt`.
-
-The supported bootstrap spec for new servers is `environment/hippo2_server.yml`.
-Most entries in that file are pinned to exact versions recovered from
-`manifests/hippo2/conda-list.txt` and `manifests/hippo2/pip-freeze.txt`.
-The only intentionally unpinned entries are `greedyreg` and `laynii`, because
-the captured manifest does not record an exact build string for those external
-entry-point packages.
-It is intentionally narrower than the lock snapshot so it is easier to read and
-maintain, while the explicit snapshot remains the bit-for-bit historical record.
-
-The `pip freeze` snapshot is archival and audit-friendly, but it should not be treated as the only bootstrap source because it contains file URL references from the build environment.
-
-## Python Layer
-
-The environment should be checked with `conda run -p /home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2 python` so the repo-local prefix is unambiguous.
-
-```text
-Item                Observed value
-------------------  ---------------------------------------------
-Python              3.13.13
-hippunfold module   /home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2/lib/python3.13/
-                    site-packages/hippunfold/__init__.py
-nnUNet_predict      /home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2/bin/nnUNet_predict
-reg_aladin          /home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2/bin/reg_aladin
-bash                /home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2/bin/bash
-```
-
-Important package versions observed from Python metadata:
-
-```text
-Package      Version
------------  --------
-hippunfold   1.5.2rc2
-nnunet       1.7.1
-nilearn      0.10.4
-pandas       1.5.3
-numpy        1.26.4
-snakemake    9.19.0
-snakebids    0.15.0
-pybids       0.16.5
-torch        2.5.1
-torchvision  0.26.0
-```
-
-### Important HippUnfold Version Mismatch
-
-This environment contains a deliberate-looking but confusing mismatch that must be documented:
-
-```text
-Source                       Observed version
---------------------------  -----------------
-`conda list -p /home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2`       2.0.0
-`hippunfold --version`       2.0.0
-`importlib.metadata`         1.5.2rc2
-`site-packages` dist-info    hippunfold-1.5.2rc2.dist-info
-```
-
-The successful runs in this workspace were driven by the `hippunfold --version == 2.0.0` CLI behavior.
-
-A local runtime hotfix is also required in this workspace: `hippunfold/workflow/scripts/gen_volume_tsv.py` must use `pd.concat(...)` instead of the removed `DataFrame.append()` API when running under the current pandas build. The active `hippo2` runtime used for direct local runs also needs `seaborn` importable because `plot_subj_subfields.py` executes in the main environment when `--use-conda` is disabled.
-
-Do not rely on `importlib.metadata.version("hippunfold")` alone when reproducing the environment. That lookup currently resolves to the stale `1.5.2rc2` dist-info record even though the CLI reports `2.0.0`.
-
-## Binary Layer
-
-The actual runnable commands used by the workflow are:
-
-```text
-Command            Location / Behavior
------------------  ----------------------------------------------------------
-hippunfold         /home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2/bin/hippunfold
-nnUNet_predict     /home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2/bin/nnUNet_predict
-reg_aladin          /home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2/bin/reg_aladin
-bash               /home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2/bin/bash
-wb_command         /home/yojiao/hpchome/hipp/software/workbench/bin_linux64/wb_command
-antsApplyTransformsToPoints  /home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2/bin/antsApplyTransformsToPoints
-LN2_LAYERS         resolved through `_archive/deprecated_2026-05-20/scripts_pre_core_workflow/LN2_LAYERS` wrapper
-```
-
-Core workflow code resolves Workbench directly from
-`software/workbench/bin_linux64/wb_command` via `scripts/core_workflow/lib/workbench.py`.
-Registered hippocampal sampling uses the ANTs points executable above for
-fMRIPrep datasets. `CORE_WORKFLOW_ANTS_POINTS` selects an explicit executable
-on another system. FNIRT datasets use Workbench warp conversion and existing
-py314 SciPy interpolation; no new package installation is needed.
-Legacy scripts may still call the wrapper in `_archive/deprecated_2026-05-20/scripts_pre_core_workflow/wb_command`.
-
-### HippUnfold External Binary Bundle
-
-`_archive/deprecated_2026-05-20/scripts_pre_core_workflow/run_hippunfold_local.sh` prepends `HIPPUNFOLD_EXTERNAL_BIN_DIR` to `PATH`
-before calling `hippunfold`. The default on this Mac is:
-
-```text
-/Applications/ITK-SNAP.app/Contents/bin
-```
-
-That bundle is the expected source of the external registration helpers used by
-the HippUnfold workflow, especially `greedy` and `c3d_affine_tool`.
-
-On a server, make the equivalent directory available somewhere stable and set:
+Use the explicit py314 interpreter for the repository launcher:
 
 ```bash
-export HIPPUNFOLD_EXTERNAL_BIN_DIR=/path/to/your/bin-dir
+/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/01_01_run_hippunfold_t1w_local.py 102311 --dataset hcp
+taskset --cpu-list 0-7,32-39 nice -n 10 /home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/01_01_run_hippunfold_t1w_local.py --dataset hcp --manifest manifests/hcp_7t_hippocampus_struct_complete_166.txt --jobs 8
 ```
 
-Then verify the bundle with:
+The closed presets select HCP, Stanford, JJ-TMS, BANDA or PDC input/output roots,
+T1w filtering, N4 preprocessing choice, 512 density, corobl output, hippocampus
+and dentate topology, unfolded registration and GPU inference. BANDA/PDC retain
+`--skip-preproc` for their already bias-corrected inputs. HCP/Stanford/JJ-TMS
+retain N4. Free-form scientific arguments and caller HIPPUNFOLD overrides are
+rejected. `--dry-run` prints the resolved JSON contract without processing.
+
+The gate validates the resource adapter, CUDA availability, canonical executable,
+CLI 2.2.0 and the T1w/512 help with inner/outer registration options. A batch
+with pending subjects runs this full gate once and reuses it only within that
+batch process. A new batch checks again. CLI probes have a 300-second limit.
+An unavailable CUDA device stops the run; it does not select CPU inference.
+
+## Scientific parameters
+
+The adult T1w model remains Task101_hcp1200_T1w, nnUNetTrainerV2, model_best.
+Reference templates and the multihist7 atlas remain the declared resources.
+Actual consumed den-512 surface paths establish the output density.
+
+Inner/outer registration uses the official v2.2.0 greedy defaults:
+`-n 50x50x50 -s 1.7320508075688772vox 0.707vox`. The launch contract explicitly
+selects method `greedy` and update-field smoothing variance 3.0. The source
+retains the optional SyN implementation and method-specific transform paths.
+The official PyVista point-ID compatibility fix and pandas-compatible volume
+statistics implementation are included. Development changes after the v2.2.0
+tag are outside this runtime.
+
+## Local resource resolution
+
+Shared models/templates reside in `runtime/hippunfold_asset_store_shared/`:
+`hippunfold_assets/` is the canonical resource cache, and
+`runtime_source_assets/` is the Snakemake runtime source cache.
+
+Complete selected templates, atlas surfaces/registration metrics/subfield
+labels and unpacked model folds are validated against their declared filenames.
+Complete cached assets register no remote dependencies and issue no HTTP
+requests. Absent resources retain their original declared download URLs.
+Incomplete resource directories fail with exact missing paths. Reusing a model
+never prunes the subject processing DAG with `--omit-from`.
+
+The maintained source patches are:
+
+- `scripts/core_workflow/lib/hippunfold_local_assets.patch`: cached-resource
+  resolution, CLI version display, host-local GPU inference slot and bounded nnUNet workers.
+- `scripts/core_workflow/lib/snakemake_local_source_cache.patch`: refresh changed
+  local source files by modification time while retaining remote-source behavior.
+
+The HippUnfold patch changes four explicit files: config/snakebids.yml,
+workflow/rules/download.smk, workflow/rules/nnunet.smk and
+workflow/lib/local_assets.py. It applies to clean official v2.2.0 source.
+Other scientific processing files remain official v2.2.0 code.
+
+## Batch resources and retained outputs
+
+The shared-host HCP profile runs eight subjects, one CPU core per subject,
+and two GPU inference slots. Its launch uses CPU affinity `0-7,32-39` (16 physical
+cores on the current IDAS host) and niceness 10. The container has a 32-CPU quota;
+this profile leaves at least half that CPU capacity available to other tasks.
+Other datasets retain two subjects (BANDA one) and one GPU slot. This specifically
+approved HCP profile supersedes the earlier two-subject/ten-task budget for this
+workload; other repository task limits remain unchanged.
+
+GPU slots use the abstract Unix sockets `hippunfold-gpu0-<uid>` and
+`hippunfold-gpu0-<uid>-1`. Contending inference waits for a free declared slot;
+process exit releases it automatically. The small lock helper starts Python
+with `-S`, avoiding the Torch startup hook before exec; the actual inference
+still loads the normal startup hook. nnUNet preprocessing and save workers
+remain one each. OMP, MKL, OpenBLAS, NumExpr, vecLib, ITK and VTK limits remain
+one. The existing fork/Torch-sharing hook remains in `.runtime_py/`.
+Per-subject runtime directories remain under
+`runtime/hippunfold_workdirs/<dataset>/sub-<id>/`; shared asset caches remain
+separate from these subject-specific directories. PATH places repository
+wrappers before hippo2/bin; LD_LIBRARY_PATH prepends hippo2/lib. The Torch
+checkpoint compatibility setting remains enabled.
+
+Output checks run serially with `--fail-on-missing --no-cleanup`, using the
+existing full-output contract. All structural payloads remain available,
+including anat, coords, warps and cifti. The per-subject output_check.json
+records the check and its exact run contract. Resume skips a subject only when
+this report matches the current contract and every declared full output remains
+present. Older cleanup receipts do not establish v2.2.0 completion. Processing
+or checking failures stop new dispatch; already running subjects finish and
+receive their checks.
+
+## Rebuild recipe
+
+For a fresh environment, create the canonical prefix from the declaration and
+provide the external Workbench binary on PATH:
 
 ```bash
-command -v c3d
-command -v greedy
-command -v c3d_affine_tool
+CONDA_CHANNEL_PRIORITY=flexible /opt/conda/bin/conda env create --prefix /home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2 --file environment/hippo2_server.yml
 ```
 
-If `c3d` is missing, install the conda-forge `c3d` package into `hippo2` or an
-equivalent environment. If `greedy` or `c3d_affine_tool` is missing, the
-launcher will not have the external helper bundle it expects.
+Use flexible channel priority for the explicitly selected Conda-forge Greedy
+and Khanlab Convert3D artifacts. For an existing hippo2 upgrade, install the clean official v2.2.0 package and
+the declared refreshed scientific/runtime dependencies. Use the CUDA 12.6
+PyTorch wheel on this driver-550 host; CUDA 13 wheels require a newer driver.
+Build/install the clean source before patching it so the package version remains
+2.2.0.
 
-### Greedy Binary Source
-
-The HippUnfold workflow expects the medical-image registration binary `greedy`,
-not the unrelated GeoPandas package named `greedy`.
-
-On this workspace, the launcher gets `greedy` from the ITK-SNAP bundle listed
-above. On a server, the shortest supported install path is usually the conda
-package:
+Apply the maintained HippUnfold patch to a clean source copy, then copy the four
+explicit patched files into the installed package. This also replaces any
+unowned adapter retained by pip during reinstallation. Pause batch dispatch and
+wait until all active HippUnfold subprocesses exit before replacing installed
+files; Snakemake reloads rules during execution:
 
 ```bash
-conda install -p /home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2 -c khanlab greedyreg
+git clone --single-branch --branch v2.2.0 https://github.com/khanlab/hippunfold.git tmp/hippunfold_220_source
+.cache/conda_envs/hippo2/bin/pip install --no-deps tmp/hippunfold_220_source
+patch --batch --forward --dry-run -p1 -d tmp/hippunfold_220_source/hippunfold < scripts/core_workflow/lib/hippunfold_local_assets.patch
+patch --batch --forward -p1 -d tmp/hippunfold_220_source/hippunfold < scripts/core_workflow/lib/hippunfold_local_assets.patch
+hippunfold_site=/home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2/lib/python3.13/site-packages/hippunfold
+cp tmp/hippunfold_220_source/hippunfold/config/snakebids.yml "$hippunfold_site/config/snakebids.yml"
+cp tmp/hippunfold_220_source/hippunfold/workflow/rules/download.smk "$hippunfold_site/workflow/rules/download.smk"
+cp tmp/hippunfold_220_source/hippunfold/workflow/rules/nnunet.smk "$hippunfold_site/workflow/rules/nnunet.smk"
+cp tmp/hippunfold_220_source/hippunfold/workflow/lib/local_assets.py "$hippunfold_site/workflow/lib/local_assets.py"
 ```
 
-That package is the one that provides the `greedy` executable used by the
-registration helpers. After installation, verify:
+After reinstalling Snakemake, dry-run and apply its separate local-source-cache
+patch to the installed snakemake directory. Activate hippo2, verify `which
+hippunfold`, run the 2.2.0/T1w/512 gate, and use the closed stage-01 launcher.
+For tests and temporary build material use the repository tmp/ workspace.
+Do not delete structural outputs or runtime directories as an upgrade step.
 
-```bash
-conda run -p /home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2 bash -lc 'command -v greedy; greedy -help | head -n 1'
-```
-
-If you already have an ITK-SNAP bundle or another vendor-supplied binary
-directory, you can keep using it by pointing `HIPPUNFOLD_EXTERNAL_BIN_DIR` at
-that directory instead.
-
-### Workbench Command Resolution
-
-Active `scripts/core_workflow` steps resolve and execute:
-
-- `software/workbench/bin_linux64/wb_command`
-
-Legacy helpers may still use [`_archive/deprecated_2026-05-20/scripts_pre_core_workflow/wb_command`](/home/yojiao/hpchome/hipp/_archive/deprecated_2026-05-20/scripts_pre_core_workflow/wb_command), which is a thin wrapper around the same binary:
-
-1. Fails fast if the app binary is missing
-2. Otherwise execs `software/workbench/bin_linux64/wb_command` directly
-
-### LAYNII Wrapper
-
-[`_archive/deprecated_2026-05-20/scripts_pre_core_workflow/LN2_LAYERS`](/Users/jy/Documents/HippoMaps-network-first/_archive/deprecated_2026-05-20/scripts_pre_core_workflow/LN2_LAYERS) wraps the real `LN2_LAYERS` binary so `.nii.gz` rims are decompressed to `.nii` before execution and the expected outputs are recompressed afterward.
-
-### LAYNII Binary Source
-
-`LN2_LAYERS` is part of the [LAYNII](https://github.com/layerfMRI/LAYNII) tool
-suite. On this workspace it may come either from:
-
-1. A conda installation of `laynii`
-2. A manually unpacked LAYNII binary directory
-
-For a server, the shortest supported install path is usually:
-
-```bash
-conda install -p /home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2 -c conda-forge laynii
-```
-
-After installation, verify the executable is visible:
-
-```bash
-conda run -p /home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2 bash -lc 'command -v LN2_LAYERS; LN2_LAYERS -help | head -n 1'
-```
-
-If the binary lives outside `hippo2`, point the launcher at it explicitly:
-
-```bash
-export HIPPUNFOLD_LN2_LAYERS_BIN=/path/to/LAYNII/LN2_LAYERS
-```
-
-The wrapper in `_archive/deprecated_2026-05-20/scripts_pre_core_workflow/LN2_LAYERS` exits with code `127` when neither the
-environment variable nor `PATH` yields a real binary.
-
-## Runtime Layer
-
-The active launcher `scripts/core_workflow/01_01_run_hippunfold_t1w_local.py` and its closed contract module are part of the environment definition.
-
-They set the following runtime layers before starting HippUnfold:
+## Separate Argon MATLAB environment
 
 ### Kong2022 Route A MATLAB Runtime
 
@@ -346,6 +272,7 @@ Setting / Path                                 Purpose
 `PATH` precedence                             `scripts/` first, then the validated `hippo2/bin`
 `XDG_CACHE_HOME`                               Derived runtime scratch under the locked runtime root
 `HIPPUNFOLD_USE_GPU`                          Not an environment override; `--use_gpu` is fixed in the argv contract
+`HIPPUNFOLD_GPU_SLOTS`                        Locked to two for HCP and one for other presets
 `LD_LIBRARY_PATH`                             Prepend `hippo2/lib` so the env libstdc++ overrides the system copy
 `nnUNet_n_proc_DA=1`                           Prevents runaway multiprocessing
 `OMP/MKL/OPENBLAS/VECLIB=1`                  Keeps numeric libs single-threaded
@@ -369,245 +296,3 @@ and scrubs every caller-provided `HIPPUNFOLD_*` override before launching.
 `HIPPUNFOLD_CACHE_ROOT` is derived from the dataset and subject, so two batches
 cannot silently choose different runtime roots or model locations. Runtime
 scratch is retained; no cleanup override is accepted by stage 01.
-
-### Local resource resolution
-
-The installed HippUnfold 2.0.0 resource rules resolve the exact selected asset in
-the shared cache before registering a remote producer. Registration templates
-are checked against their declared filenames. Surface atlases are checked for
-the selected hemispheres, labels and output/registration densities, including
-surfaces, registration metrics and hippocampal subfield labels. nnUNet v1 can
-reuse its complete unpacked model, including every detected fold's configured
-checkpoint and metadata; a local model archive can also supply unpacking.
-Existing incomplete resource directories stop with the missing paths. For an
-absent resource the original download rule and URL remain available. The old
-launcher requirement that the T1w model archive must already exist is removed
-so this declared missing-resource path can run.
-
-Complete cached resources are consumed without any remote HTTP request during
-DAG construction or execution. This includes skipping remote metadata `HEAD`
-checks. Download rules are omitted only for assets already present; the complete
-subject analysis DAG and its requested outputs remain in place.
-
-Snakemake 9.19.0 normally reuses an existing runtime source-cache entry without
-checking whether a local source file changed. The installed source-cache patch
-refreshes changed local code by modification time and leaves remote source
-handling unchanged. This is necessary because the shared runtime source cache
-persists across workflow patches.
-
-The source patches are maintained at:
-
-- `scripts/core_workflow/lib/hippunfold_local_assets.patch`
-- `scripts/core_workflow/lib/snakemake_local_source_cache.patch`
-
-These two source patches are explicitly included in the repository's source-only
-Git allowlist.
-
-Both are installed in the current runtime. After reinstalling **HippUnfold**,
-apply its patch to the installed package:
-
-```bash
-hippo_site_packages=/home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2/lib/python3.13/site-packages
-patch --batch --forward --dry-run -p1 -d "${hippo_site_packages}/hippunfold" < scripts/core_workflow/lib/hippunfold_local_assets.patch
-patch --batch --forward -p1 -d "${hippo_site_packages}/hippunfold" < scripts/core_workflow/lib/hippunfold_local_assets.patch
-```
-
-After reinstalling **Snakemake**, apply its patch separately:
-
-```bash
-hippo_site_packages=/home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2/lib/python3.13/site-packages
-patch --batch --forward --dry-run -p1 -d "${hippo_site_packages}/snakemake" < scripts/core_workflow/lib/snakemake_local_source_cache.patch
-patch --batch --forward -p1 -d "${hippo_site_packages}/snakemake" < scripts/core_workflow/lib/snakemake_local_source_cache.patch
-```
-
-Apply the matching patch after the corresponding package was reinstalled;
-the dry-run must succeed before application. Stage 01 imports the installed
-resource adapter as part of its runtime gate and reports the patch path if the
-adapter was removed by a reinstall. Focused regression checks are in
-`tests/core_workflow/test_hippunfold_local_assets.py` and
-`tests/core_workflow/test_hippunfold_cache_contract.py`. Real BANDA/PDC DAGs have
-also been checked with HTTP requests blocked in the validation process; this
-test does not set a network-blocking policy for production missing resources.
-
-The active public T1w launcher `scripts/core_workflow/01_01_run_hippunfold_t1w_local.py`
-accepts `<subject> --dataset {hcp,stanford,iowa_jj_tms,banda,pdc}` for one subject,
-or `--dataset <dataset> --manifest <subject-list.txt> --jobs <N>` for a batch.
-`--dry-run` prints one JSON contract in single-subject mode or an ordered JSON
-array in manifest mode, without running the gate or processing.
-The closed dataset preset fixes the input root, output root, T1w extension filter,
-T1w modality, `corobl` output space, density `512`, autotopology labels, GPU
-inference, one core, the N4 preprocessing choice, and the canonical shared local cache/model paths. All
-`HIPPUNFOLD_*` caller overrides are scrubbed; free-form Snakemake arguments are
-not accepted. The local model is consumed through the canonical cache output, so
-the workflow is never pruned with `--omit-from download_nnunet_model`. A direct
-one-subject run applies the complete hippo2 gate in the same fixed environment
-used for processing: exact executable resolution, CLI version `2.0.0`, and
-T1w/512 help support. The CLI version and help probes have a 60-second limit.
-BANDA/PDC batch drivers use manifest mode in this same entry point, which performs that
-gate once for each batch with pending subjects and reuses the result only for
-that batch process; the next batch checks again. This avoids repeated full CLI
-startup per subject without storing a persistent version marker. PDC uses three
-parallel HippUnfold jobs, while output checking and cleanup remain serial because
-they share the batch integrity manifest. BANDA remains serial.
-The runner enforces these dataset limits before validation or execution and
-identifies IDAS or Argon before parallel work. Processing or checking failures
-stop new subject dispatch while already running subjects finish and receive
-their serial output checks. The checker uses `--fail-on-missing`, so incomplete
-outputs cannot be reported as completed. Runtime setup, system detection, and
-execution helpers live in `lib/hippunfold_run_contract.py`.
-Manifest resume skips only subjects with an existing
-`core_workflow_cleanup_receipt.json`; surface files without that receipt go
-through HippUnfold resume and the complete checker.
-JJ_TMS is the only preset using `extension=.nii`; the other presets use
-`extension=.nii.gz`.
-
-The BANDA/PDC presets consume HCP bias-field-corrected
-`T1w_acpc_dc_restore.nii.gz` products and set `skip_preproc=True`, automatically
-adding `--skip-preproc`. Established HCP, Stanford, and JJ_TMS launch contracts
-retain `False`; the setting defaults to `False` in `DatasetPreset`. The public
-dry-run JSON exposes the selected value and command without reading inputs.
-The setting follows documented upstream bias-field correction of the consumed
-input, rather than scanner field strength or voxel size. See
-[stage-01 input preprocessing](../../scripts/core_workflow/README.md#input-preprocessing).
-
-The BANDA/PDC batch drivers under `outputs_<dataset>/work/run_hippunfold_batch.sh`
-use the checker's default automatic cleanup after each stage-01 run.
-
-The output checker `scripts/core_workflow/01_02_check_hippunfold_outputs.py`
-accepts legacy success markers, HippUnfold 2.x `N of N steps (100%) done`
-markers, and no-op logs. When a 2.x log has no `localrule all` input list, it
-derives the expected manifest from the successful subject output tree.
-
-After dataset-appropriate full-DAG acceptance exists, the generic checker uses
-its cached full-output contract for a one-time complete subject validation and
-then removes `sub-<id>/{anat,coords,warps,cifti}` from the subject payload.
-Before accepting a real HippUnfold manifest it additionally requires fixed L/R
-`space-corobl`, `space-T1w`, and `space-unfold` `den-512` midthickness surfaces,
-the `den-512` surface spec, and both unetf3d Dice QC files. This prevents a
-template-only space-unfold pair from being mistaken for a complete run.
-It retains `surf/`, `metric/`, and `qc/` for the maintained core workflow and
-writes `core_workflow_cleanup_receipt.json` beside the payload. New receipts
-are bound to the full contract SHA-256. Historical schema-1 `cleanup_complete`
-receipts with an older fingerprint are reconciled only when their approved
-directory list and removal evidence are complete, no pruned directory remains,
-and every current retained expected output is present. Missing retained anchors
-or non-approved outputs still fail validation.
-`--no-cleanup` performs validation without pruning. The removed directories
-cannot be used for HippUnfold resume, volumetric structural analysis, or CIFTI
-derivative reuse and must be regenerated from the original inputs if needed.
-`--contract-source-cache` may seed a missing dataset-local cache from a
-validated compatible full-output contract; the local cache records the source
-path and contract SHA-256 before any subject is checked or cleaned.
-
-For persistent conda installs outside the launcher, `~/.condarc` is set to keep
-`pkgs_dirs` and `envs_dirs` under the repo-local `.cache/` tree so package
-downloads and future env creation stop consuming `/home/yojiao`.
-
-For interactive shells, use the canonical gate in `AGENTS.md`: activate
-`hippo2`, verify the executable resolves to the repo-local 2.0.0 build, and
-verify the 512-density help output before a direct run.
-
-GPU inference, modality, density, output space, workflow profile, scheduler
-data-management mode, core count, N4 preprocessing choice, and T1w extension filter are fixed in the
-stage-01 argv contract. They are not controlled by `HIPPUNFOLD_USE_GPU`,
-`HIPPUNFOLD_USE_CONDA`, or any other caller environment variable.
-
-## HippUnfold Inputs and Outputs
-
-The local launcher was run with:
-
-```text
-subject                     100610 / 102311 / 102816
-input_dir                   data/hippunfold_input
-output_dir                  outputs_hcp/inputs/hippunfold/dense_corobl_batch/sub-<id>/hippunfold
-workflow-profile            none
-sdm                         env-modules
-output-density              512
-output-spaces               corobl
-autotop_labels              hipp dentate
-```
-
-This manifest records the environment only. The actual subject outputs live under:
-
-- `outputs_hcp/inputs/hippunfold/dense_corobl_batch/sub-100610/hippunfold`
-- `outputs_hcp/inputs/hippunfold/dense_corobl_batch/sub-102311/hippunfold`
-- `outputs_hcp/inputs/hippunfold/dense_corobl_batch/sub-102816/hippunfold`
-
-## Known Footguns
-
-```text
-Issue                                              Why it matters
--------------------------------------------------  ---------------------------------------------
-`pandas` >= 2.x                                   Breaks `DataFrame.append` in a helper script
-Stale `hippunfold-1.5.2rc2.dist-info`             Confuses Python metadata checks
-`wb_command` on arm64 without `arch -x86_64`      Can misbehave or crash on this Mac
-`~/Library/Caches` writes                         Must be redirected for this workspace
-Hidden `.cache` growth                           Replaced with `runtime/hippunfold_cache`
-`LN2_LAYERS` on `.nii.gz` rims                    Needs wrapper decompression/recompression
-`nnUNet` multiprocessing on macOS                Needed a fork/sharing workaround here
-`/home/yojiao` quota                              Keep `conda`/`pip` caches in repo-local `.cache`
-Parallel HippUnfold with shared disposable cache  Can fail due to cache-cleanup races across workers
-```
-
-## Rebuild Recipe
-
-From scratch, a future agent should:
-
-1. Create or activate the repo-local `hippo2` prefix at `/home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2`.
-2. Install the conda snapshot from `manifests/hippo2/conda-explicit.txt`.
-3. Verify `conda list -p /home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2` reports `hippunfold 2.0.0`.
-4. Verify `hippunfold --version` reports `2.0.0`.
-5. Ignore `importlib.metadata.version("hippunfold")` if it still reports `1.5.2rc2`.
-6. Build or update the server environment from `environment/hippo2_server.yml` before first run.
-7. Use the active stage-01 launcher only through its closed preset interface:
-   `/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/01_01_run_hippunfold_t1w_local.py <subject> --dataset <hcp|stanford|iowa_jj_tms|banda|pdc>`.
-8. Do not pass positional input/output paths, model paths, `HIPPUNFOLD_*` overrides, or free-form Snakemake arguments.
-9. Apply the runtime resource patches above and make sure the validated `hippo2/bin/hippunfold` executable is resolvable before a real run.
-10. Make sure `c3d`, `greedy`, `LN2_LAYERS`, and `N4BiasFieldCorrection` resolve from the conda env or explicit binary paths.
-11. Runtime scratch is derived under `runtime/hippunfold_workdirs/<dataset>/sub-<id>/` and retained; do not share or clean it between subjects.
-12. HCP, Stanford, JJ-TMS, BANDA, and PDC input/output roots and extension filters are defined only in `scripts/core_workflow/lib/hippunfold_run_contract.py`.
-
-## Activation Path Guardrail
-
-Current canonical Conda paths for the local host:
-
-- `/opt/conda/...` as the canonical activation root on the local host
-- `/home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2/...` as the canonical `hippo2` environment prefix
-
-Canonical local activation:
-
-```bash
-source /opt/conda/bin/activate hippo2
-which hippunfold
-```
-
-`which hippunfold` must print:
-
-```text
-/home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2/bin/hippunfold
-```
-
-## Minimal Verification Commands
-
-```bash
-source /opt/conda/bin/activate hippo2
-which hippunfold
-hippunfold --version
-hippunfold --modality T2w --output_density 512 --help | grep -F '512'
-conda list -p /home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2 | rg '^hippunfold\s'
-conda list -p /home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2 | rg '^c3d\s'
-conda run -p /home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2 python -c 'import importlib.metadata as m; print(m.version("hippunfold"))'
-conda run -p /home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2 bash -lc 'command -v c3d; command -v reg_aladin; command -v nnUNet_predict; command -v bash'
-```
-
-For Workbench, use:
-
-```bash
-_archive/deprecated_2026-05-20/scripts_pre_core_workflow/wb_command -help
-```
-
-On this Mac, that wrapper will internally invoke:
-
-```bash
-_archive/deprecated_2026-05-20/scripts_pre_core_workflow/wb_command -help
-```

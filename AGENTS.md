@@ -4,6 +4,23 @@
 
 - `<repository>/tmp/` is the only temporary workspace for this project.
 
+## Starting Codex on Argon
+
+From any Argon login node, use the personal fixed-host entry point:
+
+```bash
+cd /old_Users/yojiao/hipp
+codex-argon          # Start a new session
+codex-argon resume   # Select and resume a previous session
+codex-argon agents   # View running sessions
+```
+
+This entry automatically connects to `argon-login-6.hpc`, preserving the current
+directory and arguments. Use it again after reconnecting to Argon. The executable
+is `/Users/yojiao/.local/bin/codex-argon`; its runbook is
+`/Users/yojiao/.local/share/codex-argon.md`. These are personal tools outside this
+repository. Sessions already running on another node still require that node.
+
 ## Concurrency Limit — Identify the System First
 
 - Before launching parallel work or an SGE array, identify the active system
@@ -82,14 +99,12 @@
 - Required validation sequence before a direct HippUnfold run on the local host:
   1. `source /opt/conda/bin/activate hippo2`
   2. `which hippunfold` must resolve to `/home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2/bin/hippunfold`
-  3. `hippunfold --version` must return `2.0.0`
+  3. `hippunfold --version` must return `2.2.0`
   4. `hippunfold --modality T1w --output_density 512 --help` must succeed and show `512`
-- Do not use `importlib.metadata.version("hippunfold")` as authoritative version proof. In this workspace it can still report `1.5.2rc2` even when the CLI is the validated `2.0.0` build.
-- If the gate fails, repair in place with:
-
-```bash
-CONDA_SAFETY_CHECKS=disabled conda install -y -p /home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2 -c khanlab -c conda-forge -c bioconda khanlab::hippunfold=2.0.0=py_0 --force-reinstall
-```
+- Validate the effective CLI and its loaded scientific source; package-manager metadata alone is insufficient.
+- The runtime uses official v2.2.0 source in the refreshed hippo2 dependency stack, with the local resource/runtime patch. Rebuild using `docs/environment/hippo2_reproducibility_manifest.md#rebuild-recipe`; do not reinstall an older HippUnfold package.
+- Stage 01 performs the environment/model/CUDA gate once per batch with pending subjects. CLI probes have a 300-second limit. The explicitly approved HCP performance profile uses eight concurrent subjects, one core per subject, two GPU inference slots, CPU affinity `0-7,32-39` (16 CPUs), and niceness 10; nnUNet preprocessing/save workers remain one each. This HCP profile supersedes the prior process-count cap for this workload while reserving at least half the 32-CPU quota for other tasks. Other datasets retain two subjects (BANDA one) and one GPU slot under the general system cap. See the runtime manifest for the exact launch command.
+- Stage-01 checks use `--no-cleanup`, retaining full structural outputs. A v2.0.0 cleanup receipt never establishes completion of the v2.2.0 run.
 
 - The local runtime also requires the resource patches documented in
   `docs/environment/hippo2_reproducibility_manifest.md#local-resource-resolution`.
