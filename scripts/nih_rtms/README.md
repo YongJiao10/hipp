@@ -11,7 +11,9 @@ These scripts adapt the established Jianglab pipeline from `fmriprep_processed_J
 | File | Purpose | Description |
 | :--- | :--- | :--- |
 | `fmriprep_nih_rtms_restfmri.sh` | fMRIPrep SGE launcher | Runs fMRIPrep Singularity container on Argon (`UI,PINC`), outputting both `MNI152NLin6Asym:res-2` volumetric and `fsLR den-91k` CIFTI/surface derivatives with FreeSurfer `recon-all`, slice timing correction, and `--longitudinal` T1w templates. |
-| `xcpd_36P_nih_rtms_restfmri.sh` | XCP-D SGE launcher | Runs XCP-D 36P nuisance regression, filtering (0.01-0.10 Hz), and censoring (`FD > 0.5 mm`) in both `cifti` (`xcpd_surf/restfmri`) and `nifti` (`xcpd/restfmri`) modes with isolated per-subject scratch workdirs. |
+| `xcpd_36P_nih_rtms_restfmri.sh` | XCP-D SGE launcher | Runs XCP-D 36P nuisance regression, filtering (0.01-0.10 Hz), and censoring (`FD > 0.5 mm`) in both `cifti` (`xcpd_surf/restfmri`) and `nifti` (`xcpd/restfmri`) modes with retained per-subject scratch caches and atomic shared QC metadata writes. |
+| `environment_manifest.md` | Preprocessing runtime contract | Pins container sources and resources, documents the read-only runtime overlays and validation checks. |
+| `finalize_fmriprep_nih_rtms.sh` | Explicit fMRIPrep finalization repair | Validates a scientifically successful source array and publishes the exact FreeSurfer label dictionaries; records a completion receipt in its SGE log. |
 | `sublist.txt` | Unified subject roster | 44 subjects (`sub-D01`..`sub-D28`, `sub-HVS1`..`sub-HVS17`). |
 
 Submit the launchers from this Git checkout. The cluster shared `src/` directory holds the subject roster and logs; do not copy launchers there as part of a run.
@@ -40,12 +42,16 @@ Submit the launchers from this Git checkout. The cluster shared `src/` directory
    - XCP-D Scratch WorkDir: `/nfsscratch/Users/yojiao/xcpd_NIH_rTMS_work/sub-${subject}/{cifti,nifti}`
 4. **Flexible Subject Execution**:
    - Single-subject mode: accepts subject ID as argument `$1` when submitted as a 1-task job (`qsub -t 1-1 -tc 1 script.sh sub-D01` or `bash script.sh sub-D01`). Combining `$1` with a multi-task SGE array is rejected fail-closed to prevent duplicate concurrent runs of the same subject.
-   - SGE array mode: reads line `$SGE_TASK_ID` from the shared `sublist.txt`. Both arrays use `-tc 20` on Argon.
+   - SGE array mode: reads line `$SGE_TASK_ID` from the shared `sublist.txt`. Both arrays must use the same roster and task range so their task IDs identify the same participant.
 5. **Argon Concurrency and FreeSurfer Outputs**:
    - fMRIPrep uses a separate persistent FreeSurfer `SUBJECTS_DIR` for each participant under `derivatives/restfmri/sourcedata/freesurfer_by_subject/sub-<ID>/`. This keeps concurrent template initialization isolated while retaining each subject's recon-all outputs.
-   - fMRIPrep and XCP-D arrays may each use `-tc 20`; submit XCP-D with a whole-array dependency on fMRIPrep so the stages do not overlap. Account for other active jobs so the total task count remains at most 20.
-6. **Scratch Cleanup**:
-   - Both launchers use `--clean-workdir` for automatic cleanup of their scratch workdirs after successful processing. Obtain explicit user approval for that cleanup before submitting a batch, as required by the repository deletion safeguard.
+   - Submit XCP-D with `-hold_jid_ad` so each task waits only for the matching participant's fMRIPrep task. Completed participants can start XCP-D while other participants are still in fMRIPrep.
+   - Across both stages and other active repository jobs, keep the total concurrency at most 20. The submission example reserves 10 tasks for each stage. Rebalance caps with `qalter -tc` as fMRIPrep drains; with one remaining fMRIPrep task and no other active jobs, XCP-D may use 19 tasks, then 20 after fMRIPrep ends.
+   - Use explicit user holds as an additional admission gate: SGE has been observed starting more tasks than `-tc` when multiple ready task groups are released. Submit XCP-D held, then release only validated ready participants up to the available concurrency budget. Count running, transferring, deletion-pending, and already released queued tasks before releasing more. Keep other pending tasks held and admit replacements as slots become free; do not release an entire sparse array at once. Decrease the other stage's cap before increasing one, and confirm actual scheduler state after every release.
+6. **Runtime and Scratch Caches**:
+   - fMRIPrep loads the exact FreeSurfer table resolver documented in [the environment manifest](environment_manifest.md), avoiding an ambiguous broad TemplateFlow lookup during finalization.
+   - XCP-D loads the source-validated atomic QC overlay described in [the environment manifest](environment_manifest.md). Each pass retains a log in the subject scratch root and fails on node errors even if the container returns zero.
+   - XCP-D retains its scratch caches for resumable execution. Cleanup requires explicit user approval for exact paths. fMRIPrep retains its configured `--clean-workdir` option; obtain explicit cleanup approval before submitting it, as required by the repository deletion safeguard.
 
 ---
 
@@ -59,8 +65,8 @@ repo_root=$(git -C /Users/yojiao/hipp rev-parse --show-toplevel)
 
 ### Step 1: Run fMRIPrep Array (44 subjects)
 ```bash
-# Submit the array (up to 20 concurrent subjects) and capture its job ID
-fmriprep_submission=$(qsub -terse -t 1-44 -tc 20 "${repo_root}/scripts/nih_rtms/fmriprep_nih_rtms_restfmri.sh")
+# Reserve 10 tasks for fMRIPrep and 10 for dependent XCP-D (20 total)
+fmriprep_submission=$(qsub -terse -t 1-44 -tc 10 "${repo_root}/scripts/nih_rtms/fmriprep_nih_rtms_restfmri.sh")
 fmriprep_job_id=${fmriprep_submission%%.*}
 printf 'fMRIPrep job: %s\n' "${fmriprep_job_id}"
 
@@ -69,14 +75,32 @@ qsub -t 1-1 -tc 1 "${repo_root}/scripts/nih_rtms/fmriprep_nih_rtms_restfmri.sh" 
 ```
 
 ### Step 2: Run XCP-D Array (44 tasks, auto-skips sub-D16)
-Queue XCP-D after submitting fMRIPrep, using its whole-array dependency:
+Queue XCP-D after submitting fMRIPrep, using matching task dependencies:
 ```bash
-# Hold all XCP-D tasks until the entire fMRIPrep array has finished
-qsub -t 1-44 -tc 20 -hold_jid "${fmriprep_job_id}" "${repo_root}/scripts/nih_rtms/xcpd_36P_nih_rtms_restfmri.sh"
+# Each XCP-D task waits only for its corresponding fMRIPrep task
+xcpd_submission=$(qsub -terse -h -t 1-44 -tc 10 -hold_jid_ad "${fmriprep_job_id}" "${repo_root}/scripts/nih_rtms/xcpd_36P_nih_rtms_restfmri.sh")
+xcpd_job_id=${xcpd_submission%%.*}
+printf 'Held XCP-D job: %s\n' "${xcpd_job_id}"
 
 # Or run a single test subject (override embedded -t 1-44 with -t 1-1)
 qsub -t 1-1 -tc 1 "${repo_root}/scripts/nih_rtms/xcpd_36P_nih_rtms_restfmri.sh" sub-D01
 ```
 
 Logs will be written to `/Shared/jianglab/3_Data_Working/Depression/NIH_rTMS/src/logs/`.
-The dependency waits for job completion, regardless of exit status. Each XCP-D task checks its exact expected fMRIPrep derivatives and fails if an input is missing.
+The array is initially user-held. Inspect `qstat -u yojiao`, validate each ready participant's exact inputs, and release individual tasks with `qrls JOB_ID.TASK_ID` only while capacity remains. With the example's 10-task fMRIPrep reservation, allow at most 10 unfinished released XCP-D tasks. Admit more ready participants as those tasks finish; a slow participant does not block other validated participants.
+The task dependency normally waits for completion regardless of exit status; SGE exit code 100 keeps the corresponding dependent task held. Each XCP-D task checks its exact expected fMRIPrep derivatives and fails if an input is missing. Do not use `-hold_jid` for this paired workflow: it blocks all participants behind the slowest fMRIPrep task. Argon's JSV policy rejects changing `hold_jid_ad` with `qalter`, so set task dependencies at submission. When replacing an unstarted array, submit its replacement with a user hold (`-h`), verify the dependencies and concurrency cap, cancel the old unstarted array, then release only ready replacement tasks within the available budget.
+
+### Explicit finalization repair
+
+For an array that completed scientific processing and reports but lacks the
+FreeSurfer root dictionaries, submit the validated finalization command with
+the exact source array ID. Reserve one task within the global concurrency cap:
+
+```bash
+qsub -t 1-1 -tc 1 "${repo_root}/scripts/nih_rtms/finalize_fmriprep_nih_rtms.sh" "${fmriprep_job_id}"
+```
+
+The command validates the full cohort before publishing the missing dictionaries.
+It rejects conflicting existing metadata and records source provenance and hashes
+in its scheduler log. See the environment manifest for the pinned source and
+resource contracts.

@@ -31,6 +31,7 @@ sublist=${baseDir}/src/sublist.txt
 singularityDir=/Shared/jianglab/0_scripts/fmriprep_tools
 sifFile=${singularityDir}/xcp_d_latest.sif
 fsLicense=${singularityDir}/license.txt
+runtimeDir=/old_Users/yojiao/hipp/scripts/nih_rtms/runtime
 
 export TEMPLATEFLOW_HOME=${singularityDir}/TemplateFlow
 export SINGULARITYENV_TEMPLATEFLOW_HOME=/templateflow
@@ -150,11 +151,24 @@ if [[ ! -d "${TEMPLATEFLOW_HOME}" ]]; then
     exit 1
 fi
 
+if [[ ! -s "${runtimeDir}/sitecustomize.py" ]]; then
+    echo "ERROR: Missing required NIH rTMS atomic QC runtime: ${runtimeDir}/sitecustomize.py"
+    exit 1
+fi
+sha256sum "${runtimeDir}/sitecustomize.py"
+singularity exec --cleanenv \
+    --env PYTHONPATH=/nih_rtms_runtime \
+    -B "${runtimeDir}":/nih_rtms_runtime:ro \
+    "${sifFile}" /usr/local/miniconda/bin/python -c \
+    'from nipype.utils.filemanip import copyfile; assert getattr(copyfile, "_nih_rtms_atomic_qc_copy", False), "Atomic QC runtime not loaded"; print("NIH rTMS atomic QC runtime validated:", copyfile._nih_rtms_source_sha256)'
+
 # ==============================================================================
 # Step 1: Run XCP-D CIFTI (fsLR den-91k cortical surface + subcortical dtseries)
 # ==============================================================================
 echo "Starting XCP-D CIFTI pass (fsLR den-91k) for sub-${subject}..."
 singularity run --cleanenv \
+    --env PYTHONPATH=/nih_rtms_runtime \
+    -B "${runtimeDir}":/nih_rtms_runtime:ro \
     -B "${baseDir}":/data \
     -B "${TEMPLATEFLOW_HOME}":/templateflow \
     -B "${fsLicense}":/license.txt \
@@ -180,15 +194,21 @@ singularity run --cleanenv \
     --atlases Glasser Tian \
     --work-dir /work/cifti \
     --bids-database-dir /work/cifti/bids_db \
-    --clean-workdir \
     --fs-license-file /license.txt \
-    --resource-monitor
+    --resource-monitor 2>&1 | tee "${workDir}/cifti_execution.log"
+
+if grep -Eq 'NodeExecutionError|Workflow did not execute cleanly|Node .* failed to run' "${workDir}/cifti_execution.log"; then
+    echo "ERROR: XCP-D CIFTI pass reported a node failure: ${workDir}/cifti_execution.log"
+    exit 1
+fi
 
 # ==============================================================================
 # Step 2: Run XCP-D NIfTI (MNI152NLin6Asym:res-2 volumetric BOLD for HippUnfold)
 # ==============================================================================
 echo "Starting XCP-D NIfTI pass (MNI152NLin6Asym:res-2) for sub-${subject}..."
 singularity run --cleanenv \
+    --env PYTHONPATH=/nih_rtms_runtime \
+    -B "${runtimeDir}":/nih_rtms_runtime:ro \
     -B "${baseDir}":/data \
     -B "${TEMPLATEFLOW_HOME}":/templateflow \
     -B "${fsLicense}":/license.txt \
@@ -214,9 +234,13 @@ singularity run --cleanenv \
     --atlases Glasser Tian \
     --work-dir /work/nifti \
     --bids-database-dir /work/nifti/bids_db \
-    --clean-workdir \
     --fs-license-file /license.txt \
-    --resource-monitor
+    --resource-monitor 2>&1 | tee "${workDir}/nifti_execution.log"
+
+if grep -Eq 'NodeExecutionError|Workflow did not execute cleanly|Node .* failed to run' "${workDir}/nifti_execution.log"; then
+    echo "ERROR: XCP-D NIfTI pass reported a node failure: ${workDir}/nifti_execution.log"
+    exit 1
+fi
 
 # ==============================================================================
 # Verify expected XCP-D outputs for every run before setting permissions

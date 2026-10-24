@@ -29,6 +29,7 @@ sublist=${baseDir}/src/sublist.txt
 singularityDir=/Shared/jianglab/0_scripts/fmriprep_tools
 sifFile=${singularityDir}/fmriprep_v2314_kw.sif
 fsLicense=${singularityDir}/license.txt
+runtimeDir=/old_Users/yojiao/hipp/scripts/nih_rtms/fmriprep_overlay
 
 export TEMPLATEFLOW_HOME=${singularityDir}/TemplateFlow
 export SINGULARITYENV_TEMPLATEFLOW_HOME=/templateflow
@@ -154,7 +155,21 @@ fi
 # (fsLR den-91k) with FreeSurfer recon-all, slice timing correction (TR=3.0s),
 # and longitudinal unbiased T1w template construction.
 # ==============================================================================
+if [[ ! -s "${runtimeDir}/sitecustomize.py" ]]; then
+    echo "ERROR: Missing required exact FreeSurfer table resolver: ${runtimeDir}/sitecustomize.py"
+    exit 1
+fi
+sha256sum "${runtimeDir}/sitecustomize.py"
+singularity exec --cleanenv \
+    --env PYTHONPATH=/nih_rtms_fmriprep_runtime \
+    -B "${runtimeDir}":/nih_rtms_fmriprep_runtime:ro \
+    -B "${TEMPLATEFLOW_HOME}":/templateflow:ro \
+    "${sifFile}" /opt/conda/envs/fmriprep/bin/python -c \
+    'from templateflow import api; assert getattr(api.get, "_nih_rtms_fsaverage_table", None), "Exact FreeSurfer resolver not loaded"; print("NIH rTMS exact FreeSurfer table validated:", api.get._nih_rtms_fsaverage_table, api.get._nih_rtms_table_sha256)'
+
 singularity run --cleanenv \
+    --env PYTHONPATH=/nih_rtms_fmriprep_runtime \
+    -B "${runtimeDir}":/nih_rtms_fmriprep_runtime:ro \
     -B "${baseDir}":/data \
     -B "${TEMPLATEFLOW_HOME}":/templateflow \
     -B "${fsLicense}":/license.txt \
