@@ -3,7 +3,7 @@ from __future__ import annotations
 
 """Build the accepted HCP7T participant QC roster.
 
-Apply frame-weighted physical-run Power FD <=0.30 mm, bilateral HippUnfold
+Apply frame-weighted physical-run Power FD <=0.50 mm, bilateral HippUnfold
 Dice >=0.70, and <=20 unusable NIfTI-sampled vertices per consumed den-512
 hemisphere, in that order. Missing inputs are unassessable, not quality failures.
 No tSNR exclusion threshold or predetermined passing subject count is applied.
@@ -224,7 +224,7 @@ def main() -> int:
     parser.add_argument("--manifest-dir", default=str(DEFAULT_MANIFEST_DIR))
     parser.add_argument("--subjects", nargs="*", default=None)
     parser.add_argument("--dice-threshold", type=float, default=0.70)
-    parser.add_argument("--fd-threshold", type=float, default=0.30)
+    parser.add_argument("--fd-threshold", type=float, default=0.50)
     parser.add_argument("--max-unsupported-vertices", type=int, default=20)
     args = parser.parse_args()
     batch_root = Path(args.hippunfold_batch_root).resolve()

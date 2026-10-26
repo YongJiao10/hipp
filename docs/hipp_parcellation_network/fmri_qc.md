@@ -26,14 +26,14 @@ production outputs have been rebuilt or that other dataset entry points have
 been implemented.
 Group-input `qc` and `all` stages for other datasets or tasks stop before writing
 until their production QC input contracts are implemented.
-The research counts below are not new formal rosters; the historical HCP151
-reference is not the new QC result.
+The current HCP7T functional roster below is generated from the completed
+NIfTI coverage check on the official v2.3.0 surfaces.
 
 ## Participant and visit selection
 
 Apply these criteria in order, stopping at the first failure:
 
-1. **Motion:** overall mean Power FD <=0.30 mm. Perform this step before
+1. **Motion:** overall mean Power FD <=0.50 mm. Perform this step before
    HippUnfold when processing new inputs.
 2. **Anatomy:** HippUnfold Dice >=0.70 in both hemispheres.
 3. **Hippocampal coverage:** at most 20 unusable vertices in each consumed
@@ -61,7 +61,7 @@ censoring. The current comparison uses unfiltered, lag-one FD.
 
 For multiple runs, use
 `overall_mean_FD = sum(frames_r * mean_FD_r) / sum(frames_r)`.
-Apply the 0.30-mm threshold once to this overall mean. There is no individual
+Apply the 0.50-mm threshold once to this overall mean. There is no individual
 run veto; for example, equal-length runs with means 0.40 and 0.10 pass at 0.25.
 Dice is evaluated once per anatomical reconstruction, independently of run count.
 
@@ -107,38 +107,43 @@ Volume-to-surface sampling must use surfaces transformed into the exact BOLD
 volume space. A `space-corobl` mesh cannot be used directly to sample MNI or
 native T1w volumes. Use native T1w geometry for physical distances and smoothing;
 displaying corresponding vertex values on a corobl mesh is a separate operation.
-Coordinate sampling code has been repaired, but affected formal functional
-products have not been rebuilt by this QC analysis.
+HCP7T raw sampling, coverage masks and 2/4-mm smoothing have been rebuilt from
+the official v2.3.0 surfaces for the current 162-participant roster. PFM FC and
+group-analysis progress is recorded in the
+[current result assessment](../environment/hippunfold_result_impact.md).
 
-## Reference retention before NIfTI reassessment
+## Current assessed cohorts
 
-These existing measurements used the preceding CIFTI-based coverage
-definition. They are not new NIfTI-based pass counts and must be reassessed
-after rebuilding raw coverage and masks. Rates are cumulative percentages of
-the same complete-case N in each row. Missing cases have no assumed outcome.
+The official HippUnfold v2.3.0 HCP7T reconstruction attempted all 166 subjects.
+Exactly 163 completed the official workflow and 162 also pass bilateral
+Dice >=0.70. All 162 pass the current overall mean Power FD <=0.50 mm rule;
+their maximum mean is 0.487185 mm. All 162 also pass the newly sampled BOLD
+NIfTI coverage check, with maximum unusable-vertex counts of four on the left
+and eight on the right. The final functional roster contains 162 participants
+at `outputs_hcp/inputs/kong2022/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt`.
+The current report is
+`outputs_hcp/inputs/kong2022/qc/t1only_hippunfold_tsnr_qc.json`. The three
+incomplete structural workflows are excluded before this 163-subject QC
+assessment; its single quality failure is 182739 for right-side Dice.
 
-| Dataset / unit | Complete-case N | FD pass | FD + Dice pass | All three pass | New exclusions: FD / Dice / coverage |
-|---|---:|---:|---:|---:|---:|
-| HCP7T rest | 166 | 156 (94.0%) | 155 (93.4%) | 148 (89.2%) | 10 / 1 / 7 |
-| HCP3T EMOTION | 144 | 142 (98.6%) | 142 (98.6%) | 134 (93.1%) | 2 / 0 / 8 |
-| HCP3T WM | 144 | 142 (98.6%) | 142 (98.6%) | 134 (93.1%) | 2 / 0 / 8 |
-| Stanford 36P | 199 | 194 (97.5%) | 190 (95.5%) | 186 (93.5%) | 5 / 4 / 4 |
-| BANDA | 202 | 183 (90.6%) | 183 (90.6%) | 179 (88.6%) | 19 / 0 / 4 |
-| PDC visits with complete records | 207 | 197 (95.2%) | 197 (95.2%) | 196 (94.7%) | 10 / 0 / 1 |
-
-BANDA has 203 roster members; one lacks a declared independent functional run.
-PDC has 455 visits, of which 422 (92.7%) pass motion. The table uses the 207
-visits with completed coverage assessments, not a final 455-visit selection.
-Newly completed anatomical outputs do not acquire a coverage decision
-automatically. The two-task HCP intersection is 133/144 (92.4%).
+NIH rTMS currently has 43 functional participants and 66 resting-state scans;
+D16 is anatomical-only. Using XCP-D's unfiltered Power `mean_fd` before
+censoring and after dummy removal, 64/66 scans pass <=0.50 mm. The two failures
+are D11 ses-1 (0.589030 mm) and D12 ses-1 (0.751863 mm). Of the 23 TRD
+participants with both treatment visits, 21 retain both visits. Use session-level
+decisions for treatment analyses; do not pool pre/post visits to rescue a
+high-motion visit. The 42/43 pass count obtained by pooling each participant's
+available scans is a separate descriptive aggregate, not the paired cohort.
+Mean-FD participant/visit selection and XCP-D's existing per-frame censoring
+at FD >0.50 mm are separate operations.
 
 ## Method basis
 
 [Gao et al., Nature Communications 2026](https://www.nature.com/articles/s41467-026-71719-y)
 use mean FD >0.30 mm for exclusion in cross-cohort functional-gradient work.
-This supports the numerical choice; it does not establish an exact match of
-FD implementation or aggregation. Different TRs and filtering affect FD, and
-mean FD can conceal brief large movements.
+The project's accepted mean-FD threshold is <=0.50 mm by explicit user choice;
+the cited study uses the stricter threshold. Different TRs and filtering
+affect FD, and mean FD can conceal brief large movements.
 
 [Kember et al., Nature Communications 2026](https://www.nature.com/articles/s41467-026-74572-1)
 provide the anatomical and functional-GM coverage precedent. Their published

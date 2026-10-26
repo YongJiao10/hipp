@@ -1,18 +1,29 @@
 # hippo2 runtime and reproducibility
 
-Runtime revision: 2026-10-22. The local structural workflow uses official
-HippUnfold v2.2.0 scientific source in the refreshed hippo2 dependency stack.
-The local resource/inference patch is required. The environment manager remains
-Conda; adopting the upstream Pixi dependency stack is outside this configuration.
+Runtime revision: 2026-10-25. The scientific baseline is official HippUnfold
+v2.3.0 in the existing hippo2 dependency stack. Local changes are limited to
+cache/inference runtime adapters and CLI version display. No local boundary,
+reference-plane or Workbench scientific correction is part of this baseline.
+The environment manager remains Conda; the complete upstream Pixi stack is
+not installed.
+
+The complete official participant DAG has been attempted for all HCP166
+subjects in the formal result tree, with 12 concurrent subjects and two GPU
+inference slots. Exactly 163 subjects satisfy the current 96-product contract
+and official error-level QC. Subjects 233326 and 249947 failed surface QC;
+942658 failed right-dentate boundary-loop extraction. Generated intermediates
+remain retained. Current scope and review status are recorded in the
+[rebuild assessment](hippunfold_result_impact.md) and
+[execution workspace](../../tmp/hcp7t_official_v230_20261025/README.md).
 
 ## Runtime stack
 
-| Component | Active version or location |
+| Component | Version or location |
 | --- | --- |
 | Environment | `/home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2` |
 | Activation | `/opt/conda/bin/activate hippo2` |
-| Python | 3.13.13 |
-| HippUnfold | 2.2.0, official tagged source plus the documented local patch |
+| Python | 3.13.13; supported by v2.3.0's `>=3.12,<3.15` requirement |
+| HippUnfold | 2.3.0, official release source plus documented resource/runtime adapters |
 | Snakemake / Snakebids | 9.27.1 / 0.15.0 |
 | nnUNet / PyTorch | 1.7.1 / 2.14.1+cu126, CUDA inference |
 | NumPy / SciPy / pandas | 2.5.4 / 1.18.1 / 3.1.0 |
@@ -21,179 +32,197 @@ Conda; adopting the upstream Pixi dependency stack is outside this configuration
 | ANTs / Greedy / NiftyReg / LAYNII | 2.6.5 / 0.0.20250712 / 1.5.69.6 / 2.7.0 |
 | SQLite / libsqlite | 3.54.1, matching h9ffa6c4_0 / h13e7031_0 builds |
 | Convert3D / ITK | 1.4.2 (Khanlab h109cef4_0) / 5.4.7 |
-| Workbench | `/home/yojiao/FASTANS/workbench/bin_linux64/wb_command`, on PATH |
+| Workbench | Official 2.2.1, `<repository>/software/workbench/bin_linux64/wb_command` |
 
-`environment/hippo2_server.yml` declares the current package stack and installs
-HippUnfold from the official v2.2.0 tag. The old Conda HippUnfold package was removed through the package manager
-before reinstalling the official v2.2.0 wheel; its obsolete PyVista constraint
-no longer controls native-library updates. Python scientific packages are
-installed at the pip layer over the native Conda runtime. The effective CLI must report 2.2.0; verify its
-executable and loaded workflow rather than treating Conda metadata as the
-algorithm version. The Python package metadata now reports 2.2.0 as well.
+`environment/hippo2_server.yml` declares the stack and official v2.3.0 source.
+The effective CLI and package metadata must both report 2.3.0. Verify the loaded
+workflow and executable; the environment name and Conda package listing alone
+do not establish the algorithm version. Python scientific packages remain at
+the pip layer over the native Conda runtime.
 
-The PyTorch wheel uses CUDA 12.6 on driver 550.163.01 and an L40S.
-Snakemake 9.27.1 requires packaging below 26; nilearn 0.13.1 satisfies the
-HippUnfold range and that shared dependency. Eido 0.2.6 supports pandas 3.
-Greedy uses the Conda-forge heeecbdd_7 build; its CLI retains the generic
-1.3.0-alpha label but reports an August 26, 2026 build. Convert3D uses the
-explicit Khanlab h109cef4_0 build linked against ITK 5.4.7. The upstream
-Prefix.dev libitk547 build channel returned HTTP 403 on this host; the declared
-Khanlab artifact is selected explicitly instead. Reapply the local source-cache
-patch after updating Snakemake.
-
-SQLite and libsqlite are pinned together. The matched library restores the
-SQLite API required by Python, PyBIDS and Snakemake; ncurses 6.6 and readline
-8.3 satisfy the selected SQLite CLI build.
-
-The local stack retains Snakebids 0.15/PyBIDS 0.21 and unified nnUNet 1.7.1
-inference. Upstream declares Snakebids 0.14 and a separate legacy nnUNet
-environment. This repository validates its concrete local stack against the
-tagged scientific source before launching production.
-
-The Conda portion of the environment declaration passes a fresh-prefix dry run.
-The complete 102311 structural test finishes all 418 rules with 84 required
-outputs present and no output pruning. Both consumed T1w hippocampal surfaces
-have 512 finite vertices. Template-agreement Dice is 0.76279 (L) and 0.79944 (R).
-A complete atlas scan finds 14 right targets with candidate physical positions
-more than 1 mm apart (maximum separation 13.46 mm); no left target meets that
-criterion. The existing output check records a native-unfold correspondence
-conflict. The conflict precedes unfolded registration; candidate separation is
-not anatomical error against ground truth. Structural execution completion does
-not approve this hemisphere for functional downstream analysis.
+The PyTorch wheel uses CUDA 12.6 on driver 550.163.01 and an L40S; CUDA 13
+wheels require a newer driver. Snakemake requires packaging below 26. Greedy
+uses the Conda-forge heeecbdd_7 build; its generic CLI label is 1.3.0-alpha.
+Convert3D uses the Khanlab h109cef4_0 build linked against ITK 5.4.7. SQLite and
+libsqlite remain pinned together. The local stack retains Snakebids 0.15,
+PyBIDS 0.21 and unified nnUNet 1.7.1 inference rather than replacing the entire
+dependency environment during this upgrade.
 
 ## Launch and environment gate
 
-Use the explicit py314 interpreter for the repository launcher:
+Use explicit py314 for repository orchestration:
 
 ```bash
-/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/01_01_run_hippunfold_t1w_local.py 102311 --dataset hcp
-taskset --cpu-list 0-7,32-39 nice -n 10 /home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/01_01_run_hippunfold_t1w_local.py --dataset hcp --manifest manifests/hcp_7t_hippocampus_struct_complete_166.txt --jobs 12
+/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/01_01_run_hippunfold_t1w_local.py 102311 --dataset hcp --dry-run
+taskset --cpu-list 0-7,32-39 nice -n 10 /home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/01_01_run_hippunfold_t1w_local.py --dataset hcp --manifest manifests/hcp_7t_hippocampus_struct_complete_166.txt --jobs 12 --keep-going
 ```
 
-The closed presets select HCP, Stanford, JJ-TMS, BANDA or PDC input/output roots,
-T1w filtering, N4 preprocessing choice, 512 density, corobl output, hippocampus
-and dentate topology, unfolded registration and GPU inference. BANDA/PDC retain
-`--skip-preproc` for their already bias-corrected inputs. HCP/Stanford/JJ-TMS
-retain N4. Free-form scientific arguments and caller HIPPUNFOLD overrides are
-rejected. `--dry-run` prints the resolved JSON contract without processing.
+The first command prints the resolved contract; it does not execute the
+scientific workflow. Run the batch command only after the runtime gate and
+the approved result-root preparation are complete.
 
-The gate validates the resource adapter, CUDA availability, canonical executable,
-CLI 2.2.0 and the T1w/512 help with inner/outer registration options. A batch
-with pending subjects runs this full gate once and reuses it only within that
-batch process. A new batch checks again. CLI probes have a 300-second limit.
-An unavailable CUDA device stops the run; it does not select CPU inference.
+Direct HippUnfold execution requires this gate, in order:
+
+```bash
+source /opt/conda/bin/activate hippo2
+which hippunfold
+hippunfold --version
+hippunfold --modality T1w --output_density 512 --help
+```
+
+The executable must resolve to the canonical hippo2 prefix, the version must
+be 2.3.0, and T1w/512 help must include the inner/outer registration options.
+Stage 01 additionally validates the resource adapter and CUDA. A pending batch
+performs this gate once; a new batch checks again. CLI probes have a
+300-second limit. An unavailable CUDA device stops dispatch rather than
+selecting CPU inference.
+
+The closed presets retain T1w, density 512, corobl output, hippocampus and
+dentate, unfolded registration and GPU inference. BANDA/PDC keep
+`--skip-preproc` for already bias-corrected inputs; HCP/Stanford/JJ-TMS keep N4.
+Caller scientific arguments and HIPPUNFOLD environment overrides are rejected.
 
 ## Scientific parameters
 
-The adult T1w model remains Task101_hcp1200_T1w, nnUNetTrainerV2, model_best.
-Reference templates and the multihist7 atlas remain the declared resources.
-Actual consumed den-512 surface paths establish the output density.
+Use the official [v2.3.0 release](https://github.com/khanlab/hippunfold/releases/tag/v2.3.0).
+The adult T1w model remains Task101_hcp1200_T1w, nnUNetTrainerV2, model_best,
+with the declared CITI168 template and multihist7 atlas. Establish density from
+consumed surface paths and shapes rather than arguments alone.
 
-Inner/outer registration uses the official v2.2.0 greedy defaults:
-`-n 50x50x50 -s 1.7320508075688772vox 0.707vox`. The launch contract explicitly
-selects method `greedy` and update-field smoothing variance 3.0. The source
-retains the optional SyN implementation and method-specific transform paths.
-The official PyVista point-ID compatibility fix and pandas-compatible volume
-statistics implementation are included. Development changes after the v2.2.0
-tag are outside this runtime.
+The official release replaces the faulty terminal-contiguity operation with
+four contiguous alternating boundary arcs, and creates/samples the unfolded
+registration reference on the configured midthickness plane. It also uses
+geometric image centres for registration initialization and adds source/sink
+and surface QC. These are upstream scientific implementations, not the retired
+local whole-component and exact-slice patches. See [issue580](https://github.com/khanlab/hippunfold/issues/580),
+[issue581](https://github.com/khanlab/hippunfold/issues/581),
+[PR582](https://github.com/khanlab/hippunfold/pull/582) and
+[PR583](https://github.com/khanlab/hippunfold/pull/583).
+
+Inner/outer registration retains the official greedy defaults:
+`-n 50x50x50 -s 1.7320508075688772vox 0.707vox`, with method `greedy` and
+update-field smoothing variance 3.0. Optional SyN remains an explicit upstream
+method, not a replacement selected by missing outputs.
+
+Use the release tag rather than development main. The maintainer states that
+new surface filtering on main requires a newly generated unfolded atlas; it
+is outside this runtime. See the [maintainer's release guidance](https://github.com/khanlab/hippunfold/issues/580#issuecomment-6398866471).
+Do not install a local scientific patch, main-branch mesh repair or a local
+Workbench binary to make a failed subject appear complete.
+
+## Complete HCP166 reconstruction
+
+The formal root is
+`outputs_hcp/inputs/hippunfold/dense_corobl_batch/`, with each subject's complete
+participant run under `sub-<id>/hippunfold/`. The source roster is
+`manifests/hcp_7t_hippocampus_struct_complete_166.txt`.
+
+Unchanged native physical meshes and boundary-distance metrics were retained,
+but the postprocessed tissue volumes, nnUNet segmentations, GM masks,
+preprocessed T1w volumes and transforms required for complete formal outputs
+had been pruned. Reusing the surface inputs alone cannot produce a complete
+v2.3.0 result set. The official all-target DAG must regenerate missing upstream
+prerequisites and all affected downstream products, including volumetric
+subfields, CIFTI, sampled coordinates, spec files and QC. Do not force old
+surface timestamps to suppress dependencies scheduled by the official DAG.
+
+The pi Argon model completed the step-3 dependency/reuse review; this was a
+model review, not an Argon-cluster computation. Its substantive conclusion is
+that the full official DAG is required. See the [review](../../tmp/hcp7t_official_v230_20261025/step3_argon_review.md).
+The actual full-DAG execution has now attempted all 166 subjects; 163 completed
+and three failed as described above. The
+[step-5 pi Argon review](../../tmp/hcp7t_official_v230_20261025/step5_argon_review.md)
+independently checked the actual newly generated outputs and confirmed the
+completion counts, failure causes, coordinate frames and midthickness inverse
+statistics. See the [result assessment](hippunfold_result_impact.md) for
+the distinction between boundary-band collapse, local folding and workflow
+failure.
+
+The formal output contract contains 96 products per subject: the existing
+84 structural products plus four source/sink/surface QC HTML/verification
+files and eight hemisphere/structure QC metric JSONs. This full contract,
+matching v2.3.0 run metadata, actual files and official QC results are required
+for completion; old output checks and cleanup receipts cannot be relabelled.
 
 ## Local resource resolution
 
-Shared models/templates reside in `runtime/hippunfold_asset_store_shared/`:
-`hippunfold_assets/` is the canonical resource cache, and
-`runtime_source_assets/` is the Snakemake runtime source cache.
+Shared assets remain in `runtime/hippunfold_asset_store_shared/`:
+`hippunfold_assets/` is the canonical model/template/atlas cache and
+`runtime_source_assets/` is the Snakemake source cache. Complete selected assets
+must register no remote dependency and issue no HTTP requests. Missing or
+incomplete caches fail with their exact missing paths. A cached model never
+justifies pruning participant rules with `--omit-from`.
 
-Complete selected templates, atlas surfaces/registration metrics/subfield
-labels and unpacked model folds are validated against their declared filenames.
-Complete cached assets register no remote dependencies and issue no HTTP
-requests. Absent resources retain their original declared download URLs.
-Incomplete resource directories fail with exact missing paths. Reusing a model
-never prunes the subject processing DAG with `--omit-from`.
+The maintained adapters are:
 
-The maintained source patches are:
+- `scripts/core_workflow/lib/hippunfold_local_assets.patch`: cached resources,
+  GPU inference slots, bounded nnUNet workers and CLI version display.
+- `scripts/core_workflow/lib/snakemake_local_source_cache.patch`: refresh
+  changed local source files while retaining remote-source behavior.
 
-- `scripts/core_workflow/lib/hippunfold_local_assets.patch`: cached-resource
-  resolution, CLI version display, host-local GPU inference slot and bounded nnUNet workers.
-- `scripts/core_workflow/lib/snakemake_local_source_cache.patch`: refresh changed
-  local source files by modification time while retaining remote-source behavior.
-
-The HippUnfold patch changes four explicit files: config/snakebids.yml,
-workflow/rules/download.smk, workflow/rules/nnunet.smk and
-workflow/lib/local_assets.py. It applies to clean official v2.2.0 source.
-Other scientific processing files remain official v2.2.0 code.
+The HippUnfold adapter changes `workflow/rules/download.smk`,
+`workflow/rules/nnunet.smk` and `workflow/lib/local_assets.py`. Its fourth file,
+`config/snakebids.yml`, only corrects CLI version display to 2.3.0. No local
+scientific correction is installed or reapplied.
 
 ## Batch resources and retained outputs
 
-HCP manifest runs default to eight subjects; a per-run `--jobs` override may
-select up to twelve. The current run uses twelve subjects, one CPU core per
-subject and two GPU inference slots. Its launch uses CPU affinity `0-7,32-39` (16 physical
-cores on the current IDAS host) and niceness 10. The container has a 32-CPU quota;
-this profile leaves at least half that CPU capacity available to other tasks.
-Other datasets retain two subjects (BANDA one) and one GPU slot. The current
-HCP run uses the approved process-count exception; other repository task limits
-remain unchanged.
+The approved HCP profile defaults to eight subjects, accepts up to twelve,
+uses one CPU core per subject and two GPU inference slots, and binds CPUs to
+`0-7,32-39` with niceness 10. The profile is the HCP-only process-count
+exception; other tasks retain their limits. Other datasets allow two subjects,
+with BANDA one, and one GPU slot.
 
-GPU slots use the abstract Unix sockets `hippunfold-gpu0-<uid>` and
-`hippunfold-gpu0-<uid>-1`. Contending inference waits for a free declared slot;
-process exit releases it automatically. The small lock helper starts Python
-with `-S`, avoiding the Torch startup hook before exec; the actual inference
-still loads the normal startup hook. nnUNet preprocessing and save workers
-remain one each. OMP, MKL, OpenBLAS, NumExpr, vecLib, ITK and VTK limits remain
-one. The existing fork/Torch-sharing hook remains in `.runtime_py/`.
-Per-subject runtime directories remain under
-`runtime/hippunfold_workdirs/<dataset>/sub-<id>/`; shared asset caches remain
-separate from these subject-specific directories. PATH places repository
-wrappers before hippo2/bin; LD_LIBRARY_PATH prepends hippo2/lib. The Torch
-checkpoint compatibility setting remains enabled.
+GPU slots use abstract Unix sockets `hippunfold-gpu0-<uid>` and
+`hippunfold-gpu0-<uid>-1`; inference waits for a free slot. The lock helper
+starts Python with `-S` before exec. nnUNet preprocessing/save workers and
+OMP, MKL, OpenBLAS, NumExpr, vecLib, ITK and VTK threads remain one. Per-subject
+runtime directories are `runtime/hippunfold_workdirs/<dataset>/sub-<id>/`;
+shared resource caches are separate. PATH places repository wrappers and the
+project Workbench before hippo2/bin; LD_LIBRARY_PATH prepends hippo2/lib.
+The existing fork/Torch-sharing startup hook remains in `.runtime_py/`.
 
-Output checks run serially with `--fail-on-missing --no-cleanup`, using the
-existing full-output contract. All structural payloads remain available,
-including anat, coords, warps and cifti. The per-subject output_check.json
-records the check and its exact run contract. Resume skips a subject only when
-this report matches the current contract and every declared full output remains
-present. Older cleanup receipts do not establish v2.2.0 completion. Processing
-or checking failures stop new dispatch; already running subjects finish and
-receive their checks.
+This reconstruction performs no 01_02 cleanup. `--notemp` keeps anat, coords,
+warps, CIFTI and other generated intermediates. Every standard output check
+must pass `--fail-on-missing --no-cleanup`. Retain runtime scratch and failed
+outputs for diagnosis; do not run cleanup-shadow or delete runtime directories.
+The output checker may mark a subject complete only when all 96 declared
+formal products remain present and the exact current run contract matches.
+A retained-only cleanup receipt is not sufficient. The normal launcher stops
+new dispatch after a failure; the HCP166 reconstruction explicitly selects
+manifest-only `--keep-going` to attempt the remaining subjects. That option
+preserves error-level QC and returns a nonzero final status if any subject
+fails; it does not turn failures into completed results.
 
 ## Rebuild recipe
 
-For a fresh environment, create the canonical prefix from the declaration and
-provide the external Workbench binary on PATH:
+Create the canonical environment from `environment/hippo2_server.yml` with
+flexible channel priority for the selected Conda-forge Greedy and Khanlab
+Convert3D builds. Install the official Workbench 2.2.1 distribution under
+`software/workbench/`; no local resampling fix is selected.
+
+Build/install the clean official v2.3.0 source before applying adapters so the
+package metadata remains exactly 2.3.0. Stop batch dispatch and wait for all
+HippUnfold subprocesses to exit before replacing installed workflow files.
+For a fresh source checkout:
 
 ```bash
-CONDA_CHANNEL_PRIORITY=flexible /opt/conda/bin/conda env create --prefix /home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2 --file environment/hippo2_server.yml
-```
-
-Use flexible channel priority for the explicitly selected Conda-forge Greedy
-and Khanlab Convert3D artifacts. For an existing hippo2 upgrade, install the clean official v2.2.0 package and
-the declared refreshed scientific/runtime dependencies. Use the CUDA 12.6
-PyTorch wheel on this driver-550 host; CUDA 13 wheels require a newer driver.
-Build/install the clean source before patching it so the package version remains
-2.2.0.
-
-Apply the maintained HippUnfold patch to a clean source copy, then copy the four
-explicit patched files into the installed package. This also replaces any
-unowned adapter retained by pip during reinstallation. Pause batch dispatch and
-wait until all active HippUnfold subprocesses exit before replacing installed
-files; Snakemake reloads rules during execution:
-
-```bash
-git clone --single-branch --branch v2.2.0 https://github.com/khanlab/hippunfold.git tmp/hippunfold_220_source
-.cache/conda_envs/hippo2/bin/pip install --no-deps tmp/hippunfold_220_source
-patch --batch --forward --dry-run -p1 -d tmp/hippunfold_220_source/hippunfold < scripts/core_workflow/lib/hippunfold_local_assets.patch
-patch --batch --forward -p1 -d tmp/hippunfold_220_source/hippunfold < scripts/core_workflow/lib/hippunfold_local_assets.patch
+git clone --single-branch --branch v2.3.0 https://github.com/khanlab/hippunfold.git tmp/hippunfold_v230_source
+.cache/conda_envs/hippo2/bin/pip install --no-deps tmp/hippunfold_v230_source
+patch --batch --forward --dry-run -p1 -d tmp/hippunfold_v230_source/hippunfold < scripts/core_workflow/lib/hippunfold_local_assets.patch
+patch --batch --forward -p1 -d tmp/hippunfold_v230_source/hippunfold < scripts/core_workflow/lib/hippunfold_local_assets.patch
 hippunfold_site=/home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2/lib/python3.13/site-packages/hippunfold
-cp tmp/hippunfold_220_source/hippunfold/config/snakebids.yml "$hippunfold_site/config/snakebids.yml"
-cp tmp/hippunfold_220_source/hippunfold/workflow/rules/download.smk "$hippunfold_site/workflow/rules/download.smk"
-cp tmp/hippunfold_220_source/hippunfold/workflow/rules/nnunet.smk "$hippunfold_site/workflow/rules/nnunet.smk"
-cp tmp/hippunfold_220_source/hippunfold/workflow/lib/local_assets.py "$hippunfold_site/workflow/lib/local_assets.py"
+cp tmp/hippunfold_v230_source/hippunfold/config/snakebids.yml "$hippunfold_site/config/snakebids.yml"
+cp tmp/hippunfold_v230_source/hippunfold/workflow/rules/download.smk "$hippunfold_site/workflow/rules/download.smk"
+cp tmp/hippunfold_v230_source/hippunfold/workflow/rules/nnunet.smk "$hippunfold_site/workflow/rules/nnunet.smk"
+cp tmp/hippunfold_v230_source/hippunfold/workflow/lib/local_assets.py "$hippunfold_site/workflow/lib/local_assets.py"
 ```
 
-After reinstalling Snakemake, dry-run and apply its separate local-source-cache
-patch to the installed snakemake directory. Activate hippo2, verify `which
-hippunfold`, run the 2.2.0/T1w/512 gate, and use the closed stage-01 launcher.
-For tests and temporary build material use the repository tmp/ workspace.
-Do not delete structural outputs or runtime directories as an upgrade step.
+After a Snakemake reinstall, dry-run/apply its separate maintained source-cache
+patch. Activate hippo2, pass the 2.3.0/T1w/512 gate and use the closed stage-01
+launcher. Complete cached resources should need no network request. Keep build
+material under the repository `tmp/`; follow the exact-path authorization rule
+for deletions or production replacement.
 
 ## Separate Argon MATLAB environment
 
@@ -270,7 +299,7 @@ Setting / Path                                 Purpose
 `PIP_CACHE_DIR`                              Derived per-subject wheel cache under the locked runtime root
 `TMPDIR`                                      Derived per-subject temporary scratch under the locked runtime root
 `.runtime_py/sitecustomize.py`                 Multiprocessing + torch sharing tweaks
-`PATH` precedence                             `scripts/` first, then the validated `hippo2/bin`
+`PATH` precedence                             `scripts/`, project Workbench, then the validated `hippo2/bin`
 `XDG_CACHE_HOME`                               Derived runtime scratch under the locked runtime root
 `HIPPUNFOLD_USE_GPU`                          Not an environment override; `--use_gpu` is fixed in the argv contract
 `HIPPUNFOLD_GPU_SLOTS`                        Locked to two for HCP and one for other presets

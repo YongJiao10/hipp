@@ -1,12 +1,14 @@
 # HippUnfold shared-host performance measurement
 
-Measured on 2026-10-23 using the current official v2.2.0 scientific runtime.
+The measurements below used the official v2.2.0 scientific runtime before
+the current v2.3.0 reconstruction. They inform resource allocation; the
+[runtime manifest](hippo2_reproducibility_manifest.md) defines the current
+scientific runtime and retained-output requirements.
 The complete structural roster remains `manifests/hcp_7t_hippocampus_struct_complete_166.txt`.
 The user requested acceleration while preserving capacity for other tasks.
 HCP manifest runs default to eight subjects and accept an explicit `--jobs`
 override up to twelve. The user approved twelve for the current full cohort. Its
-first eight-subject wave passed output checks, and the full-roster coordinator
-is now running with `--jobs 12`.
+approved profile uses `--jobs 12` for that workload.
 
 ## Available resources and baseline
 
@@ -25,8 +27,9 @@ altogether. This workload primarily benefits from CPU parallelism.
 
 Each worker replayed the same actual right-dentate inner-surface registration:
 24,801,658 voxels, official `50x50x50` iterations and
-`sqrt(3.0)vox 0.707vox` smoothing. Inputs are retained 102311 masks; each worker
-writes its own warp under `tmp/hippunfold_perf_20261023/`. One production subject
+`sqrt(3.0)vox 0.707vox` smoothing. Each worker used 102311 masks and wrote a
+separate temporary warp. The measurements below are retained independently of
+the disposable benchmark workspace. One production subject
 continued in the background. Its load is included in cgroup CPU averages but
 not in the per-worker CPU counters.
 
@@ -73,7 +76,7 @@ including native-unfold correspondence checks, remains necessary.
 
 ## Production profile
 
-For this run, use twelve subjects, one CPU core per subject and two GPU
+For the approved HCP profile, use twelve subjects, one CPU core per subject and two GPU
 inference slots. Future batches can select their concurrency with `--jobs`.
 Restrict the complete process tree to 16 CPUs and use niceness 10:
 
@@ -92,13 +95,11 @@ The eight-subject default passed 58 relevant tests and its full 418-job cached
 DAG built with HTTP requests blocked. The twelve-subject update makes the
 existing `--jobs` option adjustable up to twelve for HCP while keeping its
 default at eight. The one-core HippUnfold arguments, two-slot GPU inference
-lock, model gate, cache reuse and full-output checks remain unchanged. The
-The current coordinator started after the active eight-subject wave passed
-serial output checks.
+lock, model gate, cache reuse and full-output checks remain unchanged.
 
 The first eight-subject full-run wave completed eight people in approximately
-50 minutes. This is the only whole-subject throughput measurement; the
-twelve-subject rate and total cohort time remain unknown until the next wave.
+50 minutes. These measurements do not establish the whole-subject throughput
+of the current v2.3.0 reconstruction.
 The CPU stage benchmark at twelve workers measured 187.7 registration tasks per
 hour, but that is not a full-subject throughput estimate. The profile has more
 than 40 total worker/helper processes; user approval covers this HCP-specific

@@ -55,6 +55,17 @@ Submit the launchers from this Git checkout. The cluster shared `src/` directory
 
 ---
 
+## Retained data and reruns
+
+Participant/visit motion selection uses unfiltered mean Power FD <=0.50 mm
+before censoring and after dummy removal (`mean_fd` in the XCP-D LINC QC TSV).
+Evaluate treatment sessions separately; paired pre/post analyses require both
+sessions to pass. This mean-FD selection is separate from the existing XCP-D
+per-frame censoring at FD >0.50 mm. The current data contain 43 functional
+participants and 66 scans, with 64 scans passing this mean-FD threshold and
+21 of the 23 complete TRD pairs retaining both visits. See the
+[fMRI QC policy](../../docs/hipp_parcellation_network/fmri_qc.md).
+
 ## 3. How to Submit on Argon
 
 Log into Argon (`ssh argon.hpc.uiowa.edu`) and set the path to this repository checkout:

@@ -10,6 +10,12 @@ Run Argon commands from the checkout root. Argon paths use `/Shared/jianglab`;
 Python-backed adapters use `/Users/yojiao/miniconda3/envs/py313/bin/python`.
 Local workflow Python paths do not apply to these launchers.
 
+On Argon glibc 2.17 hosts, explicitly select the existing compatible runtime:
+`WB_COMMAND=/old_Users/yojiao/hipp/software/workbench_2.1.0/bin_linux64/wb_command`.
+Its version and frame-count probes must succeed before submission; the shared
+Workbench 2.2.1 build requires newer system libraries. See the
+[Argon runtime manifest](../../docs/environment/argon_kong2022_runtime_manifest.md).
+
 ## Datasets
 
 Select `DATASET=jj_tms`, `DATASET=stanford`, `DATASET=iowa7t`, `DATASET=estt`,

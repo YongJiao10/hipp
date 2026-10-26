@@ -80,16 +80,30 @@ with exactly one `--dataset hcp|stanford|iowa_jj_tms|banda|pdc` preset:
   1001 --dataset stanford --dry-run
 ```
 
-The closed preset uses HippUnfold 2.2.0, T1w, density 512, corobl output,
+The closed preset uses official HippUnfold 2.3.0, T1w, density 512, corobl output,
 unfolded registration and GPU inference. BANDA/PDC skip N4 on their already
 bias-corrected inputs. The runtime/model/CUDA gate runs once per pending batch.
 HCP defaults to eight subjects and accepts `--jobs` up to twelve; other datasets
 use two, with BANDA serial. The approved HCP launch, CPU affinity, GPU slots and
 resource patches are maintained in the [runtime manifest](../../docs/environment/hippo2_reproducibility_manifest.md#batch-resources-and-retained-outputs).
 
-Stage 01 checks with `--fail-on-missing --no-cleanup`, retaining full structural
-outputs. Resume requires a current matching `output_check.json` and every
-declared output; a cleanup receipt or a pair of meshes is insufficient.
+For the complete HCP166 reconstruction, manifest mode explicitly uses
+`--keep-going` to attempt independent subjects after an individual failure.
+The default remains stop-on-failure. A keep-going batch still returns a
+nonzero final status if any subject fails and does not bypass official QC.
+
+Stage 01 runs the complete official participant DAG and checks all 96 formal
+products with `--fail-on-missing --no-cleanup`. `--notemp` retains anatomy,
+coordinates, warps and CIFTI intermediates. Resume requires a current matching
+`output_check.json` and every declared output; a cleanup receipt, a boundary
+function test or a pair of meshes is insufficient.
+
+The upstream release includes fixes for terminal fragmentation and ineffective
+unfolded registration. Do not apply the retired local scientific patches or
+use development `main` in place of the release. The HCP166 dependency review
+found that upstream volumes/transforms had been pruned, so the new complete
+formal outputs require their regeneration even though those algorithms did
+not change. See the [current rebuild scope and status](../../docs/environment/hippunfold_result_impact.md).
 For `IncompleteFilesException`, wait for active workers to exit, activate
 hippo2, and rerun the subject's exact `hippunfold_argv` from preset `--dry-run`
 with `--rerun-incomplete`. Then resume the normal manifest command.
@@ -122,7 +136,7 @@ physical smoothing, cortical-neighbour distances and subject vertex areas use
 native T1w geometry; corobl surfaces provide display correspondence. For cortex
 controls, native cortical meshes require `--cortex-coordinate-space T1w`.
 
-HCP7T rest implements overall mean Power FD <=0.30 mm, bilateral Dice >=0.70,
+HCP7T rest implements overall mean Power FD <=0.50 mm, bilateral Dice >=0.70,
 and at most 20 unusable vertices per consumed den-512 hemisphere. Unusable means
 no trilinear NIfTI grid support or a nonfinite/constant sampled signal in any
 physical run. Coverage uses `*_nifti_support.npy` and

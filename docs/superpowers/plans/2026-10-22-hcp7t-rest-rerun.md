@@ -14,7 +14,7 @@ T1w surfaces use the declared HCP native-to-BOLD registration.
 
 - The user authorized an independent ten-process allowance for this HCP run.
   Pin numerical-library threads to one and count coordinators and subprocesses.
-- Apply overall frame-weighted Power FD <=0.30 mm, bilateral Dice >=0.70 and
+- Apply overall frame-weighted Power FD <=0.50 mm, bilateral Dice >=0.70 and
   at most 20 unusable NIfTI-sampled vertices per consumed 512-vertex hemisphere.
   A vertex requires positive image-grid support and a finite, nonconstant
   sampled signal in every declared physical run; no CIFTI hippocampal label

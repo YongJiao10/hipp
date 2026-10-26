@@ -15,7 +15,7 @@ from typing import Mapping, TextIO
 REPO_ROOT = Path(__file__).resolve().parents[3]
 HIPPO2_PREFIX = Path("/home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2")
 HIPPUNFOLD_EXECUTABLE = HIPPO2_PREFIX / "bin" / "hippunfold"
-HIPPUNFOLD_VERSION = "2.2.0"
+HIPPUNFOLD_VERSION = "2.3.0"
 CANONICAL_ASSET_ROOT = "/home/yojiao/hpchome/hipp/runtime/hippunfold_asset_store_shared"
 CANONICAL_CACHE_DIR = f"{CANONICAL_ASSET_ROOT}/hippunfold_assets"
 CANONICAL_RUNTIME_SOURCE = f"{CANONICAL_ASSET_ROOT}/runtime_source_assets"
@@ -236,7 +236,10 @@ def build_run_environment(
             "PIP_CACHE_DIR": str(contract.runtime_root / "pip_cache"),
             "TMPDIR": str(contract.runtime_root / "tmp"),
             "PATH": _join_path(
-                str(REPO_ROOT / "scripts"), str(HIPPO2_PREFIX / "bin"), env.get("PATH", "")
+                str(REPO_ROOT / "scripts"),
+                str(REPO_ROOT / "software" / "workbench" / "bin_linux64"),
+                str(HIPPO2_PREFIX / "bin"),
+                env.get("PATH", ""),
             ),
             "LD_LIBRARY_PATH": _join_path(
                 str(HIPPO2_PREFIX / "lib"), env.get("LD_LIBRARY_PATH", "")
@@ -319,9 +322,11 @@ def validate_local_assets(env: Mapping[str, str]) -> None:
         env=env,
     )
     version_text = f"{version.stdout} {version.stderr}"
-    if version.returncode != 0 or not re.search(r"(?<![\w.])2\.2\.0(?![\w.+-])", version_text):
+    if version.returncode != 0 or not re.search(
+        rf"(?<![\w.]){re.escape(HIPPUNFOLD_VERSION)}(?![\w.+-])", version_text
+    ):
         raise RuntimeError(
-            "hippo2 gate failed: HippUnfold CLI must report 2.2.0; "
+            f"hippo2 gate failed: HippUnfold CLI must report {HIPPUNFOLD_VERSION}; "
             f"stdout={version.stdout.strip()!r}; stderr={version.stderr.strip()!r}"
         )
 

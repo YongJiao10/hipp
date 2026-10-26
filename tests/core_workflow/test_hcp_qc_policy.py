@@ -106,16 +106,17 @@ def test_power_fd_uses_degrees_and_frame_weighting(tmp_path, monkeypatch):
     assert float(result(out)["rows"][0]["overall_mean_power_fd_mm"]) == pytest.approx(1.3 / 6)
 
 
-def test_fd_threshold_is_inclusive_and_tsnr_is_not_a_gate(tmp_path, monkeypatch):
-    _, shared, _, out, _ = prepare(tmp_path, monkeypatch, increments=(0.6,))
+@pytest.mark.parametrize(("mean_fd", "expected_status"), [(0.50, "pass"), (0.51, "fail")])
+def test_fd_threshold_is_inclusive_and_tsnr_is_not_a_gate(tmp_path, monkeypatch, mean_fd, expected_status):
+    _, shared, _, out, _ = prepare(tmp_path, monkeypatch, increments=(2 * mean_fd,))
     for hemi in ("L", "R"):
         gate = shared / f"sub-100610/surface/tsnr_gate/sub-100610_hemi-{hemi}_tsnr_gate_summary.json"
         gate.parent.mkdir(parents=True, exist_ok=True)
         gate.write_text(json.dumps({"invalid_fraction": 1.0}))
     assert QC.main() == 0
     row = result(out)["rows"][0]
-    assert float(row["overall_mean_power_fd_mm"]) == pytest.approx(0.30)
-    assert row["qc_status"] == "pass"
+    assert float(row["overall_mean_power_fd_mm"]) == pytest.approx(mean_fd)
+    assert row["qc_status"] == expected_status
 
 
 @pytest.mark.parametrize("missing", ["motion", "dice"])
@@ -140,7 +141,7 @@ def test_missing_motion_or_anatomy_is_unassessable(tmp_path, monkeypatch, missin
 
 @pytest.mark.parametrize("criterion", ["motion", "dice", "coverage"])
 def test_quality_failures_are_sequential_and_bilateral(tmp_path, monkeypatch, criterion):
-    batch, shared, _, out, _ = prepare(tmp_path, monkeypatch, increments=(1.6, 0.1) if criterion == "motion" else (0.1, 0.1))
+    batch, shared, _, out, _ = prepare(tmp_path, monkeypatch, increments=(2.4, 0.1) if criterion == "motion" else (0.1, 0.1))
     if criterion == "dice":
         (batch / "sub-100610/hippunfold/sub-100610/qc/sub-100610_hemi-R_desc-unetf3d_dice.tsv").write_text("0.69\n")
     if criterion == "coverage":

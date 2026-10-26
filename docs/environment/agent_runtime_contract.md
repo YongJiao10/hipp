@@ -34,6 +34,19 @@ Use exactly one of these based on task type.
 2. Direct HippUnfold CLI execution:
 - activate `hippo2` with `source /opt/conda/bin/activate hippo2` and pass the HippUnfold gate from `AGENTS.md`
 - expected CLI path after activation: `/home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2/bin/hippunfold`
+- the scientific source is the official v2.3.0 release, including the upstream
+  boundary-terminal and unfolded-registration fixes; both CLI and package
+  metadata must report `2.3.0`.
+- only the documented cache/inference runtime adapters and CLI version-display
+  correction are applied locally. Do not reapply a local scientific patch or
+  substitute development `main`; follow the
+  [runtime manifest](hippo2_reproducibility_manifest.md#scientific-parameters).
+- the HCP166 rebuild uses the complete official participant DAG. Previously
+  pruned anatomy, coordinates and transforms must regenerate when required;
+  retained surfaces alone do not satisfy the full structural contract.
+- retain all 96 formal outputs with `--notemp`; the standard checker must use
+  `--fail-on-missing --no-cleanup`. A cleanup receipt, boundary-function test
+  or partial surface chain cannot certify v2.3.0 completion.
 
 3. Argon SGE Kong2022 launchers and their dataset adapters (including PDC/BANDA):
 `/Users/yojiao/miniconda3/envs/py313/bin/python`. This is the existing Argon
@@ -88,7 +101,9 @@ used during official plotting import: `pygeodesic`, `adjustText`,
 ## Workbench Concurrency
 
 All core workflow Workbench calls must use
-`scripts/core_workflow/lib/workbench.py`. The wrapper defaults
+`scripts/core_workflow/lib/workbench.py`. Its default executable is
+`software/workbench/bin_linux64/wb_command` (Workbench 2.2.1). Local HippUnfold
+launches prepend the same directory to PATH. The wrapper defaults
 `CORE_WORKFLOW_WB_THREADS=1` and applies that value to the common native thread
 environment variables before invoking `wb_command`, including
 `OMP_NUM_THREADS`, `OPENBLAS_NUM_THREADS`, `MKL_NUM_THREADS`,

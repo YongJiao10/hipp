@@ -58,7 +58,7 @@ dependencies:
   - batchgenerators==0.25.5
   - dicom2nifti==2.6.2
   - medpy==0.5.2
-  - hippunfold @ git+https://github.com/khanlab/hippunfold.git@v2.2.0
+  - hippunfold @ git+https://github.com/khanlab/hippunfold.git@v2.3.0
   - numpy==2.5.4
   - scipy==1.18.1
   - pandas==3.1.0

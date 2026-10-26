@@ -17,7 +17,7 @@ remain a separate analysis interface.
 
 - Work in the current checkout and preserve the existing runtime changes.
 - Use py314, one numerical thread, repository `tmp/`, and no parallel tests.
-- Keep mean Power FD <=0.30 mm, bilateral Dice >=0.70 and at most 20 unusable
+- Keep mean Power FD <=0.50 mm, bilateral Dice >=0.70 and at most 20 unusable
   vertices per actual 512-vertex hemisphere. Do not infer new retention counts.
 - Preserve exact BOLD/run declarations; missing or mismatched inputs fail closed.
 - Reject caches using the preceding CIFTI coverage policy; do not add a fallback.

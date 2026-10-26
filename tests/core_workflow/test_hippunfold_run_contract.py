@@ -186,7 +186,7 @@ def test_runtime_gate_uses_the_same_fixed_environment_as_the_run(
         if args[0] == "/bin/bash":
             stdout = str(executable)
         elif args[-1] == "--version":
-            stdout = "2.2.0"
+            stdout = "2.3.0"
         elif args[-1] == "--help":
             stdout = "--output-density {native,512,2k} --inner_outer_reg_method --inner_outer_reg_smoothing"
         else:
@@ -477,3 +477,57 @@ def test_surfaces_without_output_check_receipt_do_not_skip_a_subject(
 
     (output_dir / "core_workflow_cleanup_receipt.json").write_text("{}", encoding="utf-8")
     assert stage01._is_completed(contract) is False
+
+
+def test_v220_complete_run_cannot_be_reused_as_v230(
+    stage01: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(run_contract_module, "DATASET_PRESETS", {
+        "hcp": run_contract_module.DatasetPreset(
+            bids_dir=tmp_path / "bids", output_root=tmp_path,
+            t1w_filter="extension=.nii.gz",
+        ),
+    })
+    contract = resolve_run_contract("hcp", "1001")
+    expected = "sub-{subject}/surf/midthickness.surf.gii"
+    surface = contract.output_dir / expected.format(subject="1001")
+    surface.parent.mkdir(parents=True)
+    surface.touch()
+    manifest = tmp_path / "_batch_logs/output_integrity_manifest.json"
+    manifest.parent.mkdir()
+    manifest.write_text(json.dumps({"expected_outputs": [expected]}))
+    old_contract = contract.as_json()
+    old_contract["hippunfold_version"] = "2.2.0"
+    (contract.output_dir / "output_check.json").write_text(json.dumps([{
+        "status": "complete_all_outputs_present", "missing_count": 0,
+        "run_contract": old_contract,
+    }]))
+
+    with pytest.raises(RuntimeError, match="mismatched run contract"):
+        stage01._is_completed(contract)
+
+
+def test_batch_keep_going_checks_later_subjects_after_a_subject_fails(
+    stage01: ModuleType, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    contracts = [resolve_run_contract("pdc", f"k0114s0{i}") for i in range(1, 4)]
+    checked = []
+    monkeypatch.setattr(stage01, "_is_completed", lambda contract: False)
+
+    class FinishedProcess:
+        returncode = 0
+
+        def poll(self):
+            return 0
+
+    monkeypatch.setattr(stage01, "_start_subject", lambda contract, env: (FinishedProcess(), io.StringIO()))
+
+    def check(contract):
+        checked.append(contract.subject)
+        if contract.subject == contracts[0].subject:
+            raise RuntimeError("first subject failed QC")
+
+    monkeypatch.setattr(stage01, "_check_subject", check)
+    with pytest.raises(RuntimeError, match="first subject failed QC"):
+        stage01._run_batch(contracts, jobs=1, keep_going=True)
+    assert checked == [contract.subject for contract in contracts]

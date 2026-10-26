@@ -104,7 +104,9 @@ def _check_subject(contract: HippUnfoldRunContract) -> None:
     print(f"[done ] {subject} at {now}", flush=True)
 
 
-def _run_batch(contracts: list[HippUnfoldRunContract], jobs: int) -> None:
+def _run_batch(
+    contracts: list[HippUnfoldRunContract], jobs: int, *, keep_going: bool = False
+) -> None:
     dataset = contracts[0].dataset
     limit = DATASET_JOB_LIMITS.get(dataset, 2)
     if not 1 <= jobs <= limit:
@@ -126,16 +128,20 @@ def _run_batch(contracts: list[HippUnfoldRunContract], jobs: int) -> None:
     next_index = 0
     failure: Exception | None = None
     active = {}
-    while active or (failure is None and next_index < len(pending)):
-        while failure is None and next_index < len(pending) and len(active) < jobs:
+    while active or ((failure is None or keep_going) and next_index < len(pending)):
+        while (failure is None or keep_going) and next_index < len(pending) and len(active) < jobs:
             contract, env = pending[next_index]
+            next_index += 1
             try:
                 process, log = _start_subject(contract, env)
             except Exception as exc:
-                failure = exc
-                break
+                if failure is None:
+                    failure = exc
+                print(f"[fail ] sub-{contract.subject}: {exc}", file=sys.stderr, flush=True)
+                if not keep_going:
+                    break
+                continue
             active[process] = (contract, log)
-            next_index += 1
         finished = [process for process in active if process.poll() is not None]
         if not finished and active:
             time.sleep(0.2)
@@ -149,6 +155,7 @@ def _run_batch(contracts: list[HippUnfoldRunContract], jobs: int) -> None:
             except Exception as exc:
                 if failure is None:
                     failure = exc
+                print(f"[fail ] sub-{contract.subject}: {exc}", file=sys.stderr, flush=True)
     if failure is not None:
         raise failure
 
@@ -170,6 +177,10 @@ def run_t1w_local(argv: list[str] | None = None) -> int:
         help="Closed dataset preset; paths and all HippUnfold flags come from the preset.",
     )
     parser.add_argument(
+        "--keep-going", action="store_true",
+        help="In manifest mode, process remaining subjects after a failure; still exit nonzero if any failed.",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Print the resolved fixed contract without running HippUnfold.",
@@ -179,6 +190,8 @@ def run_t1w_local(argv: list[str] | None = None) -> int:
         parser.error("Provide exactly one subject or --manifest.")
     if args.manifest is None and args.jobs not in (None, 1):
         parser.error("--jobs applies to --manifest mode only.")
+    if args.manifest is None and args.keep_going:
+        parser.error("--keep-going applies to --manifest mode only.")
 
     if args.manifest is not None:
         subjects = [
@@ -202,7 +215,7 @@ def run_t1w_local(argv: list[str] | None = None) -> int:
         jobs = args.jobs
         if jobs is None:
             jobs = 8 if args.dataset == "hcp" else 1
-        _run_batch(contracts, jobs)
+        _run_batch(contracts, jobs, keep_going=args.keep_going)
         return 0
 
     contract = contracts[0]
