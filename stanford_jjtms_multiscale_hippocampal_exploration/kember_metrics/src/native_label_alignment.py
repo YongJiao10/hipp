@@ -153,10 +153,10 @@ def _flatten_hemisphere_record(record: Mapping[str, object]) -> dict[str, object
         "smoothing_mm": record["smoothing_mm"],
         "hemisphere": record["hemisphere"],
         "anterior_mm2": area["anterior"],
-        "body_mm2": area["body"],
+        "body_mm2": area["middle"],
         "posterior_mm2": area["posterior"],
         "anterior_fraction": fraction["anterior"],
-        "body_fraction": fraction["body"],
+        "body_fraction": fraction["middle"],
         "posterior_fraction": fraction["posterior"],
         "total_surface_area_mm2": record["total_surface_area_mm2"],
         "total_valid_surface_area_mm2": record["total_valid_surface_area_mm2"],
@@ -214,10 +214,10 @@ def _bilateral_rows(records: Sequence[Mapping[str, object]]) -> list[dict[str, o
                 "subject": subject,
                 "smoothing_mm": smoothing,
                 "anterior_mm2": area_mean["anterior"],
-                "body_mm2": area_mean["body"],
+                "body_mm2": area_mean["middle"],
                 "posterior_mm2": area_mean["posterior"],
                 "anterior_fraction": fraction_mean["anterior"],
-                "body_fraction": fraction_mean["body"],
+                "body_fraction": fraction_mean["middle"],
                 "posterior_fraction": fraction_mean["posterior"],
                 "hemisphere_aggregation": "arithmetic mean of left and right system values",
             }
@@ -557,7 +557,7 @@ def _write_label_gifti(path: Path, labels: np.ndarray) -> None:
     definitions = (
         (0, "Unassigned", (0.0, 0.0, 0.0, 0.0)),
         (1, "Anterior", (0.85, 0.25, 0.25, 1.0)),
-        (2, "Body", (0.25, 0.65, 0.25, 1.0)),
+        (2, "Middle", (0.25, 0.65, 0.25, 1.0)),
         (3, "Posterior", (0.25, 0.35, 0.85, 1.0)),
     )
     for key, name, color in definitions:

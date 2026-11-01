@@ -38,7 +38,7 @@ Each branch column presents three vertically stacked analytical modalities:
 2. **Modality 2: Gradient Spectral Clustering — Normalized Top-20 Network Recruitment (%)**:
    - **Visual Style**: Aligned with `multidataset_gradient_subregion_top20_stacked_2col`.
    - **Hippocampus 3D Surface**: 4-view locked Workbench composite showing $k=3$ cluster assignments labeled by normalized Top-20 count dominant network.
-   - **Stacked Bar Panels**: Left and Right hippocampus horizontal stacked bars showing percentage composition ($0\% - 100\%$) of normalized Top-20 connected cortical ROIs for Anterior, Body, and Posterior subregions.
+   - **Stacked Bar Panels**: Left and Right hippocampus horizontal stacked bars showing percentage composition ($0\% - 100\%$) of normalized Top-20 connected cortical ROIs for Anterior, Middle, and Posterior subregions.
    - **Normalization**: Normalized by available network ROI capacity (canonical 7: DMN=77, CON=73, VN=61, VAN=52, DAN=51, SMN=68, LAN=18).
 
 3. **Modality 3: Winner-Take-All (WTA) Parcellation — 20 Long-Axis Bins Network Composition (%)**:

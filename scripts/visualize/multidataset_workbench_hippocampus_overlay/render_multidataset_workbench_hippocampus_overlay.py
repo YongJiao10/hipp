@@ -93,9 +93,9 @@ def to_abbrev(net_name: str) -> str:
 
 
 CLUSTER_NAMES = {
-    1: "Anterior (Head)",
-    2: "Middle (Body)",
-    3: "Posterior (Tail)",
+    1: "Anterior",
+    2: "Middle",
+    3: "Posterior",
 }
 
 CLUSTER_SHORT_NAMES = {

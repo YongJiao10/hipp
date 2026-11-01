@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task with verification checkpoints.
 
-**Goal:** Eliminate the silent raw-cluster fallback that can mislabel Anterior/Body/Posterior gradient panels, make the canonical ROI profile contract explicit across producer and consumer, and add a repository rule forbidding unvalidated fallback logic.
+**Goal:** Eliminate the silent raw-cluster fallback that can mislabel Anterior/Middle/Posterior gradient panels, make the canonical ROI profile contract explicit across producer and consumer, and add a repository rule forbidding unvalidated fallback logic.
 
 **Architecture:** The group-atlas producer will generate and register the long-axis-relabelled `cluster_roi_profile.npy` for both Kong2022 atlas variants used by the visualizer (`kong2022` and `kong2022_7net`). The visualizer will accept only that registered artifact after validating manifest status, path, shape, and head-to-tail ordering; it will fail closed when the contract is absent or invalid. Gradient panel cache names will include a new contract namespace so stale raw-label panels cannot be reused after the fix.
 
@@ -76,7 +76,7 @@
 - [ ] Run the producer for the affected 2mm 36P 7-network cohort outputs with resume invalidation active, using the repository’s existing command/configuration rather than an ad hoc label rewrite.
 - [ ] Confirm every row used by the figure has a registered canonical ROI profile and no gradient row is loaded from raw labels or a network profile.
 - [ ] Regenerate the comparison figure with the new cache namespace.
-- [ ] Numerically verify the patient Body row corresponds to the canonical Body profile and that the displayed row order is Anterior, Body, Posterior for all five cohorts.
+- [ ] Numerically verify the patient Middle row corresponds to the canonical Middle profile and that the displayed row order is Anterior, Middle, Posterior for all five cohorts.
 
 ## Task 6: Full verification and handoff
 

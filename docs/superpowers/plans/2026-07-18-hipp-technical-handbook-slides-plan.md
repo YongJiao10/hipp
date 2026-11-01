@@ -123,7 +123,7 @@ V2 先完整讲流程与代码，再讲数据、进展和计划。页数故意�
 | 17 | Stage 06 Example — Gradient-Spectral Group Overview | `06_01` 输出的完整 RouteA gradient-spectral overview；右侧说明 K diagnostics, profiles, ambiguity, left/right 2/4mm surfaces；不能宣称该图表示 continuous gradients。 | 全图完整显示 + source/meaning panel |
 | 18 | Stage 06 Example — Winner-Take-All Group Overview | 完整 `top20_count` WTA overview；说明 vertex assignment counts、20-bin long-axis profiles、surface labels；与第 14 页 WTA definition 一一对应。 | 全图完整显示 + source/meaning panel |
 | 19 | Stage 06 Example — `ctxreg`/`ctxdrop` Geometry Diagnostic | 完整 local-cortex-neighbor count map；说明它是 20 mm 邻居数量诊断，服务于两个 local-cortex controls，不是 functional atlas。列出 `06_07` 命令入口。 | 全图完整显示 + meaning panel |
-| 20 | Stage 06 Example — Hippocampus-to-Cortex Template Strengths | 完整 `06_10` gradient-spectral 400-ROI template-strength figure；解释 anterior/body/posterior group labels怎样回投至 400 cortical ROIs；WTA 仅使用 `normalized_top20_count`，canonical8/canonical7 只是同一 assignment 的 taxonomy views，family17 仅用于 gradient。 | 全图完整显示 + renderer I/O |
+| 20 | Stage 06 Example — Hippocampus-to-Cortex Template Strengths | 完整 `06_10` gradient-spectral 400-ROI template-strength figure；解释 anterior/middle/posterior group labels怎样回投至 400 cortical ROIs；WTA 仅使用 `normalized_top20_count`，canonical8/canonical7 只是同一 assignment 的 taxonomy views，family17 仅用于 gradient。 | 全图完整显示 + renderer I/O |
 | 21 | Stage 07 — Final Overview Index and Where Outputs Live | `07_01_build_group_matrix.py`；`outputs_hcp/work/` vs `outputs_hcp/present/`；如何从完成 branch 找到 overview、labels、gradients、cortex panels。不要介绍 manifest。 | output location map + task lookup table |
 
 ### Section C — Individual workflow, data, and progress

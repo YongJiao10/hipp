@@ -18,7 +18,7 @@
 ### 1.1 第 1 项和第 2 项的区别
 
 “cortical—海马 subregion network 组间差异”定义**分析的因变量**：每名被试、每侧
-海马、每个 anterior/body/posterior system 与每个个体化皮层网络之间的 Fisher-z FC
+海马、每个 anterior/middle/posterior system 与每个个体化皮层网络之间的 Fisher-z FC
 profile。
 
 “Stanford 四组海马差异和 symptom × trauma interaction”定义**解释变量和对比结构**：
@@ -104,14 +104,14 @@ weighted-Fisher-z 分支方向一致，head g≈0.38、body g≈0.56。当前结
 
 ### Aim 1：跨数据集定位 hippocampal region × cortical network FC
 
-每个 subject × hemisphere × anterior/body/tail × 17/8-network 的 Fisher-z FC
+每个 subject × hemisphere × anterior/middle/posterior × 17/8-network 的 Fisher-z FC
 是共同结局。JJTMS 估计 patient−healthy；Stanford 估计 symptomatic−healthy marginal
 effect。逐 network localization 是核心发现层，按固定
 dataset × estimand × parcellation × resolution × hemisphere mode × smoothing ×
 FC-estimator 规格保留三个 region × 全部 network 的 raw p 和效应量；最终
 analysis-object set 冻结前不定义或应用 BH-FDR。
 
-anterior/body/tail 各自的网络向量 global test 和 3×network whole-hippocampus profile
+anterior/middle/posterior 各自的网络向量 global test 和 3×network whole-hippocampus profile
 只作辅助总览，不能门控逐 network 结果。任何 network-pair contrast 都必须先由绝对
 network 结果定位后再登记为下一阶段候选，不能在发现样本中批量遍历。
 
@@ -218,7 +218,7 @@ group-atlas geometry 行不进入该 FC family，但其分支仍受统一 priori
 
 ### 5.2 Profile 辅助检验
 
-anterior/body/tail 的 8/17 维向量与 whole-hippocampus 的 3×8/3×17 拼接向量使用
+anterior/middle/posterior 的 8/17 维向量与 whole-hippocampus 的 3×8/3×17 拼接向量使用
 subject-level permutation；一个被试的相关分量整体置换。profile p 值不作 confirmatory
 multiplicity claim，也不决定是否报告逐 network localization。
 
@@ -262,7 +262,7 @@ hemisphere 置于分面/补充材料。
 
 ### Figure 3：统一运行中的 HC-referenced group-atlas 描述
 
-HC 加七个 cohort 的 anterior/body/posterior probability maps、group-level area composition、
+HC 加七个 cohort 的 anterior/middle/posterior probability maps、group-level area composition、
 agreement 和 boundary geometry；明确标记为统一运行中的 descriptive geometry family，
 不作 subject-level Kember 推断。
 

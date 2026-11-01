@@ -37,7 +37,7 @@ def _combo_manifest(*, held_out: bool = True) -> dict[str, object]:
         "template_training_subjects": ["sub-105923", "sub-108323"],
         "label_semantics": {
             "1": "Anterior",
-            "2": "Body",
+            "2": "Middle",
             "3": "Posterior",
         },
     }

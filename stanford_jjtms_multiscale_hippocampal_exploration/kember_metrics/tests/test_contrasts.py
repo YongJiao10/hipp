@@ -173,7 +173,7 @@ def _synthetic_feature_table() -> tuple[pd.DataFrame, dict[str, tuple[str, ...]]
     for method in ("hcp151_template_matching", "hcp151_fixed"):
         for subject, area in values.items():
             group = "NTHC" if subject in rosters["NTHC"] else "TEHC"
-            for system in ("anterior", "body", "posterior"):
+            for system in ("anterior", "middle", "posterior"):
                 rows.append(
                 {
                     "subject": subject,

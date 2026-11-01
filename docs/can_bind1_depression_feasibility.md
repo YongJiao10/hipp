@@ -84,7 +84,7 @@ hippocampal regions.
 ## Fit to the current hippocampal workflow
 
 The active project uses T1w-based HippUnfold anatomy, hippocampal surface FC,
-group gradients, and externally trained anterior/body/posterior templates.
+group gradients, and externally trained anterior/middle/posterior templates.
 Its `2mm` and `4mm` template branches denote **surface smoothing**, not native
 BOLD acquisition resolution. The existing BANDA/PDC structural presets consume
 HCP bias-corrected T1w products; their functional input contract cannot simply

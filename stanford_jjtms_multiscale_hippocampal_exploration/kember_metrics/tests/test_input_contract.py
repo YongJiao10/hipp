@@ -34,7 +34,7 @@ def _write_combo_manifest(path: Path, *, n_vertices: int | None = 512) -> None:
                 "density_evidence": density_evidence,
                 "label_semantics": {
                     "1": "Anterior/VAN",
-                    "2": "Body/SMN",
+                    "2": "Middle/SMN",
                     "3": "Posterior/DMN",
                 },
             }

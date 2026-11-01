@@ -31,7 +31,7 @@ except ImportError:  # pragma: no cover - exercised by the focused tests
     from inventory import build_rosters, load_config, validate_rest_only_path
 
 
-REGIONS = ("anterior", "body", "tail")
+REGIONS = ("anterior", "middle", "posterior")
 NETWORK_RESOLUTIONS = (17, 8)
 HEMISPHERE_MODES = ("bilateral", "L", "R", "L-R")
 OUTPUT_COLUMNS = [
@@ -958,14 +958,12 @@ def _registry_columns(
 def _region_mapping(spec: Mapping[str, Any]) -> dict[str, str]:
     raw = spec.get("region_labels", spec.get("region_registry"))
     if raw is None:
-        raw = {"1": "anterior", "2": "body", "3": "posterior"}
+        raw = {"1": "anterior", "2": "middle", "3": "posterior"}
     if not isinstance(raw, Mapping):
-        raise TypeError("region_labels must map machine labels to anterior/body/posterior")
+        raise TypeError("region_labels must map machine labels to anterior/middle/posterior")
     result: dict[str, str] = {}
     for machine, display in raw.items():
         label = str(display).strip().lower()
-        if label == "posterior":
-            label = "tail"
         if label not in REGIONS:
             raise ValueError(f"unknown hippocampal region label: {display!r}")
         key = str(machine).strip()
@@ -973,7 +971,7 @@ def _region_mapping(spec: Mapping[str, Any]) -> dict[str, str]:
             raise ValueError(f"duplicate hippocampal region label: {machine!r}")
         result[key] = label
     if set(result.values()) != set(REGIONS) or len(result) != 3:
-        raise ValueError("region registry must define exactly anterior, body, and posterior/tail")
+        raise ValueError("region registry must define exactly anterior, middle, and posterior")
     return result
 
 
@@ -1163,7 +1161,7 @@ def _combo_rows(
             raise ValueError(
                 "region labels sidecar is required unless FC has exactly three region rows"
             )
-        labels_array = np.asarray(["anterior", "body", "tail"], dtype=object)
+        labels_array = np.asarray(["anterior", "middle", "posterior"], dtype=object)
         region_map = {region: region for region in REGIONS}
     else:
         labels_array = np.asarray(labels).reshape(-1)

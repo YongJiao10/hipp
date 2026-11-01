@@ -89,7 +89,7 @@ STATUS_FIELDS = (
 )
 LABEL_SEMANTICS = {
     "1": "Anterior/VAN",
-    "2": "Body/SMN",
+    "2": "Middle/SMN",
     "3": "Posterior/DMN",
 }
 NETWORK_DISPLAY = {

@@ -76,8 +76,8 @@ _BRANCH_COLUMNS = (
 )
 _PROFILE_SCOPES = (
     ("subregion_profile", "anterior"),
-    ("subregion_profile", "body"),
-    ("subregion_profile", "tail"),
+    ("subregion_profile", "middle"),
+    ("subregion_profile", "posterior"),
     ("whole_hippocampus_profile", "all"),
 )
 _DATASET_ORDER = {"jjtms": 0, "stanford": 1}

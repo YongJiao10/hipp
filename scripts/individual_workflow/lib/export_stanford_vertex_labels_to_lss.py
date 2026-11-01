@@ -100,12 +100,12 @@ Each subject directory contains the two hemispheres from the Stanford 2 mm HCP15
    - Vertex-level subregion assignment for each of the 512 HippUnfold `den-512` vertices:
      - `0`: Unassigned / Invalid mask (excluded due to low tSNR / non-finite signal)
      - `1`: Anterior / VAN
-     - `2`: Body / SMN
+     - `2`: Middle / SMN
      - `3`: Posterior / DMN
 
 2. `sub-<id>_2mm_hemi-<L|R>_cluster_mean_timeseries_fc_pearson.npy` and `*_fisherz.npy`:
    - Shape: `(3, 400)`, dtype: `float32`
-   - Rows: 3 subject-specific template-match clusters (1=Anterior/VAN, 2=Body/SMN, 3=Posterior/DMN)
+   - Rows: 3 subject-specific template-match clusters (1=Anterior/VAN, 2=Middle/SMN, 3=Posterior/DMN)
    - Columns: Kong2022 cortical ROI IDs 1 through 400 in the subject registry order
 
 3. `sub-<id>_2mm_cluster_mean_timeseries_fc_manifest.json`:

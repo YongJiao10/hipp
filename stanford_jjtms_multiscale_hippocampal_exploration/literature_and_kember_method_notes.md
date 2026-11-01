@@ -15,7 +15,7 @@ native HippUnfold `surfareacorobl` 逐顶点 mm² 值按 native system label 求
 
 ### 结论先行
 
-1. **Kember 的面积不是边界面积、过渡带面积、体积或顶点数。** 它定义为：某个功能 system 的标签所覆盖的 HippUnfold 顶点，其逐顶点 surface-area 值之和，单位为 `mm²`。system 本身是由海马—新皮层连接 profile 的 group template matching 得到的 anterior/body/posterior 功能系统。
+1. **Kember 的面积不是边界面积、过渡带面积、体积或顶点数。** 它定义为：某个功能 system 的标签所覆盖的 HippUnfold 顶点，其逐顶点 surface-area 值之和，单位为 `mm²`。system 本身是由海马—新皮层连接 profile 的 group template matching 得到的 anterior/middle/posterior 功能系统。
 2. **原文主结果使用绝对面积。** 论文直接报告 posterior system 的 `mm²` 面积随年龄变化（例如年龄组间的 `650 ± 200` 到 `394 ± 125 mm²`），因此不能用面积比例替代原文主端点。
 3. **原文存在相对面积/比例的归一化语句，但没有把它定义成唯一主端点。** 方法段说明在涉及“海马一部分”的计算时，用该部分逐顶点面积和除以相关范围内的全部逐顶点面积和。论文没有说明颅内容积、全脑面积、z-score 或 voxel count normalization；当前项目应把比例作为 secondary/context，而把绝对 `mm²` 作为 primary。
 4. **统一后的 `kember_metrics` 是唯一的 Kember 面积实现。** 它直接消费 native HippUnfold per-vertex 面积 metric，再按 native 标签求和；这与论文“sum ... surface area ... output from HippUnfold”的输入语义最接近。the retired geometry-only mesh reconstruction 是合理的几何重算，但不是已被论文证明等价的原始输入路径。
@@ -36,7 +36,7 @@ native HippUnfold `surfareacorobl` 逐顶点 mm² 值按 native system label 求
 
 | 层级 | Kember 原文能确认的内容 | 本仓库应冻结的表述 |
 | --- | --- | --- |
-| 标签 | group-average hippocampal–neocortical connectivity → gradients → `k=3` GMM → anterior/body/posterior templates；每个 subject 的 vertex 以与 template 最大相关者赋值 | 标签是功能 system label，不是 FreeSurfer anatomical subfield label，也不是“边界区域”标签 |
+| 标签 | group-average hippocampal–neocortical connectivity → gradients → `k=3` GMM → anterior/middle/posterior templates；每个 subject 的 vertex 以与 template 最大相关者赋值 | 标签是功能 system label，不是 FreeSurfer anatomical subfield label，也不是“边界区域”标签 |
 | 几何 | HippUnfold 的 subject-specific archicortical ribbon，midthickness surface；论文报告 native/unfolded 两种对应表面和约 `0.5 mm` vertex spacing | 面积使用 folded/native 的 subject-specific surface-area metric；unfolded 表面用于拓扑对应/显示，不用其模板几何直接替代 native 面积 |
 | 顶点面积 | 论文明确说取 HippUnfold 输出的每顶点 surface-area 并求和，但没有在正文写出 metric 文件名或具体 Workbench 命令 | `surfareacorobl.shape.gii` 是当前仓库的 asset-backed 实现选择；其“对应论文输入”是高可信方法映射，不应写成论文正文已明确给出的文件名 |
 | 绝对端点 | `system_area_mm2 = Σ_{v∈system} A_v` | primary：保留每半球每 system 的绝对 `mm²` |
@@ -96,7 +96,7 @@ Task 1 冻结了文献/输入契约；Task 2 已在 `kember_metrics` 中落实�
 
 **事实：Kember 没有测量“海马 subregion 边界面积”或“transition-zone area”。** 论文测了三个不同量：
 
-1. **system surface area（系统表面积）**：属于 anterior/body/posterior 某一标签的 HippUnfold 顶点面积之和；需要比例时，再除以全海马顶点面积之和。
+1. **system surface area（系统表面积）**：属于 anterior/middle/posterior 某一标签的 HippUnfold 顶点面积之和；需要比例时，再除以全海马顶点面积之和。
 2. **functional segregation（功能分离度）**：全海马每个顶点与目标 system 平均 BOLD 的相关分布中，system 内与 system 外的 Cohen's *d*。
 3. **boundary sharpness（边界锐利度）**：只在标签边界附近计算上述内外相关分布差异；是一个 BOLD 功能对比效应量，不是几何边界的长度、面积或移动范围。
 
@@ -113,7 +113,7 @@ Task 1 冻结了文献/输入契约；Task 2 已在 `kember_metrics` 中落实�
 - 以 GMM `k=3` 对 gradient loadings 聚类，并依解剖位置人工命名为 posterior/body/anterior。每个 cluster 的平均皮层连接向量成为一个 template。
 - 在每名受试者内，将每个海马顶点的皮层连接 profile 与三个 templates 相关；winner-take-all 分配给最大相关的 template。
 - QC 排除标准：低运动数据 `<10 min`（低运动定义为 FD `≤0.25 mm`）、HippUnfold 重建 Dice `<0.7`、或未正确投影的海马表面积 `≥20 mm²`。
-- 作者明确指出：三分区在每名受试者均可识别；`k≥4` 并非如此。作者认为更细个体分区可能需要更高空间分辨率（如 ≥7T）或更长扫描（如 ≥1 h）。posterior template 最独特，而 anterior/body 更相似，这也限制了对“是哪一侧在发生分化”的唯一解释。
+- 作者明确指出：三分区在每名受试者均可识别；`k≥4` 并非如此。作者认为更细个体分区可能需要更高空间分辨率（如 ≥7T）或更长扫描（如 ≥1 h）。posterior template 最独特，而 anterior/middle 更相似，这也限制了对“是哪一侧在发生分化”的唯一解释。
 
 ### 三个指标的精确定义（事实）
 
@@ -130,7 +130,7 @@ Task 1 冻结了文献/输入契约；Task 2 已在 `kember_metrics` 中落实�
 - 活跃实现位于 `kember_metrics/src/`，同时消费 `hcp151_template_matching` 与
   `hcp151_fixed`。功能指标保留 512-source BOLD/labels；面积在标签经
   `ADAP_BARY_AREA` 对齐后消费 native `surfareacorobl`。
-- 每个 hemisphere、每个 anterior/body/posterior system 输出三项：`surface_area_mm2`、`functional_segregation_d`、`boundary_sharpness_d`。`surface_area_fraction` 保存在 feature table 作为归一化上下文，不另算第四个 direct-comparison endpoint。
+- 每个 hemisphere、每个 anterior/middle/posterior system 输出三项：`surface_area_mm2`、`functional_segregation_d`、`boundary_sharpness_d`。`surface_area_fraction` 保存在 feature table 作为归一化上下文，不另算第四个 direct-comparison endpoint。
 - 本实现把文章所述的 ±4.0 mm 落实为 consumed source-512 midthickness 3D Euclidean radius 4.0 mm；这是本项目冻结的功能指标操作定义，记录为 `source_512_midthickness_euclidean_radius_mm`，不把它表述为已核验的作者源码细节。Native geometry/metric 只用于 system surface area。
 - Stanford direct run 对 TEHC、NTS、NTS Any MDD、NTS Pure MDD、TIS、TIS PTSD 六个 case−NTHC contrast 做双侧 Welch test；2 methods × 2/4 mm × L/R × 3 metrics × 3 systems 合计 432 个 method-aware endpoint rows。文字与图使用原始 p、Welch CI 和 Cohen d；结果表保留 method 与完整两种 smoothing。
 - 若所有对应 2/4-mm pair 的 d 方向及 p<0.05 结论一致，图只显示 2 mm；否则分别显示 2-mm 和 4-mm 图。

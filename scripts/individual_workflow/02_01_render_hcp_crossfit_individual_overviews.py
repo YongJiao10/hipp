@@ -45,7 +45,7 @@ DEFAULT_SMOOTHINGS = ("2mm", "4mm")
 DEFAULT_HEMIS = ("L", "R")
 DEFAULT_JOBS = 4
 DEFAULT_SCENE = REPO_ROOT / "config" / "wb_locked_native_view_lateral_medial.scene"
-LABEL_SEMANTICS = {"1": "Anterior", "2": "Body", "3": "Posterior"}
+LABEL_SEMANTICS = {"1": "Anterior", "2": "Middle", "3": "Posterior"}
 DISPLAY_NULL_LABEL = (0, "Null", (158, 158, 158, 255))
 FISHERZ_NETWORK_DISPLAY_SPECS = {
     # Keep compact legend aliases, but index colors by canonical Kong2022 networks.

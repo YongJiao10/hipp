@@ -27,10 +27,10 @@ def test_surface_area_sums_consumed_native_vertex_area_within_each_system() -> N
     )
 
     assert result["system_area_mm2"] == pytest.approx(
-        {"anterior": 0.5, "body": 0.4, "posterior": 0.1}
+        {"anterior": 0.5, "middle": 0.4, "posterior": 0.1}
     )
     assert result["system_area_fraction"] == pytest.approx(
-        {"anterior": 0.5, "body": 0.4, "posterior": 0.1}
+        {"anterior": 0.5, "middle": 0.4, "posterior": 0.1}
     )
     assert result["total_valid_surface_area_mm2"] == pytest.approx(1.0)
     assert result["total_labeled_area_mm2"] == pytest.approx(1.0)
@@ -39,7 +39,7 @@ def test_surface_area_sums_consumed_native_vertex_area_within_each_system() -> N
     assert "native per-vertex surface-area values" in result["vertex_area_convention"]
     assert result["systems"]["anterior"]["surface_area_mm2"] == pytest.approx(0.5)
     assert result["surface_area_mm2"] == pytest.approx(
-        {"anterior": 0.5, "body": 0.4, "posterior": 0.1}
+        {"anterior": 0.5, "middle": 0.4, "posterior": 0.1}
     )
 
 
@@ -57,7 +57,7 @@ def test_surface_area_fraction_uses_all_valid_native_surface_area() -> None:
     assert result["total_labeled_area_mm2"] == pytest.approx(0.9)
     assert result["unassigned_surface_area_mm2"] == pytest.approx(0.15)
     assert result["system_area_fraction"] == pytest.approx(
-        {"anterior": 0.5, "body": 0.4, "posterior": 0.0}
+        {"anterior": 0.5, "middle": 0.4, "posterior": 0.0}
     )
 
 
@@ -85,8 +85,8 @@ def test_combined_area_is_the_arithmetic_mean_of_left_and_right_values() -> None
     """Fails if the published left/right convention is changed to a sum."""
 
     result = combine_hemisphere_means(
-        {"anterior": 2.0, "body": 4.0, "posterior": 6.0},
-        {"anterior": 4.0, "body": 8.0, "posterior": 10.0},
+        {"anterior": 2.0, "middle": 4.0, "posterior": 6.0},
+        {"anterior": 4.0, "middle": 8.0, "posterior": 10.0},
     )
 
-    assert result == pytest.approx({"anterior": 3.0, "body": 6.0, "posterior": 8.0})
+    assert result == pytest.approx({"anterior": 3.0, "middle": 6.0, "posterior": 8.0})

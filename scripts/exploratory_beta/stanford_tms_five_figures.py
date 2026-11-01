@@ -57,7 +57,7 @@ PARCELLATION_DISPLAY = {"template_matching": "Template matching", "hcp151": "HCP
 CLUSTERS = (1, 2, 3)
 CLUSTER_DISPLAY = {
     1: "C1\nAnterior / VAN",
-    2: "C2\nBody / SMN",
+    2: "C2\nMiddle / SMN",
     3: "C3\nPosterior / DMN",
 }
 CLUSTER_SHORT = {1: "C1", 2: "C2", 3: "C3"}
@@ -741,7 +741,7 @@ def heatmap_figure(fc_stats_table: pd.DataFrame, output_dir: Path) -> dict[str, 
                         ax.text(x_index, y_index + 0.21, f"p={format_p(cell['pearson_p_raw'])}, n={int(cell['n'])}", ha="center", va="center", fontsize=13.5)
                 ax.set_xlim(-0.5, 2.5)
                 ax.set_ylim(2.5, -0.5)
-                ax.set_xticks(range(3), ["C1\nAnterior", "C2\nBody", "C3\nPosterior"])
+                ax.set_xticks(range(3), ["C1\nAnterior", "C2\nMiddle", "C3\nPosterior"])
                 ax.set_yticks(range(3), [NETWORK_DISPLAY[n] for n in NETWORKS])
                 ax.set_title(f"{GROUP_DISPLAY[group]} | {PARCELLATION_DISPLAY[parcellation]}", fontsize=15.5, pad=9, fontweight="bold")
                 ax.tick_params(length=0, labelsize=14.5)

@@ -25,7 +25,7 @@ TITLE_BY_FAMILY = {
     "functional_segregation": "Functional segregation (Cohen d)",
     "boundary_sharpness": "Boundary sharpness (Cohen d)",
 }
-SYSTEMS = ("anterior", "body", "posterior")
+SYSTEMS = ("anterior", "middle", "posterior")
 INK = "#25313b"
 MUTED = "#55616c"
 WHITE = "#ffffff"

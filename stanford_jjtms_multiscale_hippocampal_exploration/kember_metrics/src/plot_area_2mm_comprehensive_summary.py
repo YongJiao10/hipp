@@ -112,7 +112,7 @@ FONT_SIZES = {
     "legend_title": 12.0,
 }
 
-SYSTEMS = ("anterior", "body", "posterior")
+SYSTEMS = ("anterior", "middle", "posterior")
 HEMISPHERES = ("L", "R")
 METHOD = "hcp151_template_matching"
 SMOOTHING_MM = 2
@@ -129,13 +129,13 @@ GROUP_COLORS = {
 }
 SYSTEM_COLORS = {
     "anterior": "#D84315",
-    "body": "#00897B",
+    "middle": "#00897B",
     "posterior": "#5E35B1",
 }
 SYSTEM_TITLES = {
-    "anterior": "Anterior (Head)",
-    "body": "Body",
-    "posterior": "Posterior (Tail)",
+    "anterior": "Anterior",
+    "middle": "Middle",
+    "posterior": "Posterior",
 }
 
 ANALYSIS_MODES = ("proportion", "covariate")

@@ -103,7 +103,7 @@ def _write_fixed_subject(root: Path, subject: str = "1001") -> None:
                         "hemi": hemi,
                         "label_semantics": {
                             "1": "Anterior/VAN",
-                            "2": "Body/SMN",
+                            "2": "Middle/SMN",
                             "3": "Posterior/DMN",
                         },
                         "outputs": {

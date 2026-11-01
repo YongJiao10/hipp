@@ -61,7 +61,7 @@ TM_DISPLAY_TITLES: tuple[tuple[str, str], ...] = (
 )
 TM_LABEL_SEMANTICS: dict[int, str] = {
     1: "Anterior/VAN",
-    2: "Body/SMN",
+    2: "Middle/SMN",
     3: "Posterior/DMN",
 }
 TM_SUBREGION_DISPLAY: dict[int, str] = {

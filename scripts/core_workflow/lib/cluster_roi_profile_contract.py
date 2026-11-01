@@ -1,6 +1,6 @@
 """Shared contracts for Kong2022 hippocampal cortex projection profiles.
 
-The profile is the only valid input for gradient Anterior/Body/Posterior
+The profile is the only valid input for gradient Anterior/Middle/Posterior
 cortical projections.  Network-level profiles and raw, pre-relabel cluster
 rows are intentionally outside this contract.
 
@@ -17,7 +17,7 @@ from typing import Any, Mapping
 
 
 KONG2022_ROI_PROFILE_ATLASES = frozenset({"kong2022"})
-KONG2022_CLUSTER_PROFILE_SUBREGIONS = ("Anterior", "Body", "Posterior")
+KONG2022_CLUSTER_PROFILE_SUBREGIONS = ("Anterior", "Middle", "Posterior")
 KONG2022_CLUSTER_ROI_PROFILE_SHAPE = (3, 400)
 KONG2022_CLUSTER_LABEL_ORDERING = "long_axis_head_to_tail"
 KONG2022_CLUSTER_ORDER_HEAD_TO_TAIL = (1, 2, 3)

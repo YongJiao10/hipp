@@ -153,8 +153,8 @@ The long-form tensor has the columns
 `dataset, subject, group, trauma, symptomatic, method, smoothing_mm,
 hemisphere, region, network_resolution, network, fc_estimator, fisher_z,
 region_weight, valid_vertex_count, network_coverage, status,
-failure_reason`. Regions are exactly `anterior`, `body`, and display `tail`
-(machine `posterior`). Values remain absolute Fisher-z FC; incompatible
+failure_reason`. Regions are exactly `anterior`, `middle`, and `posterior`
+in both stored tables and display labels. Values remain absolute Fisher-z FC; incompatible
 shapes, provenance mismatches, unknown labels, and missing sidecars remain
 visible as failed/missing rows and are never zero-filled. The configured
 valid-vertex mask is honored before aggregation. A vertex with any nonfinite
@@ -239,7 +239,7 @@ src/global_profile.py exposes:
 
     run_global_tests(tensor, contrasts, seed, n_perm) -> pandas.DataFrame
 
-This is an auxiliary, non-gating summary. It consumes the same Task 2 hemisphere views and exact Task 3 contrasts as localisation, and emits one subregion_profile row for each of anterior, body, and tail, plus one whole_hippocampus_profile row (region=all) for every fixed dataset, estimand, method, smoothing, hemisphere mode, network resolution, and fisher_z estimator branch. The output records n_total, n_complete, effective_dimension, the squared Euclidean profile-distance statistic, plus-one p_perm, n_perm, seed, derived_seed, and an audited failure_reason.
+This is an auxiliary, non-gating summary. It consumes the same Task 2 hemisphere views and exact Task 3 contrasts as localisation, and emits one subregion_profile row for each of anterior, middle, and posterior, plus one whole_hippocampus_profile row (region=all) for every fixed dataset, estimand, method, smoothing, hemisphere mode, network resolution, and fisher_z estimator branch. The output records n_total, n_complete, effective_dimension, the squared Euclidean profile-distance statistic, plus-one p_perm, n_perm, seed, derived_seed, and an audited failure_reason.
 
 Each complete subject contributes one fixed-order vector: 8 or 17 network components for a subregion, and all 3x8 or 3x17 region-network components for the whole hippocampus. Incomplete subjects are excluded as whole profiles and are never zero-imputed or permuted network-cell by network-cell. The statistic standardizes each exact contrast effect by its full cell-means model residual SD before summing squared components. Stanford marginal/interaction tests use Freedman-Lane residual permutations under the deterministic exact-contrast reduced model; JJTMS uses the intercept-null reduced model. A stable cryptographic branch/scope seed makes results reproducible and branch-order invariant. These profile p-values have no confirmatory multiplicity correction and cannot suppress or condition primary localisation.
 

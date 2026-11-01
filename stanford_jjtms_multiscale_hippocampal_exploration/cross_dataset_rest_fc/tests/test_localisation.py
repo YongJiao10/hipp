@@ -18,7 +18,7 @@ from contrasts import jjtms_contrast_matrix, stanford_contrast_matrix  # noqa: E
 from localisation import fit_local_effects  # noqa: E402
 
 
-REGIONS = ("anterior", "body", "tail")
+REGIONS = ("anterior", "middle", "posterior")
 MODES = ("bilateral", "L", "R", "L-R")
 GROUPS = {
     "NTHC": (0, 0),
@@ -257,13 +257,13 @@ def test_empty_tensor_fails_closed() -> None:
 
 def test_failed_component_is_retained_without_provisional_correction() -> None:
     tensor = _jjtms_views()
-    unavailable = (tensor["network"] == "N08") & (tensor["region"] == "tail")
+    unavailable = (tensor["network"] == "N08") & (tensor["region"] == "posterior")
     tensor.loc[unavailable, "status"] = "unavailable"
     tensor.loc[unavailable, "fisher_z"] = np.nan
     tensor.loc[unavailable, "failure_reason"] = "audited unavailable component"
     result = fit_local_effects(tensor, jjtms_contrast_matrix())
     failed = result.query(
-        "network == 'N08' and region == 'tail' and hemisphere_mode == 'bilateral'"
+        "network == 'N08' and region == 'posterior' and hemisphere_mode == 'bilateral'"
     ).iloc[0]
     assert pd.isna(failed["p_raw"])
     assert pd.isna(failed["q_bh"])
@@ -282,11 +282,11 @@ def test_duplicate_subject_key_after_normalization_fails_closed() -> None:
 
 def test_missing_required_group_is_a_failure_row_not_a_dropped_component() -> None:
     tensor = _jjtms_views()
-    target = (tensor["network"] == "N01") & (tensor["region"] == "body")
+    target = (tensor["network"] == "N01") & (tensor["region"] == "middle")
     tensor = tensor.loc[~(target & tensor["group"].eq("patient"))].copy()
     result = fit_local_effects(tensor, jjtms_contrast_matrix())
     row = result.query(
-        "network == 'N01' and region == 'body' and hemisphere_mode == 'bilateral'"
+        "network == 'N01' and region == 'middle' and hemisphere_mode == 'bilateral'"
     ).iloc[0]
     assert pd.isna(row["coefficient"])
     assert pd.isna(row["p_raw"])

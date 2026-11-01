@@ -59,7 +59,7 @@ KEMBER_ENDPOINTS = (
     ("functional_segregation", "functional_segregation_d", "functional_segregation_d"),
     ("boundary_sharpness", "boundary_sharpness_d", "boundary_sharpness_d"),
 )
-SYSTEMS = ("anterior", "body", "posterior")
+SYSTEMS = ("anterior", "middle", "posterior")
 
 
 def _resolve_repo_path(value: str | Path) -> Path:

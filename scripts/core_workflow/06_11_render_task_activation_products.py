@@ -89,8 +89,8 @@ DEFAULT_GROUP_AVG_SURFACES_DIR = (
     / "hipp_group_average"
     / "group_average_surfaces"
 )
-CLUSTER_ORDER = ["Anterior", "Body", "Posterior"]
-CLUSTER_SHORT = {"Anterior": "Ant", "Body": "Mid", "Posterior": "Post"}
+CLUSTER_ORDER = ["Anterior", "Middle", "Posterior"]
+CLUSTER_SHORT = {"Anterior": "Ant", "Middle": "Mid", "Posterior": "Post"}
 ZONE_ORDER = [PARCELLATION_HCP151_ATLAS, PARCELLATION_TEMPLATE_MATCHING]
 ZONE_SHORT = {
     PARCELLATION_HCP151_ATLAS: "hcp151",
@@ -526,7 +526,7 @@ def render_task_figure(
             )
             if [r["cluster_name"] for r in rows] != CLUSTER_ORDER:
                 raise ValueError(
-                    f"Expected Anterior/Body/Posterior rows for {contrast} {zone} hemi-{hemi}, "
+                    f"Expected Anterior/Middle/Posterior rows for {contrast} {zone} hemi-{hemi}, "
                     f"got {[r['cluster_name'] for r in rows]}"
                 )
             for row in rows:
@@ -632,7 +632,7 @@ def render_task_figure(
                     continue
                 if np.isfinite(float(r["mean"])):
                     zone_vals.setdefault(r["subject"], {})[r["cluster_name"]] = float(r["mean"])
-            pairs = [("Anterior", "Body"), ("Body", "Posterior"), ("Anterior", "Posterior")]
+            pairs = [("Anterior", "Middle"), ("Middle", "Posterior"), ("Anterior", "Posterior")]
             for a, b in pairs:
                 paired = np.array([
                     (v[a], v[b]) for v in zone_vals.values() if a in v and b in v
@@ -753,7 +753,7 @@ def draw_brackets(
                 if vals.size:
                     tops.append(float(np.max(vals)))
             if ("Anterior" in (a, b)) and ("Posterior" in (a, b)):
-                for mid_c in ("Body", "Mid"):
+                for mid_c in ("Middle", "Mid"):
                     if (zone, mid_c) in bar_info:
                         info_m = bar_info[(zone, mid_c)]
                         assert isinstance(info_m, dict)

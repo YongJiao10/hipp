@@ -24,7 +24,7 @@ from global_profile import (  # noqa: E402
 from localisation import fit_local_effects  # noqa: E402
 
 
-REGIONS = ("anterior", "body", "tail")
+REGIONS = ("anterior", "middle", "posterior")
 GROUPS = ("NTHC", "TEHC", "NTS", "TIS")
 
 
@@ -299,14 +299,14 @@ def test_seed_identity_and_branch_order_invariance_are_byte_identical() -> None:
 
 def test_failed_profiles_are_preserved_without_zero_imputation() -> None:
     tensor = _profile_rows(resolutions=(8,))
-    failed = (tensor["region"] == "tail") & (tensor["network"] == "N08")
+    failed = (tensor["region"] == "posterior") & (tensor["network"] == "N08")
     tensor.loc[failed, "status"] = "unavailable"
     tensor.loc[failed, "fisher_z"] = np.nan
     tensor.loc[failed, "failure_reason"] = "audited unavailable component"
     result = run_global_tests(tensor, jjtms_contrast_matrix(), seed=7, n_perm=3)
 
     tail = result.query(
-        "profile_scope == 'subregion_profile' and region == 'tail'"
+        "profile_scope == 'subregion_profile' and region == 'posterior'"
     ).iloc[0]
     whole = result.query("profile_scope == 'whole_hippocampus_profile'").iloc[0]
     assert tail["n_total"] == 6

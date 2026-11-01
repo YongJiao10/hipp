@@ -63,7 +63,7 @@ The colleague-facing copies are written to:
   sub-<id>_2mm_cluster_mean_timeseries_fc_manifest.json
 ```
 
-Every matrix has shape `(3, 400)`. Rows are `1=Anterior/VAN`, `2=Body/SMN`,
+Every matrix has shape `(3, 400)`. Rows are `1=Anterior/VAN`, `2=Middle/SMN`,
 and `3=Posterior/DMN`; columns are Kong2022 ROI IDs 1 through 400 in the
 subject registry order. The Fisher-z matrix is the template-matching analysis
 scale, and the Pearson matrix is retained with the same cluster definition.

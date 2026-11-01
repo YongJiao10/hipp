@@ -111,13 +111,13 @@ def test_weighted_sides_reconstruct_load_x_places(tmp_path: Path) -> None:
 
 
 def test_parse_bh_fdr_p_requires_adjusted_value() -> None:
-    row = {"parcellation": "hcp151_atlas", "cluster_name": "Body",
+    row = {"parcellation": "hcp151_atlas", "cluster_name": "Middle",
            "contrast": "c", "hemi": "L", "group_p_fdr": "0.004",
            "group_p": "0.001"}
     assert render.parse_bh_fdr_p(row, contrast="c", hemi="L") == pytest.approx(0.004)
     for bad in ({"group_p": "0.001"}, {"group_p_fdr": ""}, {"group_p_fdr": "  "}):
         tagged = dict(bad)
-        tagged.update({"parcellation": "hcp151_atlas", "cluster_name": "Body"})
+        tagged.update({"parcellation": "hcp151_atlas", "cluster_name": "Middle"})
         with pytest.raises(ValueError, match="[Ff][Dd][Rr]"):
             render.parse_bh_fdr_p(tagged, contrast="c", hemi="L")
 
@@ -142,7 +142,7 @@ def test_cluster_plot_labels_effective_counts(monkeypatch: pytest.MonkeyPatch, b
     summary, subjects = [], []
     for zone in render.ZONE_ORDER:
         for cluster in render.CLUSTER_ORDER:
-            n = 2 if cluster == "Body" else 3
+            n = 2 if cluster == "Middle" else 3
             summary.append(dict(parcellation=zone, contrast="faces_gt_shapes", hemi="L",
                                 cluster_name=cluster, n_subjects=str(n), group_mean="1",
                                 group_sd="1", group_p_fdr="1"))
@@ -174,7 +174,7 @@ def test_region_brackets_drawn_with_legend(monkeypatch: pytest.MonkeyPatch, bin_
     monkeypatch.setattr(render, "group_beta_mean", lambda *a, **kw: np.ones(40))
     monkeypatch.setattr(render.np, "load", lambda *a, **kw: np.ones(40))
     summary, subjects = [], []
-    offsets = {"Anterior": 10.0, "Body": 0.0, "Posterior": 0.0}
+    offsets = {"Anterior": 10.0, "Middle": 0.0, "Posterior": 0.0}
     for zone in render.ZONE_ORDER:
         for cluster in render.CLUSTER_ORDER:
             summary.append(dict(parcellation=zone, contrast="faces_gt_shapes", hemi="L",
@@ -272,7 +272,7 @@ def test_draw_brackets_collision_free_and_headroom(monkeypatch: pytest.MonkeyPat
     monkeypatch.setattr(render, "group_beta_mean", lambda *a, **kw: np.ones(40))
     monkeypatch.setattr(render.np, "load", lambda *a, **kw: np.ones(40))
     summary, subjects = [], []
-    offsets = {"Anterior": 30.0, "Body": 15.0, "Posterior": 0.0}
+    offsets = {"Anterior": 30.0, "Middle": 15.0, "Posterior": 0.0}
     for zone in render.ZONE_ORDER:
         for cluster in render.CLUSTER_ORDER:
             summary.append(dict(parcellation=zone, contrast="faces_gt_shapes", hemi="L",

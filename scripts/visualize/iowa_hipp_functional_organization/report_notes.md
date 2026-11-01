@@ -70,7 +70,7 @@ Theme 2 (`hipp_spatial_organization.png`) uses a 4-tier balanced publication lay
 
 Theme 3 (`hipp_network_fingerprints.png`) uses a 2-row × 3-column matrix (Standard vs Ctx-Reg pipelines across
 Group Dominant, De Novo, and WTA atlases):
-- Heavy structural dividers separate LH and RH (at y=2.5) and Anterior, Mid-body, and Posterior
+- Heavy structural dividers separate LH and RH (at y=2.5) and Anterior, Middle, and Posterior
   subregions (at x=6.5 and x=13.5).
 - Each panel carries a single-line title (`Standard/Ctx-Reg · Group Dominant/De Novo/WTA`);
   pipeline and Fisher's-z metric context lives in the suptitle, and subregion banners

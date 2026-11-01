@@ -95,7 +95,7 @@ def write_subject_sources(inputs: dict[str, Path]) -> None:
     template_record = fingerprint(inputs["template"])
     label_semantics = {
         "1": "Anterior/VAN",
-        "2": "Body/SMN",
+        "2": "Middle/SMN",
         "3": "Posterior/DMN",
     }
     for subject in ("1001", "2002"):
@@ -292,7 +292,7 @@ def test_subject_preflight_rejects_label_drift_before_rendering(tmp_path: Path) 
             expected_matching_workflow="stanford_hcp151_fixed_template_matching",
             expected_label_semantics={
                 "1": "Anterior/VAN",
-                "2": "Body/SMN",
+                "2": "Middle/SMN",
                 "3": "Posterior/DMN",
             },
             smoothings=("2mm", "4mm"),
@@ -319,7 +319,7 @@ def test_subject_preflight_returns_ordered_exact_sources(tmp_path: Path) -> None
         expected_matching_workflow="stanford_hcp151_fixed_template_matching",
         expected_label_semantics={
             "1": "Anterior/VAN",
-            "2": "Body/SMN",
+            "2": "Middle/SMN",
             "3": "Posterior/DMN",
         },
         smoothings=("2mm", "4mm"),

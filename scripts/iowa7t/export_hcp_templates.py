@@ -266,7 +266,7 @@ def export(out_root: Path) -> None:
         print(f"[done] {key}: {counts['7net'][key]}", flush=True)
 
     packages = [("gradient_spectral", np.stack(gradients),
-                 ("Anterior", "Body", "Posterior"), ("Anterior", "Body", "Posterior"))]
+                 ("Anterior", "Middle", "Posterior"), ("Anterior", "Middle", "Posterior"))]
     packages.extend((f"wta_normalized/{v}", np.stack(results[v]), SELECTED[v], DISPLAY[v])
                     for v in ("7net", "8net", "17net"))
     generated = datetime.now(timezone.utc).isoformat()
@@ -320,7 +320,7 @@ HCP151 Kong2022 400-ROI templates. Mean Fisher-z values; rows are
 `2mm_L`, `2mm_R`, `4mm_L`, `4mm_R`; columns are ROI IDs 1..400.
 
 - `gradient_spectral`: three AP-ordered formal fixed-template prototypes
-  (Anterior, Body, Posterior).
+  (Anterior, Middle, Posterior).
 - `wta_normalized/7net`: direct canonical7 Fisher-z WTA; rows Default (DMN),
   VentralAttention (VAN), Somatomotor (SMN).
 - `wta_normalized/8net`: normalized-top20 canonical8 WTA; rows Default (DMN),

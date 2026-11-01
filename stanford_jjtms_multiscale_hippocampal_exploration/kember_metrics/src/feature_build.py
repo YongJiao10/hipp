@@ -59,7 +59,7 @@ except ImportError:  # pragma: no cover - direct source-directory execution
 
 
 SYSTEM_LABELS = (1, 2, 3)
-SYSTEM_NAMES = {1: "anterior", 2: "body", 3: "posterior"}
+SYSTEM_NAMES = {1: "anterior", 2: "middle", 3: "posterior"}
 METHODS = ("hcp151_template_matching", "hcp151_fixed")
 BOUNDARY_RADIUS_MM = 4.0
 PRIMARY_METRIC_FIELDS = (

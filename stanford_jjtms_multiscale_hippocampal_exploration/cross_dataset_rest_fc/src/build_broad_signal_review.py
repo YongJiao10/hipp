@@ -254,14 +254,14 @@ def build_four_group_patterns(
     views: pd.DataFrame,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     themes = [
-        ("tail", "Language", 8, "posterior Language"),
-        ("body", "Somatomotor", 8, "body Somatomotor"),
-        ("tail", "Auditory", 8, "posterior Auditory"),
-        ("tail", "Control", 8, "posterior Control"),
-        ("body", "Default", 8, "body Default"),
-        ("body", "VisualA", 17, "body VisualA"),
-        ("body", "SalVenAttnB", 17, "body Sal/VAN-B"),
-        ("body", "DorsAttnA", 17, "body DAN-A"),
+        ("posterior", "Language", 8, "posterior Language"),
+        ("middle", "Somatomotor", 8, "middle Somatomotor"),
+        ("posterior", "Auditory", 8, "posterior Auditory"),
+        ("posterior", "Control", 8, "posterior Control"),
+        ("middle", "Default", 8, "middle Default"),
+        ("middle", "VisualA", 17, "middle VisualA"),
+        ("middle", "SalVenAttnB", 17, "middle Sal/VAN-B"),
+        ("middle", "DorsAttnA", 17, "middle DAN-A"),
     ]
     valid = views[
         (views["dataset"] == "stanford")
@@ -629,31 +629,31 @@ def main() -> None:
         ].iloc[0]
         return row
 
-    tail_lang = get_level("stanford", "interaction", 8, "tail", "Language")
-    body_som = get_level("stanford", "interaction", 8, "body", "Somatomotor")
-    body_default_j = get_level("jjtms", "patient-healthy", 8, "body", "Default")
-    tehc_som = get_level("stanford", "TEHC-NTHC", 8, "body", "Somatomotor")
-    tehc_sal = get_level("stanford", "TEHC-NTHC", 17, "body", "SalVenAttnB")
+    tail_lang = get_level("stanford", "interaction", 8, "posterior", "Language")
+    body_som = get_level("stanford", "interaction", 8, "middle", "Somatomotor")
+    body_default_j = get_level("jjtms", "patient-healthy", 8, "middle", "Default")
+    tehc_som = get_level("stanford", "TEHC-NTHC", 8, "middle", "Somatomotor")
+    tehc_sal = get_level("stanford", "TEHC-NTHC", 17, "middle", "SalVenAttnB")
     tail_visual_lat = laterality_all[
         (laterality_all["dataset"] == "stanford")
         & (laterality_all["estimand"] == "interaction")
         & (laterality_all["resolution"] == 17)
-        & (laterality_all["region"] == "tail")
+        & (laterality_all["region"] == "posterior")
         & (laterality_all["network"] == "VisualC")
     ].iloc[0]
     body_lang_lat = laterality_all[
         (laterality_all["dataset"] == "stanford")
         & (laterality_all["estimand"] == "TIS-TEHC")
         & (laterality_all["resolution"] == 8)
-        & (laterality_all["region"] == "body")
+        & (laterality_all["region"] == "middle")
         & (laterality_all["network"] == "Language")
     ].iloc[0]
 
     j_body_visual = get_level(
-        "jjtms", "patient-healthy", 8, "body", "Visual"
+        "jjtms", "patient-healthy", 8, "middle", "Visual"
     )
     s_body_visuala = get_level(
-        "stanford", "NTS-NTHC", 17, "body", "VisualA"
+        "stanford", "NTS-NTHC", 17, "middle", "VisualA"
     )
 
     notes = f"""# Broad promising-signal review
@@ -665,44 +665,44 @@ does not refit a model, and does not modify the source tables.
 ## Main candidate themes
 
 1. **Posterior Language remains the strongest anchor, but it is not the only
-   story.** The Stanford tail–Language interaction has median standardized
+   story.** The Stanford posterior–Language interaction has median standardized
    effect {tail_lang.median_d:.3f} across 12 fixed/template × 2/4mm ×
    bilateral/L/R specifications (range {tail_lang.min_d:.3f} to
    {tail_lang.max_d:.3f}; sign consistency {tail_lang.sign_consistency:.0%}).
-2. **Body Somatomotor shows a large crossover-like interaction.** Its Stanford
+2. **Middle Somatomotor shows a large crossover-like interaction.** Its Stanford
    interaction median is {body_som.median_d:.3f} (range
    {body_som.min_d:.3f} to {body_som.max_d:.3f}; sign consistency
    {body_som.sign_consistency:.0%}). The four-group pattern is driven by high
    TEHC coupling and lower TIS coupling, making this a distinct candidate from
    the posterior Language story despite its different biological profile shape.
-3. **Body Default is the clearest cross-dataset non-thresholded convergence.**
+3. **Middle Default is the clearest cross-dataset non-thresholded convergence.**
    JJTMS patient−healthy median d is {body_default_j.median_d:.3f}; Stanford
    symptom-marginal median d is
-   {float(cross.loc[(cross.region == "body") & (cross.network == "Default"), "median_d_stanford"].iloc[0]):.3f}.
+   {float(cross.loc[(cross.region == "middle") & (cross.network == "Default"), "median_d_stanford"].iloc[0]):.3f}.
    Both are positive in all 12 specifications per dataset.
-4. **Trauma-exposed healthy participants show a body-network reconfiguration.**
-   TEHC−NTHC body Somatomotor has median d {tehc_som.median_d:.3f}, while
-   body Sal/VAN-B has median d {tehc_sal.median_d:.3f}, each with 100% sign
+4. **Trauma-exposed healthy participants show a middle-network reconfiguration.**
+   TEHC−NTHC middle Somatomotor has median d {tehc_som.median_d:.3f}, while
+   middle Sal/VAN-B has median d {tehc_sal.median_d:.3f}, each with 100% sign
    consistency. This suggests a Somatomotor-up / salience-attention-down
    pattern that should be shown as a multicomponent profile, not as isolated p
    values.
-5. **Laterality deserves its own candidate family.** Stanford tail VisualC
+5. **Laterality deserves its own candidate family.** Stanford posterior VisualC
    interaction has median L−R d {tail_visual_lat.median_d:.3f} across four
-   fixed/template × 2/4mm specifications; body Language TIS−TEHC has median
+   fixed/template × 2/4mm specifications; middle Language TIS−TEHC has median
    L−R d {body_lang_lat.median_d:.3f}. These are strong, direction-stable
    effect-size patterns, but they remain exploratory until the analysis-object
    set is frozen and the correction family is defined.
 6. **Additional JJTMS-specific clues remain visible in the landscape**, notably
-   body Default, anterior Language and posterior DorsalAttention. They are
+   middle Default, anterior Language and posterior DorsalAttention. They are
    useful for defining a broader transdiagnostic profile; this is an effect-size
    and stability observation, not a multiplicity claim.
 7. **Lower-effect direction-stable leads are retained for visual review.** The
    two secondary rows are selected by absolute median effect after the
    cross-specification sign requirement; they are not filtered or promoted by a
    provisional multiplicity threshold.
-8. **Body Visual suggests a more nuanced cross-dataset hypothesis.** JJTMS
-   patient−healthy body Visual is negative in all 12 specifications (median d
-   {j_body_visual.median_d:.3f}); Stanford NTS−NTHC body VisualA is also
+8. **Middle Visual suggests a more nuanced cross-dataset hypothesis.** JJTMS
+   patient−healthy middle Visual is negative in all 12 specifications (median d
+   {j_body_visual.median_d:.3f}); Stanford NTS−NTHC middle VisualA is also
    negative in all 12 (median d {s_body_visuala.median_d:.3f}). Because the
    Stanford marginal parent-network effect is weak and VisualA is a
    17-network refinement with a TIS rebound pattern, this is a resolution- and

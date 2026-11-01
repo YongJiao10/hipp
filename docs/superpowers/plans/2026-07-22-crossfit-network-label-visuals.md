@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Replace the presentation-only anterior/body/posterior legend labels in the canonical individual cross-fit overviews with the Fisher-z identified networks VAN, SMN, and DMN, using the project's canonical network colors.
+**Goal:** Replace the presentation-only anterior/middle/posterior legend labels in the canonical individual cross-fit overviews with the Fisher-z identified networks VAN, SMN, and DMN, using the project's canonical network colors.
 
 **Architecture:** Keep cross-fit label codes and source manifests unchanged: they remain longitudinal-axis ordered codes 1/2/3. The overview renderer will fingerprint-validate every fold/smoothing/hemisphere template profile, aggregate each code's 400-ROI Fisher-z profile by the canonical Kong2022 network registry, require a stable one-to-one winner across all templates, and create temporary display GIFTIs whose labels/colors are VAN/SMN/DMN. The persistent overview manifest records this visual-label contract, and a guarded refresh flag permits atomic replacement of legacy AP-labelled PNGs.
 

@@ -119,7 +119,7 @@ RUN_RE = re.compile(r"_run-(?P<run>\d+)_")
 LABEL_ITEMS = [
     (0, "Null", (158, 158, 158, 255)),
     (1, "Anterior/VAN", (220, 92, 255, 255)),
-    (2, "Body/SMN", (99, 150, 194, 255)),
+    (2, "Middle/SMN", (99, 150, 194, 255)),
     (3, "Posterior/DMN", (216, 92, 107, 255)),
 ]
 
@@ -1621,7 +1621,7 @@ def _match_combinations(
                 "hemi": hemi,
                 "label_semantics": {
                     "1": "Anterior/VAN",
-                    "2": "Body/SMN",
+                    "2": "Middle/SMN",
                     "3": "Posterior/DMN",
                 },
                 "template_prototypes": fingerprint(template.prototypes[(smoothing, hemi)]),

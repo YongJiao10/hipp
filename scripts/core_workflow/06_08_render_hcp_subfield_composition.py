@@ -40,7 +40,7 @@ COVERAGE_TAG = "cov_0p80"
 COMPONENT_TAG = "g1g2g3"
 SMOOTHINGS = ("2mm", "4mm")
 HEMIS = ("L", "R")
-CLUSTER_NAMES = {1: "Anterior", 2: "Body", 3: "Posterior"}
+CLUSTER_NAMES = {1: "Anterior", 2: "Middle", 3: "Posterior"}
 SUBFIELD_ORDER = (1, 2, 3, 4, 5, 6, 7)
 SUBFIELD_NAMES = {
     1: "Sub",

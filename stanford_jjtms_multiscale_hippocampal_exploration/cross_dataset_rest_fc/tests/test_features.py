@@ -22,7 +22,7 @@ build_hemisphere_views = features.build_hemisphere_views
 
 NETWORKS_17 = tuple(f"F{index:02d}" for index in range(1, 18))
 NETWORKS_8 = tuple(f"C{index:02d}" for index in range(1, 9))
-REGIONS = ("anterior", "body", "tail")
+REGIONS = ("anterior", "middle", "posterior")
 CONFIG_PATH = Path(__file__).resolve().parents[1] / "config" / "analysis_config.json"
 
 
@@ -104,7 +104,7 @@ def _write_fixture(tmp_path: Path, *, include_right: bool = True) -> dict[str, o
                             "{subject}/{smoothing}mm/hemi-{hemisphere}/weights.npy"
                         ),
                         "registry_path": str(registry_path),
-                        "region_labels": {"1": "anterior", "2": "body", "3": "posterior"},
+                        "region_labels": {"1": "anterior", "2": "middle", "3": "posterior"},
                     }
                 ],
             }

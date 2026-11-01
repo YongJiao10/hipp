@@ -1944,9 +1944,9 @@ def render_multidataset_hipp_cortex_figure_2col(
         col_titles = [
             ("Profile", "#102a43"),
             ("Hippo 3D Atlas", "#0f4c81"),
-            ("Anterior (Head)", "#d95f02"),
-            ("Body (Middle)", "#1b9e77"),
-            ("Posterior (Tail)", "#7570b3"),
+            ("Anterior", "#d95f02"),
+            ("Middle (Middle)", "#1b9e77"),
+            ("Posterior", "#7570b3"),
             ("Hippo 3D Atlas", "#4c1d95"),
         ] + wta_col_titles
         header_fs = 23.0 if is_single_col else 27.0
@@ -2007,7 +2007,7 @@ def render_multidataset_hipp_cortex_figure_2col(
             ax_gsurf.imshow(cdata["surf_grad"])
             ax_gsurf.axis("off")
 
-            # 3. Gradient Cortex Maps (Cols 2-4: Anterior, Body, Posterior)
+            # 3. Gradient Cortex Maps (Cols 2-4: Anterior, Middle, Posterior)
             for c_idx, subreg in enumerate(GRADIENT_SUBREGIONS):
                 ax_gcort = col_axes[(row_idx, 2 + c_idx)]
                 img_cortex = plt.imread(cdata["grad_cortex_pngs"][subreg])

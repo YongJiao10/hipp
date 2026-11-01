@@ -28,7 +28,7 @@ import reporting  # noqa: E402
 METHODS = ("hcp151_fixed", "hcp151_template_matching")
 REGISTERED_METHODS = METHODS + ("group_atlas_gradient_spectral",)
 MODES = ("bilateral", "L", "R", "L-R")
-REGIONS = ("anterior", "body", "tail")
+REGIONS = ("anterior", "middle", "posterior")
 
 
 def test_run_timestamp_is_current_utc_not_historical_snapshot() -> None:
@@ -222,7 +222,7 @@ def test_candidate_registry_deduplicates_pairs_before_applying_cap() -> None:
                         "estimand": "interaction",
                         "resolution": 8,
                         "hemisphere_mode": "bilateral",
-                        "region": "tail",
+                        "region": "posterior",
                         "network": network,
                         "method": method,
                         "smoothing_mm": smoothing_mm,

@@ -249,7 +249,7 @@ def _figure_cdata(tmp_path: Path, renderer, *, with_tm: bool, cid: str):
         "surf_grad": Image.new("RGB", (60, 40), "white"),
         "surf_wta": Image.new("RGB", (60, 40), "white"),
         "grad_cortex_pngs": {
-            s: tile(f"grad_{s}") for s in ("Anterior", "Body", "Posterior")
+            s: tile(f"grad_{s}") for s in ("Anterior", "Middle", "Posterior")
         },
         "wta_cortex_pngs": {
             n: tile(f"wta_{n}")

@@ -65,7 +65,7 @@ NETWORKS_17 = (
     "Aud",
     "Language",
 )
-REGIONS = ("anterior", "body", "tail")
+REGIONS = ("anterior", "middle", "posterior")
 MODES = ("bilateral", "L", "R", "L-R")
 
 
@@ -429,8 +429,8 @@ def plot_stanford_four_group_profiles(
         ax.set_title(f"{resolution}-network mean Fisher-z FC", loc="left", fontsize=9, color=CHARCOAL)
         if resolution == 8:
             ax.text(0.5, -0.42, "anterior", transform=ax.transAxes, ha="center", color=GREY, fontsize=8)
-            ax.text(0.5, -0.56, "body", transform=ax.transAxes, ha="center", color=GREY, fontsize=8)
-            ax.text(0.5, -0.70, "tail", transform=ax.transAxes, ha="center", color=GREY, fontsize=8)
+            ax.text(0.5, -0.56, "middle", transform=ax.transAxes, ha="center", color=GREY, fontsize=8)
+            ax.text(0.5, -0.70, "posterior", transform=ax.transAxes, ha="center", color=GREY, fontsize=8)
         else:
             for boundary in (len(networks) - 0.5, 2 * len(networks) - 0.5):
                 ax.axvline(boundary, color=WHITE, lw=1.2)

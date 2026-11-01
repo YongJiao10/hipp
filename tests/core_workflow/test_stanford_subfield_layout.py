@@ -39,14 +39,14 @@ def synthetic_exports(tmp_path, monkeypatch):
     monkeypatch.setattr(module, "OUTPUT_DIR", tmp_path)
     monkeypatch.setattr(module, "STATS_DIR", stats_dir)
     cases = [
-        ("NTS Pure MDD", "Body", "Sub", (-6.3564, -8.8565), 0.001),
-        ("TIS PTSD", "Body", "CA1", (4.5, 4.0), 0.02),
+        ("NTS Pure MDD", "Middle", "Sub", (-6.3564, -8.8565), 0.001),
+        ("TIS PTSD", "Middle", "CA1", (4.5, 4.0), 0.02),
         ("NTS Pure MDD", "Post", "Sub", (-2.0, -1.0), 0.3),
         ("NTS Pure MDD", "Ant", "Sub", (-5.0, -4.0), 0.4),
         ("NTS", "Ant", "CA1", (3.0, 2.5), 0.2),
         ("NTS", "Post", "CA1", (0.3, 0.2), 0.4),
         ("TEHC", "Post", "CA1", (0.2, 0.1), 0.5),
-        ("HCP 7T", "Body", "Sub", (0.01, 0.01), 0.8),
+        ("HCP 7T", "Middle", "Sub", (0.01, 0.01), 0.8),
     ]
     stats = [
         dict(case_cohort=cohort, hemisphere=hemi, cluster_name=cluster,
@@ -56,7 +56,7 @@ def synthetic_exports(tmp_path, monkeypatch):
         for hemi, difference in zip(("L", "R"), differences, strict=True)
     ]
     subjects = [dict(subject_id="fixture-01", hemisphere=hemi, cohort_name="NTHC",
-                     cluster_name="Body", subfield_name="Sub", proportion_pct=35.25)
+                     cluster_name="Middle", subfield_name="Sub", proportion_pct=35.25)
                 for hemi in ("L", "R")]
     module.export_analysis_tsvs(subjects, stats, "fixture", atlas_mode=module.TARGET_ATLAS_MODE)
     return stats, subjects
@@ -175,7 +175,7 @@ def test_c_selection_adds_largest_nonsignificant_bilateral_candidates(synthetic_
     assert items
     assert len(items) == 5
     assert sum(item[3] == "n.s." for item in items) == 3
-    body_items = [item for item in items if item[0] == "MDD" and item[1] == "Body Sub"]
+    body_items = [item for item in items if item[0] == "MDD" and item[1] == "Middle Sub"]
     assert len(body_items) == 1
     assert abs(body_items[0][2] - ((-6.3564 - 8.8565) / 2.0)) < 0.001
     ant_items = [item for item in items if item[0] == "MDD" and item[1] == "Ant Sub"]

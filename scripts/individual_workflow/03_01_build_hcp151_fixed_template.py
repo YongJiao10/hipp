@@ -479,7 +479,7 @@ def build_template(
         ),
         "cluster_label_semantics": {
             "1": "Anterior/VAN",
-            "2": "Body/SMN",
+            "2": "Middle/SMN",
             "3": "Posterior/DMN",
         },
         "source_group_root": str(Path(group_root).resolve()),

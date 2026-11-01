@@ -23,11 +23,11 @@ Kember-aligned primary endpoint and surface-area fraction is secondary context.
 
 ## 当前 Rest-FC 分析权威
 
-最初第 1、2 项的正确执行范围见 `rest_fc_primary_analysis_spec.md`。两点都以 anterior/body/posterior
+最初第 1、2 项的正确执行范围见 `rest_fc_primary_analysis_spec.md`。两点都以 anterior/middle/posterior
 对应的 17-network/8-network Fisher-z FC profile 为结局：第 1 项比较 JJTMS
 patient-vs-healthy 及 Stanford symptomatic-vs-healthy；第 2 项在 Stanford 四组中分解
 marginal symptomatic、marginal trauma、interaction 和四个预设 simple contrasts。
-逐network定位是第1点的核心结果；anterior/body/tail及whole-hippocampus向量检验仅作
+逐network定位是第1点的核心结果；anterior/middle/posterior及whole-hippocampus向量检验仅作
 辅助总览，不作为定位门。保留bilateral、left、right和配对L−R偏侧化；不批量遍历
 network-pair contrasts，只在定位后登记少量post-selection候选供后续验证。
 
@@ -85,7 +85,7 @@ Markdown report, static figures, tables, and SHA-256 manifest remain authoritati
 
 当前权威统计输出是
 `cross_dataset_rest_fc/*/primary_screen/`。其统一 branch ledger 可写成：
-`JJTMS/Stanford × 8/17net × bilateral/L/R/L-R × anterior/body/tail × 2/4mm ×
+`JJTMS/Stanford × 8/17net × bilateral/L/R/L-R × anterior/middle/posterior × 2/4mm ×
 hcp151_fixed/template_matching × network-wise/profile`。
 Stanford 的四个 parent factorial map、三个 nested clinical cohort map 与 HC reference
 map 也登记在同一 ledger 中；它们的 geometry 表不回填 subject-level FC 数值，
@@ -135,7 +135,7 @@ nested cohort 是可重叠的临床子集，不是新的互斥 factorial cells�
 
 HC 加七个 cohort × plain/weighted × 2/4mm × L/R = 64 个 K=3 atlas cells，均由 manifest
 门验证后纳入 `cross_dataset_rest_fc/*/primary_screen/` 的统一 branch ledger。该
-geometry family 计算 anterior/body/tail 面积与比例、每个非 HC 组对 HC 的 7 个 matched
+geometry family 计算 anterior/middle/posterior 面积与比例、每个非 HC 组对 HC 的 7 个 matched
 pair 的 ARI/ordered Dice、1–2/2–3 边界 Dice 及 mesh-geodesic 边界距离；不生成非 HC
 组之间的全配对，也没有个体层不确定性、p/q、split-half 或 ICC。
 
@@ -161,7 +161,7 @@ group-map 表中重复。统一输出位于 `cross_dataset_rest_fc/results/prima
 
 - Stanford 静息态 QC 样本为 194 人：NTHC 51、TEHC 40、NTS 56、TIS 47。
 - 现有 Stanford HC（NTHC+TEHC，n=91）与 symptomatic（NTS+TIS，n=103）结果提示
-  `Auditory − VentralAttention` 相对连接在 anterior/head 和 body 均向 symptomatic
+  `Auditory − VentralAttention` 相对连接在 anterior 和 middle 均向 symptomatic
   方向增加，并在 2/4 mm、普通和 weighted-Fisher-z 分支方向一致；它尚未回答
   `trauma × symptomatic` 交互。
 - Stanford HCP151 个体 template-matching 运行清单显示 194/194 complete。

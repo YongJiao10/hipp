@@ -19,7 +19,7 @@ from .surface_utils import long_axis_order, vertex_area_weights
 from .fc_math import bh_fdr
 from .task_design import normalize_task_branch
 
-ANATOMICAL_CLUSTER_NAMES = ("Anterior", "Body", "Posterior")
+ANATOMICAL_CLUSTER_NAMES = ("Anterior", "Middle", "Posterior")
 N_LONG_AXIS_BINS = 20
 
 # Subregion zone branches. hcp151_atlas = rest group K=3 labels shared by all
@@ -268,11 +268,11 @@ def anatomical_cluster_names(
     group_labels: np.ndarray,
     surface_path: Path,
 ) -> dict[int, str]:
-    """Map cluster IDs to Anterior/Body/Posterior via the verified head-to-tail order.
+    """Map cluster IDs to Anterior/Middle/Posterior via the verified head-to-tail order.
 
     Mirrors the 06_10 contract: ``cluster_order_head_to_tail`` from the group
     manifest, validated against ``long_axis_order`` centroids, named
-    Anterior/Body/Posterior for K=3.
+    Anterior/Middle/Posterior for K=3.
     """
     labels = np.asarray(group_labels, dtype=np.int32)
     order = [int(v) for v in manifest.get("cluster_order_head_to_tail", [])]
@@ -430,7 +430,7 @@ def resolve_zone_subjects(
     """Resolve the effective roster and provenance notes for one zone.
 
     Template-matching labels are functional-identity labels: a vertex labeled
-    2 functions like template cluster 2 (Body) wherever it sits, so no
+    2 functions like template cluster 2 (Middle) wherever it sits, so no
     spatial monotonicity is required or checked. Subjects without a TM label
     file are excluded from this zone only and recorded; the group zone keeps
     the full roster.

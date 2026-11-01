@@ -1263,7 +1263,7 @@ def _matrix_fingerprint(ax, rows, rowkeys, colkeys, rowfn, colfn, title):
 
     # Subregion headers above columns (shortened so larger fonts still fit square cells)
     ax.text(3, -1.05, 'Anterior (Ant / rA)', ha='center', va='bottom', fontsize=11, fontweight='bold', color='#1f78b4')
-    ax.text(10, -1.05, 'Mid-body (Mid / rB)', ha='center', va='bottom', fontsize=11, fontweight='bold', color='#d95f02')
+    ax.text(10, -1.05, 'Middle (Mid / rB)', ha='center', va='bottom', fontsize=11, fontweight='bold', color='#d95f02')
     ax.text(17, -1.05, 'Posterior (Post / rP)', ha='center', va='bottom', fontsize=11, fontweight='bold', color='#1b9e77')
 
     # Dividing lines between systems and hemispheres
@@ -1319,7 +1319,7 @@ def _figure_fingerprints(root, theme, data, panels):
         'Iowa Hippocampal Functional Organization — Theme 3: Neocortical Network Fingerprints\n'
         'Patient − HC cortical-network FC (Fisher’s z); Hedges’ g; + .05 ≤ p < .1; * p < .05; ** p < .01; *** p < .001 (Two-sided Welch t-tests; exact g retained)\n'
         'Canonical Cortical Networks: DMN (Default Mode) · SMN (Somatomotor) · VAN (Ventral Attention) · DAN (Dorsal Attention) · CON (Control) · LAN (Language) · VN (Visual)\n'
-        'Hippocampal Subregions: Ant = Anterior (VAN-coupled) · Mid = Body (SMN-coupled) · Post = Posterior (DMN-coupled)',
+        'Hippocampal Subregions: Ant = Anterior (VAN-coupled) · Mid = Middle (SMN-coupled) · Post = Posterior (DMN-coupled)',
         fontsize=15, fontweight='bold', y=0.975
     )
 

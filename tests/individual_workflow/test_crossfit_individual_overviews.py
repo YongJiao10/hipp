@@ -60,7 +60,7 @@ def write_crossfit_label(path: Path) -> None:
     for key, name, rgba in (
         (0, "Null", (0.62, 0.62, 0.62, 1.0)),
         (1, "Anterior", (0.86, 0.31, 0.29, 1.0)),
-        (2, "Body", (0.92, 0.69, 0.27, 1.0)),
+        (2, "Middle", (0.92, 0.69, 0.27, 1.0)),
         (3, "Posterior", (0.27, 0.45, 0.75, 1.0)),
     ):
         label = GiftiLabel(key=key, red=rgba[0], green=rgba[1], blue=rgba[2], alpha=rgba[3])
@@ -114,7 +114,7 @@ def build_crossfit_inputs(
                     "smoothing": smoothing,
                     "hemi": hemi,
                     "subject_was_in_template": False,
-                    "label_semantics": {"1": "Anterior", "2": "Body", "3": "Posterior"},
+                    "label_semantics": {"1": "Anterior", "2": "Middle", "3": "Posterior"},
                     "density_evidence": {
                         "consumed_subject_surface": str(surface.resolve()),
                         "filename_density": "512",

@@ -161,12 +161,12 @@ def plot_core_results(primary: pd.DataFrame, descriptives: pd.DataFrame, out_dir
         descriptives["resolution"] = descriptives["network_resolution"]
     primary = primary.copy()
 
-    # Panel A: four Stanford group means on the left-tail Language 8net row.
+    # Panel A: four Stanford group means on the left-posterior Language 8net row.
     panel_a = descriptives.loc[
         descriptives["dataset"].eq("stanford")
         & descriptives["hemisphere_mode"].eq("L")
         & descriptives["resolution"].eq(8)
-        & descriptives["region"].eq("tail")
+        & descriptives["region"].eq("posterior")
         & descriptives["network"].eq("Language")
         & descriptives["group"].isin(GROUPS)
         & descriptives["method"].isin([spec[1] for spec in SPECS])
@@ -179,7 +179,7 @@ def plot_core_results(primary: pd.DataFrame, descriptives: pd.DataFrame, out_dir
         primary["dataset"].eq("stanford")
         & primary["estimand"].eq("TIS-TEHC")
         & primary["resolution"].eq(8)
-        & primary["region"].eq("tail")
+        & primary["region"].eq("posterior")
         & primary["network"].eq("Language")
         & primary["hemisphere_mode"].isin(HEMISPHERES)
         & primary["method"].isin([spec[1] for spec in SPECS])
@@ -187,12 +187,12 @@ def plot_core_results(primary: pd.DataFrame, descriptives: pd.DataFrame, out_dir
     ].copy()
     panel_b = _finite(panel_b, ("coefficient", "ci_low", "ci_high"))
 
-    # Panel C: JJTMS patient−healthy left-tail Auditory 8net effect.
+    # Panel C: JJTMS patient−healthy left-posterior Auditory 8net effect.
     panel_c = primary.loc[
         primary["dataset"].eq("jjtms")
         & primary["estimand"].eq("patient-healthy")
         & primary["resolution"].eq(8)
-        & primary["region"].eq("tail")
+        & primary["region"].eq("posterior")
         & primary["network"].eq("Auditory")
         & primary["hemisphere_mode"].eq("L")
         & primary["method"].isin([spec[1] for spec in SPECS])
@@ -247,7 +247,7 @@ def plot_core_results(primary: pd.DataFrame, descriptives: pd.DataFrame, out_dir
     a_axes[0].text(
         -0.05,
         1.12,
-        "A  Stanford four-group profile · 8net tail/Language · L",
+        "A  Stanford four-group profile · 8net posterior/Language · L",
         transform=a_axes[0].transAxes,
         ha="left",
         va="bottom",
@@ -292,7 +292,7 @@ def plot_core_results(primary: pd.DataFrame, descriptives: pd.DataFrame, out_dir
     b_axes[0].text(
         -0.05,
         1.12,
-        "B  Stanford TIS−TEHC localisation · 8net tail/Language",
+        "B  Stanford TIS−TEHC localisation · 8net posterior/Language",
         transform=b_axes[0].transAxes,
         ha="left",
         va="bottom",
@@ -327,7 +327,7 @@ def plot_core_results(primary: pd.DataFrame, descriptives: pd.DataFrame, out_dir
     ax_c.text(
         0.0,
         1.015,
-        "8net · tail/Auditory · left hemisphere · effect ± 95% CI; specifications are shown for sensitivity, not significance",
+        "8net · posterior/Auditory · left hemisphere · effect ± 95% CI; specifications are shown for sensitivity, not significance",
         transform=ax_c.transAxes,
         ha="left",
         va="bottom",
@@ -357,7 +357,7 @@ def plot_core_results(primary: pd.DataFrame, descriptives: pd.DataFrame, out_dir
     caption = (
         f"run={run_id}; sources=primary_localisation.csv.gz and stanford_four_group_descriptives.csv.gz; "
         "all values are resting-state Fisher-z FC. Panel A shows Stanford NTHC, TEHC, NTS, and TIS group means "
-        "with 95% CIs for the left tail/Language 8net cell; it is descriptive rather than a contrast. Panel B "
+        "with 95% CIs for the left posterior/Language 8net cell; it is descriptive rather than a contrast. Panel B "
         "shows the Stanford TIS−TEHC contrast, where positive coefficients mean higher FC in TIS than TEHC. "
         "Panel C shows JJTMS patient−healthy, where positive coefficients mean higher FC in patients; negative "
         "values therefore indicate lower patient FC. All displayed contrast estimates are raw and unadjusted pending "

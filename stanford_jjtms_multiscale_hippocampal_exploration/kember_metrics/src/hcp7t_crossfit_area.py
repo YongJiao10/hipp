@@ -40,7 +40,7 @@ HCP_SMOOTHING_MM = 2
 EXPECTED_HCP_SUBJECTS = 151
 EXPECTED_HCP_FOLDS = 5
 EXPECTED_HCP_TEMPLATE_FITS = 20
-SYSTEMS = ("anterior", "body", "posterior")
+SYSTEMS = ("anterior", "middle", "posterior")
 HEMISPHERES = ("L", "R")
 DEFAULT_OUTPUT_ROOT = WORKFLOW_ROOT / "work" / "reference_hcp7t_crossfit_area"
 _CACHE_SCHEMA_VERSION = 2
@@ -123,7 +123,7 @@ def validate_crossfit_combo_manifest(
     semantics = manifest.get("label_semantics")
     if not isinstance(semantics, Mapping) or {
         str(key): str(value) for key, value in semantics.items()
-    } != {"1": "Anterior", "2": "Body", "3": "Posterior"}:
+    } != {"1": "Anterior", "2": "Middle", "3": "Posterior"}:
         raise ValueError("HCP cross-fit combo lacks the AP label semantics contract")
     return dict(manifest)
 

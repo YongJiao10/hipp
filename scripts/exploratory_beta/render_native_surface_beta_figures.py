@@ -33,7 +33,7 @@ PARCELLATION_DISPLAY = {"template_matching": "Template matching", "hcp151": "HCP
 HEMIS = ("L", "R")
 HEMI_DISPLAY = {"L": "Left hippocampus", "R": "Right hippocampus"}
 CLUSTERS = (1, 2, 3)
-CLUSTER_DISPLAY = {1: "C1\nAnterior / VAN", 2: "C2\nBody / SMN", 3: "C3\nPosterior / DMN"}
+CLUSTER_DISPLAY = {1: "C1\nAnterior / VAN", 2: "C2\nMiddle / SMN", 3: "C3\nPosterior / DMN"}
 
 
 def read_beta(run_dir: Path) -> pd.DataFrame:

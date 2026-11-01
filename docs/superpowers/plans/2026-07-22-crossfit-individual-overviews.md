@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Produce one compact, standard-Workbench-style PNG per HCP subject that compares their cross-fitted anterior/body/posterior label maps at 2 mm and 4 mm smoothing.
+**Goal:** Produce one compact, standard-Workbench-style PNG per HCP subject that compares their cross-fitted anterior/middle/posterior label maps at 2 mm and 4 mm smoothing.
 
 **Architecture:** Add a focused cross-fit presentation entrypoint rather than adapting the unrelated subject-first gradient/WTA adapter. It will validate each held-out subject's existing cross-fit combo manifests and GIFTI labels, render each smoothing with the established locked HippUnfold Workbench scene, then vertically compose the two rendered rows into one subject PNG. The canonical presentation subtree will carry the PNGs plus a machine-readable status TSV and manifest.
 

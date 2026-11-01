@@ -50,7 +50,7 @@ def test_cluster_names_follow_verified_head_to_tail_order() -> None:
         long_axis_order=long_axis_order,
     )
 
-    assert names == {1: "Anterior", 2: "Body", 3: "Posterior"}
+    assert names == {1: "Anterior", 2: "Middle", 3: "Posterior"}
 
 
 def test_cluster_names_reject_manifest_order_that_disagrees_with_long_axis() -> None:
@@ -70,21 +70,21 @@ def test_panel_order_is_smoothing_then_hemi_then_anatomical_cluster() -> None:
     order = renderer.panel_order(
         smoothings=("2mm", "4mm"),
         hemis=("L", "R"),
-        cluster_names=("Anterior", "Body", "Posterior"),
+        cluster_names=("Anterior", "Middle", "Posterior"),
     )
 
     assert order == [
         ("2mm", "L", "Anterior"),
-        ("2mm", "L", "Body"),
+        ("2mm", "L", "Middle"),
         ("2mm", "L", "Posterior"),
         ("2mm", "R", "Anterior"),
-        ("2mm", "R", "Body"),
+        ("2mm", "R", "Middle"),
         ("2mm", "R", "Posterior"),
         ("4mm", "L", "Anterior"),
-        ("4mm", "L", "Body"),
+        ("4mm", "L", "Middle"),
         ("4mm", "L", "Posterior"),
         ("4mm", "R", "Anterior"),
-        ("4mm", "R", "Body"),
+        ("4mm", "R", "Middle"),
         ("4mm", "R", "Posterior"),
     ]
 
@@ -153,11 +153,11 @@ def test_template_surface_path_rejects_legacy_fallback_path(
 
 
 def test_ordered_cluster_names_preserve_verified_anatomical_rank() -> None:
-    names_by_id = {3: "Anterior", 1: "Body", 2: "Posterior"}
+    names_by_id = {3: "Anterior", 1: "Middle", 2: "Posterior"}
 
     assert renderer.ordered_cluster_names(names_by_id) == (
         "Anterior",
-        "Body",
+        "Middle",
         "Posterior",
     )
 

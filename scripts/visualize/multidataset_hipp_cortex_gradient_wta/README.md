@@ -7,7 +7,7 @@ sums row memberships, not unique individuals. All four smoothing/preprocessing
 combinations are generated: 2mm/4mm × 36P/22P. HCP uses its shared ICA-FIX data
 in both preprocessing comparisons; the Iowa HC reference follows each variant.
 
-Each row contains the cohort card, Gradient hippocampal atlas, Anterior/Body/
+Each row contains the cohort card, Gradient hippocampal atlas, Anterior/Middle/
 Posterior cortical projections, WTA hippocampal atlas, and VAN/SMN/LAN/DMN
 cortical projections. The two 2mm/36p branch figures
 (`multidataset_hipp_cortex_gradient_wta_2mm_36p_standard.png` and
@@ -33,7 +33,7 @@ The standalone renderer remains disabled; use the suite entrypoint below.
 ## Statistical definition
 
 Individual FC arrays have shape `(N, 7, 400)`. The first three panels are
-Anterior, Body, Posterior in registered head-to-tail order. The four WTA rows
+Anterior, Middle, Posterior in registered head-to-tail order. The four WTA rows
 are stored as Default, VentralAttention, Somatomotor, Language and displayed
 as VAN, SMN, LAN, DMN. ROI IDs/names are aligned to the canonical 400-ROI registry.
 

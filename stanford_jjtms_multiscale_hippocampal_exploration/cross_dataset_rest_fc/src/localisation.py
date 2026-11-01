@@ -38,7 +38,7 @@ except ImportError:  # pragma: no cover - exercised by focused tests
     )
 
 
-REGIONS = ("anterior", "body", "tail")
+REGIONS = ("anterior", "middle", "posterior")
 HEMISPHERE_MODES = ("bilateral", "L", "R", "L-R")
 DATASET_ORDER = ("jjtms", "stanford")
 OUTPUT_COLUMNS = [
@@ -288,7 +288,7 @@ def _prepare_tensor(tensor: pd.DataFrame) -> pd.DataFrame:
         raise ValueError("tensor smoothing_mm must be finite integers")
     frame["smoothing_mm"] = smoothing_values.astype(int)
     frame["region"] = frame["region"].map(
-        lambda value: "tail" if str(value).strip().casefold() == "posterior" else str(value).strip().casefold()
+        lambda value: str(value).strip().casefold()
     )
     if not set(frame["region"]).issubset(set(REGIONS)):
         raise ValueError(f"unknown region label(s): {sorted(set(frame['region']) - set(REGIONS))}")

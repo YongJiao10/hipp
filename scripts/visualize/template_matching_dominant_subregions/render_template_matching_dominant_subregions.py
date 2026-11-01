@@ -145,7 +145,7 @@ NETWORK_NAMES = ["Anterior/VAN", "Middle/SMN", "Posterior/DMN"]
 
 TEMPLATE_MATCHING_LABEL_SEMANTICS = {
     1: "Anterior/VAN",
-    2: "Body/SMN",
+    2: "Middle/SMN",
     3: "Posterior/DMN",
 }
 SUBREGION_DISPLAY_NAMES = {

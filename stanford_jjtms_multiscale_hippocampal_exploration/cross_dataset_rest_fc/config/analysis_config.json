@@ -118,7 +118,7 @@
           "fc_column_index_base": 1,
           "region_labels": {
             "1": "anterior",
-            "2": "body",
+            "2": "middle",
             "3": "posterior"
           },
           "region_weight_source": "valid_vertex_count"
@@ -170,7 +170,7 @@
           "fc_column_index_base": 1,
           "region_labels": {
             "1": "anterior",
-            "2": "body",
+            "2": "middle",
             "3": "posterior"
           },
           "region_weight_source": "valid_vertex_count"
@@ -249,7 +249,7 @@
           "fc_column_index_base": 1,
           "region_labels": {
             "1": "anterior",
-            "2": "body",
+            "2": "middle",
             "3": "posterior"
           },
           "region_weight_source": "valid_vertex_count"
@@ -296,7 +296,7 @@
           "fc_column_index_base": 1,
           "region_labels": {
             "1": "anterior",
-            "2": "body",
+            "2": "middle",
             "3": "posterior"
           },
           "region_weight_source": "valid_vertex_count"

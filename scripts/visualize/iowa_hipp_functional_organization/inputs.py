@@ -17,7 +17,7 @@ HCP_TEMPLATE_SPECS={
     'standard':{'directory':'hcp151_routea_full_k3_fisherz','template_id':'hcp151_routea_full_k3_fisherz'},
     'ctxreg':{'directory':'hcp151_routea_ctxreg','template_id':'hcp151_routea_ctxreg'},
 }
-HCP_TEMPLATE_SEMANTICS={'1':'Anterior/VAN','2':'Body/SMN','3':'Posterior/DMN'}
+HCP_TEMPLATE_SEMANTICS={'1':'Anterior/VAN','2':'Middle/SMN','3':'Posterior/DMN'}
 
 def active_path(path):
     p=Path(path)
@@ -172,7 +172,7 @@ def make_inventory():
                 mp=subject_root/subject/f'matching/2mm/hemi-{hemi}/combo_manifest.json'; m=read_json(mp)
                 check_branch(m,branch,mp,standard_schema=True)
                 if m['subject']!=subject or m['hemi']!=hemi or m['smoothing']!='2mm' or m['status']!='ok': raise ValueError(f'TM subject/hemisphere contract: {mp}')
-                if m['label_semantics']!={'1':'Anterior/VAN','2':'Body/SMN','3':'Posterior/DMN'}: raise ValueError(f'TM semantics: {mp}')
+                if m['label_semantics']!={'1':'Anterior/VAN','2':'Middle/SMN','3':'Posterior/DMN'}: raise ValueError(f'TM semantics: {mp}')
                 row=dict(branch=branch,hemi=hemi,subject=subject,manifest=rec(mp))
                 for k in ['scores','labels','margin','fisherz_fc']:
                     row[k]=rec(m['outputs'][k]['path'])

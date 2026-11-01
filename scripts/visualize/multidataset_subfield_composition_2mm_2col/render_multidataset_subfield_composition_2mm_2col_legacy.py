@@ -84,13 +84,13 @@ SUBFIELD_COLORS = {
 }
 CLUSTER_NAMES = {
     1: "Ant",
-    2: "Body",
+    2: "Middle",
     3: "Post",
 }
 CLUSTER_FULL_NAMES = {
-    1: "Anterior (Head)",
-    2: "Middle (Body)",
-    3: "Posterior (Tail)",
+    1: "Anterior",
+    2: "Middle",
+    3: "Posterior",
 }
 
 PANORAMA_VERSIONS = {
@@ -361,7 +361,7 @@ def select_manifest_label_path(manifest: dict, *, assignment_variant: str = 'nor
 
 def render_subfield_bar_axis(ax, subregion_entries: list[dict], show_ylabel: bool = False, is_bottom_row: bool = False):
     """Render clean stacked bars with maximal font sizes and zero text collision."""
-    subregions = ["Ant", "Body", "Post"]
+    subregions = ["Ant", "Middle", "Post"]
     x_positions = np.array([0, 1, 2])
     bar_width = 0.56
 
@@ -412,9 +412,9 @@ def render_subfield_bar_axis(ax, subregion_entries: list[dict], show_ylabel: boo
 
     ax.set_xticks(x_positions)
     if is_bottom_row:
-        ax.set_xticklabels(["Anterior\n(Head)", "Middle\n(Body)", "Posterior\n(Tail)"], fontsize=15.0, fontweight="heavy", color="#0f172a")
+        ax.set_xticklabels(["Anterior", "Middle", "Posterior"], fontsize=15.0, fontweight="heavy", color="#0f172a")
     else:
-        ax.set_xticklabels(["Ant", "Body", "Post"], fontsize=14.5, fontweight="heavy", color="#1e293b")
+        ax.set_xticklabels(["Ant", "Middle", "Post"], fontsize=14.5, fontweight="heavy", color="#1e293b")
 
     ax.grid(axis="y", linestyle="--", alpha=0.55, zorder=1)
     ax.spines[["top", "right"]].set_visible(False)
@@ -474,7 +474,7 @@ def render_subfield_composition_figure(
 
     if show_subtitle:
         total_subjects = sum(c["cohort"]["n_subjects"] for c in all_cohort_data)
-        subtitle = f"MultiHist7 Anatomical Subfields Overlapping Functional Clusters (Anterior, Body, Posterior) | N = {total_subjects} across {len(all_cohort_data)} cohorts"
+        subtitle = f"MultiHist7 Anatomical Subfields Overlapping Functional Clusters (Anterior, Middle, Posterior) | N = {total_subjects} across {len(all_cohort_data)} cohorts"
         fig.text(
             0.50,
             0.956,

@@ -14,7 +14,7 @@ Directly copied and adapted from the three canonical multi-dataset reference scr
      - Copied and adapted from `multidataset_gradient_subregion_top20_stacked_2col` (render_multidataset_gradient_subregion_top20_stacked_2col.py)
      - `width_ratios = [0.13, 0.19, 0.34, 0.34]`, `wspace = 0.055, hspace = 0.16`
      - Subplots: [Cohort Card] | [2x2 Surface Overlay] | [Left Hipp Bar] | [Right Hipp Bar]
-     - Y-axis: Ant at top, Body in middle, Post at bottom (0-100% normalized ROI count)
+     - Y-axis: Ant at top, Middle in middle, Post at bottom (0-100% normalized ROI count)
      - Hipp surface and stacked bars share the EXACT same height.
 
   3. Subfig 3 (WTA Long-Axis 20 Bins):
@@ -102,7 +102,7 @@ STACK_ORDER: list[str] = [
 
 SUBREGION_NAMES: dict[int, str] = {
     1: "Anterior",
-    2: "Body",
+    2: "Middle",
     3: "Posterior",
 }
 
@@ -200,7 +200,7 @@ def load_branch_fisherz(branch: dict[str, Any], smoothing: str) -> dict[str, lis
 
 
 def load_branch_top20_count(branch: dict[str, Any], smoothing: str) -> dict[str, list[dict[str, Any]]]:
-    """Load normalized Top-20 connected cortical network percentage for Anterior, Body, Posterior."""
+    """Load normalized Top-20 connected cortical network percentage for Anterior, Middle, Posterior."""
     group_root = Path(branch["group_root"])
     out: dict[str, list[dict[str, Any]]] = {}
 
@@ -745,7 +745,7 @@ def render_subfig_top20_row(
         else:
             ax.set_xticklabels([])
 
-    ax_left.set_yticklabels(["Ant", "Body", "Post"], fontsize=14.5, fontweight="bold", color="#111111", rotation=90, va="center", ha="center")
+    ax_left.set_yticklabels(["Ant", "Middle", "Post"], fontsize=14.5, fontweight="bold", color="#111111", rotation=90, va="center", ha="center")
     ax_right.set_yticklabels([])
 
     if row_idx == 0:

@@ -80,7 +80,7 @@
   ],
   "endpoint_definition": {
     "paper_metrics": ["surface_area_mm2", "functional_segregation_d", "boundary_sharpness_d"],
-    "systems": ["anterior", "body", "posterior"],
+    "systems": ["anterior", "middle", "posterior"],
     "surface_area_fraction": "context only",
     "boundary_radius_mm": 4.0,
     "boundary_distance_convention": "source_512_midthickness_euclidean_radius_mm"

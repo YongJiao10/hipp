@@ -88,7 +88,7 @@ def test_evaluate_hemisphere_area_keeps_branch_identity_and_area_contract() -> N
     assert record["hemisphere"] == "L"
     assert record["density_evidence"] == _density_evidence()
     assert record["system_area_mm2"] == pytest.approx(
-        {"anterior": 0.5, "body": 0.4, "posterior": 0.1}
+        {"anterior": 0.5, "middle": 0.4, "posterior": 0.1}
     )
     assert record["total_valid_surface_area_mm2"] == pytest.approx(1.0)
 

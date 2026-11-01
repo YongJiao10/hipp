@@ -216,7 +216,7 @@ corresponding HCP prototype using Pearson correlation over jointly finite ROI
 features. Outputs use:
 
 - `1 = Anterior/VAN`
-- `2 = Body/SMN`
+- `2 = Middle/SMN`
 - `3 = Posterior/DMN`
 
 Each combination retains Pearson FC, Fisher-z FC, three prototype
@@ -390,7 +390,7 @@ executable. It reads the completed mapping GIFTIs and consumed
 `den-512` surfaces, never rewrites those inputs, and validates their subject
 and combination manifest fingerprints before rendering. The display layer
 retains the established HCP style: canonical network colors
-`1=Anterior/VAN`, `2=Body/SMN`, `3=Posterior/DMN`, left/right hemispheres, and
+`1=Anterior/VAN`, `2=Middle/SMN`, `3=Posterior/DMN`, left/right hemispheres, and
 the fixed two-row order `2mm` above `4mm`. The top banner title is
 fixed-template specific (`HCP151 fixed-template Fisher-z network matching |
 sub-<id>`, passed explicitly to the shared stacked-row composer); earlier

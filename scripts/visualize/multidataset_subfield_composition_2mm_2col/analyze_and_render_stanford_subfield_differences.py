@@ -180,8 +180,8 @@ SUBFIELD_COLORS = {
     5: "#FF2B17",  # CA4: Red
 }
 
-SUBREGION_NAMES = {1: "Ant", 2: "Body", 3: "Post"}
-SUBREGION_FULL_NAMES = {1: "Anterior (Head)", 2: "Body", 3: "Posterior (Tail)"}
+SUBREGION_NAMES = {1: "Ant", 2: "Middle", 3: "Post"}
+SUBREGION_FULL_NAMES = {1: "Anterior", 2: "Middle", 3: "Posterior"}
 
 ATLAS_VERSIONS = {
     "v1_fixed_hcp151_atlas": {
@@ -723,14 +723,14 @@ def relative_bar_label_placement(value: float) -> tuple[float, str, str]:
 def select_relative_bar_items(stats_results: list[dict]) -> list[tuple[str, str, float, str, str]]:
     """Select bilateral candidates plus the largest non-significant effects."""
     target_units = [
-        ("NTS Pure MDD", "MDD", "Body", "Sub", "#7c2d12"),
+        ("NTS Pure MDD", "MDD", "Middle", "Sub", "#7c2d12"),
         ("NTS Pure MDD", "MDD", "Post", "Sub", "#15803d"),
         ("NTS Pure MDD", "MDD", "Ant", "Sub", "#15803d"),
-        ("TIS PTSD", "PTSD", "Body", "CA1", "#4c1d95"),
+        ("TIS PTSD", "PTSD", "Middle", "CA1", "#4c1d95"),
         ("NTS", "NTS", "Ant", "CA1", "#d97706"),
         ("NTS", "NTS", "Post", "CA1", "#b91c1c"),
         ("TEHC", "TEHC", "Post", "CA1", "#2e7d32"),
-        ("HCP 7T", "HCP", "Body", "Sub", "#0b3c5d"),
+        ("HCP 7T", "HCP", "Middle", "Sub", "#0b3c5d"),
     ]
 
     candidate_items = []
@@ -920,7 +920,7 @@ def render_group_differences_figure(
     ax_heat.set_yticks(range(len(row_labels)))
     ax_heat.set_yticklabels(row_labels, fontsize=PANEL_A_YTICK_FONTSIZE, fontweight="heavy", color="#0f172a")
 
-    # Vertical separators between Ant, Body, Post
+    # Vertical separators between Ant, Middle, Post
     ax_heat.axvline(4.5, color="#0f172a", linewidth=3.5, linestyle="-")
     ax_heat.axvline(9.5, color="#0f172a", linewidth=3.5, linestyle="-")
 
@@ -1064,7 +1064,7 @@ def render_group_differences_figure(
     ax_area.tick_params(axis="x", labelsize=14.0)
     ax_area.grid(True, axis="x", linestyle="--", alpha=0.65, zorder=1)
     ax_area.spines[["top", "right"]].set_visible(False)
-    pure_mdd_body_sub = _format_relative_difference_range(stats_results, "NTS Pure MDD", "Body", "Sub")
+    pure_mdd_body_sub = _format_relative_difference_range(stats_results, "NTS Pure MDD", "Middle", "Sub")
     pure_mdd_post_sub = _format_relative_difference_range(stats_results, "NTS Pure MDD", "Post", "Sub")
 
     # ----------------------------------------------------
@@ -1149,7 +1149,7 @@ def render_group_differences_figure(
     ax_summary.text(
         0.05,
         0.33,
-        f"• Pure MDD: Body Sub {pure_mdd_body_sub}; Tail Sub {pure_mdd_post_sub}.\n• Redistribution across longitudinal subregions.",
+        f"• Pure MDD: Middle Sub {pure_mdd_body_sub}; Posterior Sub {pure_mdd_post_sub}.\n• Redistribution across longitudinal subregions.",
         fontsize=PANEL_D_BODY_FONTSIZE,
         fontweight="bold",
         color="#1e293b",

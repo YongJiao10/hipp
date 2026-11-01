@@ -86,7 +86,7 @@ def test_group_cli_requires_all_maintained_contrasts_for_the_roster(tmp_path, mo
         np.ones(8, dtype=np.int32), np.ones(8, dtype=bool), {},
     ))
     monkeypatch.setattr(group, "group_average_surface", lambda *a: tmp_path / "surface.gii")
-    monkeypatch.setattr(group, "anatomical_cluster_names", lambda **k: {1: "Anterior", 2: "Body", 3: "Posterior"})
+    monkeypatch.setattr(group, "anatomical_cluster_names", lambda **k: {1: "Anterior", 2: "Middle", 3: "Posterior"})
     monkeypatch.setattr(sys, "argv", [
         "group", "--task", "wm", "--shared-root", str(shared),
         "--subjects", "001", "002", "--smoothings", "2mm", "--hemis", "L",
@@ -155,7 +155,7 @@ def test_subject_cluster_rows_and_anatomical_names(tmp_path: Path) -> None:
         import importlib
 
         importlib.reload(task_group)
-    assert names == {1: "Anterior", 2: "Body", 3: "Posterior"}
+    assert names == {1: "Anterior", 2: "Middle", 3: "Posterior"}
     assert calls["path"] == surf
     stack = np.arange(16, dtype=np.float64).reshape(2, 8)
     areas = {
@@ -191,7 +191,7 @@ def test_subject_cluster_rows_require_matching_areas() -> None:
             ["a"],
             group_labels=labels,
             support_mask=mask,
-            names_by_id={1: "Anterior", 2: "Body"},
+            names_by_id={1: "Anterior", 2: "Middle"},
             vertex_areas={"a": np.ones(5)},
         )
 

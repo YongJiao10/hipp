@@ -1,9 +1,9 @@
 """Kember-method system surface-area calculations.
 
 The published method sums HippUnfold midthickness per-vertex surface-area
-values within each anterior/body/posterior system.  This module accepts those
+values within each anterior/middle/posterior system.  This module accepts those
 native, mm²-valued metrics directly, then applies the frozen label contract
-(1=anterior, 2=body, 3=posterior).
+(1=anterior, 2=middle, 3=posterior).
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from typing import Any
 import numpy as np
 
 
-SYSTEM_LABELS = {1: "anterior", 2: "body", 3: "posterior"}
+SYSTEM_LABELS = {1: "anterior", 2: "middle", 3: "posterior"}
 SYSTEM_NAMES = tuple(SYSTEM_LABELS.values())
 
 
@@ -112,7 +112,7 @@ def combine_hemisphere_means(
     """Return the published arithmetic mean of left and right system values."""
 
     if set(left) != set(SYSTEM_NAMES) or set(right) != set(SYSTEM_NAMES):
-        raise ValueError("both hemisphere mappings must contain anterior, body, and posterior")
+        raise ValueError("both hemisphere mappings must contain anterior, middle, and posterior")
     result = {name: (float(left[name]) + float(right[name])) / 2.0 for name in SYSTEM_NAMES}
     if not all(np.isfinite(value) for value in result.values()):
         raise ValueError("hemisphere values must be finite")

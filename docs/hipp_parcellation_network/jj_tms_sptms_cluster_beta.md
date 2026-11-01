@@ -125,7 +125,7 @@ bad/nonfinite 顶点为灰色。Workbench display label 每个顶点单独编码
 cards 下方。显示表面、native 表面、映射证据、卡片行布局、字号和来源哈希写入
 figure manifest。
 
-下半部 L/R 分开显示 Anterior/VAN、Body/SMN、Posterior/DMN，HC 与 Pure MDD
+下半部 L/R 分开显示 Anterior/VAN、Middle/SMN、Posterior/DMN，HC 与 Pure MDD
 并列柱，每点一名被试，误差线为组均值双侧 95% t CI（df=n-1）。该图只做描述性展示，
 不再对 HC 与 Pure MDD 做统计检验，也不画两组比较括号或 `ns`。散点图区域的标题、
 坐标轴、刻度和图例使用约 1.5 倍字号，以便审阅。另输出

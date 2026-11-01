@@ -230,11 +230,11 @@ def test_area_variant_proportion_uses_within_hemisphere_system_total() -> None:
 
     assert rows["surface_area_proportion"].to_dict() == {
         "anterior": 300.0 / 1050.0,
-        "body": 350.0 / 1050.0,
+        "middle": 350.0 / 1050.0,
         "posterior": 400.0 / 1050.0,
     }
     assert rows["plot_value"].to_dict() == pytest.approx(
-        {"anterior": 300.0 / 10.5, "body": 350.0 / 10.5, "posterior": 400.0 / 10.5}
+        {"anterior": 300.0 / 10.5, "middle": 350.0 / 10.5, "posterior": 400.0 / 10.5}
     )
 
 

@@ -18,7 +18,7 @@ README、manifest 与 [docs/analysis_map.md](docs/analysis_map.md) 为准。
 
 ### 1.1 第 1 项：跨数据集海马亚区—皮层网络 profile
 
-分析表型是每名被试每侧海马 anterior、body、tail 三个 region 各自对应的
+分析表型是每名被试每侧海马 anterior、middle、posterior 三个 region 各自对应的
 皮层网络 Fisher-z FC 向量：
 
 现有机器字段中的 `posterior` 与显示名称 `tail` 是同一个region，不形成额外分支。
@@ -113,7 +113,7 @@ group-trained atlas 定义循环带回 FC。
 
 ```text
 dataset × group_estimand × parcellation × network_resolution(8/17)
-× hemisphere_mode(bilateral/L/R/L-R) × region(anterior/body/tail)
+× hemisphere_mode(bilateral/L/R/L-R) × region(anterior/middle/posterior)
 × smoothing_mm(2/4) × fc_estimator × network
 ```
 
@@ -153,7 +153,7 @@ individual-gradient 分支。
 
 顺便计算但不作为定位门：
 
-- anterior、body、tail各自的8/17维profile global comparison；
+- anterior、middle、posterior各自的8/17维profile global comparison；
 - 拼接三个region的`3×8`/`3×17` whole-hippocampus global overview；
 - subject-level permutation保持一个被试的全部相关分量一起置换；
 - global表报告距离统计量、permutation p、组别n和有效维数。

@@ -31,4 +31,4 @@
 - 论文使用 7262×32492 顶点 FC、前 100 个 diffusion gradients、GMM 三类；本地使用 512×400 ROI FC，[群体 atlas manifest:382](/home/yojiao/hpchome/hipp/outputs_hcp/work/group_atlas/kong2022_7net_full_k3_fisherz/gradient-spectral/kong2022/2mm/cov_0p80/g1g2g3/hemi_L/group_atlas_manifest.json:382)明确为 spectral clustering、梯度 1/2/3、K=3、coverage 0.8。这些是特征空间、模板来源和建模算法的实质差异。
 - Fisher-z 是非线性变换，通常不能保证 `corr(r, template)` 与 `corr(arctanh(r), transformed_template)` 得分或排名一致。共同使用 Pearson + argmax 不消除这一差别。
 
-建议图示表述：**“个体海马顶点的 400-ROI Fisher-z FC profile，与独立 HCP151 三个固定群体均值模板计算 Pearson 相关，按最大相关指派系统；指派原则参照 Kember，特征与模板构建方案不同。”** 本地 Anterior/VAN、Body/SMN、Posterior/DMN 是本地标签语义，不应当作论文相同网络功能结论。
+建议图示表述：**“个体海马顶点的 400-ROI Fisher-z FC profile，与独立 HCP151 三个固定群体均值模板计算 Pearson 相关，按最大相关指派系统；指派原则参照 Kember，特征与模板构建方案不同。”** 本地 Anterior/VAN、Middle/SMN、Posterior/DMN 是本地标签语义，不应当作论文相同网络功能结论。

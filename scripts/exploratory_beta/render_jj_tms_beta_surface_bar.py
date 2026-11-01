@@ -258,7 +258,7 @@ def compose(rows, summaries, cards, limit, out, pdf=False):
                     if marked:
                         ax.scatter([x + offset for offset, _r in marked], [float(r['beta_mean']) for _offset, r in marked], s=SCATTER_SIZE, marker=marker, color=color, edgecolor='#333333', linewidth=0.8, zorder=4)
         ax.axhline(0,color='#777777',linewidth=.7)
-        ax.set_xticks([1,2,3], ['Anterior/VAN','Body/SMN','Posterior/DMN'])
+        ax.set_xticks([1,2,3], ['Anterior/VAN','Middle/SMN','Posterior/DMN'])
         ax.set_title(f'{h} hippocampus', weight='bold', fontsize=BAR_TITLE_FONT_SIZE, pad=16)
         ax.set_ylabel('Area-weighted beta_mean', fontsize=BAR_AXIS_LABEL_FONT_SIZE, labelpad=16)
         if h == 'R':

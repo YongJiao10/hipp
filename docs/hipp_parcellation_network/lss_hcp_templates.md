@@ -25,7 +25,7 @@ All packages have rows `2mm_L`, `2mm_R`, `4mm_L`, `4mm_R` and columns Kong2022
 ROI IDs 1 through 400. Every source manifest must match the exact HCP151
 roster. The consumed surfaces have 512 vertices per hemisphere.
 
-- `gradient_spectral`: Anterior, Body, Posterior. Copy the current formal
+- `gradient_spectral`: Anterior, Middle, Posterior. Copy the current formal
   fixed-template prototypes: finite mean group Fisher-z vertex-to-ROI FC
   within supported, AP-ordered gradient labels.
 - `wta_normalized/7net`: direct canonical7 Fisher-z WTA, with selected rows

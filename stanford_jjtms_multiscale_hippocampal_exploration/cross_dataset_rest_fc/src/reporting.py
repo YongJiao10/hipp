@@ -67,7 +67,7 @@ GROUP_ATLAS_METHOD = "group_atlas_gradient_spectral"
 REGISTERED_METHODS = AVAILABLE_METHODS + (GROUP_ATLAS_METHOD,)
 NETWORK_RESOLUTIONS = (8, 17)
 HEMISPHERE_MODES = ("bilateral", "L", "R", "L-R")
-REGIONS = ("anterior", "body", "tail")
+REGIONS = ("anterior", "middle", "posterior")
 STANFORD_ALIGNED_ESTIMANDS = ("symptom_marginal", "NTS-NTHC", "TIS-TEHC")
 
 
@@ -1289,7 +1289,7 @@ The available fixed/template branches are compared across 2/4 mm and bilateral/L
 
 The primary effect/CI figure is a deterministic top-absolute preview selected from the full primary table, with JJTMS patient-healthy and all Stanford estimand panels represented when finite rows are available. Points show signed coefficients with 95% confidence intervals; all signed panels retain a zero reference. The displayed effects are raw and unadjusted pending analysis-object freeze.
 
-The localisation heatmaps show anterior/body/tail × network structure for both 8- and 17-network resolutions on fixed/template 2 mm bilateral and L-R reference branches. The Stanford profile heatmaps are descriptive four-group means on a common scale. The specification panel is a sensitivity comparison, not an independent replication. The auxiliary profile panel is exploratory/non-gating (seed={seed}, n_perm={n_perm}).
+The localisation heatmaps show anterior/middle/posterior × network structure for both 8- and 17-network resolutions on fixed/template 2 mm bilateral and L-R reference branches. The Stanford profile heatmaps are descriptive four-group means on a common scale. The specification panel is a sensitivity comparison, not an independent replication. The auxiliary profile panel is exploratory/non-gating (seed={seed}, n_perm={n_perm}).
 
 {figure_lines}
 
@@ -1297,7 +1297,7 @@ The localisation heatmaps show anterior/body/tail × network structure for both 
 
 ## Scope, data, and metric definitions
 
-The frozen rosters are JJTMS healthy=67/patient=27 and Stanford NTHC=51, TEHC=40, NTS=56, TIS=47. FC is absolute Fisher-z vertex-to-network connectivity aggregated to anterior, body, and tail and to canonical family-8/family-17 networks. Bilateral is the recorded region-weighted mean of valid L/R values; L-R is the within-subject Fisher-z difference.
+The frozen rosters are JJTMS healthy=67/patient=27 and Stanford NTHC=51, TEHC=40, NTS=56, TIS=47. FC is absolute Fisher-z vertex-to-network connectivity aggregated to anterior, middle, and posterior and to canonical family-8/family-17 networks. Bilateral is the recorded region-weighted mean of valid L/R values; L-R is the within-subject Fisher-z difference.
 
 Cross-workflow topology metrics are outside this cross-dataset rest-FC scope.
 
@@ -1315,7 +1315,7 @@ Missing/failed rows remain in the full tables with statuses and reasons; they ar
 
 - Pre-register reliability, missingness, and covariate sensitivity checks for any finite component that appears promising.
 - Validate any candidate network contrast in an independent held-out/external cohort without discovery-sample pair testing.
-- Pair surviving anterior/body/tail effects with parcel-localisation and target-engagement evidence before funding hypotheses.
+- Pair surviving anterior/middle/posterior effects with parcel-localisation and target-engagement evidence before funding hypotheses.
 
 ## Further questions
 

@@ -111,7 +111,7 @@ STACK_ORDER = [
 
 SUBREGION_NAMES = {
     1: "Anterior",
-    2: "Body",
+    2: "Middle",
     3: "Posterior",
 }
 NORMALIZED_TOP20_ASSIGNMENT_METRIC = "top20_count_normalized_by_network_roi_count"
@@ -406,7 +406,7 @@ def render_subregion_bar_axis(
     is_top_row: bool = False,
     is_bottom_row: bool = False,
 ):
-    """Render a 3-bar subregion composition axis (Ant, Body, Post) with clean rotated labels."""
+    """Render a 3-bar subregion composition axis (Ant, Middle, Post) with clean rotated labels."""
     n_subregions = len(subregion_entries)
     y_positions = np.arange(1, n_subregions + 1)
     bar_height = 0.62
@@ -480,7 +480,7 @@ def render_subregion_bar_axis(
     ax.set_yticks([1, 2, 3])
     if show_ylabel:
         ax.set_yticklabels(
-            ["Ant", "Body", "Post"],
+            ["Ant", "Middle", "Post"],
             fontsize=17.0,
             fontweight="bold",
             color="#111111",
@@ -615,7 +615,7 @@ def render_summary_card(ax, normalized: bool = True, is_7net: bool = False):
     ax.text(
         left_x,
         0.18,
-        "• Body & Posterior: Body exhibits Somatomotor (SMN)"
+        "• Middle & Posterior: Middle exhibits Somatomotor (SMN)"
         + ("" if is_7net else ", Auditory (AUD),")
         + " and Language co-enrichment; Posterior is DMN-dominant.",
         fontsize=14.0,

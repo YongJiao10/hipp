@@ -1,6 +1,6 @@
 # Multi-Dataset Hippocampal Subfield Composition & Stanford Clinical Group Differences
 
-This directory contains the visualization, statistical modeling, and experimental pipeline analyzing **HippUnfold MultiHist7 anatomical subfield compositions** overlapping **RouteA $K=3$ gradient-spectral functional clusters (Anterior/Head, Body, Posterior/Tail)** across 10 clinical and control cohorts ($N = 528$), with an in-depth statistical contrast of the **6 Stanford clinical cohorts/subgroups against the Non-Trauma Healthy Control (NTHC) baseline ($N = 239$)**.
+This directory contains the visualization, statistical modeling, and experimental pipeline analyzing **HippUnfold MultiHist7 anatomical subfield compositions** overlapping **RouteA $K=3$ gradient-spectral functional clusters (Anterior, Middle, Posterior)** across 10 clinical and control cohorts ($N = 528$), with an in-depth statistical contrast of the **6 Stanford clinical cohorts/subgroups against the Non-Trauma Healthy Control (NTHC) baseline ($N = 239$)**.
 
 ## Additive HCP/JJ_TMS 7-network comparison
 
@@ -23,7 +23,7 @@ For the `hcp_jjtms_7net` subfield comparison, the hippocampal surface is a gradi
 
 ### 1. Neuroanatomical Context
 
-- Functional parcellations ($K=3$: Anterior, Body, Posterior) capture longitudinal gradients of cortical connectivity.
+- Functional parcellations ($K=3$: Anterior, Middle, Posterior) capture longitudinal gradients of cortical connectivity.
 - On HippUnfold's unfolded/midthickness gray-matter cortical surface (`den-512_label-hipp_midthickness.surf.gii`), the continuous cortical ribbon comprises **5 active histological subfields**:
   - **Subiculum (Sub, 1)** `#292BFC`
   - **CA1 (2)** `#66D1D8`
@@ -35,12 +35,12 @@ For the `hcp_jjtms_7net` subfield comparison, the hippocampal surface is a gradi
 ### 2. Universal Population Findings (Subject-Mean %)
 
 - **CA1 & Subiculum Predominance**: Across all 10 cohorts and all 3 longitudinal subregions, **CA1 (45%–58%)** and **Subiculum (28%–34%)** constitute $>82\%–85\%$ of total hippocampal surface area.
-- **Posterior Subfield Shift**: In the Posterior (Tail), smaller subfields expand significantly:
+- **Posterior Subfield Shift**: In the Posterior, smaller subfields expand significantly:
   - **CA2**: Increases from ~4.5%–6.0% (Head/Body) to **~9.0%–10.0%** in the Tail.
   - **CA3**: Increases from ~4.0%–6.5% to **~7.2%–8.0%** in the Tail.
   - **CA4**: Increases from ~1.5%–2.0% to **~3.5%–4.0%** in the Tail.
 
-| Cohort | N | 左侧 Anterior (CA1 / Sub) | 左侧 Body (CA1 / Sub) | 左侧 Posterior (CA1 / Sub / CA2 / CA3) | 右侧 Anterior (CA1 / Sub) | 右侧 Body (CA1 / Sub) | 右侧 Posterior (CA1 / Sub / CA2 / CA3) |
+| Cohort | N | 左侧 Anterior (CA1 / Sub) | 左侧 Middle (CA1 / Sub) | 左侧 Posterior (CA1 / Sub / CA2 / CA3) | 右侧 Anterior (CA1 / Sub) | 右侧 Middle (CA1 / Sub) | 右侧 Posterior (CA1 / Sub / CA2 / CA3) |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | **HCP 7T** | 151 | 55.6% / 30.0% | 55.0% / 33.9% | 48.4% / 29.9% / 9.8% / 7.9% | 56.6% / 28.5% | 56.4% / 31.8% | 44.8% / 33.5% / 9.8% / 7.8% |
 | **Iowa HC (7T)** | 67 | 54.5% / 33.2% | 55.9% / 33.2% | 50.6% / 28.3% / 9.2% / 7.6% | 56.7% / 30.5% | 57.5% / 31.3% | 47.0% / 32.7% / 9.0% / 7.2% |
@@ -72,7 +72,7 @@ To test whether psychiatric pathology (Depression, PTSD, Trauma exposure) induce
 
 #### A. Metric Definitions
 
-For subject $s$, hemisphere $h \in \{\text{L, R}\}$, functional subregion $k \in \{\text{Ant, Body, Post}\}$, and subfield $j \in \{\text{Sub, CA1, CA2, CA3, CA4}\}$:
+For subject $s$, hemisphere $h \in \{\text{L, R}\}$, functional subregion $k \in \{\text{Ant, Middle, Post}\}$, and subfield $j \in \{\text{Sub, CA1, CA2, CA3, CA4}\}$:
 
 - **Relative Subfield Proportion**:
   $$\text{prop}(s, h, k, j) = \frac{\sum_{v \in k, \text{sf}(v)=j} w_v(s, h)}{\sum_{v \in k, \text{sf}(v) \in \{1..5\}} w_v(s, h)} \times 100\%$$
@@ -100,8 +100,8 @@ For subject $s$, hemisphere $h \in \{\text{L, R}\}$, functional subregion $k \in
 
 In **NTS Pure MDD vs NTHC**, we discovered a massive, bilaterally symmetric anatomical reorganization along the longitudinal axis:
 
-- **Body Subregion**: Subiculum proportion drops dramatically by **$-6.4\% \sim -8.9\%$** ($p = 4.99 \times 10^{-16}$, Cohen's $d = -5.16 \sim -7.83$, FDR $q < 10^{-9}$), while CA1 expands by **$+3.6\% \sim +4.3\%$** ($p < 10^{-9}$).
-- **Posterior (Tail) Subregion**: Subiculum proportion surges by **$+9.4\% \sim +10.1\%$** ($p < 10^{-12}$, Cohen's $d = +3.8 \sim +4.5$, FDR $q < 10^{-9}$), while CA1 drops by **$-5.0\% \sim -5.3\%$** ($p < 10^{-8}$).
+- **Middle Subregion**: Subiculum proportion drops dramatically by **$-6.4\% \sim -8.9\%$** ($p = 4.99 \times 10^{-16}$, Cohen's $d = -5.16 \sim -7.83$, FDR $q < 10^{-9}$), while CA1 expands by **$+3.6\% \sim +4.3\%$** ($p < 10^{-9}$).
+- **Posterior Subregion**: Subiculum proportion surges by **$+9.4\% \sim +10.1\%$** ($p < 10^{-12}$, Cohen's $d = +3.8 \sim +4.5$, FDR $q < 10^{-9}$), while CA1 drops by **$-5.0\% \sim -5.3\%$** ($p < 10^{-8}$).
 - **Clinical Significance**: In uncomplicated pure depression, the hippocampal body exhibits severe subicular focal atrophy, accompanied by a posterior tail compensatory subicular expansion.
 
 #### 🌟 Finding 2: The Resolution Paradox (Whole-Hippocampus vs Subregions)
@@ -129,7 +129,7 @@ To ensure that clinical findings (e.g. Pure MDD body subicular atrophy) are genu
 ### 2. Key Findings
 
 - **High Biological Stability Across Control Sites**: Across all 3 independent control cohorts (HCP 7T, Iowa HC, Stanford NTHC), CA1 constitutes **~53%–56%**, Subiculum constitutes **~30%–33%**, and minor subfields (CA2–4) constitute **~2%–9%**.
-- **Negligible Regional Differences in Controls**: Right hemisphere anterior/body subicular differences between 3T NTHC and 7T controls are virtually zero ($\Delta = 0.02\% \sim 0.06\%$, $p > 0.70$).
+- **Negligible Regional Differences in Controls**: Right hemisphere anterior/middle subicular differences between 3T NTHC and 7T controls are virtually zero ($\Delta = 0.02\% \sim 0.06\%$, $p > 0.70$).
 - **Absence of Inversion**: Neither 3T nor 7T healthy controls exhibit longitudinal subfield reversals.
 - **Effect Size Contrast**: Normal control cross-site variations are small ($|d| \approx 0.1 \sim 1.5$), whereas clinical psychiatric disruptions (e.g., Pure MDD body subicular drop) reach $|d| > 5.0$ to $7.8$, confirming that Stanford NTHC serves as a rigorous, unbiased baseline.
 
@@ -143,7 +143,7 @@ To rigorously evaluate subfield composition across different spatial parcellatio
 
 ### 1. Version 1: Unified Fixed HCP151 Group Atlas (`v1_fixed_hcp151_atlas`)
 
-- **Functional Boundary Source**: The canonical HCP 151-subject Route A Group Atlas functional boundaries ($K=3$: Anterior, Body, Posterior) are applied **uniformly across all cohorts**.
+- **Functional Boundary Source**: The canonical HCP 151-subject Route A Group Atlas functional boundaries ($K=3$: Anterior, Middle, Posterior) are applied **uniformly across all cohorts**.
 - **Histological Subfields**: Each subject's native HippUnfold MultiHist7 subfields ($Sub, CA1, CA2, CA3, CA4$) on midthickness surface.
 - **Scientific Role**: Completely eliminates cross-group functional boundary variance, evaluating purely histological subfield geometry within fixed spatial coordinates.
 

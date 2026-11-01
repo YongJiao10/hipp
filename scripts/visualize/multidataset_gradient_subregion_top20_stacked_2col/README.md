@@ -9,7 +9,7 @@ comparison panel and composite has source fingerprints and assignment
 provenance. The historical four-cell legacy grid remains available through
 the unified runner.
 
-本文档记录跨数据集海马 2mm Gradient-Spectral 群组分区（$K=3$ 亚区：Anterior、Body、Posterior）与各亚区连接最强 Top-20 皮层靶区的 **Normalized Count（网络容量归一化版）** 的完整图谱与统计数据。
+本文档记录跨数据集海马 2mm Gradient-Spectral 群组分区（$K=3$ 亚区：Anterior、Middle、Posterior）与各亚区连接最强 Top-20 皮层靶区的 **Normalized Count（网络容量归一化版）** 的完整图谱与统计数据。
 
 ## Additive HCP/JJ_TMS 7-network comparison
 
@@ -54,8 +54,8 @@ renderer; existence order never selects the result.
 
 对于 legacy normalized-count 产物，海马表面图与条形图均采用**网络容量归一化（$n_k / N_k^{\text{total}}$）**：
 
-- **Iowa HC 右侧 Body**：海马表面对应渲染为 **Auditory（青色）**，与条形图中 AUD 占 33% 首位完全吻合！
-- **Stanford TEHC 右侧 Body**：海马表面对应渲染为 **Somatomotor（蓝色）**，与条形图 SMN 首位吻合！
+- **Iowa HC 右侧 Middle**：海马表面对应渲染为 **Auditory（青色）**，与条形图中 AUD 占 33% 首位完全吻合！
+- **Stanford TEHC 右侧 Middle**：海马表面对应渲染为 **Somatomotor（蓝色）**，与条形图 SMN 首位吻合！
 - **Stanford TEHC 左侧 Anterior**：海马表面对应渲染为 **Auditory（青色）**，与条形图 AUD 首位吻合！
 - **Stanford NTS 前部**：海马表面对应渲染为 **Language（棕色）**，与条形图 LAN 首位吻合！
 
