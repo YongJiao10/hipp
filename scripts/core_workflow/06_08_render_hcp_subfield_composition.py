@@ -6,7 +6,7 @@ from __future__ import annotations
 Render HCP 151-subject weighted_fisherz gradient cluster subfield composition.
 
 The figure overlaps RouteA weighted_fisherz K=3 gradient-spectral group labels
-with subject-level HippUnfold multihist7 subfield labels. Composition is
+with subject-level HippUnfold multihist7sgi subfield labels. Composition is
 computed within each subject first, using den-512 T1w midthickness vertex
 area weights, then averaged across subjects.
 """
@@ -27,6 +27,7 @@ import nibabel as nib
 import numpy as np
 
 from lib.io_utils import load_json
+from lib.hippunfold_run_contract import HIPPUNFOLD_ATLAS
 from lib.workflow_utils import write_json
 
 
@@ -184,7 +185,7 @@ def subfield_label_path(hippunfold_root: Path, subject: str, hemi: str) -> Path:
         / "hippunfold"
         / f"sub-{subject}"
         / "metric"
-        / f"sub-{subject}_hemi-{hemi}_den-512_label-hipp_atlas-multihist7_subfields.label.gii"
+        / f"sub-{subject}_hemi-{hemi}_den-512_label-hipp_atlas-{HIPPUNFOLD_ATLAS}_subfields.label.gii"
     )
 
 

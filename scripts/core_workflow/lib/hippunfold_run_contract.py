@@ -15,7 +15,21 @@ from typing import Mapping, TextIO
 REPO_ROOT = Path(__file__).resolve().parents[3]
 HIPPO2_PREFIX = Path("/home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2")
 HIPPUNFOLD_EXECUTABLE = HIPPO2_PREFIX / "bin" / "hippunfold"
-HIPPUNFOLD_VERSION = "2.3.0"
+
+
+def read_hippunfold_version(environment_file: Path) -> str:
+    """Read the official release pinned in the existing hippo2 environment."""
+    versions = re.findall(
+        r"(?m)^\s*-\s*hippunfold @ git\+https://github\.com/khanlab/hippunfold\.git@v(\d+\.\d+\.\d+)\s*$",
+        environment_file.read_text(encoding="utf-8"),
+    )
+    if len(versions) != 1:
+        raise ValueError(f"Expected one HippUnfold release pin in {environment_file}")
+    return versions[0]
+
+
+HIPPUNFOLD_VERSION = read_hippunfold_version(REPO_ROOT / "environment/hippo2_server.yml")
+HIPPUNFOLD_ATLAS = "multihist7sgi"
 CANONICAL_ASSET_ROOT = "/home/yojiao/hpchome/hipp/runtime/hippunfold_asset_store_shared"
 CANONICAL_CACHE_DIR = f"{CANONICAL_ASSET_ROOT}/hippunfold_assets"
 CANONICAL_RUNTIME_SOURCE = f"{CANONICAL_ASSET_ROOT}/runtime_source_assets"
@@ -48,7 +62,7 @@ DATASET_PRESETS = MappingProxyType({
         / "hippunfold"
         / "dense_corobl_batch",
         t1w_filter="extension=.nii.gz",
-        skip_preproc=False,
+        skip_preproc=True,
     ),
     "stanford": DatasetPreset(
         bids_dir=Path(
@@ -144,6 +158,8 @@ class HippUnfoldRunContract:
             "participant",
             "--modality",
             "T1w",
+            "--atlas",
+            HIPPUNFOLD_ATLAS,
             "--output-density",
             "512",
             "--output-spaces",
@@ -184,6 +200,7 @@ class HippUnfoldRunContract:
             "output_dir": str(self.output_dir),
             "modality": "T1w",
             "hippunfold_version": HIPPUNFOLD_VERSION,
+            "atlas": HIPPUNFOLD_ATLAS,
             "inner_outer_reg_method": "greedy",
             "inner_outer_reg_smoothing": 3.0,
             "skip_preproc": self.preset.skip_preproc,

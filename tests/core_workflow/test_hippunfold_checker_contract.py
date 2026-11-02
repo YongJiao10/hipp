@@ -8,6 +8,8 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CHECKER_PATH = REPO_ROOT / "scripts/core_workflow/01_02_check_hippunfold_outputs.py"
@@ -269,3 +271,8 @@ def test_historical_cleanup_receipt_requires_complete_removal_evidence(tmp_path:
         subject,
         ["sub-{subject}/anat/final_T1w.nii.gz"],
     ) is None
+
+
+def test_checker_can_inspect_existing_previous_atlas_results() -> None:
+    old = "sub-{subject}/metric/sub-{subject}_hemi-L_den-512_label-hipp_atlas-multihist7_subfields.label.gii"
+    assert old in checker.required_check_templates([old])

@@ -279,7 +279,7 @@ def test_standalone_qc_filters_failed_subjects_from_the_complete_dataset(tmp_pat
     assert result["n_subjects_pass"] == len(FORMAL)
 
 
-def test_task_qc_stops_before_writing_until_policy_is_implemented(tmp_path, monkeypatch, roots, capsys):
+def test_task_qc_requires_explicit_run_inputs_before_writing(tmp_path, monkeypatch, roots, capsys):
     rest, _, _, roster = roots
     route = tmp_path / "task"
     make_inputs(tmp_path / "anatomy", route / "surface", OTHER_SUBJECTS)
@@ -294,7 +294,7 @@ def test_task_qc_stops_before_writing_until_policy_is_implemented(tmp_path, monk
         PREP.main()
     assert exc.value.code == 2
     error = capsys.readouterr().err
-    assert "not yet implemented" in error and "dataset/task" in error
+    assert '--qc-run-inputs' in error and 'dataset/task' in error
     assert not (route / "manifests").exists()
     assert (rest / "manifests" / LATEST).read_text() == roster.read_text()
     assert not (rest / "qc").exists()

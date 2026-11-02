@@ -215,10 +215,10 @@ def test_original_source_selection_is_explicit_and_only_iowa36p():
     paths = contrasts.subject_input_paths(r, cohort, g, '3010', 'L', 'original-denoised')
     assert str(paths[1]).endswith('hcp151_fixed_template_matching/subjects/sub-3010/cortex/kong2022_roi_timeseries.npy')
     current = contrasts.subject_input_paths(r, cohort, g, '3010', 'L', 'canonical')
-    assert 'shared_inputs/routea' in str(current[1])
+    assert 'shared_inputs/pfm/' in str(current[1])
     g22 = r.GridSpec('2mm', '22p')
     current22 = contrasts.subject_input_paths(r, cohort, g22, '3010', 'L', 'original-denoised')
-    assert 'shared_inputs_22p/routea' in str(current22[1])
+    assert 'kong2022_22p/shared_inputs/pfm/' in str(current22[1])
     with pytest.raises(ValueError):
         contrasts.subject_input_paths(r, cohort, g, '3010', 'L', 'unknown')
 

@@ -38,6 +38,8 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+from lib.gradient_clustering import GRADIENT_METHODS
+from lib.network_ovr import OVR_VARIANTS
 from lib.output_layout import (
     DEFAULT_FIXED_17NET_GROUP_ATLAS_ROOT,
     DEFAULT_FIXED_GROUP_ATLAS_ROOT,
@@ -60,7 +62,7 @@ ROUTE_CHOICES = ("pfm", "pfm_17net", "pfm_ctxreg", "pfm_ctxdrop", "fixed", "fixe
 METHODS = ["intrinsic-spectral", "network-spectral", "gradient-spectral", "wta-top"]
 ATLAS = "kong2022"
 CLUSTERLESS_METHODS = {"wta-top"}
-GRADIENT_METHODS = {"gradient-spectral"}
+METHOD_CHOICES = METHODS + sorted(GRADIENT_METHODS - set(METHODS))
 DEFAULT_GRADIENT_COMPONENT_TAG = "g1g2g3"
 ASSIGNMENT_VARIANTS = ("fisherz", "normalized_top20_count")
 
@@ -107,13 +109,14 @@ def build_render_jobs(
     group_atlas_root: Path = DEFAULT_GROUP_ATLAS_BASE_ROOT,
     routes: tuple[str, ...] = DEFAULT_ROUTES,
     methods: tuple[str, ...] = tuple(METHODS),
+    assignment_variants: tuple[str, ...] = ASSIGNMENT_VARIANTS,
 ) -> list[RenderJob]:
     requested_routes = tuple(str(route) for route in routes)
     unknown_routes = sorted(set(requested_routes).difference(set(ROUTE_CHOICES)))
     if unknown_routes:
         raise ValueError(f"Unknown routes: {unknown_routes}")
     requested_methods = tuple(str(method) for method in methods)
-    unknown_methods = sorted(set(requested_methods).difference(set(METHODS)))
+    unknown_methods = sorted(set(requested_methods).difference(set(METHOD_CHOICES)))
     if unknown_methods:
         raise ValueError(f"Unknown methods: {unknown_methods}")
     jobs: list[RenderJob] = []
@@ -131,6 +134,10 @@ def build_render_jobs(
         ],
         "wta-top": [("pfm", None, route_roots["pfm"]), ("pfm_ctxreg", None, route_roots["pfm_ctxreg"]), ("pfm_ctxdrop", None, route_roots["pfm_ctxdrop"]), ("fixed", None, route_roots["fixed"])],
     }
+    route_roots_by_method.update({
+        method: list(route_roots_by_method["gradient-spectral"])
+        for method in GRADIENT_METHODS - {"gradient-spectral"}
+    })
     for method in requested_methods:
         for route_tag, mode_tag, group_root in route_roots_by_method[method]:
             if str(route_tag) not in requested_routes:
@@ -139,9 +146,9 @@ def build_render_jobs(
             if method in CLUSTERLESS_METHODS:
                 variants = (None,)
             elif str(route_tag) in {"pfm", "pfm_17net", "pfm_ctxreg", "pfm_ctxdrop"}:
-                variants = ASSIGNMENT_VARIANTS
+                variants = assignment_variants
             else:
-                variants = ASSIGNMENT_VARIANTS
+                variants = assignment_variants
             for assignment_variant in variants:
                 jobs.append(
                     RenderJob(
@@ -202,7 +209,8 @@ def main() -> int:
     p.add_argument("--group-atlas-root", "--route-root", dest="group_atlas_root", default=str(DEFAULT_GROUP_ATLAS_BASE_ROOT), help="Base root containing canonical branch group-atlas directories; --route-root is a legacy alias.")
     p.add_argument("--present-dir", default=str(DEFAULT_PRESENT_DIR))
     p.add_argument("--routes", nargs="+", choices=list(ROUTE_CHOICES), default=list(DEFAULT_ROUTES))
-    p.add_argument("--methods", nargs="+", choices=METHODS, default=list(METHODS))
+    p.add_argument("--methods", nargs="+", choices=METHOD_CHOICES, default=list(METHODS))
+    p.add_argument("--assignment-variant", choices=["both", *ASSIGNMENT_VARIANTS, *OVR_VARIANTS], default="both")
     p.add_argument("--coverage-threshold", type=float, default=0.80)
     p.add_argument("--manifest-name", default=DEFAULT_MANIFEST_NAME)
     p.add_argument("--scene", default=None, help="Optional override for wb scene path.")
@@ -213,7 +221,8 @@ def main() -> int:
     present_dir.mkdir(parents=True, exist_ok=True)
 
     records: list[dict[str, str]] = []
-    jobs = build_render_jobs(group_atlas_root, routes=tuple(args.routes), methods=tuple(args.methods))
+    jobs = build_render_jobs(group_atlas_root, routes=tuple(args.routes), methods=tuple(args.methods),
+                             assignment_variants=ASSIGNMENT_VARIANTS if args.assignment_variant == "both" else (args.assignment_variant,))
     for job in jobs:
         group_root = Path(job.group_root).resolve()
         if not group_root.exists():

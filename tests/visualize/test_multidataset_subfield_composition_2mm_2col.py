@@ -108,7 +108,7 @@ def test_composition_fails_closed_when_manifest_subject_input_is_missing(tmp_pat
     }
     expected = (
         tmp_path
-        / "hippunfold/sub-001/hippunfold/sub-001/metric/sub-001_hemi-L_den-512_label-hipp_atlas-multihist7_subfields.label.gii"
+        / "hippunfold/sub-001/hippunfold/sub-001/metric/sub-001_hemi-L_den-512_label-hipp_atlas-multihist7sgi_subfields.label.gii"
     )
     with pytest.raises(FileNotFoundError, match=str(expected)):
         RENDERER.compute_cohort_subfield_composition(
@@ -160,7 +160,7 @@ def test_analyzer_fails_closed_on_missing_subject_inputs(tmp_path, monkeypatch):
     expected = (
         tmp_path
         / "hippunfold/sub-001/hippunfold/sub-001/metric/"
-        "sub-001_hemi-L_den-512_label-hipp_atlas-multihist7_subfields.label.gii"
+        "sub-001_hemi-L_den-512_label-hipp_atlas-multihist7sgi_subfields.label.gii"
     )
     with pytest.raises(FileNotFoundError, match=str(expected)):
         ANALYZER.load_all_subject_data(
@@ -185,7 +185,7 @@ def test_analyzer_fails_closed_on_missing_individual_template_label(tmp_path, mo
         surf_dir = hipp_root / "sub-001/hippunfold/sub-001/surf"
         metric_dir.mkdir(parents=True, exist_ok=True)
         surf_dir.mkdir(parents=True, exist_ok=True)
-        (metric_dir / f"sub-001_hemi-{hemi}_den-512_label-hipp_atlas-multihist7_subfields.label.gii").touch()
+        (metric_dir / f"sub-001_hemi-{hemi}_den-512_label-hipp_atlas-multihist7sgi_subfields.label.gii").touch()
         (surf_dir / f"sub-001_hemi-{hemi}_space-T1w_den-512_label-hipp_midthickness.surf.gii").touch()
 
     cinfo = {

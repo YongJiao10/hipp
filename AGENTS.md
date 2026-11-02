@@ -94,17 +94,17 @@ Other workflows retain their own limits.
   1. `source /opt/conda/bin/activate hippo2`
   2. `which hippunfold` resolves to
      `/home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2/bin/hippunfold`
-  3. `hippunfold --version` returns `2.3.0`
+  3. `hippunfold --version` matches the release pinned in `environment/hippo2_server.yml`
   4. `hippunfold --modality T1w --output_density 512 --help` succeeds and shows `512`
 - Validate the effective CLI and scientific source; environment names,
   `conda list` and `bioconda::hippunfold` alone are insufficient. Use official
-  v2.3.0 release source plus the documented local resource/runtime adapters.
+  release source pinned in `environment/hippo2_server.yml` plus the documented
+  local resource/runtime adapters. Use `multihist7sgi` for the current release.
   Do not apply local boundary, reference-plane or Workbench scientific fixes,
-  and do not substitute development `main`, whose newer filtering requires
-  a new unfolded atlas. Do not use
+  and do not substitute development `main`. Do not use
   workflow labels `1.5.2`, `1.5.2-pre.2` or `1.5.2rc2`.
 - Stage 01 gates the runtime/model/CUDA once per pending batch, with 300-second
-  CLI probes, and checks all 96 formal products with `--no-cleanup` while
+  CLI probes, and checks the selected release's formal products with `--no-cleanup` while
   `--notemp` retains anatomical, coordinate, warp and CIFTI intermediates.
   Old cleanup receipts and local-candidate results do not establish completion.
   HCP defaults to eight subjects and accepts up to

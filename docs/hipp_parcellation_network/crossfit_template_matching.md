@@ -1,6 +1,6 @@
 # HCP Cross-Fitted Template Matching
 
-This workflow creates one individualized anterior/body/posterior hippocampal
+This workflow creates one individualized anterior/middle/posterior hippocampal
 label map per HCP subject, hemisphere, and smoothing level. Its inferential
 unit is the subject (with family-aware grouping), not an fMRI run. Each subject
 is labelled from their full concatenated FC using a group template learned
@@ -22,6 +22,22 @@ subject/family level. It is not run-level cross-validation and makes no claim
 about independence between runs. Using the subject's full concat FC is
 intentional: the target is a stable full-data individualized label, and the
 same method can be applied to datasets that contain only one run.
+
+FC preprocessing is explicit: `--feature-scaling {none,col_zscore}`,
+`--sparsify-stage {features,affinity,none}` and `--sparsity` select the shared
+Pearson-affinity route. Existing default scaling/sparsity are retained. Each
+fold uses its newly fitted 4mm-left training template as the component/sign
+alignment reference; settings are never aligned to a different preprocessing
+setting's cached reference. The separate `--clustering-feature-scaling
+{none,unit_sd}` fits means/SDs only on supported training vertices after
+alignment. Templates record the selected route and fitted transform, and
+resume rejects missing/mismatched declarations. The consumed 4mm-left anchor gradient is part of the existing input-fingerprint contract, and cached non-anchor templates require the explicitly requested reference during loading. Disjoint-cohort and session
+split-half fits expose the same choices, fit their own 4mm-left reference and
+component transform, and validate their existing comparison manifests before
+reusing saved arrays. These declaration changes require explicit regeneration
+of legacy comparison caches.
+Partial crossfit mapping requests still require the declared 4mm-left training
+anchor; preflight lists those inputs and the total fit count includes them.
 
 The family map may contain restricted HCP metadata. It is an execution input,
 not a repository artifact, and must not be committed. Production HCP results
@@ -167,7 +183,7 @@ identifier when needed, so the full `sub-…` title remains visible. Each row pr
 the standard left/right hemisphere layout and label legend, so smoothing-dependent
 topographic changes are visible without a separate per-smoothing file.
 
-The source label codes remain immutable AP ordering (`1=Anterior`, `2=Body`,
+The source label codes remain immutable AP ordering (`1=Anterior`, `2=Middle`,
 `3=Posterior`) in every cross-fit GIFTI and combo manifest. The overview is a
 presentation layer: it fingerprint-validates all 5 folds × 2 smoothing levels ×
 L/R template `template_profiles.npy` files, averages each 3-by-400 Fisher-z
@@ -214,3 +230,5 @@ The renderer also evaluates the registered production gate: every fold graph
 must be connected, every cluster must contain at least 10% of supported
 vertices, and all unique fold pairs must meet macro-Dice 0.85, ARI 0.70, and
 prototype-correlation 0.50. It exits nonzero when the gate fails.
+
+Disjoint-cohort and session-split diagnostic GIFTIs and legends use Anterior / Middle / Posterior spatial identities. These fits do not estimate cortical network annotations, so their display names never assert VAN/SMN/DMN assignments.

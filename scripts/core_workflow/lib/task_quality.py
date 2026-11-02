@@ -67,7 +67,7 @@ def require_task_surface_validity(surface_root: Path, subject: str, hemi: str, t
 
 
 REST_VALIDITY_POLICY = REST_POLICY
-QC_DATASETS = ("hcp", "stanford", "iowa_jj_tms", "iowa7t", "banda", "pdc")
+QC_DATASETS = ("hcp", "stanford", "iowa_jj_tms", "iowa7t", "banda", "pdc", "nih_rtms")
 
 def signal_validity_policy(dataset: str, task: str) -> str:
     if dataset not in QC_DATASETS:

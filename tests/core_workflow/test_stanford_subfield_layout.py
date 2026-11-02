@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import sys
 from pathlib import Path
 
@@ -29,6 +30,36 @@ if spec is None or spec.loader is None:
 module = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = module
 spec.loader.exec_module(module)
+
+
+def test_stanford_subfield_reader_requires_the_current_atlas(tmp_path, monkeypatch) -> None:
+    group = tmp_path / "group"
+    for hemi in ("L", "R"):
+        directory = group / f"gradient-spectral/kong2022/2mm/cov_0p80/g1g2g3/hemi_{hemi}"
+        directory.mkdir(parents=True)
+        (directory / "group_atlas_manifest.json").write_text(
+            json.dumps({"cluster_roi_profile_subjects_used": ["1001"]}), encoding="utf-8"
+        )
+    cohort = {"id": "stanford_nthc", "name": "NTHC", "group_root": group,
+              "hippunfold_root": tmp_path / "hippunfold"}
+    monkeypatch.setattr(module, "get_diff_cohorts", lambda spec: [cohort])
+
+    class SequentialExecutor:
+        def __init__(self, max_workers):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def map(self, fn, tasks):
+            return map(fn, tasks)
+
+    monkeypatch.setattr(module, "ThreadPoolExecutor", SequentialExecutor)
+    with pytest.raises(FileNotFoundError, match="atlas-multihist7sgi"):
+        module.load_all_subject_data("v3_individual_template_matching")
 
 
 @pytest.fixture

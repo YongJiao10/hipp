@@ -50,6 +50,7 @@ for p in (CORE_DIR, VIS_LIB_DIR):
     if str(p) not in sys.path:
         sys.path.insert(0, str(p))
 
+from lib.hippunfold_run_contract import HIPPUNFOLD_ATLAS
 from multidataset_cohorts import GridSpec, GRID_VARIANTS
 
 HIPPUNFOLD_ROOT = REPO_ROOT / "outputs_stanford/inputs/hippunfold/dense_corobl_batch"
@@ -265,7 +266,7 @@ def load_all_subject_data(atlas_mode: str, spec: GridSpec | None = None) -> tupl
                 labels = np.asarray(np.load(hdir_hcp / "group_labels_final.npy"), dtype=np.int32).reshape(-1)
                 support = np.asarray(np.load(hdir_hcp / "group_support_mask.npy"), dtype=bool).reshape(-1)
                 for s in subjects:
-                    lp = hipp_root / f"sub-{s}/hippunfold/sub-{s}/metric/sub-{s}_hemi-{hemi}_den-512_label-hipp_atlas-multihist7_subfields.label.gii"
+                    lp = hipp_root / f"sub-{s}/hippunfold/sub-{s}/metric/sub-{s}_hemi-{hemi}_den-512_label-hipp_atlas-{HIPPUNFOLD_ATLAS}_subfields.label.gii"
                     sp = hipp_root / f"sub-{s}/hippunfold/sub-{s}/surf/sub-{s}_hemi-{hemi}_space-T1w_den-512_label-hipp_midthickness.surf.gii"
                     tasks.append((cinfo, cname, s, hemi, labels, support, lp, sp, None))
 
@@ -273,13 +274,13 @@ def load_all_subject_data(atlas_mode: str, spec: GridSpec | None = None) -> tupl
                 labels = np.asarray(np.load(hdir / "group_labels_final.npy"), dtype=np.int32).reshape(-1)
                 support = np.asarray(np.load(hdir / "group_support_mask.npy"), dtype=bool).reshape(-1)
                 for s in subjects:
-                    lp = hipp_root / f"sub-{s}/hippunfold/sub-{s}/metric/sub-{s}_hemi-{hemi}_den-512_label-hipp_atlas-multihist7_subfields.label.gii"
+                    lp = hipp_root / f"sub-{s}/hippunfold/sub-{s}/metric/sub-{s}_hemi-{hemi}_den-512_label-hipp_atlas-{HIPPUNFOLD_ATLAS}_subfields.label.gii"
                     sp = hipp_root / f"sub-{s}/hippunfold/sub-{s}/surf/sub-{s}_hemi-{hemi}_space-T1w_den-512_label-hipp_midthickness.surf.gii"
                     tasks.append((cinfo, cname, s, hemi, labels, support, lp, sp, None))
 
             elif atlas_mode == "v3_individual_template_matching":
                 for s in subjects:
-                    lp = hipp_root / f"sub-{s}/hippunfold/sub-{s}/metric/sub-{s}_hemi-{hemi}_den-512_label-hipp_atlas-multihist7_subfields.label.gii"
+                    lp = hipp_root / f"sub-{s}/hippunfold/sub-{s}/metric/sub-{s}_hemi-{hemi}_den-512_label-hipp_atlas-{HIPPUNFOLD_ATLAS}_subfields.label.gii"
                     sp = hipp_root / f"sub-{s}/hippunfold/sub-{s}/surf/sub-{s}_hemi-{hemi}_space-T1w_den-512_label-hipp_midthickness.surf.gii"
                     if cinfo["id"] == "hcp_7t":
                         indiv_label_path = REPO_ROOT / f"outputs_hcp/work/crossfit_template_matching/subjects/sub-{s}/{spec.smoothing}/hemi_{hemi}/individual_labels_k3.npy"

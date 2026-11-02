@@ -63,10 +63,55 @@ Evaluate treatment sessions separately; paired pre/post analyses require both
 sessions to pass. This mean-FD selection is separate from the existing XCP-D
 per-frame censoring at FD >0.50 mm. The current data contain 43 functional
 participants and 66 scans, with 64 scans passing this mean-FD threshold and
-21 of the 23 complete TRD pairs retaining both visits. See the
+21 of the 23 complete TRD pairs passing motion in both visits. The full
+HippUnfold functional QC below retains 61 scans and 18 complete pairs. See the
 [fMRI QC policy](../../docs/hipp_parcellation_network/fmri_qc.md).
 
+The active dataset retains the 132 fMRIPrep functional BOLD intermediates,
+fMRIPrep-exported anatomical images, surfaces and transforms, both XCP-D output
+trees, cohort mapping metadata and processing logs. The raw `bids_input/` tree
+and the complete FreeSurfer
+`derivatives/restfmri/sourcedata/freesurfer_by_subject/` tree are not retained.
+
+The submission commands below require their declared inputs to be present.
+Before rerunning XCP-D, reconstruct the merged raw BIDS inputs from OpenNeuro
+`ds008064` v1.0.0 and `ds006731` v1.0.1 using the dataset's
+`metadata/subject_id_mapping.tsv`; the launcher checks expected runs against raw
+BIDS even when the fMRIPrep intermediates are retained. Those retained
+intermediates allow new XCP-D variants without rerunning fMRIPrep. Analyses or
+preprocessing steps that require complete FreeSurfer subjects need those
+outputs rebuilt first. Existing XCP-D results remain available for downstream
+analysis.
+
 ## 3. How to Submit on Argon
+
+### Downstream HippUnfold v2.3.0 QC
+
+The local reconstruction has 44 official v2.3.0 completion records under
+`outputs_nih_rtms/inputs/hippunfold/dense_corobl_batch/`. The shared
+`scripts/core_workflow/02_01_prepare_group_inputs.py` and `02_02_build_qc_manifest.py`
+accept `--dataset nih_rtms`. Functional QC uses separate visit routes at
+`outputs_nih_rtms/inputs/kong2022/ses-1/` and `ses-2/`, without pooling visits.
+Each route's `manifests/nih_rtms_qc_runs.tsv` declares exact denoised NIfTI,
+original motion and `temporal_mask_path` outlier inputs.
+Supply the complete visit roster with `--subjects` or `--subjects-manifest`
+when using this table, including visits without a declared run.
+
+Motion selection uses original post-dummy, pre-censor frames; coverage uses
+the shorter retained NIfTI series. The outlier table binds those two lengths.
+The registration transform is paired with the exact fMRIPrep T1w consumed by
+HippUnfold, supporting both longitudinal subject-level and single-visit
+session-level anatomical exports. Use `--tsnr-threshold none` and
+`--require-hippunfold-version 2.3.0`; the remaining criteria are bilateral
+Dice >=0.70 and <=20 unusable den-512 vertices per hemisphere.
+Reports are `qc/t1only_hippunfold_tsnr_qc.{json,tsv}` and pass lists are
+`manifests/nih_rtms_hippocampus_fmri_qc_pass_t1only_latest.txt` within each route.
+Sampling, vertex masks and final assessment are complete: ses-1 retains 37/42
+scans and ses-2 retains 24/24. Ses-1 excludes D11/D12 for mean FD and D08/D09/D28
+for unusable sampled signals above the 20-vertex limit. Both reports have no
+unassessable scans. Treatment analyses retain 18 of the 23 complete TRD pairs
+after requiring both visits to pass all three criteria.
+See the [shared QC policy and current results](../../docs/hipp_parcellation_network/fmri_qc.md).
 
 Log into Argon (`ssh argon.hpc.uiowa.edu`) and set the path to this repository checkout:
 

@@ -46,6 +46,11 @@ from lib.workbench_grid import build_grid_canvas, load_font
 DEFAULT_SMOOTHINGS = ("2mm", "4mm")
 DEFAULT_HEMIS = ("L", "R")
 DEFAULT_SPLITS = ("split-1", "split-2")
+from lib.gradient_clustering import GRADIENT_METHODS
+from lib.hippomaps_adapter import (
+    gradient_preprocessing_settings, scale_gradient_features, validate_gradient_preprocessing,
+)
+
 DEFAULT_K = 3
 DEFAULT_SCENE = REPO_ROOT / "config" / "wb_locked_native_view_lateral_medial.scene"
 DEFAULT_FIGURE_NAME = "hcp_routea_crossfit_k3_splithalf_2x2_comparison.png"
@@ -90,9 +95,9 @@ SPLIT_METADATA = {
 
 DISPLAY_LABEL_SPECS = {
     0: ("Null", (158, 158, 158, 255)),
-    1: ("VAN", (220, 92, 255, 255)),
-    2: ("SMN", (99, 150, 194, 255)),
-    3: ("DMN", (216, 92, 107, 255)),
+    1: ("Anterior", (220, 92, 255, 255)),
+    2: ("Middle", (99, 150, 194, 255)),
+    3: ("Posterior", (216, 92, 107, 255)),
 }
 
 
@@ -151,6 +156,8 @@ def fit_split_half_template(
     group_grad_module: Any,
     cf_module: Any,
     surface_path: Path,
+    gradient_options: dict[str, Any] | None = None,
+    alignment_reference: np.ndarray | None = None,
 ) -> dict[str, Any]:
     coords, faces = core_atlas_module.load_surface(surface_path)
     vertex_count = int(coords.shape[0])
@@ -214,15 +221,31 @@ def fit_split_half_template(
         subjects=subjects,
         support_mask=support,
     )
-    grad_act, lambdas, evs = cf_module.fit_gradientmaps_pearson(group_fc_act, n_components=5, random_state=0)
+    options = dict(gradient_options or {})
+    grad_act, lambdas, evs = cf_module.fit_gradientmaps_pearson(
+        group_fc_act, n_components=5, random_state=options.get("random_state", 0),
+        feature_scaling=options.get("feature_scaling", "col_zscore"),
+        sparsify_stage=options.get("sparsify_stage", "features"), sparsity=options.get("sparsity"),
+    )
+    gradients_full = cf_module.reconstruct_full_surface(grad_act, support, vertex_count)
+    if alignment_reference is not None:
+        grad_act, gradients_full, lambdas, evs, _ = group_grad_module.align_gradient_components_to_reference(
+            active=grad_act, full=gradients_full, lambdas=lambdas, ev_fractions=evs,
+            reference_full=alignment_reference,
+            component_labels=[f"G{i+1}" for i in range(grad_act.shape[1])],
+        )
+    cluster_features, transform = scale_gradient_features(
+        grad_act[:, :DEFAULT_K], scaling=options.get("clustering_feature_scaling", "none"),
+    )
     adj = core_atlas_module.build_surface_adjacency(faces, vertex_count)
     _, labels_full = core_atlas_module.cluster_from_precomputed_group_features(
-        method="gradient-spectral",
-        group_features=np.asarray(grad_act[:, :DEFAULT_K], dtype=np.float32),
+        method=options.get("method", "gradient-spectral"),
+        group_features=np.asarray(cluster_features, dtype=np.float32),
         support_mask=support,
         adjacency_full=adj,
         k=DEFAULT_K,
-        seed=0,
+        seed=int(options.get("cluster_seed", 0)),
+        rbf_scale=float(options.get("rbf_scale", 1.0)),
     )
     labels_full = core_atlas_module.reorder_labels_by_long_axis(
         labels_full.astype(np.int32),
@@ -237,6 +260,12 @@ def fit_split_half_template(
         "support": support,
         "prototypes": prototypes,
         "group_fc_full": group_fc_full,
+        "gradients_full": gradients_full,
+        "gradient_preprocessing": gradient_preprocessing_settings(
+            group_fc_act.shape[1], feature_scaling=options.get("feature_scaling", "col_zscore"),
+            sparsify_stage=options.get("sparsify_stage", "features"), sparsity=options.get("sparsity"),
+        ),
+        "clustering_feature_transform": transform,
     }
 
 
@@ -389,8 +418,8 @@ def compose_splithalf_2x2_figure(
             cnt_l = counts_by_cell.get((smoothing, split_id, "L"), [0, 0, 0])
             cnt_r = counts_by_cell.get((smoothing, split_id, "R"), [0, 0, 0])
             stat_text = (
-                f"Left Hemi: Anterior={cnt_l[0]}, Body={cnt_l[1]}, Posterior={cnt_l[2]}  |  "
-                f"Right Hemi: Anterior={cnt_r[0]}, Body={cnt_r[1]}, Posterior={cnt_r[2]}"
+                f"Left Hemi: Anterior={cnt_l[0]}, Middle={cnt_l[1]}, Posterior={cnt_l[2]}  |  "
+                f"Right Hemi: Anterior={cnt_r[0]}, Middle={cnt_r[1]}, Posterior={cnt_r[2]}"
             )
             bbox_foot = draw.textbbox((0, 0), stat_text, font=quad_foot_font)
             draw.text(
@@ -408,11 +437,7 @@ def compose_splithalf_2x2_figure(
     cur_y += 20
 
     # Color legend
-    legend_items = [
-        ("Anterior (VAN / VentralAttention)", (220, 92, 255)),
-        ("Body (SMN / Somatomotor)", (99, 150, 194)),
-        ("Posterior (DMN / Default)", (216, 92, 107)),
-    ]
+    legend_items = [(DISPLAY_LABEL_SPECS[c][0], DISPLAY_LABEL_SPECS[c][1][:3]) for c in (1, 2, 3)]
     swatch_size = 28
     item_spacing = 60
 
@@ -500,7 +525,21 @@ def main() -> None:
         default=DEFAULT_SCENE,
         help="Path to locked Workbench scene file.",
     )
+    parser.add_argument("--feature-scaling", choices=("none", "col_zscore"), default="col_zscore")
+    parser.add_argument("--sparsify-stage", choices=("features", "affinity", "none"), default="features")
+    parser.add_argument("--sparsity", type=float, default=None)
+    parser.add_argument("--gradient-random-state", type=int, default=0)
+    parser.add_argument("--method", choices=sorted(GRADIENT_METHODS), default="gradient-spectral")
+    parser.add_argument("--rbf-scale", type=float, default=1.0)
+    parser.add_argument("--cluster-seed", type=int, default=0)
+    parser.add_argument("--clustering-feature-scaling", choices=("none", "unit_sd"), default="none")
     args = parser.parse_args()
+    gradient_options = {
+        "feature_scaling": args.feature_scaling, "sparsify_stage": args.sparsify_stage,
+        "sparsity": args.sparsity, "random_state": args.gradient_random_state,
+        "clustering_feature_scaling": args.clustering_feature_scaling,
+        "method": args.method, "rbf_scale": args.rbf_scale, "cluster_seed": args.cluster_seed,
+    }
 
     overview_root = args.overview_root.resolve()
     scene_path = args.scene.resolve()
@@ -511,6 +550,11 @@ def main() -> None:
     output_png = overview_root / DEFAULT_FIGURE_NAME
     manifest_path = overview_root / DEFAULT_MANIFEST_NAME
     summary_tsv_path = overview_root / DEFAULT_SUMMARY_TSV_NAME
+    cached_manifest = json.loads(manifest_path.read_text()) if manifest_path.exists() else {}
+    preprocessing = gradient_preprocessing_settings(
+        400, feature_scaling=args.feature_scaling, sparsify_stage=args.sparsify_stage,
+        sparsity=args.sparsity,
+    )
 
     cf = load_module("crossfit", INDIVIDUAL_WORKFLOW_DIR / "01_01_run_hcp_crossfit_template_matching.py")
     core = cf.load_group_atlas_module()
@@ -531,7 +575,7 @@ def main() -> None:
     fitted_results: dict[tuple[str, str, str], dict[str, Any]] = {}
     counts_by_cell: dict[tuple[str, str, str], list[int]] = {}
 
-    for smoothing in smoothings:
+    for smoothing in ("4mm", "2mm"):
         for hemi in hemis:
             surf_path = DEFAULT_SURF_L if hemi == "L" else DEFAULT_SURF_R
             for split_id in splits:
@@ -540,12 +584,31 @@ def main() -> None:
                 sup_path = s_dir / "group_support_mask.npy"
                 prt_path = s_dir / "template_profiles.npy"
                 gii_path = s_dir / "group_labels_k3.label.gii"
+                gradient_path = s_dir / "hippomaps_gradients_full.npy"
+                metadata_key = f"{split_id}|{smoothing}|{hemi}"
 
                 if lbl_path.exists() and sup_path.exists() and prt_path.exists():
+                    validate_gradient_preprocessing(
+                        cached_manifest, settings=preprocessing, manifest_path=manifest_path,
+                    )
+                    if (cached_manifest.get("clustering_feature_scaling") != args.clustering_feature_scaling
+                            or cached_manifest.get("gradient_random_state") != args.gradient_random_state
+                            or cached_manifest.get("method") != args.method
+                            or cached_manifest.get("rbf_scale") != args.rbf_scale
+                            or cached_manifest.get("cluster_seed") != args.cluster_seed):
+                        raise ValueError(f"Comparison fit settings differ in {manifest_path}; explicitly regenerate")
+                    if not gradient_path.is_file():
+                        raise FileNotFoundError(f"Missing aligned comparison gradients: {gradient_path}; explicitly regenerate")
+                    recorded_fit = cached_manifest.get("fit_metadata", {}).get(metadata_key)
+                    if not isinstance(recorded_fit, dict):
+                        raise ValueError(f"Missing comparison fit metadata in {manifest_path}: {metadata_key}; explicitly regenerate")
+
                     res = {
                         "labels": np.load(lbl_path),
                         "support": np.load(sup_path),
                         "prototypes": np.load(prt_path),
+                        "gradients_full": np.load(gradient_path),
+                        **recorded_fit,
                     }
                     if not gii_path.exists():
                         write_display_label_gifti(res["labels"], gii_path)
@@ -560,11 +623,17 @@ def main() -> None:
                         group_grad_module=group_grad,
                         cf_module=cf,
                         surface_path=surf_path,
+                        gradient_options=gradient_options,
+                        alignment_reference=(
+                            None if smoothing == "4mm" and hemi == "L" else
+                            fitted_results[("4mm", split_id, "L")]["gradients_full"]
+                        ),
                     )
                     s_dir.mkdir(parents=True, exist_ok=True)
                     np.save(lbl_path, res["labels"])
                     np.save(sup_path, res["support"])
                     np.save(prt_path, res["prototypes"])
+                    np.save(gradient_path, res["gradients_full"])
                     write_display_label_gifti(res["labels"], gii_path)
                     print(f"  [done] Fitted {split_id} | {smoothing} | hemi-{hemi}")
 
@@ -657,6 +726,17 @@ def main() -> None:
         "splits": splits,
         "n_subjects": n_subjects,
         "split_metadata": SPLIT_METADATA,
+        "gradient_preprocessing": preprocessing,
+        "gradient_random_state": args.gradient_random_state,
+        "clustering_feature_scaling": args.clustering_feature_scaling,
+        "method": args.method, "rbf_scale": args.rbf_scale, "cluster_seed": args.cluster_seed,
+        "gradient_alignment_anchor": {"smoothing":"4mm", "hemi":"L", "population":"each_independent_fit"},
+        "fit_metadata": {
+            "|".join([key[1],key[0],key[2]]): {
+                "gradient_preprocessing": result["gradient_preprocessing"],
+                "clustering_feature_transform": result["clustering_feature_transform"],
+            } for key,result in fitted_results.items()
+        },
         "metrics_summary": {
             f"{s}_{h}": metrics_by_combo[(s, h)]
             for s in smoothings

@@ -58,6 +58,8 @@ def test_hcp_preset_has_fixed_historical_paths_and_parameters() -> None:
         "participant",
         "--modality",
         "T1w",
+        "--atlas",
+        "multihist7sgi",
         "--output-density",
         "512",
         "--output-spaces",
@@ -83,6 +85,7 @@ def test_hcp_preset_has_fixed_historical_paths_and_parameters() -> None:
         "--inner_outer_reg_smoothing",
         "3.0",
         "--use_gpu",
+        "--skip-preproc",
     )
     assert "--omit-from" not in contract.hippunfold_argv
     assert "download_nnunet_model" not in contract.hippunfold_argv
@@ -115,13 +118,12 @@ def test_non_hcp_presets_only_change_dataset_paths_and_extension(
     filter_value: str,
 ) -> None:
     contract = resolve_run_contract(dataset, subject)
-    hcp = resolve_run_contract("hcp", "102311")
 
     assert str(contract.bids_dir) == bids_dir
     assert contract.output_dir == REPO_ROOT / output_dir
     assert contract.t1w_filter == filter_value
-    assert contract.hippunfold_argv[3:-6][:11] == hcp.hippunfold_argv[3:-6][:11]
-    assert contract.hippunfold_argv[3:-6][12:] == hcp.hippunfold_argv[3:-6][12:]
+    assert contract.hippunfold_argv[contract.hippunfold_argv.index("--atlas") + 1] == "multihist7sgi"
+    assert "--skip-preproc" not in contract.hippunfold_argv
     assert "--omit-from" not in contract.hippunfold_argv
 
 
@@ -186,7 +188,7 @@ def test_runtime_gate_uses_the_same_fixed_environment_as_the_run(
         if args[0] == "/bin/bash":
             stdout = str(executable)
         elif args[-1] == "--version":
-            stdout = "2.3.0"
+            stdout = "2.4.0"
         elif args[-1] == "--help":
             stdout = "--output-density {native,512,2k} --inner_outer_reg_method --inner_outer_reg_smoothing"
         else:
@@ -240,7 +242,7 @@ def test_dataset_presets_are_closed_and_complete() -> None:
     assert tuple(DATASET_PRESETS) == ("hcp", "stanford", "iowa_jj_tms", "banda", "pdc")
 
 
-@pytest.mark.parametrize("dataset", ("hcp", "stanford", "iowa_jj_tms"))
+@pytest.mark.parametrize("dataset", ("stanford", "iowa_jj_tms"))
 def test_established_presets_keep_their_n4_launch_behavior(dataset: str) -> None:
     contract = resolve_run_contract(dataset, "1001")
 
@@ -250,7 +252,7 @@ def test_established_presets_keep_their_n4_launch_behavior(dataset: str) -> None
 
 @pytest.mark.parametrize(
     ("dataset", "subject"),
-    (("banda", "BANDA001"), ("pdc", "e0010s01")),
+    (("hcp", "102311"), ("banda", "BANDA001"), ("pdc", "e0010s01")),
 )
 def test_bias_corrected_inputs_skip_n4_in_the_public_dry_run(
     dataset: str, subject: str
@@ -271,6 +273,25 @@ def test_bias_corrected_inputs_skip_n4_in_the_public_dry_run(
     assert payload.get("skip_preproc") is True
     assert payload["modality"] == "T1w"
     assert "--no-reg-template" not in payload["hippunfold_argv"]
+
+
+def test_hcp_launch_uses_the_updated_unfolded_atlas() -> None:
+    contract = resolve_run_contract("hcp", "102311")
+    argv = contract.hippunfold_argv
+
+    assert argv[argv.index("--atlas") + 1] == "multihist7sgi"
+    assert contract.as_json()["atlas"] == "multihist7sgi"
+
+
+def test_runtime_version_is_read_from_the_existing_environment_spec(tmp_path: Path) -> None:
+    spec = tmp_path / "hippo2.yml"
+    spec.write_text(
+        "dependencies:\n  - pip:\n    - hippunfold @ git+https://github.com/khanlab/hippunfold.git@v2.4.0\n",
+        encoding="utf-8",
+    )
+    assert run_contract_module.read_hippunfold_version(spec) == "2.4.0"
+    spec.write_text(spec.read_text().replace("v2.4.0", "v2.5.0"), encoding="utf-8")
+    assert run_contract_module.read_hippunfold_version(spec) == "2.5.0"
 
 
 def test_manifest_mode_validates_once_and_checks_each_subject(

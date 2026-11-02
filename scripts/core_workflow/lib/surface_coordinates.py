@@ -95,6 +95,16 @@ def dataset_registration(dataset: str, subject: str, *, root: Path | None = None
         xfms = root / f'Depression/{dataset.upper()}/imaging/{directory}/MNINonLinear/xfms'
         return SurfaceRegistration('fnirt-pair', xfms/'acpc_dc2standard.nii.gz',
                                    inverse_warp=xfms/'standard2acpc_dc.nii.gz')
+    if dataset == 'nih_rtms':
+        # The consumed T1w is subject-level for longitudinal reconstructions
+        # and session-level for participants with a single anatomical visit.
+        link = REPO_ROOT / f'outputs_nih_rtms/inputs/hippunfold/bids_input/{sub}/anat/{sub}_T1w.nii.gz'
+        source = link.resolve(strict=True)
+        suffix = '_desc-preproc_T1w.nii.gz'
+        if not source.name.startswith(sub + '_') or not source.name.endswith(suffix):
+            raise ValueError(f'NIH HippUnfold T1w source is not the declared fMRIPrep anatomy: {link} -> {source}')
+        prefix = source.name.removesuffix(suffix)
+        return SurfaceRegistration('ants', source.parent / f'{prefix}_from-{MNI_SPACE}_to-T1w_mode-image_xfm.h5')
     anat_roots = {
         'stanford': 'fmriprep_processed_CausalConnectome/rest_fmriprep/fmriprep',
         'iowa_jj_tms': 'fmriprep_processed_JJ_TMS/derivatives_surf',

@@ -58,7 +58,7 @@ job. See the [review](../../tmp/hcp7t_official_v230_20261025/step3_argon_review.
 
 The complete official participant DAG has now been attempted for all 166
 subjects, using 12 concurrent subjects and two GPU inference slots. Exactly
-163 subjects satisfy the current 96-product contract, matching v2.3.0 run
+163 subjects initially satisfied the 96-product contract, matching v2.3.0 run
 metadata and official error-level QC. All three failures remain recorded:
 
 | Subject | Official stopping point | Observed failure |
@@ -68,7 +68,11 @@ metadata and official error-level QC. All three failures remain recorded:
 | 942658 | Right-dentate boundary assignment | `get_boundary_loop` raises `ValueError: max() iterable argument is empty` |
 
 The coordinator continued the independent subjects and exited nonzero after
-processing the full roster. A completed participant is not warning-free:
+processing the full roster. The 156 completed participants present in the HCP
+3T task dataset subsequently underwent approved 01_02 cleanup of anat, coords,
+warps and CIFTI; their retained surfaces, metrics and QC are available, but
+they no longer satisfy the full 96-product contract. The other seven completed
+participants retain the full contract. A completed participant is not warning-free:
 warning-level surface/source-sink findings remain in the official QC reports.
 
 The established Dice screen requires both hemispheres to have
@@ -95,23 +99,60 @@ right, below the 20-vertex limit. The formal final functional roster is
 the current QC report is `outputs_hcp/inputs/kong2022/qc/t1only_hippunfold_tsnr_qc.json`.
 Execution logs are under `outputs_hcp/runs/hcp7t_v230_fd050_20261026/`.
 
-Retained independent cortical references are reused. Subject 901442 lacks its
-declared PFM labels/reference and requires the standard Kong2022 backend.
-Independent PFM FC, cortex-regressed participant time series and their FC are
-complete for the other 161 participants. Each FC route contains 644
-participant/smoothing/hemisphere combinations (2/4 mm, left/right). The final
-cohort remains 162; group gradients, atlases and cross-validation await the
-missing participant input. No smaller group analysis has been substituted.
+Retained independent cortical references are reused. The missing standard
+Kong2022 PFM labels for 901442 have been supplied and its reference has been
+built. PFM FC, cortex-regressed participant time series and their FC are
+complete for all 162 participants. Each FC route contains 648
+participant/smoothing/hemisphere combinations (2/4 mm, left/right).
 
-The IDAS host has no MATLAB executable and could not connect to Argon for the
-missing single-participant Kong2022 job. Its standard submission is prepared
-in `tmp/submit_hcp7t_901442_pfm_argon.sh`: run on Argon from
-`/old_Users/yojiao/hipp`, preview with `bash tmp/submit_hcp7t_901442_pfm_argon.sh`,
-then submit with `DRY_RUN=0 bash tmp/submit_hcp7t_901442_pfm_argon.sh`.
-The script selects only 901442, retains work and forbids replacement. After
-both label files exist, build its declared PFM reference, complete its base
-and cortex-regressed FC products, then continue the 162-participant group
-workflow and family-aware cross-validation.
+Group gradients are complete for both `pfm` and `pfm_ctxreg`, with all eight
+route/smoothing/hemisphere manifests reporting 162 participants. All 24
+group-atlas combinations are complete: eight each for `pfm` and `pfm_ctxreg`,
+four for `pfm_17net`, and four for `pfm_weighted`. Every manifest matches the
+162-participant roster; every gradient-spectral result has final K=3.
+The canonical7 PFM routes include gradient-spectral and WTA, while family17
+and weighted Fisher-z use gradient-spectral.
+
+These products use the existing shifted-cosine gradient-spectral workflow.
+The code also supports Ward/GMM/RBF methods, explicit preprocessing choices,
+and OVR annotations. Exploratory runs used v2.3.0 inputs; execution of
+`GRADIENT_PARCELLATION_REVISION_PLAN.md` on v2.4.0 inputs remains pending.
+
+Nine group overview PNGs have been generated. Their presentation refresh
+awaits approval of the four formal overview directories: the renderer now
+preserves negative signs in signed Fisher-z cell annotations, wraps long
+surface titles, and uses wider family17 heatmaps with vertical network labels.
+Temporary previews are under `tmp/hcp_group_overview_preview/`.
+They contain display corrections only. The FC arrays, gradients, group
+atlases and existing overview PNGs are under `outputs_hcp/`.
+The signed-annotation correction replaces the renderer's `abs(value)` text
+with the signed value; it does not change stored FC or model results.
+
+Family-aware five-fold cross-validation is complete for all 162 participants:
+20 training templates and 648 held-out participant mappings were generated.
+Its robustness overview, disjoint-fold quantitative summary and Workbench
+comparison, and Day 1/Day 2 comparison are complete under
+`outputs_hcp/present/overviews/crossfit_template_matching/`. All four standard
+robustness gates pass. Mean pairwise macro-Dice across completely disjoint
+cohorts is 0.9662--0.9847; Day 1 versus Day 2 macro-Dice is 0.9505--0.9924.
+
+Individual overviews await a display-label decision. Their current renderer
+requires three distinct, stable canonical7 network winners across all 20
+templates, which the measured profiles do not satisfy:
+
+| AP-ordered source label | Highest mean Fisher-z network across templates |
+| --- | --- |
+| Anterior | Default: 17; Somatomotor: 3 |
+| Middle | Default: 20 |
+| Posterior | Default: 11; Somatomotor: 6; Control: 3 |
+
+The stable spatial parcellation therefore has no supported one-to-one
+VAN/SMN/DMN display mapping under this annotation rule. Using the source names
+Anterior/Middle/Posterior is the proposed individual-legend choice.
+Project code and documentation now use Anterior/Middle/Posterior consistently.
+Existing generated labels and metadata still require an explicitly approved
+in-place presentation/metadata refresh before their older middle-label name
+matches the current terminology contract.
 
 ### Origin of the topology failures
 
@@ -147,8 +188,10 @@ the older whole-segmentation Dice screen measure different properties.
 A subject requires all 96 formal products: the existing 84-file structural
 contract, four new source/sink/surface HTML and verification files, and eight
 hemisphere/structure QC metric JSONs. Run with `--notemp` and check with
-`--fail-on-missing --no-cleanup`; retain anat, coords, warps, CIFTI and runtime
-scratch. Old output checks and cleanup receipts cannot certify this release.
+`--fail-on-missing --no-cleanup` for the full contract. The approved 01_02
+cleanup for the 156 HCP 3T task participants removed anat, coords, warps and
+CIFTI; their cleanup receipts certify the retained-output contract only.
+Retain runtime scratch and failed outputs for diagnosis.
 Official error-level QC failures or external-tool crashes remain failures;
 do not silently select another scientific method or patched Workbench binary.
 

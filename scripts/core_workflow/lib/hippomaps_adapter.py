@@ -197,11 +197,115 @@ def brainspace_sparsity_for_feature_count(
     return float(default)
 
 
+def gradient_preprocessing_settings(
+    n_features: int,
+    *,
+    feature_scaling: str = "col_zscore",
+    sparsify_stage: str = "features",
+    sparsity: float | None = None,
+) -> dict[str, Any]:
+    """Resolve independent FC scaling and affinity-construction choices."""
+    if feature_scaling not in {"none", "col_zscore"}:
+        raise ValueError(f"Unknown FC feature_scaling: {feature_scaling!r}")
+    if sparsify_stage not in {"features", "affinity", "none"}:
+        raise ValueError(f"Unknown sparsify_stage: {sparsify_stage!r}")
+    effective = brainspace_sparsity_for_feature_count(n_features) if sparsity is None else float(sparsity)
+    if not np.isfinite(effective) or not 0 <= effective < 1:
+        raise ValueError(f"sparsity must be finite in [0, 1), got {sparsity!r}")
+    return {
+        "feature_scaling": feature_scaling,
+        "sparsify_stage": sparsify_stage,
+        "effective_sparsity": None if sparsify_stage == "none" else effective,
+        "kernel": "pearson",
+        "non_negative": True,
+        "symmetrization": "arithmetic_mean",
+        "diagonal": "retain_kernel_diagonal",
+        "diffusion_alpha": 0.5,
+        "diffusion_time": 0,
+    }
+
+
+def validate_gradient_preprocessing(
+    manifest: dict[str, Any], *, settings: dict[str, Any], manifest_path: Path,
+) -> None:
+    recorded = manifest.get("gradient_preprocessing")
+    if not isinstance(recorded, dict):
+        raise ValueError(f"Missing gradient_preprocessing in {manifest_path}; explicitly regenerate the gradients")
+    mismatches = [
+        f"{key}: requested={value!r}, recorded={recorded.get(key)!r}"
+        for key, value in settings.items() if key not in recorded or recorded[key] != value
+    ]
+    if mismatches:
+        raise ValueError(f"Gradient preprocessing mismatch in {manifest_path}: {'; '.join(mismatches)}; explicitly regenerate the gradients")
+
+
+def build_pearson_affinity(
+    group_fc: np.ndarray, *, feature_scaling: str = "col_zscore",
+    sparsify_stage: str = "features", sparsity: float | None = None,
+) -> np.ndarray:
+    from brainspace.gradient.kernels import compute_affinity
+    from scipy.sparse.csgraph import connected_components
+
+    matrix = np.asarray(group_fc, dtype=np.float32)
+    if matrix.ndim != 2 or matrix.shape[0] < 2 or matrix.shape[1] < 2:
+        raise ValueError(f"Expected a vertex-by-feature FC matrix, got {matrix.shape}")
+    if not np.isfinite(matrix).all():
+        raise ValueError("Gradient FC matrix contains non-finite values")
+    settings = gradient_preprocessing_settings(
+        matrix.shape[1], feature_scaling=feature_scaling,
+        sparsify_stage=sparsify_stage, sparsity=sparsity,
+    )
+    features = feature_zscore_columns(matrix) if feature_scaling == "col_zscore" else matrix.copy()
+    affinity = compute_affinity(
+        features, kernel="pearson", sparsity=settings["effective_sparsity"],
+        pre_sparsify=sparsify_stage != "affinity", non_negative=True,
+    )
+    if not np.isfinite(affinity).all():
+        raise ValueError("Pearson affinity contains non-finite values; inspect constant vertex profiles")
+    # DiffusionMaps uses this mean symmetrization for row-sparsified input.
+    # Preserve the Pearson diagonal, including the legacy default route.
+    affinity = (affinity + affinity.T) / 2
+    n_components = connected_components(affinity, directed=False, return_labels=False)
+    if n_components != 1:
+        raise ValueError(f"Diffusion affinity is disconnected: {n_components} components")
+    return affinity
+
+
+def scale_gradient_features(
+    features: np.ndarray, *, scaling: str = "none", transform: dict[str, Any] | None = None,
+) -> tuple[np.ndarray, dict[str, Any]]:
+    """Fit on supported training vertices, or apply that exact fitted transform."""
+    matrix = np.asarray(features, dtype=np.float64)
+    if matrix.ndim != 2 or matrix.shape[0] == 0 or not np.isfinite(matrix).all():
+        raise ValueError("Clustering features must be a nonempty finite 2D matrix")
+    if scaling not in {"none", "unit_sd"}:
+        raise ValueError(f"Unknown clustering feature scaling: {scaling!r}")
+    if transform is None:
+        means, sds = matrix.mean(axis=0), matrix.std(axis=0, ddof=0)
+        if np.any(sds == 0):
+            raise ValueError(f"Clustering features contain zero-variance components: {np.flatnonzero(sds == 0).tolist()}")
+        transform = {"scaling": scaling, "component_means": means.tolist(),
+                     "component_sds": sds.tolist(), "ddof": 0,
+                     "n_vertices_fit": int(matrix.shape[0]),
+                     "fit_population": "supported_training_vertices"}
+    elif transform.get("scaling") != scaling:
+        raise ValueError("Clustering transform disagrees with requested scaling")
+    means = np.asarray(transform["component_means"], dtype=np.float64)
+    sds = np.asarray(transform["component_sds"], dtype=np.float64)
+    if means.shape != (matrix.shape[1],) or sds.shape != means.shape or np.any(sds <= 0):
+        raise ValueError("Clustering transform has invalid component means or SDs")
+    scaled = (matrix - means) / sds if scaling == "unit_sd" else matrix.copy()
+    return scaled, dict(transform)
+
+
 def fit_gradientmaps_pearson(
     group_fc: np.ndarray,
     *,
     n_components: int,
     random_state: int | None = DEFAULT_GRADIENT_RANDOM_STATE,
+    feature_scaling: str = "col_zscore",
+    sparsify_stage: str = "features",
+    sparsity: float | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     matrix = np.asarray(group_fc, dtype=np.float32)
     if matrix.ndim != 2:
@@ -215,10 +319,11 @@ def fit_gradientmaps_pearson(
         )
     from brainspace.gradient import GradientMaps
 
-    matrix_z = feature_zscore_columns(matrix)
-    sparsity = brainspace_sparsity_for_feature_count(matrix_z.shape[1])
-    model = GradientMaps(n_components=n_comp, kernel="pearson", random_state=random_state)
-    fitted = model.fit(matrix_z, sparsity=sparsity)
+    affinity = build_pearson_affinity(
+        matrix, feature_scaling=feature_scaling, sparsify_stage=sparsify_stage, sparsity=sparsity,
+    )
+    model = GradientMaps(n_components=n_comp, kernel=None, random_state=random_state)
+    fitted = model.fit(affinity, sparsity=None)
     model_out = fitted if fitted is not None else model
     gradients = _extract_gradientmaps_array(model_out, "gradients_", "gradients", "gradients")
     lambdas = _extract_gradientmaps_array(model_out, "lambdas_", "lambdas", "lambdas").reshape(-1)

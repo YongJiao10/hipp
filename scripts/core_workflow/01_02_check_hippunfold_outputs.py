@@ -316,7 +316,7 @@ def output_category(template: str) -> str | None:
 
 
 def required_check_templates(expected_templates: list[str]) -> list[str]:
-    """Return the complete fixed HippUnfold 2.0 output contract."""
+    """Return the complete output contract for the selected unfolded atlas."""
     templates = [str(template) for template in expected_templates]
     return list(dict.fromkeys([*templates, *FIXED_HIPPUNFOLD_SPACE_ANCHORS]))
 

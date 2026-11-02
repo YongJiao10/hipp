@@ -13,10 +13,30 @@ its output is converted back to RAS. HCP FNIRT conversion uses Workbench and
 inverts the image pullback at the required points with a 0.001-mm residual
 tolerance. Workbench remains single threaded, including registration calls.
 No package installation or Python environment change is required.
+NIH rTMS hippocampal QC uses this same runtime and the fMRIPrep MNI-to-T1w
+image transform paired with the exact preprocessed T1w consumed by HippUnfold.
+Its input symlink identifies either the longitudinal `sub-<ID>/anat/` export
+or the single-visit `sub-<ID>/ses-<N>/anat/` export below
+`Depression/NIH_rTMS/derivatives/restfmri/`. Its explicit XCP-D
+outlier TSV binds original motion frames to the retained NIfTI series; no
+new dependency or HippUnfold runtime adapter is introduced.
 Iowa derived cortex surfaces and their explicitly selected manifest belong in
 `outputs_iowa_jj_tms/inputs/cortex_surfaces/fsLR32k/`, not `/tmp`.
 Lynch PFM concatenates explicit run inputs in memory. Worktree asset links and
 parent-directory output fallbacks are not part of the formal runtime contract.
+
+## Gradient comparison runtime
+
+The gradient parcellation revision uses the existing local py314 packages
+(scikit-learn 1.8.0 and BrainSpace 0.2.1), without a package or environment
+upgrade. OVR omits the deprecated explicit `penalty` argument and retains default
+L2. Run the HCP comparison on IDAS with one heavy fit at a time and
+`OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1`;
+keep combined active work at or below 10. Comparison results belong under
+repository `tmp/gradient_parcellation_comparison/`. Formal output trees remain
+read-only during this experiment. Tests in an isolated checkout must declare
+the original shipped Kong400 dlabel explicitly; do not install another atlas
+or substitute a different ROI registry.
 
 ## Hard Rules
 
@@ -111,8 +131,20 @@ environment variables before invoking `wb_command`, including
 `ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS`.
 
 For `02_01_prepare_group_inputs.py`, subject-level Workbench stages are capped
-at two concurrent subjects even if `--jobs` is higher. Do not bypass this cap
-with direct Workbench subprocess calls.
+at two concurrent subjects even if `--jobs` is higher. Raw sampling and
+smoothing use coordinator threads to launch Workbench, without additional
+Python worker processes. Workbench itself remains single threaded. Run the
+current BANDA/PDC continuation with raw `--jobs 2` and mask `--jobs 1`, counting
+the batch controller and coordinator threads within the total cap of 10.
+That CPU-only continuation starts with an empty `LD_LIBRARY_PATH`; the
+Workbench launcher supplies its bundled libraries. This avoids the inherited
+CUDA/TensorRT paths and the launcher's extra `echo | grep` subprocess pipeline,
+leaving room for status inspection under the cap. No package versions change.
+Do not bypass the subject cap with direct Workbench subprocess calls.
+The surface sampler joins the disconnected registered hemispheres for one
+volume-to-surface invocation per physical run, then saves separate hemisphere
+signals. This avoids reading and decompressing the same BOLD twice without
+changing the interpolation method, coordinates or output vertex order.
 
 For `05_02_run_group_atlas.py`, native math/BLAS thread counts are now hard-capped
 in script code at 1 before NumPy/SciPy imports. The script force-sets

@@ -144,9 +144,8 @@ def test_explicit_qc_stage_rebuilds_existing_roster_after_nifti_coverage_changes
     workflow.raw(np.full(512, 1000))
     workflow.nifti_support(np.zeros(512))
     workflow.gate()
-    # Empty pass lists retain the existing explicit-stop behavior.
-    with pytest.raises(RuntimeError, match='No subjects'):
-        workflow.run('qc')
+    # Zero passes are a valid QC result, recorded without running downstream work.
+    workflow.run('qc')
     roster = workflow.route/'manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt'
     assert roster.read_text().strip() == ''
     workflow.nifti_support(np.ones(512))
@@ -202,28 +201,17 @@ def test_hcp_gate_rejects_nonfinite_and_constant_vertex_series_without_sd_ceilin
     assert np.isnan(proxy).all()
 
 
-@pytest.mark.parametrize('change', ['replace', 'select_other_path'])
-def test_resume_recomputes_rest_gate_for_changed_baseline_input(workflow, change):
-    baseline = workflow.shared/'baseline'
-    baseline.mkdir(parents=True)
-    initial = str(baseline/'initial_{subject}_{hemi}.npz')
-    other = str(baseline/'other_{subject}_{hemi}.npz')
-    data = workflow.raw(np.full(512, 100))
-
-    def write(template, amplitude):
-        for hemi in ('L', 'R'):
-            np.savez(template.format(subject='01', hemi=hemi), dataset='stanford',
-                     subject='01', hemi=hemi, n_runs=1, frames_0=np.arange(12),
-                     run_0=10000+amplitude*((data-10000)/100))
-    write(initial, 100)
+@pytest.mark.parametrize('dataset', ['stanford', 'banda', 'pdc'])
+def test_other_datasets_resume_from_nifti_inputs_without_baseline(workflow, dataset):
+    workflow.raw(np.full(512, 100))
     PREP.run_tsnr_gate('01', str(workflow.batch), str(workflow.shared),
-                       dataset='stanford', tsnr_input_template=initial, tsnr_threshold='25')
+                       dataset=dataset, tsnr_threshold='none')
     assert workflow.state()[1].all()
-    selected = initial if change == 'replace' else other
-    write(selected, 1000)
-    workflow.run('tsnr', '25', dataset='stanford', baseline=selected)
+    assert PREP.tsnr_done(workflow.shared, '01', dataset, tsnr_threshold='none')
+    workflow.raw(np.zeros(512))
+    assert not PREP.tsnr_done(workflow.shared, '01', dataset, tsnr_threshold='none')
+    workflow.run('tsnr', 'none', dataset=dataset)
     summary, valid = workflow.state()
     assert not valid.any()
-    assert summary['baseline_input'] == selected.format(subject='01', hemi='L')
-    assert PREP.tsnr_done(workflow.shared, '01', 'stanford', tsnr_threshold='25',
-                          tsnr_input_template=selected)
+    assert summary['baseline_input'] is None and summary['threshold'] is None
+    assert PREP.tsnr_done(workflow.shared, '01', dataset, tsnr_threshold='none')

@@ -64,7 +64,7 @@ def test_task_consumer_rejects_old_smoothing(tmp_path):
 
 @pytest.mark.parametrize("task,dataset", [("emotion", "hcp"), ("rest", "stanford"), ("rest", "iowa_jj_tms")])
 def test_hippocampal_validity_respects_dataset_and_run_policy(
-    tmp_path, task, dataset, emotion_run_paths, baseline_input_factory,
+    tmp_path, task, dataset, emotion_run_paths,
 ):
     import importlib.util
     import nibabel as nib
@@ -75,7 +75,7 @@ def test_hippocampal_validity_respects_dataset_and_run_policy(
     raw = tmp_path / 'shared/sub-1/surface/raw'
     raw.mkdir(parents=True)
     (raw / 'surface_sampling_summary.json').write_text(json.dumps({
-        'task': 'emotion', 'run_lengths': [176, 176],
+        'task': task, 'run_ids': [1, 2], 'run_lengths': [176, 176],
         'bold_inputs': [str(path) for path in emotion_run_paths],
     }))
     signal = 10000 + 2000 * np.sin(np.arange(352))
@@ -89,24 +89,28 @@ def test_hippocampal_validity_respects_dataset_and_run_policy(
         surface = module.surface_path(tmp_path / 'batch', '1', hemi)
         surface.parent.mkdir(parents=True, exist_ok=True)
         surface.touch()
-        if task == 'rest':
-            baseline_input_factory(tmp_path / f'baseline-{hemi}.npz', data,
-                                   dataset=dataset, hemi=hemi, run_lengths=[176, 176])
+        np.save(raw / f'sub-1_hemi-{hemi}_nifti_support.npy', np.ones(512, dtype=np.float32))
+    (raw / 'sub-1_coverage_summary.json').write_text(json.dumps({
+        'subject': 'sub-1', 'coverage_policy': 'bold_nifti_runwise_trilinear_validity',
+        'sampling_space': 'MNI152NLin6Asym', 'run_ids': [1, 2], 'run_lengths': [176, 176],
+        'hemispheres': {hemi: {'nifti_support_path': str(raw / f'sub-1_hemi-{hemi}_nifti_support.npy')}
+                        for hemi in ('L', 'R')},
+    }))
     module.run_tsnr_gate(
         '1', str(tmp_path / 'batch'), str(tmp_path / 'shared'), task, dataset,
-        tsnr_input_template=str(tmp_path / 'baseline-{hemi}.npz') if task == 'rest' else None,
         tsnr_threshold='none',
     )
     gate = raw.parent / 'tsnr_gate'
     mask = np.load(gate / 'sub-1_hemi-L_valid_mask.npy')
-    assert mask.sum() == (509 if task != "rest" else 510)
-    assert mask[:4].tolist() == [True, False, task == "rest", False]
+    assert mask.sum() == 509
+    assert mask[:4].tolist() == [True, False, False, False]
     assert np.isnan(np.load(gate / 'sub-1_hemi-L_tsnr.npy')).all()
     summary = json.loads((gate / 'sub-1_hemi-L_tsnr_gate_summary.json').read_text())
     assert summary['validity_policy'] == (
         'runwise_baseline_over_task_residual_sd' if task != 'rest' else 'runwise_baseline_over_detrended_sd'
     )
     assert summary['threshold'] is None
+    assert summary['coverage_policy'] == 'bold_nifti_runwise_trilinear_validity'
     assert summary['tsnr_computed'] is False
 
 

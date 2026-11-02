@@ -34,6 +34,11 @@ def _load_numbered_module(script_name: str, alias: str):
 mod = _load_numbered_module("06_08_render_hcp_subfield_composition.py", "core_06_08_hcp_subfields")
 
 
+def test_hcp_composition_uses_the_current_atlas_labels() -> None:
+    path = mod.subfield_label_path(Path("/hippunfold"), "102311", "L")
+    assert path.name == "sub-102311_hemi-L_den-512_label-hipp_atlas-multihist7sgi_subfields.label.gii"
+
+
 def _write_surface(path: Path) -> None:
     coords = np.asarray(
         [

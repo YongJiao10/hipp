@@ -2,10 +2,12 @@
 
 ## Current data and cohorts
 
-EMOTION and WM each use the complete 144-participant task dataset at
+EMOTION and WM each use the complete 159-participant task dataset at
 `/home/yojiao/LSS/jianglab/3_Data_Working/HCP_tast_3T/`.
-The HCP 7T resting-state reference cohort contains 151 participants; all 144
-task participants are also members of that reference cohort.
+All 159 task participants have anatomy in the 166-participant HCP reconstruction.
+The current HCP7T functional reference roster contains 162 participants.
+The explicitly selected HCP151 atlas and crossfit products remain separate
+analysis references; changing QC does not rebuild those downstream products.
 HippUnfold anatomy uses 512 vertices per hippocampal hemisphere.
 
 | Task | Runs | Frames per run | Primary comparison |
@@ -13,18 +15,21 @@ HippUnfold anatomy uses 512 vertices per hippocampal hemisphere.
 | EMOTION | LR, RL | 176 | Faces > shapes |
 | WM | LR, RL | 405 | 2-back > 0-back, category effects, and load interactions |
 
-The task run manifests are the authoritative declarations of run identity,
-order, length, BOLD/CIFTI paths, EVs, and motion files:
+QC consumes the exact run identities, BOLD paths, frame counts and motion files
+in `outputs_hcp/inputs/kong2022/shared_inputs/task-<task>/manifests/hcp_3t_<task>_qc_runs.tsv`.
+The task activation entrypoints separately consume their run-artifact manifests
+for BOLD/CIFTI paths and EVs:
 
 - `outputs_hcp/inputs/kong2022/manifests/task-emotion/sub-*.json`
 - `outputs_hcp/inputs/kong2022/manifests/task-wm/sub-*.json`
 
-Each directory contains the full task cohort. Use the complete QC-passed
-subject file for all subject-level and group commands:
-`outputs_hcp/inputs/kong2022/shared_inputs/task-<task>/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_144.txt`.
+Use the task-specific final QC roster for subject-level and group commands:
+`outputs_hcp/inputs/kong2022/shared_inputs/task-<task>/manifests/hcp_3t_<task>_hippocampus_fmri_qc_pass_t1only_latest.txt`.
+A QC roster does not establish that the selected activation inputs and products
+have been rebuilt; those entrypoints still require their exact declared artifacts.
 
 The HCP 7T reference roster is
-`outputs_hcp/inputs/qc/vertex_qc_t1only/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_151.txt`.
+`outputs_hcp/inputs/kong2022/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt`.
 
 ## Input and output layout
 
@@ -40,9 +45,9 @@ For `task-emotion` or `task-wm`, use:
 
 Hippocampal time series require Workbench trilinear sampling on midthickness
 surfaces transformed into the declared BOLD volume space. Coordinate sampling
-code has been repaired; affected formal functional products have not been
-rebuilt by the QC research analysis. The commands below describe the task
-workflow and do not themselves deploy the newly accepted QC policy.
+uses the same registered NIfTI coverage calculation for rest and tasks.
+Task sampling and QC write their own branch roots. Activation, smoothing and
+group/presentation products require their separate maintained stages.
 Cortical time series use task MSMAll CIFTIs and the subject's Kong2022 400-ROI
 labels. Runs are concatenated in memory in the declared order. Missing,
 misordered, or mismatched inputs are errors.
@@ -53,21 +58,27 @@ Task preparation uses its own `--route-root` and `--shared-root`. The
 
 ## Preparation and QC
 
-The complete 144-participant EMOTION and WM cohorts are input rosters, not
-proof of passing the newly accepted selection. Use
-[the canonical fMRI QC document](docs/hipp_parcellation_network/fmri_qc.md)
-for the three ordered criteria: overall mean Power FD <=0.30 mm, bilateral
-HippUnfold Dice >=0.70, and <=20 unusable NIfTI-sampled vertices per
-hemisphere. Current task entrypoints do not implement this participant-QC
-contract. Evaluate motion within each task; do not pool EMOTION and WM to pass FD.
+Apply [the shared fMRI QC policy](docs/hipp_parcellation_network/fmri_qc.md)
+separately within each task: overall mean Power FD <=0.50 mm, recorded official
+v2.3.0 reconstruction plus bilateral Dice >=0.70, and <=20 unusable
+NIfTI-sampled vertices per hemisphere. Never pool EMOTION and WM to pass FD.
+All 159 participants pass task motion; 155 have completed v2.3.0 anatomy and
+pass bilateral Dice before coverage selection. The other four are 182739
+(right Dice <0.70), 233326, 249947 and 942658 (official workflow failures).
 
-The preparation entry point uses task-specific `--route-root`, `--shared-root`
-and `--task-manifest-root`. Select `raw`, `tsnr` and `smooth` separately;
-participant `qc` and `all` stop before writing until the task QC input contract
-is implemented. Its explicit `--tsnr-threshold none` mode checks finite,
-nonconstant signal without computing residual-tSNR scores. The inherited
-invalid-fraction checks and HCP151 destination contracts do not establish the
-accepted motion/NIfTI-coverage policy or a new formal roster.
+`02_01_prepare_group_inputs.py` and `02_02_build_qc_manifest.py` use the
+shared `--qc-run-inputs` table. Set `--dataset hcp --task emotion|wm`, explicit
+`--route-root` and `--shared-root`, `--tsnr-threshold none`, and
+`--require-hippunfold-version 2.3.0`. Run preparation stages `raw` and `tsnr`
+followed by `qc`; no task-design EVs or residual-tSNR computation are needed
+for coverage QC. Both the participant count and persisted vertex masks use
+positive NIfTI trilinear support and finite, nonconstant signal within each
+physical run. Missing completion or source inputs remain unassessable.
+
+EMOTION and WM sampling, vertex masks and final participant QC are complete:
+all 155 motion/anatomy passes in each task also pass coverage, with zero
+unusable vertices on each side. These QC runs do not rebuild
+activation GLMs, smoothed signals or group statistics.
 
 The task CIFTI headers declare a one-second SeriesAxis step, while paired BOLD
 headers and the hippocampal GLM use TR=0.72 seconds. The known EMOTION terminal
@@ -135,7 +146,7 @@ export OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_TH
 task_python=/home/yojiao/.conda/envs/py314/bin/python
 task_name=emotion
 task_root="outputs_hcp/inputs/kong2022/shared_inputs/task-${task_name}"
-subject_roster="${task_root}/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_144.txt"
+subject_roster="${task_root}/manifests/hcp_3t_${task_name}_hippocampus_fmri_qc_pass_t1only_latest.txt"
 
 "$task_python" scripts/core_workflow/05_06_build_task_activation_group.py \
   --task "$task_name" --shared-root "$task_root" \

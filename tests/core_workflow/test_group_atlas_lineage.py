@@ -29,6 +29,35 @@ def test_consumed_upstream_gradients_do_not_claim_local_recomputation(tmp_path):
         validate_group_atlas_lineage(path)
 
 
+def test_family17_upstream_gradient_lineage_requires_selected_taxonomy(tmp_path):
+    from scripts.core_workflow.lib import group_atlas_lineage as lineage
+
+    path = make_run(tmp_path / "family17", fields={"network_taxonomy": "family17"})
+    summary = json.loads((path.parent / "group_gradient_feature_summary.json").read_text())
+    manifest = json.loads(path.read_text())
+    manifest.update(lineage.gradient_computation_provenance(summary, fixed_cluster_reuse=None))
+    path.write_text(json.dumps(manifest))
+
+    with pytest.raises(ValueError, match="canonical7"):
+        validate_group_atlas_lineage(path)
+    result = validate_group_atlas_lineage(path, expected_network_taxonomy="family17")
+    assert result["mode"] == "upstream_gradients_consumed"
+    assert result["network_taxonomy"] == "family17"
+
+
+def test_gradient_lineage_validates_declared_unit_sd_transform(tmp_path):
+    from scripts.core_workflow.lib.hippomaps_adapter import scale_gradient_features
+    path = make_run(tmp_path / "scaled")
+    source_path = path.parent / "group_gradient_feature_summary.json"
+    source = json.loads(source_path.read_text())
+    features = np.load(path.parent / "group_gradient_features_active.npy")
+    scaled, transform = scale_gradient_features(features, scaling="unit_sd")
+    np.save(path.parent / "group_gradient_features_active.npy", scaled)
+    source["clustering_feature_transform"] = transform
+    source_path.write_text(json.dumps(source))
+    assert validate_group_atlas_lineage(path)["status"] == "ok"
+
+
 def _create_mock_run(run_dir: Path, manifest_data: dict, with_artifacts: bool = True) -> Path:
     fields = {"gradient_recomputed": False, "clustering_recomputed": False, **manifest_data}
     if "historical_source" in fields:

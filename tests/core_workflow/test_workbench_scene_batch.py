@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import pytest
@@ -11,6 +12,16 @@ if str(CORE_DIR) not in sys.path:
     sys.path.insert(0, str(CORE_DIR))
 
 from lib import workbench_scene_batch as module
+
+
+def test_scene_uses_current_structural_atlas_references() -> None:
+    root = ET.fromstring(
+        "<Scene><Object>sub-1001_hemi-L_space-corobl_atlas-multihist7sgi_subfields.label.gii</Object>"
+        "<Object>sub-1001_hemi-R_space-corobl_atlas-multihist7sgi_subfields.label.gii</Object></Scene>"
+    )
+    refs = module.find_current_structural_label_refs(root)
+    assert refs["L"].endswith("atlas-multihist7sgi_subfields.label.gii")
+    assert refs["R"].endswith("atlas-multihist7sgi_subfields.label.gii")
 
 
 def test_no_template_scene_can_retain_subject_specific_scene(

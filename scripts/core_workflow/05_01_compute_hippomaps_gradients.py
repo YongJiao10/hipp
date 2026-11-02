@@ -41,7 +41,6 @@ from __future__ import annotations
 import argparse
 import json
 from dataclasses import dataclass
-from itertools import permutations
 from pathlib import Path
 from typing import Any
 
@@ -50,13 +49,15 @@ from lib.branch_config import (
     SIGNAL_BRANCH_CHOICES,
     resolve_signal_branch_for_route,
 )
-from lib.fc_math import finite_pearson_1d, fisher_z_transform_fc
+from lib.fc_math import fisher_z_transform_fc
+from lib.gradient_alignment import finite_pearson_corr, best_abs_correlation_assignment, align_gradient_components_to_reference
 from lib.hippomaps_adapter import (
     DEFAULT_GRADIENT_RANDOM_STATE,
     DEFAULT_HIPPOMAPS_ROOT,
     brainspace_sparsity_for_feature_count,
     ensure_hippomaps_on_path,
     fit_gradientmaps_pearson,
+    gradient_preprocessing_settings,
     hippomaps_commit,
     hippomaps_import_path,
     reconstruct_full_surface,
@@ -138,96 +139,9 @@ class GradientComboResult:
     network_order: list[str] | None
     cohort: str | None = None
     variant: str = "36p"
-
-
-def finite_pearson_corr(a: np.ndarray, b: np.ndarray) -> float:
-    corr = finite_pearson_1d(a, b)
-    return float(corr) if np.isfinite(corr) else 0.0
-
-
-def best_abs_correlation_assignment(corr: np.ndarray) -> list[int]:
-    mat = np.asarray(corr, dtype=np.float64)
-    if mat.ndim != 2 or mat.shape[0] != mat.shape[1]:
-        raise ValueError(f"Expected square correlation matrix, got shape={mat.shape}")
-    n_comp = int(mat.shape[0])
-    best_perm: tuple[int, ...] | None = None
-    best_score = -np.inf
-    best_identity_hits = -1
-    for perm in permutations(range(n_comp)):
-        score = float(sum(abs(mat[target_idx, source_idx]) for target_idx, source_idx in enumerate(perm)))
-        identity_hits = sum(1 for idx, source_idx in enumerate(perm) if idx == source_idx)
-        if score > best_score + 1e-12 or (abs(score - best_score) <= 1e-12 and identity_hits > best_identity_hits):
-            best_score = score
-            best_identity_hits = int(identity_hits)
-            best_perm = tuple(int(x) for x in perm)
-    if best_perm is None:
-        raise RuntimeError("Could not compute component assignment")
-    return list(best_perm)
-
-
-def align_gradient_components_to_reference(
-    *,
-    active: np.ndarray,
-    full: np.ndarray,
-    lambdas: np.ndarray,
-    ev_fractions: np.ndarray,
-    reference_full: np.ndarray,
-    component_labels: list[str],
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, dict[str, Any]]:
-    active_arr = np.asarray(active, dtype=np.float32)
-    full_arr = np.asarray(full, dtype=np.float32)
-    ref_arr = np.asarray(reference_full, dtype=np.float32)
-    lambda_arr = np.asarray(lambdas, dtype=np.float64).reshape(-1)
-    ev_arr = np.asarray(ev_fractions, dtype=np.float64).reshape(-1)
-    labels = [str(x) for x in component_labels]
-    if active_arr.ndim != 2 or full_arr.ndim != 2 or ref_arr.ndim != 2:
-        raise ValueError(
-            f"Expected 2D active/full/reference arrays, got active={active_arr.shape} full={full_arr.shape} ref={ref_arr.shape}"
-        )
-    n_comp = len(labels)
-    if n_comp == 0:
-        raise ValueError("component_labels must not be empty")
-    if active_arr.shape[1] < n_comp or full_arr.shape[1] < n_comp or ref_arr.shape[1] < n_comp:
-        raise ValueError(
-            f"Component count mismatch: active={active_arr.shape} full={full_arr.shape} ref={ref_arr.shape} labels={n_comp}"
-        )
-    if lambda_arr.size < n_comp or ev_arr.size < n_comp:
-        raise ValueError(f"Lambda/EV vectors must contain at least {n_comp} values")
-
-    corr = np.zeros((n_comp, n_comp), dtype=np.float64)
-    for target_idx in range(n_comp):
-        for source_idx in range(n_comp):
-            corr[target_idx, source_idx] = finite_pearson_corr(ref_arr[:, target_idx], full_arr[:, source_idx])
-    source_for_target = best_abs_correlation_assignment(corr)
-
-    aligned_active = np.zeros((active_arr.shape[0], n_comp), dtype=np.float32)
-    aligned_full = np.zeros((full_arr.shape[0], n_comp), dtype=np.float32)
-    aligned_lambdas = np.zeros((n_comp,), dtype=np.float64)
-    aligned_ev = np.zeros((n_comp,), dtype=np.float64)
-    mapping: dict[str, str] = {}
-    corr_by_label: dict[str, float] = {}
-    flips: dict[str, bool] = {}
-    for target_idx, source_idx in enumerate(source_for_target):
-        label = labels[target_idx]
-        source_label = labels[source_idx]
-        raw_corr = float(corr[target_idx, source_idx])
-        sign = -1.0 if raw_corr < 0.0 else 1.0
-        aligned_active[:, target_idx] = (active_arr[:, source_idx] * sign).astype(np.float32)
-        aligned_full[:, target_idx] = (full_arr[:, source_idx] * sign).astype(np.float32)
-        aligned_lambdas[target_idx] = float(lambda_arr[source_idx])
-        aligned_ev[target_idx] = float(ev_arr[source_idx])
-        mapping[label] = source_label
-        corr_by_label[label] = raw_corr
-        flips[label] = bool(sign < 0.0)
-
-    meta = {
-        "matching_objective": "maximize_abs_pearson_correlation_to_anchor",
-        "component_mapping": mapping,
-        "correlation_before_flip": corr_by_label,
-        "sign_flip_applied": flips,
-        "raw_arrays_saved": False,
-    }
-    return aligned_active, aligned_full, aligned_lambdas, aligned_ev, meta
+    feature_scaling: str = "col_zscore"
+    sparsify_stage: str = "features"
+    sparsity: float | None = None
 
 
 def group_mean_fisherz_fc(
@@ -423,6 +337,9 @@ def compute_combo(
     force: bool,
     cohort: str | None = None,
     variant: str = "36p",
+    feature_scaling: str = "col_zscore",
+    sparsify_stage: str = "features",
+    sparsity: float | None = None,
 ) -> GradientComboResult:
     surface_path = (
         group_average_surfaces_dir
@@ -482,6 +399,9 @@ def compute_combo(
         group_fc_active,
         n_components=int(n_components),
         random_state=gradient_random_state,
+        feature_scaling=feature_scaling,
+        sparsify_stage=sparsify_stage,
+        sparsity=sparsity,
     )
     gradients_full = reconstruct_full_surface(gradients_active, support_mask, vertex_count)
     group_fc_full = reconstruct_full_surface(group_fc_active, support_mask, vertex_count)
@@ -521,6 +441,9 @@ def compute_combo(
         network_order=network_order,
         cohort=cohort,
         variant=variant,
+        feature_scaling=feature_scaling,
+        sparsify_stage=sparsify_stage,
+        sparsity=sparsity,
     )
 
 
@@ -530,7 +453,7 @@ def select_alignment_anchor(results: list[GradientComboResult]) -> tuple[Gradien
     for result in results:
         if result.smoothing == "4mm" and result.hemi == "L":
             return result, "preferred_4mm_hemi_L"
-    return results[0], "fallback_first_requested_combo"
+    raise ValueError("Alignment requires the newly fitted 4mm hemi L anchor; include 4mm and L explicitly")
 
 
 def write_aligned_combo_outputs(
@@ -612,16 +535,26 @@ def write_aligned_combo_outputs(
         "surface_path": str(result.surface_path.resolve()),
         "source_fc_paths": result.fc_paths,
         "fisher_z_preprocessing": "arctanh clipped to +/-0.999999 before subject averaging",
-        "feature_zscore_pre_gradientmaps": "column-wise z-score across vertices after group Fisher-z averaging, matching HippoMaps tutorial feature scaling semantics",
+        "feature_zscore_pre_gradientmaps": (
+            "none" if result.feature_scaling == "none" else
+            "explicit column-wise z-score across supported vertices after group Fisher-z averaging"
+        ),
+        "gradient_preprocessing": gradient_preprocessing_settings(
+            result.group_fc_active.shape[1], feature_scaling=result.feature_scaling,
+            sparsify_stage=result.sparsify_stage, sparsity=result.sparsity,
+        ),
         "group_fc_shape": [int(x) for x in result.group_fc_active.shape],
         "feature_count": 400 if result.atlas == "kong2022" else int(result.group_fc_active.shape[1]),
         "feature_family": "kong2022_400roi_fc" if result.atlas == "kong2022" else "network_fc",
         "gradient_shape_active": [int(x) for x in gradients_active.shape],
         "gradient_shape_full": [int(x) for x in gradients_full.shape],
         "gradientmaps_kernel": "pearson",
-        "gradientmaps_call": "brainspace.gradient.GradientMaps(n_components=N, kernel='pearson', random_state=gradient_random_state).fit(column_zscored_group_mean_fisherz_fc, sparsity=brainspace_sparsity)",
-        "brainspace_sparsity": float(brainspace_sparsity_for_feature_count(result.group_fc_active.shape[1])),
-        "brainspace_sparsity_policy": "0.0 for <=50 features; otherwise 0.9. Low-dimensional Lynch component banks use the full graph, while high-dimensional Kong400 retains BrainSpace default sparsity",
+        "gradientmaps_call": "compute_affinity(explicitly_scaled_group_mean_fisherz_fc, kernel='pearson', pre_sparsify=declared_stage); mean_symmetrize; GradientMaps(kernel=None).fit(affinity, sparsity=None)",
+        "brainspace_sparsity": gradient_preprocessing_settings(
+            result.group_fc_active.shape[1], feature_scaling=result.feature_scaling,
+            sparsify_stage=result.sparsify_stage, sparsity=result.sparsity,
+        )["effective_sparsity"],
+        "brainspace_sparsity_policy": "explicit setting; unspecified sparsity retains 0.0 for <=50 features and 0.9 otherwise",
         "gradient_random_state": None if result.gradient_random_state is None else int(result.gradient_random_state),
         "n_components_computed": int(result.n_components),
         "selected_components": selected_labels,
@@ -708,6 +641,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--variant", choices=("36p", "22p"), default="36p", help="22p appends _22p to the output route directory.")
     parser.add_argument("--hippomaps-root", default=str(DEFAULT_HIPPOMAPS_ROOT))
     parser.add_argument("--n-components", type=int, default=5)
+    parser.add_argument("--feature-scaling", choices=("none", "col_zscore"), default="col_zscore")
+    parser.add_argument("--sparsify-stage", choices=("features", "affinity", "none"), default="features")
+    parser.add_argument("--sparsity", type=float, default=None)
     parser.add_argument(
         "--gradient-random-state",
         type=int,
@@ -722,6 +658,8 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    if "4mm" not in args.smoothings or "L" not in args.hemis:
+        raise ValueError("Gradient alignment requires explicit 4mm hemi L input in --smoothings and --hemis")
     hippomaps_root = ensure_hippomaps_on_path(Path(args.hippomaps_root))
     subjects_manifest = Path(args.subjects_manifest).resolve()
     subjects = load_subject_ids(subjects_manifest)
@@ -766,6 +704,9 @@ def main() -> int:
                         force=bool(args.force),
                         cohort=args.cohort,
                         variant=args.variant,
+                        feature_scaling=args.feature_scaling,
+                        sparsify_stage=args.sparsify_stage,
+                        sparsity=args.sparsity,
                     )
                 )
         align_and_write_route_results(results=route_results, selected_components=selected_components)

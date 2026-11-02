@@ -47,6 +47,7 @@ for p in (CORE_DIR, VIS_LIB_DIR):
         sys.path.insert(0, str(p))
 
 from lib.gradient_assignment_contract import validate_gradient_assignment
+from lib.hippunfold_run_contract import HIPPUNFOLD_ATLAS
 from lib.surface_utils import render_locked_grid
 from multidataset_cohorts import (
     COMPARISON_METHODS,
@@ -279,7 +280,7 @@ def compute_cohort_subfield_composition(
                 / "hippunfold"
                 / f"sub-{s}"
                 / "metric"
-                / f"sub-{s}_hemi-{hemi}_den-512_label-hipp_atlas-multihist7_subfields.label.gii"
+                / f"sub-{s}_hemi-{hemi}_den-512_label-hipp_atlas-{HIPPUNFOLD_ATLAS}_subfields.label.gii"
             )
             sp = (
                 hippunfold_root
@@ -1174,7 +1175,7 @@ def _render_grid():
             for hemi in ["L", "R"]:
                 lp = (
                     cinfo["hippunfold_root"]
-                    / f"sub-{s}/hippunfold/sub-{s}/metric/sub-{s}_hemi-{hemi}_den-512_label-hipp_atlas-multihist7_subfields.label.gii"
+                    / f"sub-{s}/hippunfold/sub-{s}/metric/sub-{s}_hemi-{hemi}_den-512_label-hipp_atlas-{HIPPUNFOLD_ATLAS}_subfields.label.gii"
                 )
                 sp = (
                     cinfo["hippunfold_root"]

@@ -328,6 +328,9 @@ def _write_fold_subject_inputs(
         dtype=np.float32,
     )
     np.save(fc_dir / "hipp_vertex_to_network_fc.npy", base + offset)
+    anchor_dir = shared_root / f"sub-{subject}" / "fc" / "kong2022" / "4mm" / "hemi_L"
+    anchor_dir.mkdir(parents=True)
+    np.save(anchor_dir / "hipp_vertex_to_network_fc.npy", base + offset)
     mask_dir = surface_root / f"sub-{subject}" / "surface" / "tsnr_gate"
     mask_dir.mkdir(parents=True)
     np.save(mask_dir / f"sub-{subject}_hemi-L_valid_mask.npy", np.ones(6, dtype=bool))
@@ -393,7 +396,7 @@ def test_fit_fold_template_uses_only_training_subjects_and_records_density(
     monkeypatch.setattr(
         workflow,
         "fit_gradientmaps_pearson",
-        lambda matrix, n_components, random_state: (
+        lambda matrix, n_components, random_state, **kwargs: (
             gradients,
             np.asarray([3.0, 2.0, 1.0]),
             np.asarray([0.5, 1.0 / 3.0, 1.0 / 6.0]),
@@ -662,7 +665,7 @@ def test_dry_run_audits_inputs_and_reports_exact_workload_without_writing_output
     payload = workflow.dry_run_payload(args, ["01", "02"], fold_by_subject)
 
     assert payload["status"] == "ok"
-    assert payload["template_fits"] == 2
+    assert payload["template_fits"] == 4
     assert payload["subject_combo_mappings"] == 2
     assert payload["train_test_overlap_count"] == 0
     assert payload["missing_inputs"] == []
@@ -710,7 +713,7 @@ def test_main_full_execution_maps_each_subject_once_and_writes_run_manifests(
     fit_calls: list[tuple[int, str, str]] = []
     mapping_calls: list[tuple[int, str]] = []
 
-    def fake_fit(config, fold_index, smoothing, hemi):
+    def fake_fit(config, fold_index, smoothing, hemi, **kwargs):
         training, heldout = workflow._fold_partitions(config.fold_by_subject, fold_index)
         fit_calls.append((fold_index, smoothing, hemi))
         return SimpleNamespace(
@@ -753,7 +756,7 @@ def test_main_full_execution_maps_each_subject_once_and_writes_run_manifests(
 
     assert workflow.main(raw_args) == 0
 
-    assert sorted(fit_calls) == [(0, "2mm", "L"), (1, "2mm", "L")]
+    assert sorted(fit_calls) == [(0, "2mm", "L"), (0, "4mm", "L"), (1, "2mm", "L"), (1, "4mm", "L")]
     assert sorted(subject for _fold, subject in mapping_calls) == ["01", "02"]
     assert len(mapping_calls) == 2
     assert (out_root / "folds" / "fold_assignments.tsv").exists()
@@ -766,7 +769,7 @@ def test_main_full_execution_maps_each_subject_once_and_writes_run_manifests(
     assert all(row["train_test_disjoint"] for row in fold_manifest["folds"])
     run_manifest = json.loads((out_root / "crossfit_manifest.json").read_text())
     assert run_manifest["status"] == "ok"
-    assert run_manifest["template_fits_completed"] == 2
+    assert run_manifest["template_fits_completed"] == 4
     assert run_manifest["subject_combo_mappings_completed"] == 2
     assert run_manifest["family"]["subject_only_waiver"] is True
 
@@ -795,6 +798,9 @@ def test_resume_template_validation_rejects_parameter_or_training_mismatch(
         cluster_seed=0,
     )
     manifest = {
+        "gradient_preprocessing": workflow.gradient_preprocessing_settings(400),
+        **workflow.gradient_method_provenance("gradient-spectral"),
+        "clustering_feature_scaling": "none",
         "status": "ok",
         "fold_index": 1,
         "smoothing": "2mm",
@@ -862,11 +868,15 @@ def test_fit_or_load_fold_template_prefers_valid_saved_template_on_resume(
     manifest_path.parent.mkdir(parents=True)
     manifest_path.write_text("{}\n", encoding="utf-8")
     sentinel = object()
-    monkeypatch.setattr(workflow, "load_fold_template", lambda *args: sentinel)
+    def load_saved_template(*args, alignment_reference):
+        assert alignment_reference is None
+        return sentinel
+
+    monkeypatch.setattr(workflow, "load_fold_template", load_saved_template)
     monkeypatch.setattr(
         workflow,
         "fit_fold_template",
-        lambda *args: pytest.fail("fit should not run when valid resume template exists"),
+        lambda *args, **kwargs: pytest.fail("fit should not run when valid resume template exists"),
     )
 
     assert workflow.fit_or_load_fold_template(config, 0, "2mm", "L", resume=True) is sentinel

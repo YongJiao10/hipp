@@ -4,6 +4,8 @@
 
 **Goal:** Make gradient preprocessing explicit and evaluate its numerical consequences, compare three gradient-based clustering methods under a shared input contract, and add Kember-style one-versus-rest (OVR) network annotation while preserving existing Fisher-z and normalized Top-20 assignments.
 
+**Status:** Pending. Execute this exploration only after the HippUnfold 2.4.0 reconstruction and its downstream inputs are ready.
+
 **Architecture:** A shared gradient producer supports explicitly selected preprocessing settings. Within each setting, identical vertex features feed surface-constrained Ward clustering, Gaussian mixture modeling, and distance-weighted surface spectral clustering. Network assignments are computed after spatial clustering and never alter the cluster boundaries.
 
 **Tech stack:** Existing py314 environment with NumPy, SciPy, BrainSpace, scikit-learn, nibabel, and current rendering tools. The inspected environment has scikit-learn 1.8.0 and BrainSpace 0.2.1. No package installation or environment upgrade is planned.
@@ -138,7 +140,7 @@ Document this as Kember-style OVR using this project's existing network-level FC
 
 **Scratch root:** `tmp/gradient_parcellation_comparison/` (create during implementation only).
 
-**Authoritative roster:** `outputs_hcp/inputs/kong2022/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt`. It currently contains 148 subjects; execution must use the full roster file, not assume an older count or cap the sample.
+**Authoritative roster:** `outputs_hcp/inputs/kong2022/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt`. Use the complete roster resulting from the 2.4.0 reconstruction; do not assume a historical count or cap the sample.
 
 First run a full-roster numerical screen on left/right hemispheres and 2mm/4mm smoothing, using coverage 0.80, G1–G3, K=3, seed `20260420`, and identical inputs. Use these four explicit gradient routes, each with both native and unit-SD clustering features:
 

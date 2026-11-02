@@ -175,13 +175,41 @@ def _sample_prepared_surfaces(*, bold, native, mapped, subject, density, outdir,
         raise ValueError(f'BOLD/registration space mismatch: {bold}; transform targets {registration.target_space}')
     outdir.mkdir(parents=True, exist_ok=True)
 
+    # Trilinear/enclosing mapping evaluates each vertex independently. Joining
+    # the disconnected hemispheres reads and decompresses this volume once.
+    points, triangles, counts = [], [], {}
+    offset = 0
+    for hemi in ('L', 'R'):
+        image = nib.load(mapped[hemi])
+        vertices = np.asarray(image.agg_data('pointset'), dtype=np.float32)
+        faces = np.asarray(image.agg_data('triangle'), dtype=np.int32)
+        points.append(vertices)
+        triangles.append(faces + offset)
+        counts[hemi] = len(vertices)
+        offset += len(vertices)
+    scratch = REPO_ROOT / 'tmp'
+    scratch.mkdir(exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix=f'sub-{subject}_bilateral_sampling_', dir=str(scratch)) as tmp:
+        merged_surface = Path(tmp) / 'bilateral.surf.gii'
+        nib.save(nib.gifti.GiftiImage(darrays=[
+            nib.gifti.GiftiDataArray(np.concatenate(points), intent='NIFTI_INTENT_POINTSET'),
+            nib.gifti.GiftiDataArray(np.concatenate(triangles), intent='NIFTI_INTENT_TRIANGLE'),
+        ]), merged_surface)
+        bilateral = sample_volume_to_surface(
+            bold=bold, surface=merged_surface, out_metric=Path(tmp) / 'bilateral.func.gii',
+            mapping_method=mapping_method,
+        )
+
     summary: list[dict[str, object]] = []
+    offset = 0
     for hemi in ["L", "R"]:
         mid = mapped[hemi]
         out_metric = outdir / f"sub-{subject}_hemi-{hemi}_space-{METRIC_SPACE}_den-{density}_label-hipp_bold.func.gii"
-        metric = sample_volume_to_surface(
-            bold=bold, surface=mid, out_metric=out_metric, mapping_method=mapping_method,
-        )
+        metric = bilateral[offset:offset + counts[hemi]]
+        offset += counts[hemi]
+        nib.save(nib.gifti.GiftiImage(darrays=[nib.gifti.GiftiDataArray(
+            metric, intent='NIFTI_INTENT_TIME_SERIES', datatype='NIFTI_TYPE_FLOAT32',
+        )]), out_metric)
 
         summary.append(
             {

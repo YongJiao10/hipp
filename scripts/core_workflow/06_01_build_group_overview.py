@@ -14,13 +14,13 @@ Inputs:
 - Command-line arguments:
   - --group-root: Directory where group-atlas intermediate files are saved (default: `outputs_hcp/work/group_atlas/pfm`).
   - --present-dir: Exact presentation directory; by default mirror the group root below `present/overviews/<route>[/<cohort>]`.
-  - --methods: Parcellation methods to process: "intrinsic-spectral", "network-spectral", "gradient-spectral", "wta-top".
+  - --methods: Parcellation methods to process: "intrinsic-spectral", "network-spectral", "gradient-spectral", "gradient-ward", "gradient-gmm", "gradient-spectral-rbf", "wta-top".
   - --atlases: Cortical atlases to process (default: Kong2022); Lynch2024 atlases support gradient-spectral and direct-network wta-top.
   - --coverage-threshold: Selected coverage threshold for overview outputs (default: 0.80).
   - --scene: Path to standard wb scene template file.
   - --route-tag: Custom workflow branch tag to override automatic detection.
   - --mode-tag: Optional explicit overview label override (default: none). No automatic sparse/full inference is performed; all maintained formal runs are full.
-  - --assignment-variant: Network mapping variant: "fisherz", "normalized_top20_count", "weighted_fisherz", or "both" (default: "both").
+  - --assignment-variant: Network mapping variant: "fisherz", "normalized_top20_count", "weighted_fisherz", "ovr_logistic_canonical7", "ovr_logistic_family17", or "both" (default: "both").
   - --manifest-name: Name of generated presentation manifest JSON (default: "group_overview_manifest.json").
   - --skip-readme: Skip writing the README.md summary in presentation directory.
   - --skip-manifest: Skip writing the overview manifest JSON file.
@@ -65,6 +65,8 @@ from lib.gifti_labels import (
 )
 from lib.network_colors import load_network_hex_colors
 from lib.gradient_assignment_contract import validate_gradient_assignment, sha256_file
+from lib.gradient_clustering import is_gradient_method, validate_gradient_method_provenance
+from lib.network_ovr import OVR_VARIANTS
 from lib.surface_affinity import (
     GRADIENT_SPECTRAL_AFFINITY,
     GRADIENT_SPECTRAL_AFFINITY_DESCRIPTION,
@@ -79,6 +81,9 @@ DEFAULT_SCENE = REPO_ROOT / "config" / "wb_locked_native_view_lateral_medial.sce
 METHOD_CHOICES = [
     "network-spectral",
     "gradient-spectral",
+    "gradient-ward",
+    "gradient-gmm",
+    "gradient-spectral-rbf",
     "intrinsic-spectral",
     "wta-top",
 ]
@@ -101,7 +106,7 @@ FS_MISSING = 13
 FS_BIG_TITLE = 13
 FS_SUPTITLE = 18
 CLUSTERLESS_METHODS = {"wta-top"}
-ASSIGNMENT_VARIANTS = ("fisherz", "normalized_top20_count", "weighted_fisherz")
+ASSIGNMENT_VARIANTS = ("fisherz", "normalized_top20_count", "weighted_fisherz", *OVR_VARIANTS)
 DEFAULT_RENDER_ASSIGNMENT_VARIANTS = ("fisherz", "normalized_top20_count")
 ASSIGNMENT_VARIANT_CHOICES = ASSIGNMENT_VARIANTS + ("both",)
 WTA_OVERVIEW_PROFILE_BINS = 20
@@ -244,7 +249,8 @@ def overview_source_provenance(
         "source_group_manifests": [str(path) for path in manifest_paths],
     }
     if _is_gradient_method(method):
-        provenance.update(gradient_affinity_provenance(manifests))
+        provenance.update(gradient_affinity_provenance(manifests) if method == "gradient-spectral"
+                          else validate_gradient_method_provenance(method, manifests))
         provenance.update(
             ctxdrop_original_fc_annotation_provenance(
                 manifest_paths=manifest_paths,
@@ -369,7 +375,7 @@ def resolve_render_assignment_variants(
                 f"got {assignment_variant!r}"
             )
         return ("normalized_top20_count",)
-    if str(atlas) in {"lynch2024_20net", "lynch2024_7net"} and method == "gradient-spectral":
+    if str(atlas) in {"lynch2024_20net", "lynch2024_7net"} and _is_gradient_method(method):
         if assignment_variant in {"both", "fisherz"}:
             return ("fisherz",)
         raise ValueError(
@@ -422,7 +428,7 @@ def validate_method_route_compatibility(method: str, route_tag: str | None) -> N
 
 
 def _is_gradient_method(method: str) -> bool:
-    return method == GRADIENT_METHOD
+    return is_gradient_method(method)
 
 
 def _discover_gradient_comp_tags(
@@ -718,6 +724,18 @@ def concat_lr(a: np.ndarray, la: list[str], b: np.ndarray, lb: list[str]) -> tup
     return mat, yt, yl
 
 
+def plot_ovr_association_panel(
+    ax, *, profile: np.ndarray, row_positions: list[int], row_labels: list[str], smoothing: str
+) -> None:
+    """Summarize actual cluster rows, excluding the L/R heatmap separator."""
+    largest = np.max(profile[row_positions], axis=1)
+    ax.axhline(0., color="black", linewidth=.8, linestyle="--")
+    ax.bar(np.arange(len(largest)), largest)
+    ax.set_xticks(np.arange(len(largest)), row_labels, rotation=45)
+    ax.set_ylabel("Largest raw beta")
+    ax.set_title(f"{smoothing} | descriptive OVR association")
+
+
 def ordered_cluster_ids_by_position(labels: np.ndarray, order: np.ndarray, k: int) -> list[int]:
     x = labels[order]
     rows: list[tuple[float, int]] = []
@@ -772,7 +790,7 @@ def annotate_profile_values(
             linear = np.where(rgb <= 0.04045, rgb / 12.92, ((rgb + 0.055) / 1.055) ** 2.4)
             luminance = float(linear @ np.array([0.2126, 0.7152, 0.0722]))
             color = "white" if luminance < 0.179 else "#222222"
-            ax.text(c, r, f"{abs(val):.2f}", ha="center", va="center", fontsize=FS_CELL, color=color)
+            ax.text(c, r, f"{val:.2f}", ha="center", va="center", fontsize=FS_CELL, color=color)
 
 
 def highlight_top1_profile_cells(ax, data: np.ndarray) -> None:
@@ -1389,6 +1407,9 @@ def render_combo(
     effective_assignment_variant = (
         str(assignment_variant) if method in CLUSTERLESS_METHODS else str(assignment_variant)
     )
+    surface_assignment_title = effective_assignment_variant.replace("_", " ")
+    family17_overview = route_tag in {"pfm_17net", "fixed_17net"} or effective_assignment_variant == "ovr_logistic_family17"
+    diagnostic_hspace = 0.06 if family17_overview else 0.035
     manifest_paths: list[Path] = []
     for smoothing in SMOOTHINGS:
         manifest_paths.extend(
@@ -1405,9 +1426,15 @@ def render_combo(
         manifests=source_manifests,
     )
     assignment_validation_results: dict[tuple[str, str, str], dict[str, object]] = {}
-    if atlas == "kong2022" and method == "gradient-spectral":
+    if atlas == "kong2022" and _is_gradient_method(method):
         for path in manifest_paths:
-            validate_group_atlas_lineage(path)
+            validate_group_atlas_lineage(
+                path,
+                expected_network_taxonomy=(
+                    "family17" if route_tag in {"pfm_17net", "fixed_17net"} else "canonical7"
+                ),
+                expected_method=method,
+            )
         # Validate all declared assignment variants before constructing any
         # surface/profile panel. The renderer never repairs or substitutes a
         # gradient assignment asset.
@@ -1424,8 +1451,8 @@ def render_combo(
         fig = plt.figure(figsize=(19.0, 12.8), dpi=180, constrained_layout=True)
         gs = fig.add_gridspec(nrows=2, ncols=3, width_ratios=[0.62, 1.18, 1.42], hspace=0.08, wspace=0.06)
     else:
-        fig = plt.figure(figsize=(15.4, 12.2), dpi=180, constrained_layout=True)
-        gs = fig.add_gridspec(nrows=2, ncols=2, width_ratios=[1.40, 1.30], hspace=0.06, wspace=0.05)
+        fig = plt.figure(figsize=(22.0, 14.0) if family17_overview else (15.4, 12.2), dpi=180, constrained_layout=True)
+        gs = fig.add_gridspec(nrows=2, ncols=2, width_ratios=[1.65, 1.30] if family17_overview else [1.40, 1.30], hspace=0.06, wspace=0.05)
     rows_meta: list[dict[str, object]] = []
 
     for ridx, smoothing in enumerate(SMOOTHINGS):
@@ -1434,7 +1461,7 @@ def render_combo(
         d_l = left_manifest.parent
         d_r = right_manifest.parent
         if method not in CLUSTERLESS_METHODS and effective_assignment_variant == "fisherz":
-            if not (atlas == "kong2022" and method == "gradient-spectral"):
+            if not (atlas == "kong2022" and _is_gradient_method(method)):
                 m_l = ensure_functional_label_consistency(left_manifest, m_l)
                 m_r = ensure_functional_label_consistency(right_manifest, m_r)
         if method in CLUSTERLESS_METHODS:
@@ -1525,7 +1552,7 @@ def render_combo(
                         scene=scene,
                         outdir=Path(tmp),
                         name=f"merged_group_vertex_wta_{method}_{atlas}_{smoothing}",
-                        title=f"{str(overview_scope).strip() or 'Group'} functional atlas {method} {atlas} {smoothing} {effective_assignment_variant}",
+                        title=f"{str(overview_scope).strip() or 'Group'} functional atlas {method} {atlas} {smoothing} {surface_assignment_title}",
                         left_labels=left_label,
                         right_labels=right_label,
                         left_surface=surf_l,
@@ -1550,7 +1577,7 @@ def render_combo(
         k_l_raw = m_l.get("chosen_k_final")
         k_r_raw = m_r.get("chosen_k_final")
         if k_l_raw is None or k_r_raw is None:
-            sub = gs[ridx, 0].subgridspec(2, 2, wspace=0.08, hspace=0.035)
+            sub = gs[ridx, 0].subgridspec(2, 2, wspace=0.08, hspace=diagnostic_hspace)
             ax0 = fig.add_subplot(sub[0, 0])
             rows_l_tsv = read_tsv(d_l / "k_selection_summary.tsv")
             rows_r_tsv = read_tsv(d_r / "k_selection_summary.tsv")
@@ -1632,10 +1659,10 @@ def render_combo(
                 f"Missing assignment variant functional labels for {method} {atlas} {smoothing} variant={effective_assignment_variant}: "
                 f"left={left_label_variant} right={right_label_variant}"
             )
-        if method == "gradient-spectral" and atlas == "kong2022":
+        if _is_gradient_method(method) and atlas == "kong2022":
             validated_l = assignment_validation_results[(str(smoothing), "L", effective_assignment_variant)]
             validated_r = assignment_validation_results[(str(smoothing), "R", effective_assignment_variant)]
-        elif method == "gradient-spectral":
+        elif _is_gradient_method(method):
             validated_l = validate_gradient_assignment(d_l, m_l, effective_assignment_variant)
             validated_r = validate_gradient_assignment(d_r, m_r, effective_assignment_variant)
             assignment_validation_results[(str(smoothing), "L", effective_assignment_variant)] = validated_l
@@ -1643,6 +1670,13 @@ def render_combo(
         else:
             validated_l = {}
             validated_r = {}
+        if effective_assignment_variant in OVR_VARIANTS:
+            validated_l = validate_gradient_assignment(d_l, m_l, effective_assignment_variant)
+            validated_r = validate_gradient_assignment(d_r, m_r, effective_assignment_variant)
+            if validated_l["network_names"] != validated_r["network_names"]:
+                raise ValueError("OVR left/right network orders differ")
+            prof_l = np.asarray(validated_l["profile"])
+            prof_r = np.asarray(validated_r["profile"])
         status_l = load_json(status_l_path)
         status_r = load_json(status_r_path)
         surf_l, surf_r, template_subject, spec_path = resolve_template_pair_assets(
@@ -1660,7 +1694,7 @@ def render_combo(
         row_lbl_l = [f"L-C{i}" for i in range(1, len(cids_l) + 1)]
         row_lbl_r = [f"R-C{i}" for i in range(1, len(cids_r) + 1)]
 
-        sub = gs[ridx, 0].subgridspec(2, 2, wspace=0.08, hspace=0.035)
+        sub = gs[ridx, 0].subgridspec(2, 2, wspace=0.08, hspace=diagnostic_hspace)
         ax0 = fig.add_subplot(sub[0, 0])
         rows_l = read_tsv(d_l / "k_selection_summary.tsv")
         rows_r = read_tsv(d_r / "k_selection_summary.tsv")
@@ -1711,7 +1745,8 @@ def render_combo(
             plot_subject_split_ari_skipped(ax0, smoothing=smoothing)
 
         ax1 = fig.add_subplot(sub[0, 1])
-        nets = [str(x) for x in load_json(d_l / "group_feature_summary.json")["network_names"]]
+        nets = (list(validated_l["network_names"]) if effective_assignment_variant in OVR_VARIANTS else
+                [str(x) for x in load_json(d_l / "group_feature_summary.json")["network_names"]])
         if effective_assignment_variant in {"fisherz", "weighted_fisherz"}:
             validate_fisher_status_matches_profile(
                 profile_ordered=prof_l_o,
@@ -1757,6 +1792,8 @@ def render_combo(
             f"{smoothing} | cluster_network_profile "
             f"({'normalized topN counts' if profile_is_normalized_count else 'signed'})"
         )
+        if effective_assignment_variant in OVR_VARIANTS:
+            profile_title = f"{smoothing} | OVR raw beta (per 1 Fisher-z unit; zero reference)"
         prof_lr, yt_prof, yl_prof = concat_lr(prof_l_o, row_lbl_l, prof_r_o, row_lbl_r)
         if profile_is_normalized_count:
             vmax = float(np.nanmax(prof_lr)) if np.isfinite(prof_lr).any() else 1.0
@@ -1767,10 +1804,13 @@ def render_combo(
         ax1.set_yticks(yt_prof)
         ax1.set_yticklabels(yl_prof, fontsize=FS_LABEL)
         ax1.set_xticks(np.arange(len(nets)))
-        ax1.set_xticklabels(nets, fontsize=FS_TICK, rotation=35, ha="right")
+        ax1.set_xticklabels(nets, fontsize=FS_TICK,
+                            rotation=90 if len(nets) > 8 else 35,
+                            ha="center" if len(nets) > 8 else "right")
         annotate_profile_values(ax1, prof_lr, vmax)
         highlight_top1_profile_cells(ax1, prof_lr)
-        add_cbar(fig, ax1, im1, "Normalized TopN ROI count" if profile_is_normalized_count else "Fisher-z")
+        add_cbar(fig, ax1, im1, "Raw beta per Fisher-z unit" if effective_assignment_variant in OVR_VARIANTS else
+                 "Normalized TopN ROI count" if profile_is_normalized_count else "Fisher-z")
 
         ax2 = fig.add_subplot(sub[1, 0])
         plot_k_gate_panel(
@@ -1783,8 +1823,13 @@ def render_combo(
         )
 
         ax3 = fig.add_subplot(sub[1, 1])
-        conf_rows = confidence_rows(status_l, "L", cids_l) + confidence_rows(status_r, "R", cids_r)
-        plot_confidence_panel(ax3, conf_rows, f"{smoothing} | cluster confidence / ambiguity")
+        if effective_assignment_variant in OVR_VARIANTS:
+            plot_ovr_association_panel(
+                ax3, profile=prof_lr, row_positions=yt_prof, row_labels=yl_prof, smoothing=smoothing
+            )
+        else:
+            conf_rows = confidence_rows(status_l, "L", cids_l) + confidence_rows(status_r, "R", cids_r)
+            plot_confidence_panel(ax3, conf_rows, f"{smoothing} | cluster confidence / ambiguity")
 
         ax_big = fig.add_subplot(gs[ridx, 1])
         left_label = left_label_variant
@@ -1805,7 +1850,7 @@ def render_combo(
                     scene=scene,
                     outdir=Path(tmp),
                     name=f"merged_group_cluster_wta_{method}_{atlas}_{smoothing}",
-                    title=f"{str(overview_scope).strip() or 'Group'} functional atlas {method} {atlas} {smoothing} {effective_assignment_variant}",
+                    title=f"{str(overview_scope).strip() or 'Group'} functional atlas {method} {atlas} {smoothing} {surface_assignment_title}",
                     left_labels=left_label,
                     right_labels=right_label,
                     left_surface=surf_l,
@@ -1963,6 +2008,7 @@ def ensure_combo_ready(
     method: str,
     atlas: str,
     coverage_tag: str,
+    route_tag: str | None = None,
     smoothings: list[str] | None = None,
     hemis: list[str] | None = None,
 ) -> None:
@@ -1979,9 +2025,14 @@ def ensure_combo_ready(
                     problems.append(f"missing_manifest: {manifest_path}")
                     continue
                 m = load_json(manifest_path)
-                if atlas == "kong2022" and method == "gradient-spectral":
+                if atlas == "kong2022" and _is_gradient_method(method):
                     try:
-                        validate_group_atlas_lineage(manifest_path)
+                        validate_group_atlas_lineage(
+                            manifest_path,
+                            expected_network_taxonomy=(
+                                "family17" if route_tag in {"pfm_17net", "fixed_17net"} else "canonical7"
+                            ),
+                        )
                     except ValueError as exc:
                         problems.append(f"invalid_group_atlas_lineage: {exc}")
                 if str(m.get("status", "")) != "ok":
@@ -2087,6 +2138,7 @@ def main() -> int:
                 method=method,
                 atlas=atlas,
                 coverage_tag=tau_tag,
+                route_tag=args.route_tag,
             )
             comp_tags = _discover_gradient_comp_tags(
                 group_root, method, atlas, SMOOTHINGS[0], tau_tag,

@@ -50,7 +50,7 @@ def test_absent_model_can_reach_the_original_downloader(monkeypatch) -> None:
 
     def run(argv, **kwargs):
         if "--version" in argv:
-            output = "2.3.0"
+            output = contract_module.HIPPUNFOLD_VERSION
         elif "--help" in argv:
             output = "--output_density {512,2k,8k} --inner_outer_reg_method --inner_outer_reg_smoothing"
         elif "-lc" in argv:
@@ -71,7 +71,7 @@ def test_unpatched_runtime_stops_before_a_production_run(monkeypatch) -> None:
         if "-c" in argv:
             return subprocess.CompletedProcess(argv, 1, "", "No module named local_assets")
         if "--version" in argv:
-            output = "2.3.0"
+            output = contract_module.HIPPUNFOLD_VERSION
         elif "--help" in argv:
             output = "512 --inner_outer_reg_method --inner_outer_reg_smoothing"
         else:

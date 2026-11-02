@@ -12,6 +12,7 @@ from pathlib import Path
 
 import numpy as np
 
+from lib.gradient_clustering import GRADIENT_METHODS, is_gradient_method
 from lib.output_layout import DEFAULT_ROUTEA_GROUP_ATLAS_ROOT
 from lib.traceability import StageSpec, run_stage
 from lib.workflow_utils import write_json
@@ -120,9 +121,8 @@ def main(args: argparse.Namespace) -> int:
         )
 
     for method in args.methods:
-        if method != "gradient-spectral":
-            print(f"Skipping confidence map calculation for method '{method}' (only supported for 'gradient-spectral' currently)")
-            continue
+        if not is_gradient_method(method):
+            raise ValueError(f"Confidence maps require a declared gradient method: {method}")
 
         for smoothing in args.smoothings:
             for thresh in args.coverage_thresholds:
@@ -187,7 +187,7 @@ def main(args: argparse.Namespace) -> int:
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Compute vertex-level silhouette confidence maps.")
     parser.add_argument("--out-root", default=str(DEFAULT_ROUTEA_GROUP_ATLAS_ROOT))
-    parser.add_argument("--methods", nargs="+", default=["gradient-spectral"])
+    parser.add_argument("--methods", nargs="+", choices=sorted(GRADIENT_METHODS), default=["gradient-spectral"])
     parser.add_argument("--smoothings", nargs="+", default=["2mm", "4mm"])
     parser.add_argument("--hemis", nargs="+", default=["L", "R"])
     parser.add_argument("--coverage-thresholds", nargs="+", type=float, default=[0.80])

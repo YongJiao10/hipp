@@ -12,6 +12,7 @@ import numpy as np
 from nibabel.gifti import GiftiDataArray, GiftiImage
 
 from lib.output_layout import DEFAULT_HIPPUNFOLD_BATCH_ROOT
+from lib.hippunfold_run_contract import HIPPUNFOLD_ATLAS
 from lib.workbench import capture_scene
 
 
@@ -65,7 +66,7 @@ def find_current_structural_label_refs(root: ET.Element) -> dict[str, str]:
     refs: dict[str, str] = {}
     for elem in root.iter():
         text = (elem.text or "").strip()
-        if not text or "atlas-multihist7_subfields.label.gii" not in text or "space-corobl" not in text:
+        if not text or f"atlas-{HIPPUNFOLD_ATLAS}_subfields.label.gii" not in text or "space-corobl" not in text:
             continue
         if "hemi-L" in text and "L" not in refs:
             refs["L"] = text

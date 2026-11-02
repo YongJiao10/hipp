@@ -27,6 +27,8 @@ from lib.hippomaps_adapter import (
     DEFAULT_HIPPOMAPS_ROOT,
     ensure_hippomaps_on_path,
     fit_gradientmaps_pearson,
+    gradient_preprocessing_settings,
+    scale_gradient_features,
     reconstruct_full_surface,
 )
 from lib.fc_math import fisher_z_transform_fc
@@ -43,6 +45,7 @@ from lib.output_layout import (
     resolve_crossfit_template_matching_root,
 )
 from lib.surface_utils import long_axis_order
+from lib.gradient_clustering import GRADIENT_METHODS, gradient_method_provenance, cluster_mesh_diagnostics
 from lib.surface_affinity import (
     GRADIENT_SPECTRAL_AFFINITY,
     GRADIENT_SPECTRAL_AFFINITY_DESCRIPTION,
@@ -63,7 +66,7 @@ _FINGERPRINT_CACHE: dict[tuple[str, int, int, int], dict[str, object]] = {}
 CLUSTER_LABEL_ITEMS = [
     (0, "Null", (158, 158, 158, 255)),
     (1, "Anterior", (220, 80, 75, 255)),
-    (2, "Body", (235, 175, 70, 255)),
+    (2, "Middle", (235, 175, 70, 255)),
     (3, "Posterior", (70, 115, 190, 255)),
 ]
 
@@ -80,6 +83,12 @@ class CrossfitConfig:
     n_components: int = 5
     gradient_random_state: int = 0
     cluster_seed: int = 0
+    feature_scaling: str = "col_zscore"
+    sparsify_stage: str = "features"
+    sparsity: float | None = None
+    clustering_feature_scaling: str = "none"
+    method: str = "gradient-spectral"
+    rbf_scale: float = 1.0
 
 
 @dataclass(frozen=True)
@@ -259,6 +268,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--hemis", nargs="+", choices=["L", "R"], default=["L", "R"])
     parser.add_argument("--coverage-threshold", type=float, default=0.80)
     parser.add_argument("--n-components", type=int, default=5)
+    parser.add_argument("--feature-scaling", choices=("none", "col_zscore"), default="col_zscore")
+    parser.add_argument("--sparsify-stage", choices=("features", "affinity", "none"), default="features")
+    parser.add_argument("--sparsity", type=float, default=None)
+    parser.add_argument("--method", choices=sorted(GRADIENT_METHODS), default="gradient-spectral")
+    parser.add_argument("--rbf-scale", type=float, default=1.0)
+    parser.add_argument("--clustering-feature-scaling", choices=("none", "unit_sd"), default="none")
     parser.add_argument(
         "--gradient-random-state",
         type=int,
@@ -585,6 +600,7 @@ def _template_input_paths(
     fold_index: int,
     smoothing: str,
     hemi: str,
+    *, alignment_reference: FoldTemplateResult | None = None,
 ) -> dict[str, Path]:
     training, _heldout = _fold_partitions(config.fold_by_subject, fold_index)
     paths: dict[str, Path] = {
@@ -602,6 +618,8 @@ def _template_input_paths(
             subject,
             hemi,
         )
+    if alignment_reference is not None:
+        paths["alignment_anchor_gradients"] = alignment_reference.template_dir / "group_gradients.npy"
     return paths
 
 
@@ -627,6 +645,7 @@ def validate_template_manifest(
     fold_index: int,
     smoothing: str,
     hemi: str,
+    *, alignment_reference: FoldTemplateResult | None = None,
 ) -> None:
     training, heldout = _fold_partitions(config.fold_by_subject, fold_index)
     expected_surface = _template_surface_path(config.template_surfaces_dir, hemi).resolve()
@@ -642,10 +661,22 @@ def validate_template_manifest(
         "n_components": int(config.n_components),
         "gradient_random_state": int(config.gradient_random_state),
         "cluster_seed": int(config.cluster_seed),
-        "surface_affinity": GRADIENT_SPECTRAL_AFFINITY,
+        "gradient_preprocessing": gradient_preprocessing_settings(
+            int(manifest.get("feature_count", 400)), feature_scaling=config.feature_scaling,
+            sparsify_stage=config.sparsify_stage, sparsity=config.sparsity,
+        ),
+        "clustering_feature_scaling": config.clustering_feature_scaling,
+        **gradient_method_provenance(config.method, rbf_scale=config.rbf_scale),
         "k_final": DEFAULT_K,
     }
     mismatches: list[str] = []
+    recorded_anchor = manifest.get("gradient_alignment", {}).get("anchor_template")
+    if alignment_reference is not None:
+        expected_anchor = str(alignment_reference.template_dir.resolve())
+        if recorded_anchor is None or str(Path(recorded_anchor).resolve()) != expected_anchor:
+            mismatches.append(f"alignment anchor: expected={expected_anchor!r} actual={recorded_anchor!r}")
+    elif recorded_anchor is not None:
+        mismatches.append("alignment anchor requires the explicitly requested reference for resume")
     for key, value in expected.items():
         actual = manifest.get(key)
         if isinstance(value, float):
@@ -690,7 +721,7 @@ def validate_template_manifest(
     try:
         validate_file_fingerprints(
             manifest.get("input_fingerprints"),
-            _template_input_paths(config, fold_index, smoothing, hemi),
+            _template_input_paths(config, fold_index, smoothing, hemi, alignment_reference=alignment_reference),
             context="Resume template input",
         )
         validate_file_fingerprints(
@@ -711,6 +742,7 @@ def load_fold_template(
     fold_index: int,
     smoothing: str,
     hemi: str,
+    *, alignment_reference: FoldTemplateResult | None = None,
 ) -> FoldTemplateResult:
     template_dir = _fold_template_dir(
         config.out_root,
@@ -728,6 +760,7 @@ def load_fold_template(
         fold_index,
         smoothing,
         hemi,
+        alignment_reference=alignment_reference,
     )
     array_paths = {
         "support": template_dir / "group_support_mask.npy",
@@ -807,14 +840,15 @@ def fit_or_load_fold_template(
     hemi: str,
     *,
     resume: bool,
+    alignment_reference: FoldTemplateResult | None = None,
 ) -> FoldTemplateResult:
     manifest_path = (
         _fold_template_dir(config.out_root, fold_index, smoothing, hemi)
         / "template_manifest.json"
     )
     if resume and manifest_path.exists():
-        return load_fold_template(config, fold_index, smoothing, hemi)
-    return fit_fold_template(config, fold_index, smoothing, hemi)
+        return load_fold_template(config, fold_index, smoothing, hemi, alignment_reference=alignment_reference)
+    return fit_fold_template(config, fold_index, smoothing, hemi, alignment_reference=alignment_reference)
 
 
 def fit_fold_template(
@@ -822,6 +856,8 @@ def fit_fold_template(
     fold_id: int,
     smoothing: str,
     hemi: str,
+    *,
+    alignment_reference: FoldTemplateResult | None = None,
 ) -> FoldTemplateResult:
     fold_index = int(fold_id)
     training_subjects, heldout_subjects = _fold_partitions(
@@ -878,32 +914,50 @@ def fit_fold_template(
         group_fc_active,
         n_components=int(config.n_components),
         random_state=int(config.gradient_random_state),
+        feature_scaling=config.feature_scaling,
+        sparsify_stage=config.sparsify_stage,
+        sparsity=config.sparsity,
     )
     group_fc_full = reconstruct_full_surface(group_fc_active, support_mask, vertex_count)
     gradients_full = reconstruct_full_surface(gradients_active, support_mask, vertex_count)
+    alignment_meta: dict[str, object] = {"enabled": False, "mode": "native_reference_fit"}
+    if alignment_reference is not None:
+        gradients_active, gradients_full, lambdas, ev_fractions, alignment_meta = (
+            group_gradient.align_gradient_components_to_reference(
+                active=gradients_active, full=gradients_full, lambdas=lambdas,
+                ev_fractions=ev_fractions, reference_full=alignment_reference.gradients_full,
+                component_labels=[f"G{i+1}" for i in range(gradients_active.shape[1])],
+            )
+        )
+        alignment_meta.update(enabled=True, anchor_smoothing="4mm", anchor_hemi="L",
+                              anchor_template=str(alignment_reference.template_dir))
+    cluster_features, clustering_transform = scale_gradient_features(
+        gradients_active[:, :DEFAULT_K], scaling=config.clustering_feature_scaling,
+    )
     adjacency = core.build_surface_adjacency(faces, vertex_count)
+    clustering_metadata = {}
     _labels_active, labels_full = core.cluster_from_precomputed_group_features(
-        method="gradient-spectral",
-        group_features=np.asarray(gradients_active[:, :DEFAULT_K], dtype=np.float32),
+        method=config.method,
+        group_features=np.asarray(cluster_features, dtype=np.float32),
         support_mask=support_mask,
         adjacency_full=adjacency,
         k=DEFAULT_K,
         seed=int(config.cluster_seed),
+        rbf_scale=config.rbf_scale,
+        clustering_metadata=clustering_metadata,
     )
     labels_full = core.reorder_labels_by_long_axis(
         labels_full.astype(np.int32),
         long_axis_order(surface_path),
     ).astype(np.int32)
     support_indices = np.flatnonzero(support_mask)
-    affinity_graph = build_gradient_spectral_affinity(
-        np.asarray(gradients_active[:, :DEFAULT_K], dtype=np.float32),
-        adjacency[support_indices][:, support_indices],
+    graph_diagnostics = cluster_mesh_diagnostics(
+        labels_full[support_mask], adjacency[support_indices][:, support_indices], k=DEFAULT_K,
     )
-    graph_diagnostics = affinity_graph_diagnostics(
-        affinity_graph,
-        labels=labels_full[support_mask],
-        k=DEFAULT_K,
-    )
+    clustering_metadata["model_cluster_to_spatial_cluster"] = {
+        str(int(c)): int(labels_full[support_mask][np.flatnonzero(_labels_active == c)[0]])
+        for c in np.unique(_labels_active)
+    }
     prototypes = build_cluster_prototypes(
         group_fc_full,
         labels_full,
@@ -949,17 +1003,25 @@ def fit_fold_template(
         "n_components": int(config.n_components),
         "gradient_random_state": int(config.gradient_random_state),
         "cluster_seed": int(config.cluster_seed),
-        "surface_affinity": GRADIENT_SPECTRAL_AFFINITY,
-        "affinity_description": GRADIENT_SPECTRAL_AFFINITY_DESCRIPTION,
+        **gradient_method_provenance(config.method, rbf_scale=config.rbf_scale),
+        "gradient_clustering": clustering_metadata,
         "affinity_graph_diagnostics": graph_diagnostics,
+        "gradient_preprocessing": gradient_preprocessing_settings(
+            group_fc_active.shape[1], feature_scaling=config.feature_scaling,
+            sparsify_stage=config.sparsify_stage, sparsity=config.sparsity,
+        ),
+        "feature_count": int(group_fc_active.shape[1]),
+        "clustering_feature_scaling": config.clustering_feature_scaling,
+        "clustering_feature_transform": clustering_transform,
+        "gradient_alignment": alignment_meta,
         "k_final": DEFAULT_K,
-        "cluster_label_semantics": {"1": "Anterior", "2": "Body", "3": "Posterior"},
+        "cluster_label_semantics": {"1": "Anterior", "2": "Middle", "3": "Posterior"},
         "fc_paths": {f"sub-{subject}": path for subject, path in fc_paths.items()},
         "valid_mask_paths": {
             f"sub-{subject}": path for subject, path in valid_mask_paths.items()
         },
         "input_fingerprints": fingerprint_files(
-            _template_input_paths(config, fold_index, smoothing, hemi)
+            _template_input_paths(config, fold_index, smoothing, hemi, alignment_reference=alignment_reference)
         ),
         "artifact_fingerprints": fingerprint_files(
             _template_artifact_paths(template_dir)
@@ -1316,7 +1378,7 @@ def write_heldout_subject_outputs(
         ],
         "subject_was_in_template": subject_id in set(template.training_subjects),
         "assignment_metric": "max_pearson_correlation_to_training_cluster_profile",
-        "label_semantics": {"1": "Anterior", "2": "Body", "3": "Posterior"},
+        "label_semantics": {"1": "Anterior", "2": "Middle", "3": "Posterior"},
         "label_counts": label_counts,
         "margin_summary": {
             "n_finite": int(finite_margin.size),
@@ -1390,6 +1452,18 @@ def dry_run_payload(
                 if not fc_path.exists():
                     missing.add(str(fc_path.resolve()))
 
+    # Alignment is an explicit 4mm-left training fit even for a partial request.
+    anchor_surface = _template_surface_path(args.template_surfaces_dir, "L")
+    if not anchor_surface.exists():
+        missing.add(str(anchor_surface.resolve()))
+    for subject in normalized_subjects:
+        for anchor_input in (
+            _subject_valid_mask_path(args.surface_root, subject, "L"),
+            _subject_fc_path(args.shared_root, subject, "4mm", "L"),
+        ):
+            if not anchor_input.exists():
+                missing.add(str(anchor_input.resolve()))
+
     overlap_count = 0
     for row in fold_payload["folds"]:
         overlap_count += len(
@@ -1401,7 +1475,11 @@ def dry_run_payload(
         "n_folds": int(args.n_folds),
         "smoothings": [str(value) for value in args.smoothings],
         "hemis": [str(value) for value in args.hemis],
-        "template_fits": int(args.n_folds) * len(args.smoothings) * len(args.hemis),
+        "template_fits": int(args.n_folds) * (
+            len(args.smoothings) * len(args.hemis)
+            + int("4mm" not in args.smoothings or "L" not in args.hemis)
+        ),
+        "alignment_anchor": {"smoothing": "4mm", "hemi": "L"},
         "subject_combo_mappings": (
             len(normalized_subjects) * len(args.smoothings) * len(args.hemis)
         ),
@@ -1492,7 +1570,12 @@ def run_config_payload(
         "n_components": int(args.n_components),
         "gradient_random_state": int(args.gradient_random_state),
         "cluster_seed": int(args.cluster_seed),
-        "surface_affinity": GRADIENT_SPECTRAL_AFFINITY,
+        "gradient_preprocessing": gradient_preprocessing_settings(
+            400, feature_scaling=args.feature_scaling,
+            sparsify_stage=args.sparsify_stage, sparsity=args.sparsity,
+        ),
+        "clustering_feature_scaling": args.clustering_feature_scaling,
+        **gradient_method_provenance(args.method, rbf_scale=args.rbf_scale),
         "k_final": DEFAULT_K,
     }
 
@@ -1577,20 +1660,29 @@ def main(argv: Sequence[str] | None = None) -> int:
         n_components=int(args.n_components),
         gradient_random_state=int(args.gradient_random_state),
         cluster_seed=int(args.cluster_seed),
+        feature_scaling=args.feature_scaling,
+        sparsify_stage=args.sparsify_stage,
+        sparsity=args.sparsity,
+        clustering_feature_scaling=args.clustering_feature_scaling,
+        method=args.method, rbf_scale=args.rbf_scale,
     )
     template_fits = 0
     mapping_outputs: list[dict[str, str]] = []
     for fold_index in range(int(args.n_folds)):
+        alignment_reference = fit_or_load_fold_template(
+            config, fold_index, "4mm", "L", resume=bool(args.resume),
+        )
+        template_fits += 1
         for smoothing in args.smoothings:
             for hemi in args.hemis:
-                template = fit_or_load_fold_template(
-                    config,
-                    fold_index,
-                    str(smoothing),
-                    str(hemi),
-                    resume=bool(args.resume),
-                )
-                template_fits += 1
+                if str(smoothing) == "4mm" and str(hemi) == "L":
+                    template = alignment_reference
+                else:
+                    template = fit_or_load_fold_template(
+                        config, fold_index, str(smoothing), str(hemi),
+                        resume=bool(args.resume), alignment_reference=alignment_reference,
+                    )
+                    template_fits += 1
                 for subject in template.heldout_subjects:
                     outputs = write_or_load_heldout_subject_outputs(
                         config,
@@ -1615,9 +1707,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         "n_components": int(args.n_components),
         "gradient_random_state": int(args.gradient_random_state),
         "cluster_seed": int(args.cluster_seed),
-        "surface_affinity": GRADIENT_SPECTRAL_AFFINITY,
+        **gradient_method_provenance(args.method, rbf_scale=args.rbf_scale),
         "k_final": DEFAULT_K,
         "template_fits_completed": int(template_fits),
+        "alignment_anchor": {"smoothing": "4mm", "hemi": "L", "fit_population": "training_subjects"},
         "subject_combo_mappings_completed": len(mapping_outputs),
         "fold_manifest": str((fold_root / "fold_manifest.json").resolve()),
         "fold_assignments": str((fold_root / "fold_assignments.tsv").resolve()),

@@ -40,7 +40,7 @@
     {
       "step_id": "02_01_prepare_group_inputs",
       "stage": "02_inputs_qc",
-      "purpose": "Prepare registered NIfTI-sampled surface signals, vertex masks, and group-average templates from validated HippUnfold outputs and exact BOLD inputs with physical-run metadata; CIFTIs are not consumed. HCP7T rest uses NIfTI support and runwise signal validity without a numerical tSNR cutoff; participant qc/all for other datasets/tasks is not implemented.",
+      "purpose": "Prepare registered NIfTI-sampled surface signals, vertex masks, and group-average templates from validated HippUnfold outputs and exact BOLD inputs with physical-run metadata; CIFTIs are not consumed. All datasets/tasks use shared NIfTI support and runwise signal validity without a numerical tSNR cutoff; --qc-run-inputs supplies explicit BOLD/motion declarations and outputs remain cohort-specific.",
       "branches": [
         "kong2022_pfm",
         "kong2022_fixed"
@@ -52,7 +52,7 @@
     {
       "step_id": "02_02_build_qc_manifest",
       "stage": "02_inputs_qc",
-      "purpose": "Build the HCP7T rest QC-pass roster from physical-run Power FD, bilateral HippUnfold Dice, and unusable-vertex counts derived from exact NIfTI support arrays and sampled runwise signals, without a fixed subject count or numerical tSNR gate.",
+      "purpose": "Build the selected dataset/task QC-pass roster from physical-run Power FD, bilateral HippUnfold Dice, and unusable-vertex counts derived from exact NIfTI support arrays and sampled runwise signals, without a fixed subject count or numerical tSNR gate. Explicit completion-version checks exclude incomplete structural runs; missing inputs remain unassessable.",
       "branches": [
         "kong2022_pfm",
         "kong2022_fixed"

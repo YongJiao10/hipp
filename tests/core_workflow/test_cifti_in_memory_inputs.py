@@ -41,7 +41,7 @@ def test_prepare_group_inputs_manifest_ignores_comments(tmp_path: Path) -> None:
     assert subjects == ["1001", "1002"]
 
 
-def test_single_volume_sampling_records_volume_in_stage_manifest(
+def test_single_volume_sampling_requires_physical_run_metadata_before_writing(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -68,9 +68,9 @@ def test_single_volume_sampling_records_volume_in_stage_manifest(
     manifest_path = (
         tmp_path / "shared" / "sub-01" / "surface" / "raw" / "stage_manifest.json"
     )
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    assert result["ok"] is True
-    assert [item["path"] for item in manifest["inputs"]] == [str(bold.resolve())]
+    assert result['ok'] is False
+    assert '--run-metadata-template' in result['error']
+    assert not manifest_path.exists()
 
 
 def test_persistent_sampled_metric_summary_omits_temporary_metric_path() -> None:
@@ -271,6 +271,7 @@ def test_run_raw_sampling_uses_manifest_declared_runs_and_receipts(
                 "runs": [
                     {
                         "run_id": run_id,
+                        "run_label": f'physical_run_{run_id}',
                         "bold": _artifact_receipt(bolds[run_id]),
                         **({'dtseries': {'path': str(tmp_path / 'absent.dtseries.nii')}}
                            if extra_cifti_declaration else {}),
@@ -283,15 +284,22 @@ def test_run_raw_sampling_uses_manifest_declared_runs_and_receipts(
     )
 
     captured_runs: list[tuple[int, Path]] = []
+    surfaces = []
+    for hemi in ('L', 'R'):
+        surface = tmp_path / f'{hemi}.surf.gii'
+        nib.save(nib.gifti.GiftiImage(darrays=[nib.gifti.GiftiDataArray(
+            np.zeros((512, 3), dtype=np.float32), intent='NIFTI_INTENT_POINTSET')]), surface)
+        surfaces.append({'hemi': hemi, 'surface': str(surface), 'source_surface': str(surface)})
 
     def fake_sample(**kwargs: object) -> tuple[dict[str, np.ndarray], dict[str, object]]:
         captured_runs.extend(kwargs["runs"])
         return (
             {
-                "L": np.ones((3, 5), dtype=np.float32),
-                "R": np.ones((3, 5), dtype=np.float32),
+                "L": np.ones((512, 5), dtype=np.float32),
+                "R": np.ones((512, 5), dtype=np.float32),
             },
-            {"run_ids": [2, 7], "run_lengths": [2, 3]},
+            {"run_ids": [2, 7], "run_lengths": [2, 3], 'sampling_surfaces': surfaces,
+             'sampling_space': 'MNI152NLin6Asym'},
         )
 
     monkeypatch.setattr(

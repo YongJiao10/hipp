@@ -80,9 +80,13 @@ with exactly one `--dataset hcp|stanford|iowa_jj_tms|banda|pdc` preset:
   1001 --dataset stanford --dry-run
 ```
 
-The closed preset uses official HippUnfold 2.3.0, T1w, density 512, corobl output,
-unfolded registration and GPU inference. BANDA/PDC skip N4 on their already
-bias-corrected inputs. The runtime/model/CUDA gate runs once per pending batch.
+The closed preset selects the official HippUnfold release declared in
+`environment/hippo2_server.yml`, T1w, the `multihist7sgi` unfolded atlas,
+density 512, corobl output, unfolded registration and GPU inference. HCP,
+BANDA and PDC skip N4 on their bias-corrected inputs; Stanford and Iowa JJ-TMS
+retain N4. The runtime/model/CUDA gate runs once per pending batch. Existing
+2.3.0 output contracts name the old atlas and must be replaced from completed
+2.4.0 runs before checking upgraded products.
 HCP defaults to eight subjects and accepts `--jobs` up to twelve; other datasets
 use two, with BANDA serial. The approved HCP launch, CPU affinity, GPU slots and
 resource patches are maintained in the [runtime manifest](../../docs/environment/hippo2_reproducibility_manifest.md#batch-resources-and-retained-outputs).
@@ -97,6 +101,10 @@ products with `--fail-on-missing --no-cleanup`. `--notemp` retains anatomy,
 coordinates, warps and CIFTI intermediates. Resume requires a current matching
 `output_check.json` and every declared output; a cleanup receipt, a boundary
 function test or a pair of meshes is insufficient.
+The 156 completed HCP subjects present in the 3T task dataset underwent
+approved 01_02 cleanup of anat, coords, warps and CIFTI. Their retained outputs
+do not satisfy the full 96-product resume contract; see the
+[current status](../../docs/environment/hippunfold_result_impact.md).
 
 The upstream release includes fixes for terminal fragmentation and ineffective
 unfolded registration. Do not apply the retired local scientific patches or
@@ -135,8 +143,21 @@ space and saves mapped meshes in `surface/raw/sampling_surfaces/`. Raw metrics,
 physical smoothing, cortical-neighbour distances and subject vertex areas use
 native T1w geometry; corobl surfaces provide display correspondence. For cortex
 controls, native cortical meshes require `--cortex-coordinate-space T1w`.
+Each run is sampled once on a temporary disconnected bilateral mesh and split
+back into the original left/right vertex order, avoiding repeated decompression.
+Raw and smoothing jobs share coordinator threads; at most two subjects launch
+single-threaded Workbench processes concurrently.
 
-HCP7T rest implements overall mean Power FD <=0.50 mm, bilateral Dice >=0.70,
+Run-level sampling saves each hemisphere's complete concatenated sequence as
+`surface/raw/sub-<ID>_hemi-<L|R>_timeseries.npy` and a `*_bold.func.gii`.
+`surface_sampling_summary.json` records physical run order and frame lengths;
+keep the coverage arrays, vertex masks and native surfaces with these signals.
+Fixed surface analyses can consume these saved inputs. The current raw-resume
+and participant-QC commands still require the declared source BOLD files;
+deleting volumes before changing that input contract produces missing-input
+status. New geometry or voxel-level analyses require the volumes again.
+
+The shared participant QC implements overall mean Power FD <=0.50 mm, bilateral Dice >=0.70,
 and at most 20 unusable vertices per consumed den-512 hemisphere. Unusable means
 no trilinear NIfTI grid support or a nonfinite/constant sampled signal in any
 physical run. Coverage uses `*_nifti_support.npy` and
@@ -146,17 +167,28 @@ does not apply a numerical tSNR cutoff or CIFTI hippocampal-membership mask.
 Participant QC and smoothing use the same vertex validity calculation.
 
 The current `latest` QC roster defines the cohort; there is no fixed historical
-subject-count requirement. Participant `qc` and `all` stages currently reject
-other datasets/tasks before writing. Their `raw`, `tsnr`, `smooth` and
-`group-average` stages remain separately available with explicit branch roots.
+subject-count requirement. `--qc-run-inputs` supplies the same explicit
+physical-run BOLD/motion table to sampling and participant QC for every dataset
+and task. Supply the complete roster with `--subjects` or `--subjects-manifest`
+so participants without declared runs remain visible as unassessable. Columns
+are `subject,run_id,run_label,bold_path,n_timepoints,motion_path,motion_format`
+(tab separated). Motion formats are `hcp_movement_degrees` and `fmriprep_confounds`.
+For censored XCP-D volumes, add `temporal_mask_path` for the exact outlier TSV:
+motion uses original post-dummy frames, while `n_timepoints` and coverage use
+the retained BOLD frames. NIH rTMS uses `--dataset nih_rtms` and separate
+`outputs_nih_rtms/inputs/kong2022/ses-1/` and `ses-2/` roots.
+Use `--require-hippunfold-version 2.3.0` when assessing the current reconstruction.
 Task/non-HCP preparation requires its own `--route-root`, `--shared-root`, and
 an explicit `--template-root` for group-average preparation.
+Pass lists use the selected dataset/task prefix; HCP rest retains `hcp_7t`.
+Missing declared BOLD inputs are reported as unassessable and are skipped by
+sampling, rather than stopping other participants or selecting another modality.
 Rebuild incompatible sampling, coverage and masks explicitly with `--no-resume`
 before smoothing; changing source code does not replace production products.
 
 ### Existing rest tSNR baseline inputs
 
-Non-HCP rest adapters retain a separate baseline-based tSNR interface.
+Cortical rest adapters retain a separate baseline-based tSNR interface.
 `--tsnr-input-template` selects an NPZ with `dataset`, `subject` (without
 `sub-`), `hemi`, `n_runs`, and pairs `run_0`/`frames_0`, etc. Each run is a
 vertex-by-original-frame baseline array; frames are sorted, unique original
@@ -175,6 +207,27 @@ and MB/ME inputs distinct.
 
 ## Branches and analysis defaults
 
+Gradient producers and independent fit callers expose `--feature-scaling
+{none,col_zscore}`, `--sparsify-stage {features,affinity,none}` and `--sparsity`.
+The defaults preserve column z-scoring and BrainSpace feature sparsification
+(0.9 for Kong400; 0.0 for banks with at most 50 features). Pearson affinity
+is constructed once, clipped nonnegative, mean-symmetrized with its kernel
+diagonal retained, then embedded with `GradientMaps(kernel=None)` and no
+second sparsification. Disconnected diffusion support is rejected.
+`gradient_preprocessing` records the effective settings; missing or mismatched
+settings require explicit regeneration instead of cache reuse.
+
+Clustering has a separate `--clustering-feature-scaling {none,unit_sd}` choice.
+Unit-SD scaling fits component means and population SDs (`ddof=0`) on supported
+training vertices after component selection/alignment. Each independent split
+fits its own transform; held-out data use the training transform. Zero-variance
+components fail. Native component weighting remains the default.
+
+Functional K=3 cluster names are `Anterior`, `Middle`, `Posterior` in
+anterior-to-posterior order (`Ant`, `Mid`, `Post` in compact figures).
+The anatomical set is `Head`, `Body`, `Tail`; keep each set complete.
+Source labels remain separate from data-derived network annotations.
+
 | Workflow branch | Route | Reference/gradient contract |
 |---|---|---|
 | `kong2022_pfm` | `pfm` | Individualized Kong400 FC; canonical7 default |
@@ -183,6 +236,13 @@ and MB/ME inputs distinct.
 | `kong2022_pfm_ctxreg` | `pfm_ctxreg` | Cortex-regressed hippocampal signals; upstream PFM references and surface masks |
 | `kong2022_pfm_ctxdrop` | `pfm_ctxdrop` | Exclude valid cortex within 20 mm before ROI averaging; gradient-spectral/WTA |
 | `lynch2024_20net`, `lynch2024_7net` | Matching atlas slug | Hard-label Lynch references; both reuse the Lynch20 gradient bank |
+
+For family17 group overviews, pass `--route-tag pfm_17net` or
+`--route-tag fixed_17net` to `06_01_build_group_overview.py`. The explicit
+route selects the family17 assignment taxonomy for lineage validation;
+the consumed gradient FC bank must have 400 ordered Kong2022 ROI columns.
+Family17 overviews use a wider layout with vertical network labels. Signed
+Fisher-z heatmap annotations preserve negative signs.
 
 For HCP cortex controls, the formal route roots are
 `outputs_hcp/inputs/kong2022/shared_inputs/<route>/`,
@@ -227,6 +287,51 @@ Stanford Causal-Connectome 22P uses the following local roots under
 Here `surf` means cortical time-series CIFTI. Use `/Shared/jianglab` on Argon.
 The seven overview cohorts are NTHC, TEHC, NTS, NTS Any MDD, NTS Pure MDD, TIS,
 and TIS PTSD. Select the complete roster for the intended analysis.
+
+### Additional gradient methods
+
+The shared `lib/gradient_clustering.py` dispatcher accepts `gradient-ward`,
+`gradient-gmm`, and `gradient-spectral-rbf`, alongside the existing
+`gradient-spectral` shifted-cosine method. Production defaults remain unchanged.
+Ward uses Euclidean features and binary mesh connectivity and rejects disconnected
+support. Full-covariance GMM has no spatial constraint and reports disconnected
+clusters, convergence, and covariance conditioning without repairing labels.
+RBF spectral uses unique undirected binary mesh edges and float64 weights with
+sigma equal to `--rbf-scale` times the median positive edge distance. The primary
+scale is 1; 0.5 and 2 are separate sensitivity settings. Disconnected positive
+support or support after the declared relative-weight cutoff of 1e-5 fails the
+candidate. Small clusters are reported, never rebalanced.
+
+Stage `05_02` supports `--k-selection-mode fixed-comparison --k-min 3 --k-max 3`.
+This exports only the requested K and its diagnostics, leaves automatic K unset,
+and treats data and fitting errors as fatal. To write a dataset comparison to
+repository `tmp/`, also pass `--comparison-output --dataset outputs_hcp` and an
+explicit output root; consumed source roots must belong to that dataset. Formal
+output routing is unchanged and the revision comparison does not replace it.
+
+Explicit `--assignment-variant ovr_logistic_canonical7 ovr_logistic_family17`
+adds separate descriptive OVR models to the existing Fisher-z and normalized
+Top-20 exports. Each model uses the same subject-by-cluster Kong400 profiles
+computed from cluster-mean hippocampal time series. It aggregates equal ROI
+Fisher-z means within each authoritative network, without imputing missing
+network values. The fixed liblinear L2 model uses C=1, tol=1e-4, max_iter=1000,
+and seed 20260420, without extra feature scaling or class weighting.
+`both` continues to mean Fisher-z plus normalized Top-20; OVR requires explicit
+selection and does not change cluster boundaries. The largest strictly positive
+raw coefficient determines each OVR label; all other cases are unassigned.
+
+Each OVR export includes the exact subject-by-cluster input table, class/network
+order, beta, intercept, raw OR, feature SD, per-SD beta and OR, and a coefficient
+figure. SD uses ddof=0 over the exact flattened fitting observations. Raw OR is
+per one Fisher-z unit; per-SD OR changes reporting units, not model fitting.
+Coefficient plots use zero and OR plots use one as the reference. These are
+descriptive conditional associations with dependent observations within subjects,
+not accuracy estimates, inferential tests, causal effects, or a numerical
+reproduction of Kember's different inputs and standardization.
+
+OVR group overviews summarize the six fitted left/right clusters; the blank
+hemisphere separator in the coefficient heatmap is excluded from bar summaries.
+
 
 ## Implementation boundary
 

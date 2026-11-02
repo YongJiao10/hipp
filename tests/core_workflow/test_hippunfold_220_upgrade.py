@@ -47,14 +47,14 @@ def fake_gate(monkeypatch, tmp_path, version):
 
 
 def test_runtime_gate_accepts_the_upgraded_cli(monkeypatch, tmp_path):
-    fake_gate(monkeypatch, tmp_path, '2.3.0')
+    fake_gate(monkeypatch, tmp_path, '2.4.0')
     contract_module.validate_local_assets({})
 
 
-@pytest.mark.parametrize('version', ['2.0.0', '2.2.0'])
+@pytest.mark.parametrize('version', ['2.0.0', '2.2.0', '2.3.0'])
 def test_runtime_gate_rejects_the_old_cli(monkeypatch, tmp_path, version):
     fake_gate(monkeypatch, tmp_path, version)
-    with pytest.raises(RuntimeError, match=r'2\.3\.0'):
+    with pytest.raises(RuntimeError, match=r'2\.4\.0'):
         contract_module.validate_local_assets({})
 
 
@@ -65,7 +65,7 @@ def test_public_dry_run_declares_the_new_registration_parameters():
         cwd=ROOT, capture_output=True, text=True, check=True,
     )
     payload = json.loads(result.stdout)
-    assert payload['hippunfold_version'] == '2.3.0'
+    assert payload['hippunfold_version'] == '2.4.0'
     assert payload['inner_outer_reg_method'] == 'greedy'
     assert payload['inner_outer_reg_smoothing'] == 3.0
     argv = payload['hippunfold_argv']
@@ -77,6 +77,21 @@ def test_an_old_cleanup_marker_does_not_skip_the_upgrade(launcher, tmp_path):
     (tmp_path / 'core_workflow_cleanup_receipt.json').write_text('{}')
     contract = SimpleNamespace(subject='102311', output_dir=tmp_path)
     assert launcher._is_completed(contract) is False
+
+
+def test_new_run_refuses_an_old_atlas_output_contract(launcher, tmp_path, monkeypatch):
+    manifest = tmp_path / '_batch_logs/output_integrity_manifest.json'
+    manifest.parent.mkdir()
+    manifest.write_text(json.dumps({'expected_outputs': [
+        'sub-{subject}/metric/sub-{subject}_atlas-multihist7_subfields.label.gii'
+    ]}))
+    contract = SimpleNamespace(subject='102311', output_dir=tmp_path,
+                               preset=SimpleNamespace(output_root=tmp_path))
+    monkeypatch.setattr(launcher.subprocess, 'run', lambda *a, **k: None)
+    (tmp_path / 'output_check.json').write_text(json.dumps([{'subject': '102311'}]))
+    contract.as_json = lambda: {}
+    with pytest.raises(RuntimeError, match='multihist7sgi'):
+        launcher._check_subject(contract)
 
 
 def test_hcp_batch_rejects_a_budget_above_twelve_subjects(launcher, monkeypatch):

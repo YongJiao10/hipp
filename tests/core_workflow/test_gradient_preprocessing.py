@@ -1,0 +1,422 @@
+"""Numerical contracts for explicitly selected gradient preprocessing."""
+from pathlib import Path
+import importlib.util
+import json
+import sys
+
+import numpy as np
+import pytest
+from brainspace.gradient import GradientMaps
+from brainspace.gradient.kernels import compute_affinity
+
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
+from scripts.core_workflow.lib import hippomaps_adapter as adapter
+
+
+@pytest.mark.parametrize("scaling", ["none", "col_zscore"])
+@pytest.mark.parametrize("stage", ["features", "affinity", "none"])
+def test_scaling_and_sparsification_are_separate_explicit_choices(monkeypatch, scaling, stage):
+    raw = np.random.default_rng(17).normal(size=(20, 30)).astype(np.float32)
+    raw *= np.linspace(1, 9, 30)
+    before = raw.copy()
+    calls = []
+
+    def capture(matrix, **kwargs):
+        calls.append((matrix.copy(), kwargs))
+        return compute_affinity(matrix, **kwargs)
+
+    monkeypatch.setattr("brainspace.gradient.kernels.compute_affinity", capture)
+    affinity = adapter.build_pearson_affinity(
+        raw, feature_scaling=scaling, sparsify_stage=stage, sparsity=0.5,
+    )
+    expected = raw if scaling == "none" else adapter.feature_zscore_columns(raw)
+    assert len(calls) == 1
+    assert np.array_equal(calls[0][0], expected)
+    assert calls[0][1] == {
+        "kernel": "pearson", "sparsity": None if stage == "none" else 0.5,
+        "pre_sparsify": stage != "affinity", "non_negative": True,
+    }
+    expected_affinity = compute_affinity(expected.copy(), **calls[0][1])
+    assert np.allclose(affinity, (expected_affinity + expected_affinity.T) / 2)
+    assert np.all(affinity >= 0)
+    assert np.allclose(np.diag(affinity), 1)
+    assert np.array_equal(raw, before)
+
+
+def test_embedding_consumes_the_affinity_without_second_kernel_or_sparsification(monkeypatch):
+    calls = []
+
+    class Embedding:
+        def __init__(self, **kwargs):
+            calls.append(kwargs)
+
+        def fit(self, affinity, **kwargs):
+            calls.append((affinity.copy(), kwargs))
+            self.gradients_ = np.arange(60).reshape(20, 3)
+            self.lambdas_ = np.array([3., 2., 1.])
+            return self
+
+    monkeypatch.setattr("brainspace.gradient.GradientMaps", Embedding)
+    raw = np.random.default_rng(4).normal(size=(20, 30))
+    result = adapter.fit_gradientmaps_pearson(
+        raw, n_components=3, random_state=19,
+        feature_scaling="none", sparsify_stage="affinity", sparsity=0.3,
+    )
+    assert calls[0] == {"n_components": 3, "kernel": None, "random_state": 19}
+    assert calls[1][1] == {"sparsity": None}
+    assert calls[1][0].shape == (20, 20)
+    assert result[0].shape == (20, 3)
+    assert np.allclose(result[2], [0.5, 1/3, 1/6])
+
+
+def test_explicit_feature_route_preserves_current_brainspace_numerics():
+    raw = np.random.default_rng(3).normal(size=(64, 80)).astype(np.float32)
+    legacy = GradientMaps(n_components=5, kernel="pearson", random_state=11)
+    legacy.fit(adapter.feature_zscore_columns(raw), sparsity=0.9)
+    gradients, lambdas, _ = adapter.fit_gradientmaps_pearson(
+        raw, n_components=5, random_state=11, feature_scaling="col_zscore",
+        sparsify_stage="features", sparsity=0.9,
+    )
+    assert np.allclose(lambdas, legacy.lambdas_, atol=1e-6)
+    assert np.allclose(np.abs(gradients), np.abs(legacy.gradients_), atol=1e-5)
+
+
+def test_disconnected_diffusion_affinity_is_rejected():
+    row = np.arange(4, dtype=float)
+    raw = np.vstack([np.tile(row, (4, 1)), np.tile(-row, (4, 1))])
+    with pytest.raises(ValueError, match="disconnected"):
+        adapter.build_pearson_affinity(raw, feature_scaling="none", sparsify_stage="none")
+
+
+def test_gradient_cache_requires_exact_declared_preprocessing(tmp_path):
+    path = tmp_path / "hippomaps_gradient_manifest.json"
+    requested = adapter.gradient_preprocessing_settings(
+        400, feature_scaling="none", sparsify_stage="affinity", sparsity=0.9,
+    )
+    with pytest.raises(ValueError, match="gradient_preprocessing.*regenerate"):
+        adapter.validate_gradient_preprocessing({}, settings=requested, manifest_path=path)
+    recorded = {"gradient_preprocessing": dict(requested)}
+    adapter.validate_gradient_preprocessing(recorded, settings=requested, manifest_path=path)
+    recorded["gradient_preprocessing"]["feature_scaling"] = "col_zscore"
+    with pytest.raises(ValueError, match="feature_scaling.*regenerate"):
+        adapter.validate_gradient_preprocessing(recorded, settings=requested, manifest_path=path)
+
+
+def test_clustering_unit_sd_is_fitted_on_training_vertices_only():
+    training = np.array([[1., 10.], [3., 50.], [8., 30.]])
+    scaled, transform = adapter.scale_gradient_features(training, scaling="unit_sd")
+    assert np.allclose(scaled.mean(axis=0), 0)
+    assert np.allclose(scaled.std(axis=0, ddof=0), 1)
+    assert np.allclose(transform["component_means"], training.mean(axis=0))
+    assert np.allclose(transform["component_sds"], training.std(axis=0, ddof=0))
+    heldout = np.array([[100., -500.]])
+    applied, recorded = adapter.scale_gradient_features(
+        heldout, scaling="unit_sd", transform=transform,
+    )
+    assert np.allclose(applied, (heldout-training.mean(axis=0))/training.std(axis=0))
+    assert recorded == transform
+    native, _ = adapter.scale_gradient_features(training, scaling="none")
+    assert np.array_equal(native, training)
+
+
+@pytest.mark.parametrize("scaling", ["none", "unit_sd"])
+def test_clustering_rejects_a_zero_variance_component(scaling):
+    with pytest.raises(ValueError, match="zero-variance"):
+        adapter.scale_gradient_features(np.array([[1., 3.], [2., 3.]]), scaling=scaling)
+
+
+def _stage(filename):
+    core = ROOT / "scripts/core_workflow"
+    sys.path.insert(0, str(core))
+    name = "explicit_preprocessing_" + filename.split(".")[0]
+    spec = importlib.util.spec_from_file_location(name, core / filename)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_producer_forwards_and_exports_requested_preprocessing(tmp_path, monkeypatch):
+    producer = _stage("05_01_compute_hippomaps_gradients.py")
+    surface_dir = tmp_path / "surfaces"
+    surface_dir.mkdir()
+    (surface_dir / "group-average_hemi-L_space-corobl_den-512_label-hipp_midthickness.surf.gii").touch()
+    mask = np.ones(8, dtype=bool)
+    gradient = np.random.default_rng(4).normal(size=(8, 3)).astype(np.float32)
+    calls = []
+    monkeypatch.setattr(producer, "read_surface_vertex_count", lambda _: 8)
+    monkeypatch.setattr(producer, "subject_valid_mask", lambda *args: mask)
+    monkeypatch.setattr(producer, "load_subject_fc", lambda *args, **kwargs: (np.zeros((8,400)), tmp_path / "fc.npy"))
+    monkeypatch.setattr(producer, "load_kong2022_roi_fc_contract", lambda *args, **kwargs: {"roi_names": [str(i) for i in range(400)]})
+
+    def fit(matrix, **kwargs):
+        calls.append(kwargs)
+        return gradient, np.ones(3), np.ones(3)/3
+
+    monkeypatch.setattr(producer, "fit_gradientmaps_pearson", fit)
+    monkeypatch.setattr(producer, "hippomaps_import_path", lambda _: "test")
+    monkeypatch.setattr(producer, "hippomaps_commit", lambda _: "test")
+    result = producer.compute_combo(
+        route="pfm", signal_branch="standard", shared_root=tmp_path, reference_root=tmp_path,
+        atlas="kong2022", surface_root=tmp_path, subjects=["01"], subjects_manifest=tmp_path / "subjects.txt",
+        smoothing="2mm", hemi="L", coverage_threshold=.8, group_average_surfaces_dir=surface_dir,
+        out_root=tmp_path / "gradients", hippomaps_root=tmp_path, n_components=3,
+        selected_components=[1,2,3], gradient_random_state=11, force=False,
+        feature_scaling="none", sparsify_stage="affinity", sparsity=.6,
+    )
+    assert calls == [{"n_components":3, "random_state":11, "feature_scaling":"none", "sparsify_stage":"affinity", "sparsity":.6}]
+    path = producer.write_aligned_combo_outputs(
+        result=result, gradients_active=gradient, gradients_full=gradient,
+        lambdas=result.lambdas, ev_fractions=result.ev_fractions,
+        selected_components=[1,2,3], alignment_meta={"anchor_smoothing":"4mm","anchor_hemi":"L"},
+    )
+    manifest = json.loads(path.read_text())
+    assert manifest["gradient_preprocessing"] == adapter.gradient_preprocessing_settings(
+        400, feature_scaling="none", sparsify_stage="affinity", sparsity=.6,
+    )
+    assert "matching HippoMaps tutorial" not in manifest["feature_zscore_pre_gradientmaps"]
+
+
+@pytest.mark.parametrize("recorded", [None, "col_zscore"])
+def test_group_atlas_loader_rejects_missing_or_other_preprocessing(tmp_path, recorded):
+    consumer = _stage("05_02_run_group_atlas.py")
+    run = tmp_path / "pfm/2mm/hemi_L"
+    run.mkdir(parents=True)
+    array_path = run / "hippomaps_gradients_full.npy"
+    np.save(array_path, np.random.default_rng(2).normal(size=(8,5)))
+    manifest = {"status":"ok", "group_fc_shape":[8,400], "feature_count":400,
+                "outputs":{"hippomaps_gradients_full":str(array_path)}}
+    if recorded is not None:
+        manifest["gradient_preprocessing"] = adapter.gradient_preprocessing_settings(400, feature_scaling=recorded)
+    (run / "hippomaps_gradient_manifest.json").write_text(json.dumps(manifest))
+    with pytest.raises(ValueError, match="regenerate"):
+        consumer.load_hippomaps_gradient_features(
+            gradient_root=tmp_path, route="pfm", smoothing="2mm", hemi="L",
+            support_mask=np.ones(8,dtype=bool), feature_scaling="none",
+        )
+
+
+@pytest.mark.parametrize("recorded_seed", [None, 0])
+def test_group_atlas_loader_rejects_missing_or_other_gradient_seed(tmp_path, recorded_seed):
+    consumer = _stage("05_02_run_group_atlas.py")
+    run = tmp_path / "pfm/2mm/hemi_L"
+    run.mkdir(parents=True)
+    array_path = run / "hippomaps_gradients_full.npy"
+    np.save(array_path, np.random.default_rng(2).normal(size=(8,5)))
+    manifest = {"status":"ok", "group_fc_shape":[8,400], "feature_count":400,
+                "gradient_preprocessing": adapter.gradient_preprocessing_settings(400),
+                "outputs":{"hippomaps_gradients_full":str(array_path)}}
+    if recorded_seed is not None:
+        manifest["gradient_random_state"] = recorded_seed
+    (run / "hippomaps_gradient_manifest.json").write_text(json.dumps(manifest))
+    with pytest.raises(ValueError, match="gradient_random_state.*regenerate"):
+        consumer.load_hippomaps_gradient_features(
+            gradient_root=tmp_path, route="pfm", smoothing="2mm", hemi="L",
+            support_mask=np.ones(8,dtype=bool), gradient_random_state=17,
+        )
+
+
+def test_subset_fit_uses_declared_preprocessing_and_its_own_component_sd(tmp_path, monkeypatch):
+    atlas = _stage("05_02_run_group_atlas.py")
+    monkeypatch.setattr(atlas, "ensure_hippomaps_on_path", lambda path: tmp_path)
+    monkeypatch.setattr(atlas, "hippomaps_import_path", lambda path: "test")
+    monkeypatch.setattr(atlas, "hippomaps_commit", lambda path: "test")
+    raw = np.random.default_rng(7).normal(size=(12,5)).astype(np.float32)
+    calls = []
+
+    def fit(matrix, **kwargs):
+        calls.append(kwargs)
+        return raw, np.ones(5), np.ones(5)/5
+
+    options = {"feature_scaling":"none", "sparsify_stage":"affinity", "sparsity":.7,
+               "random_state":29, "clustering_feature_scaling":"unit_sd"}
+    selected, meta = atlas.build_group_gradient_features(
+        feature_bank={"a":np.ones((12,400))}, subjects_subset=["a"],
+        support_mask=np.ones(12,dtype=bool), gradientmaps_fit_fn=fit,
+        gradient_options=options,
+    )
+    assert calls == [{"n_components":5, "random_state":29, "feature_scaling":"none", "sparsify_stage":"affinity", "sparsity":.7}]
+    assert np.allclose(selected.std(axis=0), 1)
+    assert meta["clustering_feature_transform"]["n_vertices_fit"] == 12
+    assert meta["gradient_preprocessing"]["feature_scaling"] == "none"
+
+
+def test_subject_split_passes_options_to_both_independent_subset_fits(monkeypatch):
+    from scipy import sparse
+    atlas = _stage("05_02_run_group_atlas.py")
+    seen = []
+
+    def cluster(**kwargs):
+        seen.append(kwargs["gradient_options"])
+        labels = np.tile([1,2,3], 4)
+        return labels, labels
+
+    monkeypatch.setattr(atlas, "cluster_for_subset", cluster)
+    subjects = ["a","b","c","d"]
+    options = {"feature_scaling":"none", "sparsify_stage":"none"}
+    result = atlas.subject_split_ari(
+        method="gradient-spectral", feature_bank={},
+        valid_masks_by_subject={s:np.ones(12,dtype=bool) for s in subjects},
+        subjects=subjects, tau=.8, adjacency_full=sparse.eye(12,format="csr"),
+        k=3, seeds=[9], gradient_options=options,
+    )
+    assert seen == [options, options]
+    assert result["values"] == [1.0]
+
+
+def test_subset_alignment_refits_4mm_left_on_the_same_training_subjects(tmp_path, monkeypatch):
+    atlas = _stage("05_02_run_group_atlas.py")
+    monkeypatch.setattr(atlas, "ensure_hippomaps_on_path", lambda p: Path(p))
+    monkeypatch.setattr(atlas, "hippomaps_import_path", lambda p: str(p))
+    monkeypatch.setattr(atlas, "hippomaps_commit", lambda p: "test")
+    rng = np.random.default_rng(13)
+    reference = rng.normal(size=(20, 5)).astype(np.float32)
+    target = reference[:, [2, 0, 1, 4, 3]] * [-1, 1, -1, 1, 1]
+    fc_path, mask_path = tmp_path / "anchor_fc.npy", tmp_path / "anchor_mask.npy"
+    np.save(fc_path, np.full((20, 400), .5, np.float32))
+    np.save(mask_path, np.ones(20, bool))
+    calls = []
+    def fit(data, **kwargs):
+        calls.append((data.copy(), kwargs))
+        return (reference if data[0, 0] > .4 else target), np.arange(5, 0, -1.), np.ones(5)/5
+    options = {"feature_scaling": "none", "sparsify_stage": "none", "random_state": 13,
+               "alignment_fc_paths": {"train": str(fc_path), "heldout": str(tmp_path / "never_read.npy")},
+               "alignment_mask_paths": {"train": str(mask_path)}, "alignment_coverage_threshold": .8}
+    actual, meta = atlas.build_group_gradient_features(
+        feature_bank={"train": np.full((20, 400), .1)}, subjects_subset=["train"],
+        support_mask=np.ones(20, bool), gradient_options=options, gradientmaps_fit_fn=fit,
+    )
+    assert len(calls) == 2
+    assert calls[0][1] == calls[1][1]
+    assert np.allclose(actual, reference[:, :3])
+    assert meta["gradient_alignment"]["training_subjects"] == ["train"]
+    assert meta["gradient_alignment"]["anchor_smoothing"] == "4mm"
+
+
+def test_null_vertex_permutations_are_independent_of_python_hash_salt(monkeypatch):
+    atlas = _stage("05_02_run_group_atlas.py")
+    captured = []
+    monkeypatch.setattr(atlas, "subject_split_ari", lambda **kw: captured.append(kw["feature_bank"]) or {})
+    kwargs = dict(method="gradient-ward", feature_bank={"a": np.arange(40).reshape(10,4)},
+                  valid_masks_by_subject={"a": np.ones(10, bool)}, subjects=["a"], tau=.8,
+                  adjacency_full=None, k=3, seeds=[7])
+    monkeypatch.setattr(atlas, "hash", lambda _: 1, raising=False)
+    atlas.strong_null_ari(**kwargs)
+    monkeypatch.setattr(atlas, "hash", lambda _: 99, raising=False)
+    atlas.strong_null_ari(**kwargs)
+    assert np.array_equal(captured[0]["a"], captured[1]["a"])
+
+
+def test_crossfit_configuration_declares_preprocessing_for_resume():
+    path = ROOT / "scripts/individual_workflow/01_01_run_hcp_crossfit_template_matching.py"
+    spec = importlib.util.spec_from_file_location("explicit_crossfit_settings", path)
+    workflow = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = workflow
+    spec.loader.exec_module(workflow)
+    args = workflow.build_arg_parser().parse_args([
+        "--feature-scaling", "none", "--sparsify-stage", "affinity", "--sparsity", "0.7",
+        "--clustering-feature-scaling", "unit_sd",
+    ])
+    config = workflow.run_config_payload(args, ["01", "02"], {}, {"01":0,"02":1})
+    assert config["gradient_preprocessing"] == adapter.gradient_preprocessing_settings(
+        400, feature_scaling="none", sparsify_stage="affinity", sparsity=.7,
+    )
+    assert config["clustering_feature_scaling"] == "unit_sd"
+
+
+@pytest.mark.parametrize("filename,function_name,extra", [
+    ("01_03_run_and_render_hcp_crossfit_disjoint_folds.py", "fit_disjoint_cohort", {}),
+    ("01_04_render_hcp_runs_comparison.py", "fit_split_half_template", {"split_id":"split-1"}),
+])
+def test_independent_comparison_fits_honor_the_same_options(tmp_path, monkeypatch, filename, function_name, extra):
+    from types import SimpleNamespace
+    from scipy import sparse
+    path = ROOT / "scripts/individual_workflow" / filename
+    spec = importlib.util.spec_from_file_location("explicit_"+function_name, path)
+    driver = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = driver
+    spec.loader.exec_module(driver)
+    monkeypatch.setattr(driver, "DEFAULT_KONG2022_SURFACE_ROOT", tmp_path / "surface")
+    monkeypatch.setattr(driver, "DEFAULT_KONG2022_ROUTEA_ROOT", tmp_path / "pfm")
+    gradient = np.random.default_rng(9).normal(size=(8,5))
+    source = np.random.default_rng(3).uniform(-.5,.5,size=(8,400))
+    for subject in ("01", "02"):
+        mask_path = tmp_path / f"surface/sub-{subject}/surface/tsnr_gate/sub-{subject}_hemi-L_valid_mask.npy"
+        mask_path.parent.mkdir(parents=True)
+        np.save(mask_path, np.ones(8,dtype=bool))
+        for run in (1,2):
+            fc_path = tmp_path / f"pfm/sub-{subject}/fc/kong2022/2mm/hemi_L/runs/run-{run}/hipp_vertex_to_network_fc_active.npy"
+            fc_path.parent.mkdir(parents=True)
+            np.save(fc_path, source)
+    seen = []
+
+    def fit(matrix, **kwargs):
+        seen.append(kwargs)
+        return gradient, np.ones(5), np.ones(5)/5
+
+    def cluster(**kwargs):
+        assert np.allclose(kwargs["group_features"].std(axis=0),1)
+        labels = np.array([1,1,1,2,2,2,3,3])
+        return labels, labels
+
+    cf = SimpleNamespace(
+        _load_full_subject_fc=lambda *args:source,
+        fit_gradientmaps_pearson=fit,
+        reconstruct_full_surface=adapter.reconstruct_full_surface,
+        build_cluster_prototypes=lambda *args,**kwargs:np.zeros((3,400)),
+    )
+    core = SimpleNamespace(
+        load_surface=lambda path:(np.zeros((8,3)),np.array([[0,1,2]])),
+        build_surface_adjacency=lambda *args:sparse.eye(8,format="csr"),
+        cluster_from_precomputed_group_features=cluster,
+        reorder_labels_by_long_axis=lambda labels, order:labels,
+    )
+    monkeypatch.setattr(driver,"long_axis_order",lambda path:np.arange(8))
+    group = SimpleNamespace(group_mean_fisherz_fc=lambda **kwargs:source)
+    options = {"feature_scaling":"none","sparsify_stage":"none","sparsity":None,
+               "random_state":13,"clustering_feature_scaling":"unit_sd"}
+    result = getattr(driver,function_name)(
+        subjects=["01","02"],smoothing="2mm",hemi="L",core_atlas_module=core,
+        group_grad_module=group,cf_module=cf,surface_path=tmp_path/"surface.gii",
+        gradient_options=options,**extra,
+    )
+    assert seen == [{"n_components":5,"random_state":13,"feature_scaling":"none","sparsify_stage":"none","sparsity":None}]
+    assert result["gradient_preprocessing"]["feature_scaling"] == "none"
+    assert result["clustering_feature_transform"]["n_vertices_fit"] == 8
+
+
+def test_partial_crossfit_preflight_declares_and_counts_its_alignment_anchor(tmp_path):
+    path = ROOT / "scripts/individual_workflow/01_01_run_hcp_crossfit_template_matching.py"
+    spec = importlib.util.spec_from_file_location("explicit_crossfit_anchor_audit", path)
+    workflow = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = workflow
+    spec.loader.exec_module(workflow)
+    args = workflow.build_arg_parser().parse_args([
+        "--shared-root", str(tmp_path/"pfm"), "--surface-root", str(tmp_path/"surface"),
+        "--hippunfold-batch-root", str(tmp_path/"hippunfold"),
+        "--template-surfaces-dir", str(tmp_path/"templates"),
+        "--n-folds", "2", "--smoothings", "2mm", "--hemis", "L",
+    ])
+    surface = workflow._template_surface_path(args.template_surfaces_dir,"L")
+    surface.parent.mkdir(parents=True)
+    surface.touch()
+    for subject in ("01","02"):
+        for source in (
+            workflow._subject_valid_mask_path(args.surface_root,subject,"L"),
+            workflow._subject_surface_path(args.hippunfold_batch_root,subject,"L"),
+            workflow._subject_fc_path(args.shared_root,subject,"2mm","L"),
+        ):
+            source.parent.mkdir(parents=True,exist_ok=True)
+            source.touch()
+    result = workflow.dry_run_payload(args,["01","02"],{"01":0,"02":1})
+    expected = [str(workflow._subject_fc_path(args.shared_root,s,"4mm","L")) for s in ("01","02")]
+    assert result["missing_inputs"] == expected
+    assert result["template_fits"] == 4
+
+
+def test_gradient_alignment_does_not_substitute_the_first_requested_combo():
+    from types import SimpleNamespace
+    producer = _stage("05_01_compute_hippomaps_gradients.py")
+    with pytest.raises(ValueError, match="4mm.*L"):
+        producer.select_alignment_anchor([SimpleNamespace(smoothing="2mm",hemi="R")])

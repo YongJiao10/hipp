@@ -103,6 +103,9 @@ from lib.hippomaps_adapter import (
     brainspace_sparsity_for_feature_count,
     ensure_hippomaps_on_path,
     fit_gradientmaps_pearson,
+    gradient_preprocessing_settings,
+    validate_gradient_preprocessing,
+    scale_gradient_features,
     hippomaps_commit,
     hippomaps_import_path,
 )
@@ -149,10 +152,18 @@ from lib.route_tags import (
     validate_group_atlas_root_for_route,
 )
 from lib.fc_math import corrcoef_rows, fisher_z_transform_fc, bh_fdr, center_run_timeseries
+from lib.gradient_clustering import (
+    GRADIENT_METHODS, RBF_AFFINITY_DESCRIPTION, cluster_gradients,
+    binary_mesh_adjacency, build_rbf_mesh_affinity,
+    spatial_cluster_diagnostics,
+    is_gradient_method as registered_gradient_method,
+)
 from lib.gifti_labels import make_cluster_label_gifti, make_named_label_gifti
 from lib.io_utils import load_subject_ids, load_json, write_tsv, load_run_segment_metadata
 from lib.group_atlas_lineage import validate_group_atlas_lineage, gradient_computation_provenance
 from lib.network_colors import load_cluster_palette, load_network_colors
+from lib.gradient_alignment import align_gradient_components_to_reference
+from lib.network_ovr import OVR_VARIANTS, OVR_ASSIGNMENT_METRIC, fit_network_ovr, export_network_ovr
 from lib.cluster_roi_profile_contract import (
     GRADIENT_PROFILE_CONTRACT_TAG,
     atlas_produces_cluster_roi_profile,
@@ -182,6 +193,9 @@ METHOD_CHOICES = [
     "group-roi-sim-spectral",
     "network-spectral",
     "gradient-spectral",
+    "gradient-ward",
+    "gradient-gmm",
+    "gradient-spectral-rbf",
     "intrinsic-spectral",
     "wta-top",
 ]
@@ -198,7 +212,7 @@ SMOOTHINGS = ["2mm", "4mm"]
 HEMIS = ["L", "R"]
 K_RANGE = list(range(2, 9))
 KONG2022_ONLY_METHODS = {"group-roi-sim-spectral"}
-LYNCH2024_METHODS = {"gradient-spectral", "wta-top"}
+LYNCH2024_METHODS = set(GRADIENT_METHODS) | {"wta-top"}
 CLUSTERLESS_METHODS = {"wta-top"}
 PROFILE_REDUNDANCY_MAX_SIM = 0.80
 SUBJECT_FC_PREPROCESS_METHODS = {"group-roi-sim-spectral", "network-spectral", "intrinsic-spectral"}
@@ -313,12 +327,20 @@ def file_state_list(paths: list[Path]) -> list[dict[str, object]]:
 
 def gradient_resume_inputs(
     *, gradient_root: Path, cohort: str | None, variant: str,
+    gradient_options: dict[str, object] | None = None,
 ) -> dict[str, object]:
     """Record the explicit gradient bank in the existing resume contract."""
     return {
         "gradient_root": str(gradient_root),
         "gradient_cohort": cohort,
         "gradient_variant": variant,
+        "gradient_options": dict(gradient_options or {}),
+        "gradient_anchor_inputs": file_state_list([
+            Path(path) for field in ("alignment_fc_paths", "alignment_mask_paths")
+            for path in (gradient_options or {}).get(field, {}).values()
+        ] + [Path(path).parent / "runs" / f"run-{rid}" / Path(path).name
+             for path in (gradient_options or {}).get("alignment_fc_paths", {}).values()
+             for rid in (gradient_options or {}).get("alignment_run_ids", [])]),
     }
 
 
@@ -613,7 +635,7 @@ def is_network_method(method: str) -> bool:
 
 
 def is_gradient_method(method: str) -> bool:
-    return method == "gradient-spectral"
+    return registered_gradient_method(method)
 
 
 def is_roi_similarity_method(method: str) -> bool:
@@ -621,7 +643,7 @@ def is_roi_similarity_method(method: str) -> bool:
 
 
 def method_uses_network_fc_input(method: str) -> bool:
-    return is_network_method(method) or method in {"group-roi-sim-spectral", "gradient-spectral", "wta-top"}
+    return is_gradient_method(method) or is_network_method(method) or method in ({"group-roi-sim-spectral", "gradient-spectral", "wta-top"} | GRADIENT_METHODS)
 
 
 def is_lynch2024_atlas(atlas: str) -> bool:
@@ -671,7 +693,7 @@ def method_allowed_for_atlas(
         # taxonomy view, where needed, is derived from that same invariant
         # profile with the same normalized Top-20 count definition.
         return atlas_key == "kong2022" and str(network_taxonomy) in {"canonical7", "canonical8"}
-    if method_key == "gradient-spectral":
+    if is_gradient_method(method_key):
         return atlas_key == "kong2022"
     if method_key in KONG2022_ONLY_METHODS:
         return atlas_key in {"kong2022"}
@@ -733,6 +755,59 @@ def resolve_primary_k(
     return None, "none"
 
 
+def comparison_k_values(args: argparse.Namespace) -> list[int]:
+    if args.k_selection_mode != "fixed-comparison":
+        return list(range(int(args.k_min), int(args.k_max) + 1))
+    if args.force_final_k is not None:
+        k = int(args.force_final_k)
+    elif args.k_min == args.k_max:
+        k = int(args.k_min)
+    else:
+        raise ValueError("fixed-comparison requires a single requested K: --k-min=--k-max or --force-final-k")
+    if k < 2:
+        raise ValueError("fixed-comparison requires K >= 2")
+    return [k]
+
+
+def comparison_primary_k(k: int) -> dict:
+    return {"chosen_k_final": int(k), "automatic_k_final": None, "primary_k_source": "fixed_comparison"}
+
+
+def effective_k_values(k_values: list[int], *, n_support: int, v_min: int, mode: str) -> tuple[int, list[int]]:
+    maximum = (n_support - 1 if mode == "fixed-comparison" else
+               min(max(k_values), n_support // max(1, v_min)))
+    values = [k for k in k_values if k <= maximum and k < n_support]
+    if mode == "fixed-comparison" and values != k_values:
+        raise ValueError(f"Fixed-comparison requested K={k_values} requires more supported vertices; n_supported={n_support}")
+    return maximum, values
+
+
+def validate_dataset_output_contract(out_root: Path, dataset: str, *, source_roots: list[Path],
+                                     comparison: bool = False, repo_root: Path = REPO_ROOT) -> tuple[str, Path]:
+    out, repo = Path(out_root).resolve(), Path(repo_root).resolve()
+    roots = {name: repo / name for name in ("outputs_hcp", "outputs_stanford", "outputs_iowa_jj_tms")}
+    if comparison:
+        if dataset == "auto":
+            raise ValueError("A comparison requires an explicit --dataset")
+        if not out.is_relative_to(repo / "tmp"):
+            raise ValueError(f"Comparison output is outside repository tmp: {out}")
+    elif dataset == "auto":
+        matches = [key for key, root in roots.items() if out.is_relative_to(root)]
+        if len(matches) != 1:
+            raise ValueError("Cannot infer --dataset from --out-root; pass an explicit dataset")
+        dataset = matches[0]
+    if dataset not in roots:
+        raise ValueError(f"Unsupported dataset: {dataset}")
+    expected = roots[dataset]
+    if comparison:
+        for source in source_roots:
+            if not Path(source).resolve().is_relative_to(expected):
+                raise ValueError(f"Comparison source {source} disagrees with declared dataset {dataset}: {expected}")
+    elif not out.is_relative_to(expected):
+        raise ValueError(f"--out-root {out} is outside the declared dataset root {expected}")
+    return dataset, expected
+
+
 def primary_k_provenance(
     *,
     force_final_k: int | None,
@@ -762,7 +837,7 @@ def method_uses_subject_fc_preprocessing(method: str) -> bool:
 def feature_family_for_method(method: str, atlas: str, gradient_components: tuple[int, ...]) -> str:
     if method == "group-roi-sim-spectral":
         return "vertex_to_kong2022_400roi_fc_to_vertex_similarity_centered_cosine"
-    if method == "gradient-spectral":
+    if is_gradient_method(method):
         comp_tag = "".join(f"g{int(c)}" for c in gradient_components)
         if is_lynch2024_atlas(atlas) or str(atlas) == "kong2022":
             if str(atlas) == "kong2022":
@@ -796,7 +871,7 @@ def feature_family_for_method(method: str, atlas: str, gradient_components: tupl
 def fc_mode_for_method(method: str, atlas: str | None = None) -> str:
     if method == "group-roi-sim-spectral":
         return "pearson_vertex_to_roi_then_centered_cosine_vertex_to_vertex"
-    if method == "gradient-spectral":
+    if is_gradient_method(method):
         if atlas is not None and (is_lynch2024_atlas(atlas) or str(atlas) == "kong2022"):
             if str(atlas) == "kong2022":
                 return "pearson_vertex_to_kong2022_400roi_group_average_then_diffusion_gradients"
@@ -1028,6 +1103,7 @@ def brainspace_diffusion_gradients(
     n_components: int = GRADIENT_N_COMPONENTS_COMPUTED,
     hippomaps_root: Path = DEFAULT_HIPPOMAPS_ROOT,
     gradientmaps_fit_fn: object | None = None,
+    gradient_options: dict[str, object] | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     group_fc = np.asarray(features, dtype=np.float32)
     if group_fc.ndim != 2:
@@ -1041,7 +1117,14 @@ def brainspace_diffusion_gradients(
         )
     ensure_hippomaps_on_path(hippomaps_root)
     fit_fn = fit_gradientmaps_pearson if gradientmaps_fit_fn is None else gradientmaps_fit_fn
-    gradients, lambdas, ev_fractions = fit_fn(group_fc, n_components=n_comp)
+    options = dict(gradient_options or {})
+    gradients, lambdas, ev_fractions = fit_fn(
+        group_fc, n_components=n_comp,
+        random_state=options.get("random_state", DEFAULT_GRADIENT_RANDOM_STATE),
+        feature_scaling=options.get("feature_scaling", "col_zscore"),
+        sparsify_stage=options.get("sparsify_stage", "features"),
+        sparsity=options.get("sparsity"),
+    )
     gradients = np.asarray(gradients, dtype=np.float32)
     lambdas = np.asarray(lambdas, dtype=np.float64).reshape(-1)
     ev_fractions = np.asarray(ev_fractions, dtype=np.float64).reshape(-1)
@@ -1074,6 +1157,7 @@ def build_group_gradient_features(
     gradient_components: tuple[int, ...] = DEFAULT_GRADIENT_COMPONENTS,
     hippomaps_root: Path = DEFAULT_HIPPOMAPS_ROOT,
     gradientmaps_fit_fn: object | None = None,
+    gradient_options: dict[str, object] | None = None,
 ) -> tuple[np.ndarray, dict[str, object]]:
     idx = np.flatnonzero(support_mask)
     if idx.size == 0:
@@ -1091,9 +1175,59 @@ def build_group_gradient_features(
         n_components=GRADIENT_N_COMPONENTS_COMPUTED,
         hippomaps_root=hippomaps_root,
         gradientmaps_fit_fn=gradientmaps_fit_fn,
+        gradient_options=gradient_options,
     )
+    options = dict(gradient_options or {})
+    alignment_meta = {"enabled": False, "role": "native_reference_fit"}
+    if "alignment_fc_paths" in options:
+        anchor_fc, anchor_masks = [], []
+        for subject in subjects_subset:
+            fc_path = Path(options["alignment_fc_paths"][subject])
+            if "alignment_run_id" in options:
+                fc_path = fc_path.parent / "runs" / f"run-{options['alignment_run_id']}" / fc_path.name
+            mask = np.asarray(np.load(options["alignment_mask_paths"][subject]), dtype=bool)
+            raw_fc = np.asarray(np.load(fc_path), dtype=np.float32)
+            if raw_fc.shape != (mask.size, group_fc.shape[1]):
+                raise ValueError(f"4mm-left anchor FC/mask mismatch: {fc_path}: {raw_fc.shape} vs {mask.shape}")
+            permutation = options.get("alignment_vertex_permutations", {}).get(subject)
+            if permutation is not None:
+                raw_fc, mask = raw_fc[permutation], mask[permutation]
+            raw_fc = raw_fc.copy()
+            raw_fc[~mask] = np.nan
+            anchor_fc.append(fisher_z_transform_fc(raw_fc))
+            anchor_masks.append(mask)
+        anchor_support = np.mean(np.stack(anchor_masks), axis=0) >= float(options["alignment_coverage_threshold"])
+        if anchor_support.size != support_mask.size:
+            raise ValueError("4mm-left anchor and target vertex counts differ")
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            anchor_mean = np.nanmean(np.stack(anchor_fc)[:, anchor_support], axis=0)
+        anchor_mean[~np.isfinite(anchor_mean)] = 0.
+        anchor_gradients, _, _ = brainspace_diffusion_gradients(
+            anchor_mean, n_components=GRADIENT_N_COMPONENTS_COMPUTED,
+            hippomaps_root=hippomaps_root, gradientmaps_fit_fn=gradientmaps_fit_fn,
+            gradient_options=gradient_options,
+        )
+        target_full = np.full((support_mask.size, gradients.shape[1]), np.nan, dtype=np.float32)
+        reference_full = target_full.copy()
+        target_full[support_mask] = gradients
+        reference_full[anchor_support] = anchor_gradients
+        gradients, _, lambdas, ev_fractions, alignment_meta = align_gradient_components_to_reference(
+            active=gradients, full=target_full, lambdas=lambdas, ev_fractions=ev_fractions,
+            reference_full=reference_full, component_labels=[f"G{i+1}" for i in range(gradients.shape[1])],
+        )
+        alignment_meta.update(enabled=True, anchor_smoothing="4mm", anchor_hemi="L",
+                              training_subjects=list(subjects_subset))
     selected = gradients[:, [int(c) - 1 for c in comps]]
     selected[~np.isfinite(selected)] = 0.0
+    options = dict(gradient_options or {})
+    selected, clustering_transform = scale_gradient_features(
+        selected, scaling=options.get("clustering_feature_scaling", "none"),
+    )
+    preprocessing = gradient_preprocessing_settings(
+        group_fc.shape[1], feature_scaling=options.get("feature_scaling", "col_zscore"),
+        sparsify_stage=options.get("sparsify_stage", "features"), sparsity=options.get("sparsity"),
+    )
     selected_labels = [f"G{int(c)}" for c in comps]
     hippomaps_root_resolved = ensure_hippomaps_on_path(hippomaps_root)
     meta = {
@@ -1102,16 +1236,19 @@ def build_group_gradient_features(
         "selected_components": selected_labels,
         "gradient_embedding_engine": "brainspace_gradientmaps_via_hippomaps_adapter",
         "brainspace_version": brainspace_version(),
-        "gradientmaps_call": "brainspace.gradient.GradientMaps(n_components=N, kernel='pearson', random_state=gradient_random_state).fit(column_zscored_group_mean_fisherz_fc, sparsity=brainspace_sparsity)",
-        "gradient_random_state": int(DEFAULT_GRADIENT_RANDOM_STATE),
-        "feature_zscore_pre_gradientmaps": "column-wise z-score across vertices after group Fisher-z averaging",
+        "gradientmaps_call": "compute_affinity(explicitly_scaled_group_mean_fisherz_fc, kernel='pearson', pre_sparsify=declared_stage); mean_symmetrize; GradientMaps(kernel=None).fit(affinity, sparsity=None)",
+        "gradient_random_state": options.get("random_state", DEFAULT_GRADIENT_RANDOM_STATE),
+        "feature_zscore_pre_gradientmaps": preprocessing["feature_scaling"],
+        "gradient_preprocessing": preprocessing,
+        "clustering_feature_transform": clustering_transform,
         "kernel": GRADIENT_BRAINSPACE_KERNEL,
-        "brainspace_sparsity": float(brainspace_sparsity_for_feature_count(group_fc.shape[1])),
-        "brainspace_sparsity_policy": "0.0 for <=50 features; otherwise 0.9. Low-dimensional Lynch component banks use the full graph, while high-dimensional Kong400 retains BrainSpace default sparsity",
+        "brainspace_sparsity": preprocessing["effective_sparsity"],
+        "brainspace_sparsity_policy": "explicit setting; unspecified sparsity retains 0.0 for <=50 features and 0.9 otherwise",
         "n_components_computed": int(GRADIENT_N_COMPONENTS_COMPUTED),
         "components_displayed": [int(c) for c in DEFAULT_GRADIENT_COMPONENTS],
         "group_vertex_to_roi_fc_shape": [int(v) for v in group_fc.shape],
         "gradient_eigenvalues": [float(v) for v in lambdas],
+        "gradient_alignment": alignment_meta,
         "ev_fractions": [float(v) for v in ev_fractions],
         "hippomaps_repo": str(Path(hippomaps_root_resolved).resolve()),
         "hippomaps_import_path": hippomaps_import_path(hippomaps_root_resolved),
@@ -1131,6 +1268,11 @@ def load_hippomaps_gradient_features(
     expected_signal_branch: str | None = None,
     cohort: str | None = None,
     variant: str = "36p",
+    feature_scaling: str = "col_zscore",
+    sparsify_stage: str = "features",
+    sparsity: float | None = None,
+    clustering_feature_scaling: str = "none",
+    gradient_random_state: int = DEFAULT_GRADIENT_RANDOM_STATE,
 ) -> tuple[np.ndarray, dict[str, object]]:
     comps = parse_gradient_components(",".join(str(c) for c in gradient_components))
     run_dir = resolve_cohort_gradient_root(
@@ -1143,6 +1285,16 @@ def load_hippomaps_gradient_features(
             "Run 05_01_compute_hippomaps_gradients.py before 05_02_run_group_atlas.py."
         )
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    shape = manifest.get("group_fc_shape")
+    if not isinstance(shape, list) or len(shape) != 2:
+        raise ValueError(f"Gradient manifest lacks group_fc_shape: {manifest_path}")
+    preprocessing = gradient_preprocessing_settings(
+        int(shape[1]), feature_scaling=feature_scaling,
+        sparsify_stage=sparsify_stage, sparsity=sparsity,
+    )
+    validate_gradient_preprocessing(manifest, settings=preprocessing, manifest_path=manifest_path)
+    if manifest.get("gradient_random_state") != gradient_random_state:
+        raise ValueError(f"gradient_random_state mismatch in {manifest_path}: requested={gradient_random_state}, recorded={manifest.get('gradient_random_state')}; explicitly regenerate")
     if cohort is not None or variant != "36p":
         for key, expected in (("cohort", cohort), ("variant", variant)):
             if manifest.get(key) != expected:
@@ -1223,9 +1375,12 @@ def load_hippomaps_gradient_features(
         )
     selected = gradients_full[np.flatnonzero(support)][:, [int(c) - 1 for c in comps]].astype(np.float32)
     selected[~np.isfinite(selected)] = 0.0
+    selected, clustering_transform = scale_gradient_features(selected, scaling=clustering_feature_scaling)
     labels = [f"G{int(c)}" for c in comps]
     meta = {
         "gradient_source": "hippomaps_gradient_artifacts",
+        "gradient_preprocessing": preprocessing,
+        "clustering_feature_transform": clustering_transform,
         "cohort": manifest.get("cohort"),
         "variant": manifest.get("variant"),
         "hippomaps_gradient_manifest": str(manifest_path.resolve()),
@@ -1272,10 +1427,10 @@ def network_feature_filename(method: str, atlas: str | None = None) -> str:
     if str(atlas) == "kong2022":
         if method == "network-spectral":
             return "hipp_vertex_to_canonical7_fc.npy"
-        if method in {"group-roi-sim-spectral", "gradient-spectral", "wta-top"}:
+        if method in ({"group-roi-sim-spectral", "gradient-spectral", "wta-top"} | GRADIENT_METHODS):
             # Historical network_fc is now the strict 400-ROI feature bank.
             return "hipp_vertex_to_network_fc.npy"
-    if method in {"group-roi-sim-spectral", "network-spectral", "gradient-spectral", "wta-top"}:
+    if method in ({"group-roi-sim-spectral", "network-spectral", "gradient-spectral", "wta-top"} | GRADIENT_METHODS):
         return "hipp_vertex_to_network_fc.npy"
     raise ValueError(f"Not a network feature method: {method}")
 
@@ -1285,7 +1440,7 @@ def runwise_network_feature_filename(method: str, atlas: str | None = None) -> s
         return "hipp_vertex_to_roi_fc_active.npy"
     if method == "network-spectral" and str(atlas) == "kong2022":
         return "hipp_vertex_to_canonical7_fc_active.npy"
-    if method in {"network-spectral", "gradient-spectral"}:
+    if method in ({"network-spectral", "gradient-spectral"} | GRADIENT_METHODS):
         return "hipp_vertex_to_network_fc_active.npy"
     raise ValueError(f"Not a network feature method: {method}")
 
@@ -1776,7 +1931,7 @@ def load_fixed_cluster_reuse(
     """Load fixed labels and source K evidence for taxonomy-only reuse."""
     source_run = Path(source_run).resolve()
     source_manifest_path = source_run / "group_atlas_manifest.json"
-    if target_atlas == "kong2022" and target_method == "gradient-spectral":
+    if target_atlas == "kong2022" and is_gradient_method(target_method):
         validate_group_atlas_lineage(source_manifest_path)
     source_manifest = load_json(source_manifest_path)
     if source_manifest.get("status") != "ok":
@@ -1804,7 +1959,7 @@ def load_fixed_cluster_reuse(
                 f"source={source_surface!r} target={str(Path(target_surface_path).resolve())!r}"
             )
     source_gradient_summary = source_manifest.get("group_gradient_feature_summary")
-    if target_method == "gradient-spectral" and target_atlas == "kong2022":
+    if is_gradient_method(target_method) and target_atlas == "kong2022":
         if target_gradient_feature_summary is None:
             raise ValueError(
                 "Kong fixed-cluster reuse requires the target gradient feature summary "
@@ -1985,7 +2140,7 @@ def subject_network_feature(
     arr = np.load(p).astype(np.float32)
     if arr.ndim != 2:
         raise ValueError(f"Expected 2D network feature matrix: {p} shape={arr.shape}")
-    if str(atlas) == "kong2022" and method in {"group-roi-sim-spectral", "gradient-spectral", "wta-top"}:
+    if str(atlas) == "kong2022" and method in ({"group-roi-sim-spectral", "gradient-spectral", "wta-top"} | GRADIENT_METHODS):
         reference_dir = None
         if reference_root is not None:
             reference_dir = Path(reference_root) / f"sub-{subject}" / "reference" / "kong2022"
@@ -2081,6 +2236,7 @@ def group_feature_matrix(
     subjects_subset: list[str],
     support_mask: np.ndarray,
     gradient_components: tuple[int, ...] = DEFAULT_GRADIENT_COMPONENTS,
+    gradient_options: dict[str, object] | None = None,
 ) -> np.ndarray:
     idx = np.flatnonzero(support_mask)
     if idx.size == 0:
@@ -2103,6 +2259,7 @@ def group_feature_matrix(
             support_mask=support_mask,
             gradient_components=gradient_components,
             hippomaps_root=HIPPOMAPS_ROOT_OVERRIDE,
+            gradient_options=gradient_options,
         )
         return features
 
@@ -2130,6 +2287,7 @@ def cluster_for_subset(
     k: int,
     seed: int,
     gradient_components: tuple[int, ...] = DEFAULT_GRADIENT_COMPONENTS,
+    gradient_options: dict[str, object] | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     features = group_feature_matrix(
         method=method,
@@ -2137,6 +2295,7 @@ def cluster_for_subset(
         subjects_subset=subjects_subset,
         support_mask=support_mask,
         gradient_components=gradient_components,
+        gradient_options=gradient_options,
     )
     return cluster_from_precomputed_group_features(
         group_features=features,
@@ -2145,6 +2304,7 @@ def cluster_for_subset(
         k=int(k),
         seed=int(seed),
         method=method,
+        rbf_scale=float((gradient_options or {}).get("rbf_scale", 1.0)),
     )
 
 
@@ -2160,6 +2320,7 @@ def subject_split_ari(
     seeds: list[int],
     gradient_components: tuple[int, ...] = DEFAULT_GRADIENT_COMPONENTS,
     allow_diagnostic_failures: bool = False,
+    gradient_options: dict[str, object] | None = None,
 ) -> dict[str, object]:
     vals: list[float] = []
     n_skipped_overlap = 0
@@ -2196,6 +2357,7 @@ def subject_split_ari(
                 k=k,
                 seed=seed + 1001,
                 gradient_components=gradient_components,
+                gradient_options=gradient_options,
             )
             _, full_b = cluster_for_subset(
                 method=method,
@@ -2206,6 +2368,7 @@ def subject_split_ari(
                 k=k,
                 seed=seed + 2001,
                 gradient_components=gradient_components,
+                gradient_options=gradient_options,
             )
         except RuntimeError as exc:
             if not allow_diagnostic_failures:
@@ -2246,16 +2409,21 @@ def strong_null_ari(
     seeds: list[int],
     gradient_components: tuple[int, ...] = DEFAULT_GRADIENT_COMPONENTS,
     allow_diagnostic_failures: bool = False,
+    gradient_options: dict[str, object] | None = None,
 ) -> dict[str, object]:
     null_bank: dict[str, np.ndarray] = {}
-    for s in subjects:
+    permutations_by_subject = {}
+    for subject_index, s in enumerate(subjects):
         arr = feature_bank[s]
-        rng = np.random.RandomState(int(seeds[0]) + int(abs(hash(s)) % 100000))
+        rng = np.random.RandomState(int(seeds[0]) + subject_index)
         perm = rng.permutation(arr.shape[0])
+        permutations_by_subject[s] = perm.tolist()
         if method_uses_network_fc_input(method):
             null_bank[s] = arr[perm, :].astype(np.float32)
         else:
             null_bank[s] = arr[np.ix_(perm, perm)].astype(np.float32)
+    null_options = dict(gradient_options or {})
+    null_options["alignment_vertex_permutations"] = permutations_by_subject
     out = subject_split_ari(
         method=method,
         feature_bank=null_bank,
@@ -2267,6 +2435,7 @@ def strong_null_ari(
         seeds=seeds,
         gradient_components=gradient_components,
         allow_diagnostic_failures=allow_diagnostic_failures,
+        gradient_options=null_options,
     )
     out["permutation_scope"] = "subject_specific"
     return out
@@ -2298,8 +2467,14 @@ def redundancy_early_stop_triggered(row: dict[str, object], enabled: bool) -> bo
 
 
 def method_surface_affinity_metadata(method: str) -> tuple[str, str]:
-    if is_gradient_method(method):
+    if method == "gradient-spectral":
         return GRADIENT_SPECTRAL_AFFINITY, GRADIENT_SPECTRAL_AFFINITY_DESCRIPTION
+    if method == "gradient-spectral-rbf":
+        return "mesh-rbf", RBF_AFFINITY_DESCRIPTION
+    if method == "gradient-ward":
+        return "none", "ward_euclidean_binary_mesh_connectivity"
+    if method == "gradient-gmm":
+        return "none", "full_covariance_gaussian_mixture_no_spatial_constraint"
     return POSITIVE_COSINE_AFFINITY, POSITIVE_COSINE_AFFINITY_DESCRIPTION
 
 
@@ -2307,9 +2482,15 @@ def build_method_surface_affinity(
     method: str,
     features: np.ndarray,
     adjacency: sparse.spmatrix,
+    *,
+    rbf_scale: float = 1.0,
 ) -> sparse.csr_matrix:
-    if is_gradient_method(method):
+    if method == "gradient-spectral":
         return build_gradient_spectral_affinity(features, adjacency)
+    if method == "gradient-spectral-rbf":
+        return build_rbf_mesh_affinity(features, adjacency, rbf_scale=rbf_scale)[0]
+    if method in {"gradient-ward", "gradient-gmm"}:
+        raise ValueError(f"{method} does not construct a spectral affinity")
     return build_positive_cosine_surface_affinity(features, adjacency)
 
 
@@ -2321,13 +2502,22 @@ def cluster_from_precomputed_group_features(
     adjacency_full: sparse.csr_matrix,
     k: int,
     seed: int,
+    rbf_scale: float = 1.0,
+    clustering_metadata: dict[str, object] | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     idx = np.flatnonzero(support_mask)
     if idx.size == 0:
         raise RuntimeError("Support mask has zero vertices")
     adj = adjacency_full[idx][:, idx]
-    fused = build_method_surface_affinity(method, group_features, adj)
-    labels = spectral_cluster_from_affinity(fused.toarray(), int(k), int(seed))
+    if is_gradient_method(method):
+        labels, metadata = cluster_gradients(
+            method, group_features, adj, k=int(k), seed=int(seed), rbf_scale=rbf_scale,
+        )
+        if clustering_metadata is not None:
+            clustering_metadata.update(metadata)
+    else:
+        fused = build_method_surface_affinity(method, group_features, adj)
+        labels = spectral_cluster_from_affinity(fused.toarray(), int(k), int(seed))
     full = np.zeros((support_mask.size,), dtype=np.int32)
     full[idx] = labels
     return labels.astype(np.int32), full
@@ -2360,7 +2550,9 @@ def evaluate_k_candidate(
     roi_fc_bank_for_redundancy: dict[str, np.ndarray] | None,
     gradient_components: tuple[int, ...] = DEFAULT_GRADIENT_COMPONENTS,
     allow_diagnostic_failures: bool = False,
+    gradient_options: dict[str, object] | None = None,
 ) -> tuple[int, np.ndarray, dict[str, object]]:
+    clustering_metadata: dict[str, object] = {}
     labels_active, labels_full = cluster_from_precomputed_group_features(
         method=method,
         group_features=group_features_active,
@@ -2368,12 +2560,18 @@ def evaluate_k_candidate(
         adjacency_full=adjacency_full,
         k=int(k),
         seed=int(seed),
+        rbf_scale=float((gradient_options or {}).get("rbf_scale", 1.0)),
+        clustering_metadata=clustering_metadata,
     )
     support_indices = np.flatnonzero(support_mask)
-    affinity_graph = build_method_surface_affinity(
-        method,
-        group_features_active,
-        adjacency_full[support_indices][:, support_indices],
+    supported_mesh = adjacency_full[support_indices][:, support_indices]
+    affinity_graph = (
+        binary_mesh_adjacency(supported_mesh, len(support_indices))
+        if method in {"gradient-ward", "gradient-gmm"} else
+        build_method_surface_affinity(
+            method, group_features_active, supported_mesh,
+            rbf_scale=float((gradient_options or {}).get("rbf_scale", 1.0)),
+        )
     )
     graph_diagnostics = affinity_graph_diagnostics(
         affinity_graph,
@@ -2398,6 +2596,7 @@ def evaluate_k_candidate(
         seeds=split_seeds,
         gradient_components=gradient_components,
         allow_diagnostic_failures=allow_diagnostic_failures,
+        gradient_options=gradient_options,
     )
     ari_vals = list(ari_obj["values"])
     if not ari_vals:
@@ -2425,6 +2624,7 @@ def evaluate_k_candidate(
         seeds=null_seeds,
         gradient_components=gradient_components,
         allow_diagnostic_failures=allow_diagnostic_failures,
+        gradient_options=gradient_options,
     )
     strong = list(strong_obj["values"])
     strong_arr = np.asarray(strong, dtype=np.float64) if strong else np.array([0.0], dtype=np.float64)
@@ -2439,6 +2639,7 @@ def evaluate_k_candidate(
         seed_base=int(seed_base),
         gradient_components=gradient_components,
         allow_diagnostic_failures=allow_diagnostic_failures,
+        gradient_options=gradient_options,
     )
     run_vals = list(run_obj["values"])
     if run_vals:
@@ -2503,6 +2704,7 @@ def evaluate_k_candidate(
         "min_cluster_size": int(min_size),
         "max_components_per_cluster": int(max_components),
         "affinity_graph_diagnostics": graph_diagnostics,
+        "gradient_clustering": clustering_metadata,
         "min_profile_coherence": float(min_coh),
         "mean_profile_coherence": float(mean_coh),
         "nontrivial_min_size_ok": int(min_size >= v_min),
@@ -2554,7 +2756,7 @@ def runwise_feature_bank(
                 )
                 if not p.exists():
                     raise FileNotFoundError(f"Missing runwise network feature: {p}")
-                if str(atlas) == "kong2022" and method in {"group-roi-sim-spectral", "gradient-spectral", "wta-top"}:
+                if str(atlas) == "kong2022" and method in ({"group-roi-sim-spectral", "gradient-spectral", "wta-top"} | GRADIENT_METHODS):
                     reference_dir = None
                     if reference_root is not None:
                         reference_dir = Path(reference_root) / f"sub-{s}" / "reference" / "kong2022"
@@ -2649,6 +2851,7 @@ def run_aware_ari(
     seed_base: int,
     gradient_components: tuple[int, ...] = DEFAULT_GRADIENT_COMPONENTS,
     allow_diagnostic_failures: bool = False,
+    gradient_options: dict[str, object] | None = None,
 ) -> dict[str, object]:
     runs = sorted(run_feature_banks.keys())
     labels_by_run: dict[int, np.ndarray] = {}
@@ -2665,6 +2868,7 @@ def run_aware_ari(
                 k=int(k),
                 seed=int(seed_base + rid * 1000 + k),
                 gradient_components=gradient_components,
+                gradient_options={**(gradient_options or {}), "alignment_run_id": rid},
             )
         except RuntimeError as exc:
             if not allow_diagnostic_failures:
@@ -3375,6 +3579,7 @@ def cluster_roi_profile_subjectwise(
     profile_source_mode: str = "canonical",
     profile_source_root: Path | None = None,
     profile_source_registry: Path | None = None,
+    array_loader=np.load,
 ) -> tuple[np.ndarray, np.ndarray, list[dict[str, object]], list[str]]:
     if str(profile_source_mode) == "original-denoised":
         return cluster_roi_profile_subjectwise_from_explicit_original_source(
@@ -3433,8 +3638,8 @@ def cluster_roi_profile_subjectwise(
                 f"Subject valid mask shape mismatch for sub-{subject}: "
                 f"mask={valid_mask.shape} expected={labels.shape}; surface={ts_path}"
             )
-        ts = np.load(ts_path).astype(np.float32)
-        roi = np.load(roi_path).astype(np.float32)
+        ts = array_loader(ts_path).astype(np.float32, copy=False)
+        roi = array_loader(roi_path).astype(np.float32, copy=False)
         rows = read_kong2022_roi_tsv(roi_tsv)
         if ts.ndim != 2:
             raise ValueError(
@@ -3639,11 +3844,11 @@ def assignment_status_from_cluster_roi_topn(
 def method_uses_kong2022_topn_cluster_annotation(method: str, atlas: str) -> bool:
     # Gradient Fisher-z and normalized_top20_count must annotate the same
     # spatial clusters from the same 400-ROI profile; only assignment differs.
-    return str(atlas) == "kong2022" and str(method) in {
+    return str(atlas) == "kong2022" and str(method) in ({
         "group-roi-sim-spectral",
         "gradient-spectral",
         "intrinsic-spectral",
-    }
+    } | GRADIENT_METHODS)
 
 
 def assignment_status_from_profile(profile: np.ndarray, network_names: list[str]) -> tuple[list[dict[str, object]], list[str | None]]:
@@ -3819,6 +4024,38 @@ def cluster_assignment_variants_from_kong2022_roi_profile(
     }
 
 
+def requested_ovr_variants(variants: list[str], *, atlas: str, method: str) -> list[str]:
+    unknown = set(variants) - {"both", "fisherz", "normalized_top20_count", *OVR_VARIANTS}
+    if unknown:
+        raise ValueError(f"Unknown assignment variants: {sorted(unknown)}")
+    selected = [variant for variant in OVR_VARIANTS if variant in variants]
+    if selected and (atlas != "kong2022" or is_clusterless_method(method)):
+        raise ValueError("OVR requires the declared Kong2022 400-ROI subjectwise cluster profile contract")
+    return selected
+
+
+def build_ovr_assignment_specs(*, roi_profile_3d: np.ndarray, subjects: list[str],
+                              cluster_ids: list[int], roi_registry: list[dict],
+                              variants: list[str], out_dir: Path) -> dict[str, dict]:
+    specs = {}
+    for variant in variants:
+        if variant not in OVR_VARIANTS:
+            raise ValueError(f"Expected explicit OVR variant, got {variant}")
+        taxonomy = variant.removeprefix("ovr_logistic_")
+        model = fit_network_ovr(roi_profile_3d, subjects, cluster_ids, roi_registry, taxonomy=taxonomy)
+        paths = export_network_ovr(model, out_dir)
+        specs[variant] = {
+            "status_rows": model["assignment_rows"],
+            "dominant": [row["top1_network"] for row in model["assignment_rows"]],
+            "assignment_metric": OVR_ASSIGNMENT_METRIC, "q_threshold": None, "top_n_cap": None,
+            "network_names": model["network_names"], "network_taxonomy": taxonomy,
+            "network_profile": str(paths["beta"].resolve()),
+            "profile_units": "raw_beta_per_Fisher_z_unit",
+            "ovr_model_metadata": str(paths["metadata"].resolve()),
+        }
+    return specs
+
+
 def annotate_kong2022_clusters_topn(
     *,
     group_labels_final: np.ndarray,
@@ -3848,6 +4085,7 @@ def annotate_kong2022_clusters_topn(
     list[str],
     dict[str, object],
     list[dict[str, object]],
+    np.ndarray,
 ]:
     roi_profile_3d, roi_profile, roi_registry, roi_profile_subjects_used = cluster_roi_profile_subjectwise(
         group_labels_final=group_labels_final,
@@ -3881,7 +4119,7 @@ def annotate_kong2022_clusters_topn(
     dominant = list(fisherz_variant["dominant"])
     roi_normalized_status_rows = [dict(x) for x in normalized_variant["status_rows"]]
     roi_top20 = cluster_roi_top_k(roi_profile, roi_registry, k_top=int(top_n_cap))
-    return profile, status_rows, dominant, roi_profile, roi_registry, roi_profile_subjects_used, roi_top20, roi_normalized_status_rows
+    return profile, status_rows, dominant, roi_profile, roi_registry, roi_profile_subjects_used, roi_top20, roi_normalized_status_rows, roi_profile_3d
 
 
 def build_global_top_network_connections(
@@ -4140,7 +4378,7 @@ def prepare_combo_inputs(
     if not is_clusterless_method(method):
         roi_fc_bank_for_redundancy = {}
         for s in subjects:
-            if atlas == "kong2022" and method in {"network-spectral", "gradient-spectral"}:
+            if atlas == "kong2022" and method in ({"network-spectral", "gradient-spectral"} | GRADIENT_METHODS):
                 roi_fc_bank_for_redundancy[s] = feature_bank[s]
             else:
                 redundancy_atlas = (
@@ -4274,6 +4512,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Verified ordered 400-ROI TSV for --profile-source-mode original-denoised.",
     )
     parser.add_argument("--out-root", default=str(DEFAULT_OUT_ROOT))
+    parser.add_argument("--comparison-output", action="store_true", help="Explicit dataset comparison under repository tmp; requires fixed-comparison K mode.")
     parser.add_argument(
         "--dataset", choices=["auto", "outputs_hcp", "outputs_stanford", "outputs_iowa_jj_tms"], default="auto",
         help="Dataset provenance recorded in generated manifests; auto infers it from --out-root.",
@@ -4341,6 +4580,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--instability-resamples", type=int, default=100)
     parser.add_argument("--null-resamples", type=int, default=100)
     parser.add_argument("--seed", type=int, default=20260420)
+    parser.add_argument("--assignment-variant", nargs="+", default=["both"],
+                        choices=["both", "fisherz", "normalized_top20_count", *OVR_VARIANTS],
+                        help="Fisher-z and Top-20 retain their existing exports; explicitly select OVR taxonomies to add regression annotations.")
     parser.add_argument("--v-min-fraction", type=float, default=0.03)
     parser.add_argument("--max-components-threshold", type=int, default=3)
     parser.add_argument("--min-profile-coherence", type=float, default=0.0)
@@ -4363,8 +4605,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
              "Supported examples: 1, 2, 3, 1,2, 1,2,3. Default: 1,2,3. "
              "05_01 writes aligned G1-G5 via BrainSpace/HippoMaps; this option selects clustering columns.",
     )
+    parser.add_argument("--feature-scaling", choices=("none", "col_zscore"), default="col_zscore")
+    parser.add_argument("--sparsify-stage", choices=("features", "affinity", "none"), default="features")
+    parser.add_argument("--sparsity", type=float, default=None)
+    parser.add_argument("--gradient-random-state", type=int, default=DEFAULT_GRADIENT_RANDOM_STATE)
+    parser.add_argument("--rbf-scale", type=float, default=1.0)
+    parser.add_argument("--clustering-feature-scaling", choices=("none", "unit_sd"), default="none")
     parser.add_argument("--resume", action="store_true", help="Skip combos that already have group_atlas_manifest.json.")
-    parser.add_argument("--k-selection-mode", default="redundancy-aware", choices=["redundancy-aware"])
+    parser.add_argument("--k-selection-mode", default="redundancy-aware", choices=["redundancy-aware", "fixed-comparison"])
     parser.add_argument(
         "--redundancy-early-stop",
         action="store_true",
@@ -4415,7 +4663,7 @@ def _resolve_methods_and_taxonomy(args: argparse.Namespace) -> str:
                 for method in default_methods_for_atlas(atlas)
             )
         )
-    if route == "pfm_ctxdrop" and set(args.methods) - {"gradient-spectral", "wta-top"}:
+    if route == "pfm_ctxdrop" and set(args.methods) - (GRADIENT_METHODS | {"wta-top"}):
         raise ValueError("pfm_ctxdrop supports only gradient-spectral and wta-top")
     network_taxonomy = str(args.network_taxonomy)
     if not getattr(args, "_network_taxonomy_explicit", False):
@@ -4426,12 +4674,23 @@ def _resolve_methods_and_taxonomy(args: argparse.Namespace) -> str:
             "The canonical8 taxonomy is retired for active production; use canonical7 instead."
         )
     validate_requested_methods_for_taxonomy(args.methods, network_taxonomy, args.atlases)
+    for atlas in args.atlases:
+        for method in args.methods:
+            requested_ovr_variants(args.assignment_variant, atlas=atlas, method=method)
     return network_taxonomy
 
 
 def main() -> int:
     parser = build_arg_parser()
     args = parser.parse_args()
+    gradient_options = {
+        "feature_scaling": args.feature_scaling,
+        "sparsify_stage": args.sparsify_stage,
+        "sparsity": args.sparsity,
+        "random_state": args.gradient_random_state,
+        "clustering_feature_scaling": args.clustering_feature_scaling,
+        "rbf_scale": args.rbf_scale,
+    }
     suppress_known_runtime_warnings()
     print(
         "[thread-cap] "
@@ -4476,26 +4735,12 @@ def main() -> int:
     if out_root_adjusted:
         print(f"[info] Automatically adjusted --out-root to matching route directory: {out_root}", flush=True)
     validate_group_atlas_root_for_route(out_root, route_tag)
-    dataset_roots = {
-        name: (REPO_ROOT / name).resolve()
-        for name in ("outputs_hcp", "outputs_stanford", "outputs_iowa_jj_tms")
-    }
-    inferred_datasets = [
-        name for name, root in dataset_roots.items()
-        if out_root == root or root in out_root.parents
-    ]
-    dataset = str(args.dataset)
-    if dataset == "auto":
-        if len(inferred_datasets) != 1:
-            raise ValueError(
-                "Cannot infer --dataset from --out-root; pass outputs_hcp or outputs_stanford explicitly"
-            )
-        dataset = inferred_datasets[0]
-    expected_source_root = dataset_roots[dataset]
-    if out_root != expected_source_root and expected_source_root not in out_root.parents:
-        raise ValueError(
-            f"--out-root {out_root} is outside the declared dataset root {expected_source_root}"
-        )
+    if args.comparison_output and args.k_selection_mode != "fixed-comparison":
+        raise ValueError("--comparison-output requires --k-selection-mode fixed-comparison")
+    dataset, expected_source_root = validate_dataset_output_contract(
+        out_root, str(args.dataset), comparison=args.comparison_output,
+        source_roots=[shared_root, surface_root, Path(args.reference_root).resolve() if args.reference_root else shared_root],
+    )
 
     if args.reuse_fixed_cluster_root is not None:
         if route_tag == "lynch2024_7net":
@@ -4542,7 +4787,7 @@ def main() -> int:
     subject_fc_mode = resolve_subject_fc_mode(args.subject_fc_mode, args.subject_fc_top_percent)
     gradient_components = parse_gradient_components(args.gradient_components)
     coverage_thresholds = [float(x) for x in args.coverage_thresholds]
-    k_values = list(range(int(args.k_min), int(args.k_max) + 1))
+    k_values = comparison_k_values(args)
     if not k_values:
         raise ValueError(f"Empty K range: --k-min={args.k_min} --k-max={args.k_max}")
     if args.force_final_k is not None and int(args.force_final_k) not in k_values:
@@ -4684,6 +4929,13 @@ def main() -> int:
                             f"[combo] method={method} atlas={atlas} smoothing={smoothing} hemi={hemi} tau={tau:.2f}",
                             flush=True,
                         )
+                        if is_gradient_method(method):
+                            gradient_options = {**gradient_options,
+                                "alignment_fc_paths": {s: str(shared_root / f"sub-{s}" / "fc" / atlas / "4mm" / "hemi_L" / network_feature_filename(method, atlas)) for s in subjects},
+                                "alignment_mask_paths": {s: str(surface_root / f"sub-{s}" / "surface" / "tsnr_gate" / f"sub-{s}_hemi-L_valid_mask.npy") for s in subjects},
+                                "alignment_coverage_threshold": float(tau),
+                                "alignment_run_ids": sorted(run_feature_banks),
+                            }
                         tau_tag = str(f"{tau:.2f}").replace(".", "p")
                         if is_gradient_method(method):
                             comp_tag = gradient_comp_tag(gradient_components)
@@ -4714,7 +4966,7 @@ def main() -> int:
                             "null_resamples": int(args.null_resamples),
                             "diagnostic_failure_policy": (
                                 "skip_invalid_gradient_resamples_for_fixed_k"
-                                if bool(is_gradient_method(method) and args.force_final_k is not None)
+                                if bool(is_gradient_method(method) and args.force_final_k is not None and args.k_selection_mode != "fixed-comparison")
                                 else "strict"
                             ),
                             "v_min_fraction": float(args.v_min_fraction),
@@ -4725,24 +4977,22 @@ def main() -> int:
                             "profile_source_registry": str(profile_source_registry) if profile_source_registry is not None else None,
                             "profile_fc_mode": "cluster_mean_timeseries",
                             "subject_fc_preprocessing": subject_fc_preprocessing_for_resume,
+                            "assignment_variants_requested": list(args.assignment_variant),
                             "gradient_components": [int(c) for c in gradient_components],
-                            "surface_affinity": (
-                                GRADIENT_SPECTRAL_AFFINITY
-                                if method == "gradient-spectral"
-                                else None
-                            ),
+                            "surface_affinity": method_surface_affinity_metadata(method)[0] if is_gradient_method(method) else None,
                             **(
                                 gradient_resume_inputs(
                                     gradient_root=gradient_root, cohort=args.cohort, variant=args.variant,
+                                    gradient_options=gradient_options,
                                 )
-                                if method == "gradient-spectral"
+                                if is_gradient_method(method)
                                 else {"gradient_root": None}
                             ),
-                            "route_tag": route_tag if method == "gradient-spectral" else None,
+                            "route_tag": route_tag if is_gradient_method(method) else None,
                             **signal_provenance,
                             "reuse_fixed_cluster_root": (
                                 str(Path(args.reuse_fixed_cluster_root).resolve())
-                                if args.reuse_fixed_cluster_root is not None and method == "gradient-spectral"
+                                if args.reuse_fixed_cluster_root is not None and is_gradient_method(method)
                                 else None
                             ),
                             "redundancy_early_stop": bool(args.redundancy_early_stop),
@@ -4766,8 +5016,9 @@ def main() -> int:
                         subject_fc_preprocessing = subject_fc_preprocessing_for_resume
                         n_support = int(np.sum(support))
                         v_min = int(math.ceil(float(args.v_min_fraction) * max(1, n_support)))
-                        k_max_eff = min(max(k_values), n_support // max(1, v_min))
-                        k_eff = [k for k in k_values if k <= k_max_eff and k <= n_support - 1]
+                        k_max_eff, k_eff = effective_k_values(
+                            k_values, n_support=n_support, v_min=v_min, mode=args.k_selection_mode,
+                        )
                         k_selection_fields = [
                             "method",
                             "atlas",
@@ -5111,7 +5362,7 @@ def main() -> int:
                         rows: list[dict[str, object]] = []
                         labels_by_k: dict[int, np.ndarray] = {}
                         fixed_cluster_reuse: dict[str, object] | None = None
-                        allow_gradient_diagnostic_failures = bool(is_gradient_method(method) and args.force_final_k is not None)
+                        allow_gradient_diagnostic_failures = bool(is_gradient_method(method) and args.force_final_k is not None and args.k_selection_mode != "fixed-comparison")
                         support_idx = np.flatnonzero(support)
                         adjacency_support = adjacency_by_hemi[hemi][support_idx][:, support_idx]
                         group_gradient_meta: dict[str, object] | None = None
@@ -5126,6 +5377,11 @@ def main() -> int:
                                 expected_signal_branch=config.signal_branch,
                                 cohort=args.cohort,
                                 variant=args.variant,
+                                feature_scaling=args.feature_scaling,
+                                sparsify_stage=args.sparsify_stage,
+                                sparsity=args.sparsity,
+                                clustering_feature_scaling=args.clustering_feature_scaling,
+                                gradient_random_state=args.gradient_random_state,
                             )
                             np.save(run_dir / "group_gradient_features_active.npy", group_features_active.astype(np.float32))
                             write_json(run_dir / "group_gradient_feature_summary.json", group_gradient_meta)
@@ -5136,6 +5392,7 @@ def main() -> int:
                                 subjects_subset=subjects,
                                 support_mask=support,
                                 gradient_components=gradient_components,
+                                gradient_options=gradient_options,
                             )
                         if args.reuse_fixed_cluster_root is not None and not is_clusterless_method(method):
                             source_run = resolve_fixed_cluster_source_run(
@@ -5175,6 +5432,7 @@ def main() -> int:
                         redundancy_early_stop_enabled = bool(
                             args.redundancy_early_stop
                             and fixed_cluster_reuse is None
+                            and args.k_selection_mode != "fixed-comparison"
                         )
                         if fixed_cluster_reuse is not None:
                             pass
@@ -5211,6 +5469,7 @@ def main() -> int:
                                     roi_fc_bank_for_redundancy=roi_fc_bank_for_redundancy,
                                     gradient_components=gradient_components,
                                     allow_diagnostic_failures=allow_gradient_diagnostic_failures,
+                                    gradient_options=gradient_options,
                                 )
                                 print(f"  [k-done] {k_result}", flush=True)
                                 labels_by_k[int(k_result)] = labels_full
@@ -5257,6 +5516,7 @@ def main() -> int:
                                         roi_fc_bank_for_redundancy=roi_fc_bank_for_redundancy,
                                         gradient_components=gradient_components,
                                         allow_diagnostic_failures=allow_gradient_diagnostic_failures,
+                                        gradient_options=gradient_options,
                                     ): int(k)
                                     for k in k_eff
                                 }
@@ -5452,6 +5712,8 @@ def main() -> int:
                             default_k=args.default_k,
                             automatic_k_final=automatic_k_final,
                         )
+                        if args.k_selection_mode == "fixed-comparison":
+                            primary_k = comparison_primary_k(k_final)
                         if primary_k["chosen_k_final"] is None:
                             raise RuntimeError(f"No primary K available for combo={combo}")
                         k_final = int(primary_k["chosen_k_final"])
@@ -5464,6 +5726,14 @@ def main() -> int:
                             labels_by_k[k_final],
                             long_axis_order_by_hemi[hemi],
                         )
+                        if is_gradient_method(method) and fixed_cluster_reuse is None:
+                            for row in rows:
+                                if int(row["k"]) == k_final:
+                                    row["gradient_clustering"] = spatial_cluster_diagnostics(
+                                        row["gradient_clustering"], labels_by_k[k_final][support],
+                                        labels_final[support], adjacency_support, k=k_final,
+                                    )
+                                    row["affinity_graph_diagnostics"]["cluster_vertex_counts"] = row["gradient_clustering"]["cluster_vertex_counts"]
                         fixed_cluster_order = cluster_ids_by_long_axis(
                             labels_final,
                             long_axis_order_by_hemi[hemi],
@@ -5478,6 +5748,7 @@ def main() -> int:
                         roi_registry: list[dict[str, object]] | None = None
                         roi_top20: dict[str, object] | None = None
                         roi_normalized_status_rows: list[dict[str, object]] | None = None
+                        ovr_variants = requested_ovr_variants(args.assignment_variant, atlas=atlas, method=method)
                         if method_uses_kong2022_topn_cluster_annotation(method, atlas):
                             (
                                 profile,
@@ -5488,6 +5759,7 @@ def main() -> int:
                                 roi_profile_subjects_used,
                                 roi_top20,
                                 roi_normalized_status_rows,
+                                roi_profile_3d,
                             ) = annotate_kong2022_clusters_topn(
                                 group_labels_final=labels_final,
                                 support_mask=support,
@@ -5565,6 +5837,8 @@ def main() -> int:
                                 "status_rows": status_rows,
                                 "dominant": dominant,
                                 "assignment_metric": "top1_fisher_z",
+                                "network_names": network_names, "network_taxonomy": network_taxonomy,
+                                "profile_units": "Fisher_z",
                                 "q_threshold": None,
                                 "top_n_cap": None,
                             }
@@ -5574,9 +5848,19 @@ def main() -> int:
                                 "status_rows": roi_normalized_status_rows,
                                 "dominant": [str(row.get("top1_network", "unassigned")) for row in roi_normalized_status_rows],
                                 "assignment_metric": "top20_count_normalized_by_network_roi_count",
+                                "network_names": network_names, "network_taxonomy": network_taxonomy,
+                                "profile_units": "normalized_positive_ROI_count",
                                 "q_threshold": 0.05,
                                 "top_n_cap": 20,
                             }
+                        if ovr_variants:
+                            if roi_profile_3d is None or roi_registry is None or roi_profile_subjects_used != subjects:
+                                raise ValueError("OVR requires all requested subjects in the Kong2022 400-ROI subjectwise cluster profile")
+                            assignment_variant_specs.update(build_ovr_assignment_specs(
+                                roi_profile_3d=roi_profile_3d, subjects=roi_profile_subjects_used,
+                                cluster_ids=list(range(1, k_final + 1)), roi_registry=roi_registry,
+                                variants=ovr_variants, out_dir=run_dir,
+                            ))
                         default_assignment_variant = select_cluster_level_default_assignment_variant(
                             assignment_variant_specs
                         )
@@ -5586,6 +5870,9 @@ def main() -> int:
                             payload = {
                                 "items": [dict(x) for x in variant_spec["status_rows"]],
                                 "assignment_metric": str(variant_spec["assignment_metric"]),
+                                "network_names": variant_spec["network_names"],
+                                "network_taxonomy": variant_spec["network_taxonomy"],
+                                "profile_units": variant_spec["profile_units"],
                                 "q_threshold": variant_spec["q_threshold"],
                                 "top_n_cap": variant_spec["top_n_cap"],
                             }
@@ -5617,7 +5904,7 @@ def main() -> int:
                             labels_variant, meta_variant, items_variant = functional_atlas_from_clusters(
                                 group_labels_final=labels_final,
                                 status_rows=[dict(x) for x in variant_spec["status_rows"]],
-                                network_names=network_names,
+                                network_names=variant_spec["network_names"],
                                 color_map=canonical_color_map,
                             )
                             labels_variant = labels_variant.astype(np.int32)
@@ -5625,10 +5912,18 @@ def main() -> int:
                             write_json(run_dir / f"group_functional_atlas_label_map_{variant_name}.json", meta_variant)
                             functional_variant_payloads[variant_name] = {
                                 "assignment_metric": str(variant_spec["assignment_metric"]),
+                                "network_names": variant_spec["network_names"],
+                                "network_taxonomy": variant_spec["network_taxonomy"],
+                                "profile_units": variant_spec["profile_units"],
                                 "cluster_assignment_status": str((run_dir / f"cluster_assignment_status_{variant_name}.json").resolve()),
                                 "group_functional_atlas_labels": str((run_dir / f"group_functional_atlas_labels_{variant_name}.npy").resolve()),
                                 "group_functional_atlas_label_map": str((run_dir / f"group_functional_atlas_label_map_{variant_name}.json").resolve()),
                             }
+                            if variant_name in OVR_VARIANTS:
+                                functional_variant_payloads[variant_name].update({
+                                    field: variant_spec[field] for field in
+                                    ("network_profile", "ovr_model_metadata", "profile_units")
+                                })
                             if variant_name == default_assignment_variant:
                                 functional_labels = labels_variant
                                 functional_label_items = items_variant
@@ -5667,7 +5962,7 @@ def main() -> int:
                             _labels_tmp, _meta_tmp, items_variant = functional_atlas_from_clusters(
                                 group_labels_final=labels_final,
                                 status_rows=[dict(x) for x in variant_spec["status_rows"]],
-                                network_names=network_names,
+                                network_names=variant_spec["network_names"],
                                 color_map=canonical_color_map,
                             )
                             func_lbl_variant = make_named_label_gifti(labels_variant, items_variant)
@@ -5736,11 +6031,15 @@ def main() -> int:
                             ),
                             "group_feature_summary": str((run_dir / "group_feature_summary.json").resolve()),
                             "clustering_algorithm": (
+                                method if method in {"gradient-ward", "gradient-gmm"} else
                                 "spectral_clustering_precomputed_affinity_"
                                 f"{method_surface_affinity_metadata(method)[0].replace('-', '_')}_diag0_"
                                 "kmeans_n_init_50"
                             ),
                             "surface_affinity": method_surface_affinity_metadata(method)[0],
+                            "rbf_scale": float(args.rbf_scale) if method == "gradient-spectral-rbf" else None,
+                            "bandwidth_rule": "rbf_scale * median(positive unique-undirected-mesh-edge distance)" if method == "gradient-spectral-rbf" else None,
+                            "gradient_clustering": selected_rows[0].get("gradient_clustering") if is_gradient_method(method) else None,
                             "affinity_description": method_surface_affinity_metadata(method)[1],
                             "affinity_graph_diagnostics": next(
                                 row["affinity_graph_diagnostics"]

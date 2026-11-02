@@ -220,7 +220,7 @@ def test_group_gradient_features_average_subject_roi_fc_then_select_components()
 
     def fake_brainspace(group_fc: np.ndarray, **kwargs):
         n = int(group_fc.shape[0])
-        grads = np.tile(np.asarray([[1.0, 2.0, 3.0, 4.0, 5.0]], dtype=np.float32), (n, 1))
+        grads = np.arange(n, dtype=np.float32)[:, None] + np.asarray([[1.0, 2.0, 3.0, 4.0, 5.0]], dtype=np.float32)
         lambdas = np.asarray([5.0, 4.0, 3.0, 2.0, 1.0], dtype=np.float64)
         ev = lambdas / np.sum(lambdas)
         return grads, lambdas, ev
@@ -253,10 +253,14 @@ def test_group_gradient_features_average_subject_roi_fc_then_select_components()
 def test_brainspace_adapter_uses_expected_parameters() -> None:
     calls: dict[str, object] = {}
 
-    def fake_fit(group_fc: np.ndarray, *, n_components: int):
+    def fake_fit(group_fc: np.ndarray, *, n_components: int, random_state, feature_scaling, sparsify_stage, sparsity):
         calls["fit"] = {
             "shape": tuple(np.asarray(group_fc).shape),
             "n_components": int(n_components),
+            "random_state": random_state,
+            "feature_scaling": feature_scaling,
+            "sparsify_stage": sparsify_stage,
+            "sparsity": sparsity,
         }
         grads = np.arange(30, dtype=np.float32).reshape(6, 5)
         lambdas = np.array([5.0, 4.0, 3.0, 2.0, 1.0], dtype=np.float64)
@@ -271,7 +275,10 @@ def test_brainspace_adapter_uses_expected_parameters() -> None:
     finally:
         atlas_mod.ensure_hippomaps_on_path = old_ensure
 
-    assert calls["fit"] == {"shape": (6, 4), "n_components": 5}, calls
+    assert calls["fit"] == {"shape": (6, 4), "n_components": 5,
+                            "random_state": atlas_mod.DEFAULT_GRADIENT_RANDOM_STATE,
+                            "feature_scaling": "col_zscore", "sparsify_stage": "features",
+                            "sparsity": None}, calls
     assert grads.shape == (6, 5), grads.shape
     assert lambdas.shape == (5,), lambdas.shape
     assert ev.shape == (5,), ev.shape
@@ -285,7 +292,7 @@ def test_group_feature_matrix_gradient_spectral_uses_selected_gradient_columns()
 
     def fake_brainspace(group_fc: np.ndarray, **kwargs):
         n = int(group_fc.shape[0])
-        grads = np.tile(np.asarray([[2.0, 1.0, -1.0, 0.5, 0.25]], dtype=np.float32), (n, 1))
+        grads = np.arange(n, dtype=np.float32)[:, None] + np.asarray([[2.0, 1.0, -1.0, 0.5, 0.25]], dtype=np.float32)
         lambdas = np.asarray([5.0, 4.0, 3.0, 2.0, 1.0], dtype=np.float64)
         ev = lambdas / np.sum(lambdas)
         return grads, lambdas, ev

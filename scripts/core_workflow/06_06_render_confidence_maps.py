@@ -18,6 +18,7 @@ matplotlib.use("Agg")
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
+from lib.gradient_clustering import GRADIENT_METHODS
 from lib.confidence_map import publication_display_data, publication_display_upper
 from lib.hippomaps_adapter import (
     DEFAULT_HIPPOMAPS_ROOT, wait_for_stable_file, normalize_hemis,
@@ -194,13 +195,14 @@ def render_product(
     comp_dir_name: str,
     thresh_str: str,
     display_vmax: float | None,
+    method: str = "gradient-spectral",
 ) -> Path:
     arrays: dict[str, np.ndarray] = {}
     means: dict[str, float] = {}
     for hemi in HEMIS:
         run_dir = (
             out_root
-            / "gradient-spectral"
+            / method
             / "kong2022"
             / smoothing
             / thresh_str
@@ -243,9 +245,11 @@ def render_combo(
     comp_dir_name: str,
     thresh_str: str,
     display_vmax: float | None,
+    method: str = "gradient-spectral",
 ) -> None:
     print(f"Rendering confidence map for smoothing={smoothing}")
-    output_dir = present_root / route_tag / smoothing
+    output_dir = (present_root / route_tag / smoothing if method == "gradient-spectral"
+                  else present_root / route_tag / method / smoothing)
     output_dir.mkdir(parents=True, exist_ok=True)
     plotter = load_hippomaps_plotter(hippomaps_root)
     for product in CONFIDENCE_PRODUCTS:
@@ -260,6 +264,7 @@ def render_combo(
             comp_dir_name=comp_dir_name,
             thresh_str=thresh_str,
             display_vmax=display_vmax,
+            method=method,
         )
 
 
@@ -289,6 +294,7 @@ def main(args: argparse.Namespace) -> int:
                     comp_dir_name=comp_dir_name,
                     thresh_str=thresh_str,
                     display_vmax=args.display_vmax,
+                    method=args.method,
                 )
             except Exception as exc:
                 print(f"Failed rendering combo for smoothing={smoothing} thresh={thresh_str}: {exc}")
@@ -316,6 +322,7 @@ def main(args: argparse.Namespace) -> int:
 
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Render functional parcellation confidence maps.")
+    parser.add_argument("--method", choices=sorted(GRADIENT_METHODS), default="gradient-spectral")
     parser.add_argument("--out-root", default=str(DEFAULT_ROUTEA_GROUP_ATLAS_ROOT))
     parser.add_argument("--route-tag", default="auto", choices=["auto", *ROUTE_TAG_CHOICES])
     parser.add_argument("--present-root", default=str(DEFAULT_GRADIENTS_DIR))

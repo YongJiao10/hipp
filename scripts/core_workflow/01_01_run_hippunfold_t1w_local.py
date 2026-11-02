@@ -80,6 +80,14 @@ def _start_subject(
 
 def _check_subject(contract: HippUnfoldRunContract) -> None:
     subject = f"sub-{contract.subject}"
+    manifest_path = contract.preset.output_root / "_batch_logs/output_integrity_manifest.json"
+    if manifest_path.is_file():
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        if any("atlas-multihist7_" in item for item in manifest.get("expected_outputs", [])):
+            raise RuntimeError(
+                f"Old atlas output contract at {manifest_path}; prepare a multihist7sgi "
+                "contract from the completed new run before validating it."
+            )
     log_file = contract.preset.output_root / f"{subject}_hippunfold.log"
     with log_file.open("a", encoding="utf-8") as log:
         subprocess.run(

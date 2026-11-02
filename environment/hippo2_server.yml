@@ -50,6 +50,7 @@ dependencies:
 - pip=26.0.1
 - niftyreg=1.5.69.6
 - snakemake-storage-plugin-http=0.3.1
+- snakemake-storage-plugin-cached-http=0.3
 - vtk=9.7.0
 - pip:
   - --extra-index-url https://download.pytorch.org/whl/cu126
@@ -58,7 +59,7 @@ dependencies:
   - batchgenerators==0.25.5
   - dicom2nifti==2.6.2
   - medpy==0.5.2
-  - hippunfold @ git+https://github.com/khanlab/hippunfold.git@v2.3.0
+  - hippunfold @ git+https://github.com/khanlab/hippunfold.git@v2.4.0
   - numpy==2.5.4
   - scipy==1.18.1
   - pandas==3.1.0

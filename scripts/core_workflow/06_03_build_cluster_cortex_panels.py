@@ -54,6 +54,7 @@ from typing import Any
 import matplotlib  # type: ignore[import-untyped]
 import nibabel as nib
 import numpy as np
+from lib.gradient_clustering import is_gradient_method
 from lib.cortex_template_profiles import (
     compute_subject_cluster_roi_profiles,
     parse_roi_registry,
@@ -95,6 +96,9 @@ DEFAULT_HIPP_SCENE = REPO_ROOT / "config" / "wb_locked_native_view_lateral_media
 METHOD_CHOICES = [
     "network-spectral",
     "gradient-spectral",
+    "gradient-ward",
+    "gradient-gmm",
+    "gradient-spectral-rbf",
     "intrinsic-spectral",
 ]
 METHODS_DEFAULT = ["intrinsic-spectral", "network-spectral", "gradient-spectral"]
@@ -121,7 +125,7 @@ GRADIENT_METHOD = "gradient-spectral"
 
 
 def _is_gradient_method(method: str) -> bool:
-    return method == GRADIENT_METHOD
+    return is_gradient_method(method)
 
 
 def _discover_gradient_comp_tags(

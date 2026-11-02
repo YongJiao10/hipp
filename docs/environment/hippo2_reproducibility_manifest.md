@@ -1,18 +1,25 @@
 # hippo2 runtime and reproducibility
 
-Runtime revision: 2026-10-25. The scientific baseline is official HippUnfold
-v2.3.0 in the existing hippo2 dependency stack. Local changes are limited to
-cache/inference runtime adapters and CLI version display. No local boundary,
-reference-plane or Workbench scientific correction is part of this baseline.
+The stage-01 launcher and installed hippo2 runtime select HippUnfold 2.4.0 and
+`multihist7sgi`; existing formal HCP outputs still use 2.3.0. The new output
+contract and approved result-root preparation are required before dispatch.
+
+Runtime revision: 2026-11-01. The installed scientific workflow is the official
+HippUnfold v2.4.0 release. Local changes are limited to cache/inference runtime
+adapters and CLI version display. No local boundary, reference-plane or
+Workbench scientific correction is part of this runtime.
 The environment manager remains Conda; the complete upstream Pixi stack is
 not installed.
 
 The complete official participant DAG has been attempted for all HCP166
 subjects in the formal result tree, with 12 concurrent subjects and two GPU
-inference slots. Exactly 163 subjects satisfy the current 96-product contract
-and official error-level QC. Subjects 233326 and 249947 failed surface QC;
-942658 failed right-dentate boundary-loop extraction. Generated intermediates
-remain retained. Current scope and review status are recorded in the
+inference slots. Exactly 163 subjects completed the 96-product contract and
+official error-level QC. Of these, the 156 subjects present in the HCP 3T task
+dataset have since undergone approved 01_02 cleanup; their anat, coords, warps
+and CIFTI directories are no longer retained. Seven completed subjects retain
+the full output contract. Subjects 233326 and 249947 failed surface QC;
+942658 failed right-dentate boundary-loop extraction. Their intermediates remain
+retained. Current scope and review status are recorded in the
 [rebuild assessment](hippunfold_result_impact.md) and
 [execution workspace](../../tmp/hcp7t_official_v230_20261025/README.md).
 
@@ -22,8 +29,8 @@ remain retained. Current scope and review status are recorded in the
 | --- | --- |
 | Environment | `/home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2` |
 | Activation | `/opt/conda/bin/activate hippo2` |
-| Python | 3.13.13; supported by v2.3.0's `>=3.12,<3.15` requirement |
-| HippUnfold | 2.3.0, official release source plus documented resource/runtime adapters |
+| Python | 3.13.13; supported by v2.4.0's `>=3.12,<3.15` requirement |
+| HippUnfold | 2.4.0, official release source plus documented resource/runtime adapters |
 | Snakemake / Snakebids | 9.27.1 / 0.15.0 |
 | nnUNet / PyTorch | 1.7.1 / 2.14.1+cu126, CUDA inference |
 | NumPy / SciPy / pandas | 2.5.4 / 1.18.1 / 3.1.0 |
@@ -34,8 +41,8 @@ remain retained. Current scope and review status are recorded in the
 | Convert3D / ITK | 1.4.2 (Khanlab h109cef4_0) / 5.4.7 |
 | Workbench | Official 2.2.1, `<repository>/software/workbench/bin_linux64/wb_command` |
 
-`environment/hippo2_server.yml` declares the stack and official v2.3.0 source.
-The effective CLI and package metadata must both report 2.3.0. Verify the loaded
+`environment/hippo2_server.yml` declares the target stack and official v2.4.0 source.
+The installed effective CLI and package metadata report 2.4.0. Verify the loaded
 workflow and executable; the environment name and Conda package listing alone
 do not establish the algorithm version. Python scientific packages remain at
 the pip layer over the native Conda runtime.
@@ -71,22 +78,23 @@ hippunfold --modality T1w --output_density 512 --help
 ```
 
 The executable must resolve to the canonical hippo2 prefix, the version must
-be 2.3.0, and T1w/512 help must include the inner/outer registration options.
+match the release in the environment specification, and T1w/512 help must
+include the inner/outer registration options.
 Stage 01 additionally validates the resource adapter and CUDA. A pending batch
 performs this gate once; a new batch checks again. CLI probes have a
 300-second limit. An unavailable CUDA device stops dispatch rather than
 selecting CPU inference.
 
 The closed presets retain T1w, density 512, corobl output, hippocampus and
-dentate, unfolded registration and GPU inference. BANDA/PDC keep
-`--skip-preproc` for already bias-corrected inputs; HCP/Stanford/JJ-TMS keep N4.
+dentate, unfolded registration and GPU inference. HCP, BANDA and PDC use
+`--skip-preproc` for bias-corrected inputs; Stanford and JJ-TMS retain N4.
 Caller scientific arguments and HIPPUNFOLD environment overrides are rejected.
 
 ## Scientific parameters
 
-Use the official [v2.3.0 release](https://github.com/khanlab/hippunfold/releases/tag/v2.3.0).
+The prepared upgrade selects the official [v2.4.0 release](https://github.com/khanlab/hippunfold/releases/tag/v2.4.0).
 The adult T1w model remains Task101_hcp1200_T1w, nnUNetTrainerV2, model_best,
-with the declared CITI168 template and multihist7 atlas. Establish density from
+with the declared CITI168 template and multihist7sgi atlas. Establish density from
 consumed surface paths and shapes rather than arguments alone.
 
 The official release replaces the faulty terminal-contiguity operation with
@@ -104,11 +112,10 @@ Inner/outer registration retains the official greedy defaults:
 update-field smoothing variance 3.0. Optional SyN remains an explicit upstream
 method, not a replacement selected by missing outputs.
 
-Use the release tag rather than development main. The maintainer states that
-new surface filtering on main requires a newly generated unfolded atlas; it
-is outside this runtime. See the [maintainer's release guidance](https://github.com/khanlab/hippunfold/issues/580#issuecomment-6398866471).
-Do not install a local scientific patch, main-branch mesh repair or a local
-Workbench binary to make a failed subject appear complete.
+Use the release tag rather than development main. Version 2.4.0 pairs its
+updated surface processing with the regenerated multihist7sgi atlas. Do not
+install a local scientific patch or local Workbench binary to make a failed
+subject appear complete.
 
 ## Complete HCP166 reconstruction
 
@@ -160,10 +167,11 @@ The maintained adapters are:
 - `scripts/core_workflow/lib/snakemake_local_source_cache.patch`: refresh
   changed local source files while retaining remote-source behavior.
 
-The HippUnfold adapter changes `workflow/rules/download.smk`,
-`workflow/rules/nnunet.smk` and `workflow/lib/local_assets.py`. Its fourth file,
-`config/snakebids.yml`, only corrects CLI version display to 2.3.0. No local
-scientific correction is installed or reapplied.
+The prepared 2.4.0 adapter changes `workflow/rules/download.smk`,
+`workflow/rules/pred.smk` and `workflow/lib/local_assets.py`. Its `run.py` and
+`config/snakebids.yml` changes make CLI version display read installed package
+metadata rather than the stale upstream static value. No local scientific
+correction is installed or reapplied.
 
 ## Batch resources and retained outputs
 
@@ -182,12 +190,16 @@ shared resource caches are separate. PATH places repository wrappers and the
 project Workbench before hippo2/bin; LD_LIBRARY_PATH prepends hippo2/lib.
 The existing fork/Torch-sharing startup hook remains in `.runtime_py/`.
 
-This reconstruction performs no 01_02 cleanup. `--notemp` keeps anat, coords,
-warps, CIFTI and other generated intermediates. Every standard output check
-must pass `--fail-on-missing --no-cleanup`. Retain runtime scratch and failed
-outputs for diagnosis; do not run cleanup-shadow or delete runtime directories.
-The output checker may mark a subject complete only when all 96 declared
-formal products remain present and the exact current run contract matches.
+The reconstruction used `--notemp` to retain generated intermediates. The
+approved 01_02 cleanup subsequently removed anat, coords, warps and CIFTI for
+the 156 completed HCP 3T task subjects; their retained outputs have cleanup
+receipts. Standard full-output checks use `--fail-on-missing --no-cleanup`.
+Retain runtime scratch and failed outputs for diagnosis; do not run
+cleanup-shadow or delete runtime directories.
+The 2.3.0 output checker required all 96 declared formal products and an exact
+matching run contract. The 2.4.0 atlas must use its own complete official output
+contract. The standalone checker can inspect older results; the stage-01
+launcher rejects an old-atlas contract when checking a new run.
 A retained-only cleanup receipt is not sufficient. The normal launcher stops
 new dispatch after a failure; the HCP166 reconstruction explicitly selects
 manifest-only `--keep-going` to attempt the remaining subjects. That option
@@ -201,25 +213,22 @@ flexible channel priority for the selected Conda-forge Greedy and Khanlab
 Convert3D builds. Install the official Workbench 2.2.1 distribution under
 `software/workbench/`; no local resampling fix is selected.
 
-Build/install the clean official v2.3.0 source before applying adapters so the
-package metadata remains exactly 2.3.0. Stop batch dispatch and wait for all
-HippUnfold subprocesses to exit before replacing installed workflow files.
-For a fresh source checkout:
+Install the clean official release before applying adapters so package metadata
+records the release version. Stop batch dispatch and wait for all HippUnfold
+subprocesses to exit before replacing installed workflow files. For a fresh
+source checkout, with the `cached-http` storage plugin installed:
 
 ```bash
-git clone --single-branch --branch v2.3.0 https://github.com/khanlab/hippunfold.git tmp/hippunfold_v230_source
-.cache/conda_envs/hippo2/bin/pip install --no-deps tmp/hippunfold_v230_source
-patch --batch --forward --dry-run -p1 -d tmp/hippunfold_v230_source/hippunfold < scripts/core_workflow/lib/hippunfold_local_assets.patch
-patch --batch --forward -p1 -d tmp/hippunfold_v230_source/hippunfold < scripts/core_workflow/lib/hippunfold_local_assets.patch
-hippunfold_site=/home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2/lib/python3.13/site-packages/hippunfold
-cp tmp/hippunfold_v230_source/hippunfold/config/snakebids.yml "$hippunfold_site/config/snakebids.yml"
-cp tmp/hippunfold_v230_source/hippunfold/workflow/rules/download.smk "$hippunfold_site/workflow/rules/download.smk"
-cp tmp/hippunfold_v230_source/hippunfold/workflow/rules/nnunet.smk "$hippunfold_site/workflow/rules/nnunet.smk"
-cp tmp/hippunfold_v230_source/hippunfold/workflow/lib/local_assets.py "$hippunfold_site/workflow/lib/local_assets.py"
+git clone --single-branch --branch v2.4.0 https://github.com/khanlab/hippunfold.git tmp/hippunfold_v240_fresh_source
+.cache/conda_envs/hippo2/bin/pip install --no-deps tmp/hippunfold_v240_fresh_source
+patch --batch --forward --dry-run -p1 -d .cache/conda_envs/hippo2/lib/python3.13/site-packages/hippunfold < scripts/core_workflow/lib/hippunfold_local_assets.patch
+patch --batch --forward --no-backup-if-mismatch -p1 -d .cache/conda_envs/hippo2/lib/python3.13/site-packages/hippunfold < scripts/core_workflow/lib/hippunfold_local_assets.patch
 ```
 
+Prepare the exact `multihist7sgi` atlas resources before dispatch.
+
 After a Snakemake reinstall, dry-run/apply its separate maintained source-cache
-patch. Activate hippo2, pass the 2.3.0/T1w/512 gate and use the closed stage-01
+patch. Activate hippo2, pass the declared-version/T1w/512 gate and use the closed stage-01
 launcher. Complete cached resources should need no network request. Keep build
 material under the repository `tmp/`; follow the exact-path authorization rule
 for deletions or production replacement.

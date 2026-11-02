@@ -55,6 +55,19 @@ GRADIENT_METHOD = "gradient-spectral"
 DEFAULT_METHODS = ["intrinsic-spectral", "network-spectral", "wta-top"]
 
 
+def test_signed_profile_heatmap_annotations_preserve_negative_values() -> None:
+    import numpy as np
+
+    values = np.array([[-0.10, 0.20]])
+    fig, ax = present_mod.plt.subplots()
+    try:
+        ax.imshow(values, vmin=-0.20, vmax=0.20)
+        present_mod.annotate_profile_values(ax, values, vmax=0.20)
+        assert [text.get_text() for text in ax.texts] == ["-0.10", "0.20"]
+    finally:
+        present_mod.plt.close(fig)
+
+
 def test_main_pipeline_method_contract() -> None:
     assert NEW_METHOD_NAMES.issubset(set(METHOD_CHOICES))
     assert GRADIENT_METHOD in set(METHOD_CHOICES)

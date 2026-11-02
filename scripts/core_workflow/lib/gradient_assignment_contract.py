@@ -9,13 +9,15 @@ from typing import Any, Mapping
 
 import nibabel as nib
 import numpy as np
+from .network_ovr import OVR_VARIANTS, OVR_ASSIGNMENT_METRIC
 
 
-ASSIGNMENT_VARIANTS = ("normalized_top20_count", "fisherz", "weighted_fisherz")
+ASSIGNMENT_VARIANTS = ("normalized_top20_count", "fisherz", "weighted_fisherz", *OVR_VARIANTS)
 EXPECTED_METRICS = {
     "normalized_top20_count": "top20_count_normalized_by_network_roi_count",
     "fisherz": "top1_fisher_z",
     "weighted_fisherz": "top1_weighted_network_fisher_z",
+    **{variant: OVR_ASSIGNMENT_METRIC for variant in OVR_VARIANTS},
 }
 
 
@@ -254,6 +256,16 @@ def _validate_status_items(
                     f"Gradient assignment contract ({variant}): cluster "
                     f"{cid} has invalid normalized counts: {run_dir}"
                 )
+        elif variant in OVR_VARIANTS:
+            if profile is None or profile_names is None:
+                raise ValueError(f"OVR missing exact coefficients: {run_dir}")
+            values = dict(zip(profile_names, map(float, profile[cid - 1]), strict=True))
+            reported = item.get("beta_by_network")
+            if not isinstance(reported, dict) or set(reported) != set(values) or any(
+                not np.isclose(float(reported[name]), value, rtol=0, atol=1e-10)
+                for name, value in values.items()
+            ):
+                raise ValueError(f"OVR status coefficients disagree: cluster={cid}: {run_dir}")
         elif variant in {"fisherz", "weighted_fisherz"}:
             if profile is None or profile_names is None:
                 raise ValueError(
@@ -319,7 +331,7 @@ def _validate_status_items(
                     f"values: {run_dir}"
                 )
         else:
-            minimum_positive = variant == "normalized_top20_count"
+            minimum_positive = variant == "normalized_top20_count" or variant in OVR_VARIANTS
             if (
                 top not in values
                 or (minimum_positive and values[top] <= 0)
@@ -365,7 +377,7 @@ def _validate_status_items(
             )
 
         total = sum(positive.values())
-        compositions[cid] = (
+        compositions[cid] = {} if variant in OVR_VARIANTS else (
             {name: 100.0 * value / total for name, value in positive.items()}
             if total > 0
             else {}
@@ -611,6 +623,23 @@ def validate_gradient_assignment(
     profile: np.ndarray | None = None
     profile_names: list[str] | None = None
     dependencies: list[Path] = [cluster_path, *paths.values()]
+    if variant in OVR_VARIANTS:
+        coefficient_path = _declared_path(row, "network_profile", run_dir, variant)
+        metadata_path = _declared_path(row, "ovr_model_metadata", run_dir, variant)
+        model = _read_json(metadata_path, label="OVR model", variant=variant, run_dir=run_dir)
+        taxonomy = variant.removeprefix("ovr_logistic_")
+        if model.get("taxonomy") != taxonomy or model.get("variant") != variant:
+            raise ValueError(f"OVR taxonomy/variant mismatch: {metadata_path}")
+        if (model.get("cluster_ids") != actual_ids or model.get("network_names") != names
+                or row.get("profile_units") != "raw_beta_per_Fisher_z_unit"):
+            raise ValueError(f"OVR class/network order or units mismatch: {metadata_path}")
+        if Path(str(model.get("artifacts", {}).get("beta", ""))).resolve() != coefficient_path:
+            raise ValueError(f"OVR exact coefficient path mismatch: {metadata_path}")
+        profile = np.asarray(np.load(coefficient_path, allow_pickle=False), dtype=float)
+        profile_names = list(names)
+        if profile.shape != (len(actual_ids), len(names)) or not np.isfinite(profile).all():
+            raise ValueError(f"OVR coefficient shape/values mismatch: {coefficient_path}")
+        dependencies.extend([coefficient_path, metadata_path])
     if variant in {"fisherz", "weighted_fisherz"}:
         if variant == "weighted_fisherz" or manifest.get(
             "default_assignment_variant"
@@ -698,6 +727,8 @@ def validate_gradient_assignment(
         run_dir=run_dir,
     )
     validated: dict[str, Any] = {
+        "profile": profile,
+        "network_names": profile_names,
         "winners": winners,
         "compositions": compositions,
         "paths": dependencies,

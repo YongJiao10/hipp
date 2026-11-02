@@ -10,6 +10,8 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+from .gradient_clustering import is_gradient_method
+from .hippomaps_adapter import scale_gradient_features
 
 KONG2022_ROI_COUNT = 400
 
@@ -120,6 +122,9 @@ def _local_artifacts(path: Path, manifest: dict[str, Any]) -> None:
             or len(set(components)) != len(components)):
         raise ValueError(f"Invalid selected gradient components: {path}")
     selected = full[mask][:, [c - 1 for c in components]]
+    if "clustering_feature_transform" in source:
+        transform = source["clustering_feature_transform"]
+        selected, _ = scale_gradient_features(selected, scaling=transform["scaling"], transform=transform)
     if features.shape != selected.shape or not np.allclose(features, selected, equal_nan=True, atol=1e-6, rtol=1e-6):
         raise ValueError(f"Selected gradients differ from declared upstream: {path}")
     if source.get("hippomaps_gradients_full") and active_path(source["hippomaps_gradients_full"]) != active_path(outputs["hippomaps_gradients_full"]):
@@ -129,18 +134,23 @@ def _local_artifacts(path: Path, manifest: dict[str, Any]) -> None:
 def validate_group_atlas_lineage(
     manifest_path: Path | str,
     *,
+    expected_network_taxonomy: str = "canonical7",
+    expected_method: str | None = None,
     require_complete_local_artifacts: bool = True,
     visited_paths: set[Path] | None = None,
 ) -> dict[str, Any]:
     """Validate explicit active-parent, recomputed, or historical-reuse mode."""
     path = active_path(manifest_path)
     manifest = load_json(path)
+    if expected_network_taxonomy not in {"canonical7", "family17"}:
+        raise ValueError(f"Unsupported active Kong network taxonomy: {expected_network_taxonomy}")
     if manifest.get("status") != "ok":
         raise ValueError(f"Manifest status is not ok: {path}")
-    if (manifest.get("atlas"), manifest.get("method"), manifest.get("network_taxonomy")) != (
-        "kong2022", "gradient-spectral", "canonical7"
-    ):
-        raise ValueError(f"Expected active canonical7 Kong gradient-spectral manifest: {path}")
+    if (manifest.get("atlas") != "kong2022"
+            or not is_gradient_method(str(manifest.get("method")))
+            or manifest.get("network_taxonomy") != expected_network_taxonomy
+            or (expected_method is not None and manifest.get("method") != expected_method)):
+        raise ValueError(f"Expected active {expected_network_taxonomy} Kong gradient-spectral manifest: {path}")
     visited = set(visited_paths or ())
     if path in visited:
         raise ValueError(f"Cyclic manifest lineage detected: {path}")
@@ -178,7 +188,9 @@ def validate_group_atlas_lineage(
         parent = parents.pop()
         if not parent.is_file():
             raise FileNotFoundError(f"Declared parent group atlas manifest does not exist: {parent} (from {path})")
-        validate_group_atlas_lineage(parent, require_complete_local_artifacts=require_complete_local_artifacts,
+        validate_group_atlas_lineage(parent, expected_network_taxonomy=expected_network_taxonomy,
+                                     expected_method=str(manifest["method"]),
+                                     require_complete_local_artifacts=require_complete_local_artifacts,
                                      visited_paths=visited)
         parent_manifest = load_json(parent)
         for field in ("subjects", "n_subjects", "smoothing", "hemi", "coverage_threshold", "chosen_k_final"):
@@ -204,7 +216,7 @@ def validate_group_atlas_lineage(
     if require_complete_local_artifacts:
         _local_artifacts(path, manifest)
     return {"status": "ok", "path": str(path), "mode": mode,
-            "network_taxonomy": "canonical7",
+            "network_taxonomy": expected_network_taxonomy,
             "source_manifest": str(parent) if mode == "active_parent_declared" else None}
 
 
