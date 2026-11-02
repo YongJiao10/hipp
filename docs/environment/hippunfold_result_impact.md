@@ -50,9 +50,7 @@ other required outputs.
 Therefore the official complete participant DAG must regenerate missing
 upstream prerequisites and every affected downstream product. It must remain
 self-consistent; do not preserve old surface timestamps to bypass newly
-computed dependencies. The pi Argon model completed the step-3 dependency
-review and confirmed this scope. This is a model review, not an Argon-cluster
-job. See the [review](../../tmp/hcp7t_official_v230_20261025/step3_argon_review.md).
+computed dependencies.
 
 ## Completion and result interpretation
 
@@ -118,15 +116,10 @@ The code also supports Ward/GMM/RBF methods, explicit preprocessing choices,
 and OVR annotations. Exploratory runs used v2.3.0 inputs; execution of
 `GRADIENT_PARCELLATION_REVISION_PLAN.md` on v2.4.0 inputs remains pending.
 
-Nine group overview PNGs have been generated. Their presentation refresh
-awaits approval of the four formal overview directories: the renderer now
-preserves negative signs in signed Fisher-z cell annotations, wraps long
-surface titles, and uses wider family17 heatmaps with vertical network labels.
-Temporary previews are under `tmp/hcp_group_overview_preview/`.
-They contain display corrections only. The FC arrays, gradients, group
-atlases and existing overview PNGs are under `outputs_hcp/`.
-The signed-annotation correction replaces the renderer's `abs(value)` text
-with the signed value; it does not change stored FC or model results.
+The overview renderer preserves negative signs in signed Fisher-z cell
+annotations, wraps long surface titles, and uses wider family17 heatmaps with
+vertical network labels. These display changes do not alter stored FC or model
+results.
 
 Family-aware five-fold cross-validation is complete for all 162 participants:
 20 training templates and 648 held-out participant mappings were generated.
@@ -243,17 +236,12 @@ or corner-vertex sampling at those targets. The maximum distance to the flat
 mesh is 0.313 and 0.034 respectively in unfolded-coordinate units; these are
 not T1w anatomical distances.
 
-The [fresh analysis](../../tmp/hcp7t_official_v230_20261025/official_analysis/summary.json)
-separates complete participants from geometry available in incomplete runs.
-The [step-5 independent pi Argon review](../../tmp/hcp7t_official_v230_20261025/step5_argon_review.md)
-confirmed the completion counts, failures, coordinate frames, surface heights
-and inverse statistics, including a brute-force containment check across all
-208,640 complete-subject targets. Geometry or reproducibility alone does not
-establish anatomical accuracy; downstream FC, gradients and atlas
-interpretation must use the newly computed official products.
+The v2.3.0 assessment distinguished complete participants from geometry
+available in incomplete runs. An independent check covered all 208,640
+complete-subject targets. Geometry or reproducibility alone does not establish
+anatomical accuracy; downstream FC, gradients and atlas interpretation must
+use the newly computed official products.
 
-See the [runtime manifest](hippo2_reproducibility_manifest.md) for the exact
-runtime gate, preserved resource adapters and batch launch; the
-[execution workspace](../../tmp/hcp7t_official_v230_20261025/README.md) holds
-source, preparation and review material. The maintained stage-01 launcher
+See the [runtime manifest](hippo2_reproducibility_manifest.md) for the runtime
+gate, resource adapters and batch launch. The maintained stage-01 launcher
 produces the canonical formal results.

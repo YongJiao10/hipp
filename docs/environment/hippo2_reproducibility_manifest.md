@@ -1,8 +1,8 @@
 # hippo2 runtime and reproducibility
 
 The stage-01 launcher and installed hippo2 runtime select HippUnfold 2.4.0 and
-`multihist7sgi`; existing formal HCP outputs still use 2.3.0. The new output
-contract and approved result-root preparation are required before dispatch.
+`multihist7sgi`. Output validation uses the complete contract from a successful
+run of the selected release.
 
 Runtime revision: 2026-11-01. The installed scientific workflow is the official
 HippUnfold v2.4.0 release. Local changes are limited to cache/inference runtime
@@ -11,17 +11,9 @@ Workbench scientific correction is part of this runtime.
 The environment manager remains Conda; the complete upstream Pixi stack is
 not installed.
 
-The complete official participant DAG has been attempted for all HCP166
-subjects in the formal result tree, with 12 concurrent subjects and two GPU
-inference slots. Exactly 163 subjects completed the 96-product contract and
-official error-level QC. Of these, the 156 subjects present in the HCP 3T task
-dataset have since undergone approved 01_02 cleanup; their anat, coords, warps
-and CIFTI directories are no longer retained. Seven completed subjects retain
-the full output contract. Subjects 233326 and 249947 failed surface QC;
-942658 failed right-dentate boundary-loop extraction. Their intermediates remain
-retained. Current scope and review status are recorded in the
-[rebuild assessment](hippunfold_result_impact.md) and
-[execution workspace](../../tmp/hcp7t_official_v230_20261025/README.md).
+HCP runs use the complete official participant DAG and the output contract of
+the selected release. The [result assessment](hippunfold_result_impact.md)
+records observations from the earlier v2.3.0 reconstruction.
 
 ## Runtime stack
 
@@ -124,32 +116,12 @@ The formal root is
 participant run under `sub-<id>/hippunfold/`. The source roster is
 `manifests/hcp_7t_hippocampus_struct_complete_166.txt`.
 
-Unchanged native physical meshes and boundary-distance metrics were retained,
-but the postprocessed tissue volumes, nnUNet segmentations, GM masks,
-preprocessed T1w volumes and transforms required for complete formal outputs
-had been pruned. Reusing the surface inputs alone cannot produce a complete
-v2.3.0 result set. The official all-target DAG must regenerate missing upstream
-prerequisites and all affected downstream products, including volumetric
-subfields, CIFTI, sampled coordinates, spec files and QC. Do not force old
-surface timestamps to suppress dependencies scheduled by the official DAG.
-
-The pi Argon model completed the step-3 dependency/reuse review; this was a
-model review, not an Argon-cluster computation. Its substantive conclusion is
-that the full official DAG is required. See the [review](../../tmp/hcp7t_official_v230_20261025/step3_argon_review.md).
-The actual full-DAG execution has now attempted all 166 subjects; 163 completed
-and three failed as described above. The
-[step-5 pi Argon review](../../tmp/hcp7t_official_v230_20261025/step5_argon_review.md)
-independently checked the actual newly generated outputs and confirmed the
-completion counts, failure causes, coordinate frames and midthickness inverse
-statistics. See the [result assessment](hippunfold_result_impact.md) for
-the distinction between boundary-band collapse, local folding and workflow
-failure.
-
-The formal output contract contains 96 products per subject: the existing
-84 structural products plus four source/sink/surface QC HTML/verification
-files and eight hemisphere/structure QC metric JSONs. This full contract,
-matching v2.3.0 run metadata, actual files and official QC results are required
-for completion; old output checks and cleanup receipts cannot be relabelled.
+The official all-target DAG generates the required volumes, surfaces,
+coordinates, CIFTI, transforms, spec files and QC. Do not force old surface
+timestamps to suppress dependencies scheduled by the selected release.
+Completion requires its complete output contract, matching run metadata and
+official QC results. Old output checks and cleanup receipts cannot be relabelled
+as completion of a newer release.
 
 ## Local resource resolution
 
@@ -190,16 +162,13 @@ shared resource caches are separate. PATH places repository wrappers and the
 project Workbench before hippo2/bin; LD_LIBRARY_PATH prepends hippo2/lib.
 The existing fork/Torch-sharing startup hook remains in `.runtime_py/`.
 
-The reconstruction used `--notemp` to retain generated intermediates. The
-approved 01_02 cleanup subsequently removed anat, coords, warps and CIFTI for
-the 156 completed HCP 3T task subjects; their retained outputs have cleanup
-receipts. Standard full-output checks use `--fail-on-missing --no-cleanup`.
+Use `--notemp` to retain generated intermediates. Standard full-output checks
+use `--fail-on-missing --no-cleanup`.
 Retain runtime scratch and failed outputs for diagnosis; do not run
 cleanup-shadow or delete runtime directories.
-The 2.3.0 output checker required all 96 declared formal products and an exact
-matching run contract. The 2.4.0 atlas must use its own complete official output
-contract. The standalone checker can inspect older results; the stage-01
-launcher rejects an old-atlas contract when checking a new run.
+The selected atlas must use its own complete official output contract and an
+exact matching run contract. The standalone checker can inspect older results;
+the stage-01 launcher rejects an old-atlas contract when checking a new run.
 A retained-only cleanup receipt is not sufficient. The normal launcher stops
 new dispatch after a failure; the HCP166 reconstruction explicitly selects
 manifest-only `--keep-going` to attempt the remaining subjects. That option

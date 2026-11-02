@@ -55,6 +55,11 @@ Other workflows retain their own limits.
   authoritative analysis rosters. Keep active instructions about current
   inputs, methods, outputs and usage; remove outdated text in place rather than
   appending corrections or retaining batch/upload histories.
+- Formal documentation must not depend on pre-existing one-off scripts,
+  reports, previews or logs in `tmp/`. Maintain tools needed for ongoing use in
+  their appropriate project location; task-specific notes may record temporary
+  artifacts. Generic temporary-workspace instructions and self-contained
+  commands that create their own temporary files are appropriate.
 - Behavior, path, cache, launcher, environment or output changes require matching
   documentation in the same change. Runtime-stack changes also require an
   environment-manifest update.

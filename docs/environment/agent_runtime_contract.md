@@ -32,8 +32,8 @@ The gradient parcellation revision uses the existing local py314 packages
 upgrade. OVR omits the deprecated explicit `penalty` argument and retains default
 L2. Run the HCP comparison on IDAS with one heavy fit at a time and
 `OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1`;
-keep combined active work at or below 10. Comparison results belong under
-repository `tmp/gradient_parcellation_comparison/`. Formal output trees remain
+keep combined active work at or below 10. Exploratory results belong under the
+repository `tmp/` workspace. Formal output trees remain
 read-only during this experiment. Tests in an isolated checkout must declare
 the original shipped Kong400 dlabel explicitly; do not install another atlas
 or substitute a different ROI registry.
@@ -54,9 +54,9 @@ Use exactly one of these based on task type.
 2. Direct HippUnfold CLI execution:
 - activate `hippo2` with `source /opt/conda/bin/activate hippo2` and pass the HippUnfold gate from `AGENTS.md`
 - expected CLI path after activation: `/home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2/bin/hippunfold`
-- the scientific source is the official v2.3.0 release, including the upstream
-  boundary-terminal and unfolded-registration fixes; both CLI and package
-  metadata must report `2.3.0`.
+- the scientific source is the official release pinned in
+  `environment/hippo2_server.yml`; both CLI and package metadata must report
+  the pinned version, currently `2.4.0`.
 - only the documented cache/inference runtime adapters and CLI version-display
   correction are applied locally. Do not reapply a local scientific patch or
   substitute development `main`; follow the
@@ -64,9 +64,10 @@ Use exactly one of these based on task type.
 - the HCP166 rebuild uses the complete official participant DAG. Previously
   pruned anatomy, coordinates and transforms must regenerate when required;
   retained surfaces alone do not satisfy the full structural contract.
-- retain all 96 formal outputs with `--notemp`; the standard checker must use
-  `--fail-on-missing --no-cleanup`. A cleanup receipt, boundary-function test
-  or partial surface chain cannot certify v2.3.0 completion.
+- retain the selected release's formal outputs with `--notemp`; the standard
+  checker must use `--fail-on-missing --no-cleanup` and the 2.4.0 output
+  contract. A cleanup receipt, boundary-function test or partial surface chain
+  cannot certify completion.
 
 3. Argon SGE Kong2022 launchers and their dataset adapters (including PDC/BANDA):
 `/Users/yojiao/miniconda3/envs/py313/bin/python`. This is the existing Argon

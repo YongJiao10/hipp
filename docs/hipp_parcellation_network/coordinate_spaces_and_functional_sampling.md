@@ -52,18 +52,20 @@ Kember's author repository has one default branch, `main`. Its latest source com
 
 Source access: the GitHub connector returned repository metadata, histories and ordinary source files. The HippoMaps and Kember notebooks exceeded its file-content limit, so their JSON was fetched directly from the official `raw.githubusercontent.com` URLs and parsed in memory with py314. No notebook was executed and no external checkout was used.
 
-## Local surface evidence
+## HCP functional sampling
 
-Read-only inspection of `sub-102311` found actual corobl, T1w and registered MNI surface files with 512 vertices and identical triangle arrays. All three inspected GIFTI coordinate-system matrices are identity matrices; they do not contain a hidden registration between these frames. The T1w file's recorded corobl-to-T1w Workbench command matches the upstream direct matrix application described above.
+HCP sampling starts from the subject's native T1w midthickness surfaces.
+Workbench converts the declared FNIRT field to a world displacement field;
+the inverse solver maps the T1w vertices into the MNI BOLD frame with a
+0.001 mm residual tolerance. The transformed surfaces are used for trilinear
+BOLD sampling, while native T1w geometry is used for smoothing.
 
-The current sampling record is `outputs_hcp/inputs/kong2022/shared_inputs/surface/sub-102311/surface/raw/surface_sampling_summary.json`. It declares the native T1w source, the generated MNI sampling surface and the HCP registration input. Mapping a metric onto a corobl display surface afterward does not resample the BOLD volume: the values remain attached to corresponding vertex indices.
+Each subject's `surface_sampling_summary.json` records the native T1w source,
+the generated MNI sampling surfaces and the registration input. Mapping a
+sampled metric onto a corobl display surface preserves vertex correspondence;
+it does not resample the BOLD volume. The NIfTI coverage rule does not use a
+CIFTI hippocampal contour as an exclusion mask.
 
-The approximately 12-mm median difference observed between this subject's unchanged corobl points and registered MNI points describes two different sampling locations if both are interpreted in the same BOLD frame. It is not an estimate of registration error and does not, by itself, establish that the current registration or its FC results are correct.
-
-## Focused check of the current HCP mapping
-
-The current HCP PFM cohort's stored MNI surfaces were checked for all 148 participants, both hemispheres, and all 512 vertices per hemisphere. Official Workbench converted the original FNIRT image field to a world pullback field, then directly mapped each stored MNI surface back to T1w. Comparing the returned coordinates with the actual HippUnfold T1w surfaces covered 151,552 vertices. The maximum return error was 0.000995735 mm, within the production inverse solver's 0.001 mm residual tolerance. The check did not call the production inverse solver. This supports the numerical implementation and direction of the stored mapping. [Numerical comparison](../../tmp/reproduce_van_smn_dmn/registration_check/coordinate_return_check.tsv)
-
-Full-length sagittal and anterior/middle/posterior coronal surface intersections were inspected bilaterally for sub-102311, sub-826353 (largest numerical return error), and sub-156334 (lowest diagnostic CIFTI-mask coverage and mean mask weight). The actual HippUnfold T1w input matched the FNIRT source image's grid and voxel values for all three. No gross systematic displacement comparable to the historical coordinate mismatch was seen. The target T1w panel uses the same warp, while the CIFTI hippocampal contour supplies the subject's target-space mask. The denoised BOLD preview is a signal-location display, not an independent structural reference. These overlays provide registration evidence; the current NIfTI coverage rule does not use the CIFTI contour as an exclusion mask. [Methods and all six overlay figures](../../tmp/reproduce_van_smn_dmn/README.md#focused-check-of-the-current-registration)
-
-The governing choice remains a common physical/anatomical frame for the volume and surface. These focused checks support the current HCP mapping without changing the registration code or formal products. They test the current implementation of the provided field and inspect selected full-length anatomy; they do not estimate a new anatomical registration or repeat the FC/gradient analysis.
+The implementation is maintained in
+[`surface_coordinates.py`](../../scripts/core_workflow/lib/surface_coordinates.py)
+and [`surface_sampling.py`](../../scripts/core_workflow/lib/surface_sampling.py).

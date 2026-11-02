@@ -1,5 +1,9 @@
 # Argon Findings (Kong2022 Route A / MATLAB Kill Investigation)
 
+This file records a historical investigation. Current submission commands,
+runtime requirements and retained-work policy are maintained in the
+[Kong2022 ArealMSHBM guide](scripts/ArealMSHBM_Kong2022/README.md).
+
 ## Scope
 Date range: 2026-04-28
 Environment: Argon SGE queues (`UI`, `PINC`, `UI-HM`, `all.q`)
@@ -40,10 +44,6 @@ Goal: find why Route A jobs are killed and whether MATLAB startup mode is the ca
 - Early no-memory probe on `all.q` (`5888024`) was killed (`exit_status 137`) at low observed maxvmem (~3GB), showing queue-specific volatility.
 
 ## MATLAB Mode Isolation (MATLAB-only probes)
-Scripts used:
-- `tmp/probe_matlab_mode.m`
-- `tmp/matlab_mode_probe_sge.sh`
-
 ### Completed probe results
 - UI:
   - `mp_ui_b0` `5888556`: success
@@ -65,23 +65,10 @@ Interpretation:
 - Outcome depends on queue/node conditions and runtime context.
 - `-nojvm` reduces JVM usage (`usejava('jvm')=0`) and can improve stability in some UI probe runs, but this is not yet proven on full Route A end-to-end.
 
-## Script/Workflow Fixes Applied During Investigation
-### `tmp/matlab_kong2022_mshbm_subject_sge.sh`
-- Added `MATLAB_MODE` switch:
-  - `batch`
-  - `batch_nodisplay`
-  - `r_nodesktop`
-  - `r_nodesktop_nojvm`
-- Added `ATLAS_SLUG_SUFFIX` to isolate outputs for A/B runs.
-- Added `REPO_ROOT` override so job can force correct project root.
-- Note: `repo_root` now resolves as:
-  - `REPO_ROOT` (if set) else `SGE_O_WORKDIR` else `pwd`.
-
-### `tmp/memory_probe_sge.sh`
-- Added runtime diagnostics (`ulimit`, cgroup memory limit prints).
-
-### `tmp/run_mem_threshold_probe.sh`
-- Added more robust submission and qacct polling behavior.
+## Investigation workflow
+The probes varied MATLAB startup mode, isolated subject outputs and recorded
+runtime memory limits. Their controls describe this historical investigation;
+use the maintained guide above for current launch options.
 
 ## Controlled A/B Results (real Route A)
 Completed outcomes:
@@ -115,7 +102,7 @@ Submitted four UI-only jobs for fastest signal split:
 - Real Route A:
   - `fast_ui_real_batch` `5890621` (running at snapshot time)
   - `fast_ui_real_nd` `5890623` (running at snapshot time)
-- MATLAB-only probes (`tmp/matlab_mode_probe_sge.sh`, mode=`batch`):
+- MATLAB-only probes (mode=`batch`):
   - `fast_ui_probe6` `5890624`: `exit_status 9`, `maxvmem 3.568GB`
   - `fast_ui_probe10` `5890626`: `exit_status 9`, `maxvmem 5.771GB`
 
@@ -189,19 +176,9 @@ Confirmed root cause:
 - Array task index then exceeded parsed list length, causing scripted `exit 2`.
 
 ### Submission/Script Fixes Applied
-1) `tmp/matlab_kong2022_mshbm_subject_sge.sh`
-- Added robust subject input via `SUBJECT_IDS_FILE` (line-delimited IDs).
-- Keeps backward CSV fallback only if file variable is absent.
-
-2) `tmp/submit_kong2022_route_a_dual_queues.sh`
-- Writes split subject lists to files under `tmp/subject_lists/`.
-- Passes `SUBJECT_IDS_FILE=...` to `qsub -v` (no comma payload).
-- Enforces locale for submission compatibility:
-  - `LANG=C`, `LC_ALL=C`, `LC_CTYPE=C`
-
-3) `tmp/submit_kong2022_route_a_batch.sh`
-- Same file-based subject passing (`SUBJECT_IDS_FILE`) support.
-- Same locale hardening.
+The relaunch supplied line-delimited subject files instead of passing a
+comma-separated list through SGE `-v`, and selected the C locale for
+submission. Current subject-selection controls are in the maintained guide.
 
 Relaunch after fix:
 - UI: `5909706` (`1-51`, `-tc 5`)
@@ -235,9 +212,6 @@ Quota recovery outcome:
   - `qrls -u yojiao`
 - Queued tasks resumed dispatch (`qstat` back to `r/t/qw` progression).
 
-### Preventive Change for Remaining Tasks
-`tmp/matlab_kong2022_mshbm_subject_sge.sh` now performs automatic post-success cleanup by default:
-- Deletes intermediate directories listed above.
-- Keeps only final route outputs.
-- Can be disabled with:
-  - `KEEP_INTERMEDIATES=1`
+The historical recovery used cleanup to address the quota incident. Current
+retention and deletion rules are defined by the maintained guide and repository
+policy.
