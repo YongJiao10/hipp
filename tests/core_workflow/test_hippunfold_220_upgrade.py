@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import re
 import subprocess
 from pathlib import Path
 from types import SimpleNamespace
@@ -47,14 +48,14 @@ def fake_gate(monkeypatch, tmp_path, version):
 
 
 def test_runtime_gate_accepts_the_upgraded_cli(monkeypatch, tmp_path):
-    fake_gate(monkeypatch, tmp_path, '2.4.0')
+    fake_gate(monkeypatch, tmp_path, contract_module.HIPPUNFOLD_VERSION)
     contract_module.validate_local_assets({})
 
 
 @pytest.mark.parametrize('version', ['2.0.0', '2.2.0', '2.3.0'])
 def test_runtime_gate_rejects_the_old_cli(monkeypatch, tmp_path, version):
     fake_gate(monkeypatch, tmp_path, version)
-    with pytest.raises(RuntimeError, match=r'2\.4\.0'):
+    with pytest.raises(RuntimeError, match=re.escape(contract_module.HIPPUNFOLD_VERSION)):
         contract_module.validate_local_assets({})
 
 
@@ -65,7 +66,7 @@ def test_public_dry_run_declares_the_new_registration_parameters():
         cwd=ROOT, capture_output=True, text=True, check=True,
     )
     payload = json.loads(result.stdout)
-    assert payload['hippunfold_version'] == '2.4.0'
+    assert payload['hippunfold_version'] == contract_module.HIPPUNFOLD_VERSION
     assert payload['inner_outer_reg_method'] == 'greedy'
     assert payload['inner_outer_reg_smoothing'] == 3.0
     argv = payload['hippunfold_argv']

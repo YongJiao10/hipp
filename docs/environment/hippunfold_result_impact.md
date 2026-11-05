@@ -112,7 +112,7 @@ and weighted Fisher-z use gradient-spectral.
 These products use the existing shifted-cosine gradient-spectral workflow.
 The code also supports Ward/GMM/RBF methods, explicit preprocessing choices,
 and OVR annotations. Exploratory runs used v2.3.0 inputs; execution of
-`GRADIENT_PARCELLATION_REVISION_PLAN.md` on v2.4.0 inputs remains pending.
+`GRADIENT_PARCELLATION_REVISION_PLAN.md` on upgraded HippUnfold inputs remains pending.
 
 The overview renderer preserves negative signs in signed Fisher-z cell
 annotations, wraps long surface titles, and uses wider family17 heatmaps with

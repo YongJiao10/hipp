@@ -1,187 +1,116 @@
 diff --git a/config/snakebids.yml b/config/snakebids.yml
-index 900113c..b2ad350 100644
+index 9ecea2f..7cb3d74 100644
 --- a/config/snakebids.yml
 +++ b/config/snakebids.yml
-@@ -310,6 +309,0 @@ parse_args:
+@@ -312,12 +312,6 @@ parse_args:
+     action: "store_false"
+     default: True
+ 
 -  --version:
 -    help: 'Print the version of HippUnfold'
 -    action: version
 -    version: "2.0.0"
 -
 -
+ # --- surface specific configuration -- 
+ 
+ gyrification_pooling_sigma: 1.5  # mm, surface smoothing of the sGI area ratio
 diff --git a/run.py b/run.py
 index b06f083..155f4c8 100755
 --- a/run.py
 +++ b/run.py
-@@ -2,0 +3 @@ import os
+@@ -1,8 +1,10 @@
+ #!/usr/bin/env python3
+ import os
 +from importlib.metadata import version
-@@ -5,0 +7 @@ from snakebids import bidsapp, plugins
+ from pathlib import Path
+ 
+ from snakebids import bidsapp, plugins
 +from snakebids.plugins.base import PluginBase
-@@ -20,0 +23,6 @@ except ImportError:  # Works when run directly
+ 
+ try:  # Works when run as a package
+     from hippunfold.plugins import (
+@@ -18,6 +20,12 @@ except ImportError:  # Works when run directly
+     from workflow.lib import utils
+ 
+ 
 +class CliVersion(PluginBase):
 +    @bidsapp.hookimpl
 +    def add_cli_arguments(self, parser, argument_groups):
 +        parser.add_argument("--version", action="version", version=version("hippunfold"))
 +
 +
-@@ -29,0 +38 @@ app = bidsapp.app(
+ if "__file__" not in globals():
+     __file__ = "../hippunfold/run.py"
+ 
+@@ -27,6 +35,7 @@ app = bidsapp.app(
+         plugins.SnakemakeBidsApp(Path(__file__).resolve().parent),
+         plugins.BidsValidator(),
+         plugins.Version(distribution="hippunfold"),
 +        CliVersion(),
-diff --git a/workflow/lib/local_assets.py b/workflow/lib/local_assets.py
-new file mode 100644
-index 0000000..0b04ebe
---- /dev/null
-+++ b/workflow/lib/local_assets.py
-@@ -0,0 +1,125 @@
-+"""Resolve the installed workflow's declared resources before registering downloads."""
-+
-+from itertools import product
-+import shlex
-+import sys
-+from pathlib import Path
-+from string import Formatter
-+
-+
-+def file_is_present(path):
-+    path = Path(path)
-+    return path.is_file() and path.stat().st_size > 0
-+
-+
-+def directory_is_cached(folder, filenames):
-+    folder = Path(folder)
-+    if not folder.exists():
-+        return False
-+    missing = [folder / name for name in filenames if not file_is_present(folder / name)]
-+    if missing:
-+        raise FileNotFoundError(
-+            f"Incomplete HippUnfold resource cache at {folder}; missing or empty: "
-+            + ", ".join(map(str, missing))
-+            + ". Repair this declared cache before reuse."
-+        )
-+    return True
-+
-+
-+def template_is_cached(cache, template, config):
-+    spec = config["template_files"][template]
-+    values = {
-+        "hemi": spec["hemi_wildcards"],
-+        "dir": ("AP", "PD", "IO"),
-+        "label": config["autotop_labels"],
-+        "modality": [name for name in ("T1w", "T2w") if name in spec],
-+    }
-+    filenames = set()
-+    for pattern in spec.values():
-+        if not isinstance(pattern, str):
-+            continue
-+        fields = sorted({name for _, name, _, _ in Formatter().parse(pattern) if name})
-+        for combination in product(*(values[name] for name in fields)):
-+            filenames.add(pattern.format(**dict(zip(fields, combination))))
-+    return directory_is_cached(Path(cache) / "template" / template, sorted(filenames))
-+
-+
-+def atlas_filenames(atlas, config):
-+    # Atlas metrics are registration inputs at unfoldreg_density; participant
-+    # metrics at output_density are computed by the workflow, not copied here.
-+    registration_density = config["unfoldreg_density"]
-+    densities = sorted((set(config["output_density"]) | {registration_density}) - {"native"})
-+    filenames = []
-+    for hemi, label in product(config["hemi"], config["autotop_labels"]):
-+        prefix = f"tpl-{atlas}_hemi-{hemi}"
-+        for density, surface in product(densities, ("inner", "midthickness", "outer")):
-+            filenames.append(
-+                f"{prefix}_space-unfold_den-{density}_label-{label}_{surface}.surf.gii"
-+            )
-+        for metric in config["atlas_metadata"][atlas]["metric_wildcards"]:
-+            filenames.append(
-+                f"{prefix}_den-{registration_density}_label-{label}_{metric}.shape.gii"
-+            )
-+        if label == "hipp":
-+            for density in densities:
-+                filenames.append(f"{prefix}_den-{density}_label-hipp_dseg.label.gii")
-+    return filenames
-+
-+
-+def atlas_copy_is_cached(cache, atlas, config):
-+    folder = Path(cache) / "atlases" / f"tpl-{atlas}"
-+    return all(file_is_present(folder / name) for name in atlas_filenames(atlas, config))
-+
-+
-+def atlas_extract_is_cached(cache, atlas, config):
-+    folder = Path(cache) / "atlases_dl" / f"tpl-{atlas}"
-+    return directory_is_cached(folder, atlas_filenames(atlas, config))
-+
-+
-+def model_is_unpacked(folder, model):
-+    folder = Path(folder)
-+    if model["arch_version"] != "nnunet_v1" or not folder.exists():
-+        return False
-+    training = (
-+        folder / "nnUNet" / "3d_fullres" / model["task"]
-+        / f"{model['trainer']}__nnUNetPlansv2.1"
-+    )
-+    if not training.is_dir():
-+        raise FileNotFoundError(f"Incomplete HippUnfold model cache: {training}")
-+    # nnUNet v1 discovers every fold in this exact model directory. Check all
-+    # discovered folds; directory order never selects a checkpoint or a variant.
-+    folds = [
-+        child for child in training.iterdir()
-+        if child.is_dir() and (child.name == "all" or child.name.startswith("fold_"))
-+    ]
-+    if not folds:
-+        raise FileNotFoundError(f"Incomplete HippUnfold model cache: no folds in {training}")
-+    checkpoint = model["checkpoint"]
-+    names = ["plans.pkl"]
-+    for fold in folds:
-+        names.extend((f"{fold.name}/{checkpoint}.model", f"{fold.name}/{checkpoint}.model.pkl"))
-+    return directory_is_cached(training, names)
-+
-+
-+def gpu_inference_prefix(slot_name, slots=1):
-+    """Hold one of the declared host-local GPU slots through inference exec."""
-+    if slots < 1:
-+        raise ValueError("GPU slot count must be positive")
-+    code = r'''import errno,os,socket,sys,time
-+slot=socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-+while True:
-+    for index in range(int(sys.argv[2])):
-+        try:
-+            slot.bind("\0" + sys.argv[1] + ("" if index == 0 else "-" + str(index)))
-+            break
-+        except OSError as exc:
-+            if exc.errno != errno.EADDRINUSE:
-+                raise
-+    else:
-+        time.sleep(0.2)
-+        continue
-+    break
-+slot.set_inheritable(True)
-+os.execvp(sys.argv[3], sys.argv[3:])
-+'''
-+    return shlex.join([sys.executable, "-S", "-c", code, slot_name, str(slots)])
+         plugins.CliConfig("parse_args"),
+         plugins.ComponentEdit("pybids_inputs"),
+         atlas_plugin.AtlasConfig(argument_group="ATLASES"),
 diff --git a/workflow/rules/download.smk b/workflow/rules/download.smk
 index 88d0d67..801019f 100644
 --- a/workflow/rules/download.smk
 +++ b/workflow/rules/download.smk
-@@ -1 +1 @@
+@@ -1,112 +1,122 @@
 -# populate the HIPPUNFOLD_CACHE_DIR folder as needed
 +# Resolve declared local resources before any remote storage() input is registered.
-@@ -2,0 +3,3 @@ from lib import utils as utils
+ from lib import utils as utils
 +from lib.local_assets import (
 +    atlas_copy_is_cached, atlas_extract_is_cached, template_is_cached,
 +)
-@@ -6,3 +8,0 @@ download_dir = utils.get_download_dir()
+ 
+ download_dir = utils.get_download_dir()
+ 
 -
 -# zenodo.org URLs are handled by the cached-http plugin (rate limits, retries,
 -# checksums); keep its cache inside HIPPUNFOLD_CACHE_DIR instead of ~/.cache
-@@ -13,97 +13,107 @@ storage cached_http:
--
+ storage cached_http:
+     provider="cached-http",
+     cache=str(Path(download_dir) / "http_cache"),
+ 
++selected_templates = {config["template"], config["inject_template"]}
++cached_templates = {
++    name for name in selected_templates
++    if template_is_cached(download_dir, name, config)
++}
++missing_templates = [
++    name for name in config["resource_urls"]["template"] if name not in cached_templates
++]
++copy_atlases = [
++    name for name in [config["atlas"]]
++    if name in config["builtin_atlases"]
++    and not atlas_copy_is_cached(download_dir, name, config)
++]
++download_atlases = [
++    name for name in copy_atlases
++    if not atlas_extract_is_cached(download_dir, name, config)
++]
+ 
 -# run on the host (not submitted to a cluster), since compute nodes may lack internet access
 -localrules:
 -    download_extract_template,
 -    download_surf_template_atlas,
 -    cp_atlas_surf_gii,
 -    cp_atlas_metric_gii,
--
--
++if missing_templates:
+ 
++    rule download_extract_template:
++        """Note: OSF urls don't seem to be supported with snakemake storage plugin"""
++        params:
++            url=lambda wildcards: config["resource_urls"]["template"][wildcards.template],
++        output:
++            unzip_dir=directory(Path(download_dir) / "template" / "{template}"),
++        wildcard_constraints:
++            template="|".join(missing_templates),
++        shadow:
++            "minimal"
++        script:
++            "../scripts/download.py"
+ 
 -rule download_extract_template:
 -    output:
 -        unzip_dir=directory(Path(download_dir) / "template" / "{template}"),
@@ -194,8 +123,9 @@ index 88d0d67..801019f 100644
 -        url=lambda wildcards: config["resource_urls"]["template"][wildcards.template],
 -    script:
 -        "../scripts/download.py"
--
--
+ 
++if download_atlases:
+ 
 -rule download_surf_template_atlas:
 -    input:
 -        zip_file=lambda wildcards: storage(
@@ -212,8 +142,21 @@ index 88d0d67..801019f 100644
 -        runtime=scale_by_attempt(10),
 -    shell:
 -        "unzip {input} -d {output}"
--
--
++    rule download_surf_template_atlas:
++        input:
++            zip_file=lambda wildcards: storage(
++                config["resource_urls"]["atlas"][wildcards.atlas]
++            ),
++        output:
++            unzip_dir=temp(directory(Path(download_dir) / "atlases_dl" / "tpl-{atlas}")),
++        wildcard_constraints:
++            atlas="|".join(download_atlases),
++        shadow:
++            "minimal"
++        shell:
++            "unzip {input} -d {output}"
+ 
+ 
 -rule cp_atlas_surf_gii:
 -    input:
 -        unzip_dir=Path(download_dir) / "atlases_dl" / "tpl-{atlas}",
@@ -242,87 +185,8 @@ index 88d0d67..801019f 100644
 -        ),
 -    shell:
 -        "cp {params.path} {output}"
--
--
--rule cp_atlas_metric_gii:
--    input:
--        unzip_dir=Path(download_dir) / "atlases_dl" / "tpl-{atlas}",
--    output:
--        atlas_file=bids_atlas(
--            root=get_atlas_dir(),
--            template="{atlas}",
--            hemi="{hemi}",
--            label="{label}",
--            den="{density}",
--            suffix="{metricname}.{metrictype}.gii",
--        ),
--    resources:
--        mem_mb=scale_by_attempt(1000),
--        runtime=scale_by_attempt(1),
--    params:
--        path=lambda wildcards, input: bids_atlas(
--            root=Path(input.unzip_dir).parent,
--            template=wildcards.atlas,
--            hemi=wildcards.hemi,
--            label=wildcards.label,
--            den=wildcards.density,
--            suffix=f"{wildcards.metricname}.{wildcards.metrictype}.gii",
--        ),
--    shell:
--        "cp {params.path} {output}"
-+selected_templates = {config["template"], config["inject_template"]}
-+cached_templates = {
-+    name for name in selected_templates
-+    if template_is_cached(download_dir, name, config)
-+}
-+missing_templates = [
-+    name for name in config["resource_urls"]["template"] if name not in cached_templates
-+]
-+copy_atlases = [
-+    name for name in [config["atlas"]]
-+    if name in config["builtin_atlases"]
-+    and not atlas_copy_is_cached(download_dir, name, config)
-+]
-+download_atlases = [
-+    name for name in copy_atlases
-+    if not atlas_extract_is_cached(download_dir, name, config)
-+]
-+
-+if missing_templates:
-+
-+    rule download_extract_template:
-+        """Note: OSF urls don't seem to be supported with snakemake storage plugin"""
-+        params:
-+            url=lambda wildcards: config["resource_urls"]["template"][wildcards.template],
-+        output:
-+            unzip_dir=directory(Path(download_dir) / "template" / "{template}"),
-+        wildcard_constraints:
-+            template="|".join(missing_templates),
-+        shadow:
-+            "minimal"
-+        script:
-+            "../scripts/download.py"
-+
-+
-+if download_atlases:
-+
-+    rule download_surf_template_atlas:
-+        input:
-+            zip_file=lambda wildcards: storage(
-+                config["resource_urls"]["atlas"][wildcards.atlas]
-+            ),
-+        output:
-+            unzip_dir=temp(directory(Path(download_dir) / "atlases_dl" / "tpl-{atlas}")),
-+        wildcard_constraints:
-+            atlas="|".join(download_atlases),
-+        shadow:
-+            "minimal"
-+        shell:
-+            "unzip {input} -d {output}"
-+
-+
 +if copy_atlases:
-+
+ 
 +    rule cp_atlas_surf_gii:
 +        input:
 +            unzip_dir=Path(download_dir) / "atlases_dl" / "tpl-{atlas}",
@@ -350,7 +214,33 @@ index 88d0d67..801019f 100644
 +            atlas="|".join(copy_atlases),
 +        shell:
 +            "cp {params.path} {output}"
-+
+ 
+-rule cp_atlas_metric_gii:
+-    input:
+-        unzip_dir=Path(download_dir) / "atlases_dl" / "tpl-{atlas}",
+-    output:
+-        atlas_file=bids_atlas(
+-            root=get_atlas_dir(),
+-            template="{atlas}",
+-            hemi="{hemi}",
+-            label="{label}",
+-            den="{density}",
+-            suffix="{metricname}.{metrictype}.gii",
+-        ),
+-    resources:
+-        mem_mb=scale_by_attempt(1000),
+-        runtime=scale_by_attempt(1),
+-    params:
+-        path=lambda wildcards, input: bids_atlas(
+-            root=Path(input.unzip_dir).parent,
+-            template=wildcards.atlas,
+-            hemi=wildcards.hemi,
+-            label=wildcards.label,
+-            den=wildcards.density,
+-            suffix=f"{wildcards.metricname}.{wildcards.metrictype}.gii",
+-        ),
+-    shell:
+-        "cp {params.path} {output}"
 +
 +    rule cp_atlas_metric_gii:
 +        input:
@@ -377,19 +267,30 @@ index 88d0d67..801019f 100644
 +            atlas="|".join(copy_atlases),
 +        shell:
 +            "cp {params.path} {output}"
+ 
+ 
+ ## unpack template
 diff --git a/workflow/rules/pred.smk b/workflow/rules/pred.smk
 index 81e22c3..a891903 100644
 --- a/workflow/rules/pred.smk
 +++ b/workflow/rules/pred.smk
-@@ -1,0 +2,2 @@ import re
+@@ -1,4 +1,6 @@
+ import re
 +import os
 +from lib.local_assets import file_is_present, model_is_unpacked, gpu_inference_prefix
-@@ -66,3 +68 @@ def get_model_dir():
+ 
+ 
+ def get_tissuepred_input(wildcards):
+@@ -63,21 +65,24 @@ def get_model_dir():
+     return get_model_tar().removesuffix(".gz").removesuffix(".tar")
+ 
+ 
 -# run on the host (not submitted to a cluster), since compute nodes may lack internet access
 -localrules:
 -    download_tissuepred_model,
 +local_model_unpacked = model_is_unpacked(get_model_dir(), model_dict)
-@@ -71,10 +71,15 @@ localrules:
+ 
+ 
 -rule download_tissuepred_model:
 -    input:
 -        url=storage(model_dict["url"]),
@@ -415,13 +316,32 @@ index 81e22c3..a891903 100644
 +            runtime=scale_by_attempt(10),
 +        shell:
 +            "cp {input} {output}"
-@@ -97 +102 @@ def get_cmd_copy_inputs(wildcards, input):
+ 
+ 
+ def get_cmd_copy_inputs(wildcards, input):
+@@ -94,7 +99,7 @@ def get_cmd_copy_inputs(wildcards, input):
+ 
+ 
+ # only for nnUNet tar archives (synthtopo uses extract_synthtopo_checkpoint instead)
 -if model_dict["arch_version"] in ("nnunet_v1", "nnunet_v2"):
 +if model_dict["arch_version"] in ("nnunet_v1", "nnunet_v2") and not local_model_unpacked:
-@@ -164 +169,2 @@ if model_dict["arch_version"] == "nnunet_v1":
+ 
+     localrules:
+         unpack_tissuepred_model,
+@@ -161,13 +166,14 @@ if model_dict["arch_version"] == "nnunet_v1":
+             chkpnt=model_dict["checkpoint"],
+             trainer=model_dict["trainer"],
+             tta="" if config["nnunet_enable_tta"] else "--disable_tta",
 -            cuda_visible_devices="" if config["use_gpu"] else "CUDA_VISIBLE_DEVICES=-1",
 +            inference_prefix=gpu_inference_prefix(os.environ["HIPPUNFOLD_GPU_SLOT"], slots=int(os.environ["HIPPUNFOLD_GPU_SLOTS"]))
 +            if config["use_gpu"] else "env CUDA_VISIBLE_DEVICES=-1",
-@@ -170 +176 @@ if model_dict["arch_version"] == "nnunet_v1":
+         shell:
+             "mkdir -p {params.in_folder} {params.out_folder} && "
+             "{params.cmd_copy_inputs} && "
+             "export RESULTS_FOLDER={input.model_dir} && "
+             "export nnUNet_n_proc_DA={threads} && "
 -            "{params.cuda_visible_devices} nnUNet_predict -i {params.in_folder} -o {params.out_folder} -t {params.task} -chk {params.chkpnt} -tr {params.trainer} {params.tta} &> {log} && "
 +            "{params.inference_prefix} nnUNet_predict -i {params.in_folder} -o {params.out_folder} -t {params.task} -chk {params.chkpnt} -tr {params.trainer} {params.tta} --num_threads_preprocessing 1 --num_threads_nifti_save 1 &> {log} && "
+             "cp {params.temp_lbl} {output.tissuepred_seg}"
+ 
+ elif model_dict["arch_version"] == "nnunet_v2":

@@ -84,9 +84,8 @@ The closed preset selects the official HippUnfold release declared in
 `environment/hippo2_server.yml`, T1w, the `multihist7sgi` unfolded atlas,
 density 512, corobl output, unfolded registration and GPU inference. HCP,
 BANDA and PDC skip N4 on their bias-corrected inputs; Stanford and Iowa JJ-TMS
-retain N4. The runtime/model/CUDA gate runs once per pending batch. Existing
-2.3.0 output contracts name the old atlas and must be replaced from completed
-2.4.0 runs before checking upgraded products.
+retain N4. The runtime/model/CUDA gate runs once per pending batch. Existing older output contracts name the previous atlas and must be replaced
+from completed runs of the active release before checking upgraded products.
 HCP defaults to eight subjects and accepts `--jobs` up to twelve; other datasets
 use two, with BANDA serial. The approved HCP launch, CPU affinity, GPU slots and
 resource patches are maintained in the [runtime manifest](../../docs/environment/hippo2_reproducibility_manifest.md#batch-resources-and-retained-outputs).

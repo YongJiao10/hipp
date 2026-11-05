@@ -25,7 +25,7 @@ Dataset registration and motion input formats are explicit input adapters;
 dataset identity does not disable coverage QC. Existing HCP7T rest commands
 may still provide their exact `--motion-manifest` table and BOLD/run metadata.
 The HCP7T functional roster is generated from the completed
-NIfTI coverage check on the official v2.4.0 surfaces.
+NIfTI coverage check on the official HippUnfold surfaces.
 
 ## Shared run inputs and commands
 
@@ -170,13 +170,14 @@ independently. Run-level sampling saves the full vertex-by-time arrays as
 in `surface_sampling_summary.json`. The current raw-resume and QC commands
 still require the declared source BOLD files, even when those surface products
 are present. Retain the volumes during this QC run.
-HCP7T raw sampling and coverage have been rebuilt from the official v2.4.0
-surfaces for the current 166-participant roster. Cortical references and
-dependent FC products require regeneration under the current signal policy.
+HCP7T raw sampling and coverage have been rebuilt from the official HippUnfold
+surfaces for the current 166-participant roster. The PFM cortical references
+and 400-ROI FC products for both hemispheres and 2/4-mm smoothing have also
+been rebuilt for this roster under the current signal policy.
 
 ## Current assessed cohorts
 
-The official HippUnfold v2.4.0 HCP7T reconstruction and functional QC cover
+The official HippUnfold HCP7T reconstruction and functional QC cover
 all 166 participants. The current report records 166 passes, zero quality
 failures and zero unassessable participants. The accepted roster is
 `outputs_hcp/inputs/kong2022/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt`.

@@ -188,7 +188,7 @@ def test_runtime_gate_uses_the_same_fixed_environment_as_the_run(
         if args[0] == "/bin/bash":
             stdout = str(executable)
         elif args[-1] == "--version":
-            stdout = "2.4.0"
+            stdout = run_contract_module.HIPPUNFOLD_VERSION
         elif args[-1] == "--help":
             stdout = "--output-density {native,512,2k} --inner_outer_reg_method --inner_outer_reg_smoothing"
         else:

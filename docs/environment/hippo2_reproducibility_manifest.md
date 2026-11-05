@@ -1,11 +1,11 @@
 # hippo2 runtime and reproducibility
 
-The stage-01 launcher and installed hippo2 runtime select HippUnfold 2.4.0 and
+The stage-01 launcher and installed hippo2 runtime select HippUnfold 2.4.1 and
 `multihist7sgi`. Output validation uses the complete contract from a successful
 run of the selected release.
 
-Runtime revision: 2026-11-01. The installed scientific workflow is the official
-HippUnfold v2.4.0 release. Local changes are limited to cache/inference runtime
+Runtime revision: 2026-11-05. The installed scientific workflow is the official
+HippUnfold v2.4.1 release. Local changes are limited to cache/inference runtime
 adapters and CLI version display. No local boundary, reference-plane or
 Workbench scientific correction is part of this runtime.
 The environment manager remains Conda; the complete upstream Pixi stack is
@@ -21,8 +21,8 @@ records observations from the earlier v2.3.0 reconstruction.
 | --- | --- |
 | Environment | `/home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2` |
 | Activation | `/opt/conda/bin/activate hippo2` |
-| Python | 3.13.13; supported by v2.4.0's `>=3.12,<3.15` requirement |
-| HippUnfold | 2.4.0, official release source plus documented resource/runtime adapters |
+| Python | 3.13.13; supported by v2.4.1's `>=3.12,<3.15` requirement |
+| HippUnfold | 2.4.1, official release source plus documented resource/runtime adapters |
 | Snakemake / Snakebids | 9.27.1 / 0.15.0 |
 | nnUNet / PyTorch | 1.7.1 / 2.14.1+cu126, CUDA inference |
 | NumPy / SciPy / pandas | 2.5.4 / 1.18.1 / 3.1.0 |
@@ -33,8 +33,8 @@ records observations from the earlier v2.3.0 reconstruction.
 | Convert3D / ITK | 1.4.2 (Khanlab h109cef4_0) / 5.4.7 |
 | Workbench | Official 2.2.1, `<repository>/software/workbench/bin_linux64/wb_command` |
 
-`environment/hippo2_server.yml` declares the target stack and official v2.4.0 source.
-The installed effective CLI and package metadata report 2.4.0. Verify the loaded
+`environment/hippo2_server.yml` declares the target stack and official v2.4.1 source.
+The installed effective CLI and package metadata report 2.4.1. Verify the loaded
 workflow and executable; the environment name and Conda package listing alone
 do not establish the algorithm version. Python scientific packages remain at
 the pip layer over the native Conda runtime.
@@ -84,7 +84,7 @@ Caller scientific arguments and HIPPUNFOLD environment overrides are rejected.
 
 ## Scientific parameters
 
-The prepared upgrade selects the official [v2.4.0 release](https://github.com/khanlab/hippunfold/releases/tag/v2.4.0).
+The prepared upgrade selects the official [v2.4.1 release](https://github.com/khanlab/hippunfold/releases/tag/v2.4.1).
 The adult T1w model remains Task101_hcp1200_T1w, nnUNetTrainerV2, model_best,
 with the declared CITI168 template and multihist7sgi atlas. Establish density from
 consumed surface paths and shapes rather than arguments alone.
@@ -104,7 +104,7 @@ Inner/outer registration retains the official greedy defaults:
 update-field smoothing variance 3.0. Optional SyN remains an explicit upstream
 method, not a replacement selected by missing outputs.
 
-Use the release tag rather than development main. Version 2.4.0 pairs its
+Use the release tag rather than development main. Version 2.4.1 pairs its
 updated surface processing with the regenerated multihist7sgi atlas. Do not
 install a local scientific patch or local Workbench binary to make a failed
 subject appear complete.
@@ -139,7 +139,7 @@ The maintained adapters are:
 - `scripts/core_workflow/lib/snakemake_local_source_cache.patch`: refresh
   changed local source files while retaining remote-source behavior.
 
-The prepared 2.4.0 adapter changes `workflow/rules/download.smk`,
+The prepared 2.4.1 adapter changes `workflow/rules/download.smk`,
 `workflow/rules/pred.smk` and `workflow/lib/local_assets.py`. Its `run.py` and
 `config/snakebids.yml` changes make CLI version display read installed package
 metadata rather than the stale upstream static value. No local scientific
@@ -188,8 +188,8 @@ subprocesses to exit before replacing installed workflow files. For a fresh
 source checkout, with the `cached-http` storage plugin installed:
 
 ```bash
-git clone --single-branch --branch v2.4.0 https://github.com/khanlab/hippunfold.git tmp/hippunfold_v240_fresh_source
-.cache/conda_envs/hippo2/bin/pip install --no-deps tmp/hippunfold_v240_fresh_source
+git clone --single-branch --branch v2.4.1 https://github.com/khanlab/hippunfold.git tmp/hippunfold_v241_fresh_source
+.cache/conda_envs/hippo2/bin/pip install --no-deps tmp/hippunfold_v241_fresh_source
 patch --batch --forward --dry-run -p1 -d .cache/conda_envs/hippo2/lib/python3.13/site-packages/hippunfold < scripts/core_workflow/lib/hippunfold_local_assets.patch
 patch --batch --forward --no-backup-if-mismatch -p1 -d .cache/conda_envs/hippo2/lib/python3.13/site-packages/hippunfold < scripts/core_workflow/lib/hippunfold_local_assets.patch
 ```

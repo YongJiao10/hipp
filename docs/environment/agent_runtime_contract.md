@@ -56,7 +56,7 @@ Use exactly one of these based on task type.
 - expected CLI path after activation: `/home/yojiao/hpchome/hipp/.cache/conda_envs/hippo2/bin/hippunfold`
 - the scientific source is the official release pinned in
   `environment/hippo2_server.yml`; both CLI and package metadata must report
-  the pinned version, currently `2.4.0`.
+  the pinned release version.
 - only the documented cache/inference runtime adapters and CLI version-display
   correction are applied locally. Do not reapply a local scientific patch or
   substitute development `main`; follow the
@@ -65,7 +65,7 @@ Use exactly one of these based on task type.
   pruned anatomy, coordinates and transforms must regenerate when required;
   retained surfaces alone do not satisfy the full structural contract.
 - retain the selected release's formal outputs with `--notemp`; the standard
-  checker must use `--fail-on-missing --no-cleanup` and the 2.4.0 output
+  checker must use `--fail-on-missing --no-cleanup` and the formal output
   contract. A cleanup receipt, boundary-function test or partial surface chain
   cannot certify completion.
 
