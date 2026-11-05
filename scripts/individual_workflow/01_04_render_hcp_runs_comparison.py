@@ -171,7 +171,7 @@ def fit_split_half_template(
             DEFAULT_KONG2022_SURFACE_ROOT
             / f"sub-{s}"
             / "surface"
-            / "tsnr_gate"
+            / "validity"
             / f"sub-{s}_hemi-{hemi}_valid_mask.npy"
         )
         mask = np.load(m_path).astype(bool).reshape(-1)

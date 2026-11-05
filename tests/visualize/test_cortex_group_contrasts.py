@@ -216,9 +216,6 @@ def test_original_source_selection_is_explicit_and_only_iowa36p():
     assert str(paths[1]).endswith('hcp151_fixed_template_matching/subjects/sub-3010/cortex/kong2022_roi_timeseries.npy')
     current = contrasts.subject_input_paths(r, cohort, g, '3010', 'L', 'canonical')
     assert 'shared_inputs/pfm/' in str(current[1])
-    g22 = r.GridSpec('2mm', '22p')
-    current22 = contrasts.subject_input_paths(r, cohort, g22, '3010', 'L', 'original-denoised')
-    assert 'kong2022_22p/shared_inputs/pfm/' in str(current22[1])
     with pytest.raises(ValueError):
         contrasts.subject_input_paths(r, cohort, g, '3010', 'L', 'unknown')
 
@@ -276,7 +273,7 @@ def test_shared_scale_rejects_changed_other_grid_result(tmp_path, monkeypatch):
     receipt=dict(schema=contrasts.SCHEMA,version='legacy',colormap=contrasts.T_CMAP,t_vmax=5.,t_display_vmax=4.,code=[],grids=grids)
     manifest=tmp_path/'manifest.json';manifest.write_text(json.dumps(receipt))
     contrasts.load_contrasts(manifest,r.GridSpec('2mm','36p'),'legacy')
-    (tmp_path/'4mm_22p.npz').write_bytes(b'changed')
+    (tmp_path/'4mm_36p.npz').write_bytes(b'changed')
     with pytest.raises(ValueError,match='Stale contrast source'):
         contrasts.load_contrasts(manifest,r.GridSpec('2mm','36p'),'legacy')
 
@@ -308,19 +305,19 @@ def test_hcp7t_and_iowa_hc_have_no_contrast_comparison(tmp_path, monkeypatch):
     manifest = tmp_path / 'manifest.json'
     manifest.write_text(json.dumps(receipt))
 
-    receipt_loaded, results = contrasts.load_contrasts(manifest, r.GridSpec('2mm', '22p'), 'legacy')
+    receipt_loaded, results = contrasts.load_contrasts(manifest, r.GridSpec('2mm', '36p'), 'legacy')
     assert results['hcp_7t'] is None
     assert results['iowa_hc'] is None
     assert results['iowa_pat'] is not None
 
     # Verify append_contrast_maps behaves correctly when result is None
     cdata = {'spec': {'id': 'hcp_7t'}, 'grad_cortex_pngs': {'Anterior': 'dummy_ant.png'}, 'wta_cortex_pngs': {}}
-    out_cdata = r.append_contrast_maps(cdata, None, receipt, {}, {}, tmp_path, r.GridSpec('2mm', '22p'))
+    out_cdata = r.append_contrast_maps(cdata, None, receipt, {}, {}, tmp_path, r.GridSpec('2mm', '36p'))
     assert out_cdata['has_contrast'] is False
     assert out_cdata['grad_cortex_pngs']['Anterior'] == 'dummy_ant.png'
 
     # If hcp_7t has a comparison attached, load_contrasts must fail closed
-    grids['2mm_22p']['hcp_7t']['comparison'] = pat_entry['comparison']
+    grids['2mm_36p']['hcp_7t']['comparison'] = pat_entry['comparison']
     manifest.write_text(json.dumps(receipt))
     with pytest.raises(ValueError, match='hcp_7t must not have a comparison'):
-        contrasts.load_contrasts(manifest, r.GridSpec('2mm', '22p'), 'legacy')
+        contrasts.load_contrasts(manifest, r.GridSpec('2mm', '36p'), 'legacy')

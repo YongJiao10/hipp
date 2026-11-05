@@ -1,23 +1,22 @@
 # Stanford cohort group-atlas paths
 
 The Stanford CausalConnectome workflow uses the complete QC-passed roster for
-the selected denoising variant: 194 subjects for 36P and 192 for 22P. The
+36P: 194 subjects. The
 canonical seven overview cohorts are NTHC, TEHC, NTS, NTS Any MDD, NTS Pure
 MDD, TIS, and TIS PTSD. Diagnostic subsets overlap their parent cohorts.
 
-| Cohort | Path component | 36P N | 22P N |
-| --- | --- | ---: | ---: |
-| Non-Trauma Healthy Control | `nthc` | 51 | 50 |
-| Trauma-Exposed Healthy Control | `tehc` | 40 | 39 |
-| Non-Trauma Symptomatic | `nts` | 56 | 56 |
-| NTS Any MDD | `nts_any_mdd` | 43 | 43 |
-| NTS Pure MDD | `nts_pure_mdd` | 11 | 11 |
-| Trauma-Induced Symptomatic | `tis` | 47 | 47 |
-| TIS PTSD | `tis_ptsd` | 35 | 35 |
+| Cohort | Path component | 36P N |
+| --- | --- | ---: |
+| Non-Trauma Healthy Control | `nthc` | 51 |
+| Trauma-Exposed Healthy Control | `tehc` | 40 |
+| Non-Trauma Symptomatic | `nts` | 56 |
+| NTS Any MDD | `nts_any_mdd` | 43 |
+| NTS Pure MDD | `nts_pure_mdd` | 11 |
+| Trauma-Induced Symptomatic | `tis` | 47 |
+| TIS PTSD | `tis_ptsd` | 35 |
 
 Use each cohort's explicit manifest under
-`outputs_stanford/inputs/kong2022/manifests/` for 36P or
-`outputs_stanford/inputs/kong2022_22p/manifests/` for 22P. Cohort selection
+`outputs_stanford/inputs/kong2022/manifests/`. Cohort selection
 must use that declared roster. The NTS Pure MDD roster remains the established
 11-person input; this path cleanup does not rederive diagnoses or membership.
 TIS PTSD is a subset of TIS and is not an additional factorial cell.
@@ -35,8 +34,7 @@ For 36P, the formal roots relative to `outputs_stanford/` are:
 | Base overviews | `present/overviews/pfm/<cohort>/` |
 | Weighted overviews | `present/overviews/pfm_weighted/<cohort>/` |
 
-For 22P, inputs use `kong2022_22p`; downstream base routes use `pfm_22p` and
-weighted routes use `pfm_weighted_22p`. Method, atlas, smoothing, coverage,
+Method, atlas, smoothing, coverage,
 gradient dimensions, and hemisphere remain below the stage roots. Fisher-z
 and normalized Top-20 count assignments remain explicit filenames/metadata.
 Missing formal products must be reported by their exact paths.

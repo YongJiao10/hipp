@@ -144,12 +144,12 @@ def get_diff_cohorts(spec: GridSpec | None = None) -> list[dict]:
             cinfo["n"] = 151
         else:
             stem = cinfo["stem"]
-            var_sfx = "_22p" if spec.variant == "22p" else ""
+            var_sfx = ""
             cinfo["group_root"] = REPO_ROOT / f"outputs_stanford/work/group_atlas/pfm{var_sfx}/{stem}"
             cinfo["hippunfold_root"] = REPO_ROOT / "outputs_stanford/inputs/hippunfold/dense_corobl_batch"
             default_ns = {
-                "nthc": 50 if spec.variant == "22p" else 51,
-                "tehc": 39 if spec.variant == "22p" else 40,
+                "nthc": 51,
+                "tehc": 40,
                 "nts": 56,
                 "nts_any_mdd": 43,
                 "nts_pure_mdd": 11,
@@ -1179,7 +1179,7 @@ def main():
     )
     args = parser.parse_args()
 
-    # All four grid variants are processed simultaneously by default; no single-grid bypass
+    # Both 36p grids are processed by default; no single-grid bypass
     grid_specs = tuple(GridSpec.from_tag(t) for t in GRID_VARIANTS)
 
     def process_spec(spec: GridSpec) -> None:
@@ -1251,8 +1251,8 @@ def main():
 
             print(f"=== Completed {mode} ({spec.tag}) in {time.time()-t0:.2f}s ===", flush=True)
 
-    print(f"[RUNNER] Executing Stanford subfield differences across all 4 grid cells in mandatory 4-way parallel execution (concurrency=4)...", flush=True)
-    with ThreadPoolExecutor(max_workers=4) as executor:
+    print(f"[RUNNER] Executing Stanford subfield differences across both 36p grid cells...", flush=True)
+    with ThreadPoolExecutor(max_workers=len(grid_specs)) as executor:
         futures = [executor.submit(process_spec, s) for s in grid_specs]
         for f in futures:
             f.result()

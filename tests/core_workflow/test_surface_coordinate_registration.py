@@ -105,12 +105,12 @@ def test_native_beta_cannot_relabel_old_corobl_mapping_as_t1w(tmp_path):
 
 def test_resume_cannot_use_old_qc_after_raw_coordinates_are_fixed(tmp_path):
     import json
-    gate = tmp_path/'sub-01/surface/tsnr_gate'
+    gate = tmp_path/'sub-01/surface/validity'
     gate.mkdir(parents=True)
     for hemi in ('L', 'R'):
-        (gate/f'sub-01_hemi-{hemi}_tsnr_gate_summary.json').write_text(json.dumps({'invalid_fraction': .1}))
+        (gate/f'sub-01_hemi-{hemi}_validity_summary.json').write_text(json.dumps({'invalid_fraction': .1}))
     with pytest.raises(ValueError, match='sampling|coordinate|registered'):
-        prep.tsnr_done(tmp_path, '01')
+        prep.validity_done(tmp_path, '01')
 
 
 def test_resume_cannot_use_corobl_millimetre_smoothing(tmp_path):
@@ -142,10 +142,10 @@ def test_iowa_resume_rejects_qc_from_before_registration(tmp_path, name):
     from types import SimpleNamespace
     sys.path.insert(0, str(ROOT/'scripts/iowa7t'))
     module = importlib.import_module(name)
-    gate = tmp_path/'tsnr_gate'
+    gate = tmp_path/'validity'
     gate.mkdir()
     for hemi in ('L', 'R'):
-        (gate/f'sub-01_hemi-{hemi}_tsnr_gate_summary.json').write_text(json.dumps({
-            'validity_policy': module.REST_POLICY,
+        (gate/f'sub-01_hemi-{hemi}_validity_summary.json').write_text(json.dumps({
+            'validity_policy': module.SERIES_VALIDITY_POLICY,
         }))
     assert not module.qc_policy_done(SimpleNamespace(subject='01', surface_root=tmp_path))

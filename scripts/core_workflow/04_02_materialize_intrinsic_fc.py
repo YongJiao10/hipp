@@ -18,7 +18,7 @@ Inputs:
   - --jobs: Subject-level process concurrency cap (default: 1).
 - Physical inputs:
   - Resampled BOLD timeseries: `{surface_root}/sub-<subject>/surface/{smoothing}/sub-<subject>_hemi-{hemi}_timeseries.npy`.
-  - BOLD active mask: `{surface_root}/sub-<subject>/surface/tsnr_gate/sub-<subject>_hemi-{hemi}_valid_mask.npy`.
+  - BOLD active mask: `{surface_root}/sub-<subject>/surface/validity/sub-<subject>_hemi-{hemi}_valid_mask.npy`.
 
 Outputs:
 - Command-line output / file outputs:
@@ -75,7 +75,7 @@ def materialize_subject(
             subj = shared_root / f"sub-{subject}"
             surf_subj = surface_root / f"sub-{subject}"
             ts_path = surf_subj / "surface" / smoothing / f"sub-{subject}_hemi-{hemi}_timeseries.npy"
-            mask_path = mask_root / f"sub-{subject}" / "surface" / "tsnr_gate" / f"sub-{subject}_hemi-{hemi}_valid_mask.npy"
+            mask_path = mask_root / f"sub-{subject}" / "surface" / "validity" / f"sub-{subject}_hemi-{hemi}_valid_mask.npy"
             ts = np.load(ts_path).astype(np.float32)
             valid = np.load(mask_path).astype(bool)
             active = ts[valid, :]

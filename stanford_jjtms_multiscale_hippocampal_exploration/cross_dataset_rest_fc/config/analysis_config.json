@@ -290,7 +290,7 @@
             }
           },
           "labels_pattern": "{subject}/matching/{smoothing}mm/hemi-{hemisphere}/labels.npy",
-          "valid_mask_pattern": "{subject}/surface/tsnr_gate/hemi-{hemisphere}_valid_mask.npy",
+          "valid_mask_pattern": "{subject}/surface/validity/hemi-{hemisphere}_valid_mask.npy",
           "registry_path": "outputs_hcp/work/group_atlas/routea_full_k3_fisherz/gradient-spectral/kong2022/2mm/cov_0p80/g1g2g3/hemi_L/cluster_roi_registry.tsv",
           "fc_column_index_column": "roi_id",
           "fc_column_index_base": 1,

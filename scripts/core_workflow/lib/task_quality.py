@@ -1,7 +1,4 @@
-"""QC policy identifiers and basic validity prerequisites.
-
-Basic validity helpers are not tSNR gates; production gates use lib.tsnr.
-"""
+"""QC policy identifiers and signal-validity prerequisites."""
 from __future__ import annotations
 
 import json
@@ -10,35 +7,28 @@ from typing import Sequence
 
 import numpy as np
 
-from .tsnr import TASK_POLICY, REST_POLICY
-
-TASK_VALIDITY_POLICY = TASK_POLICY
-
-
-def parse_tsnr_threshold(value: str | float | None) -> float | None:
-    """Arbitrary screening criterion: positive number gates, none disables.
-
-    Accepts a positive float (any cutoff), or ``none``/``null`` (case
-    insensitive) / ``None`` for validity-only with no tSNR screening.
-    Anything else fails closed.
-    """
-    if value is None:
-        return None
-    if isinstance(value, str) and value.strip().lower() in ("none", "null", "off"):
-        return None
-    threshold = float(value)
-    if not np.isfinite(threshold) or threshold <= 0:
-        raise ValueError(f"tSNR threshold must be a positive number or none, got {value!r}")
-    return threshold
+TASK_VALIDITY_POLICY = "finite_nonconstant_each_run"
+CORTEX_VALIDITY_POLICY = "finite_cortex_signal"
+SERIES_VALIDITY_POLICY = "finite_nonconstant_series"
 
 
-def task_signal_validity(data: np.ndarray, run_lengths: Sequence[int]) -> np.ndarray:
-    values = np.asarray(data, dtype=np.float64)
+def _validate_runs(data: np.ndarray, run_lengths: Sequence[int]) -> tuple[np.ndarray, list[int]]:
+    values = np.asarray(data)
     lengths = list(run_lengths)
     if (values.ndim != 2 or not lengths
             or any(isinstance(n, bool) or not isinstance(n, (int, np.integer)) or n < 2 for n in lengths)
             or sum(lengths) != values.shape[1]):
         raise ValueError(f"Task run lengths must partition the timeseries into runs of >=2 frames: {lengths}, shape={values.shape}")
+    return values, lengths
+
+
+def cortex_signal_validity(data: np.ndarray, run_lengths: Sequence[int]) -> np.ndarray:
+    values, _ = _validate_runs(data, run_lengths)
+    return np.isfinite(values).all(axis=1)
+
+
+def task_signal_validity(data: np.ndarray, run_lengths: Sequence[int]) -> np.ndarray:
+    values, lengths = _validate_runs(data, run_lengths)
     valid = np.ones(values.shape[0], dtype=bool)
     start = 0
     for length in lengths:
@@ -62,11 +52,11 @@ def require_task_surface_validity(surface_root: Path, subject: str, hemi: str, t
     stage = surface / "stage_manifest.json"
     params = json.loads(stage.read_text(encoding="utf-8")).get("params", {})
     require_task_policy(params, stage, task)
-    gate = surface / "tsnr_gate" / f"sub-{subject}_hemi-{hemi}_tsnr_gate_summary.json"
+    gate = surface / "validity" / f"sub-{subject}_hemi-{hemi}_validity_summary.json"
     require_task_policy(json.loads(gate.read_text(encoding="utf-8")), gate, task)
 
 
-REST_VALIDITY_POLICY = REST_POLICY
+REST_VALIDITY_POLICY = TASK_VALIDITY_POLICY
 QC_DATASETS = ("hcp", "stanford", "iowa_jj_tms", "iowa7t", "banda", "pdc", "nih_rtms")
 
 def signal_validity_policy(dataset: str, task: str) -> str:
@@ -76,7 +66,7 @@ def signal_validity_policy(dataset: str, task: str) -> str:
         if dataset != "hcp":
             raise ValueError(f"Task QC is only implemented for HCP, got {dataset}/{task}")
         return TASK_VALIDITY_POLICY
-    return "hcp_10000_over_std" if dataset == "hcp" else REST_VALIDITY_POLICY
+    return REST_VALIDITY_POLICY
 
 
 def rest_signal_validity(data: np.ndarray) -> np.ndarray:
@@ -111,14 +101,6 @@ def require_cortex_reference_policy(
                 f"Rebuild cortex reference: {path}: {key}={payload.get(key)!r}, expected {expected!r}"
             )
 
-    def cutoff(payload: dict, path: Path, key: str) -> float | None:
-        if key not in payload:
-            raise ValueError(f"Rebuild cortex reference: missing {key} at {path}")
-        try:
-            return parse_tsnr_threshold(payload[key])
-        except (TypeError, ValueError) as exc:
-            raise ValueError(f"Rebuild cortex reference: invalid {key} at {path}: {exc}") from exc
-
     ref_dir = Path(ref_dir)
     summary_path = ref_dir / "reference_summary.json"
     summary = read(summary_path)
@@ -128,25 +110,23 @@ def require_cortex_reference_policy(
     selected_task = task if task is not None else declared_task
     try:
         selected_task = normalize_task_branch(selected_task) if selected_task != "rest" else "rest"
-        policy = signal_validity_policy(dataset, selected_task)
+        signal_validity_policy(dataset, selected_task)
+        policy = CORTEX_VALIDITY_POLICY
     except ValueError as exc:
         raise ValueError(f"Rebuild cortex reference: invalid dataset/task policy at {summary_path}: {exc}") from exc
     for key, expected in (("dataset", dataset), ("task", selected_task), ("validity_policy", policy)):
         require(summary, summary_path, key, expected)
-    threshold = cutoff(summary, summary_path, "tsnr_threshold")
+    stage_path = ref_dir / "stage_manifest.json"
+    stage = read(stage_path)
+    require(stage, stage_path, "status", "done")
+    params = stage.get("params")
+    if not isinstance(params, dict):
+        raise ValueError(f"Rebuild cortex reference: missing params at {stage_path}")
+    for key, expected in (("dataset", dataset), ("task", selected_task), ("validity_policy", policy)):
+        require(params, stage_path, key, expected)
     for side in ("left", "right"):
-        gate_path = ref_dir.parent / "common" / "tsnr_gate" / f"cortex_{side}_tsnr_gate_summary.json"
+        gate_path = ref_dir.parent / "common" / "validity" / f"cortex_{side}_validity_summary.json"
         gate = read(gate_path)
         for key, expected in (("dataset", dataset), ("task", selected_task), ("validity_policy", policy)):
             require(gate, gate_path, key, expected)
-        gate_threshold = cutoff(gate, gate_path, "threshold")
-        if gate_threshold != threshold:
-            raise ValueError(
-                f"Rebuild cortex reference: {gate_path}: threshold={gate_threshold!r}, "
-                f"reference tsnr_threshold={threshold!r} at {summary_path}"
-            )
-        if dataset != "hcp" and selected_task == "rest" and threshold is not None:
-            baseline = gate.get("baseline_input")
-            if not isinstance(baseline, str) or not baseline:
-                raise ValueError(f"Rebuild cortex reference: missing baseline_input at {gate_path}")
     return summary

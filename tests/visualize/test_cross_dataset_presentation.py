@@ -165,7 +165,7 @@ def test_section_slides_aspect_and_no_overlap(presentation):
 def test_each_7net_section_has_eight_slides(presentation):
     section_nodes = presentation._element.xpath(".//*[local-name()='sectionLst']")[0]
     sec_dict = {s.get("name"): s for s in section_nodes}
-    expected_sections = ["7net_2mm_36p", "7net_4mm_36p", "7net_2mm_22p", "7net_4mm_22p"]
+    expected_sections = ["7net_2mm_36p", "7net_4mm_36p"]
     for sec_name in expected_sections:
         assert sec_name in sec_dict, f"Expected section '{sec_name}' not found in presentation"
         sec = sec_dict[sec_name]
@@ -177,7 +177,7 @@ def test_page_7_has_cortex_control_explanations(presentation):
     section_nodes = presentation._element.xpath(".//*[local-name()='sectionLst']")[0]
     sec_dict = {s.get("name"): s for s in section_nodes}
     slides_by_id = {str(s.slide_id): s for s in presentation.slides}
-    for sec_name in ["7net_2mm_36p", "7net_4mm_36p", "7net_2mm_22p", "7net_4mm_22p"]:
+    for sec_name in ["7net_2mm_36p", "7net_4mm_36p"]:
         sec = sec_dict[sec_name]
         sids = [c.get("id") for c in sec.xpath(".//*[local-name()='sldId']")]
         page7_slide = slides_by_id[sids[6]]

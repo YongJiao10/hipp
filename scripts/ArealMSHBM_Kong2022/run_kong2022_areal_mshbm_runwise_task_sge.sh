@@ -58,14 +58,11 @@ subject="sub-${sid}"
 old_out_root="${data_root}/hipp_outputs"
 
 case "${variant}" in
-  22p)
-    variant_upper="22P"
-    ;;
   36p)
     variant_upper="36P"
     ;;
   *)
-    echo "ERROR: IOWA7T_VARIANT must be 22p or 36p, got: ${variant}" >&2
+    echo "ERROR: IOWA7T_VARIANT must be 36p, got: ${variant}" >&2
     exit 2
     ;;
 esac

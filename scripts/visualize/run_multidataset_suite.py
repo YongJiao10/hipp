@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """Unified Batch Runner and Orchestrator for Multi-Dataset Hippocampal Visualizations.
 
-Executes the 6 participating multi-dataset visualizations across the 2x2 grid
-matrix (smoothing: 2mm, 4mm; variant: 36p, 22p).
+Executes the 6 participating multi-dataset visualizations across the 36p grid
+(smoothing: 2mm and 4mm).
 
-Signal branches: the default 'standard' mode preserves the established 2x2 grid
+Signal branches: the default 'standard' mode uses the 36p grid
 with unsuffixed names. '--signal-branch ctxreg' renders only the canonical
-2mm/36p ctxreg cell; '--signal-branch all' renders the 2x2 standard grid plus
+2mm/36p ctxreg cell; '--signal-branch all' renders the standard grid plus
 the ctxreg cell with branch-qualified (_standard/_ctxreg) names.
 
 Excluded Visualizations (hard-guarded, not run):
@@ -255,7 +255,7 @@ def run_figure(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Run multi-dataset hippocampal visualization suite across 2x2 grid."
+        description="Run multi-dataset hippocampal visualization suite across 36p grids."
     )
     parser.add_argument(
         "--version",
@@ -306,8 +306,8 @@ def main():
         default="standard",
         help=(
             "Hippocampal signal branch cells to render. 'standard' preserves the "
-            "established 2x2 grid with unsuffixed names; 'ctxreg' renders only the "
-            "canonical 2mm/36p ctxreg cell; 'all' renders the 2x2 standard grid plus "
+            "36p grids with unsuffixed names; 'ctxreg' renders only the "
+            "canonical 2mm/36p ctxreg cell; 'all' renders the standard grids plus "
             "the ctxreg cell with branch-qualified (_standard/_ctxreg) names."
         ),
     )
@@ -318,7 +318,7 @@ def main():
             f"--atlas is not used by --version {COMPARISON_VERSION}; omit it to select both 7-network methods"
         )
 
-    # Determine GridSpecs. Default mode is exactly the historical 2x2 standard
+    # Determine GridSpecs. Default mode uses the standard 36p grids;
     # grid; branch modes add the canonical 2mm/36p ctxreg cell (ctxreg is only
     # defined for 2mm/36p/7net by the GridSpec contract).
     branch_qualified = args.signal_branch != "standard"
@@ -344,9 +344,9 @@ def main():
     if args.check_readiness:
         return 0 if all_ready else 1
 
-    # Execute all 4 grid combinations in strict 4-way parallel execution (no serial execution permitted)
+    # Execute the selected grids concurrently.
     print(
-        f"[RUNNER] Executing {len(figures)} figure(s) across {len(grid_specs)} grid cell(s) in mandatory 4-way parallel execution (concurrency=4)..."
+        f"[RUNNER] Executing {len(figures)} figure(s) across {len(grid_specs)} grid cell(s)..."
     )
     contrast_manifest = None
     if "hipp_cortex_gradient_wta" in figures and not args.dry_run:
@@ -429,7 +429,7 @@ def main():
             ):
                 skwargs["tm_contrast_manifest"] = tm_manifests.get(spec.tag)
             submit_specs.append((spec, skwargs))
-        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=min(4, len(grid_specs))) as executor:
             future_to_spec = {
                 executor.submit(
                     run_figure,

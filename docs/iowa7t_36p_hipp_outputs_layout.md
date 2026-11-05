@@ -4,8 +4,6 @@ Canonical production roots:
 
 - 0P local: `/home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_0P/hipp_outputs`
 - 0P Argon: `/Shared/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_0P/hipp_outputs`
-- 22P local: `/home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_22P/hipp_outputs`
-- 22P Argon: `/Shared/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_22P/hipp_outputs`
 - 32P local: `/home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_32P/hipp_outputs`
 - 32P Argon: `/Shared/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_32P/hipp_outputs`
 - 36P local: `/home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_36P/hipp_outputs`
@@ -17,7 +15,7 @@ Rules:
 
 - Iowa7T means the Jianglab fMRIPrep Iowa7T trees, not HCPpipeline500.
 - `36p` remains the default workflow variant for backward compatibility.
-- `0p`, `22p`, `32p`, and `noxcpd` use parallel `DataOrg_PFM_*` trees and must not write into the 36P output root.
+- `0p`, `32p`, and `noxcpd` use parallel `DataOrg_PFM_*` trees and must not write into the 36P output root.
 - `outputs_iowa_estt/` and `outputs_iowa_jj_tms/` in the repository are derived-output roots for ESTT (3T) and JJ_TMS (3T) respectively, not Iowa 7T production output roots.
 - Subject structural HippUnfold output is shared at `subjects/sub-<ID>/hippunfold/` (non-36P variants symlink to the shared 36P HippUnfold output tree via relative symlink `../../../../DataOrg_PFM_36P/hipp_outputs/subjects/sub-<ID>/hippunfold`).
 - Functional branches are direct siblings: `multiband/` and `multi_echo/`.
@@ -103,24 +101,22 @@ Migration preserves structural, surface, cortex-reference, FC, and group
 assets. Individual-clustering labels, figures, overview-adapter caches, and
 their run metadata are excluded; the migration does not delete those files.
 
-## 0P, 22P, and 32P Variants
+## 0P and 32P Variants
 
-0P, 22P, and 32P are first-class Iowa7T variants. Local wrappers accept
-`--variant 0p`, `--variant 22p`, and `--variant 32p` and resolve defaults to
-`DataOrg_PFM_0P/hipp_outputs`, `DataOrg_PFM_22P/hipp_outputs`, and `DataOrg_PFM_32P/hipp_outputs`.
+0P and 32P are first-class Iowa7T variants. Local wrappers accept
+`--variant 0p` and `--variant 32p` and resolve defaults to
+`DataOrg_PFM_0P/hipp_outputs` and `DataOrg_PFM_32P/hipp_outputs`.
 
-0P/22P/32P branch inputs are fixed:
+0P/32P branch inputs are fixed:
 
 - `multiband` consumes the same `desc-denoised` MNI volume and 91k dtseries
   filename pattern as 36P.
 - `0p` `multi_echo` consumes `desc-MEICA_XCPD0P_denoised` MNI volume and 91k
   dtseries files.
-- `22p` `multi_echo` consumes `desc-MEICA_XCPD22P_denoised` MNI volume and 91k
-  dtseries files.
 - `32p` `multi_echo` consumes `desc-MEICA_XCPD32P_denoised` MNI volume and
   91k dtseries files.
 
-Like NoXCPD, 0P, 22P, and 32P use independent HippUnfold subject trees under their
+Like NoXCPD, 0P and 32P use independent HippUnfold subject trees under their
 selected `hipp_outputs/subjects/sub-<ID>/hippunfold/`. Use an isolated BIDS
 staging root for anatomical inputs before running HippUnfold so SnakeBIDS does
 not scan existing `hipp_outputs` as inputs.
@@ -218,10 +214,10 @@ run-03 = MB03
 run-04 = MB04
 ```
 
-For `sub-06112026` on Argon, the default 22P root is:
+For `sub-06112026` on Argon, the default 36P root is:
 
 ```text
-/Shared/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_22P/kong2022_runwise_06112026_20260904/
+/Shared/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_36P/kong2022_runwise_06112026_20260904/
 ├── run-01/
 ├── run-02/
 ├── run-03/
@@ -234,14 +230,13 @@ For `sub-06112026` on Argon, the default 22P root is:
 Each `run-XX/` directory directly contains the two label text files and its
 provenance record. The root deliberately has no `subjects/` or
 `sub-06112026/` wrapper and is separate from
-`DataOrg_PFM_22P/hipp_outputs`. The analogous 36P rerun uses the same layout
-under `DataOrg_PFM_36P/kong2022_runwise_06112026_20260904/`.
+`DataOrg_PFM_36P/hipp_outputs`.
 
 Use the dedicated launcher and inspect its printed qsub command before any
 submission:
 
 ```bash
-SYSTEM_NAME=argon IOWA7T_VARIANT=22p SUBJECT_ID=06112026 \
+SYSTEM_NAME=argon IOWA7T_VARIANT=36p SUBJECT_ID=06112026 \
   RUN_TAG=06112026_20260904 DRY_RUN=1 \
   scripts/ArealMSHBM_Kong2022/submit_kong2022_areal_mshbm_runwise.sh
 ```
@@ -265,7 +260,7 @@ The script automatically detects the latest `kong2022_runwise_<subject>_*` tree 
 
 Output tree per run:
 - `run-XX/cortex/`: `cortex_roi_parcel_timeseries.npy` (400 × T), `cortex_roi_parcels.tsv`, `cortex_canonical7_network_timeseries.npy` (7 × T), `cortex_family17_network_timeseries.npy` (17 × T)
-- `run-XX/surface/`: `raw/`, `tsnr_gate/`, `2mm/` and `4mm/` smoothed hippocampal timeseries (`sub-<subject>_hemi-{L,R}_timeseries.npy`)
+- `run-XX/surface/`: `raw/`, `validity/`, `2mm/` and `4mm/` smoothed hippocampal timeseries (`sub-<subject>_hemi-{L,R}_timeseries.npy`)
 - `run-XX/fc/`: `2mm/` and `4mm/` FC matrices (`hipp_vertex_to_network_fc.npy`, `hipp_vertex_to_network_fc_active.npy`, and `hippo512_to_kong400_corr.npy`)
 
 

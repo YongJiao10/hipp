@@ -1,13 +1,13 @@
 # Iowa 3T Template Matching: Dominant Subregions & Dominance Heatmaps
 
 The formal renderer is maintained independently in
-`render_template_matching_dominant_subregions.py`. The older four-grid
+`render_template_matching_dominant_subregions.py`. The 36p grid
 implementation remains in `render_template_matching_dominant_subregions_legacy.py`.
 Both import scalar export, folded-scene assembly and scene capture from
 `scripts/core_workflow/lib/workbench_scene_batch.py`; neither loads the retired
 `06_05` renderer. Neither renderer imports or executes code from `ctxreg_worktree`.
 
-Publication-ready visualization suite displaying the group-level hippocampal functional subregion atlases derived from individual template matching alongside percentage dominance agreement heatmaps across the repository's canonical $2 \times 2$ grid architecture ($2\text{mm} / 4\text{mm}$ hippocampal surface smoothing $\times$ $36\text{P} / 22\text{P}$ fMRIPrep/xcp-d confound regression).
+Publication-ready visualization suite displaying the group-level hippocampal functional subregion atlases derived from individual template matching alongside percentage dominance agreement heatmaps across the 36P grids with $2\text{mm}$ and $4\text{mm}$ hippocampal surface smoothing.
 
 Each grid figure presents all **4 Iowa 3T cohorts** in stacked comparative rows:
 
@@ -87,18 +87,10 @@ All metrics across the 16 cohort $\times$ grid combinations are recorded in `tem
 | | Depression Patients | 26 | 36.5% (374 vtx) | 25.4% (260 vtx) | 38.1% (390 vtx) | 56.6% | 92.3% |
 | | **Pure MDD Subgroup** | 7 | **29.0%** (297 vtx) | 22.3% (228 vtx) | **48.7%** (499 vtx) | **63.7%** | **100.0%** |
 | | Comorbid MDD Subgroup | 19 | 37.6% (385 vtx) | 29.1% (298 vtx) | 33.3% (341 vtx) | 56.5% | 94.7% |
-| **`2mm_22p`** | Healthy Controls | 67 | 43.4% (444 vtx) | 30.2% (309 vtx) | 26.5% (271 vtx) | 51.8% | 76.1% |
-| | Depression Patients | 26 | 35.5% (364 vtx) | 32.4% (332 vtx) | 32.0% (328 vtx) | 56.8% | 88.5% |
-| | **Pure MDD Subgroup** | 7 | 26.7% (273 vtx) | 35.6% (365 vtx) | **37.7%** (386 vtx) | **62.3%** | **100.0%** |
-| | Comorbid MDD Subgroup | 19 | 37.2% (381 vtx) | 29.6% (303 vtx) | 33.2% (340 vtx) | 57.2% | 94.7% |
 | **`4mm_36p`** | Healthy Controls | 67 | 43.2% (442 vtx) | 27.8% (285 vtx) | 29.0% (297 vtx) | 58.3% | 89.6% |
 | | Depression Patients | 26 | 35.2% (361 vtx) | 29.3% (300 vtx) | 35.5% (363 vtx) | 59.8% | 96.2% |
 | | **Pure MDD Subgroup** | 7 | 26.5% (271 vtx) | 26.4% (270 vtx) | **47.2%** (483 vtx) | **66.8%** | **100.0%** |
 | | Comorbid MDD Subgroup | 19 | 34.9% (357 vtx) | 32.6% (334 vtx) | 32.5% (333 vtx) | 59.5% | 94.7% |
-| **`4mm_22p`** | Healthy Controls | 67 | 42.8% (438 vtx) | 32.9% (337 vtx) | 24.3% (249 vtx) | 54.5% | 80.6% |
-| | Depression Patients | 26 | 34.1% (349 vtx) | 34.7% (355 vtx) | 31.2% (320 vtx) | 60.2% | 96.2% |
-| | **Pure MDD Subgroup** | 7 | 24.8% (254 vtx) | 40.4% (414 vtx) | 34.8% (356 vtx) | **65.5%** | **100.0%** |
-| | Comorbid MDD Subgroup | 19 | 37.2% (381 vtx) | 32.2% (330 vtx) | 30.6% (313 vtx) | 60.3% | **100.0%** |
 
 ### Key Scientific Findings
 
@@ -119,8 +111,6 @@ All metrics across the 16 cohort $\times$ grid combinations are recorded in `tem
   Both branches require the exact per-hemisphere `combo_manifest.json` contract;
   the renderer resolves the manifest-declared `labels` and `scores` artifacts
   and validates the fixed-template label semantics before rendering.
-- **22P Template Matching Results**:
-  `outputs_iowa_jj_tms/work/hcp151_fixed_template_matching_22p/subjects/sub-{id}/matching/{smoothing}/hemi-{hemi}/labels.npy`
 - **Cohort Manifests**:
   - `manifests/jj_tms_hc_67_subjects.txt`
   - `manifests/jj_tms_patient_26_subjects.txt`
@@ -144,7 +134,7 @@ Run the renderer with the repository's explicit Python interpreter:
 ```
 
 With no branch flag, the maintained entry point preserves the established
-four-grid behavior. To render the explicit Standard and CtxReg 2mm/36P
+36p grid behavior. To render the explicit Standard and CtxReg 2mm/36P
 comparison from the formal checkout:
 
 ```bash
@@ -157,11 +147,9 @@ comparison from the formal checkout:
 
 ### Outputs Generated
 
-- **4 Canonical Master Figures (300 DPI, $1940 \times 2580\text{ px}$)**:
+- **2 Canonical Master Figures (300 DPI, $1940 \times 2580\text{ px}$)**:
   - `template_matching_dominant_subregions_2mm_36p.png`
-  - `template_matching_dominant_subregions_2mm_22p.png`
   - `template_matching_dominant_subregions_4mm_36p.png`
-  - `template_matching_dominant_subregions_4mm_22p.png`
 - **Summary Metrics**: `template_matching_dominant_subregions_stats.csv`
 - **Provenance Manifest**: `template_matching_dominant_subregions_manifest.json` (records run timestamp, input paths, output SHA-256 hashes, and per-cohort metrics)
 - **Workbench Panel Cache**: `panels/` (contains 32 intermediate 4-view composite PNGs for fast recomposition)
@@ -221,7 +209,7 @@ both columns completely blank (no panels, titles, or boxes).
   --data-root /home/yojiao/hpchome/hipp
 ```
 
-Grid mode without `--signal-branch` keeps the established four-grid behavior
+Grid mode without `--signal-branch` keeps the established 36p grid behavior
 and writes `_ttest`-suffixed outputs, so it never overwrites the canonical
 tracked grid products.
 

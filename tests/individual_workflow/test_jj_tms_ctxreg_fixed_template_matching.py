@@ -218,7 +218,7 @@ def _write_subject_inputs(module, root: Path, subject: str, prototypes: np.ndarr
             surface_root
             / f"sub-{subject}"
             / "surface"
-            / "tsnr_gate"
+            / "validity"
             / f"sub-{subject}_hemi-{hemi}_valid_mask.npy"
         )
         mask_path.parent.mkdir(parents=True, exist_ok=True)

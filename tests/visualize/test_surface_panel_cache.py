@@ -26,7 +26,7 @@ def test_input_changes_and_output_corruption_invalidate_cache(tmp_path):
 
 def test_missing_source_fails_even_with_cached_png(tmp_path):
     with pytest.raises(FileNotFoundError, match='missing.gii'):
-        panel_inputs([tmp_path / 'missing.gii'], smoothing='2mm', variant='22p')
+        panel_inputs([tmp_path / 'missing.gii'], smoothing='2mm', variant='36p')
 
 
 @pytest.mark.parametrize('kind', ['confidence', 'subfield'])

@@ -4,7 +4,6 @@ from __future__ import annotations
 import csv
 import importlib
 import json
-import os
 import sys
 from pathlib import Path
 
@@ -30,7 +29,7 @@ def test_empty_parcel_keeps_its_row_and_diagnostics() -> None:
     assert [row['parcel_id'] for row in empty] == [2, 3]
     assert [row['n_grayordinates_total'] for row in rows] == [2, 1, 0]
     assert [row['n_grayordinates_used'] for row in rows] == [2, 0, 0]
-    assert [row['excluded_by_tsnr_gate'] for row in rows] == [False, True, True]
+    assert [row['excluded_by_validity'] for row in rows] == [False, True, True]
     assert stats['n_grayordinates_used'] == 2
 
 
@@ -49,7 +48,8 @@ def test_reference_outputs_keep_400_rows_and_count_only_contributors(tmp_path: P
     right = nib.cifti2.BrainModelAxis.from_surface(np.arange(200), 32492, name='CORTEX_RIGHT')
     cortex = left + right
     values = np.tile(np.asarray([10., 12., 14., 12.], np.float32)[:, None], (1, 400))
-    values[:, 0] = 0
+    values[:, 0] = np.nan
+    values[:, 1] *= 1000
     dtseries = tmp_path / 'source.dtseries.nii'
     nib.save(nib.Cifti2Image(values, header=nib.Cifti2Header.from_axes([
         nib.cifti2.SeriesAxis(0, 1, 4), cortex])), dtseries)
@@ -71,28 +71,6 @@ def test_reference_outputs_keep_400_rows_and_count_only_contributors(tmp_path: P
             full[:200] = subset
             np.savetxt(label_dir / f'{hemi}_labels.txt', full, fmt='%d')
         args += ['--route-a-root', str(label_dir.parent), '--dataset', dataset]
-    if dataset == 'stanford':
-        relative_template = os.path.relpath(tmp_path / 'baseline-{hemi}.npz', Path.cwd())
-        args += ['--tsnr-input-template', relative_template]
-
-        def baseline_gate(*, data, outdir, hemi, threshold, tsnr_input, task, dataset, **kwargs):
-            letter = 'L' if hemi == 'left' else 'R'
-            # Observe the real extractor boundary; baseline math is covered by
-            # the dedicated tSNR tests rather than this path-selection test.
-            assert tsnr_input == (tmp_path / f'baseline-{letter}.npz').resolve()
-            valid = np.isfinite(data).all(axis=1) & (np.ptp(data, axis=1) > 0)
-            outdir.mkdir(parents=True, exist_ok=True)
-            mask = outdir / f'cortex_{hemi}_valid_mask.npy'
-            np.save(mask, valid)
-            (outdir / f'cortex_{hemi}_tsnr_gate_summary.json').write_text(json.dumps({
-                'dataset': dataset, 'task': task, 'validity_policy': 'runwise_baseline_over_detrended_sd',
-                'threshold': threshold, 'baseline_input': str(tsnr_input),
-                'n_grayordinates_total': int(valid.size), 'n_grayordinates_valid': int(valid.sum()),
-                'n_grayordinates_invalid': int((~valid).sum()),
-            }))
-            return mask
-
-        monkeypatch.setattr(module, 'compute_cortex_tsnr_gate', baseline_gate)
     monkeypatch.setattr(sys, 'argv', args)
     if sum(run_lengths) != 4:
         with pytest.raises(ValueError, match="metadata|lengths|frames|timepoints"):
@@ -104,7 +82,7 @@ def test_reference_outputs_keep_400_rows_and_count_only_contributors(tmp_path: P
     data = np.load(ref / 'cortex_roi_parcel_timeseries.npy')
     assert data.shape == (400, 4)
     assert np.isnan(data[0]).all()
-    np.testing.assert_array_equal(data[1], [10., 12., 14., 12.])
+    np.testing.assert_array_equal(data[1], [10000., 12000., 14000., 12000.])
     with (ref / 'cortex_roi_parcels.tsv').open() as handle:
         rows = list(csv.DictReader(handle, delimiter='\t'))
     assert [int(row['parcel_id']) for row in rows] == ids.tolist()
@@ -114,13 +92,8 @@ def test_reference_outputs_keep_400_rows_and_count_only_contributors(tmp_path: P
     for rid, length in zip(run_ids, run_lengths, strict=True):
         segment = json.loads((root / f'sub-01/reference/common/runs/run-{rid}/reference_summary.json').read_text())
         assert segment['run_length'] == length
-    assert (summary['n_parcels_used_after_tsnr'], summary['n_parcels_empty_after_tsnr']) == (399, 1)
-    expected_policy = 'hcp_10000_over_std' if dataset == 'hcp' else 'runwise_baseline_over_detrended_sd'
-    assert (summary['dataset'], summary['task'], summary['validity_policy']) == (dataset, 'rest', expected_policy)
-    if dataset == 'stanford':
-        for side, hemi in [('left', 'L'), ('right', 'R')]:
-            gate = json.loads((ref.parent / f'common/tsnr_gate/cortex_{side}_tsnr_gate_summary.json').read_text())
-            assert gate['baseline_input'] == str((tmp_path / f'baseline-{hemi}.npz').resolve())
+    assert (summary['n_parcels_used'], summary['n_parcels_empty']) == (399, 1)
+    assert (summary['dataset'], summary['task'], summary['validity_policy']) == (dataset, 'rest', 'finite_cortex_signal')
     run = json.loads((root / 'sub-01/reference/common/runs/run-1/reference_summary.json').read_text())
     assert run['n_roi_parcels_used'] == 399
     for name, column, key in [('canonical7', 'canonical7', 'canonical7_network'),
@@ -131,7 +104,7 @@ def test_reference_outputs_keep_400_rows_and_count_only_contributors(tmp_path: P
         assert int(affected['n_parcels_merged']) == sum(row[column] == registry[0][column] for row in registry) - 1
 
 
-def test_task_reference_requires_manifest_declared_original_bold_before_loading(tmp_path, monkeypatch):
+def test_task_reference_requires_manifest_declared_runs_before_loading(tmp_path, monkeypatch):
     module = importlib.import_module('scripts.core_workflow.lib.extract_cortex_kong2022_route_a_roi_timeseries')
     monkeypatch.setattr(sys, 'argv', ['extract', '--subject', '01', '--dataset', 'hcp',
         '--task', 'emotion', '--dtseries', str(tmp_path / 'concat.dtseries.nii'),

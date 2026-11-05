@@ -177,7 +177,7 @@ def test_extract_tm_hemisphere_requires_2mm36p(renderer):
         GridSpec,
     )
 
-    grid = GridSpec("2mm", "22p", signal_branch="standard", atlas="7net")
+    grid = GridSpec("4mm", "36p", signal_branch="standard", atlas="7net")
     with pytest.raises(ValueError, match="2mm/36p"):
         tm.extract_tm_hemisphere(
             renderer, {"id": "iowa_hc"}, grid, "L", {}, "canonical"

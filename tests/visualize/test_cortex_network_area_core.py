@@ -217,29 +217,19 @@ def test_resolver_reuses_one_hcp_input_and_selects_exact_iowa_variant_branch(
             "lynch2024": str(tmp_path / "hcp/{sub_subject}/lynch.dlabel.nii"),
         },
         iowa_surface_templates={
-            "22p": str(tmp_path / "iowa22/{sub_subject}/{hemi}.surf.gii"),
             "36p": str(tmp_path / "iowa36/{sub_subject}/{hemi}.surf.gii"),
         },
         iowa_functional_manifest_templates={
-            "22p": str(tmp_path / "iowa22/{sub_subject}/provenance.json"),
             "36p": str(tmp_path / "iowa36/{sub_subject}/provenance.json"),
         },
         iowa_label_templates={
-            "22p": {"kong2022": str(tmp_path / "iowa22/{sub_subject}/kong.dlabel.nii")},
             "36p": {"kong2022": str(tmp_path / "iowa36/{sub_subject}/kong.dlabel.nii")},
         },
     )
 
-    hcp22 = resolve_subject_record("100610", "HCP HC", "22p", "kong2022", layout)
     hcp36 = resolve_subject_record("100610", "HCP HC", "36p", "kong2022", layout)
-    iowa22 = resolve_subject_record("1001", "Iowa HC", "22p", "kong2022", layout)
     iowa36 = resolve_subject_record("1001", "Iowa HC", "36p", "kong2022", layout)
 
-    assert hcp22.label_path == hcp36.label_path
-    assert hcp22.surface_paths == hcp36.surface_paths
-    assert hcp22.functional_manifest == hcp36.functional_manifest
-    assert iowa22.label_path != iowa36.label_path
-    assert "iowa22" in str(iowa22.label_path)
     assert "iowa36" in str(iowa36.label_path)
 
 
@@ -248,7 +238,7 @@ def test_audit_reports_missing_and_incompatible_inputs_explicitly(tmp_path: Path
         subject="sub-1001",
         cohort="Iowa HC",
         dataset="iowa",
-        variant="22p",
+        variant="36p",
         atlas="kong2022",
         surface_paths={"L": tmp_path / "missing.L.surf.gii", "R": tmp_path / "missing.R.surf.gii"},
         label_path=tmp_path / "missing.dlabel.nii",
@@ -283,7 +273,7 @@ def test_audit_reports_missing_and_incompatible_inputs_explicitly(tmp_path: Path
         subject="sub-1001",
         cohort="Iowa HC",
         dataset="iowa",
-        variant="22p",
+        variant="36p",
         atlas="kong2022",
         surface_paths={"L": left, "R": right},
         label_path=dlabel,

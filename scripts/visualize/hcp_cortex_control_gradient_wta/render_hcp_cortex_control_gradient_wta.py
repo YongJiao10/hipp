@@ -24,7 +24,7 @@ Directly copied and adapted from the three canonical multi-dataset reference scr
      - Y-axis: Bin 1 (Ant) at top, Bin 20 (Post) at bottom (0-100% vertex count)
      - Hipp surface and stacked bars share the EXACT same height.
 
-Unified 2x2 grid support: 2mm_36p, 2mm_22p, 4mm_36p, 4mm_22p (HCP 7T ICA-FIX Young Adults N=151).
+Unified grid support: 2mm_36p and 4mm_36p (HCP 7T ICA-FIX Young Adults N=151).
 """
 
 from __future__ import annotations
@@ -1085,9 +1085,9 @@ def _render_grid():
     parser = argparse.ArgumentParser(description="Render HCP Cortex-Control Combination Visualization.")
     default_dir = REPO_ROOT / "scripts" / "visualize" / "hcp_cortex_control_gradient_wta"
     parser.add_argument("--smoothing", choices=["2mm", "4mm"], default="2mm", help="Hippocampal smoothing resolution")
-    parser.add_argument("--variant", choices=["36p", "22p"], default="36p", help="Denoising variant label")
+    parser.add_argument("--variant", choices=["36p"], default="36p", help="Denoising variant label")
     parser.add_argument("--grid", choices=list(GRID_VARIANTS), default=None, help="Grid tag (e.g. 2mm_36p)")
-    parser.add_argument("--all-grids", action="store_true", help="Render all 4 grid combinations (2mm/4mm x 22p/36p)")
+    parser.add_argument("--all-grids", action="store_true", help="Render both 36p grid combinations (2mm/4mm)")
     parser.add_argument("--out-png", type=Path, default=None, help="Output PNG path")
     parser.add_argument("--stats-tsv", type=Path, default=None, help="Output stats TSV path")
     parser.add_argument("--force", action="store_true", help="Force re-rendering of surface panels and composites")

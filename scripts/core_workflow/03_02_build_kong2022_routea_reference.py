@@ -49,7 +49,6 @@ from lib.task_design import normalize_task_branch
 from lib.task_manifests import task_run_manifest_path
 from lib.task_quality import (
     QC_DATASETS,
-    parse_tsnr_threshold,
     require_cortex_reference_policy,
 )
 
@@ -77,8 +76,7 @@ def validate_routea_path(path: Path, arg_name: str) -> None:
 
 def subject_is_done(
     shared_root: Path, subject: str, atlas_slug: str, *, dataset: str,
-    tsnr_threshold: str, expected_inputs: dict[str, object],
-    tsnr_input_template: str | None = None, task: str = "rest",
+    expected_inputs: dict[str, object], task: str = "rest",
 ) -> bool:
     """Reuse only a reference made from the requested policy and source selection."""
     ref_dir = shared_root / f"sub-{subject}" / "reference" / str(atlas_slug)
@@ -87,22 +85,11 @@ def subject_is_done(
         return False
     try:
         payload = require_cortex_reference_policy(ref_dir, dataset=dataset, task=task)
-        if parse_tsnr_threshold(payload["tsnr_threshold"]) != parse_tsnr_threshold(tsnr_threshold):
-            return False
         if (payload.get("reference_label_source") != SOURCE_TAG
                 or payload.get("atlas_slug") != str(atlas_slug)):
             return False
         if any(payload.get(field) != value for field, value in expected_inputs.items()):
             return False
-        for side, hemi in (("left", "L"), ("right", "R")):
-            gate_path = ref_dir.parent / "common" / "tsnr_gate" / f"cortex_{side}_tsnr_gate_summary.json"
-            gate = json.loads(gate_path.read_text(encoding="utf-8"))
-            expected_baseline = (
-                str(Path(tsnr_input_template.format(subject=subject, hemi=hemi)).resolve())
-                if tsnr_input_template is not None else None
-            )
-            if gate.get("baseline_input") != expected_baseline:
-                return False
     except (OSError, ValueError, KeyError, TypeError):
         return False
     return True
@@ -123,8 +110,6 @@ def run_subject(
     task: str = "rest",
     task_manifest_root: str | None = None,
     dataset: str,
-    tsnr_input_template: str | None = None,
-    tsnr_threshold: str = "25",
     resume: bool = True,
 ) -> tuple[str, bool, str]:
     options: dict[str, object] = {
@@ -164,13 +149,10 @@ def run_subject(
     options.update(dt_options)
     if kong2022_dlabel is not None:
         options["kong2022_dlabel"] = kong2022_dlabel
-    options.update(task=branch, dataset=dataset, tsnr_threshold=str(tsnr_threshold))
-    if tsnr_input_template is not None:
-        options["tsnr_input_template"] = tsnr_input_template
+    options.update(task=branch, dataset=dataset)
     options["overwrite"] = overwrite
     if resume and not overwrite and branch == "rest" and subject_is_done(
         shared_root, subject, atlas_slug, dataset=dataset, task=branch,
-        tsnr_threshold=tsnr_threshold, tsnr_input_template=tsnr_input_template,
         expected_inputs=expected_inputs,
     ):
         return subject, True, "reused"
@@ -234,12 +216,6 @@ def main() -> int:
         help="Root holding task-<task>/sub-<subject>.json run-artifact manifests.",
     )
     parser.add_argument("--dataset", choices=QC_DATASETS, required=True)
-    parser.add_argument(
-        "--tsnr-threshold",
-        default="25",
-        help="Arbitrary screening criterion forwarded to the extractor (any positive number or 'none').",
-    )
-    parser.add_argument("--tsnr-input-template", help="Baseline cortex NPZ template with {subject}, {hemi}")
     parser.add_argument("--resume", action="store_true", default=True)
     parser.add_argument("--overwrite", action="store_true", default=False)
     args = parser.parse_args()
@@ -284,8 +260,6 @@ def main() -> int:
                 task=str(args.task),
                 task_manifest_root=args.task_manifest_root,
                 dataset=args.dataset,
-                tsnr_input_template=args.tsnr_input_template,
-                tsnr_threshold=str(args.tsnr_threshold),
                 resume=bool(args.resume),
             ): s
             for s in todo

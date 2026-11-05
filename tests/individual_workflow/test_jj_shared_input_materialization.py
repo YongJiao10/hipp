@@ -16,7 +16,6 @@ sys.path.insert(0, str(ROOT/'scripts/core_workflow'))
 ADAPTER = importlib.import_module('scripts.jj_tms.materialize_jj_tms_shared_inputs')
 from lib.io_utils import load_run_segment_metadata
 from lib.kong2022_label_utils import load_kong2022_bundle
-from lib.tsnr import rest_tsnr_input
 
 
 def save(path, values):
@@ -46,33 +45,11 @@ def source(tmp_path, monkeypatch):
         if missing_roi:
             roi[0] = np.nan
             counts[0] = 0
-        baseline_inputs = {}
-
-        def baseline(domain, hemi, n_vertices, invalid_index=None):
-            path = sub / 'baseline' / f'{domain}-{hemi}.npz'
-            path.parent.mkdir(parents=True, exist_ok=True)
-            payload = dict(dataset='iowa_jj_tms', subject='1001', hemi=hemi, n_runs=len(ids))
-            if domain == 'cortex':
-                payload['vertex_ids'] = np.arange(n_vertices)
-            for index in range(len(ids)):
-                samples = np.tile(100 + wave, (n_vertices, 1))
-                if invalid_index is not None:
-                    samples[invalid_index] = 0
-                payload[f'run_{index}'] = samples
-                payload[f'frames_{index}'] = np.arange(4)
-            np.savez(path, **payload)
-            baseline_inputs[f'tsnr_{domain}_{hemi}'] = {'path': str(path.resolve())}
-            return rest_tsnr_input(
-                path, dataset='iowa_jj_tms', subject='1001', hemi=hemi,
-                n_vertices=n_vertices, n_frames=4 * len(ids), threshold=25.0,
-                vertex_ids=np.arange(n_vertices) if domain == 'cortex' else None,
-            )
-
         for hemi in ('L', 'R'):
-            scores, valid = baseline('hipp', hemi, 512, invalid_index=511)
-            save(sub/f'surface/tsnr_gate/hemi-{hemi}_valid_mask.npy', valid)
-            save(sub/f'surface/tsnr_gate/hemi-{hemi}_tsnr.npy', np.min(scores, axis=0))
-            metric(sub/f'surface/tsnr_gate/hemi-{hemi}_valid_roi.shape.gii', valid)
+            valid = np.ones(512, dtype=bool)
+            valid[-1] = False
+            save(sub/f'surface/validity/hemi-{hemi}_valid_mask.npy', valid)
+            metric(sub/f'surface/validity/hemi-{hemi}_valid_roi.shape.gii', valid)
             save(sub/f'surface/raw/hemi-{hemi}_timeseries.npy', hipp)
             metric(sub/f'surface/raw/sub-1001_hemi-{hemi}_space-T1w_den-512_label-hipp_bold.func.gii', hipp)
             for smooth in ('2mm', '4mm'):
@@ -84,11 +61,10 @@ def source(tmp_path, monkeypatch):
                 if missing_roi:
                     pooled[:, 0] = np.nan
                 save(sub/f'matching/{smooth}/hemi-{hemi}/vertex_to_roi_pearson_fc.npy', pooled)
-            cortex_scores, cortex_valid = baseline(
-                'cortex', hemi, 200, invalid_index=0 if missing_roi and hemi == 'L' else None,
-            )
+            cortex_valid = np.ones(200, dtype=bool)
+            if missing_roi and hemi == 'L':
+                cortex_valid[0] = False
             save(sub/f'cortex/hemi-{hemi}_valid_mask.npy', cortex_valid)
-            save(sub/f'cortex/hemi-{hemi}_tsnr.npy', np.min(cortex_scores, axis=0))
         save(sub/'cortex/kong2022_roi_timeseries.npy', roi)
         save(sub/'cortex/kong2022_roi_vertex_counts.npy', counts)
         evidence = {'subject': '1001', 'run_lengths': [4]*len(ids),
@@ -98,10 +74,9 @@ def source(tmp_path, monkeypatch):
         metadata = sub/'subject_manifest.json'
         metadata.write_text(json.dumps({
             'subject': 'sub-1001', 'workflow': 'jj_tms_hcp151_fixed_template_matching',
-            'parameters': {'task': 'rest', 'tsnr_threshold': 25.0,
-                           'tsnr_definition': 'runwise_baseline_over_detrended_sd',
-                           'validity_policy': 'runwise_baseline_over_detrended_sd'},
-            'inputs': baseline_inputs, 'header_evidence': evidence,
+            'parameters': {'task': 'rest', 'validity_policy': 'finite_nonconstant_series',
+                           'cortex_validity_policy': 'finite_cortex_signal'},
+            'inputs': {}, 'header_evidence': evidence,
         }))
         return sub, metadata, signs
     return build

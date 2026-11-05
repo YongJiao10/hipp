@@ -6,14 +6,10 @@ Supports canonical7 sections by default; canonical8 is an explicit historical op
 Canonical 8-Network Historical Sections:
   - 2mm 36p (Section 1, 7 slides including Surface Area)
   - 4mm 36p (Section 2, 6 slides)
-  - 2mm 22p (Section 3, 6 slides)
-  - 4mm 22p (Section 4, 6 slides)
 
 Canonical7 Sections:
   - 2mm_36p (6 slides)
   - 4mm_36p (6 slides)
-  - 2mm_22p (6 slides)
-  - 4mm_22p (6 slides)
 
 Pages in each 7net section:
   Page 1: Hippocampal Functional Network Profiles (Gradient)
@@ -180,15 +176,11 @@ FIGURE_CONFIGS_HCP_JJTMS_7NET = [
 SECTIONS_GRID_8NET = [
     ("8net_2mm_36p", "2mm_36p"),
     ("8net_4mm_36p", "4mm_36p"),
-    ("8net_2mm_22p", "2mm_22p"),
-    ("8net_4mm_22p", "4mm_22p"),
 ]
 
 SECTIONS_GRID_7NET = [
     ("2mm 36p", "2mm_36p"),
     ("4mm 36p", "4mm_36p"),
-    ("2mm 22p", "2mm_22p"),
-    ("4mm 22p", "4mm_22p"),
 ]
 
 # The checked-in deck predates the current canonical section labels and uses
@@ -198,8 +190,6 @@ SECTIONS_GRID_7NET = [
 SECTION_ALIASES_7NET = {
     "2mm 36p": ("7net_2mm_36p",),
     "4mm 36p": ("7net_4mm_36p",),
-    "2mm 22p": ("7net_2mm_22p",),
-    "4mm 22p": ("7net_4mm_22p",),
 }
 
 CORTEX_NETWORK_AREA_SECTION = "cortical network area"

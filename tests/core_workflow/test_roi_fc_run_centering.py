@@ -31,7 +31,7 @@ def _write_kong400_inputs(root, cortex_reference_factory):
     hipp[2, 2] = np.nan
     hipp[3] = STEP
     np.save(surface_dir / "sub-01_hemi-L_timeseries.npy", hipp)
-    gate_dir = surface_root / "sub-01/surface/tsnr_gate"
+    gate_dir = surface_root / "sub-01/surface/validity"
     gate_dir.mkdir()
     np.save(gate_dir / "sub-01_hemi-L_valid_mask.npy", [True, False, True, True])
 
@@ -49,7 +49,7 @@ def _write_kong400_inputs(root, cortex_reference_factory):
     np.save(ref_dir / "cortex_roi_parcel_timeseries.npy", cortex)
     cortex_reference_factory(reference_root, dataset="hcp", run_ids=(1, 2), run_lengths=(4, 4))
     summary = ref_dir / "reference_summary.json"
-    gates = [ref_dir.parent / "common/tsnr_gate" / f"cortex_{side}_tsnr_gate_summary.json"
+    gates = [ref_dir.parent / "common/validity" / f"cortex_{side}_validity_summary.json"
              for side in ("left", "right")]
     return surface_root, reference_root, output_root, summary, gates
 

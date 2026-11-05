@@ -331,7 +331,7 @@ def _write_fold_subject_inputs(
     anchor_dir = shared_root / f"sub-{subject}" / "fc" / "kong2022" / "4mm" / "hemi_L"
     anchor_dir.mkdir(parents=True)
     np.save(anchor_dir / "hipp_vertex_to_network_fc.npy", base + offset)
-    mask_dir = surface_root / f"sub-{subject}" / "surface" / "tsnr_gate"
+    mask_dir = surface_root / f"sub-{subject}" / "surface" / "validity"
     mask_dir.mkdir(parents=True)
     np.save(mask_dir / f"sub-{subject}_hemi-L_valid_mask.npy", np.ones(6, dtype=bool))
 
@@ -825,10 +825,10 @@ def test_resume_template_validation_rejects_parameter_or_training_mismatch(
         },
         "valid_mask_paths": {
             "sub-01": str(
-                (tmp_path / "surface" / "sub-01" / "surface" / "tsnr_gate" / "sub-01_hemi-L_valid_mask.npy").resolve()
+                (tmp_path / "surface" / "sub-01" / "surface" / "validity" / "sub-01_hemi-L_valid_mask.npy").resolve()
             ),
             "sub-02": str(
-                (tmp_path / "surface" / "sub-02" / "surface" / "tsnr_gate" / "sub-02_hemi-L_valid_mask.npy").resolve()
+                (tmp_path / "surface" / "sub-02" / "surface" / "validity" / "sub-02_hemi-L_valid_mask.npy").resolve()
             ),
         },
     }
@@ -917,7 +917,7 @@ def test_resume_subject_validation_rejects_wrong_template_fold(
                 (tmp_path / "routea" / "sub-03" / "fc" / "kong2022" / "2mm" / "hemi_L" / "hipp_vertex_to_network_fc.npy").resolve()
             ),
             "valid_mask": str(
-                (tmp_path / "surface" / "sub-03" / "surface" / "tsnr_gate" / "sub-03_hemi-L_valid_mask.npy").resolve()
+                (tmp_path / "surface" / "sub-03" / "surface" / "validity" / "sub-03_hemi-L_valid_mask.npy").resolve()
             ),
             "subject_surface": str(
                 (tmp_path / "hippunfold" / "sub-03" / "hippunfold" / "sub-03" / "surf" / "sub-03_hemi-L_space-corobl_den-512_label-hipp_midthickness.surf.gii").resolve()

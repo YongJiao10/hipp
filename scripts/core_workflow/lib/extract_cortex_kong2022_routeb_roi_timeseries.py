@@ -19,7 +19,7 @@ except ImportError:  # pragma: no cover - supports direct script execution durin
         load_required_mask,
     )
 from .io_utils import (
-    compute_cortex_tsnr_gate,
+    compute_cortex_validity,
     load_cifti_dtseries_inputs,
 )
 from .kong2022_label_utils import (
@@ -36,7 +36,6 @@ from .kong2022_reference import (
     write_reference_manifests,
 )
 from .output_layout import DEFAULT_KONG2022_ROUTEB_ROOT
-from .task_quality import parse_tsnr_threshold
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -45,8 +44,6 @@ DEFAULT_SHARED_ROOT = DEFAULT_KONG2022_ROUTEB_ROOT
 DEFAULT_RUN_IDS = [1, 2, 3, 4]
 ATLAS_SLUG = "kong2022"
 COMMON_REFERENCE_SLUG = "common"
-TSNR_THRESHOLD = 25.0
-HCP_MODE = 10000.0
 
 
 def ensure_vertices_aligned(
@@ -92,8 +89,6 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--kong2022-dlabel", default=str(KONG2022_DLABEL_PATH))
     parser.add_argument("--cross-atlas-merge-json", default=str(KONG2022_MERGE_CONFIG))
     parser.add_argument("--shared-root", default=str(DEFAULT_SHARED_ROOT))
-    parser.add_argument("--left-tsnr-mask", default=None)
-    parser.add_argument("--right-tsnr-mask", default=None)
     parser.add_argument("--run-lengths", nargs="*", type=int, default=None)
     parser.add_argument("--outdir", default=None)
     return parser
@@ -102,10 +97,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
 def build_kong2022_reference(*, request: ReferenceRequest) -> int:
     """Build the public-dlabel HCP rest reference without CLI parsing."""
     args = request
-    if (args.dataset != "hcp" or args.task != "rest"
-            or parse_tsnr_threshold(args.tsnr_threshold) != 25.0
-            or args.tsnr_input_template is not None or args.atlas_slug != "kong2022"):
-        raise ValueError("Route B references require HCP rest with tSNR25 and public Kong2022 labels")
+    if args.dataset != "hcp" or args.task != "rest" or args.atlas_slug != "kong2022":
+        raise ValueError("Route B references require HCP rest and public Kong2022 labels")
 
     subject = str(args.subject).replace("sub-", "")
     shared_root = Path(args.shared_root).resolve()
@@ -141,19 +134,11 @@ def build_kong2022_reference(*, request: ReferenceRequest) -> int:
     common_ref_dir.mkdir(parents=True, exist_ok=True)
     left_vertices, left_dt = extract_structure_data(dt_axis, dt_data_t, "CORTEX_LEFT")
     right_vertices, right_dt = extract_structure_data(dt_axis, dt_data_t, "CORTEX_RIGHT")
-    tsnr_dir = common_ref_dir / "tsnr_gate"
-    left_tsnr_mask = (
-        Path(args.left_tsnr_mask).resolve()
-        if args.left_tsnr_mask
-        else compute_cortex_tsnr_gate(data=left_dt, outdir=tsnr_dir, hemi="left", threshold=TSNR_THRESHOLD).resolve()
-    )
-    right_tsnr_mask = (
-        Path(args.right_tsnr_mask).resolve()
-        if args.right_tsnr_mask
-        else compute_cortex_tsnr_gate(data=right_dt, outdir=tsnr_dir, hemi="right", threshold=TSNR_THRESHOLD).resolve()
-    )
-    left_valid = load_required_mask(str(left_tsnr_mask), int(left_vertices.shape[0]), "left cortex tSNR")
-    right_valid = load_required_mask(str(right_tsnr_mask), int(right_vertices.shape[0]), "right cortex tSNR")
+    validity_dir = common_ref_dir / "validity"
+    left_valid_mask = compute_cortex_validity(data=left_dt, outdir=validity_dir, hemi="left", dataset="hcp", task="rest", run_lengths=source_run_lengths).resolve()
+    right_valid_mask = compute_cortex_validity(data=right_dt, outdir=validity_dir, hemi="right", dataset="hcp", task="rest", run_lengths=source_run_lengths).resolve()
+    left_valid = load_required_mask(str(left_valid_mask), int(left_vertices.shape[0]), "left cortex validity")
+    right_valid = load_required_mask(str(right_valid_mask), int(right_vertices.shape[0]), "right cortex validity")
 
     left_parcel_ids = ensure_vertices_aligned(
         dt_vertices=left_vertices,
@@ -182,8 +167,7 @@ def build_kong2022_reference(*, request: ReferenceRequest) -> int:
         reference_scope=COMMON_REFERENCE_SLUG,
         dataset="hcp",
         task="rest",
-        validity_policy="hcp_10000_over_std",
-        tsnr_threshold=float(TSNR_THRESHOLD),
+        validity_policy="finite_cortex_signal",
         resolved=resolved,
         source_run_lengths=source_run_lengths,
         n_timepoints=n_timepoints,
@@ -192,8 +176,8 @@ def build_kong2022_reference(*, request: ReferenceRequest) -> int:
         family17_order=family17_order,
         kong2022_dlabel=Path(args.kong2022_dlabel).resolve(),
         cross_atlas_merge_json=Path(args.cross_atlas_merge_json).resolve(),
-        left_tsnr_mask=left_tsnr_mask,
-        right_tsnr_mask=right_tsnr_mask,
+        left_valid_mask=left_valid_mask,
+        right_valid_mask=right_valid_mask,
         include_dlabel_in_stage_inputs=True,
     )
     return 0

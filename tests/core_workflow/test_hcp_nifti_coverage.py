@@ -126,8 +126,8 @@ def test_hcp_raw_coverage_uses_nifti_without_cifti_and_checks_each_run(tmp_path,
         target = prep.surface_path(tmp_path / 'batch', '01', hemi)
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(source.read_bytes())
-    mask_result = prep.run_tsnr_gate('01', str(tmp_path / 'batch'), str(tmp_path / 'shared'),
-                                    dataset=dataset, tsnr_threshold='none')
+    mask_result = prep.run_validity('01', str(tmp_path / 'batch'), str(tmp_path / 'shared'),
+                                    dataset=dataset)
     assert mask_result['ok']
-    mask = np.load(tmp_path / 'shared/sub-01/surface/tsnr_gate/sub-01_hemi-L_valid_mask.npy')
+    mask = np.load(tmp_path / 'shared/sub-01/surface/validity/sub-01_hemi-L_valid_mask.npy')
     assert mask.tolist() == [True, False, False, False] + [True] * 508

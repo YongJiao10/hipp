@@ -72,52 +72,47 @@ def workflow(tmp_path, monkeypatch):
         nifti_support(np.ones(512))
         return data
 
-    def gate(threshold='none'):
-        assert PREP.run_tsnr_gate(subject, str(batch), str(shared), tsnr_threshold=threshold)['ok']
+    def gate():
+        assert PREP.run_validity(subject, str(batch), str(shared))['ok']
 
-    def run(stage, threshold='none', *, dataset='hcp', baseline=None):
+    def run(stage, *, dataset='hcp'):
         arguments = [
             'prepare', '--hippunfold-batch-root', str(batch), '--route-root', str(route),
             '--shared-root', str(shared), '--template-root', str(tmp_path/'template'),
-            '--subjects', subject, '--jobs', '1', '--stage', stage, '--tsnr-threshold', threshold,
+            '--subjects', subject, '--jobs', '1', '--stage', stage,
             '--dataset', dataset,
             '--motion-manifest', str(motion_manifest),
         ]
-        if baseline is not None:
-            arguments += ['--tsnr-input-template', baseline]
         monkeypatch.setattr(sys, 'argv', arguments)
         assert PREP.main() == 0
 
     def state():
-        directory = shared/f'sub-{subject}/surface/tsnr_gate'
-        return (json.loads((directory/f'sub-{subject}_hemi-L_tsnr_gate_summary.json').read_text()),
+        directory = shared/f'sub-{subject}/surface/validity'
+        return (json.loads((directory/f'sub-{subject}_hemi-L_validity_summary.json').read_text()),
                 np.load(directory/f'sub-{subject}_hemi-L_valid_mask.npy'))
 
     return SimpleNamespace(batch=batch, shared=shared, route=route, subject=subject,
                            raw=raw, gate=gate, run=run, state=state, nifti_support=nifti_support)
 
 
-def test_hcp_rejects_numeric_threshold_and_reuses_matching_validity_only_gate(workflow, capsys):
+def test_hcp_reuses_matching_validity_mask(workflow, capsys):
     workflow.raw(np.full(512, 1000))
-    with pytest.raises(ValueError, match='none'):
-        workflow.gate('25')
-    workflow.run('tsnr', 'none')
+    workflow.run('validity')
     summary, valid = workflow.state()
-    assert summary['threshold'] is None
     assert valid.all()
-    before = (workflow.shared/'sub-01/surface/tsnr_gate/sub-01_hemi-L_valid_mask.npy').stat().st_mtime_ns
+    before = (workflow.shared/'sub-01/surface/validity/sub-01_hemi-L_valid_mask.npy').stat().st_mtime_ns
     capsys.readouterr()
-    workflow.run('tsnr', 'none')
-    assert 'tsnr gate todo=0' in capsys.readouterr().out
-    assert (workflow.shared/'sub-01/surface/tsnr_gate/sub-01_hemi-L_valid_mask.npy').stat().st_mtime_ns == before
+    workflow.run('validity')
+    assert 'validity todo=0' in capsys.readouterr().out
+    assert (workflow.shared/'sub-01/surface/validity/sub-01_hemi-L_valid_mask.npy').stat().st_mtime_ns == before
 
 
-def test_replacing_raw_signal_recomputes_gate_with_unchanged_threshold(workflow):
+def test_replacing_raw_signal_recomputes_gate(workflow):
     workflow.raw(np.full(512, 100))
     workflow.gate()
     assert workflow.state()[1].all()
     workflow.raw(np.zeros(512))
-    workflow.run('tsnr')
+    workflow.run('validity')
     assert workflow.state()[1].sum() == 0
 
 
@@ -127,7 +122,7 @@ def test_replacing_nifti_support_recomputes_a_resumed_vertex_mask(workflow):
     weights = np.ones(512)
     weights[0] = 0
     workflow.nifti_support(weights)
-    workflow.run('tsnr')
+    workflow.run('validity')
     assert workflow.state()[1][:2].tolist() == [False, True]
 
 
@@ -194,24 +189,21 @@ def test_hcp_gate_rejects_nonfinite_and_constant_vertex_series_without_sd_ceilin
     assert mask[:5].tolist() == [False, False, False, False, True]
     assert summary['n_vertices_valid'] == 508
     assert summary['n_vertices_invalid'] == 4
-    directory = workflow.shared/'sub-01/surface/tsnr_gate'
+    directory = workflow.shared/'sub-01/surface/validity'
     roi = nib.load(directory/'sub-01_hemi-L_valid_roi.shape.gii').darrays[0].data
     np.testing.assert_array_equal(roi, mask.astype(np.float32))
-    proxy = np.load(directory/'sub-01_hemi-L_tsnr.npy')
-    assert np.isnan(proxy).all()
 
 
 @pytest.mark.parametrize('dataset', ['stanford', 'banda', 'pdc'])
 def test_other_datasets_resume_from_nifti_inputs_without_baseline(workflow, dataset):
     workflow.raw(np.full(512, 100))
-    PREP.run_tsnr_gate('01', str(workflow.batch), str(workflow.shared),
-                       dataset=dataset, tsnr_threshold='none')
+    PREP.run_validity('01', str(workflow.batch), str(workflow.shared),
+                       dataset=dataset)
     assert workflow.state()[1].all()
-    assert PREP.tsnr_done(workflow.shared, '01', dataset, tsnr_threshold='none')
+    assert PREP.validity_done(workflow.shared, '01', dataset)
     workflow.raw(np.zeros(512))
-    assert not PREP.tsnr_done(workflow.shared, '01', dataset, tsnr_threshold='none')
-    workflow.run('tsnr', 'none', dataset=dataset)
+    assert not PREP.validity_done(workflow.shared, '01', dataset)
+    workflow.run('validity', dataset=dataset)
     summary, valid = workflow.state()
     assert not valid.any()
-    assert summary['baseline_input'] is None and summary['threshold'] is None
-    assert PREP.tsnr_done(workflow.shared, '01', dataset, tsnr_threshold='none')
+    assert PREP.validity_done(workflow.shared, '01', dataset)

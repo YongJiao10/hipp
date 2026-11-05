@@ -84,14 +84,13 @@ def test_hcp_vertex_mask_combines_nifti_support_with_consumed_signal_validity(tm
     }))
     (raw / "surface_sampling_summary.json").write_text(json.dumps({"run_ids": [1], "run_lengths": [3]}))
 
-    result = prep.run_tsnr_gate("01", str(tmp_path / "batch"), str(shared), tsnr_threshold="none")
+    result = prep.run_validity("01", str(tmp_path / "batch"), str(shared))
 
     assert result["ok"]
-    gate = shared / "sub-01/surface/tsnr_gate"
+    gate = shared / "sub-01/surface/validity"
     np.testing.assert_array_equal(np.load(gate / "sub-01_hemi-L_valid_mask.npy"), [False, True, False, False])
-    summary = json.loads((gate / "sub-01_hemi-L_tsnr_gate_summary.json").read_text())
+    summary = json.loads((gate / "sub-01_hemi-L_validity_summary.json").read_text())
     assert summary["coverage_policy"] == "bold_nifti_runwise_trilinear_validity"
-    assert summary["threshold"] is None
 
 
 def test_hcp_concat_sampling_records_nifti_support_and_physical_runs(tmp_path, monkeypatch):
@@ -159,7 +158,7 @@ def test_hcp_concat_checks_declared_run_frames_before_sampling(tmp_path, monkeyp
 def test_explicit_log_directory_keeps_run_logs_outside_formal_inputs(tmp_path, monkeypatch):
     route = tmp_path / "inputs/kong2022"
     logs = tmp_path / "runs/current/prepare"
-    monkeypatch.setattr(sys, "argv", ["prepare", "--stage", "tsnr", "--subjects", "01",
+    monkeypatch.setattr(sys, "argv", ["prepare", "--stage", "validity", "--subjects", "01",
         "--hippunfold-batch-root", str(tmp_path / "anatomy"), "--route-root", str(route),
         "--shared-root", str(tmp_path / "surface"), "--log-dir", str(logs)])
 

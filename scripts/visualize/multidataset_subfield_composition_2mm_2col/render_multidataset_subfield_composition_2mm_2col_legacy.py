@@ -757,7 +757,7 @@ def _render_grid():
     parser.add_argument("--version", choices=["legacy", COMPARISON_VERSION], default="legacy", help="Data branch; legacy is unchanged, or use the additive HCP/JJ_TMS comparison.")
     parser.add_argument("--mode", choices=["all", "v1", "v2", "v3"], default="v2", help="Atlas mode to run (default: v2)")
     parser.add_argument("--smoothing", choices=["2mm", "4mm"], default="2mm", help="Smoothing resolution (default: 2mm)")
-    parser.add_argument("--variant", choices=["36p", "22p"], default="36p", help="Preprocessing variant (default: 36p)")
+    parser.add_argument("--variant", choices=["36p"], default="36p", help="Preprocessing variant (default: 36p)")
     parser.add_argument(
         "--atlas",
         choices=["kong2022", "7net"],
@@ -904,5 +904,5 @@ if __name__ == "__main__":
     raise SystemExit(
         "Standalone rendering has been removed. Use "
         "scripts/visualize/run_multidataset_suite.py "
-        "with --figures to select the figure type; all four grids are processed in 4-way parallel by default."
+        "with --figures to select the figure type; both 36p grids are processed by default."
     )

@@ -39,13 +39,9 @@ class ReferenceRequest:
     cross_atlas_merge_json: Path = KONG2022_MERGE_CONFIG
     route_a_root: Path = DEFAULT_CORTEX_ROUTEA_ROOT
     atlas_slug: str = "kong2022"
-    left_tsnr_mask: Path | None = None
-    right_tsnr_mask: Path | None = None
     run_lengths: Sequence[int] | None = None
     task: str = "rest"
     dataset: str = "hcp"
-    tsnr_threshold: str = "25"
-    tsnr_input_template: str | None = None
     outdir: Path | None = None
     overwrite: bool = False
 
@@ -84,16 +80,16 @@ def materialize_reference_timeseries(
     kept_rows = left_rows + right_rows
     empty_rows = left_empty + right_empty
     if len(kept_rows) == len(empty_rows):
-        raise RuntimeError("No Kong2022 ROI timeseries remained after tSNR gate.")
+        raise RuntimeError("No Kong2022 ROI timeseries remained after signal validity filtering.")
     parcel_ts = np.asarray(left_ts + right_ts, dtype=np.float32)
     np.save(outdir / "cortex_roi_parcel_timeseries.npy", parcel_ts)
     roi_fields = [
         "parcel_id", "parcel_name", "family17", "canonical8", "canonical7",
         "hemisphere", "subregion", "rank", "n_grayordinates_total",
-        "n_grayordinates_used", "excluded_by_tsnr_gate",
+        "n_grayordinates_used", "excluded_by_validity",
     ]
     write_tsv(outdir / "cortex_roi_parcels.tsv", kept_rows, roi_fields)
-    write_tsv(outdir / "cortex_roi_parcels_empty_after_tsnr.tsv", empty_rows, roi_fields)
+    write_tsv(outdir / "cortex_roi_parcels_empty_after_validity.tsv", empty_rows, roi_fields)
 
     canonical7_rows = []
     canonical7_ts_rows = []
@@ -102,7 +98,7 @@ def materialize_reference_timeseries(
                if str(row["canonical7"]) == canonical7 and int(str(row["n_grayordinates_used"])) > 0]
         if not idx:
             raise RuntimeError(
-                f"Canonical-7 network has zero parcels after tSNR gate: {canonical7}. "
+                f"Canonical-7 network has zero parcels after validity filtering: {canonical7}. "
                 "Kong2022 downstream requires fixed canonical-7 outputs."
             )
         rows = [kept_rows[i] for i in idx]
@@ -124,7 +120,7 @@ def materialize_reference_timeseries(
                if str(row["family17"]) == family17 and int(str(row["n_grayordinates_used"])) > 0]
         if not idx:
             raise RuntimeError(
-                f"Family17 network has zero parcels after tSNR gate: {family17}. "
+                f"Family17 network has zero parcels after validity filtering: {family17}. "
                 "Kong2022 17-net branch requires fixed original-family outputs."
             )
         rows = [kept_rows[i] for i in idx]
@@ -240,7 +236,6 @@ def write_reference_manifests(
     dataset: str,
     task: str,
     validity_policy: str,
-    tsnr_threshold: float | None,
     resolved: ResolvedReferenceInputs,
     source_run_lengths: list[int],
     n_timepoints: int,
@@ -249,8 +244,8 @@ def write_reference_manifests(
     family17_order: list[str],
     kong2022_dlabel: Path,
     cross_atlas_merge_json: Path,
-    left_tsnr_mask: Path,
-    right_tsnr_mask: Path,
+    left_valid_mask: Path,
+    right_valid_mask: Path,
     reference_label_source: str | None = None,
     route_a_extra_summary: dict[str, object] | None = None,
     extra_input_files: Sequence[Path] = (),
@@ -270,7 +265,6 @@ def write_reference_manifests(
     roi_src = str((outdir / "cortex_roi_parcel_timeseries.npy").resolve())
     c7_src = str((outdir / "cortex_canonical7_network_timeseries.npy").resolve())
     f17_src = str((outdir / "cortex_family17_network_timeseries.npy").resolve())
-    cutoff = None if tsnr_threshold is None else float(tsnr_threshold)
 
     for seg in run_segments:
         rid = int(seg["run_id"])
@@ -302,7 +296,6 @@ def write_reference_manifests(
             "n_family17_networks_used": int(reference.family17_ts.shape[0]),
             "family17_network_timeseries_source": f17_src,
             "roi_timeseries_source": roi_src,
-            "tsnr_threshold": cutoff,
             "validity_policy": validity_policy,
             "dataset": dataset,
             "run_slice_policy": "read_time_slice_from_full_timeseries",
@@ -350,20 +343,19 @@ def write_reference_manifests(
         "cross_atlas_merge_json": str(cross_atlas_merge_json),
         **(route_a_extra_summary or {}),
         "n_parcels_total": 400,
-        "n_parcels_used_after_tsnr": n_used,
-        "n_parcels_empty_after_tsnr": int(len(reference.empty_rows)),
+        "n_parcels_used": n_used,
+        "n_parcels_empty": int(len(reference.empty_rows)),
         "n_canonical7_networks_used": int(reference.canonical7_ts.shape[0]),
         "canonical7_networks_used": canonical7_order,
         "canonical7_network_timeseries_source": c7_src,
         "n_family17_networks_used": int(reference.family17_ts.shape[0]),
         "family17_networks_used": family17_order,
         "n_timepoints": int(n_timepoints),
-        "tsnr_threshold": cutoff,
-        "left_tsnr_mask": str(left_tsnr_mask),
-        "right_tsnr_mask": str(right_tsnr_mask),
+        "left_valid_mask": str(left_valid_mask),
+        "right_valid_mask": str(right_valid_mask),
         "run_boundaries_dir": str((common_ref_dir / "runs").resolve()),
         "run_boundary_source": run_boundary_source,
-        "tsnr_gate_stats": {
+        "validity_stats": {
             "left": left_stats,
             "right": right_stats,
             "combined": {
@@ -371,7 +363,7 @@ def write_reference_manifests(
                 "n_grayordinates_used": int(left_stats["n_grayordinates_used"] + right_stats["n_grayordinates_used"]),
                 "n_grayordinates_masked": int(left_stats["n_grayordinates_masked"] + right_stats["n_grayordinates_masked"]),
             },
-            "rois_empty_after_tsnr_gate": {
+            "rois_empty_after_validity": {
                 "left": int(len(reference.left_empty)),
                 "right": int(len(reference.right_empty)),
                 "combined": int(len(reference.empty_rows)),
@@ -387,8 +379,8 @@ def write_reference_manifests(
         *([file_meta(kong2022_dlabel)] if include_dlabel_in_stage_inputs else []),
         file_meta(cross_atlas_merge_json),
         *(file_meta(path) for path in extra_input_files),
-        file_meta(left_tsnr_mask),
-        file_meta(right_tsnr_mask),
+        file_meta(left_valid_mask),
+        file_meta(right_valid_mask),
     ]
     stage_manifest: dict[str, object] = {
         "stage": "reference",
@@ -407,7 +399,6 @@ def write_reference_manifests(
                    "network_taxonomy": "canonical7", "reference_branch": "kong2022_canonical7_default",
                    "reference_scope": reference_scope,
                }),
-            "tsnr_threshold": cutoff,
             "run_boundary_source": run_boundary_source,
             "run_lengths": [int(seg["run_length"]) for seg in run_segments],
             "dtseries_input_mode": resolved.dtseries_input_mode,

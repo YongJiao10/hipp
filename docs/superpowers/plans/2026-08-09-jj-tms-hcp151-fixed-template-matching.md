@@ -21,7 +21,7 @@
   - 按数值 run 顺序逐 run 将 MNI XCP-D volume 采样到个体 corobl den-512 表面，保留每个 run 的 GIFTI，再沿时间轴拼接；不生成重复的大型 concat NIfTI。
   - 校验 volume 网格/affine、拼接时间点与 91k concat dtseries 完全一致。
   - 使用个体 ArealMSHBM 标签提取固定顺序的 Kong2022 400 ROI 时序；缺失 ROI 保留为 NaN，不改变列顺序。
-  - 采用既有定义：海马 tSNR `10000/std ≥ 25`、2/4 mm surface smoothing、vertex-to-ROI Pearson FC、Fisher-z、与 HCP prototype 的 jointly-finite Pearson matching。
+  - 采用既有定义：海马逐 run 有效信号掩膜、2/4 mm surface smoothing、vertex-to-ROI Pearson FC、Fisher-z、与 HCP prototype 的 jointly-finite Pearson matching。
   - 输出 AP 标签 `1=Anterior/VAN, 2=Middle/SMN, 3=Posterior/DMN`、三个相关系数、top1-top2 margin、GIFTI、输入/输出指纹和 consumed-surface density evidence。
 - 创建已确认的 JJ_TMS 目录：
   - `outputs_iowa_jj_tms/work/hcp151_fixed_template_matching/subjects/`

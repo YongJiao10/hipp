@@ -46,7 +46,7 @@ from lib.fc_math import corrcoef_rows, fisher_z_transform_fc
 from lib.gifti_labels import make_named_label_gifti
 from lib.template_matching import match_vertices_to_prototypes
 from lib.workbench import workbench_env
-from lib.task_quality import rest_signal_validity, REST_VALIDITY_POLICY
+from lib.task_quality import cortex_signal_validity, rest_signal_validity, CORTEX_VALIDITY_POLICY, SERIES_VALIDITY_POLICY
 from lib.gifti_contracts import (
     gifti_logical_shape_dtype,
     load_gifti_timeseries,
@@ -70,8 +70,6 @@ LEGACY_PUBLISHED_RUN_IDS = frozenset(
 )
 N_ROIS = 400
 K = 3
-TSNR_THRESHOLD = 25.0
-HCP_MODE = 10000.0
 MAX_JOBS = 10
 DEFAULT_JOBS = 2
 EXPECTED_SUBJECT_COUNT = 94
@@ -452,22 +450,6 @@ def extract_fixed_roi_timeseries(
     return output, counts
 
 
-def compute_tsnr(
-    timeseries: np.ndarray, *, threshold: float = 25.0,
-    baseline_input: Path | None = None, subject: str | None = None,
-    hemi: str | None = None, vertex_ids: np.ndarray | None = None,
-) -> tuple[np.ndarray, np.ndarray]:
-    """True rest tSNR from explicit baseline samples, intersected with data validity."""
-    from lib.tsnr import rest_tsnr_input
-    if baseline_input is None or subject is None or hemi is None:
-        raise ValueError("JJ_TMS tSNR requires explicit baseline_input, subject and hemi")
-    data = np.asarray(timeseries)
-    scores, valid = rest_tsnr_input(baseline_input, dataset="iowa_jj_tms",
-                                  subject=subject, hemi=hemi, n_vertices=data.shape[0], n_frames=data.shape[1],
-                                  threshold=threshold, vertex_ids=vertex_ids)
-    return np.min(scores, axis=0), valid & rest_signal_validity(data)
-
-
 def validate_combo_arrays(
     *,
     labels: np.ndarray,
@@ -603,8 +585,6 @@ def canonical_output_contracts(
 ) -> dict[str, tuple[tuple[int, ...], np.dtype]]:
     contracts: dict[str, tuple[tuple[int, ...], np.dtype]] = {}
     fixed: dict[str, tuple[tuple[int, ...], np.dtype]] = {
-        "tsnr_hemi-L": ((N_VERTICES,), np.dtype(np.float32)),
-        "tsnr_hemi-R": ((N_VERTICES,), np.dtype(np.float32)),
         "valid_mask_hemi-L": ((N_VERTICES,), np.dtype(bool)),
         "valid_mask_hemi-R": ((N_VERTICES,), np.dtype(bool)),
         "cortex_roi_vertex_counts": ((N_ROIS,), np.dtype(np.int32)),
@@ -635,14 +615,9 @@ def canonical_output_contracts(
             (N_VERTICES, total_timepoints),
             np.dtype(np.float32),
         )
-        contracts[f"tsnr_hemi-{hemi}"] = ((N_VERTICES,), np.dtype(np.float32))
         contracts[f"valid_mask_hemi-{hemi}"] = ((N_VERTICES,), np.dtype(bool))
         contracts[f"valid_roi_hemi-{hemi}"] = (
             (N_VERTICES,),
-            np.dtype(np.float32),
-        )
-        contracts[f"cortex_tsnr_hemi-{hemi}"] = (
-            (cortex_counts[hemi],),
             np.dtype(np.float32),
         )
         contracts[f"cortex_valid_mask_hemi-{hemi}"] = (
@@ -1173,17 +1148,11 @@ def _expected_subject_output_paths(
             f"sub-{subject}_hemi-{hemi}_space-T1w_den-512_"
             "label-hipp_bold.func.gii"
         )
-        paths[f"tsnr_hemi-{hemi}"] = (
-            directory / "surface" / "tsnr_gate" / f"hemi-{hemi}_tsnr.npy"
-        )
         paths[f"valid_mask_hemi-{hemi}"] = (
-            directory / "surface" / "tsnr_gate" / f"hemi-{hemi}_valid_mask.npy"
+            directory / "surface" / "validity" / f"hemi-{hemi}_valid_mask.npy"
         )
-        paths[f"valid_roi_hemi-{hemi}"] = directory / "surface" / "tsnr_gate" / (
+        paths[f"valid_roi_hemi-{hemi}"] = directory / "surface" / "validity" / (
             f"hemi-{hemi}_valid_roi.shape.gii"
-        )
-        paths[f"cortex_tsnr_hemi-{hemi}"] = (
-            directory / "cortex" / f"hemi-{hemi}_tsnr.npy"
         )
         paths[f"cortex_valid_mask_hemi-{hemi}"] = (
             directory / "cortex" / f"hemi-{hemi}_valid_mask.npy"
@@ -1241,9 +1210,8 @@ def _parameters(*, wb_command: Path) -> dict[str, object]:
         "geometry_space": "T1w",
         "smoothings": list(SMOOTHINGS),
         "hemis": list(HEMIS),
-        "tsnr_definition": REST_VALIDITY_POLICY,
-        "tsnr_threshold": 25.0,
-        "validity_policy": REST_VALIDITY_POLICY,
+        "validity_policy": SERIES_VALIDITY_POLICY,
+        "cortex_validity_policy": CORTEX_VALIDITY_POLICY,
         "fc": "vertex-to-ROI Pearson",
         "fc_transform": "arctanh clipped to +/-0.999999",
         "matching": "jointly-finite Pearson correlation to fixed HCP151 prototypes",
@@ -1422,21 +1390,15 @@ def _smooth_surfaces(
     subject_dir: Path,
     wb_command: Path,
     outputs: dict[str, Path],
-    tsnr_input_template: str | None = None,
 ) -> tuple[dict[str, np.ndarray], dict[tuple[str, str], np.ndarray]]:
     valid_by_hemi: dict[str, np.ndarray] = {}
     smoothed: dict[tuple[str, str], np.ndarray] = {}
     for hemi in HEMIS:
-        if tsnr_input_template is None:
-            raise ValueError("JJ_TMS requires --tsnr-input-template with {subject}, {hemi}, {domain}")
-        tsnr, valid = compute_tsnr(raw[hemi], baseline_input=Path(tsnr_input_template.format(subject=subject, hemi=hemi, domain="hipp")), subject=subject, hemi=hemi)
-        tsnr_path = subject_dir / "surface" / "tsnr_gate" / f"hemi-{hemi}_tsnr.npy"
-        valid_path = subject_dir / "surface" / "tsnr_gate" / f"hemi-{hemi}_valid_mask.npy"
-        roi_path = subject_dir / "surface" / "tsnr_gate" / f"hemi-{hemi}_valid_roi.shape.gii"
-        _save_npy_exclusive(tsnr_path, tsnr)
+        valid = rest_signal_validity(raw[hemi])
+        valid_path = subject_dir / "surface" / "validity" / f"hemi-{hemi}_valid_mask.npy"
+        roi_path = subject_dir / "surface" / "validity" / f"hemi-{hemi}_valid_roi.shape.gii"
         _save_npy_exclusive(valid_path, valid.astype(bool))
         _write_roi_gifti_exclusive(roi_path, valid)
-        outputs[f"tsnr_hemi-{hemi}"] = tsnr_path
         outputs[f"valid_mask_hemi-{hemi}"] = valid_path
         outputs[f"valid_roi_hemi-{hemi}"] = roi_path
         valid_by_hemi[hemi] = valid
@@ -1489,7 +1451,7 @@ def _extract_cortex_roi_timeseries(
     roi_registry: Sequence[Mapping[str, object]],
     subject_dir: Path,
     outputs: dict[str, Path],
-    tsnr_input_template: str | None = None,
+    run_lengths: Sequence[int],
 ) -> tuple[np.ndarray, np.ndarray]:
     if concat_dtseries is not None:
         image = nib.load(str(concat_dtseries))
@@ -1519,19 +1481,13 @@ def _extract_cortex_roi_timeseries(
             vertices,
             hemi=hemi,
         )
-        if tsnr_input_template is None:
-            raise ValueError("JJ_TMS requires --tsnr-input-template for cortex baseline samples")
-        subject = subject_dir.name.removeprefix("sub-")
-        cortex_tsnr, cortex_valid = compute_tsnr(hemi_data, baseline_input=Path(tsnr_input_template.format(subject=subject, hemi=hemi, domain="cortex")), subject=subject, hemi=hemi, vertex_ids=vertices)
+        cortex_valid = cortex_signal_validity(hemi_data, run_lengths)
         parcel_ids = parcel_ids.copy()
         parcel_ids[~cortex_valid] = 0
         cortex[hemi] = np.asarray(hemi_data, dtype=np.float32)
         aligned[hemi] = parcel_ids
-        tsnr_path = subject_dir / "cortex" / f"hemi-{hemi}_tsnr.npy"
         valid_path = subject_dir / "cortex" / f"hemi-{hemi}_valid_mask.npy"
-        _save_npy_exclusive(tsnr_path, cortex_tsnr)
         _save_npy_exclusive(valid_path, cortex_valid.astype(bool))
-        outputs[f"cortex_tsnr_hemi-{hemi}"] = tsnr_path
         outputs[f"cortex_valid_mask_hemi-{hemi}"] = valid_path
     roi_ids = [int(row["roi_id"]) for row in roi_registry]
     roi_timeseries, counts = extract_fixed_roi_timeseries(
@@ -1804,15 +1760,7 @@ def _run_subject(
     wb_command: Path,
     template: TemplateContract,
     resume: bool,
-    tsnr_input_template: str | None = None,
 ) -> dict[str, object]:
-    if tsnr_input_template is None:
-        raise ValueError("JJ_TMS run requires --tsnr-input-template for baseline hippocampal and cortex samples")
-    baseline_inputs = {f"tsnr_{domain}_{hemi}": Path(tsnr_input_template.format(subject=subject, hemi=hemi, domain=domain))
-                       for domain in ("hipp", "cortex") for hemi in HEMIS}
-    for path in baseline_inputs.values():
-        if not path.is_file():
-            raise FileNotFoundError(f"Missing JJ_TMS baseline tSNR input: {path}")
     functional, header_evidence, surfaces = preflight_subject(
         subject=subject,
         volume_root=volume_root,
@@ -1831,7 +1779,6 @@ def _run_subject(
         hippunfold_root=hippunfold_root,
         template=template,
     )
-    expected_inputs.update(baseline_inputs)
     parameters = _parameters(wb_command=wb_command)
     final_manifest = subject_dir / "subject_manifest.json"
     if final_manifest.is_file():
@@ -1936,7 +1883,6 @@ def _run_subject(
             outputs=outputs,
         )
         valid_by_hemi, smoothed = _smooth_surfaces(
-            tsnr_input_template=tsnr_input_template,
             raw=raw,
             surfaces=surfaces,
             subject=subject,
@@ -1945,7 +1891,7 @@ def _run_subject(
             outputs=outputs,
         )
         roi_timeseries, roi_counts = _extract_cortex_roi_timeseries(
-            tsnr_input_template=tsnr_input_template,
+            run_lengths=header_evidence["run_lengths"],
             concat_dtseries=functional.concat_dtseries,
             runs=functional.runs,
             areal_labels=areal_labels,
@@ -2315,7 +2261,6 @@ def _run_batch(
     template: TemplateContract,
     wb_command: Path,
     skip_smoke_gate: bool = False,
-    tsnr_input_template: str | None = None,
 ) -> dict[str, object]:
     smoke_gate: dict[str, object] | None = None
     if list(subjects) == list(canonical_roster) and not skip_smoke_gate:
@@ -2359,7 +2304,6 @@ def _run_batch(
                 if concat_dtseries_root is not None and str(concat_dtseries_root).strip().lower() not in ("none", "null", "")
                 else None
             ),
-            "tsnr_input_template": tsnr_input_template,
             "label_root": str(Path(label_root).resolve()),
             "hippunfold_root": str(Path(hippunfold_root).resolve()),
             "template_root": str(template.root),
@@ -2387,7 +2331,6 @@ def _run_batch(
         futures = {
             pool.submit(
                 _run_subject,
-                tsnr_input_template=tsnr_input_template,
                 subject=subject,
                 volume_root=volume_root,
                 dtseries_root=dtseries_root,
@@ -2473,12 +2416,6 @@ def _validate_subject_for_run(
         hippunfold_root=Path(str(roots["hippunfold_root"])),
         template=template,
     )
-    tsnr_template = roots.get("tsnr_input_template")
-    if parameters.get("validity_policy") == REST_VALIDITY_POLICY:
-        if not isinstance(tsnr_template, str):
-            raise ValueError("Run metadata lacks explicit baseline tSNR input template")
-        expected_inputs.update({f"tsnr_{domain}_{hemi}": Path(tsnr_template.format(subject=subject, hemi=hemi, domain=domain))
-                                for domain in ("hipp", "cortex") for hemi in HEMIS})
     subject_dir = Path(out_root) / "subjects" / f"sub-{subject}"
     expected_outputs = _expected_subject_output_paths(
         functional=functional, subject_dir=subject_dir
@@ -2509,7 +2446,7 @@ def _validate_subject_for_run(
         scores = np.load(outputs["scores"]["path"], allow_pickle=False)
         margin = np.load(outputs["margin"]["path"], allow_pickle=False)
         valid = np.load(
-            subject_dir / "surface" / "tsnr_gate" / f"hemi-{hemi}_valid_mask.npy",
+            subject_dir / "surface" / "validity" / f"hemi-{hemi}_valid_mask.npy",
             allow_pickle=False,
         ).astype(bool)
         summary = validate_combo_arrays(
@@ -2851,7 +2788,6 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--template-root", type=Path, default=DEFAULT_TEMPLATE_ROOT)
     parser.add_argument("--out-root", type=Path, default=DEFAULT_OUT_ROOT)
     parser.add_argument("--wb-command", type=Path, default=DEFAULT_WB_COMMAND)
-    parser.add_argument("--tsnr-input-template", help="Baseline NPZ template with {subject}, {hemi}, {domain} (hipp/cortex)")
     return parser
 
 
@@ -2885,7 +2821,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         if not args.run_id:
             raise ValueError("--run-id is required for --mode run")
         payload = _run_batch(
-            tsnr_input_template=args.tsnr_input_template,
             subjects=subjects,
             canonical_roster=canonical,
             run_id=args.run_id,

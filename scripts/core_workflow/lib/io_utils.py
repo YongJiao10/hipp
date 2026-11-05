@@ -404,10 +404,11 @@ def _cifti_axes_equal(left: Any, right: Any) -> bool:
 def load_cifti_dtseries_inputs(
     paths: Sequence[str | Path],
 ) -> tuple[np.ndarray, Any, list[int]]:
-    """Load and concatenate CIFTI dtseries runs in memory.
+    """Load CIFTI dtseries runs, concatenating only when there are several.
 
     The returned data are time-by-grayordinate and the source files remain the
-    only on-disk inputs.  Every run must expose the same BrainModelAxis.
+    only on-disk inputs. A single input may remain memory mapped. Every run
+    must expose the same BrainModelAxis.
     """
     import nibabel as nib
 
@@ -439,7 +440,8 @@ def load_cifti_dtseries_inputs(
 
     if reference_axis is None:  # pragma: no cover - guarded by non-empty input_paths
         raise RuntimeError("No BrainModelAxis loaded from CIFTI dtseries inputs")
-    return np.concatenate(data_blocks, axis=0), reference_axis, run_lengths
+    data = data_blocks[0] if len(data_blocks) == 1 else np.concatenate(data_blocks, axis=0)
+    return data, reference_axis, run_lengths
 
 
 def load_json(path: Path) -> Any:
@@ -480,92 +482,36 @@ def load_subject_ids(path: Path, *, require_nonempty: bool = True) -> list[str]:
     return out
 
 
-def compute_cortex_tsnr_gate(
+def compute_cortex_validity(
     *,
     data: np.ndarray,
     outdir: Path,
     hemi: str,
-    threshold: float | None,
-    hcp_mode: float = 10000.0,
-    task: str = "rest",
-    run_lengths: Sequence[int] | None = None,
-    dataset: str = "hcp",
-    task_bold_paths: Sequence[str | Path] | None = None,
-    tsnr_input: Path | None = None,
-    subject: str | None = None,
-    vertex_ids: np.ndarray | None = None,
+    dataset: str,
+    task: str,
+    run_lengths: Sequence[int],
 ) -> Path:
-    from .task_quality import (
-        parse_tsnr_threshold,
-        rest_signal_validity,
-        signal_validity_policy,
-    )
+    """Persist vertices with finite signal in every physical run."""
+    from .task_quality import CORTEX_VALIDITY_POLICY, QC_DATASETS, cortex_signal_validity
 
-    policy = signal_validity_policy(dataset, task)
-    cutoff = parse_tsnr_threshold(threshold)
-    if policy != "hcp_10000_over_std":
-        from .task_design import normalize_task_branch
-        from .tsnr import rest_tsnr_input, task_tsnr
-
-        if task != "rest":
-            task = normalize_task_branch(task)
-            scores, valid = task_tsnr(data, [] if run_lengths is None else run_lengths,
-                                      [] if task_bold_paths is None else task_bold_paths,
-                                      task=task, threshold=cutoff)
-        else:
-            if tsnr_input is None or subject is None:
-                raise ValueError(f"{dataset} cortex tSNR requires explicit baseline samples, subject and vertex order")
-            scores, valid = rest_tsnr_input(tsnr_input, dataset=dataset, subject=subject,
-                                            hemi="L" if hemi.lower() in ("left", "l") else "R",
-                                            n_vertices=data.shape[0], n_frames=data.shape[1], threshold=threshold, vertex_ids=vertex_ids)
-            valid &= rest_signal_validity(data)
-        outdir.mkdir(parents=True, exist_ok=True)
-        mask_path = outdir / f"cortex_{hemi.lower()}_valid_mask.npy"
-        np.save(mask_path, valid)
-        np.save(outdir / f"cortex_{hemi.lower()}_run_tsnr.npy", scores)
-        np.save(outdir / f"cortex_{hemi.lower()}_tsnr.npy", np.min(scores, axis=0))
-        task_validity_only = task != "rest" and cutoff is None
-        summary = {
-            "hemi": hemi, "task": task, "dataset": dataset, "validity_policy": policy,
-            "baseline_input": str(tsnr_input) if tsnr_input is not None else None,
-            "threshold": None if cutoff is None else float(cutoff),
-            "tsnr_definition": policy,
-            "run_aggregation": "validity_only_no_tsnr" if task_validity_only else "all_runs_pass",
-            "run_lengths": list(run_lengths) if run_lengths is not None else None,
-            "n_grayordinates_total": int(valid.size), "n_grayordinates_valid": int(valid.sum()),
-            "n_grayordinates_invalid": int((~valid).sum()),
-            "invalid_fraction": float((~valid).sum() / max(1, valid.size)),
-        }
-        if task != "rest":
-            summary["tsnr_computed"] = cutoff is not None
-        (outdir / f"cortex_{hemi.lower()}_tsnr_gate_summary.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
-        return mask_path
-    sd = np.nanstd(np.asarray(data, dtype=np.float64), axis=1, ddof=1)
-    tsnr = np.where(sd > 0, hcp_mode / sd, np.nan).astype(np.float32)
-    valid = (
-        rest_signal_validity(data) if cutoff is None
-        else np.isfinite(tsnr) & (tsnr >= float(cutoff))
-    )
+    if dataset not in QC_DATASETS:
+        raise ValueError(f"Unsupported QC dataset: {dataset}")
+    valid = cortex_signal_validity(data, run_lengths)
     outdir.mkdir(parents=True, exist_ok=True)
-    np.save(outdir / f"cortex_{hemi.lower()}_tsnr.npy", tsnr)
     mask_path = outdir / f"cortex_{hemi.lower()}_valid_mask.npy"
-    np.save(mask_path, valid.astype(bool))
-
-    # Write json directly
-    gate_summary = {
-        "hemi": hemi,
-        "dataset": dataset,
-        "task": task,
-        "validity_policy": policy,
-        "threshold": None if cutoff is None else float(cutoff),
-        "tsnr_definition": f"{int(hcp_mode)}/std",
+    np.save(mask_path, valid)
+    summary = {
+        "hemi": hemi, "dataset": dataset, "task": task,
+        "validity_policy": CORTEX_VALIDITY_POLICY,
+        "run_lengths": list(run_lengths),
         "n_grayordinates_total": int(valid.size),
         "n_grayordinates_valid": int(valid.sum()),
-        "n_grayordinates_invalid": int(valid.size - valid.sum()),
-        "invalid_fraction": float(1.0 - (valid.sum() / max(1, valid.size))),
+        "n_grayordinates_invalid": int((~valid).sum()),
+        "invalid_fraction": float((~valid).sum() / max(1, valid.size)),
     }
-    summary_path = outdir / f"cortex_{hemi.lower()}_tsnr_gate_summary.json"
-    summary_path.write_text(json.dumps(gate_summary, indent=2) + "\n", encoding="utf-8")
+    (outdir / f"cortex_{hemi.lower()}_validity_summary.json").write_text(
+        json.dumps(summary, indent=2) + "\n", encoding="utf-8"
+    )
     return mask_path
 
 
@@ -674,7 +620,7 @@ def load_optional_cortex_valid_mask(
 ) -> np.ndarray:
     """Load explicit cortical validity masks; no implicit mask is default."""
     subject = str(subject).replace("sub-", "")
-    gate = Path(reference_root) / f"sub-{subject}" / "reference" / "common" / "tsnr_gate"
+    gate = Path(reference_root) / f"sub-{subject}" / "reference" / "common" / "validity"
     pieces: list[np.ndarray] = []
     missing: list[Path] = []
     for hemi_name, key in [("left", "CORTEX_LEFT"), ("right", "CORTEX_RIGHT")]:

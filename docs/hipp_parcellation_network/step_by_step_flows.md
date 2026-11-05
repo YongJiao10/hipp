@@ -82,13 +82,13 @@ Lynch2024 FC materialization reuses the existing `04_01` implementation with `--
 3. `05_03_run_spectral_fast_rerun.py` for optional rerun orchestration after the primary atlas step
 4. `05_04_compute_confidence_maps.py` for vertex-level silhouette confidence maps in G1/G2/G3 feature space
 
-For multi-cohort gradients, use the same `--cohort <name> --variant 36p|22p`
+For multi-cohort gradients, use the same `--cohort <name> --variant 36p`
 selection in `05_01`, `05_02`, and `06_04`. The gradient base root is the stage
-root; `--cohort nthc --variant 22p` with `pfm` resolves to
-`<gradient-stage-root>/pfm_22p/nthc/<smoothing>/hemi_<hemi>/`.
+root; `--cohort nthc --variant 36p` with `pfm` resolves to
+`<gradient-stage-root>/pfm/nthc/<smoothing>/hemi_<hemi>/`.
 Select the matching upstream roots and subject manifest explicitly. HCP omits
 `--cohort` and uses the default `36p` variant. Group-atlas output roots remain
-explicit, for example `work/group_atlas/pfm_22p/nthc`.
+explicit, for example `work/group_atlas/pfm/nthc`.
 
 Kong2022 HippoMaps gradient artifact example. The default `--gradient-random-state 0` fixes BrainSpace diffusion initialization and is recorded in each `05_01` manifest:
 

@@ -127,7 +127,7 @@ def test_fmriprep_motion_uses_original_fd_and_sets_run_first_frame_zero(tmp_path
 @pytest.mark.parametrize('dataset,task', [('banda', 'rest'), ('pdc', 'rest'), ('hcp', 'emotion')])
 def test_other_cohorts_cannot_write_default_hcp_rest_reports(tmp_path, monkeypatch, dataset, task):
     batch, _, _, out, _ = prepare(tmp_path, monkeypatch)
-    existing = out / 't1only_hippunfold_tsnr_qc.json'
+    existing = out / 't1only_hippunfold_qc.json'
     out.mkdir()
     existing.write_text('existing HCP report\n')
     monkeypatch.setattr(sys, 'argv', ['qc', '--dataset', dataset, '--task', task,

@@ -26,7 +26,7 @@ from multidataset_cohorts import (
 
 
 def test_grid_variants_contract():
-    assert GRID_VARIANTS == ("2mm_36p", "2mm_22p", "4mm_36p", "4mm_22p")
+    assert GRID_VARIANTS == ("2mm_36p", "4mm_36p")
 
 
 def test_excluded_visualizations_contract():
@@ -50,12 +50,15 @@ def test_grid_spec_validation():
     g = GridSpec("2mm", "36p")
     assert g.tag == "2mm_36p"
 
-    g2 = GridSpec.from_tag("4mm_22p")
+    g2 = GridSpec.from_tag("4mm_36p")
     assert g2.smoothing == "4mm"
     assert g.is_7net is True
     assert g.file_tag == "2mm_36p"
     assert GridSpec().atlas == "7net"
-    assert g2.variant == "22p"
+    assert g2.variant == "36p"
+
+    with pytest.raises(ValueError):
+        GridSpec.from_tag("4mm_unsupported")
 
     with pytest.raises(ValueError):
         GridSpec("3mm", "36p")
@@ -80,10 +83,7 @@ def test_cohorts_resolution_all_cells():
 
         # Check Iowa variant routing
         iowa_hc = [c for c in all_cohorts if c["id"] == "iowa_hc"][0]
-        if spec.variant == "22p":
-            assert str(iowa_hc["group_root"]).endswith("outputs_iowa_jj_tms/work/group_atlas/pfm_22p/hc")
-        else:
-            assert str(iowa_hc["group_root"]).endswith("outputs_iowa_jj_tms/work/group_atlas/pfm/hc")
+        assert str(iowa_hc["group_root"]).endswith("outputs_iowa_jj_tms/work/group_atlas/pfm/hc")
         assert f"/{spec.smoothing}/" in str(iowa_hc["grad_subpath"])
 
         # Check Iowa newly added cohorts routing
@@ -94,10 +94,7 @@ def test_cohorts_resolution_all_cells():
 
         # Check Stanford variant routing
         stan_nthc = [c for c in all_cohorts if c["id"] == "stan_nthc"][0]
-        if spec.variant == "22p":
-            assert str(stan_nthc["group_root"]).endswith("outputs_stanford/work/group_atlas/pfm_22p/nthc")
-        else:
-            assert str(stan_nthc["group_root"]).endswith("outputs_stanford/work/group_atlas/pfm/nthc")
+        assert str(stan_nthc["group_root"]).endswith("outputs_stanford/work/group_atlas/pfm/nthc")
         assert f"/{spec.smoothing}/" in str(stan_nthc["grad_subpath"])
 
 
@@ -105,7 +102,7 @@ def test_canonical7_patient_resolver_uses_materialized_7net_root():
     for tag in GRID_VARIANTS:
         spec = GridSpec.from_tag(tag, atlas="7net")
         paths = resolve_cohort_paths("iowa_pat", spec)
-        variant_suffix = "_22p" if spec.variant == "22p" else ""
+        variant_suffix = ""
         expected_root = (
             REPO_ROOT
             / "outputs_iowa_jj_tms"
@@ -139,13 +136,6 @@ def test_no_active_7net_compatibility_symlinks_remain():
         / "routea_patient_full_k3_fisherz"
         / "gradient-spectral"
         / "kong2022",
-        REPO_ROOT
-        / "outputs_iowa_jj_tms"
-        / "work"
-        / "group_atlas"
-        / "routea_patient_22p_full_k3_fisherz"
-        / "gradient-spectral"
-        / "kong2022",
     )
     assert all(not path.is_symlink() for path in symlink_paths)
 
@@ -158,18 +148,6 @@ def test_preflight_readiness_audit():
         assert report["total_cohorts"] == 12
         assert report["ready_count"] == 12
         assert report["all_ready"] is True
-
-    # All canonical7 22p products are materialized and taxonomy-validated.
-    for tag in ("2mm_22p", "4mm_22p"):
-        spec = GridSpec.from_tag(tag)
-        report = check_grid_readiness(spec)
-        assert report["total_cohorts"] == 12
-        assert report["ready_count"] == 12
-        assert report["all_ready"] is True
-        assert report["cohorts"]["iowa_hc"]["ready"] is True
-        assert report["cohorts"]["iowa_pat"]["ready"] is True
-        assert report["cohorts"]["hcp_7t"]["ready"] is True
-
 
 def test_cli_help_all_participating_scripts():
     py_bin = "/home/yojiao/.conda/envs/py314/bin/python"

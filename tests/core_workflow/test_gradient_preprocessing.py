@@ -14,6 +14,21 @@ sys.path.insert(0, str(ROOT))
 from scripts.core_workflow.lib import hippomaps_adapter as adapter
 
 
+def test_group_atlas_requires_explicit_validity_mask_even_when_fc_exists(tmp_path):
+    atlas = _stage("05_02_run_group_atlas.py")
+    shared = tmp_path / "shared"
+    fc = shared / "sub-01/fc/kong2022/2mm/hemi_L/hipp_vertex_to_network_fc.npy"
+    fc.parent.mkdir(parents=True)
+    np.save(fc, np.ones((3, 2)))
+    surface = tmp_path / "surface"
+    expected = surface / "sub-01/surface/validity/sub-01_hemi-L_valid_mask.npy"
+    with pytest.raises(FileNotFoundError, match="sub-01_hemi-L_valid_mask"):
+        atlas.subject_valid_mask(surface, shared, "01", "2mm", "L")
+    expected.parent.mkdir(parents=True)
+    np.save(expected, np.array([True, False, True]))
+    assert atlas.subject_valid_mask(surface, shared, "01", "2mm", "L").tolist() == [True, False, True]
+
+
 @pytest.mark.parametrize("scaling", ["none", "col_zscore"])
 @pytest.mark.parametrize("stage", ["features", "affinity", "none"])
 def test_scaling_and_sparsification_are_separate_explicit_choices(monkeypatch, scaling, stage):
@@ -342,7 +357,7 @@ def test_independent_comparison_fits_honor_the_same_options(tmp_path, monkeypatc
     gradient = np.random.default_rng(9).normal(size=(8,5))
     source = np.random.default_rng(3).uniform(-.5,.5,size=(8,400))
     for subject in ("01", "02"):
-        mask_path = tmp_path / f"surface/sub-{subject}/surface/tsnr_gate/sub-{subject}_hemi-L_valid_mask.npy"
+        mask_path = tmp_path / f"surface/sub-{subject}/surface/validity/sub-{subject}_hemi-L_valid_mask.npy"
         mask_path.parent.mkdir(parents=True)
         np.save(mask_path, np.ones(8,dtype=bool))
         for run in (1,2):

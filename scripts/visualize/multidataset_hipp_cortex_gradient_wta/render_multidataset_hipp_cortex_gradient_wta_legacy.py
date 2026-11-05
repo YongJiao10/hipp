@@ -1310,23 +1310,21 @@ def render_hippo_wta_biglegend(
 
 def resolve_cohort_inputs_roots(cohort_spec: dict[str, Any], variant: str) -> tuple[Path, Path, Path]:
     """Resolve (surface_root, reference_root, mask_root) honoring variant."""
+    if variant != "36p":
+        raise ValueError(f"Unsupported variant: {variant}")
     ds_key = cohort_spec["dataset_key"]
     if ds_key == "hcp":
         surface_root = REPO_ROOT / "outputs_hcp/inputs/kong2022/shared_inputs/surface"
         reference_root = REPO_ROOT / "outputs_hcp/inputs/kong2022/shared_inputs/pfm"
         return surface_root, reference_root, surface_root
     elif ds_key == "iowa_jj_tms":
-        var_suffix = "_22p" if variant == "22p" else ""
+        var_suffix = ""
         surface_root = REPO_ROOT / f"outputs_iowa_jj_tms/inputs/kong2022{var_suffix}/shared_inputs/surface"
         reference_root = REPO_ROOT / f"outputs_iowa_jj_tms/inputs/kong2022{var_suffix}/shared_inputs/pfm"
         return surface_root, reference_root, surface_root
     elif ds_key == "stanford":
-        if variant == "22p":
-            surface_root = REPO_ROOT / "outputs_stanford/inputs/kong2022_22p/shared_inputs/surface"
-            reference_root = REPO_ROOT / "outputs_stanford/inputs/kong2022_22p/shared_inputs/pfm"
-        else:
-            surface_root = REPO_ROOT / "outputs_stanford/inputs/kong2022/shared_inputs/surface"
-            reference_root = REPO_ROOT / "outputs_stanford/inputs/kong2022/shared_inputs/pfm"
+        surface_root = REPO_ROOT / "outputs_stanford/inputs/kong2022/shared_inputs/surface"
+        reference_root = REPO_ROOT / "outputs_stanford/inputs/kong2022/shared_inputs/pfm"
         return surface_root, reference_root, surface_root
 
     surface_root = resolve_kong2022_surface_root(ds_key, variant)
@@ -2266,7 +2264,7 @@ def _render_grid():
     parser.add_argument("--out", default=None, help="Output PNG path (synonym for --out-png)")
     parser.add_argument("--out-png", default=None, help=f"Output PNG path (default: {default_png})")
     parser.add_argument("--smoothing", choices=["2mm", "4mm"], default="2mm", help="Smoothing resolution (default: 2mm)")
-    parser.add_argument("--variant", choices=["36p", "22p"], default="36p", help="Preprocessing variant (default: 36p)")
+    parser.add_argument("--variant", choices=["36p"], default="36p", help="Preprocessing variant (default: 36p)")
     parser.add_argument(
         "--atlas",
         choices=["kong2022", "7net"],
@@ -2329,5 +2327,5 @@ if __name__ == "__main__":
     raise SystemExit(
         "Standalone rendering has been removed. Use "
         "scripts/visualize/run_multidataset_suite.py "
-        "with --figures to select the figure type; all four grids are processed in 4-way parallel by default."
+        "with --figures to select the figure type; both 36p grids are processed by default."
     )

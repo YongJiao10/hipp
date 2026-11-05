@@ -120,10 +120,9 @@ def test_iowa7t_hipp_outputs_root_accepts_noxcpd_variant():
     )
 
 
-def test_iowa7t_hipp_outputs_root_accepts_0p_22p_32p_variants():
+def test_iowa7t_hipp_outputs_root_accepts_0p_32p_variants():
     cases = {
         "0p": "DataOrg_PFM_0P/hipp_outputs",
-        "22p": "DataOrg_PFM_22P/hipp_outputs",
         "32p": "DataOrg_PFM_32P/hipp_outputs",
     }
     for variant, suffix in cases.items():

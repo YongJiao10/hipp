@@ -13,7 +13,7 @@ Root: `outputs_hcp/work/group_atlas/`.
 - Post-hoc weighted assignment comparison: `pfm_weighted/`.
 - Lynch2024 comparison: `lynch2024_20net/`, `lynch2024_7net/`.
 
-HCP has no native 22P branch. Family17 products reuse the corresponding PFM or
+Family17 products reuse the corresponding PFM or
 Fixed input and gradient banks. Assignment variants such as `fisherz` and
 `normalized_top20_count` remain explicit files and manifest entries inside
 these roots.
@@ -23,8 +23,7 @@ these roots.
 Roots: `outputs_iowa_jj_tms/work/group_atlas/` and
 `outputs_stanford/work/group_atlas/`.
 
-Canonical7 cohort products use `pfm/<cohort>/` for 36P and
-`pfm_22p/<cohort>/` for 22P. Iowa cohorts are `hc`, `patient`, `pure_mdd`, and
+Canonical7 cohort products use `pfm/<cohort>/` for 36P. Iowa cohorts are `hc`, `patient`, `pure_mdd`, and
 `comorbid_mdd`. Stanford cohorts are `nthc`, `tehc`, `nts`, `nts_any_mdd`,
 `nts_pure_mdd`, `tis`, and `tis_ptsd`. A signal control retains its explicit
 route identity, such as `pfm_ctxreg/<cohort>/`. Scientific variants and cohorts
@@ -50,11 +49,9 @@ distinct. See [Output Layout](output_layout.md) for the full directory contract.
 
 ## Inputs and readiness
 
-Kong reference inputs use `inputs/kong2022/shared_inputs/pfm/` or `fixed/`;
-the supported 22P input branch uses `inputs/kong2022_22p/shared_inputs/pfm/`.
+Kong reference inputs use `inputs/kong2022/shared_inputs/pfm/` or `fixed/`.
 Lynch references use `inputs/lynch2024/shared_inputs/pfm/` for the HCP base
 cohort, with explicit `pfm_nsi043/` roots for retained NSI-filtered comparisons.
-Iowa 22P Lynch references use `inputs/lynch2024_22p/shared_inputs/pfm_nsi043/`.
 
 Reference path cleanup preserves the original cortex reference files and QC
 provenance. Hippocampal coordinate corrections do not require cortex reference

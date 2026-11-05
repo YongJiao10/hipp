@@ -31,23 +31,18 @@ variant="$(printf '%s' "${IOWA7T_VARIANT:-}" | tr '[:upper:]' '[:lower:]')"
 data_root="${DATA_ROOT:-}"
 if [ -z "${variant}" ] && [ -n "${data_root}" ]; then
   case "${data_root##*/}" in
-    DataOrg_PFM_22P) variant="22p" ;;
     DataOrg_PFM_36P) variant="36p" ;;
   esac
 fi
 if [ -z "${variant}" ]; then variant="36p"; fi
 
 case "${variant}" in
-  22p)
-    variant_upper="22P"
-    default_data_root="/Shared/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_22P"
-    ;;
   36p)
     variant_upper="36P"
     default_data_root="/Shared/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_36P"
     ;;
   *)
-    echo "ERROR: IOWA7T_VARIANT must be 22p or 36p, got: ${variant}" >&2
+    echo "ERROR: IOWA7T_VARIANT must be 36p, got: ${variant}" >&2
     exit 2
     ;;
 esac

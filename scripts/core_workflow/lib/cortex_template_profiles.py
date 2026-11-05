@@ -255,7 +255,7 @@ def compute_subject_label_roi_profiles(
         ts_path = shared_root / f"sub-{subject}" / "surface" / smoothing / f"sub-{subject}_hemi-{hemi}_timeseries.npy"
         roi_path = _subject_reference_path(reference_root, subject, "cortex_roi_parcel_timeseries.npy")
         roi_tsv_path = _subject_reference_path(reference_root, subject, "cortex_roi_parcels.tsv")
-        valid_path = mask_root / f"sub-{subject}" / "surface" / "tsnr_gate" / f"sub-{subject}_hemi-{hemi}_valid_mask.npy"
+        valid_path = mask_root / f"sub-{subject}" / "surface" / "validity" / f"sub-{subject}_hemi-{hemi}_valid_mask.npy"
         if not (ts_path.exists() and roi_path.exists() and roi_tsv_path.exists() and valid_path.exists()):
             continue
 

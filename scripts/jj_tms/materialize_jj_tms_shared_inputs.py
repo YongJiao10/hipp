@@ -24,7 +24,7 @@ from lib.kong2022_label_utils import (
 
 from lib.io_utils import load_run_segment_metadata
 from lib.kong2022_fc_contract import authoritative_kong2022_roi_registry
-from lib.task_quality import parse_tsnr_threshold, signal_validity_policy
+from lib.task_quality import CORTEX_VALIDITY_POLICY
 
 materialize_fc = importlib.import_module("04_01_materialize_kong2022_roi_fc").materialize_fc
 
@@ -45,7 +45,7 @@ def load_kong2022_reference_table() -> list[dict[str, str]]:
 
 
 def build_cortex_parcels_tsv(vertex_counts: np.ndarray, base_table: list[dict[str, str]]) -> str:
-    lines = ["parcel_id\tparcel_name\tfamily17\tcanonical7\tcanonical8\themisphere\tsubregion\trank\tn_grayordinates_total\tn_grayordinates_used\texcluded_by_tsnr_gate"]
+    lines = ["parcel_id\tparcel_name\tfamily17\tcanonical7\tcanonical8\themisphere\tsubregion\trank\tn_grayordinates_total\tn_grayordinates_used\texcluded_by_validity"]
     for i, row in enumerate(base_table):
         cnt = int(vertex_counts[i])
         excluded = str(cnt <= 0)
@@ -88,33 +88,17 @@ def compute_group_average_surfaces(subjects: list[str]) -> None:
     (TEMPLATE_ROOT / "stage_manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
 
 
-def read_cortex_reference_policy(
-    source_manifest: Path, *, subject: str,
-) -> tuple[dict[str, object], dict[str, str | None]]:
-    """Read the dedicated JJ matcher policy and its declared cortex baselines."""
+def read_cortex_reference_policy(source_manifest: Path, *, subject: str) -> dict[str, object]:
     payload = json.loads(Path(source_manifest).read_text(encoding="utf-8"))
     parameters = payload.get("parameters", {})
     dataset = "iowa_jj_tms"
-    expected_policy = signal_validity_policy(dataset, "rest")
+    policy = CORTEX_VALIDITY_POLICY
     if (payload.get("subject") != f"sub-{subject}"
             or payload.get("workflow") != "jj_tms_hcp151_fixed_template_matching"
             or parameters.get("task") != "rest"
-            or parameters.get("validity_policy") != expected_policy
-            or "tsnr_threshold" not in parameters):
-        raise ValueError(f"Rebuild JJ cortex inputs with the declared rest baseline policy: {source_manifest}")
-    threshold = parse_tsnr_threshold(parameters["tsnr_threshold"])
-    policy: dict[str, object] = {
-        "dataset": dataset, "task": "rest", "validity_policy": expected_policy,
-        "tsnr_threshold": threshold,
-    }
-    baselines: dict[str, str | None] = {}
-    for hemi in HEMIS:
-        record = payload.get("inputs", {}).get(f"tsnr_cortex_{hemi}", {})
-        baseline = record.get("path")
-        if threshold is not None and (not isinstance(baseline, str) or not baseline):
-            raise ValueError(f"Rebuild JJ cortex inputs: missing tsnr_cortex_{hemi} baseline at {source_manifest}")
-        baselines[hemi] = baseline
-    return policy, baselines
+            or parameters.get("cortex_validity_policy") != policy):
+        raise ValueError(f"Rebuild JJ cortex inputs with finite-signal validity: {source_manifest}")
+    return {"dataset": dataset, "task": "rest", "validity_policy": policy}
 
 
 def materialize_subject(sub: str, base_table: list[dict[str, str]]) -> None:
@@ -124,7 +108,7 @@ def materialize_subject(sub: str, base_table: list[dict[str, str]]) -> None:
 
     run_metadata = src_sub / "subject_manifest.json"
     run_ids, run_lengths = load_run_segment_metadata(run_metadata)
-    reference_policy, baseline_inputs = read_cortex_reference_policy(run_metadata, subject=sub)
+    reference_policy = read_cortex_reference_policy(run_metadata, subject=sub)
     for sm in SMOOTHINGS:
         for hemi in HEMIS:
             source_ts = src_sub / f"surface/{sm}/hemi-{hemi}_timeseries.npy"
@@ -134,11 +118,10 @@ def materialize_subject(sub: str, base_table: list[dict[str, str]]) -> None:
 
     # 1. Surface shared inputs
     for hemi in HEMIS:
-        tsnr_dir = dst_surf / "tsnr_gate"
-        tsnr_dir.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(src_sub / f"surface/tsnr_gate/hemi-{hemi}_valid_mask.npy", tsnr_dir / f"sub-{sub}_hemi-{hemi}_valid_mask.npy")
-        shutil.copy2(src_sub / f"surface/tsnr_gate/hemi-{hemi}_tsnr.npy", tsnr_dir / f"sub-{sub}_hemi-{hemi}_tsnr.npy")
-        shutil.copy2(src_sub / f"surface/tsnr_gate/hemi-{hemi}_valid_roi.shape.gii", tsnr_dir / f"sub-{sub}_hemi-{hemi}_valid_roi.shape.gii")
+        validity_dir = dst_surf / "validity"
+        validity_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src_sub / f"surface/validity/hemi-{hemi}_valid_mask.npy", validity_dir / f"sub-{sub}_hemi-{hemi}_valid_mask.npy")
+        shutil.copy2(src_sub / f"surface/validity/hemi-{hemi}_valid_roi.shape.gii", validity_dir / f"sub-{sub}_hemi-{hemi}_valid_roi.shape.gii")
         
         # Raw
         raw_dir = dst_surf / "raw"
@@ -221,27 +204,24 @@ def materialize_subject(sub: str, base_table: list[dict[str, str]]) -> None:
         "stage": "routea_kong2022_reference",
         "status": "done",
         "subject": f"sub-{sub}",
+        "params": reference_policy,
     }, indent=2), encoding="utf-8")
 
-    # Common tsnr_gate
-    common_tsnr = dst_routea / "reference/common/tsnr_gate"
-    common_tsnr.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(src_sub / "cortex/hemi-L_valid_mask.npy", common_tsnr / "cortex_left_valid_mask.npy")
-    shutil.copy2(src_sub / "cortex/hemi-R_valid_mask.npy", common_tsnr / "cortex_right_valid_mask.npy")
-    shutil.copy2(src_sub / "cortex/hemi-L_tsnr.npy", common_tsnr / "cortex_left_tsnr.npy")
-    shutil.copy2(src_sub / "cortex/hemi-R_tsnr.npy", common_tsnr / "cortex_right_tsnr.npy")
+    # Common validity
+    common_validity = dst_routea / "reference/common/validity"
+    common_validity.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(src_sub / "cortex/hemi-L_valid_mask.npy", common_validity / "cortex_left_valid_mask.npy")
+    shutil.copy2(src_sub / "cortex/hemi-R_valid_mask.npy", common_validity / "cortex_right_valid_mask.npy")
     for side, hemi in (("left", "L"), ("right", "R")):
-        mask = np.load(common_tsnr / f"cortex_{side}_valid_mask.npy").astype(bool)
+        mask = np.load(common_validity / f"cortex_{side}_valid_mask.npy").astype(bool)
         gate_summary = {
             "hemi": side, "dataset": reference_policy["dataset"],
             "task": reference_policy["task"], "validity_policy": reference_policy["validity_policy"],
-            "tsnr_definition": reference_policy["validity_policy"],
-            "threshold": reference_policy["tsnr_threshold"], "baseline_input": baseline_inputs[hemi],
             "run_lengths": list(run_lengths),
             "n_grayordinates_total": int(mask.size), "n_grayordinates_valid": int(mask.sum()),
             "n_grayordinates_invalid": int((~mask).sum()),
         }
-        (common_tsnr / f"cortex_{side}_tsnr_gate_summary.json").write_text(
+        (common_validity / f"cortex_{side}_validity_summary.json").write_text(
             json.dumps(gate_summary, indent=2), encoding="utf-8",
         )
 

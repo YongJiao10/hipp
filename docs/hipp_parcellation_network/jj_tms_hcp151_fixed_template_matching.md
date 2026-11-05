@@ -46,28 +46,9 @@ primary group. `JJ_TMS_3021` is not in the QC-passed 94-subject roster; its
 `Sheet1` row is marked `N/A` for upload, processing, and QC with the note
 `Dropped during Visit 1 scan`.
 
-The default no-suffix Iowa3T subgroup products are the 36P branch. The
-completed 22P subgroup rerun reads the versioned reference/surface/mask inputs
-from:
+The Iowa3T subgroup products use the 36P branch.
 
-```text
-outputs_iowa_jj_tms/inputs/kong2022_22p/shared_inputs/pfm/
-outputs_iowa_jj_tms/inputs/kong2022_22p/shared_inputs/surface/
-```
-
-It writes the 22P subgroup FC caches under
-`inputs/kong2022_22p/shared_inputs/pfm/{pure_mdd,comorbid_mdd}/`.
-Gradients and base group atlases use `pfm_22p/{pure_mdd,comorbid_mdd}/`
-under their stage roots; weighted atlases use
-`pfm_weighted_22p/{pure_mdd,comorbid_mdd}/`. The final 22P
-presentation directories are:
-
-```text
-outputs_iowa_jj_tms/present/overviews/pfm_22p/pure_mdd/
-outputs_iowa_jj_tms/present/overviews/pfm_22p/comorbid_mdd/
-```
-
-The corresponding default 36P presentation directories are:
+The 36P presentation directories are:
 
 ```text
 outputs_iowa_jj_tms/present/overviews/pfm/pure_mdd/
@@ -142,7 +123,7 @@ The adapter consumes exactly:
 outputs_iowa_jj_tms/inputs/kong2022/shared_inputs/pfm_ctxreg/
   sub-<id>/fc/kong2022/2mm/hemi_{L,R}/hipp_vertex_to_roi_fc.npy
 outputs_iowa_jj_tms/inputs/kong2022/shared_inputs/surface/
-  sub-<id>/surface/tsnr_gate/sub-<id>_hemi-{L,R}_valid_mask.npy
+  sub-<id>/surface/validity/sub-<id>_hemi-{L,R}_valid_mask.npy
 outputs_iowa_jj_tms/inputs/hippunfold/dense_corobl_batch/
   sub-<id>/hippunfold/sub-<id>/surf/
   sub-<id>_hemi-{L,R}_space-corobl_den-512_label-hipp_midthickness.surf.gii
@@ -197,19 +178,18 @@ onto the subject's actually consumed HippUnfold corobl `den-512` midthickness
 surface. Each run-level GIFTI is retained. The workflow concatenates sampled
 surface arrays along time and does not create a duplicate concatenated NIfTI.
 The volume grid/affine, volume-versus-run-dtseries time points, and summed
-run-versus-91k-concat time points must agree before computation. Across the 94-subject
-cohort, 92 subjects have canonical runs `[1, 2, 3]`, `sub-1016` has canonical runs
-`[1, 2]`, and `sub-1027` has canonical runs `[2, 3]` under 22P (and `[1, 2, 3]` under
-36P). Cortex ROI time series concatenation is performed directly in memory when
+run-versus-91k-concat time points must agree before computation. Use the declared
+physical run IDs for each subject. Cortex ROI time series concatenation is performed directly in memory when
 `--concat-dtseries-root none` is specified.
 
 The subject's 32k ArealMSHBM labels must have exactly 32,492 entries per
 hemisphere and use fixed global Kong2022 IDs (`1..200` left, `201..400`
-right, with `0` allowed). Cortex vertices use the same `10000/std >= 25` gate
-as the RouteA reference construction, then fixed registry order `1..400` is
+right, with `0` allowed). Cortex vertices with finite signal are retained,
+then fixed registry order `1..400` is
 used to extract ROI time series. Missing ROIs remain all-NaN columns.
 
-Hippocampal vertices use `10000/std >= 25`, followed by 2 mm and 4 mm FWHM
+Hippocampal vertices require finite, nonconstant concatenated signals,
+followed by 2 mm and 4 mm FWHM
 surface smoothing within the valid-vertex ROI. Each valid vertex is correlated
 with the 400 ROI time series, Fisher-z transformed, and matched to the
 corresponding HCP prototype using Pearson correlation over jointly finite ROI

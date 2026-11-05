@@ -607,18 +607,12 @@ def default_input_layout(repo_root: Path) -> InputLayout:
         "lynch2024": str(root / "outputs_hcp" / "work" / "cortex_pfm" / "{sub_subject}" / "lynch2024" / "PFM_Lynch2024priors.dlabel.nii"),
     }
     iowa_surface = {
-        "22p": str(jiang / "derivatives_surf" / "{sub_subject}" / "anat" / "{sub_subject}_hemi-{hemi}_space-fsLR_den-32k_midthickness.surf.gii"),
         "36p": str(jiang / "derivatives_surf" / "{sub_subject}" / "anat" / "{sub_subject}_hemi-{hemi}_space-fsLR_den-32k_midthickness.surf.gii"),
     }
     iowa_manifest = {
-        "22p": str(jiang / "ArealMSHBM_Kong2022_22P" / "{sub_subject}" / "provenance.json"),
         "36p": str(jiang / "ArealMSHBM_Kong2022" / "_manifests" / "jj_tms_pinc_20260607_000010.txt"),
     }
     iowa_labels = {
-        "22p": {
-            "kong2022": str(jiang / "ArealMSHBM_Kong2022_22P" / "{sub_subject}"),
-            "lynch2024": str(root / "outputs_iowa_jj_tms" / "work" / "cortex_pfm" / "lynch2024_iowa3t_22p" / "{sub_subject}" / "lynch2024" / "PFM_Lynch2024priors.dlabel.nii"),
-        },
         "36p": {
             "kong2022": str(jiang / "ArealMSHBM_Kong2022" / "{sub_subject}"),
             "lynch2024": str(root / "outputs_iowa_jj_tms" / "work" / "cortex_pfm" / "lynch2024_iowa3t" / "{sub_subject}" / "lynch2024" / "PFM_Lynch2024priors.dlabel.nii"),
@@ -640,7 +634,7 @@ def resolve_subject_record(
 
     normalized = f"sub-{str(subject).removeprefix('sub-')}"
     variant_key = str(variant).lower()
-    if variant_key not in {"22p", "36p"}:
+    if variant_key != "36p":
         raise ValueError(f"Unsupported variant: {variant}")
     if layout is None:
         layout = default_input_layout(repo_root or Path(__file__).resolve().parents[3])

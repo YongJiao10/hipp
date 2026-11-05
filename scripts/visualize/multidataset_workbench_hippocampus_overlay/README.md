@@ -6,7 +6,7 @@
 
 ## Signal branch contract
 
-The legacy renderer retains its four grid cells. The maintained comparison
+The legacy renderer uses the two 36p grid cells. The maintained comparison
 renderer can be selected with an explicit 2mm/36p signal branch, standard or
 ctxreg. Each cohort entry and each panel cache carries that branch. A ctxreg
 render requires both hemisphere manifests to record signal_branch: ctxreg,
@@ -88,7 +88,7 @@ The `hcp_jjtms_7net` branch adds Kong2022 7-Network and Lynch2024 7-Network meth
 网格和输出内容哈希校验；旧的仅按文件大小复用方式已移除。缺少源文件直接报错。
 
 ```bash
-# 独立入口已移除；统一4路并行刷新 2mm/4mm × 22p/36p 四图及统计表
+# 独立入口已移除；统一刷新 2mm/4mm 的 36p 两图及统计表
 /home/yojiao/.conda/envs/py314/bin/python scripts/visualize/run_multidataset_suite.py --figures workbench_hippocampus_overlay
 
 # 双分支模式：2mm/36p standard + ctxreg（分支限定名 *_standard.png / *_ctxreg.png）
@@ -116,14 +116,14 @@ reused. Before rendering, the formal gradient-assignment validator additionally
 checks the cluster/functional-label NPY-GIFTI agreement, label map, profile,
 and status semantics.
 
-The retained formal products remain the main branch's 2mm/4mm × 22p/36p
+The retained formal products remain the main branch's 2mm/4mm × 36p
 grids and the additive hcp_jjtms_7net comparison outputs. The active
 comparison loader now supports the explicitly selected standard and ctxreg
 branches; it resolves formal branch roots and validates their manifests
 before rendering. The historical legacy wrapper remains independently
-managed. The unified suite entry point defaults to its legacy four-grid
+managed. The unified suite entry point defaults to its 36p grid
 matrix; pass --signal-branch ctxreg (ctxreg cell only) or --signal-branch all
-(2x2 standard grid plus the branch-qualified ctxreg cell) for branch-pair
+(36p standard grids plus the branch-qualified ctxreg cell) for branch-pair
 products; the branch-aware comparison renderer must
 be invoked with its explicit branch option. No
 reference-worktree PNG, manifest, CSV, or TSV is an input to the formal

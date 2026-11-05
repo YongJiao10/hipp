@@ -20,7 +20,7 @@
 - Formal HCP control routes are exactly `routea_ctxreg` and `routea_ctxdrop`; do not create dated, recovered, regenerated, or suffix-based result roots.
 - Any behavior/path/workflow change must receive matching documentation in the same change.
 - Output trees are read-only. A product that needs rebuilding must be listed for user approval before any write is attempted.
-- Preserve 22P, 4mm, CtxDrop, and Stanford capabilities; add CtxReg as an explicit branch rather than narrowing existing scope.
+- Preserve 4mm, CtxDrop, and Stanford capabilities; add CtxReg as an explicit branch rather than narrowing existing scope.
 
 ---
 
@@ -95,7 +95,7 @@ assert validate_signal_branch_route("ctxreg", "routea_ctxreg") == "ctxreg"
 
 - [ ] **Step 2: Implement only the pure mapping and nested-root validation hunk.**
 
-Keep comments scope-neutral: core branch primitives must not claim that 22P, 4mm, CtxDrop, or Stanford are retired.
+Keep comments scope-neutral: core branch primitives must not claim that 4mm, CtxDrop, or Stanford are retired.
 
 - [ ] **Step 3: Run the two focused route tests.**
 
@@ -240,14 +240,14 @@ Expected: template/FC/mask/surface mismatches fail without reading existing resu
 
 **Interfaces:**
 
-- Existing standard grid tags retain 22P/36P and 2mm/4mm behavior.
+- Existing standard grid tags retain 36P and 2mm/4mm behavior.
 - CtxReg is an explicit signal branch with exact `routea_ctxreg` paths and no Standard fallback.
 - Every cache/contrast key includes signal branch, smoothing, preprocessing variant, method, and selected assignment semantics.
 
 - [ ] **Step 1: Add failing compatibility tests.**
 
 ```python
-assert GridSpec.from_tag("4mm_22p").signal_branch == "standard"
+assert GridSpec.from_tag("4mm_36p").signal_branch == "standard"
 assert GridSpec.from_tag("2mm_36p_ctxreg").signal_branch == "ctxreg"
 with pytest.raises(ValueError, match="routea_ctxreg"):
     resolve_cohort_paths("hcp_7t", GridSpec.from_tag("2mm_36p_ctxreg"))["grad_subpath"].relative_to(ctxreg_root)

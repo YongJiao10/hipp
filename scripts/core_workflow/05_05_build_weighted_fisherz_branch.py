@@ -151,7 +151,7 @@ def load_subject_weighted_cluster_profile(
 ) -> np.ndarray:
     ts_path = surface_timeseries_path(surface_root, subject, smoothing, hemi)
     roi_path, rows_path = reference_paths(reference_root, subject)
-    mask_path = surface_root / f"sub-{subject}" / "surface" / "tsnr_gate" / f"sub-{subject}_hemi-{hemi}_valid_mask.npy"
+    mask_path = surface_root / f"sub-{subject}" / "surface" / "validity" / f"sub-{subject}_hemi-{hemi}_valid_mask.npy"
     summary_path = roi_path.parent / "reference_summary.json"
     if not ts_path.exists():
         raise FileNotFoundError(f"Missing hippocampal surface timeseries for strict weighted_fisherz: {ts_path}")

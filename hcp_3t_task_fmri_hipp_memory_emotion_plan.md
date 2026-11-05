@@ -68,9 +68,9 @@ pass bilateral Dice before coverage selection. The other four are 182739
 
 `02_01_prepare_group_inputs.py` and `02_02_build_qc_manifest.py` use the
 shared `--qc-run-inputs` table. Set `--dataset hcp --task emotion|wm`, explicit
-`--route-root` and `--shared-root`, `--tsnr-threshold none`, and
-`--require-hippunfold-version 2.3.0`. Run preparation stages `raw` and `tsnr`
-followed by `qc`; no task-design EVs or residual-tSNR computation are needed
+`--route-root` and `--shared-root`, and
+`--require-hippunfold-version 2.3.0`. Run preparation stages `raw` and `validity`
+followed by `qc`; no task-design EVs are needed
 for coverage QC. Both the participant count and persisted vertex masks use
 positive NIfTI trilinear support and finite, nonconstant signal within each
 physical run. Missing completion or source inputs remain unassessable.

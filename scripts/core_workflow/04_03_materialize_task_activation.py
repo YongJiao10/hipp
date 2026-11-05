@@ -22,7 +22,7 @@ Inputs:
   - --subjects-manifest / --subjects / --smoothings / --hemis / --jobs / --tr.
 - Physical inputs:
   - Concatenated task surface timeseries: `{surface_root}/sub-<subject>/surface/{smoothing}/sub-<subject>_hemi-{hemi}_timeseries.npy`.
-  - Task signal-validity mask: `{surface_root}/sub-<subject>/surface/tsnr_gate/sub-<subject>_hemi-{hemi}_valid_mask.npy`; invalid vertices are NaNed before the GLM so ROI-smoothing zeros never enter as responses.
+  - Task signal-validity mask: `{surface_root}/sub-<subject>/surface/validity/sub-<subject>_hemi-{hemi}_valid_mask.npy`; invalid vertices are NaNed before the GLM so ROI-smoothing zeros never enter as responses.
   - Per-run `EVs/<stem>.txt` and `Movement_Regressors.txt` under the manifest-declared run directories.
 - Run-order verification: the cached surface series is only trusted when the
   `surface/raw/surface_sampling_summary.json` receipt matches the manifest
@@ -110,7 +110,7 @@ def run_subject(
                     surface_root
                     / f"sub-{subject}"
                     / "surface"
-                    / "tsnr_gate"
+                    / "validity"
                     / f"sub-{subject}_hemi-{hemi}_valid_mask.npy"
                 )
                 if not mask_path.is_file():

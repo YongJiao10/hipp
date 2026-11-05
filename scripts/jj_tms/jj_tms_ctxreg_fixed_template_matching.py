@@ -555,7 +555,7 @@ def _mask_path(surface_root: Path, subject: str, hemi: str) -> Path:
         Path(surface_root)
         / sub_id
         / "surface"
-        / "tsnr_gate"
+        / "validity"
         / f"{sub_id}_hemi-{hemi}_valid_mask.npy"
     ).resolve()
 

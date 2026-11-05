@@ -48,16 +48,14 @@ Each branch column presents three vertically stacked analytical modalities:
 
 ---
 
-## 3. The 2x2 Grid Matrix Outputs
+## 3. The 36P Grid Outputs
 
-All 4 grid combinations across smoothing resolution ($2\text{mm}$, $4\text{mm}$) and denoising strategy ($36\text{P}$, $22\text{P}$) are fully materialized:
+The 36P grid uses smoothing resolutions $2\text{mm}$ and $4\text{mm}$:
 
 | Grid Cell | Resolution | Preprocessing Denoising | Output Image | Status |
 |---|---|---|---|---|
 | **`2mm_36p`** | 2mm | ICA-FIX Reference Baseline | `hcp_cortex_control_gradient_wta_2mm_36p.png` | **Materialized** (10780 × 3960 px, 220 DPI) |
-| **`2mm_22p`** | 2mm | ICA-FIX Reference Baseline | `hcp_cortex_control_gradient_wta_2mm_22p.png` | **Materialized** (10780 × 3960 px, 220 DPI) |
 | **`4mm_36p`** | 4mm | ICA-FIX Reference Baseline | `hcp_cortex_control_gradient_wta_4mm_36p.png` | **Materialized** (10780 × 3960 px, 220 DPI) |
-| **`4mm_22p`** | 4mm | ICA-FIX Reference Baseline | `hcp_cortex_control_gradient_wta_4mm_22p.png` | **Materialized** (10780 × 3960 px, 220 DPI) |
 
 > [!NOTE]
 > Canvas geometry is $49.0 \times 18.0\text{ inches}$ ($10,780 \times 3,960\text{ px}$ at 220 DPI). The layout preserves the exact $1.00 : 1.00$ height ratio between the locked 2x2 hippocampal surfaces and stacked bars. It eliminates all left-side text collisions: in Column 1 (Fisher-$z$), `C1 (Ant)`, `C2 (Mid)`, `C3 (Post)` labels and the cohort badges maintain $+26\text{ px}$ of clear separation; in Column 3 (WTA), a dedicated spacer column provides $+48\text{ px}$ of clearance between the 2x2 surface and `Long-Axis Bin` y-axis labels.
@@ -72,15 +70,15 @@ Use the validated repository Python environment:
 # Render single grid
 /home/yojiao/.conda/envs/py314/bin/python scripts/visualize/hcp_cortex_control_gradient_wta/render_hcp_cortex_control_gradient_wta.py --grid 2mm_36p
 
-# Render all four grids in sequence
+# Render both grids in sequence
 /home/yojiao/.conda/envs/py314/bin/python scripts/visualize/hcp_cortex_control_gradient_wta/render_hcp_cortex_control_gradient_wta.py --all-grids
 ```
 
 ### CLI Arguments
 - `--smoothing {2mm,4mm}`: Select hippocampal smoothing resolution.
-- `--variant {36p,22p}`: Select grid variant tag.
-- `--grid {2mm_36p,2mm_22p,4mm_36p,4mm_22p}`: Shorthand grid specifier.
-- `--all-grids`: Batch execute all 4 grid combinations.
+- `--variant {36p}`: Select grid variant tag.
+- `--grid {2mm_36p,4mm_36p}`: Shorthand grid specifier.
+- `--all-grids`: Batch execute both grid combinations.
 - `--force`: Force re-rendering of surface panels and composite figures even if cache is valid.
 - `--out-png <path>`: Custom output image destination.
 - `--stats-tsv <path>`: Custom output statistics TSV destination.

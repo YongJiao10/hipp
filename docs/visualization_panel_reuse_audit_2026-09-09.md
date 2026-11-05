@@ -31,7 +31,6 @@ or gradient estimates and does not certify every scientific analysis upstream.
 ## Evidence
 
 - 176 gradient manifests across both branches matched their requested smoothing.
-- Iowa/Stanford 22p and 36p resolved to distinct actual gradient directories;
   HCP intentionally shares its preprocessing source across these variants.
 - Before/after RGBA pixel hashes were recorded for existing comparison panel
   caches. Workbench overlay: 18 of 40 matching cache paths changed after

@@ -211,7 +211,7 @@ def create_forest_figure(statistics: pd.DataFrame, *, figure_kind: str):
                         rows = chosen.loc[chosen.control_cohort.eq(control) & chosen.case_cohort.eq(cohort)]
                         sample = all_tax.loc[all_tax.control_cohort.eq(control) & all_tax.case_cohort.eq(cohort)]
                         _draw_panel(ax, rows, networks, limit=limit, series_column="variant",
-                                    series=[("22p", "o"), ("36p", "D")], colors=colors, labels=ci == 0)
+                                    series=[("36p", "D")], colors=colors, labels=ci == 0)
                         counts = sorted(sample.n_case.unique())
                         n = "/".join(str(int(v)) for v in counts) or "—"
                         control_n = "/".join(str(int(v)) for v in sorted(sample.n_control.unique())) or "—"
@@ -223,7 +223,7 @@ def create_forest_figure(statistics: pd.DataFrame, *, figure_kind: str):
             else:
                 ax = fig.add_subplot(grid[ti // 2, ti % 2])
                 _draw_panel(ax, chosen, networks, limit=limit, series_column="variant",
-                            series=[("22p", "o"), ("36p", "D")], colors=colors)
+                            series=[("36p", "D")], colors=colors)
                 ax.set_title(TAXONOMY_TITLES[taxonomy], loc="left", fontsize=13, weight="bold", pad=33)
                 counts = chosen[["n_case", "n_control"]].drop_duplicates()
                 sample_label = "; ".join(f"Iowa HC n={int(r.n_case)} · HCP HC n={int(r.n_control)}" for r in counts.itertuples())
@@ -232,9 +232,8 @@ def create_forest_figure(statistics: pd.DataFrame, *, figure_kind: str):
                  fontsize=23, weight="bold", va="top")
         subtitle = "Patient − control · percentage points · 95% confidence intervals" if is_patient else "Iowa HC − HCP HC · percentage points · 95% confidence intervals"
         fig.text(0.04, 1-0.68/height, subtitle, fontsize=11, color=MUTED, va="top")
-        legend_labels = ["22P", "36P"]
-        handles = [Line2D([], [], color=INK, marker=m, markerfacecolor=INK if i == 0 else "white", lw=1.2, ms=5, label=legend_labels[i]) for i,m in enumerate(("o", "D"))]
-        fig.legend(handles=handles, loc="upper right", bbox_to_anchor=(0.965, 1-0.20/height), frameon=False, ncol=2, fontsize=10)
+        handles = [Line2D([], [], color=INK, marker="D", markerfacecolor="white", lw=1.2, ms=5, label="36P")]
+        fig.legend(handles=handles, loc="upper right", bbox_to_anchor=(0.965, 1-0.20/height), frameon=False, ncol=1, fontsize=10)
         fig.text(0.53, 0.50/height, "← Smaller area proportion     Difference (percentage points)     Larger area proportion →", ha="center", fontsize=10, color=INK)
         note = ("All networks shown. Uncorrected two-sided Welch: * p < 0.05; ** p < 0.01; *** p < 0.001; blank p ≥ 0.05. HCP comparisons are cross-dataset.\nPatient and MDD subgroup rosters overlap; these are not independent replications. BH-FDR q is auxiliary, not a selection criterion."
                 if is_patient else "All networks shown. Uncorrected Welch: * p < 0.05; ** p < 0.01; *** p < 0.001; blank p ≥ 0.05. Cross-dataset comparison; blank does not establish equivalence.")

@@ -17,7 +17,7 @@ Inputs:
   - --hemis: Hemispheres to process: "L", "R".
   - --coverage-threshold: Minimum coverage fraction to include vertices (default: 0.80).
   - --group-average-surfaces-dir: Path to template midthickness surfaces (default: `outputs_hcp/inputs/kong2022/templates/hipp_group_average/group_average_surfaces`).
-  - --cohort / --variant: Explicit cohort and 36p|22p selection; HCP omits the cohort and defaults to 36p.
+  - --cohort / --variant: Explicit cohort and 36p selection; HCP omits the cohort.
   - --out-root: Stage root above route and optional cohort directories (default: `outputs_hcp/work/hippomaps_gradients`).
   - --hippomaps-root: Root path to external HippoMaps codebase (default: `external/hippomaps`).
   - --n-components: Number of gradient components to fit in BrainSpace (default: 5).
@@ -26,12 +26,12 @@ Inputs:
   - --force: Force recompute even if outputs exist.
 - Physical inputs:
   - Subject active vertex-to-ROI/component FC matrices: `{shared_inputs_root}/{route_dir}/sub-<subject>/fc/{atlas}/{smoothing}/hemi_{hemi}/hipp_vertex_to_network_fc_active.npy`.
-  - Subject active masks: `{surface_root}/sub-<subject>/surface/tsnr_gate/sub-<subject>_hemi-{hemi}_valid_mask.npy`.
+  - Subject active masks: `{surface_root}/sub-<subject>/surface/validity/sub-<subject>_hemi-{hemi}_valid_mask.npy`.
   - Group template midthickness surfaces: `{group_average_surfaces_dir}/group-average_hemi-{hemi}_space-corobl_den-512_label-hipp_midthickness.surf.gii`.
 
 Outputs:
 - Command-line output / file outputs:
-  - Gradient arrays: `{out_root}/{route}[_22p]/[<cohort>/]{smoothing}/hemi_{hemi}/hippomaps_gradients_{active|full}.npy`.
+  - Gradient arrays: `{out_root}/{route}/[<cohort>/]{smoothing}/hemi_{hemi}/hippomaps_gradients_{active|full}.npy`.
   - Eigenvalues and variance fractions: `hippomaps_lambdas.npy` and `hippomaps_ev_fractions.npy` in the same run directory.
   - Group mean Fisher-z FC matrices: `group_mean_fisherz_fc_{active|full}.npy` in the same run directory.
   - Gradient manifest: `hippomaps_gradient_manifest.json`, recording cohort, variant, and consumed inputs.
@@ -162,7 +162,7 @@ def group_mean_fisherz_fc(
 
 
 def subject_valid_mask(surface_root: Path, subject: str, hemi: str) -> np.ndarray:
-    path = surface_root / f"sub-{subject}" / "surface" / "tsnr_gate" / f"sub-{subject}_hemi-{hemi}_valid_mask.npy"
+    path = surface_root / f"sub-{subject}" / "surface" / "validity" / f"sub-{subject}_hemi-{hemi}_valid_mask.npy"
     if not path.exists():
         raise FileNotFoundError(f"Missing valid mask: {path}")
     return np.load(path).astype(bool)
@@ -638,7 +638,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--group-average-surfaces-dir", default=str(DEFAULT_GROUP_AVG_SURFACES_DIR))
     parser.add_argument("--out-root", default=str(DEFAULT_OUT_ROOT))
     parser.add_argument("--cohort", default=None, help="Cohort directory below the route; omit for HCP.")
-    parser.add_argument("--variant", choices=("36p", "22p"), default="36p", help="22p appends _22p to the output route directory.")
+    parser.add_argument("--variant", choices=("36p",), default="36p")
     parser.add_argument("--hippomaps-root", default=str(DEFAULT_HIPPOMAPS_ROOT))
     parser.add_argument("--n-components", type=int, default=5)
     parser.add_argument("--feature-scaling", choices=("none", "col_zscore"), default="col_zscore")

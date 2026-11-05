@@ -20,7 +20,7 @@ Inputs:
   - --subjects: Space-separated list of explicit subject IDs.
   - --jobs: Worker threads for parallel execution (default: 2).
   - --resume/--no-resume: Skip already completed subjects or force recomputation (default: resume).
-  - --stage: Steps to run: "all", "raw", "tsnr", "qc", "smooth", "group-average" (default: "all").
+  - --stage: Steps to run: "all", "raw", "validity", "qc", "smooth", "group-average" (default: "all").
   - --dice-threshold: Dice overlap QC threshold (default: 0.70).
   - --qc-run-inputs: Explicit shared physical-run BOLD/motion TSV; optional temporal_mask_path declares censoring.
 - Physical inputs:
@@ -31,7 +31,7 @@ Inputs:
 Outputs:
 - Command-line output / file outputs:
   - Resampled hippocampal BOLD surface timeseries: `{shared_root}/sub-<subject>/surface/{smoothing}/sub-<subject>_hemi-{hemi}_timeseries.npy`.
-  - Vertex-mask summaries: `{shared_root}/sub-<subject>/surface/tsnr_gate/sub-<subject>_hemi-{hemi}_tsnr_gate_summary.json` and `valid_mask.npy`; all datasets use NIfTI support and runwise signal validity without a numerical tSNR gate.
+  - Vertex-mask summaries: `{shared_root}/sub-<subject>/surface/validity/sub-<subject>_hemi-{hemi}_validity_summary.json` and `valid_mask.npy`; all datasets use NIfTI support and runwise signal validity in each physical run.
   - BOLD NIfTI coverage: `{shared_root}/sub-<subject>/surface/raw/sub-<subject>_coverage_summary.json` and per-hemisphere `*_nifti_support.npy`.
   - Group average template surfaces under `{template_root}/`.
   - Run preparation manifest: `{route_root}/prepare_t1only_group_inputs_manifest.json`.
@@ -177,11 +177,6 @@ def load_coverage(raw_dir: Path, subject: str) -> dict[str, object]:
     return coverage
 
 
-def require_validity_only(cutoff: float | None) -> None:
-    if cutoff is not None:
-        raise ValueError("Hippocampal QC uses BOLD NIfTI coverage and finite, nonconstant signals; use --tsnr-threshold none")
-
-
 def _recorded_files_current(records: list[dict[str, object]]) -> bool:
     return bool(records) and all(
         Path(record["path"]).is_file() and file_meta(Path(record["path"])) == record
@@ -189,23 +184,19 @@ def _recorded_files_current(records: list[dict[str, object]]) -> bool:
     )
 
 
-def tsnr_done(shared_root: Path, subject: str, dataset: str = "hcp", *,
-              task: str = "rest", tsnr_threshold: str | None = None,
-              tsnr_input_template: str | None = None) -> bool:
-    from lib.task_quality import parse_tsnr_threshold
-    cutoff = parse_tsnr_threshold(tsnr_threshold if tsnr_threshold is not None else "none")
-    require_validity_only(cutoff)
+def validity_done(shared_root: Path, subject: str, dataset: str = "hcp", *,
+                  task: str = "rest") -> bool:
     policy = signal_validity_policy(dataset, task)
-    gate_dir = shared_root / f"sub-{subject}" / "surface" / "tsnr_gate"
+    gate_dir = shared_root / f"sub-{subject}" / "surface" / "validity"
     for hemi in HEMIS:
-        summary_path = gate_dir / f"sub-{subject}_hemi-{hemi}_tsnr_gate_summary.json"
+        summary_path = gate_dir / f"sub-{subject}_hemi-{hemi}_validity_summary.json"
         stage_path = gate_dir / f"hemi-{hemi}/stage_manifest.json"
         if not summary_path.is_file():
             return False
         summary = json.loads(summary_path.read_text())
         if summary.get('sampling_space') != 'MNI152NLin6Asym':
             raise ValueError(f'QC cache lacks registered sampling coordinates: {summary_path}; rebuild raw and QC with --no-resume')
-        expected = {"threshold": cutoff, "dataset": dataset, "task": task,
+        expected = {"dataset": dataset, "task": task,
                     "validity_policy": policy}
         expected["coverage_policy"] = NIFTI_COVERAGE_POLICY
         if any(summary.get(key) != value for key, value in expected.items()):
@@ -214,7 +205,7 @@ def tsnr_done(shared_root: Path, subject: str, dataset: str = "hcp", *,
             return False
         stage = json.loads(stage_path.read_text())
         recorded_inputs = stage.get("inputs", [])
-        suffixes = ["tsnr.npy", "valid_mask.npy", "invalid_initial_mask.npy", "valid_roi.shape.gii"]
+        suffixes = ["valid_mask.npy", "invalid_initial_mask.npy", "valid_roi.shape.gii"]
         if not all((gate_dir / f"sub-{subject}_hemi-{hemi}_{suffix}").is_file() for suffix in suffixes):
             return False
         if not _recorded_files_current(recorded_inputs) or not _recorded_files_current(stage.get("outputs", [])):
@@ -428,7 +419,7 @@ def run_raw_sampling(
                 **source_summary[hemi], "n_vertices_total": int(data.shape[0]),
                 "n_vertices_unsupported": int(np.count_nonzero(~valid)),
                 "n_vertices_valid": int(valid.sum()), "nifti_support_path": str(weight_path),
-                "valid_mask_path": str(shared / f"sub-{subject}/surface/tsnr_gate/sub-{subject}_hemi-{hemi}_valid_mask.npy"),
+                "valid_mask_path": str(shared / f"sub-{subject}/surface/validity/sub-{subject}_hemi-{hemi}_valid_mask.npy"),
             }
         coverage = {
             "subject": f"sub-{subject}", "coverage_policy": NIFTI_COVERAGE_POLICY,
@@ -504,11 +495,8 @@ def surface_path(batch_root: Path, subject: str, hemi: str, *, space: str = 'T1w
     )
 
 
-def run_tsnr_gate(subject: str, batch_root: str, shared_root: str, task: str = "rest", dataset: str = "hcp", tsnr_input_template: str | None = None, tsnr_threshold: str | None = None) -> dict[str, object]:
+def run_validity(subject: str, batch_root: str, shared_root: str, task: str = "rest", dataset: str = "hcp") -> dict[str, object]:
     """Persist the same NIfTI/runwise mask used by participant coverage QC."""
-    from lib.task_quality import parse_tsnr_threshold
-    cutoff = parse_tsnr_threshold(tsnr_threshold if tsnr_threshold is not None else "none")
-    require_validity_only(cutoff)
     batch, shared = Path(batch_root), Path(shared_root)
     raw_dir = shared / f"sub-{subject}/surface/raw"
     coverage = load_coverage(raw_dir, subject)
@@ -520,7 +508,7 @@ def run_tsnr_gate(subject: str, batch_root: str, shared_root: str, task: str = "
         raise ValueError(f'Task sampling mismatch for {task}: {sampling_path}')
     run_lengths = coverage['run_lengths']
     policy = signal_validity_policy(dataset, task)
-    gate_dir = shared / f"sub-{subject}/surface/tsnr_gate"
+    gate_dir = shared / f"sub-{subject}/surface/validity"
     gate_dir.mkdir(parents=True, exist_ok=True)
     inputs, outputs = [], []
     for hemi in HEMIS:
@@ -533,25 +521,23 @@ def run_tsnr_gate(subject: str, batch_root: str, shared_root: str, task: str = "
             raw_dir / f'sub-{subject}_coverage_summary.json', surface_path(batch, subject, hemi))]
         np.save(gate_dir / f"sub-{subject}_hemi-{hemi}_valid_mask.npy", valid)
         np.save(gate_dir / f"sub-{subject}_hemi-{hemi}_invalid_initial_mask.npy", invalid)
-        np.save(gate_dir / f"sub-{subject}_hemi-{hemi}_tsnr.npy", np.full(valid.size, np.nan, dtype=np.float32))
         nib.save(make_shape_gifti(valid.astype(np.float32)), gate_dir / f"sub-{subject}_hemi-{hemi}_valid_roi.shape.gii")
-        summary = dict(subject=subject, hemi=hemi, threshold=None, tsnr_definition=None,
+        summary = dict(subject=subject, hemi=hemi,
             task=task, dataset=dataset, validity_policy=policy, coverage_policy=NIFTI_COVERAGE_POLICY,
-            sampling_space=coverage['sampling_space'], tsnr_computed=False, baseline_input=None,
-            run_lengths=run_lengths, run_aggregation='validity_only_no_tsnr',
+            sampling_space=coverage['sampling_space'], run_lengths=run_lengths,
             n_vertices_total=int(valid.size), n_vertices_valid=int(valid.sum()),
             n_vertices_invalid=int(invalid.sum()), n_vertices_unsupported=int(invalid.sum()),
             invalid_fraction=float(invalid.mean()))
-        summary_path = gate_dir / f"sub-{subject}_hemi-{hemi}_tsnr_gate_summary.json"
+        summary_path = gate_dir / f"sub-{subject}_hemi-{hemi}_validity_summary.json"
         write_json(summary_path, summary)
         hemi_outputs = [file_meta(gate_dir / f"sub-{subject}_hemi-{hemi}_{suffix}") for suffix in
-            ('valid_mask.npy', 'invalid_initial_mask.npy', 'tsnr.npy', 'valid_roi.shape.gii', 'tsnr_gate_summary.json')]
-        write_json(gate_dir / f'hemi-{hemi}/stage_manifest.json', dict(stage='t1only_hipp_tsnr_gate',
+            ('valid_mask.npy', 'invalid_initial_mask.npy', 'valid_roi.shape.gii', 'validity_summary.json')]
+        write_json(gate_dir / f'hemi-{hemi}/stage_manifest.json', dict(stage='t1only_hipp_validity',
             status='done', timestamp_utc=utc_now_iso(), git_commit=git_commit(),
             params=summary, inputs=hemi_inputs, outputs=hemi_outputs))
         inputs.extend(hemi_inputs)
         outputs.extend(hemi_outputs)
-    return dict(subject=subject, ok=True, stage='tsnr_gate', inputs=inputs, outputs=outputs)
+    return dict(subject=subject, ok=True, stage='validity', inputs=inputs, outputs=outputs)
 
 
 def smoothing_done(shared_root: Path, subject: str, dataset: str = "hcp", *, task: str = "rest") -> bool:
@@ -568,19 +554,15 @@ def smoothing_done(shared_root: Path, subject: str, dataset: str = "hcp", *, tas
         return False
     if any(params.get(key) != value for key, value in expected.items()):
         return False
-    thresholds = {}
     for hemi in HEMIS:
-        summary_path = surface / f'tsnr_gate/sub-{subject}_hemi-{hemi}_tsnr_gate_summary.json'
+        summary_path = surface / f'validity/sub-{subject}_hemi-{hemi}_validity_summary.json'
         if not summary_path.is_file():
             return False
         gate = json.loads(summary_path.read_text())
-        if gate.get("coverage_policy") != NIFTI_COVERAGE_POLICY or gate.get("threshold") is not None:
+        if gate.get("coverage_policy") != NIFTI_COVERAGE_POLICY:
             return False
         if any(gate.get(key) != value for key, value in expected.items()):
             return False
-        thresholds[hemi] = gate['threshold']
-    if params.get('tsnr_thresholds') != thresholds:
-        return False
     for smoothing in SMOOTHINGS:
         for hemi in HEMIS:
             if not (surface / smoothing / f"sub-{subject}_hemi-{hemi}_timeseries.npy").is_file():
@@ -595,7 +577,6 @@ def run_smoothing(subject: str, batch_root: str, shared_root: str, task: str = "
     shared = Path(shared_root)
     inputs: list[dict[str, object]] = []
     outputs: list[dict[str, object]] = []
-    thresholds: dict[str, float | None] = {}
     # Thread caps are enforced centrally by lib.workbench.run_workbench.
     _wb_env = {}
     for smoothing in SMOOTHINGS:
@@ -604,14 +585,13 @@ def run_smoothing(subject: str, batch_root: str, shared_root: str, task: str = "
         out_dir.mkdir(parents=True, exist_ok=True)
         for hemi in HEMIS:
             raw = shared / f"sub-{subject}" / "surface" / "raw" / f"sub-{subject}_hemi-{hemi}_space-T1w_den-512_label-hipp_bold.func.gii"
-            roi = shared / f"sub-{subject}" / "surface" / "tsnr_gate" / f"sub-{subject}_hemi-{hemi}_valid_roi.shape.gii"
-            gate_summary = roi.parent / f"sub-{subject}_hemi-{hemi}_tsnr_gate_summary.json"
+            roi = shared / f"sub-{subject}" / "surface" / "validity" / f"sub-{subject}_hemi-{hemi}_valid_roi.shape.gii"
+            gate_summary = roi.parent / f"sub-{subject}_hemi-{hemi}_validity_summary.json"
             gate = json.loads(gate_summary.read_text(encoding="utf-8"))
             if gate.get("validity_policy") != policy or gate.get("task") != task or gate.get("dataset") != dataset:
                 raise ValueError(f"Rebuild {dataset}/{task} gate with policy={policy}: {gate_summary}")
-            if gate.get("coverage_policy") != NIFTI_COVERAGE_POLICY or gate.get("threshold") is not None:
-                raise ValueError(f"Rebuild hippocampal mask with NIfTI support and --tsnr-threshold none: {gate_summary}")
-            thresholds[hemi] = gate["threshold"]
+            if gate.get("coverage_policy") != NIFTI_COVERAGE_POLICY:
+                raise ValueError(f"Rebuild hippocampal mask with NIfTI support: {gate_summary}")
             surf = surface_path(batch, subject, hemi)
             out_gii = out_dir / f"sub-{subject}_hemi-{hemi}_space-T1w_den-512_label-hipp_bold.func.gii"
             cmd = [
@@ -643,7 +623,6 @@ def run_smoothing(subject: str, batch_root: str, shared_root: str, task: str = "
                        "smoothing_space": "T1w",
                        "validity_policy": policy,
                        "dataset": dataset,
-                       "tsnr_thresholds": thresholds,
                        "smoothing_roi_policy": NIFTI_COVERAGE_POLICY},
             "inputs": inputs,
             "outputs": outputs,
@@ -787,32 +766,19 @@ def main() -> int:
         default=None,
         help="Root holding task-<task>/sub-<subject>.json run-artifact manifests.",
     )
-    parser.add_argument("--dataset", choices=QC_DATASETS, default="hcp", help="Select dataset-specific tSNR inputs and definition.")
+    parser.add_argument("--dataset", choices=QC_DATASETS, default="hcp", help="Select dataset inputs.")
     parser.add_argument('--registration-root', help='Explicit Jianglab storage prefix for registration inputs; defaults to the active system prefix.')
-    parser.add_argument(
-        "--tsnr-threshold",
-        default=None,
-        help="Use 'none': all hippocampal branches require positive NIfTI support and finite, nonconstant signal in every physical run.",
-    )
-    parser.add_argument("--tsnr-input-template", help="Retained CLI argument; hippocampal NIfTI coverage does not consume a tSNR baseline.")
     parser.add_argument("--subjects-manifest", default=None)
     parser.add_argument("--subjects", nargs="*", default=None)
     parser.add_argument("--jobs", type=int, default=2)
     parser.add_argument("--resume", action=argparse.BooleanOptionalAction, default=True)
-    parser.add_argument("--stage", choices=["all", "raw", "tsnr", "qc", "smooth", "group-average"], default="all")
+    parser.add_argument("--stage", choices=["all", "raw", "validity", "qc", "smooth", "group-average"], default="all")
     parser.add_argument("--dice-threshold", type=float, default=0.70)
     args = parser.parse_args()
     if args.qc_run_inputs and not (args.subjects or args.subjects_manifest):
         parser.error('--qc-run-inputs requires the complete roster via --subjects or --subjects-manifest')
     if (args.dataset != "hcp" or args.task != "rest") and args.stage in {"all", "qc"} and not args.qc_run_inputs:
         parser.error('This dataset/task requires --qc-run-inputs with its exact BOLD and motion declarations')
-    if args.tsnr_threshold is None:
-        args.tsnr_threshold = "none"
-    from lib.task_quality import parse_tsnr_threshold
-    try:
-        require_validity_only(parse_tsnr_threshold(args.tsnr_threshold))
-    except ValueError as exc:
-        parser.error(str(exc))
     if sum(bool(value) for value in (args.run_artifact_manifest_template, args.run_metadata_template, args.qc_run_inputs)) > 1:
         parser.error("Choose the exact run-artifact manifest or concatenated BOLD NIfTI with physical-run metadata")
     if (args.dataset == "hcp" and args.task == "rest" and args.stage in {"all", "raw"}
@@ -906,10 +872,10 @@ def main() -> int:
             args.run_metadata_template,
             args.qc_run_inputs,
         )
-    if args.stage in {"all", "tsnr"}:
-        tsnr_todo = [s for s in sampling_subjects if not (args.resume and tsnr_done(shared_root, s, args.dataset, task=args.task, tsnr_threshold=args.tsnr_threshold, tsnr_input_template=args.tsnr_input_template))]
-        print(f"[info] tsnr gate todo={len(tsnr_todo)}", flush=True)
-        run_parallel("tsnr", tsnr_todo, jobs, run_tsnr_gate, str(batch_root), str(shared_root), args.task, args.dataset, args.tsnr_input_template, str(args.tsnr_threshold))
+    if args.stage in {"all", "validity"}:
+        validity_todo = [s for s in sampling_subjects if not (args.resume and validity_done(shared_root, s, args.dataset, task=args.task))]
+        print(f"[info] validity todo={len(validity_todo)}", flush=True)
+        run_parallel("validity", validity_todo, jobs, run_validity, str(batch_root), str(shared_root), args.task, args.dataset)
     manifest_path = route_root / "manifests" / pass_roster_name(args.dataset, args.task)
     preparation_status = 'done'
     if args.stage in {"all", "qc"}:
@@ -933,7 +899,7 @@ def main() -> int:
         proc = subprocess.run(cmd, text=True)
         if proc.returncode != 0:
             return proc.returncode
-        preparation_status = json.loads((route_root / 'qc/t1only_hippunfold_tsnr_qc.json').read_text())['status']
+        preparation_status = json.loads((route_root / 'qc/t1only_hippunfold_qc.json').read_text())['status']
     pass_subjects = read_latest_manifest(route_root, args.dataset, args.task) if manifest_path.exists() else []
     if args.stage in {"all", "smooth"}:
         smooth_todo = [s for s in pass_subjects if not (args.resume and args.task == "rest" and smoothing_done(shared_root, s, args.dataset, task=args.task))]
@@ -955,8 +921,6 @@ def main() -> int:
             "shared_root": str(shared_root),
             "template_root": str(template_root),
             "task": str(args.task),
-            "tsnr_threshold": str(args.tsnr_threshold),
-            "tsnr_input_template": args.tsnr_input_template,
             "task_manifest_root": args.task_manifest_root,
             'dataset': args.dataset,
             'qc_run_inputs': args.qc_run_inputs,

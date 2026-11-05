@@ -181,11 +181,11 @@ def run_subject(
                     surface_root
                     / f"sub-{subject}"
                     / "surface"
-                    / "tsnr_gate"
+                    / "validity"
                     / f"sub-{subject}_hemi-{hemi}_valid_mask.npy"
                 )
                 if not mask_path.is_file():
-                    raise FileNotFoundError(f"Missing tSNR valid mask: {mask_path}")
+                    raise FileNotFoundError(f"Missing signal-validity mask: {mask_path}")
                 require_task_surface_validity(surface_root, subject, hemi, task)
                 valid = np.load(str(mask_path)).astype(bool).reshape(-1)
                 ts = np.load(str(ts_path)).astype(np.float64)

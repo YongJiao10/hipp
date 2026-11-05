@@ -20,7 +20,7 @@ from scripts.visualize.cortex_network_area.plot import (
 def _statistics() -> pd.DataFrame:
     rows = [
         {
-            "variant": "22p",
+            "variant": "36p",
             "method": "kong2022",
             "network_classification": "canonical7",
             "taxonomy": "kong_canonical7",
@@ -38,7 +38,7 @@ def _statistics() -> pd.DataFrame:
             "q_value_bh": 0.91,
         },
         {
-            "variant": "22p",
+            "variant": "36p",
             "method": "kong2022",
             "network_classification": "canonical7",
             "taxonomy": "kong_canonical7",
@@ -56,7 +56,7 @@ def _statistics() -> pd.DataFrame:
             "q_value_bh": 0.01,
         },
         {
-            "variant": "22p",
+            "variant": "36p",
             "method": "kong2022",
             "network_classification": "canonical7",
             "taxonomy": "kong_canonical7",
@@ -74,7 +74,7 @@ def _statistics() -> pd.DataFrame:
             "q_value_bh": 0.90,
         },
         {
-            "variant": "22p",
+            "variant": "36p",
             "method": "kong2022",
             "network_classification": "canonical7",
             "taxonomy": "kong_canonical7",
@@ -92,7 +92,7 @@ def _statistics() -> pd.DataFrame:
             "q_value_bh": 0.02,
         },
         {
-            "variant": "22p",
+            "variant": "36p",
             "method": "lynch2024",
             "network_classification": "canonical7",
             "taxonomy": "lynch_canonical7",
@@ -110,7 +110,7 @@ def _statistics() -> pd.DataFrame:
             "q_value_bh": 0.20,
         },
         {
-            "variant": "22p",
+            "variant": "36p",
             "method": "lynch2024",
             "network_classification": "canonical7",
             "taxonomy": "lynch_canonical7",

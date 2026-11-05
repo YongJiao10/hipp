@@ -8,7 +8,7 @@ Panel reuse requires matching source-content and output SHA-256 fingerprints
 in `.sources.json`; source labels/manifests/surfaces and grid are checked first.
 Unverified historical PNGs are rebuilt, never accepted by file size alone.
 
-Standalone rendering has been removed. Refresh all four grids in 4-way parallel through
+Standalone rendering has been removed. Refresh both 36p grids through
 `scripts/visualize/run_multidataset_suite.py --figures cluster_confidence_stacked`
 using `/home/yojiao/.conda/envs/py314/bin/python`. Add `--version hcp_jjtms_7net`
 for the method comparison. Single-grid diagnostic rendering is not supported.

@@ -19,26 +19,22 @@ jj = importlib.import_module('scripts.jj_tms.materialize_jj_tms_shared_inputs')
 def test_reference_policy_accepts_matching_explicit_dataset(tmp_path: Path, cortex_reference_factory) -> None:
     ref = cortex_reference_factory(tmp_path, dataset='stanford')
     result = quality.require_cortex_reference_policy(ref, dataset='stanford', task='rest')
-    assert result['tsnr_threshold'] == 25.0
+    assert result['validity_policy'] == 'finite_cortex_signal'
 
 
-@pytest.mark.parametrize('mutation', ['dataset', 'policy', 'cutoff', 'missing', 'baseline'])
+@pytest.mark.parametrize('mutation', ['dataset', 'policy', 'missing'])
 def test_reference_policy_rejects_mismatched_right_gate(tmp_path: Path, mutation: str, cortex_reference_factory) -> None:
     ref = cortex_reference_factory(tmp_path, dataset='stanford')
-    path = ref.parent / 'common/tsnr_gate/cortex_right_tsnr_gate_summary.json'
+    path = ref.parent / 'common/validity/cortex_right_validity_summary.json'
     gate = json.loads(path.read_text())
     if mutation == 'dataset':
         gate['dataset'] = 'iowa_jj_tms'
     elif mutation == 'policy':
         gate['validity_policy'] = 'hcp_10000_over_std'
-    elif mutation == 'cutoff':
-        gate['threshold'] = 25.00000001
     elif mutation == 'missing':
         del gate['task']
-    else:
-        gate['baseline_input'] = None
     path.write_text(json.dumps(gate))
-    with pytest.raises(ValueError, match=r'Rebuild.*cortex_right_tsnr_gate_summary.json'):
+    with pytest.raises(ValueError, match=r'Rebuild.*cortex_right_validity_summary.json'):
         quality.require_cortex_reference_policy(ref, dataset='stanford')
 
 
@@ -58,26 +54,15 @@ def test_reference_policy_rejects_missing_policy_metadata(tmp_path: Path, cortex
         quality.require_cortex_reference_policy(ref, dataset='hcp')
 
 
-def test_validity_only_reference_accepts_none_cutoff_without_baseline(tmp_path: Path, cortex_reference_factory) -> None:
-    ref = cortex_reference_factory(tmp_path, dataset='stanford', threshold=None)
-    for side in ('left', 'right'):
-        path = ref.parent / f'common/tsnr_gate/cortex_{side}_tsnr_gate_summary.json'
-        gate = json.loads(path.read_text())
-        gate['baseline_input'] = None
-        path.write_text(json.dumps(gate))
-    assert quality.require_cortex_reference_policy(ref, dataset='stanford')['tsnr_threshold'] is None
+def test_routea_does_not_reuse_interrupted_reference_with_old_stage(tmp_path: Path, cortex_reference_factory) -> None:
+    ref = cortex_reference_factory(tmp_path, dataset='hcp')
+    (ref / 'stage_manifest.json').write_text(json.dumps({
+        'status': 'done', 'params': {'validity_policy': 'legacy_policy'},
+    }))
+    assert not routea.subject_is_done(tmp_path, '01', 'kong2022', dataset='hcp', expected_inputs={})
 
 
-def test_hcp_cortex_gate_records_the_policy_it_actually_applies(tmp_path: Path) -> None:
-    io.compute_cortex_tsnr_gate(data=np.asarray([[10., 12., 14., 12.]]), outdir=tmp_path,
-                               hemi='left', threshold=25, dataset='hcp')
-    gate = json.loads((tmp_path / 'cortex_left_tsnr_gate_summary.json').read_text())
-    assert (gate['dataset'], gate['task'], gate['validity_policy'], gate['threshold']) == (
-        'hcp', 'rest', 'hcp_10000_over_std', 25.0,
-    )
-
-
-@pytest.mark.parametrize('changed', ['dataset', 'threshold', 'baseline', 'source'])
+@pytest.mark.parametrize('changed', ['dataset', 'source'])
 def test_routea_resume_rebuilds_when_requested_contract_changes(tmp_path: Path, changed: str, cortex_reference_factory) -> None:
     shared = tmp_path / 'shared'
     ref = cortex_reference_factory(shared, dataset='stanford')
@@ -96,69 +81,26 @@ def test_routea_resume_rebuilds_when_requested_contract_changes(tmp_path: Path, 
     summary = json.loads((ref / 'reference_summary.json').read_text())
     summary.update(expected)
     (ref / 'reference_summary.json').write_text(json.dumps(summary))
-    baseline = str(shared / 'baseline-{hemi}.npz')
-    kwargs = dict(dataset='stanford', tsnr_threshold='25', tsnr_input_template=baseline,
-                  expected_inputs=expected)
+    kwargs = dict(dataset='stanford', expected_inputs=expected)
     assert routea.subject_is_done(shared, '01', 'kong2022', **kwargs)
     if changed == 'dataset':
         kwargs['dataset'] = 'iowa_jj_tms'
-    elif changed == 'threshold':
-        kwargs['tsnr_threshold'] = '25.00000001'
-    elif changed == 'baseline':
-        kwargs['tsnr_input_template'] = str(shared / 'different-{hemi}.npz')
     else:
         kwargs['expected_inputs'] = {**expected, 'run_ids': [3]}
     assert not routea.subject_is_done(shared, '01', 'kong2022', **kwargs)
 
 
-def test_jj_adapter_reads_source_policy_instead_of_assigning_a_new_cutoff(tmp_path: Path) -> None:
+def test_jj_adapter_reads_source_policy(tmp_path: Path) -> None:
     path = tmp_path / 'subject_manifest.json'
-    source = {
-        'subject': 'sub-01', 'workflow': 'jj_tms_hcp151_fixed_template_matching',
-        'parameters': {'task': 'rest', 'validity_policy': 'runwise_baseline_over_detrended_sd',
-                       'tsnr_threshold': 30.0},
-        'inputs': {f'tsnr_cortex_{hemi}': {'path': str(tmp_path / f'{hemi}.npz')} for hemi in ('L', 'R')},
-    }
+    source = {'subject': 'sub-01', 'workflow': 'jj_tms_hcp151_fixed_template_matching',
+              'parameters': {'task': 'rest', 'cortex_validity_policy': 'finite_cortex_signal'}}
     path.write_text(json.dumps(source))
-    policy, baselines = jj.read_cortex_reference_policy(path, subject='01')
-    assert policy == {'dataset': 'iowa_jj_tms', 'task': 'rest',
-                      'validity_policy': 'runwise_baseline_over_detrended_sd', 'tsnr_threshold': 30.0}
-    assert baselines == {'L': str(tmp_path / 'L.npz'), 'R': str(tmp_path / 'R.npz')}
-    source['parameters']['validity_policy'] = 'hcp_10000_over_std'
+    assert jj.read_cortex_reference_policy(path, subject='01') == {
+        'dataset': 'iowa_jj_tms', 'task': 'rest', 'validity_policy': 'finite_cortex_signal'}
+    source['parameters']['cortex_validity_policy'] = 'legacy_policy'
     path.write_text(json.dumps(source))
     with pytest.raises(ValueError, match='subject_manifest.json'):
         jj.read_cortex_reference_policy(path, subject='01')
-
-
-def test_hcp_none_cutoff_keeps_all_finite_nonconstant_rows(tmp_path: Path) -> None:
-    values = np.asarray([
-        [10., 12., 14., 12.],
-        [1., 1., 1., 1.],
-        [0., np.nan, 1., 2.],
-        [0., 1000., 2000., 1000.],
-    ])
-    mask_path = io.compute_cortex_tsnr_gate(data=values, outdir=tmp_path, hemi='left',
-                                          threshold=None, dataset='hcp')
-    np.testing.assert_array_equal(np.load(mask_path), [True, False, False, True])
-    # The low nominal tSNR is still reported, but does not exclude this row.
-    assert np.load(tmp_path / 'cortex_left_tsnr.npy')[3] < 25.0
-    summary = json.loads((tmp_path / 'cortex_left_tsnr_gate_summary.json').read_text())
-    assert summary['threshold'] is None
-    assert (summary['n_grayordinates_total'], summary['n_grayordinates_valid'],
-            summary['n_grayordinates_invalid'], summary['invalid_fraction']) == (4, 2, 2, 0.5)
-    assert (summary['dataset'], summary['task'], summary['validity_policy']) == (
-        'hcp', 'rest', 'hcp_10000_over_std',
-    )
-
-
-def test_hcp_numeric_cutoff_retains_existing_nominal_tsnr_selection(tmp_path: Path) -> None:
-    values = np.asarray([[10., 12., 14., 12.], [0., 1000., 2000., 1000.], [1., 1., 1., 1.]])
-    mask_path = io.compute_cortex_tsnr_gate(data=values, outdir=tmp_path, hemi='left',
-                                          threshold=25.0, dataset='hcp')
-    np.testing.assert_array_equal(np.load(mask_path), [True, False, False])
-    summary = json.loads((tmp_path / 'cortex_left_tsnr_gate_summary.json').read_text())
-    assert summary['threshold'] == 25.0
-    assert (summary['n_grayordinates_valid'], summary['n_grayordinates_invalid']) == (1, 2)
 
 
 def test_manifest_resume_rebuilds_changed_run_partition_with_same_paths_and_ids(tmp_path: Path, monkeypatch, cortex_reference_factory) -> None:

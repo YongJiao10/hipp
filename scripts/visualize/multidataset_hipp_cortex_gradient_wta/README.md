@@ -4,7 +4,7 @@ The canonical seven-network figure contains five cohort rows: HCP 7T (151),
 Iowa HC (67), Iowa Patient (26; sub-3003 excluded), Pure MDD (7), and Comorbid
 MDD (19). The latter two are subgroups of Patient; the displayed total N=270
 sums row memberships, not unique individuals. All four smoothing/preprocessing
-combinations are generated: 2mm/4mm × 36P/22P. HCP uses its shared ICA-FIX data
+combinations are generated: 2mm/4mm × 36P. HCP uses its shared ICA-FIX data
 in both preprocessing comparisons; the Iowa HC reference follows each variant.
 
 Each row contains the cohort card, Gradient hippocampal atlas, Anterior/Middle/
@@ -73,8 +73,8 @@ surface time series and masks come from
 `outputs_hcp/inputs/kong2022/shared_inputs/surface`, while its Kong2022
 cortical reference arrays and registry come from
 `outputs_hcp/inputs/kong2022/shared_inputs/pfm`. Iowa uses the matching
-`outputs_iowa_jj_tms/inputs/kong2022/shared_inputs{_22p}/surface`
-and `.../shared_inputs{_22p}/routea` roots. The `shared_inputs` parent itself
+`outputs_iowa_jj_tms/inputs/kong2022/shared_inputs/surface`
+and `.../shared_inputs/routea` roots. The `shared_inputs` parent itself
 is not a subject-input root; resolving it directly is an error. CtxReg keeps
 its signal inputs under the explicit `routea_ctxreg` branch while retaining the
 validated standard `routea` reference root where the branch contract requires
@@ -97,12 +97,11 @@ In this mode only Iowa36P reads original time series and valid masks under
 `outputs_iowa_jj_tms/work/hcp151_fixed_template_matching/subjects/sub-*/`:
 
 - `surface/{2mm|4mm}/hemi-{L|R}_timeseries.npy`
-- `surface/tsnr_gate/hemi-{L|R}_valid_mask.npy`
+- `surface/validity/hemi-{L|R}_valid_mask.npy`
 - `cortex/kong2022_roi_timeseries.npy`
 
 Every file is hash-verified against the original `subject_manifest.json`, and
-frame counts must match its denoised run evidence. HCP and Iowa22P keep their
-canonical inputs. No upstream reference file is overwritten or truncated.
+frame counts must match its denoised run evidence. HCP retains its canonical inputs. No upstream reference file is overwritten or truncated.
 
 The formal ROI registry path is
 `outputs_hcp/work/group_atlas/pfm_ctxreg/gradient-spectral/kong2022/2mm/cov_0p80/g1g2g3/hemi_L/cluster_roi_registry.tsv`.
@@ -117,8 +116,7 @@ The old Patient manifests contain a retired `shared_inputs*/kong2022_7net`
 reference root and no `cluster_roi_profile_subjects_used`. Explicit recovery
 reconstructs inclusion from the complete 26-person roster and checked inputs,
 requiring its recomputed Gradient means to reproduce the canonical result.
-This applies to the missing Patient metadata in both preprocessing variants;
-22P still uses its current canonical time series. A present but inconsistent
+This applies to the missing Patient metadata in the 36P branch. A present but inconsistent
 inclusion list is always an error. Canonical mode does not relax these checks.
 
 Iowa36P WTA mean caches are rebuilt from the same bilateral individual values
@@ -143,7 +141,7 @@ or cross-branch declarations fail closed. The renderer never substitutes a
 standard gradient profile, WTA cache, panel, PNG, manifest, or contrast export.
 
 The lower-level contrast preparation accepts an explicitly selected branch.
-The established Standard four-grid receipt keeps the historical
+The established Standard 36p grid receipt keeps the historical
 `contrasts/{version}_all_grids.manifest.json` name; a CtxReg-only preparation
 uses a branch-qualified name such as
 `contrasts/canonical_2mm_36p_ctxreg.manifest.json`, or an explicit caller-
@@ -213,7 +211,7 @@ First build, or an intentional rebuild after resolving input contracts:
 OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1 /home/yojiao/.conda/envs/py314/bin/python scripts/visualize/run_multidataset_suite.py --figures hipp_cortex_gradient_wta --rebuild-contrast-profiles --iowa36p-source original-denoised
 ```
 
-Subsequent refreshes reuse saved individual matrices across all 4 grids in 4-way parallel:
+Subsequent refreshes reuse saved individual matrices across both 36p grids:
 
 ```bash
 OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1 /home/yojiao/.conda/envs/py314/bin/python scripts/visualize/run_multidataset_suite.py --figures hipp_cortex_gradient_wta --iowa36p-source original-denoised
@@ -265,18 +263,18 @@ register t/p/masks, palette, statistical peak, display range, caption and code.
 Invalid panels are regenerated from validated inputs, never substituted as data
 sources.
 
-Patient inputs use the formal `pfm/patient` and `pfm_22p/patient` group roots
+Patient inputs use the formal `pfm/patient` group root
 with matching presentation roots. Kong WTA uses the internal
 `wta-top/kong2022` producer path and manifest-declared normalized Top-20 labels.
 The active contrast aggregate is
-`contrasts/canonical_all_grids.manifest.json`, whose four grids contain only
+`contrasts/canonical_all_grids.manifest.json`, whose grids contain only
 `(N,7,400)` subject matrices for the explicitly selected roster.
 
 ## Artifacts and verification
 
 - `contrasts/{version}_{grid}_{cohort}_subjects.npz`: float32 `left`, `right`,
   `values` (bilateral), ordered `subjects` and `panels`, plus a provenance
-  `.manifest.json`. All four grids occupy about 32.13 MiB compressed.
+  `.manifest.json`. The matrices are stored compressed.
 - `contrasts/{version}_{grid}_{cohort}_vs_iowa_hc.npz` and TSV: all ROI t/p,
   effective N, testable and significant masks (`p<0.05`). HC has no
   self-comparison.

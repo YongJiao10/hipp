@@ -98,7 +98,7 @@ Each subject directory contains the two hemispheres from the Stanford 2 mm HCP15
 1. `sub-<id>_2mm_hemi-<L|R>_labels.npy`:
    - Shape: `(512,)`, dtype: `int32`
    - Vertex-level subregion assignment for each of the 512 HippUnfold `den-512` vertices:
-     - `0`: Unassigned / Invalid mask (excluded due to low tSNR / non-finite signal)
+     - `0`: Unassigned / Invalid mask (excluded due to non-finite or constant signal)
      - `1`: Anterior / VAN
      - `2`: Middle / SMN
      - `3`: Posterior / DMN

@@ -24,7 +24,7 @@ def fixture(root: Path, run_ids: list[int]) -> tuple[Path, Path, Path]:
     ts_dir = surface / 'sub-01/surface/2mm'
     ts_dir.mkdir(parents=True)
     np.save(ts_dir / 'sub-01_hemi-L_timeseries.npy', ts)
-    gate = surface / 'sub-01/surface/tsnr_gate'
+    gate = surface / 'sub-01/surface/validity'
     gate.mkdir(parents=True)
     np.save(gate / 'sub-01_hemi-L_valid_mask.npy', np.ones(3, bool))
     ref = reference / 'sub-01/reference/kong2022'

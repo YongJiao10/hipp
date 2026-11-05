@@ -15,7 +15,6 @@ from scripts.visualize.cortex_network_area.analysis import (
     flatten_subject_metrics,
     expand_variants,
     run_analysis,
-    validate_hcp_variant_invariance,
     write_analysis_outputs,
 )
 from scripts.visualize.cortex_network_area.core import (
@@ -56,7 +55,7 @@ def _subject_metrics() -> pd.DataFrame:
                 {
                     "subject": f"{cohort}-{index}",
                     "cohort": cohort,
-                    "variant": "22p",
+                    "variant": "36p",
                     "method": "kong2022",
                     "network_classification": "canonical7",
                     "taxonomy": "kong_canonical7",
@@ -90,7 +89,7 @@ def test_bh_fdr_groups_across_variants_comparisons_and_networks() -> None:
         {
             "method": ["kong2022", "kong2022", "kong2022", "lynch2024"],
             "network_classification": ["canonical7"] * 4,
-            "variant": ["22p", "36p", "22p", "22p"],
+            "variant": ["36p", "36p", "36p", "36p"],
             "comparison": ["a", "b", "c", "a"],
             "network": ["Default", "Visual", "Control", "Default"],
             "p_value": [0.01, 0.04, 0.03, 0.01],
@@ -111,9 +110,9 @@ def test_output_writer_exports_full_tables_audit_and_manifest(tmp_path: Path) ->
         [{"subject": "sub-1001", "status": "ready", "missing_inputs": ""}]
     )
     manifest = {
-        "variant_request": "22p",
+        "variant_request": "36p",
         "check_readiness": False,
-        "actual_n": {"22p": {"Iowa HC": 3}},
+        "actual_n": {"36p": {"Iowa HC": 3}},
     }
 
     paths = write_analysis_outputs(
@@ -145,7 +144,7 @@ def test_calculation_failure_is_fail_closed_and_audit_is_written(
         subject="sub-corrupt",
         cohort="Iowa HC",
         dataset="iowa",
-        variant="22p",
+        variant="36p",
         atlas="kong2022",
         surface_paths={"L": tmp_path / "L.surf.gii", "R": tmp_path / "R.surf.gii"},
         label_path=tmp_path / "labels.txt",
@@ -177,7 +176,7 @@ def test_calculation_failure_is_fail_closed_and_audit_is_written(
         run_analysis(
             repo_root=Path(__file__).resolve().parents[2],
             output_dir=output_dir,
-            variant="22p",
+            variant="36p",
             records=[record],
         )
 
@@ -191,10 +190,9 @@ def test_calculation_failure_is_fail_closed_and_audit_is_written(
 
 
 def test_all_variant_expands_in_fixed_preprocessing_order() -> None:
-    assert expand_variants("22p") == ("22p",)
     assert expand_variants("36p") == ("36p",)
-    assert expand_variants("all") == ("22p", "36p")
-    with pytest.raises(ValueError, match="22p.*36p.*all"):
+    assert expand_variants("all") == ("36p",)
+    with pytest.raises(ValueError, match="36p.*all"):
         expand_variants("2mm")
 
 
@@ -205,7 +203,7 @@ def test_readiness_mode_exports_missing_inputs_without_calculating(
         subject="sub-1001",
         cohort="Iowa HC",
         dataset="iowa",
-        variant="22p",
+        variant="36p",
         atlas="kong2022",
         surface_paths={
             "L": tmp_path / "missing.L.surf.gii",
@@ -218,7 +216,7 @@ def test_readiness_mode_exports_missing_inputs_without_calculating(
     result = run_analysis(
         repo_root=Path(__file__).resolve().parents[2],
         output_dir=tmp_path / "stats",
-        variant="22p",
+        variant="36p",
         check_readiness=True,
         records=[record],
     )
@@ -228,7 +226,7 @@ def test_readiness_mode_exports_missing_inputs_without_calculating(
     assert audit.loc[0, "status"] == "missing"
     assert pd.read_csv(result["subject_metrics"]).empty
     assert pd.read_csv(result["statistics"]).empty
-    assert manifest["variant_request"] == "22p"
+    assert manifest["variant_request"] == "36p"
     assert manifest["check_readiness"] is True
     assert manifest["audit_status_counts"] == {"missing": 1}
 
@@ -242,18 +240,12 @@ def _layout(tmp_path: Path) -> InputLayout:
             "lynch2024": str(tmp_path / "hcp/{sub_subject}/lynch.dlabel.nii"),
         },
         iowa_surface_templates={
-            "22p": str(tmp_path / "iowa/{sub_subject}/{hemi}.surf.gii"),
             "36p": str(tmp_path / "iowa/{sub_subject}/{hemi}.surf.gii"),
         },
         iowa_functional_manifest_templates={
-            "22p": str(tmp_path / "iowa22/{sub_subject}/provenance.json"),
             "36p": str(tmp_path / "iowa36/{sub_subject}/provenance.json"),
         },
         iowa_label_templates={
-            "22p": {
-                "kong2022": str(tmp_path / "iowa22/{sub_subject}/kong"),
-                "lynch2024": str(tmp_path / "iowa22/{sub_subject}/lynch.dlabel.nii"),
-            },
             "36p": {
                 "kong2022": str(tmp_path / "iowa36/{sub_subject}/kong"),
                 "lynch2024": str(tmp_path / "iowa36/{sub_subject}/lynch.dlabel.nii"),
@@ -267,7 +259,7 @@ def test_subject_record_builder_uses_every_formal_roster_for_both_methods(
 ) -> None:
     records = build_subject_records(
         repo_root=Path(__file__).resolve().parents[2],
-        variants=("22p",),
+        variants=("36p",),
         layout=_layout(tmp_path),
     )
 
@@ -288,7 +280,7 @@ def test_flattened_metrics_keep_network_noise_and_unassigned_separate() -> None:
         subject="sub-1001",
         cohort="Iowa HC",
         dataset="iowa",
-        variant="22p",
+        variant="36p",
         atlas="kong2022",
         surface_paths={"L": Path("L.surf.gii"), "R": Path("R.surf.gii")},
         label_path=Path("labels.dlabel.nii"),
@@ -331,37 +323,15 @@ def test_flattened_metrics_keep_network_noise_and_unassigned_separate() -> None:
     assert rows[0]["mapping_source"] == "config/cross_atlas_network_merge.json"
 
 
-def test_hcp_metrics_must_match_between_22p_and_36p() -> None:
-    metrics = pd.DataFrame(
-        [
-            {
-                "subject": "sub-100610",
-                "cohort": "HCP HC",
-                "variant": variant,
-                "method": "kong2022",
-                "taxonomy": "kong_canonical7",
-                "network": "Default",
-                "component_kind": "network",
-                "area_percent": value,
-                "area_mm2": value * 10.0,
-            }
-            for variant, value in (("22p", 10.0), ("36p", 10.0))
-        ]
-    )
-    validate_hcp_variant_invariance(metrics, ("22p", "36p"))
-
-    metrics.loc[metrics["variant"].eq("36p"), "area_percent"] = 10.1
-    with pytest.raises(ValueError, match="HCP.*22p.*36p"):
-        validate_hcp_variant_invariance(metrics, ("22p", "36p"))
 
 
 def test_full_run_rejects_missing_inputs_before_partial_statistics(tmp_path):
     from scripts.visualize.cortex_network_area.core import SubjectRecord
     from scripts.visualize.cortex_network_area.analysis import run_analysis
     import pytest
-    record = SubjectRecord('sub-1001', 'Iowa HC', 'iowa', '22p', 'lynch2024',
+    record = SubjectRecord('sub-1001', 'Iowa HC', 'iowa', '36p', 'lynch2024',
                            {'L': tmp_path/'missing.L.surf.gii', 'R': tmp_path/'missing.R.surf.gii'},
                            tmp_path/'missing.dlabel.nii', tmp_path/'missing.json')
     with pytest.raises(RuntimeError, match='missing or incompatible'):
-        run_analysis(repo_root=Path(__file__).resolve().parents[2], output_dir=tmp_path/'stats', variant='22p', records=[record])
+        run_analysis(repo_root=Path(__file__).resolve().parents[2], output_dir=tmp_path/'stats', variant='36p', records=[record])
     assert pd.read_csv(tmp_path/'stats'/'network_area_statistics.csv').empty

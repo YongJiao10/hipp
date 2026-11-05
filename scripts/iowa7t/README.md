@@ -29,8 +29,7 @@ For runwise processing, pass an explicit `--run-tag` naming the intended
 ```bash
 /home/yojiao/.conda/envs/py314/bin/python \
   scripts/iowa7t/run_runwise_downstream.py \
-  --subject <subject> --variant 22p --run-tag <explicit_tag> --run all \
-  --tsnr-input-template '<baseline_root>/{subject}_{variant}_{run}_{domain}_{hemi}.npz' \
+  --subject <subject> --variant 36p --run-tag <explicit_tag> --run all \
   --stage all
 ```
 
@@ -42,22 +41,11 @@ Surface/gate summaries must record `sampling_space=MNI152NLin6Asym` and
 `smoothing_space=T1w`. Incompatible products require an explicit approved
 `--overwrite` rebuild.
 
-## Baseline tSNR and FC
+## Signal validity and FC
 
-Both adapters require `--tsnr-input-template`. Supported placeholders are
-`{subject}`, `{hemi}`, `{domain}` (hipp/cortex), `{variant}`, `{branch}` and
-`{run}` where supported. The NPZ format is defined in the
-[core input guide](../core_workflow/README.md#existing-rest-tsnr-baseline-inputs).
-Preserve acquisition-specific samples and variant-specific retained frames.
-
-Per-run scores use original baseline mean divided by linearly detrended sample
-SD on retained frames. All included runs must reach the inherited comparison
-threshold 25 and have finite, nonconstant consumed analysis signals. Missing
-baselines fail. This setting does not establish a universal participant-QC
-cutoff; see [fMRI QC](../../docs/hipp_parcellation_network/fmri_qc.md).
-
-A changed gate invalidates smoothing. FC rejects incompatible surface/cortex
-gate metadata; use `--overwrite` for approved baseline/input replacement.
+Both adapters use finite, nonconstant hippocampal series and finite cortical
+signals. Acquisition-level reference and FC stages require explicit run metadata.
+Changing vertex masks requires rebuilding smoothing, cortical references and FC.
 Adapters import maintained run-segment/TSV and label helpers from the core
 workflow. Shared cortex inputs use the selected `hipp_outputs/runs/cache/`
 root, while HCP references and template banks use their explicit formal

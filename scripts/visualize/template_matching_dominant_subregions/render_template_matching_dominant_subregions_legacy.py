@@ -4,9 +4,7 @@ Render Iowa 3T Hippocampal Template Matching Dominant Subregions & Dominance Hea
 
 Outputs 4 standard grid figures:
 - template_matching_dominant_subregions_2mm_36p.png
-- template_matching_dominant_subregions_2mm_22p.png
 - template_matching_dominant_subregions_4mm_36p.png
-- template_matching_dominant_subregions_4mm_22p.png
 
 Each figure displays all 4 Iowa cohorts in stacked rows:
 1. Healthy Controls (HC, N=67)
@@ -60,7 +58,6 @@ from lib.workbench_scene_batch import (
 
 # Canonical Paths
 DEFAULT_36P_ROOT = REPO_ROOT / "outputs_iowa_jj_tms" / "work" / "hcp151_fixed_template_matching" / "subjects"
-DEFAULT_22P_ROOT = REPO_ROOT / "outputs_iowa_jj_tms" / "work" / "hcp151_fixed_template_matching_22p" / "subjects"
 DEFAULT_SCENE = REPO_ROOT / "config" / "wb_locked_native_view_lateral_medial.scene"
 DEFAULT_SPEC = (
     REPO_ROOT
@@ -483,7 +480,7 @@ def compose_grid_figure(
     title_text = "Iowa 3T Hippocampal Functional Atlas: Dominant Subregions & Agreement Heatmaps"
     draw.text((margin_x, 22), title_text, fill=(20, 30, 45), font=title_font)
 
-    variant_desc = "36-Parameter (36P) Confound Regression" if variant == "36p" else "22-Parameter (22P) Confound Regression"
+    variant_desc = "36-Parameter (36P) Confound Regression"
     sub_text = (
         f"{smoothing.upper()} Surface Smoothing  |  {variant.upper()} Confound Regression ({variant_desc})  "
         f"—  Iowa 3T Cohorts (N=93 Total Subjects)"
@@ -690,7 +687,7 @@ def compose_grid_figure(
 
 
 def write_comprehensive_csv(all_results: dict[str, list[CohortRowResult]], csv_path: Path) -> None:
-    """Write comprehensive metrics across all 4 grid combinations and 4 cohorts."""
+    """Write comprehensive metrics across both 36p grid combinations and 4 cohorts."""
     csv_path.parent.mkdir(parents=True, exist_ok=True)
     rows = []
     for grid_tag, cohort_list in all_results.items():
@@ -750,7 +747,7 @@ def write_manifest_json(
             }
             for c in COHORTS_DEF
         ],
-        "grid_combinations": ["2mm_36p", "2mm_22p", "4mm_36p", "4mm_22p"],
+        "grid_combinations": ["2mm_36p", "4mm_36p"],
         "master_figures": {
             grid: {
                 "path": str(fig_path.resolve()),
@@ -787,7 +784,7 @@ def write_manifest_json(
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Render Iowa 3T Hippocampal Template Matching Dominant Subregions & Dominance Heatmaps (4 Grids)."
+        description="Render Iowa 3T Hippocampal Template Matching Dominant Subregions & Dominance Heatmaps (36p Grids)."
     )
     parser.add_argument(
         "--output-dir",
@@ -798,8 +795,8 @@ def main() -> None:
     parser.add_argument(
         "--grids",
         nargs="+",
-        default=["2mm_36p", "2mm_22p", "4mm_36p", "4mm_22p"],
-        choices=["2mm_36p", "2mm_22p", "4mm_36p", "4mm_22p", "all"],
+        default=["2mm_36p", "4mm_36p"],
+        choices=["2mm_36p", "4mm_36p", "all"],
         help="Grid combinations to render.",
     )
     parser.add_argument(
@@ -815,7 +812,7 @@ def main() -> None:
     args = parser.parse_args()
 
     selected_grids = (
-        ["2mm_36p", "2mm_22p", "4mm_36p", "4mm_22p"]
+        ["2mm_36p", "4mm_36p"]
         if "all" in args.grids
         else args.grids
     )
@@ -829,7 +826,6 @@ def main() -> None:
 
     grid_roots = {
         "36p": DEFAULT_36P_ROOT,
-        "22p": DEFAULT_22P_ROOT,
     }
 
     all_results: dict[str, list[CohortRowResult]] = {}
@@ -912,7 +908,7 @@ def main() -> None:
             manifest_path=manifest_path,
         )
 
-    print("\nAll 4 grid figures and statistics completed successfully!")
+    print("\nSelected 36p grid figures and statistics completed successfully!")
 
 
 if __name__ == "__main__":

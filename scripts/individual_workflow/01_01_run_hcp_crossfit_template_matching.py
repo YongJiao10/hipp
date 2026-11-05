@@ -522,7 +522,7 @@ def _subject_valid_mask_path(surface_root: Path, subject: str, hemi: str) -> Pat
         Path(surface_root)
         / f"sub-{subject}"
         / "surface"
-        / "tsnr_gate"
+        / "validity"
         / f"sub-{subject}_hemi-{hemi}_valid_mask.npy"
     )
 

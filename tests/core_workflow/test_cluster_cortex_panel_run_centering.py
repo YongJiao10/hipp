@@ -27,7 +27,7 @@ def _write_inputs(root, *, missing=np.nan, write_summary=True):
         -cortex * 100,
         [20, 20, 20, 40, 40, 40],
     ], dtype=np.float32))
-    gate_dir = subject / "surface/tsnr_gate"
+    gate_dir = subject / "surface/validity"
     gate_dir.mkdir()
     np.save(gate_dir / "sub-01_hemi-L_valid_mask.npy", np.array([True, True, False, True]))
     reference_dir = subject / "reference/kong2022"

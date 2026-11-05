@@ -72,7 +72,7 @@ QC_RUN_LABELS = {1: "rfMRI_REST1_7T_PA", 2: "rfMRI_REST2_7T_AP", 3: "rfMRI_REST3
 
 
 def result(out):
-    return json.loads((out / "t1only_hippunfold_tsnr_qc.json").read_text())
+    return json.loads((out / "t1only_hippunfold_qc.json").read_text())
 
 
 def test_inclusive_bilateral_gates_and_physical_run_boundaries(tmp_path, monkeypatch):
@@ -84,7 +84,6 @@ def test_inclusive_bilateral_gates_and_physical_run_boundaries(tmp_path, monkeyp
     assert row["qc_status"] == "pass"
     assert payload["n_subjects_pass"] == 1
     assert (manifests / "hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt").read_text() == "100610\n"
-    assert "tsnr_invalid_threshold" not in payload
 
 
 def test_power_fd_uses_degrees_and_frame_weighting(tmp_path, monkeypatch):
@@ -107,10 +106,10 @@ def test_power_fd_uses_degrees_and_frame_weighting(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize(("mean_fd", "expected_status"), [(0.50, "pass"), (0.51, "fail")])
-def test_fd_threshold_is_inclusive_and_tsnr_is_not_a_gate(tmp_path, monkeypatch, mean_fd, expected_status):
+def test_fd_threshold_is_inclusive(tmp_path, monkeypatch, mean_fd, expected_status):
     _, shared, _, out, _ = prepare(tmp_path, monkeypatch, increments=(2 * mean_fd,))
     for hemi in ("L", "R"):
-        gate = shared / f"sub-100610/surface/tsnr_gate/sub-100610_hemi-{hemi}_tsnr_gate_summary.json"
+        gate = shared / f"sub-100610/surface/validity/sub-100610_hemi-{hemi}_validity_summary.json"
         gate.parent.mkdir(parents=True, exist_ok=True)
         gate.write_text(json.dumps({"invalid_fraction": 1.0}))
     assert QC.main() == 0

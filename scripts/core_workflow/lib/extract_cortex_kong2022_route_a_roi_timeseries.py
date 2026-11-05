@@ -20,7 +20,7 @@ except ImportError:  # pragma: no cover - supports direct script execution durin
         load_required_mask,
     )
 from .io_utils import (
-    compute_cortex_tsnr_gate,
+    compute_cortex_validity,
     load_cifti_dtseries_inputs,
 )
 from .output_layout import DEFAULT_CORTEX_ROUTEA_ROOT, DEFAULT_KONG2022_ROUTEA_ROOT
@@ -31,7 +31,7 @@ from .kong2022_label_utils import (
     load_kong2022_bundle,
 )
 from .task_design import TASK_RUN_LENGTHS, normalize_task_branch
-from .task_quality import QC_DATASETS, parse_tsnr_threshold, signal_validity_policy
+from .task_quality import CORTEX_VALIDITY_POLICY, QC_DATASETS, signal_validity_policy
 from .kong2022_reference import (
     ReferenceRequest,
     materialize_reference_timeseries,
@@ -48,8 +48,6 @@ DEFAULT_ROUTE_A_ROOT = DEFAULT_CORTEX_ROUTEA_ROOT
 DEFAULT_RUN_IDS = [1, 2, 3, 4]
 ATLAS_SLUG = "kong2022"
 COMMON_REFERENCE_SLUG = "common"
-TSNR_THRESHOLD = 25.0
-HCP_MODE = 10000.0
 ROUTE_A_SOURCE_TAG = "route_a_kong2022_areal_mshbm"
 
 
@@ -111,8 +109,6 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--shared-root", default=str(DEFAULT_SHARED_ROOT))
     parser.add_argument("--route-a-root", default=str(DEFAULT_ROUTE_A_ROOT))
-    parser.add_argument("--left-tsnr-mask", default=None)
-    parser.add_argument("--right-tsnr-mask", default=None)
     parser.add_argument("--run-lengths", nargs="*", type=int, default=None)
     parser.add_argument(
         "--task",
@@ -123,15 +119,6 @@ def build_arg_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument("--dataset", choices=QC_DATASETS, required=True)
-    parser.add_argument(
-        "--tsnr-threshold",
-        default="25",
-        help=(
-            "Arbitrary screening criterion: any positive number gates at that "
-            "value; 'none' keeps finite, nonconstant vertices with no tSNR screening."
-        ),
-    )
-    parser.add_argument("--tsnr-input-template", help="Baseline cortex NPZ template with {subject}, {hemi}")
     parser.add_argument("--outdir", default=None)
     parser.add_argument("--overwrite", action="store_true", default=False)
     return parser
@@ -142,7 +129,7 @@ def build_kong2022_reference(*, request: ReferenceRequest) -> int:
     args = request
     ATLAS_SLUG = str(args.atlas_slug)
     if args.task != "rest" and not args.run_dtseries:
-        raise ValueError("Task references require --run-dtseries and --run-artifact-manifest with original BOLD inputs")
+        raise ValueError("Task references require --run-dtseries and --run-artifact-manifest")
     subject = str(args.subject).replace("sub-", "")
     shared_root = Path(args.shared_root).resolve()
     route_a_root = Path(args.route_a_root).resolve()
@@ -150,7 +137,7 @@ def build_kong2022_reference(*, request: ReferenceRequest) -> int:
         args,
         subject=subject,
         shared_root=shared_root,
-        required_artifacts=("bold", "dtseries") if args.task != "rest" else ("dtseries",),
+        required_artifacts=("dtseries",),
     )
     outdir = (
         Path(args.outdir).resolve()
@@ -191,7 +178,8 @@ def build_kong2022_reference(*, request: ReferenceRequest) -> int:
         n_timepoints=n_timepoints,
     )
     task_branch = normalize_task_branch(args.task) if str(args.task) != "rest" else "rest"
-    policy = signal_validity_policy(args.dataset, task_branch)
+    signal_validity_policy(args.dataset, task_branch)
+    policy = CORTEX_VALIDITY_POLICY
     if task_branch != "rest":
         expected = int(TASK_RUN_LENGTHS[task_branch])
         if [int(v) for v in source_run_lengths] != [expected] * len(source_run_lengths):
@@ -206,25 +194,11 @@ def build_kong2022_reference(*, request: ReferenceRequest) -> int:
     left_parcel_ids = align_surface_labels_to_dt_vertices(lh_full, left_vertices, hemi="L")
     right_parcel_ids = align_surface_labels_to_dt_vertices(rh_full, right_vertices, hemi="R")
 
-    if policy != "hcp_10000_over_std" and (args.left_tsnr_mask or args.right_tsnr_mask):
-        raise ValueError("Selected dataset/task must compute signal validity from its declared inputs; external tSNR masks are not supported")
-    task_bold_paths = [r["artifacts"]["bold"] for r in resolved.records] if task_branch != "rest" else None
-    def qc_input(hemi: str) -> Path | None:
-        return Path(args.tsnr_input_template.format(subject=subject, hemi=hemi)).resolve() if args.tsnr_input_template else None
-    tsnr_dir = common_ref_dir / "tsnr_gate"
-    task_threshold = parse_tsnr_threshold(str(getattr(args, "tsnr_threshold", "25")))
-    left_tsnr_mask = (
-        Path(args.left_tsnr_mask).resolve()
-        if args.left_tsnr_mask
-        else compute_cortex_tsnr_gate(data=left_dt, outdir=tsnr_dir, hemi="left", threshold=task_threshold, task=task_branch, run_lengths=source_run_lengths, dataset=args.dataset, task_bold_paths=task_bold_paths, tsnr_input=qc_input("L"), subject=subject, vertex_ids=left_vertices).resolve()
-    )
-    right_tsnr_mask = (
-        Path(args.right_tsnr_mask).resolve()
-        if args.right_tsnr_mask
-        else compute_cortex_tsnr_gate(data=right_dt, outdir=tsnr_dir, hemi="right", threshold=task_threshold, task=task_branch, run_lengths=source_run_lengths, dataset=args.dataset, task_bold_paths=task_bold_paths, tsnr_input=qc_input("R"), subject=subject, vertex_ids=right_vertices).resolve()
-    )
-    left_valid = load_required_mask(str(left_tsnr_mask), int(left_vertices.shape[0]), "left cortex tSNR")
-    right_valid = load_required_mask(str(right_tsnr_mask), int(right_vertices.shape[0]), "right cortex tSNR")
+    validity_dir = common_ref_dir / "validity"
+    left_valid_mask = compute_cortex_validity(data=left_dt, outdir=validity_dir, hemi="left", dataset=args.dataset, task=task_branch, run_lengths=source_run_lengths).resolve()
+    right_valid_mask = compute_cortex_validity(data=right_dt, outdir=validity_dir, hemi="right", dataset=args.dataset, task=task_branch, run_lengths=source_run_lengths).resolve()
+    left_valid = load_required_mask(str(left_valid_mask), int(left_vertices.shape[0]), "left cortex validity")
+    right_valid = load_required_mask(str(right_valid_mask), int(right_vertices.shape[0]), "right cortex validity")
 
     reference = materialize_reference_timeseries(
         outdir=outdir, left_dt=left_dt, right_dt=right_dt,
@@ -241,7 +215,6 @@ def build_kong2022_reference(*, request: ReferenceRequest) -> int:
         dataset=args.dataset,
         task=task_branch,
         validity_policy=policy,
-        tsnr_threshold=task_threshold,
         resolved=resolved,
         source_run_lengths=source_run_lengths,
         n_timepoints=n_timepoints,
@@ -250,8 +223,8 @@ def build_kong2022_reference(*, request: ReferenceRequest) -> int:
         family17_order=family17_order,
         kong2022_dlabel=Path(args.kong2022_dlabel).resolve(),
         cross_atlas_merge_json=Path(args.cross_atlas_merge_json).resolve(),
-        left_tsnr_mask=left_tsnr_mask,
-        right_tsnr_mask=right_tsnr_mask,
+        left_valid_mask=left_valid_mask,
+        right_valid_mask=right_valid_mask,
         reference_label_source=ROUTE_A_SOURCE_TAG,
         route_a_extra_summary={
             "route_a_root": str(route_a_root),

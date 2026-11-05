@@ -877,7 +877,7 @@ def _render_grid():
     parser.add_argument("--out-png", default=None, help=f"Output PNG path (default: {default_png})")
     parser.add_argument("--out-tsv", default=None, help=f"Output TSV path (default: {default_tsv})")
     parser.add_argument("--smoothing", choices=["2mm", "4mm"], default="2mm", help="Smoothing resolution (default: 2mm)")
-    parser.add_argument("--variant", choices=["36p", "22p"], default="36p", help="Preprocessing variant (default: 36p)")
+    parser.add_argument("--variant", choices=["36p"], default="36p", help="Preprocessing variant (default: 36p)")
     parser.add_argument(
         "--atlas",
         choices=["kong2022", "7net"],
@@ -920,5 +920,5 @@ if __name__ == "__main__":
     raise SystemExit(
         "Standalone rendering has been removed. Use "
         "scripts/visualize/run_multidataset_suite.py "
-        "with --figures to select the figure type; all four grids are processed in 4-way parallel by default."
+        "with --figures to select the figure type; both 36p grids are processed by default."
     )

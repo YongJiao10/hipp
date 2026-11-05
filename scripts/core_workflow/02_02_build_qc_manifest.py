@@ -6,7 +6,7 @@ from __future__ import annotations
 Apply frame-weighted physical-run Power FD <=0.50 mm, bilateral HippUnfold
 Dice >=0.70, and <=20 unusable NIfTI-sampled vertices per consumed den-512
 hemisphere, in that order. Missing inputs are unassessable, not quality failures.
-No tSNR exclusion threshold or predetermined passing subject count is applied.
+No predetermined passing subject count is applied.
 
 Shared BOLD/motion inputs are declared by --qc-run-inputs. HCP7T rest also
 supports its --motion-manifest table (subject, run_label, filename, lss_path). Coverage is
@@ -14,8 +14,7 @@ read from shared-root/sub-ID/surface/raw/sub-ID_coverage_summary.json and must
 match the declared physical runs and actual consumed 512-node hemispheres.
 Counts use the current raw sampled signals and NIfTI support, with
 finite/nonconstant validity in every run.
-The established t1only_hippunfold_tsnr_qc report filenames and latest pass-list
-filename remain the downstream interface; their names do not imply a tSNR gate.
+The participant QC report and latest pass list are downstream interfaces.
 """
 import argparse
 import csv
@@ -269,8 +268,8 @@ def main() -> int:
     pass_subjects = [str(row["subject"]).removeprefix("sub-") for row in rows if row["pass_all"]]
     out_dir.mkdir(parents=True, exist_ok=True)
     manifest_dir.mkdir(parents=True, exist_ok=True)
-    qc_tsv = out_dir / "t1only_hippunfold_tsnr_qc.tsv"
-    qc_json = out_dir / "t1only_hippunfold_tsnr_qc.json"
+    qc_tsv = out_dir / "t1only_hippunfold_qc.tsv"
+    qc_json = out_dir / "t1only_hippunfold_qc.json"
     manifest = manifest_dir / pass_roster_name(args.dataset, args.task, len(pass_subjects))
     latest_manifest = manifest_dir / pass_roster_name(args.dataset, args.task)
     fields = ["subject", "overall_mean_power_fd_mm", "dice_L", "dice_R", "unsupported_vertices_L", "unsupported_vertices_R",

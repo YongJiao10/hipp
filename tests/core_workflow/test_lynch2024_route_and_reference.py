@@ -447,7 +447,7 @@ def test_04_01_lynch7_materializes_canonical7_fc_not_component20(tmp_path: Path)
     ref_dir = reference_root / f"sub-{subject}" / "reference" / "lynch2024_7net"
     common_run_dir = reference_root / f"sub-{subject}" / "reference" / "common" / "runs"
     surf_dir = surface_root / f"sub-{subject}" / "surface" / "2mm"
-    mask_dir = mask_root / f"sub-{subject}" / "surface" / "tsnr_gate"
+    mask_dir = mask_root / f"sub-{subject}" / "surface" / "validity"
     ref_dir.mkdir(parents=True)
     surf_dir.mkdir(parents=True)
     mask_dir.mkdir(parents=True)

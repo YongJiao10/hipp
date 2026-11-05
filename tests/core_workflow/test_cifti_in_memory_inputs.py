@@ -464,6 +464,17 @@ def test_load_cifti_dtseries_inputs_concatenates_in_memory(tmp_path: Path) -> No
     assert run1.exists() and run2.exists()
 
 
+def test_single_cifti_input_keeps_source_unchanged(tmp_path: Path) -> None:
+    path = tmp_path / "run.dtseries.nii"
+    original = np.arange(16, dtype=np.float32).reshape(2, 8)
+    _write_test_dtseries(path, original)
+    values, _, lengths = io_utils.load_cifti_dtseries_inputs([path])
+    np.testing.assert_array_equal(values, original)
+    assert lengths == [2]
+    values[0, 0] = -1
+    assert np.asarray(nib.load(str(path)).dataobj)[0, 0] == original[0, 0]
+
+
 def test_load_cifti_dtseries_inputs_rejects_incompatible_brain_model_axes(tmp_path: Path) -> None:
     run1 = tmp_path / "run-01.dtseries.nii"
     run2 = tmp_path / "run-02.dtseries.nii"
@@ -802,7 +813,7 @@ def test_reference_worker_preserves_outputs_and_isolates_concurrent_subject_fail
     summary = json.loads((reference / 'reference_summary.json').read_text())
     assert summary['run_ids'] == [1, 3]
     assert summary['run_lengths'] == [2, 2]
-    assert summary['n_parcels_used_after_tsnr'] == 400
+    assert summary['n_parcels_used'] == 400
 
 
 def test_routeb_batch_default_matches_its_public_label_extractor():
@@ -821,13 +832,12 @@ def test_reference_request_preserves_routea_cli_label_root_default():
 
 
 @pytest.mark.parametrize('selected', [
-    {'dataset': 'stanford'}, {'task': 'wm'}, {'tsnr_threshold': 'none'},
-    {'tsnr_input_template': 'baseline-{hemi}.npz'}, {'atlas_slug': 'other'},
+    {'dataset': 'stanford'}, {'task': 'wm'}, {'atlas_slug': 'other'},
 ])
 def test_routeb_callable_rejects_unsupported_policy_before_reading_inputs(tmp_path, selected):
     from lib.extract_cortex_kong2022_routeb_roi_timeseries import build_kong2022_reference
     from lib.kong2022_reference import ReferenceRequest
     request = ReferenceRequest(subject='01', shared_root=tmp_path / 'out', **selected)
-    with pytest.raises(ValueError, match='Route B.*HCP rest.*25'):
+    with pytest.raises(ValueError, match='Route B.*HCP rest'):
         build_kong2022_reference(request=request)
     assert not (tmp_path / 'out').exists()

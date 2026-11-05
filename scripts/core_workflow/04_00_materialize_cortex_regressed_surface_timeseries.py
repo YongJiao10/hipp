@@ -390,7 +390,7 @@ def write_regression_outputs(
             / f"sub-{subject}"
             / "reference"
             / "common"
-            / "tsnr_gate"
+            / "validity"
             / "cortex_left_valid_mask.npy"
         ).resolve(),
         "R": (
@@ -398,7 +398,7 @@ def write_regression_outputs(
             / f"sub-{subject}"
             / "reference"
             / "common"
-            / "tsnr_gate"
+            / "validity"
             / "cortex_right_valid_mask.npy"
         ).resolve(),
     }
@@ -627,7 +627,7 @@ def process_subject(
         )
         for smoothing in smoothings:
             ts_path = source_surface / f"sub-{subject}" / "surface" / smoothing / f"sub-{subject}_hemi-{hemi}_timeseries.npy"
-            mask_path = source_surface / f"sub-{subject}" / "surface" / "tsnr_gate" / f"sub-{subject}_hemi-{hemi}_valid_mask.npy"
+            mask_path = source_surface / f"sub-{subject}" / "surface" / "validity" / f"sub-{subject}_hemi-{hemi}_valid_mask.npy"
             hipp_ts = np.load(ts_path).astype(np.float32)
             valid_mask = np.load(mask_path).astype(bool)
             if int(hipp_ts.shape[0]) != int(hipp_coords.shape[0]):

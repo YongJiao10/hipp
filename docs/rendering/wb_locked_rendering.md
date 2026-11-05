@@ -20,8 +20,7 @@ winner agrees with the surface labels. A missing, ambiguous,
 cross-directory, malformed, or disagreeing artifact fails closed; no
 competing filename or older cache is selected implicitly.
 
-Signal-branch path resolution is additive: the historical four-cell
-2mm/4mm by 36P/22P registry remains unchanged, while ctxreg is available only
+Signal-branch path resolution uses the 2mm/4mm 36P registry, while ctxreg is available only
 as an explicit canonical 2mm/36P branch. Every GridSpec has an explicit
 signal_branch value, with standard as the legacy default. Standard paths are
 never replaced with ctxreg paths because a branch directory happens to exist.

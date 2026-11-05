@@ -64,39 +64,19 @@ def build_dense_group_parcel_labels(
 
 
 def find_subject_t1(lss_root: Path, subject_id: str) -> Path | None:
-    candidates = [
-        lss_root / f"DataOrg_PFM_22P/sub-{subject_id}/anat/sub-{subject_id}_T1w.nii.gz",
-        lss_root / f"DataOrg_PFM_36P/sub-{subject_id}/anat/sub-{subject_id}_T1w.nii.gz",
-    ]
-    for c in candidates:
-        if c.is_file():
-            return c
-    return None
+    path = lss_root / f"DataOrg_PFM_36P/sub-{subject_id}/anat/sub-{subject_id}_T1w.nii.gz"
+    return path if path.is_file() else None
 
 
 def find_subject_surface(lss_root: Path, subject_id: str, hemi: str) -> Path | None:
-    candidates = [
-        lss_root
-        / f"DataOrg_PFM_22P/sub-{subject_id}/anat/sub-{subject_id}_hemi-{hemi}_space-fsLR_den-32k_midthickness.surf.gii",
-        lss_root
-        / f"DataOrg_PFM_36P/sub-{subject_id}/anat/sub-{subject_id}_hemi-{hemi}_space-fsLR_den-32k_midthickness.surf.gii",
-    ]
-    for c in candidates:
-        if c.is_file():
-            return c
-    return None
+    path = lss_root / f"DataOrg_PFM_36P/sub-{subject_id}/anat/sub-{subject_id}_hemi-{hemi}_space-fsLR_den-32k_midthickness.surf.gii"
+    return path if path.is_file() else None
 
 
 def find_subject_labels(lss_root: Path, subject_id: str, hemi: str) -> Path | None:
     filename = f"{hemi.lower()}h_labels.txt"
-    candidates = [
-        lss_root / f"ArealMSHBM_Kong2022_22P/sub-{subject_id}/{filename}",
-        lss_root / f"ArealMSHBM_Kong2022/sub-{subject_id}/{filename}",
-    ]
-    for c in candidates:
-        if c.is_file():
-            return c
-    return None
+    path = lss_root / f"ArealMSHBM_Kong2022/sub-{subject_id}/{filename}"
+    return path if path.is_file() else None
 
 
 def voxel_to_ras(voxel: np.ndarray, affine: np.ndarray) -> np.ndarray:

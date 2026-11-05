@@ -18,15 +18,14 @@ Missing inputs receive `unassessable` status; malformed or mismatched
 declarations stop the operation before reports are written.
 
 The passing roster is derived from current inputs, without a fixed subject
-count or historical ID requirement. Established report filenames containing
-`tsnr` remain an output interface, but no tSNR numerical gate is applied.
+count or historical ID requirement.
 Raw sampling, vertex masking, participant QC and smoothing consume the same
 NIfTI coverage contract across HCP rest/tasks, BANDA, PDC, Stanford, Iowa and NIH rTMS.
 Dataset registration and motion input formats are explicit input adapters;
 dataset identity does not disable coverage QC. Existing HCP7T rest commands
 may still provide their exact `--motion-manifest` table and BOLD/run metadata.
-The current HCP7T functional roster below is generated from the completed
-NIfTI coverage check on the official v2.3.0 surfaces.
+The HCP7T functional roster is generated from the completed
+NIfTI coverage check on the official v2.4.0 surfaces.
 
 ## Shared run inputs and commands
 
@@ -61,10 +60,9 @@ selects a CIFTI, reference image or mask in place of the BOLD series.
 Task/non-HCP preparation requires separate `--route-root`, `--shared-root`
 and, when building a group template, `--template-root`. Direct `02_02` calls
 require separate `--shared-root`, `--out-dir` and `--manifest-dir` for those
-cohorts. Run `02_01` stages `raw` and `tsnr` with `--tsnr-threshold none`, then
-`qc`; `all` also runs smoothing and the group-template stage. The `tsnr`
-stage name is retained, but the hippocampal mask uses NIfTI support and
-runwise signal validity, without EV files or baseline NPZ inputs.
+cohorts. Run `02_01` stages `raw` and `validity`, then `qc`; `all` also
+runs smoothing and the group-template stage. The hippocampal mask uses NIfTI
+support and finite, nonconstant signal within every physical run.
 
 For v2.3.0 cohorts, supply `--require-hippunfold-version 2.3.0` to the QC
 entrypoint. Official completion metadata must match that release; an
@@ -72,7 +70,7 @@ incomplete reconstruction cannot enter through a high Dice score. Retained
 post-cleanup surfaces remain usable for functional QC when their completed
 run is recorded; this does not satisfy the full structural-resume contract.
 
-Each route contains `qc/t1only_hippunfold_tsnr_qc.{json,tsv}`. Passing rosters
+Each route contains `qc/t1only_hippunfold_qc.{json,tsv}`. Passing rosters
 are `<cohort>_hippocampus_fmri_qc_pass_t1only_<N|latest>.txt`, where cohort is
 `hcp_7t`, `hcp_3t_emotion`, `hcp_3t_wm`, `banda`, `pdc`, or the selected dataset.
 Reports use `incomplete_inputs` status when any participant is unassessable;
@@ -94,8 +92,7 @@ Use one bilateral participant/visit roster per analysis branch. A failure on
 either side excludes that participant/visit from the branch. Missing required
 inputs remain unassessable and are not recorded as quality failures.
 
-tSNR can be reported where its input baseline supports interpretation; it is
-not a numerical exclusion criterion. Mean relative RMS <=0.5 mm (M05) adds
+Mean relative RMS <=0.5 mm (M05) adds
 no exclusions among the currently assessed three-criterion passes and is not
 an additional gate. The coverage threshold counts vertices, not physical area.
 
@@ -173,35 +170,22 @@ independently. Run-level sampling saves the full vertex-by-time arrays as
 in `surface_sampling_summary.json`. The current raw-resume and QC commands
 still require the declared source BOLD files, even when those surface products
 are present. Retain the volumes during this QC run.
-HCP7T raw sampling, coverage masks and 2/4-mm smoothing have been rebuilt from
-the official v2.3.0 surfaces for the current 162-participant roster. PFM FC and
-group-analysis progress is recorded in the
-[current result assessment](../environment/hippunfold_result_impact.md).
+HCP7T raw sampling and coverage have been rebuilt from the official v2.4.0
+surfaces for the current 166-participant roster. Cortical references and
+dependent FC products require regeneration under the current signal policy.
 
 ## Current assessed cohorts
 
-The official HippUnfold v2.3.0 HCP7T reconstruction attempted all 166 subjects.
-Exactly 163 completed the official workflow and 162 also pass bilateral
-Dice >=0.70. All 162 pass the current overall mean Power FD <=0.50 mm rule;
-their maximum mean is 0.487185 mm. All 162 also pass the newly sampled BOLD
-NIfTI coverage check, with maximum unusable-vertex counts of four on the left
-and eight on the right. The final functional roster contains 162 participants
-at `outputs_hcp/inputs/kong2022/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt`.
-The current report is
-`outputs_hcp/inputs/kong2022/qc/t1only_hippunfold_tsnr_qc.json`. The three
-incomplete structural workflows are excluded before this 163-subject QC
-assessment; its single quality failure is 182739 for right-side Dice.
-
-The shared-code reassessment includes all 166 attempted HCP subjects and
-reproduces the same 162-person pass roster. It records 182739 as a Dice
-failure and the three missing completion reports as unassessable. The formal
-rest products have not been replaced.
+The official HippUnfold v2.4.0 HCP7T reconstruction and functional QC cover
+all 166 participants. The current report records 166 passes, zero quality
+failures and zero unassessable participants. The accepted roster is
+`outputs_hcp/inputs/kong2022/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt`.
 
 HCP3T EMOTION includes 159 task participants. All 159 pass motion; 155 have
 recorded official v2.3.0 completion and pass bilateral Dice. All 155 also pass
 NIfTI coverage, with zero unusable vertices in either hemisphere. Raw sampling
 and vertex masks are complete. The report is
-`outputs_hcp/inputs/kong2022/shared_inputs/task-emotion/qc/t1only_hippunfold_tsnr_qc.json`;
+`outputs_hcp/inputs/kong2022/shared_inputs/task-emotion/qc/t1only_hippunfold_qc.json`;
 the final roster is `hcp_3t_emotion_hippocampus_fmri_qc_pass_t1only_latest.txt`
 in the route's `manifests/` directory. The remaining four participants are
 182739 (right Dice) and 233326, 249947, 942658 (no official completion).
@@ -221,7 +205,7 @@ The final report records 193 passes, three motion failures and seven
 unassessable participants.
 BANDA199 has no run-level rest declaration; six other participants lack
 structural completion records after motion selection. The current report is
-`outputs_banda/inputs/kong2022/qc/t1only_hippunfold_tsnr_qc.json`.
+`outputs_banda/inputs/kong2022/qc/t1only_hippunfold_qc.json`.
 
 PDC has 455 attempted visits, with 442 v2.3.0 completion records. Motion passes
 451 visits; e0020s01, k0082s01, s0063s01 and s0066s02 exceed mean FD 0.50 mm.
@@ -231,7 +215,7 @@ are complete for all 437 eligible visits with all runs present; all pass, with
 zero unusable vertices in each hemisphere. The report records 437 passes,
 four motion failures and 14 unassessable visits. Thirteen of those visits lack
 structural completion records. The current report is
-`outputs_pdc/inputs/kong2022/qc/t1only_hippunfold_tsnr_qc.json`.
+`outputs_pdc/inputs/kong2022/qc/t1only_hippunfold_qc.json`.
 The only missing BOLD runs are `k0008_01_MR` REST1 AP/PA, corresponding to
 visit `k0008s01`; their Legacy Volume sources were not matched. QC retains
 their exact expected paths and marks that visit unassessable until both runs
@@ -276,7 +260,7 @@ unusable left vertices, and D28 has 85 unusable left vertices. All their
 vertices have positive image-grid support; the excluded vertices have invalid
 sampled signals. All other assessed hemispheres satisfy the <=20 rule.
 
-Each visit's report is `qc/t1only_hippunfold_tsnr_qc.json` and its final roster
+Each visit's report is `qc/t1only_hippunfold_qc.json` and its final roster
 is `manifests/nih_rtms_hippocampus_fmri_qc_pass_t1only_latest.txt` within that
 visit route. Both reports have `done` status, with no unassessable scans.
 Of the 23 TRD participants with both treatment visits, **18 retain both

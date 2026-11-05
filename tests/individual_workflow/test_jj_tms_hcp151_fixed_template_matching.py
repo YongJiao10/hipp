@@ -215,7 +215,7 @@ def test_resolve_and_validate_accepts_canonical_three_and_two_run_inputs(
 @pytest.mark.parametrize(
     ("run_ids", "run_lengths"),
     [
-        ([2, 3], [6, 7]),       # 22P canonical case
+        ([2, 3], [6, 7]),       # nonconsecutive run IDs
         ([1, 2, 3], [4, 5, 6]), # 36P canonical case
     ],
 )
@@ -426,12 +426,15 @@ def test_hippocampal_rest_validity_has_no_amplitude_threshold():
         dtype=np.float32,
     )
 
-    # This checks basic residual validity, separately from baseline tSNR QC.
     valid = workflow.rest_signal_validity(timeseries)
     assert valid.tolist() == [True, True, False]
-    with pytest.raises(ValueError, match='baseline_input'):
-        workflow.compute_tsnr(timeseries)
 
+
+
+def test_hippocampal_rest_validity_retains_a_constant_individual_run():
+    workflow = load_module()
+    signal = np.asarray([[1., 2., 3., 4., 4., 4.]], dtype=np.float32)
+    assert workflow.rest_signal_validity(signal).tolist() == [True]
 
 def test_combo_validation_requires_nonzero_valid_labels_and_all_three_codes():
     workflow = load_module()
@@ -550,7 +553,7 @@ def test_run_resume_contract_rejects_immutable_context_drift(field: str):
         "canonical_roster_count": 70,
         "template_manifest": {"sha256": "template"},
         "roi_registry": {"sha256": "registry"},
-        "parameters": {"tsnr_threshold": 25.0},
+        "parameters": {"validity_policy": "finite_nonconstant_series"},
         "path_roots": {"out_root": "/tmp/out"},
     }
     workflow.validate_run_resume_contract(dict(expected), expected)

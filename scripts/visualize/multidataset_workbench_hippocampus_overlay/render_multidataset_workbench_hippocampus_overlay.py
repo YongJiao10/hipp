@@ -1630,7 +1630,7 @@ def _render_grid():
     )
     parser.add_argument(
         "--variant",
-        choices=["36p", "22p"],
+        choices=["36p"],
         default="36p",
         help="Preprocessing variant (default: 36p)",
     )
@@ -1728,5 +1728,5 @@ if __name__ == "__main__":
     raise SystemExit(
         "Standalone rendering has been removed. Use "
         "scripts/visualize/run_multidataset_suite.py "
-        "with --figures to select the figure type; all four grids are processed in 4-way parallel by default."
+        "with --figures to select the figure type; both 36p grids are processed by default."
     )

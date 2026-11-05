@@ -57,7 +57,7 @@ The `hcp_jjtms_7net` branch adds Kong2022 7-Network and Lynch2024 7-Network meth
 - **路径与 assignment 单一入口**：活跃默认路径由 `scripts/visualize/lib/multidataset_cohorts.py` 统一解析；Kong2022 使用 canonical7 的 `normalized_top20_count` WTA。canonical8 仅能通过显式 resolver 选择历史归档路径，不作为默认输入。
 
 Canonical7 的维护输出文件名使用无后缀网格标签，例如
-`multidataset_wta_normalized_longaxis_stacked_2col_2mm_22p.png`；旧的
+`multidataset_wta_normalized_longaxis_stacked_2col_2mm_36p.png`。
 
 ---
 

@@ -22,14 +22,13 @@ for those details:
 |---|---|
 | `scripts/core_workflow/01_01_run_hippunfold_t1w_local.py` | Run local T1w HippUnfold workflow |
 | `scripts/core_workflow/01_02_check_hippunfold_outputs.py` | Validate the full HippUnfold output contract, then receipt and trim `anat/`, `coords/`, `warps/`, and `cifti/` while retaining core-consumed surface, metric, and QC assets |
-| `scripts/core_workflow/02_01_prepare_group_inputs.py` | Prepare shared surfaces, tSNR metadata, and group templates |
+| `scripts/core_workflow/02_01_prepare_group_inputs.py` | Prepare shared surfaces, signal-validity metadata, and group templates |
 | `scripts/core_workflow/02_02_build_qc_manifest.py` | Build QC-pass and excluded-subject manifests |
 | `scripts/core_workflow/03_01_build_kong2022_reference.py` | Build shared Kong2022 cortex references |
 | `scripts/core_workflow/03_02_build_kong2022_routea_reference.py` | Build RouteA cortex references and compact 17-net summaries |
 | `scripts/core_workflow/04_00_materialize_cortex_regressed_surface_timeseries.py` | Build isolated RouteA cortex-regressed hippocampal time series |
 | `scripts/core_workflow/04_01_materialize_kong2022_roi_fc.py` | Materialize Kong2022 vertex-to-ROI FC, including ctxdrop mode |
 | `scripts/core_workflow/04_02_materialize_intrinsic_fc.py` | Materialize intrinsic hippocampal FC |
-| `scripts/core_workflow/04_03_materialize_kong2019_fc.py` | Materialize Kong2019 FC banks |
 | `scripts/core_workflow/05_01_compute_hippomaps_gradients.py` | Compute aligned HippoMaps/BrainSpace gradient artifacts |
 | `scripts/core_workflow/05_02_run_group_atlas.py` | Build group atlas outputs and K diagnostics |
 | `scripts/core_workflow/05_03_run_spectral_fast_rerun.py` | Optional rerun orchestration after primary group-atlas construction |

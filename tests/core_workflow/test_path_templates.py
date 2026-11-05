@@ -29,6 +29,20 @@ def test_normalize_subject_removes_sub_prefix():
     assert normalize_subject("2001") == "2001"
 
 
+def test_retired_unsupported_variants_are_rejected():
+    from scripts.core_workflow.lib.output_layout import (
+        resolve_kong2022_variant_root,
+        validate_iowa7t_variant,
+    )
+
+    with pytest.raises(ValueError):
+        resolve_kong2022_variant_root("stanford", "unsupported")
+    with pytest.raises(ValueError):
+        validate_iowa7t_variant("unsupported")
+    assert resolve_kong2022_variant_root("stanford", "36p") == REPO_ROOT / "outputs_stanford/inputs/kong2022"
+    assert validate_iowa7t_variant("36p") == "36p"
+
+
 def test_normalize_subject_only_first_occurrence():
     assert normalize_subject("sub-sub-2001") == "sub-2001"
 
@@ -147,12 +161,6 @@ def test_cohort_resolvers_omit_redundant_cohort_layer_when_none():
         "group_atlas",
         "pfm",
     )
-    assert resolve_cohort_group_atlas_root("stanford", "pfm", cohort="nthc", variant="22p").parts[-4:] == (
-        "work",
-        "group_atlas",
-        "pfm_22p",
-        "nthc",
-    )
     assert resolve_cohort_gradient_root("stanford", "pfm", cohort="nthc").parts[-4:] == (
         "work",
         "hippomaps_gradients",
@@ -191,7 +199,6 @@ def test_legacy_wrong_path_mapping_resolves_all_declared_targets(tmp_path):
 
 @pytest.mark.parametrize("new_directory,old_directory,old_tag,old_atlas", [
     ("outputs_hcp/present/overviews/pfm", "wrong/outputs_hcp/present/overviews/kong2022_7net", "kong2022_7net", "kong2022_7net"),
-    ("outputs_stanford/present/overviews/pfm_22p/nthc", "wrong/outputs_stanford/present/overviews/routea_7net_22p/nthc", "routea_7net", "kong2022"),
     ("outputs_iowa_jj_tms/present/overviews/pfm/patient", "wrong/outputs_iowa_jj_tms/present/overviews/kong2022_7net/36p/patient", "kong2022_7net", "kong2022_7net"),
 ])
 def test_legacy_mapping_resolves_renamed_overview_files(tmp_path, new_directory, old_directory, old_tag, old_atlas):

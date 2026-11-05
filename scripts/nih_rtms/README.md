@@ -101,10 +101,9 @@ Motion selection uses original post-dummy, pre-censor frames; coverage uses
 the shorter retained NIfTI series. The outlier table binds those two lengths.
 The registration transform is paired with the exact fMRIPrep T1w consumed by
 HippUnfold, supporting both longitudinal subject-level and single-visit
-session-level anatomical exports. Use `--tsnr-threshold none` and
-`--require-hippunfold-version 2.3.0`; the remaining criteria are bilateral
+session-level anatomical exports. Use `--require-hippunfold-version 2.3.0`; the remaining criteria are bilateral
 Dice >=0.70 and <=20 unusable den-512 vertices per hemisphere.
-Reports are `qc/t1only_hippunfold_tsnr_qc.{json,tsv}` and pass lists are
+Reports are `qc/t1only_hippunfold_qc.{json,tsv}` and pass lists are
 `manifests/nih_rtms_hippocampus_fmri_qc_pass_t1only_latest.txt` within each route.
 Sampling, vertex masks and final assessment are complete: ses-1 retains 37/42
 scans and ses-2 retains 24/24. Ses-1 excludes D11/D12 for mean FD and D08/D09/D28

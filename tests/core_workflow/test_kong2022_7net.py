@@ -590,48 +590,6 @@ def test_template_surface_validation_rejects_foreign_dataset_path(
         )
 
 
-def test_template_producer_prefers_manifest_22p_root_over_36p_root(
-    tmp_path: Path,
-    monkeypatch,
-) -> None:
-    versioned_root = tmp_path / "outputs_stanford" / "inputs" / "kong2022_22p" / "shared_inputs" / "template"
-    generic_root = tmp_path / "generic_36p_template"
-    spec_root = tmp_path / "outputs_stanford" / "inputs" / "hippunfold" / "dense_corobl_batch"
-    surface_name = "group-average_hemi-L_space-corobl_den-512_label-hipp_midthickness.surf.gii"
-    spec_name = "sub-01_den-512_label-hipp_surfaces.spec"
-    versioned_surface = versioned_root / "group_average_surfaces" / surface_name
-    generic_surface = generic_root / "group_average_surfaces" / surface_name
-    versioned_surface.parent.mkdir(parents=True)
-    generic_surface.parent.mkdir(parents=True)
-    versioned_surface.write_bytes(b"22p")
-    generic_surface.write_bytes(b"36p")
-    spec = spec_root / "sub-01" / "hippunfold" / "sub-01" / "surf" / spec_name
-    spec.parent.mkdir(parents=True)
-    spec.write_text("spec\n", encoding="utf-8")
-    monkeypatch.setattr(
-        template_assets,
-        "resolve_kong2022_template_root",
-        lambda dataset, variant="36p": versioned_root if variant == "22p" else generic_root,
-    )
-    monkeypatch.setattr(
-        template_assets,
-        "resolve_hippunfold_batch_root",
-        lambda dataset: spec_root,
-    )
-
-    manifest = {
-        "dataset": "outputs_stanford",
-        "preprocessing_variant": "22p",
-        "template_subject": "sub-01",
-        "template_left_or_right_surface": str(generic_surface),
-        "template_spec_path": str(spec),
-    }
-    canonicalized = template_assets.canonicalize_template_manifest(
-        manifest,
-        hemi="L",
-        dataset="stanford",
-    )
-    assert Path(canonicalized["template_left_or_right_surface"]).resolve() == versioned_surface.resolve()
 
 
 def test_weighted_gradient_normalization_passes_run_dir_once(tmp_path: Path, monkeypatch) -> None:

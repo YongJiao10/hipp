@@ -190,7 +190,7 @@ def make_inventory():
                     ('ts',Path(c['surface_root'])/subject/f'surface/2mm/{subject}_hemi-{hemi}_timeseries.npy'),
                     ('roi',Path(c['reference_root'])/subject/'reference/kong2022/cortex_roi_parcel_timeseries.npy'),
                     ('roi_table',Path(c['reference_root'])/subject/'reference/kong2022/cortex_roi_parcels.tsv'),
-                    ('valid',Path(c['mask_root'])/subject/f'surface/tsnr_gate/{subject}_hemi-{hemi}_valid_mask.npy')]: row[k]=rec(p)
+                    ('valid',Path(c['mask_root'])/subject/f'surface/validity/{subject}_hemi-{hemi}_valid_mask.npy')]: row[k]=rec(p)
                 points,faces=surface(native); up,uf=surface(unfolded)
                 if not np.array_equal(faces,uf): raise ValueError(f'native/unfold topology mismatch: {mp}')
                 axis=unfold_axis(up)

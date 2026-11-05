@@ -11,7 +11,7 @@
 ## Global Constraints
 
 - Use only the ESTT 25-subject manifest: `subjects_25_estt_kong2022_areal.txt`.
-- The two restored cortex ROI caches must be exactly `(400, n_timepoints)` and use the existing Kong2022 dlabel and `TSNR >= 25` gate.
+- The two restored cortex ROI caches must be exactly `(400, n_timepoints)` and use the existing Kong2022 dlabel and runwise signal-validity mask.
 - The group atlas must consume the recorded HippUnfold `den-512` corobl midthickness surface topology and use 2mm/4mm separately for both L/R hemispheres.
 - The formal gradient affinity is `((1+cosine_similarity)/2)_hadamard_surface_adjacency_diag0`; do not label a ReLU-cosine result as shifted-cosine.
 - Do not access `_archive` content and do not delete existing files; overwrite only the requested Kong2022 canonical outputs after successful computation.

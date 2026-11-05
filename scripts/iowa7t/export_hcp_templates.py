@@ -102,7 +102,7 @@ def subject_paths(subject: str, smoothing: str, hemi: str) -> tuple[Path, ...]:
     return (surf / smoothing / f"{sub}_hemi-{hemi}_timeseries.npy",
             ref / "cortex_roi_parcel_timeseries.npy",
             ref / "cortex_roi_parcels.tsv",
-            surf / "tsnr_gate" / f"{sub}_hemi-{hemi}_valid_mask.npy")
+            surf / "validity" / f"{sub}_hemi-{hemi}_valid_mask.npy")
 
 
 def subject_data(subject: str, smoothing: str, hemi: str,

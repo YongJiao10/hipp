@@ -95,30 +95,18 @@ def test_standard_launcher_exposes_one_contract_for_all_datasets() -> None:
     assert "--materialize-label-assets" in task_text
 
 
-def test_stanford_22p_launcher_isolated_from_36p(tmp_path: Path) -> None:
+def test_stanford_launcher_rejects_retired_variant(tmp_path: Path) -> None:
     script_dir = REPO_ROOT / "scripts" / "ArealMSHBM_Kong2022"
     submit = script_dir / "submit_kong2022_areal_mshbm.sh"
-    task = script_dir / "run_kong2022_areal_mshbm_subject_sge.sh"
-    combined = "\n".join(path.read_text(encoding="utf-8") for path in [submit, task])
-
-    for token in [
-        "STANFORD_VARIANT=22p|36p",
-        "DataOrg_PFM_22P",
-        "ArealMSHBM_Kong2022_22P",
-        "export STANFORD_VARIANT=%s",
-        "stanford_22p_kong2022",
-    ]:
-        assert token in combined, f"Stanford 22P isolation missing {token}"
-
     env = os.environ.copy()
     env.update(
         {
             "DATASET": "stanford",
-            "STANFORD_VARIANT": "22p",
+            "STANFORD_VARIANT": "unsupported",
             "SYSTEM_NAME": "argon",
             "REPO_ROOT": str(REPO_ROOT),
-            "DATA_ROOT": "/Shared/jianglab/3_Data_Working/fmriprep_processed_CausalConnectome/rest_fmriprep/DataOrg_PFM_22P",
-            "OUT_ROOT": str(tmp_path / "ArealMSHBM_Kong2022_22P"),
+            "DATA_ROOT": "/Shared/jianglab/3_Data_Working/fmriprep_processed_CausalConnectome/rest_fmriprep/DataOrg_PFM_UNSUPPORTED",
+            "OUT_ROOT": str(tmp_path / "ArealMSHBM_Kong2022_UNSUPPORTED"),
             "SUBJECT_IDS_CSV": "1001",
             "SMOKE_N": "1",
             "KEEP_TMP": "1",
@@ -133,10 +121,9 @@ def test_stanford_22p_launcher_isolated_from_36p(tmp_path: Path) -> None:
         text=True,
         check=False,
     )
-    assert result.returncode == 0, result.stdout + result.stderr
+    assert result.returncode != 0
     output = result.stdout + result.stderr
-    assert "data_root=/Shared/jianglab/3_Data_Working/fmriprep_processed_CausalConnectome/rest_fmriprep/DataOrg_PFM_22P" in output
-    assert f"out_root={tmp_path / 'ArealMSHBM_Kong2022_22P'}" in output
+    assert "STANFORD_VARIANT must be 36p" in output
 
 
 def test_stanford_variant_rejects_known_data_root_conflict(tmp_path: Path) -> None:
@@ -145,10 +132,10 @@ def test_stanford_variant_rejects_known_data_root_conflict(tmp_path: Path) -> No
     env.update(
         {
             "DATASET": "stanford",
-            "STANFORD_VARIANT": "22p",
+            "STANFORD_VARIANT": "36p",
             "SYSTEM_NAME": "argon",
             "REPO_ROOT": str(REPO_ROOT),
-            "DATA_ROOT": "/Shared/jianglab/3_Data_Working/fmriprep_processed_CausalConnectome/rest_fmriprep/DataOrg_PFM_36P",
+            "DATA_ROOT": "/Shared/jianglab/3_Data_Working/fmriprep_processed_CausalConnectome/rest_fmriprep/DataOrg_PFM_23P",
             "OUT_ROOT": str(tmp_path / "out"),
             "SUBJECT_IDS_CSV": "1001",
             "DRY_RUN": "1",
@@ -166,56 +153,16 @@ def test_stanford_variant_rejects_known_data_root_conflict(tmp_path: Path) -> No
     assert "conflicts with DATA_ROOT" in result.stderr
 
 
-def test_estt_22p_launcher_isolated_from_36p(tmp_path: Path) -> None:
-    script_dir = REPO_ROOT / "scripts" / "ArealMSHBM_Kong2022"
-    submit = script_dir / "submit_kong2022_areal_mshbm.sh"
-    task = script_dir / "run_kong2022_areal_mshbm_subject_sge.sh"
-    provenance = script_dir / "write_kong2022_areal_mshbm_provenance.py"
-    combined = "\n".join(path.read_text(encoding="utf-8") for path in [submit, task, provenance])
-
-    for token in [
-        "ESTT_VARIANT=22p|23p|36p",
-        "/Shared/jianglab/3_Data_Working/fmriprep_processed_esTT/DataOrg_PFM_22P",
-        "/DataOrg_PFM_22P/hipp_outputs/cortex_kong2022_areal_mshbm",
-        "export ESTT_VARIANT=%s",
-        "estt_22p_kong2022",
-        '"variant": manifest["variant"]',
-    ]:
-        assert token in combined, f"ESTT 22P isolation missing {token}"
-
-    env = os.environ.copy()
-    env.update(
-        {
-            "DATASET": "estt",
-            "ESTT_VARIANT": "22p",
-            "SYSTEM_NAME": "argon",
-            "REPO_ROOT": str(REPO_ROOT),
-            "DATA_ROOT": "/Shared/jianglab/3_Data_Working/fmriprep_processed_esTT/DataOrg_PFM_22P",
-            "OUT_ROOT": str(tmp_path / "cortex_kong2022_areal_mshbm_22P"),
-            "SUBJECT_IDS_CSV": "369",
-            "SMOKE_N": "1",
-            "KEEP_TMP": "1",
-            "DRY_RUN": "1",
-            "MANIFEST_DIR": str(tmp_path / "manifests"),
-            "LOG_ROOT": str(tmp_path / "logs"),
-        }
-    )
-    result = subprocess.run(
-        [str(submit)],
-        cwd=REPO_ROOT,
-        env=env,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert result.returncode == 0, result.stdout + result.stderr
-    output = result.stdout + result.stderr
-    assert "ESTTVariant=22p" in output
-    assert "data_root=/Shared/jianglab/3_Data_Working/fmriprep_processed_esTT/DataOrg_PFM_22P" in output
-    assert f"out_root={tmp_path / 'cortex_kong2022_areal_mshbm_22P'}" in output
+def test_estt_launcher_rejects_retired_variant(tmp_path: Path) -> None:
+    submit = REPO_ROOT / "scripts/ArealMSHBM_Kong2022/submit_kong2022_areal_mshbm.sh"
+    env = {**os.environ, "DATASET": "estt", "ESTT_VARIANT": "unsupported",
+           "SYSTEM_NAME": "argon", "REPO_ROOT": str(REPO_ROOT)}
+    result = subprocess.run([str(submit)], cwd=REPO_ROOT, env=env, capture_output=True, text=True)
+    assert result.returncode == 2
+    assert "ESTT_VARIANT must be 23p or 36p" in result.stderr
 
 
-def test_estt_23p_launcher_isolated_from_22p_and_36p(tmp_path: Path) -> None:
+def test_estt_23p_launcher_isolated_from_36p(tmp_path: Path) -> None:
     script_dir = REPO_ROOT / "scripts" / "ArealMSHBM_Kong2022"
     submit = script_dir / "submit_kong2022_areal_mshbm.sh"
     task = script_dir / "run_kong2022_areal_mshbm_subject_sge.sh"
@@ -224,7 +171,7 @@ def test_estt_23p_launcher_isolated_from_22p_and_36p(tmp_path: Path) -> None:
     combined = "\n".join(path.read_text(encoding="utf-8") for path in [submit, task, report, readme])
 
     for token in [
-        "ESTT_VARIANT=22p|23p|36p",
+        "ESTT_VARIANT=23p|36p",
         "DataOrg_PFM_23P",
         "ESTT_VARIANT=23p",
     ]:
@@ -268,7 +215,7 @@ def test_estt_variant_rejects_known_data_root_conflict(tmp_path: Path) -> None:
     env.update(
         {
             "DATASET": "estt",
-            "ESTT_VARIANT": "22p",
+            "ESTT_VARIANT": "23p",
             "SYSTEM_NAME": "argon",
             "REPO_ROOT": str(REPO_ROOT),
             "DATA_ROOT": "/Shared/jianglab/3_Data_Working/fmriprep_processed_esTT/DataOrg_PFM_36P",
@@ -300,7 +247,7 @@ def test_estt_23p_variant_rejects_known_data_root_conflict(tmp_path: Path) -> No
             "ESTT_VARIANT": "23p",
             "SYSTEM_NAME": "argon",
             "REPO_ROOT": str(REPO_ROOT),
-            "DATA_ROOT": "/Shared/jianglab/3_Data_Working/fmriprep_processed_esTT/DataOrg_PFM_22P",
+            "DATA_ROOT": "/Shared/jianglab/3_Data_Working/fmriprep_processed_esTT/DataOrg_PFM_36P",
             "OUT_ROOT": str(tmp_path / "out"),
             "SUBJECT_IDS_CSV": "369",
             "DRY_RUN": "1",
@@ -474,7 +421,7 @@ def test_iowa7t_argon_preset_contract_supports_0p_32p_variants() -> None:
         "DataOrg_PFM_32P",
         "MEICA_XCPD0P_denoised",
         "MEICA_XCPD32P_denoised",
-        "0p|22p|32p|36p|noxcpd",
+        "0p|32p|36p|noxcpd",
     ]
     for token in required:
         assert token in combined, f"missing {token}"

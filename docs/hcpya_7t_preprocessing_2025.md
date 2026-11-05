@@ -42,9 +42,9 @@ is explicitly marked in the filename.
 For a file such as
 `rfMRI_REST_7T_hp2000_clean_rclean_tclean.nii.gz` or its matching CIFTI:
 
-| Component | Meaning | XCP-D/22P? |
+| Component | Meaning | XCP-D? |
 |---|---|---|
-| `hp2000` | HCP high-pass operation using 2000 seconds as the full-width parameter; it is not “22P” | No |
+| `hp2000` | HCP high-pass operation using 2000 seconds as the full-width parameter | No |
 | `clean` | spatial ICA + FIX cleaned output | No |
 | `rclean` | Reclean output, an improvement/reclassification stage for spatial ICA cleanup | No |
 | `tclean` | temporal ICA-cleaned output | No |
@@ -81,14 +81,6 @@ as “raw/unprocessed volume”; it is not the unprocessed acquisition:
 
 ## Analysis implication
 
-HCP-YA 2025 native data do not contain XCP-D or a 22P nuisance-regression
-strategy. For a native HCP analysis, use the matching HCP CIFTI for cortex and
-the matching HCP processed NIfTI for volume-to-HippUnfold sampling. Calling this
-branch “22P” would be incorrect.
-
-If a common 22P-style nuisance model is required across datasets, it should be
-defined as a new, explicitly documented post-processing branch (or all datasets
-should be rerun through one common pipeline). Applying 22P only to HCP, or
-applying it after HCP ICA/tICA without preserving a native branch, would create
-`HCP-2025 + post-hoc 22P`, not an HCP-2025-native product, and may constitute
-additional/double denoising.
+HCP-YA 2025 native data use HCP processing rather than XCP-D. For a native HCP
+analysis, use the matching HCP CIFTI for cortex and the matching processed NIfTI
+for volume-to-HippUnfold sampling.

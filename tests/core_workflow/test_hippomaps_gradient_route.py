@@ -78,7 +78,7 @@ smoke_mod = _load_module(
 )
 
 
-@pytest.mark.parametrize("variant,branch", [("36p", "pfm"), ("22p", "pfm_22p")])
+@pytest.mark.parametrize("variant,branch", [("36p", "pfm")])
 def test_cohort_gradient_producer_and_consumers_share_layout(tmp_path, monkeypatch, variant, branch):
     surface_dir = tmp_path / "surfaces"
     surface_dir.mkdir()
@@ -121,7 +121,7 @@ def test_cohort_gradient_producer_and_consumers_share_layout(tmp_path, monkeypat
 
 
 @pytest.mark.parametrize("cohort,variant,can_resume", [
-    ("nthc", "36p", True), ("tehc", "36p", False), ("nthc", "22p", False),
+    ("nthc", "36p", True), ("tehc", "36p", False),
 ])
 def test_gradient_resume_rejects_a_different_cohort_or_variant(tmp_path, cohort, variant, can_resume):
     recorded = atlas_mod.gradient_resume_inputs(

@@ -45,8 +45,7 @@ EMOTION's final fear EV extends beyond the acquisition window; the official
 HCP protocol documents missing final trials. Interpret the actual final-block
 timing without imposing an unsupported global event shift.
 
-Current task masks use `--tsnr-threshold none`; residual-tSNR scores were not
-computed. File completeness and basic signal validity are prerequisites,
+Current task masks use per-run signal validity. File completeness and basic signal validity are prerequisites,
 not evidence of acceptable motion, local signal, or task reliability.
 See [the accepted fMRI QC policy](docs/hipp_parcellation_network/fmri_qc.md)
 for motion, anatomy and hippocampal-coverage selection, their implementation

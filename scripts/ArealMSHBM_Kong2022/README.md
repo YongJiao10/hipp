@@ -26,10 +26,8 @@ The CLI defaults to `jj_tms`; set the dataset explicitly in commands.
 | --- | --- | --- | --- |
 | `jj_tms` | `/Shared/jianglab/3_Data_Working/fmriprep_processed_JJ_TMS/xcpd_surf` | `/Shared/jianglab/3_Data_Working/fmriprep_processed_JJ_TMS/ArealMSHBM_Kong2022` | `func/*_task-rest_run-*_space-fsLR_den-91k_desc-denoised_bold.dtseries.nii` |
 | `stanford` + `STANFORD_VARIANT=36p` | `/Shared/jianglab/3_Data_Working/fmriprep_processed_CausalConnectome/rest_fmriprep/DataOrg_PFM_36P` | `/Shared/jianglab/3_Data_Working/fmriprep_processed_CausalConnectome/rest_fmriprep/ArealMSHBM_Kong2022` | `func/*_task-rest_space-fsLR_den-91k_desc-denoised_bold.dtseries.nii` |
-| `stanford` + `STANFORD_VARIANT=22p` | `/Shared/jianglab/3_Data_Working/fmriprep_processed_CausalConnectome/rest_fmriprep/DataOrg_PFM_22P` | `/Shared/jianglab/3_Data_Working/fmriprep_processed_CausalConnectome/rest_fmriprep/ArealMSHBM_Kong2022_22P` | `func/*_task-rest_space-fsLR_den-91k_desc-denoised_bold.dtseries.nii` |
 | `iowa7t` | `/Shared/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_36P` | `/Shared/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_36P/hipp_outputs` | selected by `IOWA7T_BRANCH` and `IOWA7T_VARIANT` |
 | `estt` + `ESTT_VARIANT=36p` | `/Shared/jianglab/3_Data_Working/fmriprep_processed_esTT/DataOrg_PFM_36P` | `/Shared/jianglab/3_Data_Working/fmriprep_processed_esTT/DataOrg_PFM_36P/hipp_outputs/cortex_kong2022_areal_mshbm` | `func/sub-<id>_task-rest_run-concat.dtseries.nii` |
-| `estt` + `ESTT_VARIANT=22p` | `/Shared/jianglab/3_Data_Working/fmriprep_processed_esTT/DataOrg_PFM_22P` | `/Shared/jianglab/3_Data_Working/fmriprep_processed_esTT/DataOrg_PFM_22P/hipp_outputs/cortex_kong2022_areal_mshbm` | `func/sub-<id>_task-rest_run-concat.dtseries.nii` |
 | `estt` + `ESTT_VARIANT=23p` | `/Shared/jianglab/3_Data_Working/fmriprep_processed_esTT/DataOrg_PFM_23P` | `/Shared/jianglab/3_Data_Working/fmriprep_processed_esTT/DataOrg_PFM_23P/hipp_outputs/cortex_kong2022_areal_mshbm` | `func/sub-<id>_task-rest_run-concat.dtseries.nii` |
 | `iowa_hcp500` | `/old_Users/yojiao/HCPpipeline500/work/qunex_iowa7t_hcppipeline500/sessions` | `${REPO_ROOT}/outputs_iowa_hcp500/inputs/kong2022/cortex_references/routea_areal_mshbm` | `<subject>/hcp/<subject>/MNINonLinear/Results/REST/REST_Atlas_MSMAll_hp0_clean_rclean.dtseries.nii` |
 | `hcp7t` | `${REPO_ROOT}/data/hippunfold_input` | `${REPO_ROOT}/outputs_hcp/inputs/kong2022/cortex_references/pfm_areal_mshbm` | `func/sub-<id>_task-rest_run-concat.dtseries.nii`, split using `outputs_hcp/inputs/qc/run_metadata/sub-<id>.json` |
@@ -48,7 +46,7 @@ use isolated matching output roots. Keep ESTT separate from Iowa7T.
   `${REPO_ROOT}/outputs_hcp/inputs/qc/run_metadata`). Validate subject, IDs 1–4,
   run lengths and total frames, then split the supplied CIFTI into those four
   physical sessions. Existing label/provenance files are protected.
-- ESTT uses `ESTT_VARIANT=22p|23p|36p`. Read each selected CIFTI's actual frame
+- ESTT uses `ESTT_VARIANT=23p|36p`. Read each selected CIFTI's actual frame
   count and split it into four balanced sessions. Retain the subject CBIG work,
   flat labels, `labels/*.func.gii`, `labels/*.label.gii`, flat `.dlabel.nii`,
   `provenance.json`, `summary.json`, `stage_manifest.json` and `matlab_wrapper.log`.
@@ -67,7 +65,7 @@ Each hemisphere has 32,492 labels. Provenance records consumed runs and inputs.
 
 These presets use HCP MSMAll clean CIFTIs from exact official
 `metadata/datastructure_manifest.txt` declarations. They have no fMRIPrep
-22P/36P selector. The complete cortex roster is 455 PDC visits (984 runs) and
+denoising-variant selector. The complete cortex roster is 455 PDC visits (984 runs) and
 202 BANDA participants (808 runs); BANDA199 is explicitly excluded because its
 source metadata has no run-level resting CIFTI.
 
@@ -92,20 +90,20 @@ persistent subject `inputs/` plus a unique CBIG work directory.
 ### Iowa7T variants
 
 `DATASET=iowa7t` requires `IOWA7T_BRANCH=multiband|multi_echo`.
-`IOWA7T_VARIANT=0p|22p|32p|36p|noxcpd` selects the matching
-`DataOrg_PFM_0P`, `DataOrg_PFM_22P`, `DataOrg_PFM_32P`,
+`IOWA7T_VARIANT=0p|32p|36p|noxcpd` selects the matching
+`DataOrg_PFM_0P`, `DataOrg_PFM_32P`,
 `DataOrg_PFM_36P` or `DataOrg_PFM_NoXCPD` tree; 36P is the default.
 
 | Acquisition | Exact subject filename below `sub-<id>/func/` |
 |---|---|
-| Multiband 0P/22P/32P/36P | `sub-<id>_task-rest_dir-concat_space-fsLR_den-91k_desc-denoised_bold.dtseries.nii` |
-| Multi-echo 0P/22P/32P/36P | `sub-<id>_task-rest_run-concat_space-fsLR_den-91k_desc-MEICA_XCPD<0P\|22P\|32P\|36P>_denoised_bold.dtseries.nii` |
+| Multiband 0P/32P/36P | `sub-<id>_task-rest_dir-concat_space-fsLR_den-91k_desc-denoised_bold.dtseries.nii` |
+| Multi-echo 0P/32P/36P | `sub-<id>_task-rest_run-concat_space-fsLR_den-91k_desc-MEICA_XCPD<0P\|32P\|36P>_denoised_bold.dtseries.nii` |
 | Multiband NoXCPD | `sub-<id>_task-rest_dir-concat_space-fsLR_den-91k_desc-NoXCPD_bold.dtseries.nii` |
 | Multi-echo NoXCPD | `sub-<id>_task-rest_run-concat_space-fsLR_den-91k_desc-MEICA_NoXCPD_bold.dtseries.nii` |
 
 See [Iowa7T output layout](../../docs/iowa7t_36p_hipp_outputs_layout.md)
 for production structure and [Iowa7T utilities](../iowa7t/README.md) for downstream
-sampling, baseline tSNR and FC.
+sampling, signal validity and FC.
 
 ## Submit and inspect
 
@@ -127,7 +125,7 @@ Inspect outputs before treating a dependent run as valid.
 Preview an explicit subject selection:
 
 ```bash
-SYSTEM_NAME=argon DATASET=stanford STANFORD_VARIANT=22p SUBJECT_IDS_CSV=1001 KEEP_TMP=1 DRY_RUN=1 scripts/ArealMSHBM_Kong2022/submit_kong2022_areal_mshbm.sh
+SYSTEM_NAME=argon DATASET=stanford STANFORD_VARIANT=36p SUBJECT_IDS_CSV=1001 KEEP_TMP=1 DRY_RUN=1 scripts/ArealMSHBM_Kong2022/submit_kong2022_areal_mshbm.sh
 ```
 
 Use the same selection with `TASK_DRY_RUN=1` for task preflight without MATLAB.
@@ -139,8 +137,8 @@ only for the authorized operation. `KEEP_TMP=1` prevents automatic workdir clean
 |---|---|
 | `SUBJECT_IDS_FILE`, `SUBJECT_IDS_CSV` | Explicit subject roster |
 | `SMOKE_N` | Restrict the selected roster to N subjects |
-| `STANFORD_VARIANT=22p\|36p` | Matching Stanford input/output variant |
-| `ESTT_VARIANT=22p\|23p\|36p` | Matching ESTT input/output variant |
+| `STANFORD_VARIANT=36p` | Matching Stanford input/output variant |
+| `ESTT_VARIANT=23p\|36p` | Matching ESTT input/output variant |
 | `IOWA7T_BRANCH`, `IOWA7T_VARIANT` | Iowa7T acquisition and denoising selection |
 | `DATA_ROOT`, `OUT_ROOT`, `COHORT_MANIFEST`, `HCP_RUN_METADATA_ROOT` | Explicit input/output contracts |
 | `SYSTEM_NAME`, `UI_TC`, `PINC_TC`, `HOLD_JID` | Cluster, throttle and dependencies |
@@ -156,17 +154,17 @@ Task logs identify the exact subject manifest as `SubjectIDsFile=...`.
 Use the same dataset/variant selectors for status reporting:
 
 ```bash
-DATASET=stanford STANFORD_VARIANT=22p scripts/ArealMSHBM_Kong2022/report_kong2022_areal_mshbm_status.sh <job_id> sub-1001
+DATASET=stanford STANFORD_VARIANT=36p scripts/ArealMSHBM_Kong2022/report_kong2022_areal_mshbm_status.sh <job_id> sub-1001
 ```
 
 ## Iowa7T runwise interface
 
-`submit_kong2022_areal_mshbm_runwise.sh` selects one subject and 22P or 36P.
+`submit_kong2022_areal_mshbm_runwise.sh` selects one subject and 36P.
 Four separate calls use `run-01=ME01`, `run-02=ME02`, `run-03=MB03`,
 `run-04=MB04`. They are not paired acquisitions or multi-session MATLAB calls.
 
 ```bash
-SYSTEM_NAME=argon IOWA7T_VARIANT=22p SUBJECT_ID=<subject> RUN_TAG=<explicit_tag> DRY_RUN=1 scripts/ArealMSHBM_Kong2022/submit_kong2022_areal_mshbm_runwise.sh
+SYSTEM_NAME=argon IOWA7T_VARIANT=36p SUBJECT_ID=<subject> RUN_TAG=<explicit_tag> DRY_RUN=1 scripts/ArealMSHBM_Kong2022/submit_kong2022_areal_mshbm_runwise.sh
 ```
 
 The default array has four tasks with `-tc 4`. Its root is

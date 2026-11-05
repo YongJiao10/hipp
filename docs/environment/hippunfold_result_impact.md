@@ -92,9 +92,7 @@ passes also pass the newly measured NIfTI support and runwise signal coverage.
 Canonical BOLD resampling from the new v2.3.0 T1w surfaces, 2/4-mm smoothing
 and both group-average surfaces are complete for these 162 participants.
 The largest unusable-vertex counts are four on the left and eight on the
-right, below the 20-vertex limit. The formal final functional roster is
-`outputs_hcp/inputs/kong2022/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt`;
-the current QC report is `outputs_hcp/inputs/kong2022/qc/t1only_hippunfold_tsnr_qc.json`.
+right, below the 20-vertex limit in this v2.3.0 assessment.
 Execution logs are under `outputs_hcp/runs/hcp7t_v230_fd050_20261026/`.
 
 Retained independent cortical references are reused. The missing standard

@@ -477,7 +477,7 @@ def test_routea_ctxreg_fc_steps_use_separate_reference_and_mask_roots(tmp_path: 
     ts_dir.mkdir(parents=True)
     np.save(ts_dir / f"sub-{subject}_hemi-L_timeseries.npy", np.asarray([[1, 2, 3, 4], [2, 3, 4, 5]], dtype=np.float32))
 
-    mask_dir = source_masks / f"sub-{subject}" / "surface" / "tsnr_gate"
+    mask_dir = source_masks / f"sub-{subject}" / "surface" / "validity"
     mask_dir.mkdir(parents=True)
     np.save(mask_dir / f"sub-{subject}_hemi-L_valid_mask.npy", np.asarray([True, False], dtype=bool))
 
@@ -517,7 +517,7 @@ def test_routea_ctxreg_fc_steps_use_separate_reference_and_mask_roots(tmp_path: 
     )
     assert (out_root / f"sub-{subject}" / "fc" / "kong2022" / "2mm" / "hemi_L" / "hipp_vertex_to_network_fc.npy").exists()
     assert not (out_root / f"sub-{subject}" / "reference").exists()
-    assert not (out_root / f"sub-{subject}" / "surface" / "tsnr_gate").exists()
+    assert not (out_root / f"sub-{subject}" / "surface" / "validity").exists()
 
     intrinsic_mod.materialize_subject(
         shared_root=out_root,

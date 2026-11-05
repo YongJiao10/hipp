@@ -1,10 +1,10 @@
 # pyright: reportMissingImports=false, reportPossiblyUnboundVariable=false
-"""Centralized multi-dataset cohort metadata and 2x2 grid path resolution.
+"""Centralized multi-dataset cohort metadata and grid path resolution.
 
 Supported grid dimensions:
   - smoothing: '2mm' | '4mm'
-  - variant: '36p' | '22p'
-  (Four combinations: 2mm_36p, 2mm_22p, 4mm_36p, 4mm_22p)
+  - variant: '36p'
+  (Two combinations: 2mm_36p, 4mm_36p)
 
 Excluded from the 2x2 grid matrix:
   - multidataset_gradient_subregion_top20_fixed_hcp7t_2col
@@ -29,7 +29,7 @@ if str(CORE_LIB_DIR) not in sys.path:
 
 from lib.group_atlas_lineage import validate_group_atlas_lineage
 
-GRID_VARIANTS: tuple[str, ...] = ("2mm_36p", "2mm_22p", "4mm_36p", "4mm_22p")
+GRID_VARIANTS: tuple[str, ...] = ("2mm_36p", "4mm_36p")
 SIGNAL_BRANCHES: tuple[str, ...] = ("standard", "ctxreg")
 
 EXCLUDED_VISUALIZATIONS: tuple[str, ...] = (
@@ -70,8 +70,8 @@ class GridSpec:
             raise ValueError(
                 f"smoothing must be '2mm' or '4mm', got {self.smoothing!r}"
             )
-        if self.variant not in ("36p", "22p"):
-            raise ValueError(f"variant must be '36p' or '22p', got {self.variant!r}")
+        if self.variant != "36p":
+            raise ValueError(f"variant must be '36p', got {self.variant!r}")
         if self.atlas not in ("kong2022", "7net", "canonical7"):
             raise ValueError(
                 f"atlas must be 'kong2022' or a canonical7 taxonomy alias, got {self.atlas!r}"
@@ -446,12 +446,11 @@ def _resolve_ctxreg_cohort_paths(cohort_id: str, spec: GridSpec) -> dict[str, Pa
 def resolve_cohort_paths(cohort_id: str, spec: GridSpec) -> dict[str, Path]:
     """Resolve group atlas, overview, and input paths for a cohort given a GridSpec."""
     sm = spec.smoothing
-    var = spec.variant
 
     if spec.signal_branch == "ctxreg":
         return _resolve_ctxreg_cohort_paths(cohort_id, spec)
 
-    route_dir = "pfm_22p" if var == "22p" else "pfm"
+    route_dir = "pfm"
     if cohort_id == "hcp_7t":
         grp_base = REPO_ROOT / "outputs_hcp/work/group_atlas/pfm"
         pres_base = REPO_ROOT / "outputs_hcp/present/overviews/pfm"
@@ -555,11 +554,6 @@ def get_multidataset_cohorts(
         entry["legacy_7net_namespace"] = spec.uses_legacy_7net_namespace
         if spec.signal_branch == "ctxreg":
             entry["signal_branch"] = "ctxreg"
-        if spec.variant == "22p":
-            if entry["id"] == "stan_nthc":
-                entry["n_subjects"] = 50
-            elif entry["id"] == "stan_tehc":
-                entry["n_subjects"] = 39
         col1.append(entry)
 
     col2: list[dict[str, Any]] = []
@@ -570,11 +564,6 @@ def get_multidataset_cohorts(
         entry["legacy_7net_namespace"] = spec.uses_legacy_7net_namespace
         if spec.signal_branch == "ctxreg":
             entry["signal_branch"] = "ctxreg"
-        if spec.variant == "22p":
-            if entry["id"] == "stan_nthc":
-                entry["n_subjects"] = 50
-            elif entry["id"] == "stan_tehc":
-                entry["n_subjects"] = 39
         col2.append(entry)
 
     return col1, col2
@@ -900,9 +889,7 @@ def resolve_comparison_paths(
 
     sm = resolved.smoothing
     var = resolved.variant
-    var_suffix = (
-        "_22p" if var == "22p" and cohort["dataset_key"] == "iowa_jj_tms" else ""
-    )
+    var_suffix = ""
     dataset_root = REPO_ROOT / (
         "outputs_hcp" if cohort["dataset_key"] == "hcp" else "outputs_iowa_jj_tms"
     )

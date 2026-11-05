@@ -874,7 +874,7 @@ def _render_grid():
     )
     parser.add_argument(
         "--variant",
-        choices=["36p", "22p"],
+        choices=["36p"],
         default="36p",
         help="Denoising pipeline variant (default: 36p)",
     )
@@ -888,7 +888,7 @@ def _render_grid():
         "--grid",
         choices=list(GRID_VARIANTS),
         default=None,
-        help="Grid specification shortcut (e.g. 2mm_36p, 4mm_22p)",
+        help="Grid specification shortcut (e.g. 2mm_36p, 4mm_36p)",
     )
     args = parser.parse_args()
 
@@ -916,5 +916,5 @@ if __name__ == "__main__":
     raise SystemExit(
         "Standalone rendering has been removed. Use "
         "scripts/visualize/run_multidataset_suite.py "
-        "with --figures to select the figure type; all four grids are processed in 4-way parallel by default."
+        "with --figures to select the figure type; both 36p grids are processed by default."
     )

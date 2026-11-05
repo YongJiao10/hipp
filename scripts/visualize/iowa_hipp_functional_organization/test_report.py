@@ -256,9 +256,9 @@ class ReportTests(unittest.TestCase):
             subject_rows = self._subject_metric_bases(rows)
         else:
             rows = [
-                self._row(branch="22p", atlas="tm_dominant", target="DMN"),
+                self._row(branch="36p", atlas="tm_dominant", target="DMN"),
                 self._row(
-                    branch="22p", atlas="tm_dominant", system="B", metric="margin",
+                    branch="36p", atlas="tm_dominant", system="B", metric="margin",
                     target="SMN", mean_patient="", n_patient=0, difference="",
                     ci_low="", ci_high="", g="", p="", df="", reason="no valid area",
                 ),

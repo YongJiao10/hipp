@@ -272,7 +272,7 @@ def test_comparison_paths_are_method_and_grid_specific(tag: str, method: str):
             assert paths["overview_wta"].name.endswith("_fisherz.png")
 
         if cohort_id != "hcp_7t":
-            variant_suffix = "_22p" if spec.variant == "22p" else ""
+            variant_suffix = ""
             expected_present_namespace = (
                 f"pfm{variant_suffix}"
                 if method == "kong2022_7net"
@@ -282,7 +282,7 @@ def test_comparison_paths_are_method_and_grid_specific(tag: str, method: str):
             assert "iowa3t" not in str(paths["present_dir"])
 
         if cohort_id == "iowa_pat" and method == "kong2022_7net":
-            variant_suffix = "_22p" if spec.variant == "22p" else ""
+            variant_suffix = ""
             assert paths["group_root"].name == "patient"
             assert paths["group_root"].parent.name == f"pfm{variant_suffix}"
 
@@ -301,7 +301,7 @@ def test_standard_kong_reference_inputs_use_exact_routea_roots(tag: str):
                 REPO_ROOT / "outputs_hcp/inputs/kong2022/shared_inputs/surface"
             )
         else:
-            suffix = "_22p" if spec.variant == "22p" else ""
+            suffix = ""
             expected_reference = REPO_ROOT / (
                 f"outputs_iowa_jj_tms/inputs/kong2022{suffix}/"
                 "shared_inputs/pfm"
@@ -361,7 +361,7 @@ def test_comparison_overview_resolver_rejects_cross_method_metric_requests():
 
 def test_comparison_output_tag_is_disjoint_from_legacy_and_atlas_tags():
     assert get_comparison_output_tag(GridSpec("2mm", "36p")) == "hcp_jjtms_7net_2mm_36p"
-    assert get_comparison_output_tag(GridSpec("4mm", "22p")) == "hcp_jjtms_7net_4mm_22p"
+    assert get_comparison_output_tag(GridSpec("4mm", "36p")) == "hcp_jjtms_7net_4mm_36p"
 
 
 def test_wta_loader_rejects_count_only_label_cache(tmp_path, monkeypatch):
@@ -781,7 +781,7 @@ def test_each_internal_renderer_preserves_the_additive_version_flag():
         assert COMPARISON_VERSION in result.stdout
 
 
-def test_suite_runner_dry_run_exposes_additive_version_and_20_jobs():
+def test_suite_runner_dry_run_exposes_additive_version_and_10_jobs():
     runner = REPO_ROOT / "scripts" / "visualize" / "run_multidataset_suite.py"
     py_bin = "/home/yojiao/.conda/envs/py314/bin/python"
     result = subprocess.run(
@@ -791,7 +791,7 @@ def test_suite_runner_dry_run_exposes_additive_version_and_20_jobs():
         check=False,
     )
     assert result.returncode == 0
-    assert result.stdout.count("--version hcp_jjtms_7net") == 20
+    assert result.stdout.count("--version hcp_jjtms_7net") == 10
     assert "stanford" not in result.stdout.lower()
 
 
@@ -1058,7 +1058,7 @@ def test_wta_profile_contract_registers_four_rows_in_one_canonical_order(tmp_pat
         ),
         (
             np.zeros((4, 400), dtype=np.float32),
-            {"variant": "22p"},
+            {"variant": "unsupported"},
             "variant",
         ),
         (

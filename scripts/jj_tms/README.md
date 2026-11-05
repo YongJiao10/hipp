@@ -103,18 +103,6 @@ isolated under
 with downstream roots under `outputs_iowa_jj_tms/{work,present}/` using the
 same unversioned subgroup names.
 
-The completed 22P subgroup rerun reads versioned inputs from
-`outputs_iowa_jj_tms/inputs/kong2022_22p/shared_inputs/{pfm,surface}/`.
-Its FC caches use `inputs/kong2022_22p/shared_inputs/pfm/{pure_mdd,comorbid_mdd}/`.
-Gradients and base group atlases use `pfm_22p/{pure_mdd,comorbid_mdd}/`
-under their respective work roots; weighted group atlases use
-`pfm_weighted_22p/{pure_mdd,comorbid_mdd}/`. Presentation roots use
-`outputs_iowa_jj_tms/present/overviews/pfm_22p/{pure_mdd,comorbid_mdd}/`.
-Each presentation directory contains four PNGs:
-Fisher-z gradient-spectral, normalized Top-20 gradient-spectral, normalized
-Top-20 WTA, and weighted-Fisher-z gradient-spectral.
-
-
 ## JJ_TMS canonical7 branch
 
 The JJ_TMS canonical7 output is the default branch of the existing numbered
@@ -128,80 +116,13 @@ Pass `--atlas-slug kong2022` to `03_02`, `--atlas kong2022` to `04_01`,
 `05_02`. The existing renderers then consume the resulting direct branch.
 
 The fixed Iowa Patient cohort is 26 subjects with sub-3003 excluded. The
-active Patient branch uses the standard names
-`pfm/patient` and
-`pfm_22p/patient`; Lynch2024 7net uses the
+active Patient branch uses `pfm/patient`; Lynch2024 7net uses the
 corresponding `lynch2024_7net_iowa3t_patient*` roots. There is no parallel
 27-person Patient branch.
-The 22P inputs use `kong2022_22p/shared_inputs/`; downstream roots use
-`pfm_22p/<cohort>/`. Unversioned inputs and `pfm/<cohort>/` are the 36P branch.
 
-## JJ-TMS 22P core-workflow contract
+## Signal validity
 
-The 22P cortex branch uses 22P XCP-D dtseries and matching 22P individualized
-cortex labels. The hippocampal branch must use full, unsmoothed, denoised 22P
-volumes for the same runs. The structural HippUnfold `T1w den-512` geometry
-is independent of 22P/36P because it is derived from structural images, but the
-sampled hippocampal BOLD time series are variant-specific and live under the
-dedicated root:
-
-`outputs_iowa_jj_tms/inputs/kong2022_22p/shared_inputs/surface/`
-
-The available JJ-TMS 22P sources are:
-
-- functional CIFTI root:
-  `/home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_JJ_TMS/xcpd_surf_22P`
-- individualized cortex labels:
-  `/home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_JJ_TMS/ArealMSHBM_Kong2022_22P`
-- full denoised 22P volume root:
-  `/home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_JJ_TMS/xcpd_vol_22P/restfmri`
-
-The full denoised 22P volume runs are now available across all 94 subjects under
-`xcpd_vol_22P/restfmri/sub-<id>/func/sub-<id>_task-rest_run-*_space-MNI152NLin6Asym_res-2_desc-denoised_bold.nii.gz`.
-Do not substitute the generic `xcpd/restfmri` tree, which is a 36P derivative;
-do not use raw fMRIPrep preprocessed volumes; and do not reconstruct a sparse
-volume from CIFTI subcortical grayordinates. Pass 22P volumes through
-`--run-bold-glob` or `--volume-root`, pair them with the 22P CIFTI roster through
-`--run-dtseries-glob` or `--dtseries-root`, and require matching numeric run IDs
-and timepoint counts. For a subject such as sub-1027, run-02/run-03 remain run
-IDs 2/3. In core-workflow hippocampal surface extraction, surface and cortex run
-blocks are concatenated only in memory; no concat Volume or CIFTI is written. Pass
-the versioned 22P surface/reference roots explicitly to downstream commands.
-
-The subject-level invalid-vertex threshold remains the standard 0.20. Do not
-apply a sparse-CIFTI-specific threshold override.
-
-Keep versioned outputs isolated. The 22P inputs use
-`kong2022_22p/shared_inputs/`; gradients, group atlases, and presentations use
-`pfm_22p/{hc,patient,pure_mdd,comorbid_mdd}/` under their stage roots.
-The corresponding 36P roots use `pfm/{hc,patient,pure_mdd,comorbid_mdd}/`.
-The Patient cohort contains the fixed 26 subjects.
-
-For the complete HC/patient 22P overview rerun, use these isolated roots:
-
-- gradients: `outputs_iowa_jj_tms/work/hippomaps_gradients/pfm_22p/{hc,patient}/`
-- base group atlases: `outputs_iowa_jj_tms/work/group_atlas/pfm_22p/{hc,patient}/`
-- weighted Fisher-z comparison: `outputs_iowa_jj_tms/work/group_atlas/pfm_weighted_22p/{hc,patient}/`
-- overviews: `outputs_iowa_jj_tms/present/overviews/pfm_22p/{hc,patient}/`
-
-Each cohort presentation directory contains four maintained products:
-gradient-spectral `fisherz`, gradient-spectral `normalized_top20_count`,
-gradient-spectral `weighted_fisherz` (the ROI-size-normalized/weighted Fisher-z
-comparison), and WTA `normalized_top20_count`. Both products described as
-"count" therefore use normalized Top-20 count. Raw `count` is obsolete and
-must not be generated. Run the weighted branch with the versioned 22P
-surface/reference roots above.
-
-## Baseline tSNR inputs
-
-The fixed-template matcher now requires `--tsnr-input-template` with
-`{subject}`, `{hemi}` and `{domain}` (`hipp`/`cortex`). It computes per-run
-baseline mean / detrended SD on retained frames (threshold 25), intersected
-with finite/nonconstant analysis data. The old XCP `10000/SD` gate and the
-interim validity-only rule are replaced. Baseline samples must use the consumed
-mapping (the matcher and core workflow both use trilinear interpolation),
-geometry and cortex vertex order. Both samplers call the shared
-`lib.surface_sampling.sample_volume_to_surface` implementation; per-run
-publication and matching outputs retain the JJ_TMS file layout.
-See the core-workflow README's dataset-specific tSNR section for the NPZ input
-format. Existing products are not automatically rebuilt by this code change.
+The fixed-template matcher retains finite, nonconstant hippocampal series and
+finite cortical signals. It uses the declared physical-run lengths for the
+cortical time series. Existing
+products made under another vertex-selection policy require a rebuild.

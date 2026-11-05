@@ -174,7 +174,7 @@ def test_fixed_400_roi_reference_keeps_missing_roi_as_nan() -> None:
             "rank": 2,
             "n_grayordinates_total": 4,
             "n_grayordinates_used": 4,
-            "excluded_by_tsnr_gate": False,
+            "excluded_by_validity": False,
         }
     ]
     right_rows = [
@@ -188,7 +188,7 @@ def test_fixed_400_roi_reference_keeps_missing_roi_as_nan() -> None:
             "rank": 1,
             "n_grayordinates_total": 5,
             "n_grayordinates_used": 5,
-            "excluded_by_tsnr_gate": False,
+            "excluded_by_validity": False,
         }
     ]
 

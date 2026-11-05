@@ -61,7 +61,7 @@ def _normalize_route_tag(route_tag: str) -> str:
 
 def _route_from_name(name: str) -> str | None:
     value = str(name).strip().lower()
-    if value in {"lynch2024", "lynch2024_22p"}:
+    if value == "lynch2024":
         return "lynch2024_20net"
     if value in {"pfm_7net", "routea_7net"} or value.startswith(("pfm_7net_", "routea_7net_")):
         raise ValueError("The suffixed *_7net namespace is not an active route; use unsuffixed pfm.")
@@ -74,7 +74,7 @@ def _route_from_name(name: str) -> str | None:
 def infer_route_tag_from_path(path: Path, *, arg_name: str) -> str:
     candidate = Path(path)
     lowered_parts = [str(part).strip().lower() for part in candidate.parts]
-    if any(part in {"lynch2024", "lynch2024_22p"} for part in lowered_parts):
+    if "lynch2024" in lowered_parts:
         for part in reversed(lowered_parts):
             if part == "lynch2024_7net" or part.startswith("lynch2024_7net_"):
                 return "lynch2024_7net"

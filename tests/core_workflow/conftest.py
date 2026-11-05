@@ -16,29 +16,27 @@ if str(CORE) not in sys.path:
 @pytest.fixture
 def cortex_reference_factory():
     """Write the RouteA reference policy and run declarations, without signals."""
-    def write(root, *, subject="01", dataset="hcp", threshold=25.0,
+    def write(root, *, subject="01", dataset="hcp",
               run_ids=(1,), run_lengths=(4,)):
         root = Path(root)
         ref = root / f"sub-{subject}" / "reference" / "kong2022"
         ref.mkdir(parents=True, exist_ok=True)
         policy = {
             "dataset": dataset, "task": "rest",
-            "validity_policy": ("hcp_10000_over_std" if dataset == "hcp"
-                                else "runwise_baseline_over_detrended_sd"),
+            "validity_policy": "finite_cortex_signal",
         }
         (ref / "reference_summary.json").write_text(json.dumps({
             **policy, "subject": subject, "atlas_slug": "kong2022",
             "reference_label_source": "route_a_kong2022_areal_mshbm",
-            "tsnr_threshold": threshold, "run_ids": list(run_ids),
+            "run_ids": list(run_ids),
             "run_lengths": list(run_lengths),
         }), encoding="utf-8")
-        (ref / "stage_manifest.json").write_text(json.dumps({"status": "done"}), encoding="utf-8")
-        gate = ref.parent / "common" / "tsnr_gate"
+        (ref / "stage_manifest.json").write_text(json.dumps({"status": "done", "params": policy}), encoding="utf-8")
+        gate = ref.parent / "common" / "validity"
         gate.mkdir(parents=True, exist_ok=True)
         for side, hemi in (("left", "L"), ("right", "R")):
-            (gate / f"cortex_{side}_tsnr_gate_summary.json").write_text(json.dumps({
-                **policy, "threshold": threshold,
-                "baseline_input": None if dataset == "hcp" else str(root / f"baseline-{hemi}.npz"),
+            (gate / f"cortex_{side}_validity_summary.json").write_text(json.dumps({
+                **policy,
             }), encoding="utf-8")
         return ref
     return write

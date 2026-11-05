@@ -341,11 +341,9 @@ STATISTICS_COLUMNS: tuple[str, ...] = (
 def expand_variants(variant: str) -> tuple[str, ...]:
     """Expand the CLI variant selector without inventing resolution branches."""
 
-    if variant == "all":
-        return ("22p", "36p")
-    if variant in {"22p", "36p"}:
-        return (variant,)
-    raise ValueError("variant must be one of: 22p, 36p, all")
+    if variant in {"all", "36p"}:
+        return ("36p",)
+    raise ValueError("variant must be one of: 36p, all")
 
 
 def run_analysis(
@@ -407,10 +405,9 @@ def run_analysis(
             "preprocessing_inputs": {
                 "HCP HC": {
                     "source": "ICA-FIX",
-                    "variant_policy": "same input paths for 22p and 36p",
+                    "variant_policy": "36p",
                 },
                 "Iowa": {
-                    "22p": "explicit 22P branch",
                     "36p": "explicit 36P branch",
                 },
             },
@@ -469,7 +466,6 @@ def run_analysis(
             statistics = pd.DataFrame(columns=STATISTICS_COLUMNS)
         else:
             statistics = statistics.reindex(columns=STATISTICS_COLUMNS)
-        validate_hcp_variant_invariance(subject_metrics, selected_variants)
         status_counts = {
             str(key): int(value)
             for key, value in input_audit["status"].value_counts().items()
@@ -582,29 +578,13 @@ def calculate_all_subject_metrics(
     return result, audit
 
 
-def validate_hcp_variant_invariance(subject_metrics: pd.DataFrame, variants: Sequence[str]) -> None:
-    """Ensure HCP rows are identical when both variant labels are requested."""
-
-    if len(set(variants)) < 2 or subject_metrics.empty:
-        return
-    hcp = subject_metrics.loc[
-        subject_metrics["cohort"].eq("HCP HC") & subject_metrics["component_kind"].eq("network")
-    ]
-    if hcp.empty:
-        return
-    grouped = hcp.groupby(["subject", "method", "taxonomy", "network"], sort=False)["area_percent"]
-    for key, values in grouped:
-        if float(values.max() - values.min()) > 1e-10:
-            raise ValueError(f"HCP ICA-FIX values differ between 22p and 36p labels for {key}")
-
-
 def build_arg_parser():
     import argparse
 
     parser = argparse.ArgumentParser(description="Analyze cortical network surface area percentages")
     parser.add_argument("--repo-root", type=Path, default=Path(__file__).resolve().parents[3])
     parser.add_argument("--output-dir", type=Path, default=Path(__file__).resolve().parent / "stats")
-    parser.add_argument("--variant", choices=("22p", "36p", "all"), default="all")
+    parser.add_argument("--variant", choices=("36p", "all"), default="36p")
     parser.add_argument("--iowa-surface-manifest", type=Path, help="Explicit validated complete-roster surface manifest")
     parser.add_argument("--check-readiness", action="store_true", help="Only audit inputs and write readiness tables")
     return parser

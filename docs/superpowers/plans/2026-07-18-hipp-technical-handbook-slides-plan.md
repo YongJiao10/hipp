@@ -109,7 +109,7 @@ V2 先完整讲流程与代码，再讲数据、进展和计划。页数故意�
 | # | English title | 入口与内容 | 版式 |
 |---:|---|---|---|
 | 5 | Stage 01 — HippUnfold Reconstruction and Validation | `01_01_run_hippunfold_t1w_local.py`：T1w HippUnfold；`01_02_check_hippunfold_outputs.py`：检查表面和输出。输入 `data/hippunfold_input/`，输出 `outputs_hcp/inputs/hcp/hippunfold/dense_corobl_batch/`。给出最小 run pattern 与“do not proceed before validation”。 | 左侧 input→output；右侧两张 script cards |
-| 6 | Stage 02 — Shared Inputs, QC, and the Lynch NSI Cohort | `02_01`: surface/tSNR/template；`02_02`: 166→151 QC cohort；`02_03`: NSI >=0.43、n=78 Lynch cohort。把标准输入与输出路径放在表中。 | 三张 script cards + cohort flow |
+| 6 | Stage 02 — Shared Inputs, QC, and the Lynch NSI Cohort | `02_01`: surface/validity/template；`02_02`: 166→151 QC cohort；`02_03`: NSI >=0.43、n=78 Lynch cohort。把标准输入与输出路径放在表中。 | 三张 script cards + cohort flow |
 | 7 | Stage 03A — Kong2022 Cortical References and ArealMSHBM | `03_01` shared reference；Argon ArealMSHBM label generation 是 RouteA prerequisite；`03_02` builds RouteA reference and 17-net summaries；`06_09` renders MSHBM cortical maps。写清“先运行哪一个、在哪里运行、输出在哪”。 | 一个 numbered run chain + exact output tree；不放 HCP subject ID 图 |
 | 8 | Stage 03B — Lynch2024 FASTANS Precision Functional Mapping | `03_04`：priors → prior time courses → z-score/weights → argmax hard labels → Workbench cleanup/dilation → component time series；`03_03`: Lynch20 + canonical7 references。必须列出 priors 和 output roots，并给出两条实际可执行的命令卡。 | 公式/流程图 + short command cards + output tree |
 | 9 | Stage 04 — Functional-Connectivity Products | `04_01`: Kong2022 and Lynch vertex-to-ROI/component FC；`04_02`: intrinsic hippocampal FC；`04_03`: Kong2019 FC；输出矩阵说明哪条 branch 能用哪类 FC。 | FC product matrix |

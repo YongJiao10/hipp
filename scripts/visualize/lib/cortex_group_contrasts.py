@@ -215,12 +215,12 @@ def subject_input_paths(renderer, cohort, grid, subject, hemi, source_mode):
         base = ORIGINAL_ROOT / f'sub-{subject}'
         return [base/f'surface/{grid.smoothing}/hemi-{hemi}_timeseries.npy',
                 base/'cortex/kong2022_roi_timeseries.npy', ORIGINAL_REGISTRY,
-                base/f'surface/tsnr_gate/hemi-{hemi}_valid_mask.npy']
+                base/f'surface/validity/hemi-{hemi}_valid_mask.npy']
     surface, reference, masks = renderer.resolve_cohort_inputs_roots(cohort, grid.variant)
     return [surface/f'sub-{subject}/surface/{grid.smoothing}/sub-{subject}_hemi-{hemi}_timeseries.npy',
             reference/f'sub-{subject}/reference/kong2022/cortex_roi_parcel_timeseries.npy',
             reference/f'sub-{subject}/reference/kong2022/cortex_roi_parcels.tsv',
-            masks/f'sub-{subject}/surface/tsnr_gate/sub-{subject}_hemi-{hemi}_valid_mask.npy']
+            masks/f'sub-{subject}/surface/validity/sub-{subject}_hemi-{hemi}_valid_mask.npy']
 
 
 def validate_original_source(paths, subject):

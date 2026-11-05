@@ -79,7 +79,7 @@ def _write_subject(root, *, hipp=None, mask=(True, False), write_mask=True, writ
     ts_path = surface_root / "sub-01/surface/2mm/sub-01_hemi-L_timeseries.npy"
     ts_path.parent.mkdir(parents=True, exist_ok=True)
     np.save(ts_path, np.array([HIPP, CORTEX]) if hipp is None else hipp)
-    mask_path = surface_root / "sub-01/surface/tsnr_gate/sub-01_hemi-L_valid_mask.npy"
+    mask_path = surface_root / "sub-01/surface/validity/sub-01_hemi-L_valid_mask.npy"
     if write_mask:
         mask_path.parent.mkdir(parents=True, exist_ok=True)
         np.save(mask_path, np.asarray(mask, dtype=bool))

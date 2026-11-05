@@ -1946,6 +1946,8 @@ def resolve_cohort_inputs_roots(
     cohort_spec: dict[str, Any], variant: str
 ) -> tuple[Path, Path, Path]:
     """Resolve (surface_root, reference_root, mask_root) from the explicit registry contract."""
+    if variant != "36p":
+        raise ValueError(f"Unsupported variant: {variant}")
     declared = (
         cohort_spec.get("surface_root"),
         cohort_spec.get("reference_root"),
@@ -1974,7 +1976,7 @@ def resolve_cohort_inputs_roots(
         )
         return surface_root, reference_root, surface_root
     elif ds_key == "iowa_jj_tms":
-        var_suffix = "_22p" if variant == "22p" else ""
+        var_suffix = ""
         surface_root = (
             REPO_ROOT
             / f"outputs_iowa_jj_tms/inputs/kong2022{var_suffix}/shared_inputs/surface"
@@ -1985,24 +1987,8 @@ def resolve_cohort_inputs_roots(
         )
         return surface_root, reference_root, surface_root
     elif ds_key == "stanford":
-        if variant == "22p":
-            surface_root = (
-                REPO_ROOT
-                / "outputs_stanford/inputs/kong2022_22p/shared_inputs/surface"
-            )
-            reference_root = (
-                REPO_ROOT
-                / "outputs_stanford/inputs/kong2022_22p/shared_inputs/pfm"
-            )
-        else:
-            surface_root = (
-                REPO_ROOT
-                / "outputs_stanford/inputs/kong2022/shared_inputs/surface"
-            )
-            reference_root = (
-                REPO_ROOT
-                / "outputs_stanford/inputs/kong2022/shared_inputs/pfm"
-            )
+        surface_root = REPO_ROOT / "outputs_stanford/inputs/kong2022/shared_inputs/surface"
+        reference_root = REPO_ROOT / "outputs_stanford/inputs/kong2022/shared_inputs/pfm"
         return surface_root, reference_root, surface_root
 
     surface_root = resolve_kong2022_surface_root(ds_key, variant)

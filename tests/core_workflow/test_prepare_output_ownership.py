@@ -69,7 +69,7 @@ def make_inputs(anatomy: Path, shared: Path, subjects: list[str]) -> None:
             dice = anatomy / f"sub-{subject}/hippunfold/sub-{subject}/qc/sub-{subject}_hemi-{hemi}_desc-unetf3d_dice.tsv"
             dice.parent.mkdir(parents=True, exist_ok=True)
             dice.write_text("0.95\n")
-            gate = shared / f"sub-{subject}/surface/tsnr_gate/sub-{subject}_hemi-{hemi}_tsnr_gate_summary.json"
+            gate = shared / f"sub-{subject}/surface/validity/sub-{subject}_hemi-{hemi}_validity_summary.json"
             gate.parent.mkdir(parents=True, exist_ok=True)
             gate.write_text(json.dumps({"invalid_fraction": 0.0}))
             PREP.save_surface(
@@ -223,7 +223,7 @@ def test_standalone_qc_uses_measured_passes_without_fixed_count_or_ids(tmp_path,
         manifests = roster.parent
     latest = manifests / LATEST
     latest.write_text(roster.read_text())
-    report = out / "t1only_hippunfold_tsnr_qc.tsv"
+    report = out / "t1only_hippunfold_qc.tsv"
     report.parent.mkdir(parents=True)
     report.write_text("Existing formal QC report\n")
     before_roster = roster.read_text()
@@ -238,7 +238,7 @@ def test_standalone_qc_uses_measured_passes_without_fixed_count_or_ids(tmp_path,
     assert latest.read_text().splitlines() == expected
     if manifests != roster.parent or len(expected) != len(FORMAL):
         assert roster.read_text() == before_roster
-    result = json.loads((out / "t1only_hippunfold_tsnr_qc.json").read_text())
+    result = json.loads((out / "t1only_hippunfold_qc.json").read_text())
     assert result["n_subjects_pass"] == len(expected)
 
 
@@ -256,7 +256,7 @@ def test_standalone_qc_accepts_current_input_roster_in_default_destinations(tmp_
 
     assert QC.main() == 0
     assert (manifests / LATEST).read_text().splitlines() == OTHER_SUBJECTS
-    assert json.loads((out / "t1only_hippunfold_tsnr_qc.json").read_text())["n_subjects_pass"] == len(OTHER_SUBJECTS)
+    assert json.loads((out / "t1only_hippunfold_qc.json").read_text())["n_subjects_pass"] == len(OTHER_SUBJECTS)
     assert roster.read_text().splitlines() == FORMAL
 
 
@@ -274,7 +274,7 @@ def test_standalone_qc_filters_failed_subjects_from_the_complete_dataset(tmp_pat
     assert QC.main() == 0
 
     assert (rest / "manifests" / LATEST).read_text() == roster.read_text()
-    result = json.loads((rest / "qc/t1only_hippunfold_tsnr_qc.json").read_text())
+    result = json.loads((rest / "qc/t1only_hippunfold_qc.json").read_text())
     assert result["n_subjects_total"] == len(subjects)
     assert result["n_subjects_pass"] == len(FORMAL)
 

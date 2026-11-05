@@ -67,7 +67,7 @@ renderer; existence order never selects the result.
 
 | 版本类型 | 高清大图 (220 DPI) | 统计表格 (TSV) | 说明 |
 | :--- | :--- | :--- | :--- |
-| **Normalized Count** | [`multidataset_gradient_subregion_top20_normalized_count_2col.png`](file:///home/yojiao/hpchome/hipp/scripts/visualize/multidataset_gradient_subregion_top20_stacked_2col/multidataset_gradient_subregion_top20_normalized_count_2col.png) | [`stats/multidataset_gradient_subregion_top20_stacked_2col_2mm_22p_stats.tsv`](file:///home/yojiao/hpchome/hipp/scripts/visualize/multidataset_gradient_subregion_top20_stacked_2col/stats/multidataset_gradient_subregion_top20_stacked_2col_2mm_22p_stats.tsv) | 海马表面功能赋名与条形图均采用**网络容量归一化**（完全吻合，支持 2mm/4mm 与 22p/36p 网格，TSV 归入 `stats/`） |
+| **Normalized Count** | `multidataset_gradient_subregion_top20_normalized_count_2col.png` | `stats/` | 海马表面与条形图采用网络容量归一化，支持 2mm/4mm 的 36p 网格。 |
 
 ---
 
@@ -81,7 +81,7 @@ renderer; existence order never selects the result.
 都直接报错，绝不复用另一行或其他 overview。两种平滑条件共享 overview 文件是
 正常的，但必须选择各自对应的行。
 
-正式刷新必须通过统一入口，一次性4路并行刷新 2mm/4mm × 22p/36p 四图。
+正式刷新必须通过统一入口，刷新 2mm/4mm 的 36p 两图。
 独立 renderer 命令行入口已移除，直接执行会报错；不再保留单网格诊断例外。
 
 ```bash

@@ -21,10 +21,10 @@ from multidataset_cohorts import (  # noqa: E402
 )
 
 
-def test_legacy_four_grid_registry_remains_unchanged() -> None:
-    assert GRID_VARIANTS == ("2mm_36p", "2mm_22p", "4mm_36p", "4mm_22p")
+def test_36p_grid_registry() -> None:
+    assert GRID_VARIANTS == ("2mm_36p", "4mm_36p")
     assert GridSpec("2mm", "36p").tag == "2mm_36p"
-    assert len(get_multidataset_cohorts(GridSpec("4mm", "22p"))[0]) == 6
+    assert len(get_multidataset_cohorts(GridSpec("4mm", "36p"))[0]) == 6
 
 
 def test_ctxreg_is_an_explicit_additive_2mm_36p_branch() -> None:

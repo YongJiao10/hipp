@@ -81,7 +81,7 @@ def aggregate_hemi_roi_timeseries(
             "rank": int(row["rank"]),
             "n_grayordinates_total": n_g_total,
             "n_grayordinates_used": n_g_used,
-            "excluded_by_tsnr_gate": bool(n_g_used <= 0),
+            "excluded_by_validity": bool(n_g_used <= 0),
         }
         if n_g_used <= 0:
             empty_rows.append(out_row)

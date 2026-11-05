@@ -32,13 +32,12 @@ Outputs:
 from __future__ import annotations
 
 import argparse
-import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from lib.extract_cortex_kong2022_routeb_roi_timeseries import build_kong2022_reference
-from lib.io_utils import _sha256_file as file_sha256
 from lib.io_utils import load_subject_ids
+from lib.task_quality import require_cortex_reference_policy
 from lib.kong2022_reference import ReferenceRequest, resolve_batch_subject_dtseries
 from lib.output_layout import (
     DEFAULT_KONG2022_MANIFEST_ROOT,
@@ -53,47 +52,15 @@ DEFAULT_MANIFEST = DEFAULT_KONG2022_MANIFEST_ROOT / "hcp_7t_hippocampus_fmri_qc_
 MAX_CONCURRENCY = 10
 
 
-def migrate_tree_with_conflict_guard(legacy_dir: Path, common_dir: Path) -> tuple[int, int]:
-    moved = 0
-    shared_same = 0
-    if not legacy_dir.exists():
-        return moved, shared_same
-    common_dir.mkdir(parents=True, exist_ok=True)
-    for src in sorted(p for p in legacy_dir.rglob("*") if p.is_file()):
-        rel = src.relative_to(legacy_dir)
-        dst = common_dir / rel
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        if dst.exists():
-            if file_sha256(src) != file_sha256(dst):
-                raise RuntimeError(
-                    f"Legacy/common conflict with different content: legacy={src} common={dst}"
-                )
-            shared_same += 1
-            src.unlink()
-            continue
-        os.replace(str(src), str(dst))
-        moved += 1
-    for d in sorted((p for p in legacy_dir.rglob("*") if p.is_dir()), key=lambda p: len(p.parts), reverse=True):
-        d.rmdir()
-    legacy_dir.rmdir()
-    return moved, shared_same
-
-
-def migrate_legacy_reference_to_common(shared_root: Path, subject: str) -> dict[str, int]:
-    subj_ref = shared_root / f"sub-{subject}" / "reference"
-    legacy_root = subj_ref / "kong2022"
-    common_root = subj_ref / "common"
-    moved_a, same_a = migrate_tree_with_conflict_guard(legacy_root / "tsnr_gate", common_root / "tsnr_gate")
-    moved_b, same_b = migrate_tree_with_conflict_guard(legacy_root / "runs", common_root / "runs")
-    return {
-        "moved_files": int(moved_a + moved_b),
-        "deduped_same_files": int(same_a + same_b),
-    }
-
-
 def subject_is_done(shared_root: Path, subject: str) -> bool:
     ref_dir = shared_root / f"sub-{subject}" / "reference" / "kong2022"
-    return (ref_dir / "reference_summary.json").exists() and (ref_dir / "stage_manifest.json").exists()
+    if not (ref_dir / "stage_manifest.json").is_file():
+        return False
+    try:
+        require_cortex_reference_policy(ref_dir, dataset="hcp", task="rest")
+    except ValueError:
+        return False
+    return True
 
 
 def run_subject(
@@ -172,18 +139,6 @@ def main() -> int:
         if args.subjects
         else load_subject_ids(Path(args.subjects_manifest).resolve())
     )
-    migration_moved = 0
-    migration_deduped = 0
-    for s in subjects:
-        migrated = migrate_legacy_reference_to_common(shared_root, s)
-        migration_moved += int(migrated["moved_files"])
-        migration_deduped += int(migrated["deduped_same_files"])
-    if migration_moved or migration_deduped:
-        print(
-            f"[migrate] moved_files={migration_moved} deduped_same_files={migration_deduped} target=reference/common",
-            flush=True,
-        )
-
     if args.resume:
         todo = [s for s in subjects if not subject_is_done(shared_root, s)]
     else:

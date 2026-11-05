@@ -10,7 +10,7 @@ Main Flow Path:
 Inputs:
 - Command-line arguments:
   - --gradient-root: Root directory containing gradient data outputs (default: `outputs_hcp/work/hippomaps_gradients`).
-  - --cohort / --variant: Select the same cohort and 36p|22p gradient bank as 05_01 and 05_02.
+  - --cohort / --variant: Select the same cohort and 36p gradient bank as 05_01 and 05_02.
   - --present-root: Root directory for saving presentation figures (default: `outputs_hcp/present/gradients`).
   - --hippomaps-root: Root directory for the HippoMaps repository package (default: `external/HippoMaps`).
   - --routes: Routes to process (choices: "pfm", "pfm_ctxreg", "pfm_ctxdrop", "fixed"; default: all).
@@ -22,15 +22,15 @@ Inputs:
   - --no-cross-route-display-alignment: Disable cross-route display sign alignment and shared color ranges.
   - --display-color-trim-fraction: Quantile trim for shared per-component color ranges (default: 0.05).
 - Physical inputs:
-  - Gradient output arrays and manifests: `{gradient_root}/{route}[_22p]/[<cohort>/]{smoothing}/hemi_{hemi}/hippomaps_gradient_manifest.json` and matching `*.npy`/`*.gii` files.
+  - Gradient output arrays and manifests: `{gradient_root}/{route}/[<cohort>/]{smoothing}/hemi_{hemi}/hippomaps_gradient_manifest.json` and matching `*.npy`/`*.gii` files.
   - Group-level FC matrix: `{routes_root}/intrinsic_group_fc_smooth-{smoothing}_hemi-{hemi}.npy` or matching path.
 
 Outputs:
 - File outputs:
-  - Folded/Unfolded gradient surface rendering PNG: `{present_root}/{route}[_22p]/[<cohort>/]{smoothing}/hippomaps_gradients_{route}_{smoothing}_{out_tag}_g1g2g3.png`
-  - Explained variance fraction plot PNG: `{present_root}/{route}[_22p]/[<cohort>/]{smoothing}/hippomaps_ev_{route}_{smoothing}_{out_tag}.png`
-  - Endpoint FC contrast plot PNG: `{present_root}/{route}[_22p]/[<cohort>/]{smoothing}/hippomaps_endpoint_fc_contrast_{route}_{smoothing}_{out_tag}.png`
-  - Manifest JSON: `{present_root}/{route}[_22p]/[<cohort>/]{smoothing}/hippomaps_gradient_products_{route}_{smoothing}_{out_tag}_manifest.json`
+  - Folded/Unfolded gradient surface rendering PNG: `{present_root}/{route}/[<cohort>/]{smoothing}/hippomaps_gradients_{route}_{smoothing}_{out_tag}_g1g2g3.png`
+  - Explained variance fraction plot PNG: `{present_root}/{route}/[<cohort>/]{smoothing}/hippomaps_ev_{route}_{smoothing}_{out_tag}.png`
+  - Endpoint FC contrast plot PNG: `{present_root}/{route}/[<cohort>/]{smoothing}/hippomaps_endpoint_fc_contrast_{route}_{smoothing}_{out_tag}.png`
+  - Manifest JSON: `{present_root}/{route}/[<cohort>/]{smoothing}/hippomaps_gradient_products_{route}_{smoothing}_{out_tag}_manifest.json`
 """
 from __future__ import annotations
 
@@ -689,7 +689,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--gradient-root", default=str(DEFAULT_GRADIENT_ROOT))
     parser.add_argument("--present-root", default=str(DEFAULT_PRESENT_ROOT))
     parser.add_argument("--cohort", default=None, help="Cohort directory below each route; omit for HCP.")
-    parser.add_argument("--variant", choices=("36p", "22p"), default="36p", help="22p selects <route>_22p/<cohort> for inputs and figures.")
+    parser.add_argument("--variant", choices=("36p",), default="36p")
     parser.add_argument("--hippomaps-root", default=str(DEFAULT_HIPPOMAPS_ROOT))
     parser.add_argument("--routes", nargs="+", choices=ROUTES, default=list(ROUTES))
     parser.add_argument("--smoothings", nargs="+", choices=SMOOTHINGS, default=list(SMOOTHINGS))

@@ -10,7 +10,7 @@ Use [README.md](README.md) for exact dataset roots, sessions, controls and comma
   standard dataset presets. Do not add duplicate launchers in other dataset
   folders or the numbered workflows. The maintained Iowa7T runwise launcher
   is a separate, explicitly selected one-run-per-call interface.
-- Keep input/output variants isolated: Stanford 22P/36P, ESTT 22P/23P/36P,
+- Keep input/output variants isolated: Stanford 36P, ESTT 23P/36P,
   and Iowa7T acquisition/denoising branches use their declared matching roots.
   ESTT and Iowa7T are separate datasets. Validate explicit variant/root agreement.
 - JJ_TMS/Stanford source runs remain separate MATLAB sessions, each with one

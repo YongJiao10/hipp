@@ -190,8 +190,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--variant",
         choices=IOWA7T_VARIANTS,
-        default="22p",
-        help="Iowa7T variant (default: 22p).",
+        default="36p",
+        help="Iowa7T variant (default: 36p).",
     )
     parser.add_argument(
         "--staging-dir",

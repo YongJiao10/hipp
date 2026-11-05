@@ -148,7 +148,7 @@ def fit_disjoint_cohort(
     valid_masks = {}
     feature_bank = {}
     for s in subjects:
-        m_path = DEFAULT_KONG2022_SURFACE_ROOT / f"sub-{s}" / "surface" / "tsnr_gate" / f"sub-{s}_hemi-{hemi}_valid_mask.npy"
+        m_path = DEFAULT_KONG2022_SURFACE_ROOT / f"sub-{s}" / "surface" / "validity" / f"sub-{s}_hemi-{hemi}_valid_mask.npy"
         fc_path = DEFAULT_KONG2022_ROUTEA_ROOT / f"sub-{s}" / "fc" / "kong2022" / smoothing / f"hemi_{hemi}" / "hipp_vertex_to_network_fc.npy"
         mask = np.load(m_path).astype(bool).reshape(-1)
         valid_masks[s] = mask

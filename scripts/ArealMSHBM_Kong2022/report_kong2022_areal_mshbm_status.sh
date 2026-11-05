@@ -20,24 +20,14 @@ case "${dataset}" in
     ;;
   stanford)
     if [ -z "${stanford_variant}" ]; then
-      case "${OUT_ROOT:-}" in
-        *_ArealMSHBM_Kong2022_22P)
-          stanford_variant="22p"
-          ;;
-        *)
-          stanford_variant="36p"
-          ;;
-      esac
+      stanford_variant="36p"
     fi
     case "${stanford_variant}" in
-      22p)
-        out_root="${OUT_ROOT:-/Shared/jianglab/3_Data_Working/fmriprep_processed_CausalConnectome/rest_fmriprep/ArealMSHBM_Kong2022_22P}"
-        ;;
       36p)
         out_root="${OUT_ROOT:-/Shared/jianglab/3_Data_Working/fmriprep_processed_CausalConnectome/rest_fmriprep/ArealMSHBM_Kong2022}"
         ;;
       *)
-        echo "ERROR: STANFORD_VARIANT must be 22p or 36p, got: ${STANFORD_VARIANT:-}" >&2
+        echo "ERROR: STANFORD_VARIANT must be 36p, got: ${STANFORD_VARIANT:-}" >&2
         exit 2
         ;;
     esac
@@ -68,9 +58,6 @@ case "${dataset}" in
   estt)
     if [ -z "${estt_variant}" ]; then
       case "${OUT_ROOT:-}" in
-        */DataOrg_PFM_22P/hipp_outputs/cortex_kong2022_areal_mshbm)
-          estt_variant="22p"
-          ;;
         */DataOrg_PFM_23P/hipp_outputs/cortex_kong2022_areal_mshbm)
           estt_variant="23p"
           ;;
@@ -78,15 +65,12 @@ case "${dataset}" in
           estt_variant="36p"
           ;;
         *)
-          echo "ERROR: ESTT OUT_ROOT is not an identifiable 22P, 23P, or 36P root; set ESTT_VARIANT=22p|23p|36p explicitly." >&2
+          echo "ERROR: ESTT OUT_ROOT is not an identifiable 23P or 36P root; set ESTT_VARIANT=23p|36p explicitly." >&2
           exit 2
           ;;
       esac
     fi
     case "${estt_variant}" in
-      22p)
-        out_root="${OUT_ROOT:-/Shared/jianglab/3_Data_Working/fmriprep_processed_esTT/DataOrg_PFM_22P/hipp_outputs/cortex_kong2022_areal_mshbm}"
-        ;;
       23p)
         out_root="${OUT_ROOT:-/Shared/jianglab/3_Data_Working/fmriprep_processed_esTT/DataOrg_PFM_23P/hipp_outputs/cortex_kong2022_areal_mshbm}"
         ;;
@@ -94,7 +78,7 @@ case "${dataset}" in
         out_root="${OUT_ROOT:-/Shared/jianglab/3_Data_Working/fmriprep_processed_esTT/DataOrg_PFM_36P/hipp_outputs/cortex_kong2022_areal_mshbm}"
         ;;
       *)
-        echo "ERROR: ESTT_VARIANT must be 22p, 23p, or 36p, got: ${ESTT_VARIANT:-}" >&2
+        echo "ERROR: ESTT_VARIANT must be 23p or 36p, got: ${ESTT_VARIANT:-}" >&2
         exit 2
         ;;
     esac

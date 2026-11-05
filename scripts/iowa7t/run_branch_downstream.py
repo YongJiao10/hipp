@@ -7,7 +7,7 @@ import json
 import os
 import sys
 import time
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from pathlib import Path
 
 import nibabel as nib
@@ -23,10 +23,9 @@ if str(CORE_WORKFLOW_DIR) not in sys.path:
 from lib.extract_cortex_merged_network_timeseries import extract_structure_data, load_required_mask
 from lib.extract_cortex_kong2022_route_a_roi_timeseries import (
     ROUTE_A_SOURCE_TAG,
-    TSNR_THRESHOLD,
     aggregate_hemi_roi_timeseries,
     align_surface_labels_to_dt_vertices,
-    compute_cortex_tsnr_gate,
+    compute_cortex_validity,
     load_surface_label_vector,
 )
 from lib.fc_math import compact_active_vertices, corrcoef_rows
@@ -39,8 +38,7 @@ from lib.kong2022_label_utils import (
 )
 from lib.surface_sampling import sample_hipp_surface_timeseries
 from lib.surface_coordinates import dataset_registration, require_registered_sampling
-from lib.tsnr import rest_tsnr_input, REST_POLICY
-from lib.task_quality import rest_signal_validity
+from lib.task_quality import CORTEX_VALIDITY_POLICY, SERIES_VALIDITY_POLICY, rest_signal_validity
 from lib.workbench import run_workbench
 from lib.output_layout import (
     IOWA7T_VARIANTS,
@@ -85,7 +83,6 @@ class BranchJob:
     fc_root: Path
     areal_mshbm_label_dir: Path
 
-    tsnr_input_template: str | None = None
 
 
 def normalize_subject(subject: str) -> str:
@@ -124,7 +121,6 @@ def resolve_branch_job(
     else:
         multi_echo_desc_by_variant = {
             "0p": "MEICA_XCPD0P_denoised",
-            "22p": "MEICA_XCPD22P_denoised",
             "32p": "MEICA_XCPD32P_denoised",
             "36p": "MEICA_XCPD36P_denoised",
             "noxcpd": "MEICA_NoXCPD",
@@ -229,8 +225,8 @@ def raw_outputs_done(job: BranchJob) -> bool:
     )
 
 
-def tsnr_outputs_done(job: BranchJob) -> bool:
-    gate_dir = job.surface_root / "tsnr_gate"
+def validity_outputs_done(job: BranchJob) -> bool:
+    gate_dir = job.surface_root / "validity"
     return all((gate_dir / f"sub-{job.subject}_hemi-{hemi}_valid_mask.npy").exists() for hemi in HEMIS)
 
 
@@ -245,39 +241,26 @@ def smoothing_outputs_done(job: BranchJob) -> bool:
     )
 
 
-def qc_input(job, hemi: str, domain: str) -> Path:
-    if job.tsnr_input_template is None:
-        raise ValueError("Iowa7T requires --tsnr-input-template: explicit baseline samples per acquisition/run")
-    path = Path(job.tsnr_input_template.format(subject=job.subject, hemi=hemi, domain=domain,
-                variant=job.variant, branch=getattr(job, "branch", getattr(job, "kind", "")),
-                run=getattr(job, "run_label", "")))
-    if not path.is_file():
-        raise FileNotFoundError(f"Missing Iowa7T baseline tSNR input: {path}")
-    return path
-
-
 def cortex_qc_done(directory: Path) -> bool:
     for hemi in ("left", "right"):
-        path = directory / "tsnr_gate" / f"cortex_{hemi}_tsnr_gate_summary.json"
-        if not path.is_file() or json.loads(path.read_text()).get("validity_policy") != REST_POLICY:
+        path = directory / "validity" / f"cortex_{hemi}_validity_summary.json"
+        if not path.is_file() or json.loads(path.read_text()).get("validity_policy") != CORTEX_VALIDITY_POLICY:
             return False
     return True
 
 
 def qc_policy_done(job) -> bool:
     for hemi in HEMIS:
-        path = job.surface_root / "tsnr_gate" / f"sub-{job.subject}_hemi-{hemi}_tsnr_gate_summary.json"
+        path = job.surface_root / "validity" / f"sub-{job.subject}_hemi-{hemi}_validity_summary.json"
         if not path.is_file():
             return False
         summary = json.loads(path.read_text())
-        if summary.get('validity_policy') != REST_POLICY or summary.get('sampling_space') != 'MNI152NLin6Asym':
+        if summary.get('validity_policy') != SERIES_VALIDITY_POLICY or summary.get('sampling_space') != 'MNI152NLin6Asym':
             return False
     return True
 
 
 def run_surface_stage(job: BranchJob, *, overwrite: bool = False) -> None:
-    for hemi in HEMIS:
-        qc_input(job, hemi, "hipp")
     require_inputs(job)
     t0 = time.monotonic()
     stage_inputs: list[dict[str, object]] = []
@@ -312,19 +295,16 @@ def run_surface_stage(job: BranchJob, *, overwrite: bool = False) -> None:
             },
         )
 
-    gate_dir = job.surface_root / "tsnr_gate"
+    gate_dir = job.surface_root / "validity"
     qc_changed = not qc_policy_done(job)
-    if overwrite or not tsnr_outputs_done(job) or not qc_policy_done(job):
+    if overwrite or not validity_outputs_done(job) or not qc_policy_done(job):
         gate_dir.mkdir(parents=True, exist_ok=True)
         for hemi in HEMIS:
             raw = raw_dir / f"sub-{job.subject}_hemi-{hemi}_space-T1w_den-512_label-hipp_bold.func.gii"
             surf = hippunfold_surface_path(job, hemi)
             data = load_func_gii(raw).astype(np.float64)
-            scores, valid = rest_tsnr_input(qc_input(job, hemi, "hipp"), dataset="iowa7t", subject=job.subject, hemi=hemi, n_vertices=data.shape[0], n_frames=data.shape[1])
-            valid &= rest_signal_validity(data)
-            tsnr = np.min(scores, axis=0)
+            valid = rest_signal_validity(data)
             invalid = ~valid
-            np.save(gate_dir / f"sub-{job.subject}_hemi-{hemi}_tsnr.npy", tsnr)
             np.save(gate_dir / f"sub-{job.subject}_hemi-{hemi}_valid_mask.npy", valid.astype(bool))
             np.save(gate_dir / f"sub-{job.subject}_hemi-{hemi}_invalid_initial_mask.npy", invalid.astype(bool))
             nib.save(
@@ -332,15 +312,12 @@ def run_surface_stage(job: BranchJob, *, overwrite: bool = False) -> None:
                 str(gate_dir / f"sub-{job.subject}_hemi-{hemi}_valid_roi.shape.gii"),
             )
             write_json(
-                gate_dir / f"sub-{job.subject}_hemi-{hemi}_tsnr_gate_summary.json",
+                gate_dir / f"sub-{job.subject}_hemi-{hemi}_validity_summary.json",
                 {
                     "subject": job.subject,
                     "branch": job.branch,
                     "hemi": hemi,
-                    "threshold": 25.0,
-                    "tsnr_definition": REST_POLICY,
-                    "baseline_input": str(qc_input(job, hemi, "hipp")),
-                    "validity_policy": REST_POLICY,
+                    "validity_policy": SERIES_VALIDITY_POLICY,
                     "sampling_space": "MNI152NLin6Asym",
                     "n_vertices_total": int(valid.size),
                     "n_vertices_valid": int(valid.sum()),
@@ -455,7 +432,7 @@ def fixed_400_roi_reference(
             "rank": int(source_row.get("rank", registry_row.get("rank", 0))),
             "n_grayordinates_total": int(source_row.get("n_grayordinates_total", 0)),
             "n_grayordinates_used": int(source_row.get("n_grayordinates_used", 0)),
-            "excluded_by_tsnr_gate": bool(source_row.get("excluded_by_tsnr_gate", True)),
+            "excluded_by_validity": bool(source_row.get("excluded_by_validity", True)),
         }
         has_timeseries = roi_id in ts_by_id and int(row["n_grayordinates_used"]) > 0
         row["excluded_by_no_vertices"] = bool(int(row["n_grayordinates_total"]) <= 0)
@@ -549,11 +526,11 @@ def run_reference_stage(
     left_parcel_ids = align_surface_labels_to_dt_vertices(lh_full, left_vertices, hemi="L")
     right_parcel_ids = align_surface_labels_to_dt_vertices(rh_full, right_vertices, hemi="R")
 
-    tsnr_dir = common_ref_dir / "tsnr_gate"
-    left_tsnr_mask = compute_cortex_tsnr_gate(data=left_dt, outdir=tsnr_dir, hemi="left", threshold=TSNR_THRESHOLD, dataset="iowa7t", subject=job.subject, tsnr_input=qc_input(job, "L", "cortex"), vertex_ids=left_vertices)
-    right_tsnr_mask = compute_cortex_tsnr_gate(data=right_dt, outdir=tsnr_dir, hemi="right", threshold=TSNR_THRESHOLD, dataset="iowa7t", subject=job.subject, tsnr_input=qc_input(job, "R", "cortex"), vertex_ids=right_vertices)
-    left_valid = load_required_mask(str(left_tsnr_mask), int(left_vertices.shape[0]), "left cortex tSNR")
-    right_valid = load_required_mask(str(right_tsnr_mask), int(right_vertices.shape[0]), "right cortex tSNR")
+    validity_dir = common_ref_dir / "validity"
+    left_valid_mask = compute_cortex_validity(data=left_dt, outdir=validity_dir, hemi="left", dataset="iowa7t", task="rest", run_lengths=run_lengths)
+    right_valid_mask = compute_cortex_validity(data=right_dt, outdir=validity_dir, hemi="right", dataset="iowa7t", task="rest", run_lengths=run_lengths)
+    left_valid = load_required_mask(str(left_valid_mask), int(left_vertices.shape[0]), "left cortex validity")
+    right_valid = load_required_mask(str(right_valid_mask), int(right_vertices.shape[0]), "right cortex validity")
 
     left_ts, left_rows, left_empty, left_stats = aggregate_hemi_roi_timeseries(
         hemi="L",
@@ -583,7 +560,7 @@ def run_reference_stage(
     kept_rows = [row for row in roi_rows if bool(row["included_in_timeseries"])]
     empty_rows = [row for row in roi_rows if not bool(row["included_in_timeseries"])]
     if not kept_rows:
-        raise RuntimeError(f"No Kong2022 ROI timeseries remained after tSNR gate for sub-{job.subject} {job.branch}.")
+        raise RuntimeError(f"No Kong2022 ROI timeseries remained after validity filtering for sub-{job.subject} {job.branch}.")
 
     np.save(outdir / "cortex_roi_parcel_timeseries.npy", parcel_ts)
 
@@ -598,19 +575,19 @@ def run_reference_stage(
         "rank",
         "n_grayordinates_total",
         "n_grayordinates_used",
-        "excluded_by_tsnr_gate",
+        "excluded_by_validity",
         "excluded_by_no_vertices",
         "included_in_timeseries",
     ]
     write_tsv(outdir / "cortex_roi_parcels.tsv", roi_rows, roi_tsv_fields)
-    write_tsv(outdir / "cortex_roi_parcels_empty_after_tsnr.tsv", empty_rows, roi_tsv_fields)
+    write_tsv(outdir / "cortex_roi_parcels_empty_after_validity.tsv", empty_rows, roi_tsv_fields)
 
     canonical_rows: list[dict[str, object]] = []
     canonical_ts_rows: list[np.ndarray] = []
     for canonical in canonical7_order:
         idx = [i for i, row in enumerate(roi_rows) if str(row["canonical7"]) == canonical and bool(row["included_in_timeseries"])]
         if not idx:
-            raise RuntimeError(f"Canonical network has zero parcels after tSNR gate: {canonical}")
+            raise RuntimeError(f"Canonical network has zero parcels after validity filtering: {canonical}")
         row_subset = [roi_rows[i] for i in idx]
         ts = np.nanmean(parcel_ts[np.asarray(idx, dtype=np.int32), :], axis=0).astype(np.float32)
         canonical_ts_rows.append(ts)
@@ -635,7 +612,7 @@ def run_reference_stage(
     for family17 in family17_order:
         idx = [i for i, row in enumerate(roi_rows) if str(row["family17"]) == family17 and bool(row["included_in_timeseries"])]
         if not idx:
-            raise RuntimeError(f"Family17 network has zero parcels after tSNR gate: {family17}")
+            raise RuntimeError(f"Family17 network has zero parcels after validity filtering: {family17}")
         row_subset = [roi_rows[i] for i in idx]
         ts = np.nanmean(parcel_ts[np.asarray(idx, dtype=np.int32), :], axis=0).astype(np.float32)
         family17_ts_rows.append(ts)
@@ -680,7 +657,6 @@ def run_reference_stage(
             "network_taxonomy": "canonical7",
             "n_family17_networks_used": int(family17_ts.shape[0]),
             "roi_timeseries_source": str((outdir / "cortex_roi_parcel_timeseries.npy").resolve()),
-            "tsnr_threshold": float(TSNR_THRESHOLD),
             "run_slice_policy": "read_time_slice_from_full_timeseries",
         }
         write_json(run_dir / "reference_summary.json", run_summary)
@@ -705,6 +681,9 @@ def run_reference_stage(
     summary = {
         "subject": job.subject,
         "branch": job.branch,
+        "dataset": "iowa7t",
+        "task": "rest",
+        "validity_policy": CORTEX_VALIDITY_POLICY,
         "atlas_slug": ATLAS,
         "reference_scope": COMMON_REFERENCE_SLUG,
         "reference_label_source": ROUTE_A_SOURCE_TAG,
@@ -715,8 +694,8 @@ def run_reference_stage(
         "route_a_rh_labels": str(rh_labels_path),
         "n_parcels_total": 400,
         "n_parcels_materialized": int(parcel_ts.shape[0]),
-        "n_parcels_used_after_tsnr": int(len(kept_rows)),
-        "n_parcels_empty_after_tsnr": int(len(empty_rows)),
+        "n_parcels_used": int(len(kept_rows)),
+        "n_parcels_empty": int(len(empty_rows)),
         "missing_roi_ids": missing_roi_ids,
         "n_canonical7_networks_used": int(canonical_ts.shape[0]),
         "canonical7_networks_used": canonical7_order,
@@ -724,13 +703,12 @@ def run_reference_stage(
         "n_family17_networks_used": int(family17_ts.shape[0]),
         "family17_networks_used": family17_order,
         "n_timepoints": int(n_timepoints),
-        "tsnr_threshold": float(TSNR_THRESHOLD),
-        "left_tsnr_mask": str(left_tsnr_mask),
-        "right_tsnr_mask": str(right_tsnr_mask),
+        "left_valid_mask": str(left_valid_mask),
+        "right_valid_mask": str(right_valid_mask),
         "run_boundaries_dir": str((common_ref_dir / "runs").resolve()),
         "run_boundary_source": "explicit_run_metadata_template",
         "run_metadata": str(run_metadata_path),
-        "tsnr_gate_stats": {
+        "validity_stats": {
             "left": left_stats,
             "right": right_stats,
             "combined": {
@@ -738,7 +716,7 @@ def run_reference_stage(
                 "n_grayordinates_used": int(left_stats["n_grayordinates_used"] + right_stats["n_grayordinates_used"]),
                 "n_grayordinates_masked": int(left_stats["n_grayordinates_masked"] + right_stats["n_grayordinates_masked"]),
             },
-            "rois_empty_after_tsnr_gate": {
+            "rois_empty_after_validity": {
                 "left": int(len(left_empty)),
                 "right": int(len(right_empty)),
                 "combined": int(len(empty_rows)),
@@ -755,9 +733,11 @@ def run_reference_stage(
             "params": {
                 "subject": job.subject,
                 "branch": job.branch,
+                "dataset": "iowa7t",
+                "task": "rest",
+                "validity_policy": CORTEX_VALIDITY_POLICY,
                 "atlas_slug": ATLAS,
                 "reference_label_source": ROUTE_A_SOURCE_TAG,
-                "tsnr_threshold": float(TSNR_THRESHOLD),
                 "run_lengths": [int(seg["run_length"]) for seg in run_segments],
                 "run_ids": [int(seg["run_id"]) for seg in run_segments],
                 "run_metadata": str(run_metadata_path),
@@ -770,8 +750,8 @@ def run_reference_stage(
                 file_meta_unresolved(Path(KONG2022_MERGE_CONFIG).resolve()),
                 file_meta_unresolved(lh_labels_path),
                 file_meta_unresolved(rh_labels_path),
-                file_meta_unresolved(left_tsnr_mask),
-                file_meta_unresolved(right_tsnr_mask),
+                file_meta_unresolved(left_valid_mask),
+                file_meta_unresolved(right_valid_mask),
                 file_meta_unresolved(run_metadata_path),
             ],
             "outputs": [
@@ -840,7 +820,7 @@ def load_run_segments_direct(
 def fc_outputs_done(job: BranchJob) -> bool:
     return all(
         (job.fc_root / smoothing / f"hemi_{hemi}" / "fc_summary.json").exists()
-        and json.loads((job.fc_root / smoothing / f"hemi_{hemi}" / "fc_summary.json").read_text()).get("validity_policy") == REST_POLICY
+        and json.loads((job.fc_root / smoothing / f"hemi_{hemi}" / "fc_summary.json").read_text()).get("validity_policy") == SERIES_VALIDITY_POLICY
         and (job.fc_root / smoothing / f"hemi_{hemi}" / "hipp_vertex_to_network_fc.npy").exists()
         for smoothing in SMOOTHINGS
         for hemi in HEMIS
@@ -857,7 +837,7 @@ def run_fc_stage(
         raise ValueError("Iowa7T FC stage requires an explicit run metadata path")
     run_metadata_path = Path(run_metadata_path).resolve()
     if not qc_policy_done(job) or not cortex_qc_done(job.cortex_common_root):
-        raise ValueError("Rebuild Iowa7T surface and cortex with true baseline tSNR before FC")
+        raise ValueError("Rebuild Iowa7T surface and cortex with signal validity before FC")
     if not overwrite and fc_outputs_done(job):
         return
     if not reference_outputs_done(job):
@@ -878,7 +858,7 @@ def run_fc_stage(
             fc_dir = job.fc_root / smoothing / f"hemi_{hemi}"
             fc_dir.mkdir(parents=True, exist_ok=True)
             ts = np.load(job.surface_root / smoothing / f"sub-{job.subject}_hemi-{hemi}_timeseries.npy").astype(np.float32)
-            valid_mask = np.load(job.surface_root / "tsnr_gate" / f"sub-{job.subject}_hemi-{hemi}_valid_mask.npy").astype(bool)
+            valid_mask = np.load(job.surface_root / "validity" / f"sub-{job.subject}_hemi-{hemi}_valid_mask.npy").astype(bool)
             if ts.ndim != 2:
                 raise ValueError(f"Expected 2D hippocampal timeseries for sub-{job.subject} {smoothing} hemi-{hemi}: {ts.shape}")
             if ts.shape[1] != roi_ts.shape[1]:
@@ -926,7 +906,7 @@ def run_fc_stage(
             write_json(
                 fc_dir / "fc_summary.json",
                 {
-                    "validity_policy": REST_POLICY,
+                    "validity_policy": SERIES_VALIDITY_POLICY,
                     "subject": job.subject,
                     "branch": job.branch,
                     "atlas_slug": ATLAS,
@@ -935,7 +915,7 @@ def run_fc_stage(
                     "fc_shape": [int(pearson_full.shape[0]), int(pearson_full.shape[1])],
                     "active_fc_shape": [int(pearson_valid.shape[0]), int(pearson_valid.shape[1])],
                     "n_vertices_total": int(ts.shape[0]),
-                    "n_vertices_valid_high_tsnr": int(valid_mask.sum()),
+                    "n_vertices_valid": int(valid_mask.sum()),
                     "n_vertices_invalid_initial": int(ts.shape[0] - valid_mask.sum()),
                     "n_timepoints": int(ts.shape[1]),
                     "n_roi_targets_total": int(roi_ts.shape[0]),
@@ -966,7 +946,7 @@ def run_fc_stage(
                     "inputs": [
                         str((job.cortex_kong2022_root / "cortex_roi_parcel_timeseries.npy").resolve()),
                         str((job.surface_root / smoothing / f"sub-{job.subject}_hemi-{hemi}_timeseries.npy").resolve()),
-                        str((job.surface_root / "tsnr_gate" / f"sub-{job.subject}_hemi-{hemi}_valid_mask.npy").resolve()),
+                        str((job.surface_root / "validity" / f"sub-{job.subject}_hemi-{hemi}_valid_mask.npy").resolve()),
                         file_meta_unresolved(run_metadata_path),
                     ],
                     "outputs": [
@@ -1034,7 +1014,6 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--stage", choices=["all", "surface", "reference", "fc"], default="all")
     parser.add_argument("--jobs", type=int, default=1, help="Reserved for future parallel execution; capped at 10.")
     parser.add_argument("--overwrite", action="store_true", default=False)
-    parser.add_argument("--tsnr-input-template", help="Baseline NPZ template with {subject}, {hemi}, {domain}, {variant}, {branch}, {run}")
     return parser
 
 
@@ -1063,7 +1042,6 @@ def main() -> int:
             output_root=output_root,
             hippunfold_batch_root=hippunfold_batch_root,
         )
-        job = replace(job, tsnr_input_template=args.tsnr_input_template)
         run_metadata_path = None
         if args.stage in {"all", "reference", "fc"}:
             run_metadata_path = format_subject_path_template(

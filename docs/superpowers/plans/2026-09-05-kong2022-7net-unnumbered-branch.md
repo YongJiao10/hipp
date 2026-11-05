@@ -34,12 +34,7 @@ overwrite, while active manifests record `atlas=kong2022_7net` and
 ## Cohorts and variants
 
 The 36P release contains HCP, seven Stanford cohorts, and four JJ_TMS cohorts:
-12 groups and four overview PNGs per group. The native 22P release contains
-the seven Stanford cohorts and four JJ_TMS cohorts: 11 groups and four PNGs per
-group. HCP is excluded from 22P because it has no native 22P input contract.
-Stanford 22P uses the versioned `kong2022_22p` input root; JJ_TMS 22P keeps
-`shared_inputs_22p` and the required `_22p` suffixes throughout downstream
-roots. The unversioned roots remain 36P.
+12 groups and four overview PNGs per group. The unversioned roots use 36P.
 
 ## Verification
 

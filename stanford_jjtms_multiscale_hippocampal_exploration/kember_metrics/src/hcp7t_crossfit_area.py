@@ -248,7 +248,7 @@ def _build_hcp_entry(
         shared_surface_root
         / subject
         / "surface"
-        / "tsnr_gate"
+        / "validity"
         / f"{subject}_hemi-{hemisphere}_valid_mask.npy"
     )
     source_surface_path = _surface_path(
@@ -341,7 +341,7 @@ def _input_asset_fingerprint(
                     shared_surface_root
                     / subject
                     / "surface"
-                    / "tsnr_gate"
+                    / "validity"
                     / f"{subject}_hemi-{hemisphere}_valid_mask.npy",
                 ),
                 ("source_area_surface", _surface_path(hippunfold_root, subject, hemisphere, space="corobl", density="512")),

@@ -21,13 +21,12 @@ variants and comparison methods. Inspect readiness against current inputs:
 | `--version legacy` (default) | HCP, Iowa3T and Stanford cohort suite |
 | `--version hcp_jjtms_7net` | HCP/JJ_TMS Kong2022 and Lynch2024 canonical7 comparison |
 | `--atlas 7net` (default), `kong2022` | Equivalent canonical7 suite aliases |
-| `--signal-branch standard` (default) | Four standard cells: 2mm/4mm × 36P/22P |
+| `--signal-branch standard` (default) | Two standard cells: 2mm/4mm × 36P |
 | `--signal-branch ctxreg` | Explicit CtxReg 2mm/36P cell |
-| `--signal-branch all` | Four standard cells plus CtxReg 2mm/36P, with branch-qualified names |
+| `--signal-branch all` | Two standard cells plus CtxReg 2mm/36P, with branch-qualified names |
 
-HCP uses ICA-FIX inputs and has no native 22P/36P distinction. Those grid
-selectors distinguish Iowa3T/Stanford denoising; HCP's baseline changes only
-with smoothing. The standard suite uses four concurrent grid workers; explicit
+HCP uses ICA-FIX inputs; its baseline changes only with smoothing.
+The standard suite uses two concurrent grid workers; explicit
 signal-branch modes select the cells described above. Account for child
 rendering processes under the repository and module concurrency limits.
 
@@ -62,8 +61,7 @@ Use the suite for these renderers; their standalone rendering CLIs are disabled.
 ## Input and output contracts
 
 Group roots use the formal `outputs_<dataset>/work/group_atlas/` layout:
-HCP `pfm/`; Iowa/Stanford `pfm/<cohort>/` for 36P and
-`pfm_22p/<cohort>/` for 22P. Cortex controls use `pfm_ctxreg` and
+HCP `pfm/`; Iowa/Stanford `pfm/<cohort>/` for 36P. Cortex controls use `pfm_ctxreg` and
 `pfm_ctxdrop`. The registry selects exact Lynch and comparison products
 separately; presentation tags do not select another scientific input bank.
 See [output layout](../../docs/hipp_parcellation_network/output_layout.md).

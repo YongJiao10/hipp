@@ -63,7 +63,7 @@ Other workflows retain their own limits.
 - Behavior, path, cache, launcher, environment or output changes require matching
   documentation in the same change. Runtime-stack changes also require an
   environment-manifest update.
-- Preserve real scientific branches, including 22P/36P, method and atlas variants.
+- Preserve real scientific branches, including 36P, method and atlas variants.
   Dates and run IDs belong in logs/manifests, not formal result-root names.
 - HCP cortex-control routes are exactly `pfm_ctxreg` and `pfm_ctxdrop` below
   `outputs_hcp/inputs/kong2022/shared_inputs/`, `work/hippomaps_gradients/`,
@@ -72,14 +72,9 @@ Other workflows retain their own limits.
   as `fisherz` and `normalized_top20_count` remain explicit files/metadata.
   Repairs replace approved formal products in place; do not create dated,
   recovered/regenerated roots or compatibility symlinks.
-- Stanford 22P uses `DataOrg_PFM_22P` and `ArealMSHBM_Kong2022_22P` beneath the
-  Causal-Connectome `rest_fmriprep` tree. Its `surf` input is an fsLR den-91k
-  time-series CIFTI. Use the exact paths and seven overview cohorts in the
-  [core workflow guide](scripts/core_workflow/README.md#dataset-and-preprocessing-variants).
 - Iowa JJ_TMS unversioned subgroup paths are 36P (`pfm/pure_mdd`,
-  `pfm/comorbid_mdd`); 22P uses `pfm_22p/` and `_22p` in flat route names.
-  Apply that distinction to FC, gradients, group atlases, weighted and
-  presentation products.
+  `pfm/comorbid_mdd`); retain those names for FC, gradients, group atlases,
+  weighted and presentation products.
 - Establish density from consumed surface/CIFTI paths and recorded
   `density_evidence`, not arguments alone. Report disagreements and treat
   consumed assets as authoritative.

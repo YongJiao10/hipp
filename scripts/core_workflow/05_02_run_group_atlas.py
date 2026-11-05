@@ -2089,40 +2089,11 @@ def infer_surface_path(subject: str, hemi: str, batch_root: Path | None = None) 
     return p
 
 
-def infer_valid_mask_from_fc(shared_root: Path, subject: str, smoothing: str, hemi: str) -> np.ndarray:
-    p = (
-        shared_root
-        / f"sub-{subject}"
-        / "fc"
-        / "kong2022"
-        / smoothing
-        / f"hemi_{hemi}"
-        / "hipp_vertex_to_network_fc.npy"
-    )
-    if not p.exists():
-        raise FileNotFoundError(
-            "Missing both surface tsnr mask and FC-based fallback source. "
-            f"Expected FC file for fallback: {p}"
-        )
-    arr = np.load(p).astype(np.float32)
-    if arr.ndim != 2:
-        raise ValueError(f"Expected 2D FC array for fallback mask, got {arr.shape} from {p}")
-    mask = np.any(np.isfinite(arr), axis=1)
-    if int(np.sum(mask)) <= 0:
-        raise RuntimeError(f"FC-based fallback valid mask is empty: {p}")
-    return mask.astype(bool)
-
-
 def subject_valid_mask(surface_root: Path, shared_root: Path, subject: str, smoothing: str, hemi: str) -> np.ndarray:
-    p = surface_root / f"sub-{subject}" / "surface" / "tsnr_gate" / f"sub-{subject}_hemi-{hemi}_valid_mask.npy"
-    if p.exists():
-        return np.load(p).astype(bool)
-    print(
-        f"[warn] missing tsnr_gate mask for sub-{subject} {smoothing} hemi-{hemi}; "
-        "inferring valid mask from precomputed FC file",
-        flush=True,
-    )
-    return infer_valid_mask_from_fc(shared_root, subject, smoothing, hemi)
+    p = surface_root / f"sub-{subject}" / "surface" / "validity" / f"sub-{subject}_hemi-{hemi}_valid_mask.npy"
+    if not p.exists():
+        raise FileNotFoundError(f"Missing hippocampal validity mask: {p}; prepare the subject's validity inputs first")
+    return np.load(p).astype(bool)
 
 
 def subject_network_feature(
@@ -3463,7 +3434,7 @@ def cluster_roi_profile_subjectwise_from_explicit_original_source(
         manifest_path = subject_root / "subject_manifest.json"
         ts_path = subject_root / "surface" / str(smoothing) / f"hemi-{hemi}_timeseries.npy"
         roi_path = subject_root / "cortex" / "kong2022_roi_timeseries.npy"
-        valid_path = subject_root / "surface" / "tsnr_gate" / f"hemi-{hemi}_valid_mask.npy"
+        valid_path = subject_root / "surface" / "validity" / f"hemi-{hemi}_valid_mask.npy"
         required = (manifest_path, ts_path, roi_path, valid_path)
         missing = [str(path) for path in required if not path.is_file()]
         if missing:
@@ -4406,7 +4377,7 @@ def prepare_combo_inputs(
 
     subject_fc_preprocessing_for_resume = subject_fc_preprocessing_manifest_block(method, subject_fc_mode)
     valid_mask_paths = [
-        surface_root / f"sub-{s}" / "surface" / "tsnr_gate" / f"sub-{s}_hemi-{hemi}_valid_mask.npy"
+        surface_root / f"sub-{s}" / "surface" / "validity" / f"sub-{s}_hemi-{hemi}_valid_mask.npy"
         for s in subjects
     ]
     runwise_feature_paths: list[Path] = []
@@ -4520,7 +4491,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--reference-root", default=None, help="Read cortex reference metadata/time series from this root; defaults to --shared-root.")
     parser.add_argument("--gradient-root", default=str(DEFAULT_GRADIENT_ROOT))
     parser.add_argument("--cohort", default=None, help="Cohort directory below the selected gradient route; omit for HCP.")
-    parser.add_argument("--variant", choices=("36p", "22p"), default="36p", help="Input gradient variant; 22p reads <route>_22p/<cohort>.")
+    parser.add_argument("--variant", choices=("36p",), default="36p")
     parser.add_argument("--hippomaps-root", default=str(DEFAULT_HIPPOMAPS_ROOT))
     parser.add_argument("--route-tag", choices=["auto", *ROUTE_TAG_CHOICES], default="auto")
     parser.add_argument(
@@ -4932,7 +4903,7 @@ def main() -> int:
                         if is_gradient_method(method):
                             gradient_options = {**gradient_options,
                                 "alignment_fc_paths": {s: str(shared_root / f"sub-{s}" / "fc" / atlas / "4mm" / "hemi_L" / network_feature_filename(method, atlas)) for s in subjects},
-                                "alignment_mask_paths": {s: str(surface_root / f"sub-{s}" / "surface" / "tsnr_gate" / f"sub-{s}_hemi-L_valid_mask.npy") for s in subjects},
+                                "alignment_mask_paths": {s: str(surface_root / f"sub-{s}" / "surface" / "validity" / f"sub-{s}_hemi-L_valid_mask.npy") for s in subjects},
                                 "alignment_coverage_threshold": float(tau),
                                 "alignment_run_ids": sorted(run_feature_banks),
                             }

@@ -107,7 +107,7 @@ def main():
     parser.add_argument(
         "--variant",
         default="36p",
-        choices=["36p", "22p"],
+        choices=["36p"],
         help="Confounder variant (default: 36p)",
     )
     args = parser.parse_args()

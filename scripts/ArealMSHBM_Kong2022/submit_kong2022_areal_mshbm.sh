@@ -73,10 +73,6 @@ case "${dataset}" in
     dataset_label="ESTT"
     default_data_root="/Shared/jianglab/3_Data_Working/fmriprep_processed_esTT/DataOrg_PFM_36P"
     default_out_root="/Shared/jianglab/3_Data_Working/fmriprep_processed_esTT/DataOrg_PFM_36P/hipp_outputs/cortex_kong2022_areal_mshbm"
-    if [ "${estt_variant:-}" = "22p" ]; then
-      default_data_root="/Shared/jianglab/3_Data_Working/fmriprep_processed_esTT/DataOrg_PFM_22P"
-      default_out_root="/Shared/jianglab/3_Data_Working/fmriprep_processed_esTT/DataOrg_PFM_22P/hipp_outputs/cortex_kong2022_areal_mshbm"
-    fi
     job_prefix="estt_k22"
     manifest_prefix="estt"
     ;;
@@ -131,9 +127,6 @@ data_root="${DATA_ROOT:-${default_data_root}}"
 if [ "${dataset}" = "stanford" ]; then
   if [ -n "${stanford_variant}" ] && [ -z "${DATA_ROOT:-}" ]; then
     case "${stanford_variant}" in
-      22p)
-        data_root="/Shared/jianglab/3_Data_Working/fmriprep_processed_CausalConnectome/rest_fmriprep/DataOrg_PFM_22P"
-        ;;
       36p)
         data_root="/Shared/jianglab/3_Data_Working/fmriprep_processed_CausalConnectome/rest_fmriprep/DataOrg_PFM_36P"
         ;;
@@ -141,39 +134,31 @@ if [ "${dataset}" = "stanford" ]; then
   fi
   if [ -z "${stanford_variant}" ]; then
     case "${data_root##*/}" in
-      DataOrg_PFM_22P)
-        stanford_variant="22p"
-        ;;
       DataOrg_PFM_36P)
         stanford_variant="36p"
         ;;
       *)
-        echo "ERROR: Stanford DATA_ROOT is not an identifiable DataOrg_PFM_22P or DataOrg_PFM_36P root; set STANFORD_VARIANT=22p|36p explicitly." >&2
+        echo "ERROR: Stanford DATA_ROOT is not an identifiable DataOrg_PFM_36P root; set STANFORD_VARIANT=36p explicitly." >&2
         exit 2
         ;;
     esac
   fi
   case "${stanford_variant}" in
-    22p|36p)
+    36p)
       ;;
     *)
-      echo "ERROR: STANFORD_VARIANT must be 22p or 36p, got: ${STANFORD_VARIANT:-}" >&2
+      echo "ERROR: STANFORD_VARIANT must be 36p, got: ${STANFORD_VARIANT:-}" >&2
       exit 2
       ;;
   esac
-  case "${data_root##*/}:${stanford_variant}" in
-    DataOrg_PFM_22P:36p|DataOrg_PFM_36P:22p)
-      echo "ERROR: STANFORD_VARIANT=${stanford_variant} conflicts with DATA_ROOT=${data_root}." >&2
-      exit 2
-      ;;
+  case "${data_root##*/}" in
+    DataOrg_PFM_36P) ;;
+    DataOrg_PFM_*) echo "ERROR: STANFORD_VARIANT=${stanford_variant} conflicts with DATA_ROOT=${data_root}." >&2; exit 2 ;;
   esac
 fi
 if [ "${dataset}" = "estt" ]; then
   if [ -n "${estt_variant}" ] && [ -z "${DATA_ROOT:-}" ]; then
     case "${estt_variant}" in
-      22p)
-        data_root="/Shared/jianglab/3_Data_Working/fmriprep_processed_esTT/DataOrg_PFM_22P"
-        ;;
       23p)
         data_root="/Shared/jianglab/3_Data_Working/fmriprep_processed_esTT/DataOrg_PFM_23P"
         ;;
@@ -184,9 +169,6 @@ if [ "${dataset}" = "estt" ]; then
   fi
   if [ -z "${estt_variant}" ]; then
     case "${data_root##*/}" in
-      DataOrg_PFM_22P)
-        estt_variant="22p"
-        ;;
       DataOrg_PFM_23P)
         estt_variant="23p"
         ;;
@@ -194,33 +176,28 @@ if [ "${dataset}" = "estt" ]; then
         estt_variant="36p"
         ;;
       *)
-        echo "ERROR: ESTT DATA_ROOT is not an identifiable DataOrg_PFM_22P, DataOrg_PFM_23P, or DataOrg_PFM_36P root; set ESTT_VARIANT=22p|23p|36p explicitly." >&2
+        echo "ERROR: ESTT DATA_ROOT is not an identifiable DataOrg_PFM_23P or DataOrg_PFM_36P root; set ESTT_VARIANT=23p|36p explicitly." >&2
         exit 2
         ;;
     esac
   fi
   case "${estt_variant}" in
-    22p|23p|36p)
+    23p|36p)
       ;;
     *)
-      echo "ERROR: ESTT_VARIANT must be 22p, 23p, or 36p, got: ${ESTT_VARIANT:-}" >&2
+      echo "ERROR: ESTT_VARIANT must be 23p or 36p, got: ${ESTT_VARIANT:-}" >&2
       exit 2
       ;;
   esac
   case "${data_root##*/}:${estt_variant}" in
-    DataOrg_PFM_22P:23p|DataOrg_PFM_22P:36p|DataOrg_PFM_23P:22p|DataOrg_PFM_23P:36p|DataOrg_PFM_36P:22p|DataOrg_PFM_36P:23p)
-      echo "ERROR: ESTT_VARIANT=${estt_variant} conflicts with DATA_ROOT=${data_root}." >&2
-      exit 2
-      ;;
+    DataOrg_PFM_23P:23p|DataOrg_PFM_36P:36p) ;;
+    DataOrg_PFM_*:*) echo "ERROR: ESTT_VARIANT=${estt_variant} conflicts with DATA_ROOT=${data_root}." >&2; exit 2 ;;
   esac
 fi
 if [ "${dataset}" = "iowa7t" ] && [ -n "${iowa7t_variant}" ] && [ -z "${DATA_ROOT:-}" ]; then
   case "${iowa7t_variant}" in
     0p)
       data_root="/Shared/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_0P"
-      ;;
-    22p)
-      data_root="/Shared/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_22P"
       ;;
     32p)
       data_root="/Shared/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_32P"
@@ -236,9 +213,6 @@ if [ "${dataset}" = "iowa7t" ]; then
       DataOrg_PFM_0P)
         iowa7t_variant="0p"
         ;;
-      DataOrg_PFM_22P)
-        iowa7t_variant="22p"
-        ;;
       DataOrg_PFM_32P)
         iowa7t_variant="32p"
         ;;
@@ -251,18 +225,22 @@ if [ "${dataset}" = "iowa7t" ]; then
     esac
   fi
   case "${iowa7t_variant}" in
-    0p|22p|32p|36p|noxcpd)
+    0p|32p|36p|noxcpd)
       ;;
     *)
-      echo "ERROR: IOWA7T_VARIANT must be 0p, 22p, 32p, 36p, or noxcpd, got: ${IOWA7T_VARIANT:-}" >&2
+      echo "ERROR: IOWA7T_VARIANT must be 0p, 32p, 36p, or noxcpd, got: ${IOWA7T_VARIANT:-}" >&2
       exit 2
       ;;
   esac
 fi
+if [ "${dataset}" = "iowa7t" ]; then
+  case "${data_root##*/}:${iowa7t_variant}" in
+    DataOrg_PFM_0P:0p|DataOrg_PFM_32P:32p|DataOrg_PFM_36P:36p|DataOrg_PFM_NoXCPD:noxcpd) ;;
+    DataOrg_PFM_*:*) echo "ERROR: IOWA7T_VARIANT=${iowa7t_variant} conflicts with DATA_ROOT=${data_root}." >&2; exit 2 ;;
+  esac
+fi
 if [ "${dataset}" = "iowa7t" ] && [ "${iowa7t_variant}" != "36p" ] && [ -z "${OUT_ROOT:-}" ]; then
   out_root="${data_root}/hipp_outputs"
-elif [ "${dataset}" = "stanford" ] && [ "${stanford_variant}" = "22p" ] && [ -z "${OUT_ROOT:-}" ]; then
-  out_root="${data_root%/*}/ArealMSHBM_Kong2022_22P"
 elif [ "${dataset}" = "estt" ] && [ -z "${OUT_ROOT:-}" ]; then
   out_root="${data_root}/hipp_outputs/cortex_kong2022_areal_mshbm"
 else
@@ -305,10 +283,10 @@ Usage: $(basename "$0")
 Environment controls:
   DATASET=jj_tms|stanford|iowa7t|estt|iowa_hcp500|hcp7t|pdc|banda
                         Dataset preset. Default: jj_tms.
-  STANFORD_VARIANT=22p|36p
+  STANFORD_VARIANT=36p
                         Stanford input version. Auto-detected from DATA_ROOT;
                         defaults to 36p only when DATA_ROOT is unset.
-  ESTT_VARIANT=22p|23p|36p
+  ESTT_VARIANT=23p|36p
                         ESTT input version. Auto-detected from DATA_ROOT;
                         defaults to 36p only when DATA_ROOT is unset.
   SYSTEM_NAME=idas|argon  Scheduler system override. Otherwise detected from
@@ -327,7 +305,7 @@ Environment controls:
   COHORT_MANIFEST=...   Exact metadata-derived PDC/BANDA input manifest.
   HOLD_JID=...          Explicit comma-separated prerequisite SGE job IDs.
   IOWA7T_BRANCH=...     Required for DATASET=iowa7t: multiband or multi_echo.
-  IOWA7T_VARIANT=...    Optional for DATASET=iowa7t: 0p, 22p, 32p, 36p, or noxcpd.
+  IOWA7T_VARIANT=...    Optional for DATASET=iowa7t: 0p, 32p, 36p, or noxcpd.
                         Auto-detected from DATA_ROOT basename when possible.
   RUN_ID=...            Run identifier. Iowa7T defaults to <branch>_<timestamp>.
 

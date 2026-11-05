@@ -38,8 +38,7 @@ The first-level directory count follows actual product ownership.
   workflow. A self-contained scientific package can retain its own figures,
   tables, and logs.
 - Anatomical group-average surfaces use
-  `inputs/kong2022/templates/hipp_group_average/`, with the corresponding
-  `kong2022_22p/` input root where supported.
+  `inputs/kong2022/templates/hipp_group_average/`.
 - HCP fixed functional transfer templates use
   `outputs_hcp/templates/<template_id>/`. They contain functional cluster
   labels, support, and cortical connectivity prototypes. The individual
@@ -51,8 +50,7 @@ The first-level directory count follows actual product ownership.
   downstream reference contracts.
 
 Preserve separate preprocessing variants, cohorts, methods, taxonomies,
-cortex controls, and scientific parameter branches. In particular, 22P and
-36P products remain distinct. Formal HCP control routes remain `pfm_ctxreg`
+cortex controls, and scientific parameter branches. Formal HCP control routes remain `pfm_ctxreg`
 and `pfm_ctxdrop`. Exact group-atlas roots are documented in
 [Formal Group-Atlas Layout](active_group_atlas_inventory.md).
 

@@ -12,9 +12,7 @@ declaration fields, and rejects cycles and conflicting or unknown provenance.
 Archive paths (including symlinks) are rejected before reads. Historical reuse
 needs a source identity, a historical-only role, and explicit non-recomputation
 flags; it never opens the historical reference. Patient 36P's four in-place
-reuse manifests use `canonical7_in_place_fixed_cluster_reuse`; Patient 22P
-remains independently recomputed. No scientific arrays were changed by this
-metadata repair.
+reuse manifests use `canonical7_in_place_fixed_cluster_reuse`.
 
 Subject-contrast cache fingerprints include the lineage validator and reject
 archive sources before hashing. After a validator/consumer code change or
@@ -29,23 +27,17 @@ means are republished by that preparation command with its standard backups.
 Presentation manifests follow the same boundary: active `kong2022_7net`
 overview products record `atlas: kong2022`, `network_taxonomy: canonical7`,
 and `presentation_namespace: kong2022_7net`, while their source paths end in
-`gradient-spectral/kong2022` or `wta-top/kong2022`. The Stanford 22P aggregate
-driver is rebuilt from the current per-cohort manifests; a cohort without a
-weighted product is recorded as `not_generated` rather than pointing to a
-missing cache. Historical four-network Patient pseudo-cluster sidecars remain retained and
-explicitly excluded from the active comparison suite. The release audit in
-`docs/kong400_recovery_audit/closeout_live_audit_20260912.json` covers 184
-active gradient group-atlas manifests: 88 explicit historical reuse records,
-84 validated active-parent declarations, and 12 independently recomputed
-manifests (four Patient 22P plus eight control combinations). The accepted HCP
+`gradient-spectral/kong2022` or `wta-top/kong2022`. Historical four-network
+Patient pseudo-cluster sidecars remain excluded from the active comparison suite.
+The accepted HCP
 ctxdrop/ctxreg controls are now independently regenerated from the dated
 400-ROI roots recorded in
 `docs/kong400_recovery_audit/2026-09-11-review-followup.md`; their group
 atlases prove a `(3,400)` profile and a 400-ROI gradient input. The older
 recovered trees were removed on 2026-09-12 and are not selected by active
 manifests. The visualization audit in
-`docs/kong400_recovery_audit/visualization_7net_audit.json` covers the 24 active
-comparison PNGs and their source/statistics contracts. The six HCP
+`docs/kong400_recovery_audit/visualization_7net_audit.json` records comparison
+PNGs and their source/statistics contracts. The six HCP
 ctxdrop/ctxreg overview panels and their dated sources are checked in the
 `controls` section of the closeout audit. Earlier audit files are annotated
 as historical/superseded rather than having their old facts silently rewritten.

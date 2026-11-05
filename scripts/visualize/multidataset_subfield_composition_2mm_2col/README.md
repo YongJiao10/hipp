@@ -11,9 +11,7 @@ The comparison panorama omits the single-atlas version tag (`[VERSION 2: ...]`) 
 | Grid Tag | Comparison Figure Artifact | Statistics TSV (in `stats/`) |
 | --- | --- | --- |
 | `2mm_36p` | [`multidataset_subfield_composition_2mm_2col_hcp_jjtms_7net_2mm_36p.png`](file:///home/yojiao/hpchome/hipp/scripts/visualize/multidataset_subfield_composition_2mm_2col/multidataset_subfield_composition_2mm_2col_hcp_jjtms_7net_2mm_36p.png) | [`stats/multidataset_subfield_composition_hcp_jjtms_7net_2mm_36p_stats.tsv`](file:///home/yojiao/hpchome/hipp/scripts/visualize/multidataset_subfield_composition_2mm_2col/stats/multidataset_subfield_composition_hcp_jjtms_7net_2mm_36p_stats.tsv) |
-| `2mm_22p` | [`multidataset_subfield_composition_2mm_2col_hcp_jjtms_7net_2mm_22p.png`](file:///home/yojiao/hpchome/hipp/scripts/visualize/multidataset_subfield_composition_2mm_2col/multidataset_subfield_composition_2mm_2col_hcp_jjtms_7net_2mm_22p.png) | [`stats/multidataset_subfield_composition_hcp_jjtms_7net_2mm_22p_stats.tsv`](file:///home/yojiao/hpchome/hipp/scripts/visualize/multidataset_subfield_composition_2mm_2col/stats/multidataset_subfield_composition_hcp_jjtms_7net_2mm_22p_stats.tsv) |
 | `4mm_36p` | [`multidataset_subfield_composition_2mm_2col_hcp_jjtms_7net_4mm_36p.png`](file:///home/yojiao/hpchome/hipp/scripts/visualize/multidataset_subfield_composition_2mm_2col/multidataset_subfield_composition_2mm_2col_hcp_jjtms_7net_4mm_36p.png) | [`stats/multidataset_subfield_composition_hcp_jjtms_7net_4mm_36p_stats.tsv`](file:///home/yojiao/hpchome/hipp/scripts/visualize/multidataset_subfield_composition_2mm_2col/stats/multidataset_subfield_composition_hcp_jjtms_7net_4mm_36p_stats.tsv) |
-| `4mm_22p` | [`multidataset_subfield_composition_2mm_2col_hcp_jjtms_7net_4mm_22p.png`](file:///home/yojiao/hpchome/hipp/scripts/visualize/multidataset_subfield_composition_2mm_2col/multidataset_subfield_composition_2mm_2col_hcp_jjtms_7net_4mm_22p.png) | [`stats/multidataset_subfield_composition_hcp_jjtms_7net_4mm_22p_stats.tsv`](file:///home/yojiao/hpchome/hipp/scripts/visualize/multidataset_subfield_composition_2mm_2col/stats/multidataset_subfield_composition_hcp_jjtms_7net_4mm_22p_stats.tsv) |
 
 For the `hcp_jjtms_7net` subfield comparison, the hippocampal surface is a gradient-spectral atlas surface and therefore uses the `fisherz` label variant in both columns (Kong2022 and Lynch2024). Kong2022's `normalized_top20_count` variant remains restricted to the WTA/Top-20 panels and is not reused for this gradient surface.
 
@@ -173,25 +171,21 @@ the enlarged labels remain readable without excessive page margins or gaps.
 
 ### 🌟 Active Production Suite (2×2 Resolution × Preprocessing Grid)
 
-Both the 10/12-cohort cross-dataset panorama and the Stanford clinical group differences pipeline support the full $2 \times 2$ grid matrix (`2mm_36p`, `2mm_22p`, `4mm_36p`, `4mm_22p`):
+Both the 10/12-cohort cross-dataset panorama and the Stanford clinical group differences pipeline support the 36P grid (`2mm_36p`, `4mm_36p`):
 
 #### 1. Cross-Dataset Subfield Panorama (`render_multidataset_subfield_composition_2mm_2col.py`)
 
 | Grid Tag | Figure Artifact | Statistics TSV (in `stats/`) |
 | --- | --- | --- |
 | `2mm_36p` | [`multidataset_subfield_composition_2mm_2col_2mm_36p.png`](file:///home/yojiao/hpchome/hipp/scripts/visualize/multidataset_subfield_composition_2mm_2col/multidataset_subfield_composition_2mm_2col_2mm_36p.png) | [`stats/multidataset_subfield_composition_2mm_36p_stats.tsv`](file:///home/yojiao/hpchome/hipp/scripts/visualize/multidataset_subfield_composition_2mm_2col/stats/multidataset_subfield_composition_2mm_36p_stats.tsv) |
-| `2mm_22p` | [`multidataset_subfield_composition_2mm_2col_2mm_22p.png`](file:///home/yojiao/hpchome/hipp/scripts/visualize/multidataset_subfield_composition_2mm_2col/multidataset_subfield_composition_2mm_2col_2mm_22p.png) | [`stats/multidataset_subfield_composition_2mm_22p_stats.tsv`](file:///home/yojiao/hpchome/hipp/scripts/visualize/multidataset_subfield_composition_2mm_2col/stats/multidataset_subfield_composition_2mm_22p_stats.tsv) |
 | `4mm_36p` | [`multidataset_subfield_composition_2mm_2col_4mm_36p.png`](file:///home/yojiao/hpchome/hipp/scripts/visualize/multidataset_subfield_composition_2mm_2col/multidataset_subfield_composition_2mm_2col_4mm_36p.png) | [`stats/multidataset_subfield_composition_4mm_36p_stats.tsv`](file:///home/yojiao/hpchome/hipp/scripts/visualize/multidataset_subfield_composition_2mm_2col/stats/multidataset_subfield_composition_4mm_36p_stats.tsv) |
-| `4mm_22p` | [`multidataset_subfield_composition_2mm_2col_4mm_22p.png`](file:///home/yojiao/hpchome/hipp/scripts/visualize/multidataset_subfield_composition_2mm_2col/multidataset_subfield_composition_2mm_2col_4mm_22p.png) | [`stats/multidataset_subfield_composition_4mm_22p_stats.tsv`](file:///home/yojiao/hpchome/hipp/scripts/visualize/multidataset_subfield_composition_2mm_2col/stats/multidataset_subfield_composition_4mm_22p_stats.tsv) |
 
 #### 2. Stanford Clinical Group Differences vs NTHC (`analyze_and_render_stanford_subfield_differences.py`)
 
 | Grid Tag | Figure Artifact | Contrasts TSV (in `stats/`) | Subject Long TSV (in `stats/`) |
 | --- | --- | --- | --- |
 | `2mm_36p` | [`stanford_subfield_group_differences_figure_2mm_36p.png`](file:///home/yojiao/hpchome/hipp/scripts/visualize/multidataset_subfield_composition_2mm_2col/stanford_subfield_group_differences_figure_2mm_36p.png) | [`stats/stanford_subfield_group_differences_stats_2mm_36p.tsv`](file:///home/yojiao/hpchome/hipp/scripts/visualize/multidataset_subfield_composition_2mm_2col/stats/stanford_subfield_group_differences_stats_2mm_36p.tsv) | [`stats/stanford_subfield_subject_level_long_2mm_36p.tsv`](file:///home/yojiao/hpchome/hipp/scripts/visualize/multidataset_subfield_composition_2mm_2col/stats/stanford_subfield_subject_level_long_2mm_36p.tsv) |
-| `2mm_22p` | [`stanford_subfield_group_differences_figure_2mm_22p.png`](file:///home/yojiao/hpchome/hipp/scripts/visualize/multidataset_subfield_composition_2mm_2col/stanford_subfield_group_differences_figure_2mm_22p.png) | [`stats/stanford_subfield_group_differences_stats_2mm_22p.tsv`](file:///home/yojiao/hpchome/hipp/scripts/visualize/multidataset_subfield_composition_2mm_2col/stats/stanford_subfield_group_differences_stats_2mm_22p.tsv) | [`stats/stanford_subfield_subject_level_long_2mm_22p.tsv`](file:///home/yojiao/hpchome/hipp/scripts/visualize/multidataset_subfield_composition_2mm_2col/stats/stanford_subfield_subject_level_long_2mm_22p.tsv) |
 | `4mm_36p` | [`stanford_subfield_group_differences_figure_4mm_36p.png`](file:///home/yojiao/hpchome/hipp/scripts/visualize/multidataset_subfield_composition_2mm_2col/stanford_subfield_group_differences_figure_4mm_36p.png) | [`stats/stanford_subfield_group_differences_stats_4mm_36p.tsv`](file:///home/yojiao/hpchome/hipp/scripts/visualize/multidataset_subfield_composition_2mm_2col/stats/stanford_subfield_group_differences_stats_4mm_36p.tsv) | [`stats/stanford_subfield_subject_level_long_4mm_36p.tsv`](file:///home/yojiao/hpchome/hipp/scripts/visualize/multidataset_subfield_composition_2mm_2col/stats/stanford_subfield_subject_level_long_4mm_36p.tsv) |
-| `4mm_22p` | [`stanford_subfield_group_differences_figure_4mm_22p.png`](file:///home/yojiao/hpchome/hipp/scripts/visualize/multidataset_subfield_composition_2mm_2col/stanford_subfield_group_differences_figure_4mm_22p.png) | [`stats/stanford_subfield_group_differences_stats_4mm_22p.tsv`](file:///home/yojiao/hpchome/hipp/scripts/visualize/multidataset_subfield_composition_2mm_2col/stats/stanford_subfield_group_differences_stats_4mm_22p.tsv) | [`stats/stanford_subfield_subject_level_long_4mm_22p.tsv`](file:///home/yojiao/hpchome/hipp/scripts/visualize/multidataset_subfield_composition_2mm_2col/stats/stanford_subfield_subject_level_long_4mm_22p.tsv) |
 
 *(Note: For backward compatibility, default unversioned [`stanford_subfield_group_differences_figure.png`](file:///home/yojiao/hpchome/hipp/scripts/visualize/multidataset_subfield_composition_2mm_2col/stanford_subfield_group_differences_figure.png) mirrors `2mm_36p`).*
 
@@ -218,13 +212,13 @@ Lynch Fisher-z labels; it never requests or borrows a Lynch normalized label.
 The group-differences renderer can render directly from existing exports (default `target` mode) or recompute analyses across any or all grid combinations:
 
 ```bash
-# 1. Generate subfield composition panoramas for all four grids (standalone CLI removed):
+# 1. Generate subfield composition panoramas for both 36p grids (standalone CLI removed):
 /home/yojiao/.conda/envs/py314/bin/python scripts/visualize/run_multidataset_suite.py --figures subfield_composition_2col
 
 # 1b. Branch-pair mode (2mm/36p standard + ctxreg, branch-qualified names):
 /home/yojiao/.conda/envs/py314/bin/python scripts/visualize/run_multidataset_suite.py --version hcp_jjtms_7net --figures subfield_composition_2col --signal-branch all
 
-# 2. Recompute and render Stanford group differences across all four grids simultaneously:
+# 2. Recompute and render Stanford group differences across both 36p grids:
 /home/yojiao/.conda/envs/py314/bin/python /home/yojiao/hpchome/hipp/scripts/visualize/multidataset_subfield_composition_2mm_2col/analyze_and_render_stanford_subfield_differences.py --grid all --mode v2
 ```
 

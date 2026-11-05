@@ -102,13 +102,7 @@ Directory names intentionally do not encode `t1only`, `present_fixedk`, or a
 `10perc/full` presentation split.
 
 Retained Kong cortex references use `inputs/kong2022/shared_inputs/pfm/` or
-`fixed/`; Stanford and Iowa JJ_TMS 22P use
-`inputs/kong2022_22p/shared_inputs/pfm/`. Iowa 22P also retains its separate
-direct-seven-network reference package under
-`inputs/kong2022_22p/shared_inputs/pfm/variants/canonical7_direct/`, with its
-original atlas directory, arrays, network summaries, and QC metadata. The
-formal 400-ROI bank remains at the parent PFM root; the direct-network package
-is a distinct retained variant and is not selected implicitly. These
+`fixed/`. These
 references are derived from cortical CIFTI time series and cortical labels,
 independently of hippocampal sampling coordinates. Correcting hippocampal
 coordinates affects hippocampal sampling and products derived from it, rather
@@ -119,8 +113,7 @@ or scientific relabelling.
 Cortex label sources use
 `inputs/kong2022/cortex_references/pfm_areal_mshbm/`. Group-average surfaces
 use `inputs/kong2022/templates/hipp_group_average/group_average_surfaces/`
-within the corresponding dataset root; versioned Stanford 22P templates use
-`kong2022_22p` instead of `kong2022`.
+within the corresponding dataset root.
 
 `scripts/core_workflow/` is both:
 - canonical public interface (`NN_MM_*`)

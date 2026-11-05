@@ -18,7 +18,7 @@ Inputs:
   - --jobs: Subject-level process concurrency cap (default: 1, hard-capped at 10).
 - Physical inputs:
   - Resampled BOLD timeseries: `{surface_root}/sub-<subject>/surface/{smoothing}/sub-<subject>_hemi-{hemi}_timeseries.npy`.
-  - BOLD active mask: `{surface_root}/sub-<subject>/surface/tsnr_gate/sub-<subject>_hemi-{hemi}_valid_mask.npy`.
+  - BOLD active mask: `{surface_root}/sub-<subject>/surface/validity/sub-<subject>_hemi-{hemi}_valid_mask.npy`.
   - Reference timeseries: `{shared_root}/sub-<subject>/reference/kong2022/cortex_roi_parcel_timeseries.npy`.
   - Reference parcels TSV: `{shared_root}/sub-<subject>/reference/kong2022/cortex_roi_parcels.tsv`.
 
@@ -345,7 +345,7 @@ def materialize_ctxdrop_fc_from_arrays(
             "fc_shape": [int(pearson_full.shape[0]), int(pearson_full.shape[1])],
             "active_fc_shape": [int(pearson_valid.shape[0]), int(pearson_valid.shape[1])],
             "n_vertices_total": int(ts.shape[0]),
-            "n_vertices_valid_high_tsnr": int(valid.sum()),
+            "n_vertices_valid": int(valid.sum()),
             "n_vertices_invalid_initial": int(ts.shape[0] - valid.sum()),
             "n_vertices_clustered": int(valid.sum()),
             "n_timepoints": int(ts.shape[1]),
@@ -736,7 +736,7 @@ def materialize_ctxdrop_fc(
     fc_dir = subj_root / "fc" / atlas_slug / smoothing / f"hemi_{hemi}"
 
     ts = np.load(surf_subj_root / "surface" / smoothing / f"sub-{subject}_hemi-{hemi}_timeseries.npy").astype(np.float32)
-    valid_mask = np.load(mask_subj_root / "surface" / "tsnr_gate" / f"sub-{subject}_hemi-{hemi}_valid_mask.npy").astype(bool)
+    valid_mask = np.load(mask_subj_root / "surface" / "validity" / f"sub-{subject}_hemi-{hemi}_valid_mask.npy").astype(bool)
     roi_rows = read_roi_rows(ref_subj_root / "reference" / ATLAS / "cortex_roi_parcels.tsv")
     run_segments = load_run_segments(ref_subj_root)
     materialize_ctxdrop_fc_from_arrays(
@@ -780,7 +780,7 @@ def materialize_fc(
         require_cortex_reference_policy(ref_subj_root / "reference" / atlas_slug, dataset=dataset)
 
     ts = np.load(surf_subj_root / "surface" / smoothing / f"sub-{subject}_hemi-{hemi}_timeseries.npy").astype(np.float32)
-    valid_mask = np.load(mask_subj_root / "surface" / "tsnr_gate" / f"sub-{subject}_hemi-{hemi}_valid_mask.npy").astype(bool)
+    valid_mask = np.load(mask_subj_root / "surface" / "validity" / f"sub-{subject}_hemi-{hemi}_valid_mask.npy").astype(bool)
     target_tsv_name, target_timeseries_name, target_name_column = reference_fc_target_files(atlas_slug)
     target_timeseries_path = ref_subj_root / "reference" / atlas_slug / target_timeseries_name
     target_tsv_path = ref_subj_root / "reference" / atlas_slug / target_tsv_name
@@ -932,7 +932,7 @@ def materialize_fc(
             "fc_shape": [int(pearson_full.shape[0]), int(pearson_full.shape[1])],
             "active_fc_shape": [int(pearson_valid.shape[0]), int(pearson_valid.shape[1])],
             "n_vertices_total": int(ts.shape[0]),
-            "n_vertices_valid_high_tsnr": int(valid_mask.sum()),
+            "n_vertices_valid": int(valid_mask.sum()),
             "n_vertices_invalid_initial": int(ts.shape[0] - valid_mask.sum()),
             "n_vertices_clustered": int(valid_mask.sum()),
             "n_timepoints": int(ts.shape[1]),
@@ -991,7 +991,7 @@ def materialize_fc(
                     else []
                 ),
                 str((surf_subj_root / "surface" / smoothing / f"sub-{subject}_hemi-{hemi}_timeseries.npy").resolve()),
-                str((mask_subj_root / "surface" / "tsnr_gate" / f"sub-{subject}_hemi-{hemi}_valid_mask.npy").resolve()),
+                str((mask_subj_root / "surface" / "validity" / f"sub-{subject}_hemi-{hemi}_valid_mask.npy").resolve()),
             ],
             "outputs": [
                 str((fc_dir / "hipp_vertex_to_network_fc.npy").resolve()),

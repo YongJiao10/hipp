@@ -162,8 +162,7 @@ and at most 20 unusable vertices per consumed den-512 hemisphere. Unusable means
 no trilinear NIfTI grid support or a nonfinite/constant sampled signal in any
 physical run. Coverage uses `*_nifti_support.npy` and
 `sub-<subject>_coverage_summary.json` with policy
-`bold_nifti_runwise_trilinear_validity`. Use `--tsnr-threshold none`; this gate
-does not apply a numerical tSNR cutoff or CIFTI hippocampal-membership mask.
+`bold_nifti_runwise_trilinear_validity`.
 Participant QC and smoothing use the same vertex validity calculation.
 
 The current `latest` QC roster defines the cohort; there is no fixed historical
@@ -186,24 +185,12 @@ sampling, rather than stopping other participants or selecting another modality.
 Rebuild incompatible sampling, coverage and masks explicitly with `--no-resume`
 before smoothing; changing source code does not replace production products.
 
-### Existing rest tSNR baseline inputs
+### Cortical signal validity
 
-Cortical rest adapters retain a separate baseline-based tSNR interface.
-`--tsnr-input-template` selects an NPZ with `dataset`, `subject` (without
-`sub-`), `hemi`, `n_runs`, and pairs `run_0`/`frames_0`, etc. Each run is a
-vertex-by-original-frame baseline array; frames are sorted, unique original
-indices retained after dummy removal and censoring. Cortex inputs also declare
-`vertex_ids` matching the consumed CIFTI order. Package explicitly selected
-baseline GIFTIs/CIFTIs with `lib/prepare_tsnr_baseline_inputs.py --help`.
-
-The rest score is the original temporal mean divided by sample SD after
-intercept/linear-trend removal on retained frames, evaluated per run.
-The mask intersects run thresholds and validity of the analysis signal.
-Threshold 25 is an inherited operational comparison setting. The accepted
-participant policy is defined separately in [fMRI QC](../../docs/hipp_parcellation_network/fmri_qc.md).
-Templates use `{subject}` and `{hemi}`; dataset adapters add `{domain}`,
-`{variant}`, `{branch}` or `{run}` where documented. Keep 22P/36P retained frames
-and MB/ME inputs distinct.
+Cortical reference generation retains vertices with finite signal
+throughout the declared physical runs. The per-hemisphere masks and summaries are
+written under `reference/common/validity/`. References and downstream FC must
+be rebuilt when their recorded validity policy differs from this one.
 
 ## Branches and analysis defaults
 
@@ -214,6 +201,7 @@ The defaults preserve column z-scoring and BrainSpace feature sparsification
 is constructed once, clipped nonnegative, mean-symmetrized with its kernel
 diagonal retained, then embedded with `GradientMaps(kernel=None)` and no
 second sparsification. Disconnected diffusion support is rejected.
+
 `gradient_preprocessing` records the effective settings; missing or mismatched
 settings require explicit regeneration instead of cache reuse.
 
@@ -269,22 +257,13 @@ explicitly when a controlled signal root is separate.
 
 ### Dataset and preprocessing variants
 
-For cohort gradients, pass the same `--cohort <name> --variant 36p|22p` to
+For cohort gradients, pass the same `--cohort <name> --variant 36p` to
 `05_01`, `05_02` and `06_04`. Gradient root arguments name the stage root above
-the route; for example `pfm` plus `--cohort nthc --variant 22p` resolves to
-`<gradient-stage-root>/pfm_22p/nthc/<smoothing>/hemi_<hemi>/`.
+the route; for example `pfm` plus `--cohort nthc` resolves to
+`<gradient-stage-root>/pfm/nthc/<smoothing>/hemi_<hemi>/`.
 Select matching upstream roots, subject rosters and group-atlas roots separately.
-HCP omits `--cohort`, uses `36p`, and has no native 22P input branch.
-Iowa JJ_TMS unversioned subgroup routes are 36P; 22P routes append `_22p`.
+HCP omits `--cohort`. Iowa JJ_TMS subgroup routes use 36P.
 
-Stanford Causal-Connectome 22P uses the following local roots under
-`/home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_CausalConnectome/rest_fmriprep/`:
-
-- CIFTI: `DataOrg_PFM_22P/sub-*/func/*_task-rest_space-fsLR_den-91k_desc-denoised_bold.dtseries.nii`.
-- BOLD: `DataOrg_PFM_22P/sub-*/func/*_task-rest_space-MNI152NLin6Asym_res-2_desc-denoised_bold.nii.gz`.
-- Labels: `ArealMSHBM_Kong2022_22P/sub-*/{lh_labels.txt,rh_labels.txt}`.
-
-Here `surf` means cortical time-series CIFTI. Use `/Shared/jianglab` on Argon.
 The seven overview cohorts are NTHC, TEHC, NTS, NTS Any MDD, NTS Pure MDD, TIS,
 and TIS PTSD. Select the complete roster for the intended analysis.
 

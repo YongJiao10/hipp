@@ -84,13 +84,6 @@ DEFAULT_36P_ROOT = (
     / "hcp151_fixed_template_matching"
     / "subjects"
 )
-DEFAULT_22P_ROOT = (
-    REPO_ROOT
-    / "outputs_iowa_jj_tms"
-    / "work"
-    / "hcp151_fixed_template_matching_22p"
-    / "subjects"
-)
 DEFAULT_SCENE = REPO_ROOT / "config" / "wb_locked_native_view_lateral_medial.scene"
 DEFAULT_SPEC = (
     REPO_ROOT
@@ -1867,11 +1860,7 @@ def compose_grid_figure(
             f"—  Iowa 3T Cohorts (N=93 Unique Subjects)"
         )
     else:
-        variant_desc = (
-            "36-Parameter (36P) Confound Regression"
-            if variant == "36p"
-            else "22-Parameter (22P) Confound Regression"
-        )
+        variant_desc = "36-Parameter (36P) Confound Regression"
         sub_text = (
             f"{smoothing.upper()} Surface Smoothing  |  {variant.upper()} Confound Regression ({variant_desc})  "
             f"—  Iowa 3T Cohorts (N=93 Total Subjects)"
@@ -2217,11 +2206,7 @@ def compose_grid_figure_ttest(
             f"—  Iowa 3T Cohorts (N=93 Unique Subjects)"
         )
     else:
-        variant_desc = (
-            "36-Parameter (36P) Confound Regression"
-            if variant == "36p"
-            else "22-Parameter (22P) Confound Regression"
-        )
+        variant_desc = "36-Parameter (36P) Confound Regression"
         sub_text = (
             f"{smoothing.upper()} Surface Smoothing  |  {variant.upper()} Confound Regression ({variant_desc})  "
             f"—  Iowa 3T Cohorts (N=93 Total Subjects)"
@@ -2546,7 +2531,7 @@ def compose_grid_figure_ttest(
 def write_comprehensive_csv(
     all_results: dict[str, list[CohortRowResult]], csv_path: Path
 ) -> None:
-    """Write comprehensive metrics across all 4 grid combinations and 4 cohorts."""
+    """Write comprehensive metrics across both 36p grid combinations and 4 cohorts."""
     csv_path.parent.mkdir(parents=True, exist_ok=True)
     rows = []
     for grid_tag, cohort_list in all_results.items():
@@ -2608,7 +2593,7 @@ def write_manifest_json(
             }
             for c in COHORTS_DEF
         ],
-        "grid_combinations": ["2mm_36p", "2mm_22p", "4mm_36p", "4mm_22p"],
+        "grid_combinations": ["2mm_36p", "4mm_36p"],
         "master_figures": {
             grid: {
                 "path": str(fig_path.resolve()),
@@ -3224,7 +3209,7 @@ def render_branch_outputs_ttest(
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Render Iowa 3T Hippocampal Template Matching Dominant Subregions & Dominance Heatmaps (4 Grids)."
+        description="Render Iowa 3T Hippocampal Template Matching Dominant Subregions & Dominance Heatmaps (36p Grids)."
     )
     parser.add_argument(
         "--output-dir",
@@ -3239,7 +3224,7 @@ def main() -> None:
         "--grids",
         nargs="+",
         default=None,
-        choices=["2mm_36p", "2mm_22p", "4mm_36p", "4mm_22p", "all"],
+        choices=["2mm_36p", "4mm_36p", "all"],
         help="Grid combinations to render.",
     )
     parser.add_argument(
@@ -3291,9 +3276,9 @@ def main() -> None:
         print(f"\nCompleted {len(selected_branches)} t-test branch figure(s).")
         return
 
-    grids = args.grids or ["2mm_36p", "2mm_22p", "4mm_36p", "4mm_22p"]
+    grids = args.grids or ["2mm_36p", "4mm_36p"]
     selected_grids = (
-        ["2mm_36p", "2mm_22p", "4mm_36p", "4mm_22p"] if "all" in grids else grids
+        ["2mm_36p", "4mm_36p"] if "all" in grids else grids
     )
 
     out_dir = args.output_dir.resolve()
@@ -3305,7 +3290,6 @@ def main() -> None:
 
     grid_roots = {
         "36p": DEFAULT_36P_ROOT,
-        "22p": DEFAULT_22P_ROOT,
     }
 
     all_results: dict[str, list[CohortRowResult]] = {}
@@ -3435,7 +3419,7 @@ def main() -> None:
             manifest_path=manifest_path,
         )
 
-    print("\nAll 4 grid figures and statistics completed successfully!")
+    print("\nSelected 36p grid figures and statistics completed successfully!")
 
 
 if __name__ == "__main__":

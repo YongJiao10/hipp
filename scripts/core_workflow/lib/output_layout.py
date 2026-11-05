@@ -22,14 +22,11 @@ DATASET_KEYS = (
 DEFAULT_DATASET = "hcp"
 
 IOWA7T_BRANCHES = ("multiband", "multi_echo")
-IOWA7T_VARIANTS = ("0p", "22p", "32p", "36p", "noxcpd")
+IOWA7T_VARIANTS = ("0p", "32p", "36p", "noxcpd")
 LOCAL_JIANGLAB_ROOT = Path("/home/yojiao/LSS/jianglab")
 ARGON_JIANGLAB_ROOT = Path("/Shared/jianglab")
 IOWA7T_0P_RELATIVE_ROOT = Path(
     "3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_0P"
-)
-IOWA7T_22P_RELATIVE_ROOT = Path(
-    "3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_22P"
 )
 IOWA7T_32P_RELATIVE_ROOT = Path(
     "3_Data_Working/fmriprep_processed_Iowa7T/DataOrg_PFM_32P"
@@ -42,7 +39,6 @@ IOWA7T_NOXCPD_RELATIVE_ROOT = Path(
 )
 IOWA7T_VARIANT_RELATIVE_ROOTS = {
     "0p": IOWA7T_0P_RELATIVE_ROOT,
-    "22p": IOWA7T_22P_RELATIVE_ROOT,
     "32p": IOWA7T_32P_RELATIVE_ROOT,
     "36p": IOWA7T_36P_RELATIVE_ROOT,
     "noxcpd": IOWA7T_NOXCPD_RELATIVE_ROOT,
@@ -253,7 +249,7 @@ def resolve_qc_root(dataset: str = DEFAULT_DATASET) -> Path:
     return resolve_inputs_root(dataset) / "qc"
 
 
-KONG2022_VARIANTS = ("36p", "22p")
+KONG2022_VARIANTS = ("36p",)
 
 
 def _validate_kong2022_variant(variant: str) -> str:
@@ -274,15 +270,8 @@ def resolve_kong2022_variant_root(
     variant: str = "36p",
 ) -> Path:
     dataset_key = _validate_dataset(dataset)
-    variant_key = _validate_kong2022_variant(variant)
-    if variant_key == "36p":
-        return resolve_inputs_root(dataset_key) / "kong2022"
-    if dataset_key in {"stanford", "iowa_jj_tms"}:
-        return resolve_inputs_root(dataset_key) / "kong2022_22p"
-    raise ValueError(
-        f"Kong2022 {variant_key} has no supported native input layout for "
-        f"dataset={dataset_key!r}"
-    )
+    _validate_kong2022_variant(variant)
+    return resolve_inputs_root(dataset_key) / "kong2022"
 
 
 def resolve_kong2022_shared_inputs_root(
@@ -437,8 +426,8 @@ def resolve_lynch2024_7net_group_atlas_root(dataset: str = DEFAULT_DATASET) -> P
 
 def _variant_suffixed_route(route: str, variant: str = "36p") -> str:
     route_key = str(route).strip().lower()
-    variant_key = _validate_kong2022_variant(variant)
-    return f"{route_key}_22p" if variant_key == "22p" else route_key
+    _validate_kong2022_variant(variant)
+    return route_key
 
 
 def resolve_cohort_group_atlas_root(
