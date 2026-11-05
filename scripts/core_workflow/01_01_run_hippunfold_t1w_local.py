@@ -65,6 +65,7 @@ def _start_subject(
     contract: HippUnfoldRunContract, base_env: Mapping[str, str]
 ) -> tuple[subprocess.Popen, TextIO]:
     subject = f"sub-{contract.subject}"
+    contract.preset.output_root.mkdir(parents=True, exist_ok=True)
     env = prepare_subject_environment(contract, base_env)
     log_file = contract.preset.output_root / f"{subject}_hippunfold.log"
     now = datetime.now().astimezone().isoformat(timespec="seconds")
@@ -176,7 +177,7 @@ def run_t1w_local(argv: list[str] | None = None) -> int:
     parser.add_argument("--manifest", type=Path, help="Subject list for batch execution.")
     parser.add_argument(
         "--jobs", type=int, default=None,
-        help="Manifest concurrency (default: HCP 8, others 1; HCP max 12, others max 2, BANDA max 1).",
+        help="Manifest concurrency (default: HCP 8, others 1; HCP/NIH rTMS max 12, others max 2, BANDA max 1).",
     )
     parser.add_argument(
         "--dataset",

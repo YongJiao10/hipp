@@ -33,7 +33,7 @@ Within `kong2022`, PFM (`pfm`, canonical7), PFM 17-net (`pfm_17net`), PFM cortex
 - `07_xx`: group matrix indexing
 
 Group atlas method families include intrinsic FC, network/ROI FC, WTA, and
-`gradient-spectral`. `05_02_run_group_atlas.py` evaluates K=2..8, records its automatic selection separately, and uses non-forced `--default-k 3` for primary labels and overviews. Partial
+gradient clustering. `05_02_run_group_atlas.py` evaluates K=2..8, records its automatic selection separately, and uses non-forced `--default-k 3` for primary labels and overviews. Partial
 correlation spectral branches are retired from public method choices.
 
 `gradient-spectral` consumes aligned HippoMaps/BrainSpace gradient artifacts
@@ -50,7 +50,42 @@ aligns component order and sign within each preprocessing setting/route to the
 required `4mm/hemi_L` anchor, and writes only the aligned arrays. `05_02`
 selects aligned G1-G3 by default (`--gradient-components 1,2,3`) and applies
 the separate declared clustering scaling (`none` or component-wise `unit_sd`).
-The full effective preprocessing contract is required for gradient reuse.
+The full effective preprocessing contract is required for gradient reuse,
+including `--resume` and `--reuse-fixed-cluster-root`. Fixed-cluster reuse
+requires matching explicit preprocessing declarations in the feature summary
+and upstream gradient manifest, as well as matching clustering feature scaling,
+active gradient features, and the exact declared RBF bandwidth when applicable.
+Resuming a gradient result requires its declared feature summary
+and upstream gradient manifest; missing or conflicting source declarations
+stop with an explicit regeneration error. Runs skipped because no K was valid
+or survived selection retain their skip status when their input signature is
+unchanged; a run with no valid K does not require a gradient cache.
+Subject-specific spatial-permutation nulls (`strong_null_ari`)
+permute each participant's vertex FC and validity mask with the same permutation.
+
+For explicit comparisons, `05_02` also accepts `gradient-ward`,
+`gradient-gmm`, and `gradient-spectral-rbf`. Ward uses Euclidean features
+and a connected binary mesh; GMM uses full-covariance mixtures without a
+spatial constraint and reports disconnected clusters. RBF spectral clustering
+weights unique mesh edges by gradient distance; `--rbf-scale` multiplies the
+median positive edge distance. Its diagnostics include effective connectivity
+at a relative edge-weight cutoff of `1e-5`. The established
+`gradient-spectral` method retains shifted-cosine affinity. These methods use
+the same explicitly selected gradient features, and the comparison does not
+change the production default. `--k-selection-mode fixed-comparison` evaluates
+the requested fixed K without selecting an automatic K; `--comparison-output`
+requires this mode, an explicit dataset, and an output location under `tmp/`.
+
+For Kong2022 subjectwise 400-ROI inputs, the explicitly selected assignment
+variants `ovr_logistic_canonical7` and `ovr_logistic_family17` fit separate
+one-versus-rest models to cluster-mean hippocampal time-series FC. They annotate
+existing spatial clusters using the largest strictly positive raw coefficient;
+a cluster without one is unassigned. The exports include input observations,
+coefficients, intercepts, and raw and per-SD odds ratios. Per-SD values change
+the reporting units of the same fitted model. These associations are
+descriptive and are not directly comparable with Kember's different input and
+standardization procedure. `--assignment-variant both` continues to select
+Fisher-z and normalized Top-20 only; request each OVR variant explicitly.
 
 `06_04_render_hippomaps_gradient_products.py` renders the same continuous
 gradient artifacts with `hippomaps.plotting.surfplot_canonical_foldunfold`,

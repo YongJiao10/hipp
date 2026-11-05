@@ -39,7 +39,7 @@ CANONICAL_MODEL_PATH = (
 )
 RUNTIME_WORK_ROOT = REPO_ROOT / "runtime" / "hippunfold_workdirs"
 RUNTIME_PY = REPO_ROOT / ".runtime_py"
-DATASET_JOB_LIMITS = MappingProxyType({"hcp": 12, "banda": 1, "pdc": 2})
+DATASET_JOB_LIMITS = MappingProxyType({"hcp": 12, "banda": 1, "pdc": 2, "nih_rtms": 12})
 _SAFE_SUBJECT = re.compile(r"^[0-9A-Za-z]+$")
 
 
@@ -108,6 +108,20 @@ DATASET_PRESETS = MappingProxyType({
         ),
         output_root=REPO_ROOT
         / "outputs_pdc"
+        / "inputs"
+        / "hippunfold"
+        / "dense_corobl_batch",
+        t1w_filter="extension=.nii.gz",
+        skip_preproc=True,
+    ),
+    "nih_rtms": DatasetPreset(
+        bids_dir=REPO_ROOT
+        / "outputs_nih_rtms"
+        / "inputs"
+        / "hippunfold"
+        / "bids_input",
+        output_root=REPO_ROOT
+        / "outputs_nih_rtms"
         / "inputs"
         / "hippunfold"
         / "dense_corobl_batch",
@@ -438,8 +452,11 @@ def start_hippunfold(
     stdout: TextIO | None = None,
 ) -> subprocess.Popen:
     """Start the fixed command without adding a coordinator worker thread."""
+    cmd = list(contract.hippunfold_argv)
+    if "--rerun-incomplete" not in cmd:
+        cmd.append("--rerun-incomplete")
     return subprocess.Popen(
-        list(contract.hippunfold_argv),
+        cmd,
         cwd=str(REPO_ROOT),
         env=dict(env),
         stdout=stdout,

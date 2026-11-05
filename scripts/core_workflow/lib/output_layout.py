@@ -18,6 +18,7 @@ DATASET_KEYS = (
     "iowa_hcp500",
     "banda",
     "pdc",
+    "nih_rtms",
 )
 DEFAULT_DATASET = "hcp"
 

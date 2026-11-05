@@ -28,6 +28,10 @@ def make_source(tmp_path: Path, feature_count: int = 400) -> Path:
     np.save(run / "cluster_roi_profile.npy", np.zeros((3, 400), dtype=np.float32))
     fc_array = run / "group_mean_fisherz_fc_active.npy"
     np.save(fc_array, np.arange(4 * feature_count, dtype=np.float32).reshape(4, feature_count))
+    preprocessing = atlas.gradient_preprocessing_settings(
+        feature_count, feature_scaling="col_zscore", sparsify_stage="features",
+    )
+    transform = atlas.scale_gradient_features(np.arange(12, dtype=np.float32).reshape(4, 3), scaling="none")[1]
     gradient_manifest = run / "gradient_manifest.json"
     gradient_manifest.write_text(json.dumps({
         "status": "ok", "method": "hippomaps-gradient", "atlas": "kong2022",
@@ -36,6 +40,7 @@ def make_source(tmp_path: Path, feature_count: int = 400) -> Path:
         "group_fc_shape": [4, feature_count], "feature_count": feature_count,
         "gradient_shape_full": [4, 3], "gradient_components": [1, 2, 3],
         "selected_components": ["G1", "G2", "G3"], "gradientmaps_kernel": "pearson",
+        "gradient_preprocessing": preprocessing,
         "outputs": {"hippomaps_gradients_full": str(gradient_array),
                     "group_mean_fisherz_fc_active": str(fc_array)},
     }))
@@ -47,6 +52,7 @@ def make_source(tmp_path: Path, feature_count: int = 400) -> Path:
         "feature_family": "group_vertex_to_kong2022_400roi_fc_diffusion_gradients_g1g2g3",
         "gradient_shape_full": [4, 3], "selected_components": ["G1", "G2", "G3"],
         "gradient_components": [1, 2, 3], "smoothing": "2mm", "hemi": "L", "route": "routea",
+        "gradient_preprocessing": preprocessing, "clustering_feature_transform": transform,
     }))
     row = {"k": 3, "group_ari_mean": 0.42, "group_ari_se": 0.02, "selected_final": 1, "nontrivial_min_size_ok": 1}
     (run / "k_selection_summary.json").write_text(json.dumps({"rows": [row], "chosen_k_final": 3}))
@@ -157,4 +163,96 @@ def test_kong_reuse_rejects_target_gradient_array_mismatch(tmp_path: Path) -> No
             support_mask=np.ones(4, dtype=bool), n_vertices=4, k_values=[2, 3],
             force_final_k=3, default_k=3, k_selection_fields=["k"], target_subjects=["01", "02"],
             target_gradient_feature_summary=target_summary,
+        )
+
+
+@pytest.mark.parametrize("case", ["missing_summary", "missing_upstream", "mismatched_upstream"])
+def test_kong_reuse_rejects_missing_or_mismatched_preprocessing(tmp_path: Path, case: str) -> None:
+    root = make_source(tmp_path)
+    run = atlas.resolve_fixed_cluster_source_run(
+        source_root=root, method="gradient-spectral", atlas="kong2022",
+        smoothing="2mm", hemi="L", coverage_tag="cov_0p80", gradient_components=(1, 2, 3),
+    )
+    summary_path = run / "group_gradient_feature_summary.json"
+    source_summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    target_summary = dict(source_summary)
+    if case == "missing_summary":
+        del source_summary["gradient_preprocessing"]
+        summary_path.write_text(json.dumps(source_summary), encoding="utf-8")
+    else:
+        manifest_path = run / "gradient_manifest.json"
+        gradient_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        if case == "missing_upstream":
+            del gradient_manifest["gradient_preprocessing"]
+        else:
+            gradient_manifest["gradient_preprocessing"]["feature_scaling"] = "none"
+        manifest_path.write_text(json.dumps(gradient_manifest), encoding="utf-8")
+    with pytest.raises(ValueError, match="gradient_preprocessing|Gradient preprocessing"):
+        atlas.load_fixed_cluster_reuse(
+            source_run=run, target_method="gradient-spectral", target_atlas="kong2022",
+            smoothing="2mm", hemi="L", coverage_threshold=0.8,
+            support_mask=np.ones(4, dtype=bool), n_vertices=4, k_values=[2, 3],
+            force_final_k=3, default_k=3, k_selection_fields=["k"], target_subjects=["01", "02"],
+            target_gradient_feature_summary=target_summary,
+        )
+
+
+def test_kong_rbf_reuse_requires_declared_bandwidth(tmp_path: Path) -> None:
+    root = make_source(tmp_path)
+    run = atlas.resolve_fixed_cluster_source_run(
+        source_root=root, method="gradient-spectral", atlas="kong2022",
+        smoothing="2mm", hemi="L", coverage_tag="cov_0p80", gradient_components=(1, 2, 3),
+    )
+    manifest_path = run / "group_atlas_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["method"] = "gradient-spectral-rbf"
+    manifest["gradient_clustering"] = {"rbf_scale": 1.0}
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    summary = json.loads((run / "group_gradient_feature_summary.json").read_text(encoding="utf-8"))
+    with pytest.raises(ValueError, match="rbf_scale"):
+        atlas.load_fixed_cluster_reuse(
+            source_run=run, target_method="gradient-spectral-rbf", target_atlas="kong2022",
+            smoothing="2mm", hemi="L", coverage_threshold=0.8,
+            support_mask=np.ones(4, dtype=bool), n_vertices=4, k_values=[2, 3],
+            force_final_k=3, default_k=3, k_selection_fields=["k"], target_subjects=["01", "02"],
+            target_gradient_feature_summary=summary, target_rbf_scale=1.0,
+        )
+
+
+@pytest.mark.parametrize("source_rbf_scale", [0.5, 1.000001])
+def test_kong_reuse_rejects_clustering_scaling_and_rbf_scale_mismatch(tmp_path: Path, source_rbf_scale: float) -> None:
+    root = make_source(tmp_path)
+    run = atlas.resolve_fixed_cluster_source_run(
+        source_root=root, method="gradient-spectral", atlas="kong2022",
+        smoothing="2mm", hemi="L", coverage_tag="cov_0p80", gradient_components=(1, 2, 3),
+    )
+    raw_grad = np.arange(12, dtype=np.float32).reshape(4, 3)
+    source_summary = json.loads((run / "group_gradient_feature_summary.json").read_text(encoding="utf-8"))
+    source_summary["clustering_feature_transform"] = atlas.scale_gradient_features(raw_grad, scaling="none")[1]
+    (run / "group_gradient_feature_summary.json").write_text(json.dumps(source_summary), encoding="utf-8")
+    target_summary = dict(source_summary)
+    target_summary["clustering_feature_transform"] = atlas.scale_gradient_features(raw_grad, scaling="unit_sd")[1]
+    with pytest.raises(ValueError, match="clustering_feature_scaling|clustering_feature_transform"):
+        atlas.load_fixed_cluster_reuse(
+            source_run=run, target_method="gradient-spectral", target_atlas="kong2022",
+            smoothing="2mm", hemi="L", coverage_threshold=0.8,
+            support_mask=np.ones(4, dtype=bool), n_vertices=4, k_values=[2, 3],
+            force_final_k=3, default_k=3, k_selection_fields=["k"], target_subjects=["01", "02"],
+            target_gradient_feature_summary=target_summary,
+            target_clustering_feature_scaling="unit_sd",
+        )
+
+    # Also test rbf_scale mismatch on gradient-spectral-rbf
+    rbf_manifest = json.loads((run / "group_atlas_manifest.json").read_text(encoding="utf-8"))
+    rbf_manifest["method"] = "gradient-spectral-rbf"
+    rbf_manifest["rbf_scale"] = source_rbf_scale
+    (run / "group_atlas_manifest.json").write_text(json.dumps(rbf_manifest), encoding="utf-8")
+    with pytest.raises(ValueError, match="rbf_scale"):
+        atlas.load_fixed_cluster_reuse(
+            source_run=run, target_method="gradient-spectral-rbf", target_atlas="kong2022",
+            smoothing="2mm", hemi="L", coverage_threshold=0.8,
+            support_mask=np.ones(4, dtype=bool), n_vertices=4, k_values=[2, 3],
+            force_final_k=3, default_k=3, k_selection_fields=["k"], target_subjects=["01", "02"],
+            target_gradient_feature_summary=source_summary,
+            target_rbf_scale=1.0,
         )

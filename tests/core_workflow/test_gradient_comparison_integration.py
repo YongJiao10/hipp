@@ -66,6 +66,63 @@ def test_fixed_comparison_fails_when_requested_k_cannot_fit_support():
     assert atlas.effective_k_values([3], n_support=12, v_min=8, mode="redundancy-aware")[1] == []
 
 
+def test_no_valid_k_skips_without_loading_gradient_cache(tmp_path, monkeypatch, capsys):
+    from types import SimpleNamespace
+    import json
+    import numpy as np
+
+    atlas = stage("05_02_run_group_atlas.py")
+    surface_dir = tmp_path / "surfaces"
+    surface_dir.mkdir()
+    surface = surface_dir / "group-average_hemi-L_space-corobl_den-512_label-hipp_midthickness.surf.gii"
+    surface.write_text("test surface", encoding="utf-8")
+    subjects = ["01", "02", "03", "04"]
+    prepared = SimpleNamespace(
+        n_vertices=8,
+        valid_masks={s: np.ones(8, dtype=bool) for s in subjects},
+        coverage_count=np.full(8, len(subjects)),
+        coverage_fraction=np.ones(8),
+        feature_bank={},
+        actual_input_paths=[],
+        run_feature_banks={},
+        roi_fc_bank_for_redundancy={},
+        subject_fc_preprocessing_for_resume={},
+        resume_input_category_hashes={},
+    )
+    monkeypatch.setattr(atlas, "validate_dataset_output_contract", lambda *a, **k: ("outputs_hcp", tmp_path))
+    monkeypatch.setattr(atlas, "load_subject_ids", lambda p: subjects)
+    monkeypatch.setattr(atlas, "infer_surface_path", lambda *a, **k: surface)
+    monkeypatch.setattr(atlas, "infer_spec_path", lambda *a, **k: tmp_path / "template.spec")
+    monkeypatch.setattr(atlas, "verify_subject_topology_against_template", lambda *a, **k: {"L": {}})
+    monkeypatch.setattr(atlas, "long_axis_order", lambda p: np.arange(8))
+    monkeypatch.setattr(atlas, "load_surface", lambda p: (np.zeros((8, 3)), np.empty((0, 3), dtype=int)))
+    monkeypatch.setattr(atlas, "build_surface_adjacency", lambda faces, n: np.eye(n))
+    monkeypatch.setattr(atlas, "load_cluster_colors", lambda: {})
+    monkeypatch.setattr(atlas, "load_canonical_network_color_map", lambda: {})
+    monkeypatch.setattr(atlas, "verify_canonical_network_order_consistency", lambda *a, **k: ["Default"])
+    monkeypatch.setattr(atlas, "prepare_combo_inputs", lambda **kwargs: prepared)
+    monkeypatch.setattr(sys, "argv", [
+        "05_02_run_group_atlas.py", "--shared-root", str(tmp_path / "shared/pfm"),
+        "--surface-root", str(tmp_path / "surface"), "--out-root", str(tmp_path / "out"),
+        "--gradient-root", str(tmp_path / "missing-gradients"),
+        "--group-average-surfaces-dir", str(surface_dir), "--route-tag", "pfm",
+        "--methods", "gradient-ward", "--atlases", "kong2022", "--smoothings", "4mm",
+        "--hemis", "L", "--k-min", "3", "--k-max", "3", "--default-k", "3",
+        "--v-min-fraction", "0.5", "--instability-resamples", "0", "--null-resamples", "0",
+    ])
+
+    assert atlas.main() == 0
+    manifest = tmp_path / "out/gradient-ward/kong2022/4mm/cov_0p80/g1g2g3/hemi_L/group_atlas_manifest.json"
+    result = json.loads(manifest.read_text(encoding="utf-8"))
+    assert result["status"] == "skipped_no_valid_k"
+    assert result["group_gradient_feature_summary"] is None
+    assert result["group_gradient_features_active"] is None
+    capsys.readouterr()
+    monkeypatch.setattr(sys, "argv", [*sys.argv, "--resume"])
+    assert atlas.main() == 0
+    assert "existing manifest (resume-signature matched)" in capsys.readouterr().out
+
+
 def test_run_anchor_changes_invalidate_the_existing_gradient_resume_contract(tmp_path):
     atlas = stage("05_02_run_group_atlas.py")
     fc = tmp_path / "hemi_L/hipp_vertex_to_network_fc.npy"

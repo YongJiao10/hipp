@@ -25,7 +25,7 @@ Inputs:
   - --subjects-manifest: Path to QC-passed subject list manifest.
   - --hippunfold-batch-root: Batch output root containing sub-*/hippunfold outputs.
   - --kong2022-dlabel: Path to standard Kong2022 dlabel.nii cortical atlas file.
-  - --methods: Parcellation methods to evaluate: "intrinsic-spectral", "network-spectral", "gradient-spectral", "wta-top".
+  - --methods: Parcellation methods to evaluate, including "gradient-spectral", "gradient-ward", "gradient-gmm", and "gradient-spectral-rbf".
   - --atlases: Cortical atlases to map (default: "kong2022"); Lynch2024 atlases support gradient-spectral and direct-network wta-top.
   - --smoothings: Smoothing levels to process: "2mm", "4mm".
   - --hemis: Hemispheres to process: "L", "R".
@@ -42,9 +42,13 @@ Inputs:
   - --min-profile-coherence: Minimum profile coherence score threshold.
   - --subject-fc-mode: FC preprocessing sparsification mode: "full", "top-percent".
   - --subject-fc-top-percent: Sparsification top percentage integer.
-  - --gradient-components: Selected gradient components for gradient-spectral (default: "1,2,3").
+  - --gradient-components: Selected gradient components for gradient clustering (default: "1,2,3").
+  - --feature-scaling and --sparsify-stage: Explicit upstream FC scaling and Pearson-affinity sparsification settings.
+  - --clustering-feature-scaling: Independent clustering feature scaling ("none" or "unit_sd").
+  - --rbf-scale: Multiplier for the median positive mesh-edge gradient distance.
+  - --assignment-variant: Select Fisher-z, normalized Top-20, or explicit canonical7/family17 OVR annotations; "both" means Fisher-z plus normalized Top-20.
   - --resume: Resume from existing runs.
-  - --k-selection-mode: K selection model: "redundancy-aware" (only).
+  - --k-selection-mode: "redundancy-aware" or fixed-K "fixed-comparison".
   - --redundancy-early-stop: Stop evaluation of larger K values once first redundant K is found (default: False).
   - --overview-threshold: Selected coverage threshold for overview outputs (default: 0.80).
   - --jobs: Parallel worker pool size (default: 1).
@@ -52,7 +56,7 @@ Inputs:
 - Physical inputs:
   - Subject functional connectivity caches: e.g. `{shared_root}/sub-<subject>/fc/.../hipp_vertex_to_network_fc_active.npy`.
   - Group average template surfaces: e.g. `{group_average_surfaces_dir}/group-average_hemi-{L|R}_space-corobl_den-512_label-hipp_midthickness.surf.gii`.
-  - Pre-computed continuous gradients under `{gradient_root}/` (for gradient-spectral method).
+  - Pre-computed continuous gradients under `{gradient_root}/` for gradient clustering methods.
 
 Outputs:
 - Command-line output / file outputs:
@@ -328,9 +332,12 @@ def file_state_list(paths: list[Path]) -> list[dict[str, object]]:
 def gradient_resume_inputs(
     *, gradient_root: Path, cohort: str | None, variant: str,
     gradient_options: dict[str, object] | None = None,
+    route: str | None = None,
+    smoothing: str | None = None,
+    hemi: str | None = None,
 ) -> dict[str, object]:
     """Record the explicit gradient bank in the existing resume contract."""
-    return {
+    out: dict[str, object] = {
         "gradient_root": str(gradient_root),
         "gradient_cohort": cohort,
         "gradient_variant": variant,
@@ -342,15 +349,151 @@ def gradient_resume_inputs(
              for path in (gradient_options or {}).get("alignment_fc_paths", {}).values()
              for rid in (gradient_options or {}).get("alignment_run_ids", [])]),
     }
+    if route is not None and smoothing is not None and hemi is not None:
+        grad_run_dir = (
+            resolve_cohort_gradient_root(
+                route=route, cohort=cohort, variant=variant, base_root=Path(gradient_root).resolve(),
+            )
+            / smoothing
+            / f"hemi_{hemi}"
+        )
+        out["gradient_artifact_inputs"] = file_state_list([
+            grad_run_dir / "hippomaps_gradient_manifest.json",
+            grad_run_dir / "hippomaps_gradients_full.npy",
+        ])
+    return out
 
 
-def resume_manifest_matches(manifest_path: Path, expected_signature: str) -> tuple[bool, str]:
+def _validate_gradient_resume_contract(
+    manifest_path: Path,
+    payload: dict[str, object],
+    *,
+    gradient_options: dict[str, object] | None = None,
+    expected_gradient_meta: dict[str, object] | None = None,
+) -> None:
+    sig_payload = payload.get("resume_input_signature_payload")
+    recorded_opts = (
+        sig_payload.get("gradient_options", {})
+        if isinstance(sig_payload, dict) and isinstance(sig_payload.get("gradient_options"), dict)
+        else {}
+    )
+    opts = dict(recorded_opts) if gradient_options is None else dict(gradient_options)
+    summary_raw = payload.get("group_gradient_feature_summary")
+    source_manifest_raw = payload.get("gradient_source_manifest")
+    method = str(payload.get("method", ""))
+    if (
+        expected_gradient_meta is None
+        and gradient_options is None
+        and not summary_raw
+        and not source_manifest_raw
+        and not is_gradient_method(method)
+    ):
+        return
+    feature_count = int(payload.get("feature_count", 400) or 400)
+    expected_preprocessing = (
+        dict(expected_gradient_meta["gradient_preprocessing"])
+        if isinstance(expected_gradient_meta, dict) and isinstance(expected_gradient_meta.get("gradient_preprocessing"), dict)
+        else gradient_preprocessing_settings(
+            feature_count,
+            feature_scaling=str(opts.get("feature_scaling", "col_zscore")),
+            sparsify_stage=str(opts.get("sparsify_stage", "features")),
+            sparsity=opts.get("sparsity"),
+        )
+    )
+    expected_scaling = (
+        str(expected_gradient_meta["clustering_feature_transform"]["scaling"])
+        if isinstance(expected_gradient_meta, dict)
+        and isinstance(expected_gradient_meta.get("clustering_feature_transform"), dict)
+        and "scaling" in expected_gradient_meta["clustering_feature_transform"]
+        else str(opts.get("clustering_feature_scaling", "none"))
+    )
+    expected_seed = opts.get("random_state", DEFAULT_GRADIENT_RANDOM_STATE)
+    if not summary_raw:
+        raise ValueError(
+            f"Missing group_gradient_feature_summary declaration in {manifest_path}; explicitly regenerate"
+        )
+    summary_path = Path(str(summary_raw)).resolve()
+    if not summary_path.exists():
+        raise ValueError(
+            f"Missing group_gradient_feature_summary in {manifest_path}: {summary_path}; explicitly regenerate"
+        )
+    summary_obj = json.loads(summary_path.read_text(encoding="utf-8"))
+    validate_gradient_preprocessing(
+        summary_obj, settings=expected_preprocessing, manifest_path=summary_path,
+    )
+    transform = summary_obj.get("clustering_feature_transform")
+    recorded_scaling = transform.get("scaling") if isinstance(transform, dict) else None
+    if recorded_scaling != expected_scaling:
+        raise ValueError(
+            f"clustering_feature_scaling mismatch in {summary_path}: "
+            f"requested={expected_scaling}, recorded={recorded_scaling}; explicitly regenerate"
+        )
+    summary_source = summary_obj.get("hippomaps_gradient_manifest")
+    if not summary_source:
+        raise ValueError(
+            f"Missing gradient_source_manifest declaration in {summary_path}; explicitly regenerate"
+        )
+    if source_manifest_raw and Path(str(source_manifest_raw)).resolve() != Path(str(summary_source)).resolve():
+        raise ValueError(
+            f"gradient_source_manifest mismatch in {manifest_path}: "
+            f"manifest={source_manifest_raw!r}, summary={summary_source!r}; explicitly regenerate"
+        )
+    source_manifest_raw = summary_source
+    if source_manifest_raw:
+        grad_manifest_path = Path(str(source_manifest_raw)).resolve()
+        if not grad_manifest_path.exists():
+            raise FileNotFoundError(
+                f"Missing upstream gradient manifest for resume in {manifest_path}: "
+                f"{grad_manifest_path}; explicitly regenerate"
+            )
+        grad_manifest = json.loads(grad_manifest_path.read_text(encoding="utf-8"))
+        grad_shape = grad_manifest.get("group_fc_shape")
+        if isinstance(grad_shape, list) and len(grad_shape) == 2:
+            expected_preprocessing = gradient_preprocessing_settings(
+                int(grad_shape[1]),
+                feature_scaling=str(opts.get("feature_scaling", expected_preprocessing["feature_scaling"])),
+                sparsify_stage=str(opts.get("sparsify_stage", expected_preprocessing["sparsify_stage"])),
+                sparsity=opts.get("sparsity", expected_preprocessing["effective_sparsity"]),
+            )
+        validate_gradient_preprocessing(
+            grad_manifest, settings=expected_preprocessing, manifest_path=grad_manifest_path,
+        )
+        if grad_manifest.get("gradient_random_state") != expected_seed:
+            raise ValueError(
+                f"gradient_random_state mismatch in {grad_manifest_path}: "
+                f"requested={expected_seed}, recorded={grad_manifest.get('gradient_random_state')}; "
+                "explicitly regenerate"
+            )
+    if method == "gradient-spectral-rbf":
+        expected_rbf = float(opts.get("rbf_scale", 1.0))
+        recorded_rbf = payload.get("rbf_scale")
+        if recorded_rbf is None or float(recorded_rbf) != expected_rbf:
+            raise ValueError(
+                f"rbf_scale mismatch in {manifest_path}: "
+                f"requested={expected_rbf}, recorded={recorded_rbf}; explicitly regenerate"
+            )
+
+
+def resume_manifest_matches(
+    manifest_path: Path,
+    expected_signature: str,
+    *,
+    gradient_options: dict[str, object] | None = None,
+    expected_gradient_meta: dict[str, object] | None = None,
+) -> tuple[bool, str]:
     if not manifest_path.exists():
         return False, "missing_manifest"
     try:
         payload = json.loads(manifest_path.read_text(encoding="utf-8"))
     except Exception as exc:  # pragma: no cover
         return False, f"invalid_manifest:{exc.__class__.__name__}"
+    if payload.get("status") not in {"skipped_no_valid_k", "skipped_no_k_survived_constraints"}:
+        _validate_gradient_resume_contract(
+            manifest_path,
+            payload,
+            gradient_options=gradient_options,
+            expected_gradient_meta=expected_gradient_meta,
+        )
     if int(payload.get("resume_input_signature_version", -1)) != int(RESUME_SIGNATURE_VERSION):
         return False, "missing_or_legacy_signature"
     got = payload.get("resume_input_signature")
@@ -1880,6 +2023,14 @@ def _load_kong_gradient_identity(
             f"Kong {role} gradient does not prove a 400-ROI FC branch: "
             f"{manifest_path} group_fc_shape={group_fc_shape!r}"
         )
+    preprocessing = gradient_summary.get("gradient_preprocessing")
+    required_preprocessing = set(gradient_preprocessing_settings(KONG2022_ROI_COUNT))
+    if not isinstance(preprocessing, dict) or required_preprocessing - preprocessing.keys():
+        raise ValueError(
+            f"Kong {role} gradient summary lacks complete gradient_preprocessing for "
+            f"{manifest_path}; explicitly regenerate"
+        )
+    validate_gradient_preprocessing(manifest, settings=preprocessing, manifest_path=manifest_path)
     gradient = np.asarray(np.load(selected_path), dtype=np.float32)
     fc = np.asarray(np.load(fc_path, mmap_mode="r"), dtype=np.float32)
     expected_gradient_shape = [int(x) for x in manifest["gradient_shape_full"]]
@@ -1902,12 +2053,25 @@ def _load_kong_gradient_identity(
     }
     identity_fields["gradient_components"] = gradient_components
     identity_fields["selected_components"] = selected_components
+    identity_fields["gradient_preprocessing"] = preprocessing
+    identity_fields["clustering_feature_transform"] = gradient_summary.get("clustering_feature_transform")
     identity_fields["gradient_manifest"] = str(manifest_path)
     identity_fields["selected_gradient_sha256"] = _sha256_file(selected_path)
     identity_fields["fc_sha256"] = _sha256_file(fc_path)
     identity_fields["fc_path"] = str(fc_path)
     identity_fields["gradient_shape_actual"] = [int(x) for x in gradient.shape]
     return identity_fields
+
+
+def _extract_clustering_scaling(summary: dict[str, object] | None) -> str | None:
+    if not isinstance(summary, dict):
+        return None
+    transform = summary.get("clustering_feature_transform")
+    if isinstance(transform, dict) and "scaling" in transform:
+        return str(transform["scaling"])
+    if "clustering_feature_scaling" in summary and summary["clustering_feature_scaling"] is not None:
+        return str(summary["clustering_feature_scaling"])
+    return None
 
 
 def load_fixed_cluster_reuse(
@@ -1927,6 +2091,9 @@ def load_fixed_cluster_reuse(
     target_subjects: list[str] | None = None,
     target_surface_path: Path | None = None,
     target_gradient_feature_summary: dict[str, object] | None = None,
+    target_clustering_feature_scaling: str | None = None,
+    target_rbf_scale: float | None = None,
+    target_gradient_features_active: np.ndarray | None = None,
 ) -> tuple[int, np.ndarray, dict[str, object], dict[str, object]]:
     """Load fixed labels and source K evidence for taxonomy-only reuse."""
     source_run = Path(source_run).resolve()
@@ -1942,6 +2109,16 @@ def load_fixed_cluster_reuse(
             f"method={source_manifest.get('method')!r} atlas={source_manifest.get('atlas')!r} "
             f"expected={target_method!r}/{target_atlas!r}"
         )
+    if str(target_method) == "gradient-spectral-rbf" or target_rbf_scale is not None:
+        expected_rbf_scale = 1.0 if target_rbf_scale is None else float(target_rbf_scale)
+        source_rbf_scale = source_manifest.get("rbf_scale")
+        if str(target_method) == "gradient-spectral-rbf" and (
+            source_rbf_scale is None or float(source_rbf_scale) != expected_rbf_scale
+        ):
+            raise ValueError(
+                f"Fixed-cluster source rbf_scale mismatch: {source_manifest_path} "
+                f"source={source_rbf_scale!r} expected={expected_rbf_scale!r}; explicitly regenerate"
+            )
     if target_subjects is not None:
         source_subjects = [str(x) for x in source_manifest.get("subjects", [])]
         expected_subjects = [f"sub-{str(x).removeprefix('sub-')}" for x in target_subjects]
@@ -1959,6 +2136,49 @@ def load_fixed_cluster_reuse(
                 f"source={source_surface!r} target={str(Path(target_surface_path).resolve())!r}"
             )
     source_gradient_summary = source_manifest.get("group_gradient_feature_summary")
+    if is_gradient_method(target_method):
+        source_summary_obj = (
+            load_json(Path(str(source_gradient_summary)))
+            if source_gradient_summary is not None and Path(str(source_gradient_summary)).exists()
+            else None
+        )
+        source_scaling = _extract_clustering_scaling(source_summary_obj)
+        target_scaling = (
+            str(target_clustering_feature_scaling)
+            if target_clustering_feature_scaling is not None
+            else _extract_clustering_scaling(target_gradient_feature_summary)
+        )
+        if (source_scaling is not None or target_scaling is not None) and source_scaling != target_scaling:
+            raise ValueError(
+                f"Fixed-cluster source clustering_feature_scaling mismatch: {source_manifest_path} "
+                f"source={source_scaling!r} target={target_scaling!r}; explicitly regenerate"
+            )
+        if (
+            isinstance(source_summary_obj, dict)
+            and isinstance(target_gradient_feature_summary, dict)
+            and (
+                "clustering_feature_transform" in source_summary_obj
+                or "clustering_feature_transform" in target_gradient_feature_summary
+            )
+            and source_summary_obj.get("clustering_feature_transform")
+            != target_gradient_feature_summary.get("clustering_feature_transform")
+        ):
+            raise ValueError(
+                f"Fixed-cluster source clustering_feature_transform mismatch: {source_manifest_path} "
+                f"source={source_summary_obj.get('clustering_feature_transform')!r} "
+                f"target={target_gradient_feature_summary.get('clustering_feature_transform')!r}; "
+                "explicitly regenerate"
+            )
+        if target_gradient_features_active is not None and (source_run / "group_gradient_features_active.npy").exists():
+            source_active = np.asarray(np.load(source_run / "group_gradient_features_active.npy"), dtype=np.float32)
+            target_active = np.asarray(target_gradient_features_active, dtype=np.float32)
+            if source_active.shape != target_active.shape or not np.allclose(
+                source_active, target_active, equal_nan=True, atol=1e-6, rtol=1e-6
+            ):
+                raise ValueError(
+                    "Fixed-cluster source active gradient features mismatch: "
+                    f"{source_run / 'group_gradient_features_active.npy'}; explicitly regenerate"
+                )
     if is_gradient_method(target_method) and target_atlas == "kong2022":
         if target_gradient_feature_summary is None:
             raise ValueError(
@@ -1979,6 +2199,7 @@ def load_fixed_cluster_reuse(
             "route", "smoothing", "hemi", "feature_taxonomy", "feature_family",
             "feature_count", "group_fc_shape", "gradient_shape_full", "gradient_components",
             "selected_components", "gradientmaps_kernel",
+            "gradient_preprocessing", "clustering_feature_transform",
         )
         mismatches = [
             f"{key}: source={source_gradient_identity[key]!r} target={target_gradient_identity[key]!r}"
@@ -2382,10 +2603,27 @@ def strong_null_ari(
     allow_diagnostic_failures: bool = False,
     gradient_options: dict[str, object] | None = None,
 ) -> dict[str, object]:
+    if not seeds:
+        return {
+            "values": [],
+            "n_requested": 0,
+            "n_used": 0,
+            "n_skipped_overlap": 0,
+            "n_skipped_empty": 0,
+            "n_skipped_failure": 0,
+            "failure_examples": [],
+            "permutation_scope": "subject_specific",
+        }
     null_bank: dict[str, np.ndarray] = {}
+    null_masks: dict[str, np.ndarray] = {}
     permutations_by_subject = {}
     for subject_index, s in enumerate(subjects):
         arr = feature_bank[s]
+        mask = np.asarray(valid_masks_by_subject[s], dtype=bool).reshape(-1)
+        if mask.size != int(arr.shape[0]):
+            raise ValueError(
+                f"Subject sub-{s} null FC/mask vertex mismatch: fc={arr.shape[0]} mask={mask.size}"
+            )
         rng = np.random.RandomState(int(seeds[0]) + subject_index)
         perm = rng.permutation(arr.shape[0])
         permutations_by_subject[s] = perm.tolist()
@@ -2393,12 +2631,13 @@ def strong_null_ari(
             null_bank[s] = arr[perm, :].astype(np.float32)
         else:
             null_bank[s] = arr[np.ix_(perm, perm)].astype(np.float32)
+        null_masks[s] = mask[perm]
     null_options = dict(gradient_options or {})
     null_options["alignment_vertex_permutations"] = permutations_by_subject
     out = subject_split_ari(
         method=method,
         feature_bank=null_bank,
-        valid_masks_by_subject=valid_masks_by_subject,
+        valid_masks_by_subject=null_masks,
         subjects=subjects,
         tau=tau,
         adjacency_full=adjacency_full,
@@ -4730,7 +4969,7 @@ def main() -> int:
                 f"--reuse-fixed-cluster-root taxonomy mismatch: route={route_tag} taxonomy={network_taxonomy} "
                 f"allowed={sorted(allowed_taxonomies)}"
             )
-        if "gradient-spectral" not in args.methods:
+        if not any(is_gradient_method(m) for m in args.methods):
             raise ValueError("--reuse-fixed-cluster-root requires gradient-spectral in --methods")
 
     out_root.mkdir(parents=True, exist_ok=True)
@@ -4915,6 +5154,32 @@ def main() -> int:
                             run_dir = out_root / method / atlas / smoothing / f"cov_{tau_tag}" / f"hemi_{hemi}"
                         run_dir.mkdir(parents=True, exist_ok=True)
                         manifest_path = run_dir / "group_atlas_manifest.json"
+                        support = coverage_fraction >= float(tau)
+                        subject_fc_preprocessing = subject_fc_preprocessing_for_resume
+                        n_support = int(np.sum(support))
+                        v_min = int(math.ceil(float(args.v_min_fraction) * max(1, n_support)))
+                        k_max_eff, k_eff = effective_k_values(
+                            k_values, n_support=n_support, v_min=v_min, mode=args.k_selection_mode,
+                        )
+                        group_gradient_meta: dict[str, object] | None = None
+                        group_features_active: np.ndarray | None = None
+                        if is_gradient_method(method) and k_eff:
+                            group_features_active, group_gradient_meta = load_hippomaps_gradient_features(
+                                gradient_root=gradient_root,
+                                route=gradient_route_tag,
+                                smoothing=smoothing,
+                                hemi=hemi,
+                                support_mask=support,
+                                gradient_components=gradient_components,
+                                expected_signal_branch=config.signal_branch,
+                                cohort=args.cohort,
+                                variant=args.variant,
+                                feature_scaling=args.feature_scaling,
+                                sparsify_stage=args.sparsify_stage,
+                                sparsity=args.sparsity,
+                                clustering_feature_scaling=args.clustering_feature_scaling,
+                                gradient_random_state=args.gradient_random_state,
+                            )
                         resume_signature_payload = {
                             "resume_input_signature_version": int(RESUME_SIGNATURE_VERSION),
                             "combo": {
@@ -4955,6 +5220,7 @@ def main() -> int:
                                 gradient_resume_inputs(
                                     gradient_root=gradient_root, cohort=args.cohort, variant=args.variant,
                                     gradient_options=gradient_options,
+                                    route=gradient_route_tag, smoothing=smoothing, hemi=hemi,
                                 )
                                 if is_gradient_method(method)
                                 else {"gradient_root": None}
@@ -4971,7 +5237,12 @@ def main() -> int:
                         }
                         resume_input_signature = canonical_json_sha256(resume_signature_payload)
                         if args.resume and manifest_path.exists():
-                            skip_ok, resume_reason = resume_manifest_matches(manifest_path, resume_input_signature)
+                            skip_ok, resume_reason = resume_manifest_matches(
+                                manifest_path,
+                                resume_input_signature,
+                                gradient_options=gradient_options if is_gradient_method(method) else None,
+                                expected_gradient_meta=group_gradient_meta,
+                            )
                             if skip_ok:
                                 print(
                                     f"  [skip] existing manifest (resume-signature matched): {manifest_path}",
@@ -4983,13 +5254,6 @@ def main() -> int:
                                 flush=True,
                             )
 
-                        support = coverage_fraction >= float(tau)
-                        subject_fc_preprocessing = subject_fc_preprocessing_for_resume
-                        n_support = int(np.sum(support))
-                        v_min = int(math.ceil(float(args.v_min_fraction) * max(1, n_support)))
-                        k_max_eff, k_eff = effective_k_values(
-                            k_values, n_support=n_support, v_min=v_min, mode=args.k_selection_mode,
-                        )
                         k_selection_fields = [
                             "method",
                             "atlas",
@@ -5294,16 +5558,8 @@ def main() -> int:
                                 "resume_input_signature": resume_input_signature,
                                 "resume_input_signature_payload": resume_signature_payload,
                                 "subject_fc_preprocessing": subject_fc_preprocessing,
-                                "group_gradient_features_active": (
-                                    str((run_dir / "group_gradient_features_active.npy").resolve())
-                                    if is_gradient_method(method)
-                                    else None
-                                ),
-                                "group_gradient_feature_summary": (
-                                    str((run_dir / "group_gradient_feature_summary.json").resolve())
-                                    if is_gradient_method(method)
-                                    else None
-                                ),
+                                "group_gradient_features_active": None,
+                                "group_gradient_feature_summary": None,
                                 "group_feature_summary": str((run_dir / "group_feature_summary.json").resolve()),
                                 "nontriviality_thresholds": {
                                     "V_min_fraction": float(args.v_min_fraction),
@@ -5336,26 +5592,24 @@ def main() -> int:
                         allow_gradient_diagnostic_failures = bool(is_gradient_method(method) and args.force_final_k is not None and args.k_selection_mode != "fixed-comparison")
                         support_idx = np.flatnonzero(support)
                         adjacency_support = adjacency_by_hemi[hemi][support_idx][:, support_idx]
-                        group_gradient_meta: dict[str, object] | None = None
                         if is_gradient_method(method):
-                            group_features_active, group_gradient_meta = load_hippomaps_gradient_features(
-                                gradient_root=gradient_root,
-                                route=gradient_route_tag,
-                                smoothing=smoothing,
-                                hemi=hemi,
-                                support_mask=support,
-                                gradient_components=gradient_components,
-                                expected_signal_branch=config.signal_branch,
-                                cohort=args.cohort,
-                                variant=args.variant,
-                                feature_scaling=args.feature_scaling,
-                                sparsify_stage=args.sparsify_stage,
-                                sparsity=args.sparsity,
-                                clustering_feature_scaling=args.clustering_feature_scaling,
-                                gradient_random_state=args.gradient_random_state,
-                            )
-                            np.save(run_dir / "group_gradient_features_active.npy", group_features_active.astype(np.float32))
-                            write_json(run_dir / "group_gradient_feature_summary.json", group_gradient_meta)
+                            if group_features_active is None or group_gradient_meta is None:
+                                group_features_active, group_gradient_meta = load_hippomaps_gradient_features(
+                                    gradient_root=gradient_root,
+                                    route=gradient_route_tag,
+                                    smoothing=smoothing,
+                                    hemi=hemi,
+                                    support_mask=support,
+                                    gradient_components=gradient_components,
+                                    expected_signal_branch=config.signal_branch,
+                                    cohort=args.cohort,
+                                    variant=args.variant,
+                                    feature_scaling=args.feature_scaling,
+                                    sparsify_stage=args.sparsify_stage,
+                                    sparsity=args.sparsity,
+                                    clustering_feature_scaling=args.clustering_feature_scaling,
+                                    gradient_random_state=args.gradient_random_state,
+                                )
                         else:
                             group_features_active = group_feature_matrix(
                                 method=method,
@@ -5391,6 +5645,9 @@ def main() -> int:
                                 target_subjects=subjects,
                                 target_surface_path=surfaces[hemi],
                                 target_gradient_feature_summary=group_gradient_meta,
+                                target_clustering_feature_scaling=args.clustering_feature_scaling,
+                                target_rbf_scale=args.rbf_scale,
+                                target_gradient_features_active=group_features_active,
                             )
                             labels_by_k[int(reused_k)] = reused_labels.astype(np.int32)
                             np.save(run_dir / f"group_labels_k{reused_k}.npy", reused_labels.astype(np.int32))
@@ -5400,6 +5657,9 @@ def main() -> int:
                                 "gradient/clustering/K-selection computation skipped",
                                 flush=True,
                             )
+                        if is_gradient_method(method):
+                            np.save(run_dir / "group_gradient_features_active.npy", group_features_active.astype(np.float32))
+                            write_json(run_dir / "group_gradient_feature_summary.json", group_gradient_meta)
                         redundancy_early_stop_enabled = bool(
                             args.redundancy_early_stop
                             and fixed_cluster_reuse is None

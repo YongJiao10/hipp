@@ -239,7 +239,20 @@ def test_shell_compatibility_adapter_rejects_free_form_argument_counts() -> None
 
 
 def test_dataset_presets_are_closed_and_complete() -> None:
-    assert tuple(DATASET_PRESETS) == ("hcp", "stanford", "iowa_jj_tms", "banda", "pdc")
+    assert tuple(DATASET_PRESETS) == ("hcp", "stanford", "iowa_jj_tms", "banda", "pdc", "nih_rtms")
+
+
+def test_nih_rtms_preset_paths_and_parameters() -> None:
+    contract = resolve_run_contract("nih_rtms", "D01")
+
+    assert contract.bids_dir == REPO_ROOT / "outputs_nih_rtms/inputs/hippunfold/bids_input"
+    assert contract.output_dir == (
+        REPO_ROOT
+        / "outputs_nih_rtms/inputs/hippunfold/dense_corobl_batch/sub-D01/hippunfold"
+    )
+    assert contract.t1w_filter == "extension=.nii.gz"
+    assert "--skip-preproc" in contract.hippunfold_argv
+    assert contract.as_json().get("skip_preproc") is True
 
 
 @pytest.mark.parametrize("dataset", ("stanford", "iowa_jj_tms"))
@@ -252,7 +265,7 @@ def test_established_presets_keep_their_n4_launch_behavior(dataset: str) -> None
 
 @pytest.mark.parametrize(
     ("dataset", "subject"),
-    (("hcp", "102311"), ("banda", "BANDA001"), ("pdc", "e0010s01")),
+    (("hcp", "102311"), ("banda", "BANDA001"), ("pdc", "e0010s01"), ("nih_rtms", "D01")),
 )
 def test_bias_corrected_inputs_skip_n4_in_the_public_dry_run(
     dataset: str, subject: str
@@ -388,7 +401,7 @@ def test_completed_batch_does_not_run_the_runtime_gate(
     assert validated == []
 
 
-@pytest.mark.parametrize(("dataset", "jobs", "limit"), [("pdc", 3, 2), ("banda", 2, 1)])
+@pytest.mark.parametrize(("dataset", "jobs", "limit"), [("pdc", 3, 2), ("banda", 2, 1), ("nih_rtms", 13, 12)])
 def test_batch_rejects_excess_jobs_before_validation_or_execution(
     stage01: ModuleType, monkeypatch: pytest.MonkeyPatch,
     dataset: str, jobs: int, limit: int,

@@ -1,8 +1,9 @@
 """Numerical contracts for explicitly selected gradient preprocessing."""
-from pathlib import Path
+# pyright: reportMissingImports=false
 import importlib.util
 import json
 import sys
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -11,7 +12,7 @@ from brainspace.gradient.kernels import compute_affinity
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
-from scripts.core_workflow.lib import hippomaps_adapter as adapter
+from scripts.core_workflow.lib import hippomaps_adapter as adapter  # noqa: E402
 
 
 def test_group_atlas_requires_explicit_validity_mask_even_when_fc_exists(tmp_path):
@@ -146,6 +147,7 @@ def _stage(filename):
     sys.path.insert(0, str(core))
     name = "explicit_preprocessing_" + filename.split(".")[0]
     spec = importlib.util.spec_from_file_location(name, core / filename)
+    assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     sys.modules[name] = module
     spec.loader.exec_module(module)
@@ -313,9 +315,16 @@ def test_null_vertex_permutations_are_independent_of_python_hash_salt(monkeypatc
     atlas = _stage("05_02_run_group_atlas.py")
     captured = []
     monkeypatch.setattr(atlas, "subject_split_ari", lambda **kw: captured.append(kw["feature_bank"]) or {})
-    kwargs = dict(method="gradient-ward", feature_bank={"a": np.arange(40).reshape(10,4)},
-                  valid_masks_by_subject={"a": np.ones(10, bool)}, subjects=["a"], tau=.8,
-                  adjacency_full=None, k=3, seeds=[7])
+    kwargs = {
+        "method": "gradient-ward",
+        "feature_bank": {"a": np.arange(40).reshape(10, 4)},
+        "valid_masks_by_subject": {"a": np.ones(10, bool)},
+        "subjects": ["a"],
+        "tau": 0.8,
+        "adjacency_full": None,
+        "k": 3,
+        "seeds": [7],
+    }
     monkeypatch.setattr(atlas, "hash", lambda _: 1, raising=False)
     atlas.strong_null_ari(**kwargs)
     monkeypatch.setattr(atlas, "hash", lambda _: 99, raising=False)
@@ -326,6 +335,7 @@ def test_null_vertex_permutations_are_independent_of_python_hash_salt(monkeypatc
 def test_crossfit_configuration_declares_preprocessing_for_resume():
     path = ROOT / "scripts/individual_workflow/01_01_run_hcp_crossfit_template_matching.py"
     spec = importlib.util.spec_from_file_location("explicit_crossfit_settings", path)
+    assert spec is not None and spec.loader is not None
     workflow = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = workflow
     spec.loader.exec_module(workflow)
@@ -345,10 +355,11 @@ def test_crossfit_configuration_declares_preprocessing_for_resume():
     ("01_04_render_hcp_runs_comparison.py", "fit_split_half_template", {"split_id":"split-1"}),
 ])
 def test_independent_comparison_fits_honor_the_same_options(tmp_path, monkeypatch, filename, function_name, extra):
-    from types import SimpleNamespace
+    from types import SimpleNamespace  # noqa: I001
     from scipy import sparse
     path = ROOT / "scripts/individual_workflow" / filename
     spec = importlib.util.spec_from_file_location("explicit_"+function_name, path)
+    assert spec is not None and spec.loader is not None
     driver = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = driver
     spec.loader.exec_module(driver)
@@ -404,6 +415,7 @@ def test_independent_comparison_fits_honor_the_same_options(tmp_path, monkeypatc
 def test_partial_crossfit_preflight_declares_and_counts_its_alignment_anchor(tmp_path):
     path = ROOT / "scripts/individual_workflow/01_01_run_hcp_crossfit_template_matching.py"
     spec = importlib.util.spec_from_file_location("explicit_crossfit_anchor_audit", path)
+    assert spec is not None and spec.loader is not None
     workflow = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = workflow
     spec.loader.exec_module(workflow)
@@ -435,3 +447,211 @@ def test_gradient_alignment_does_not_substitute_the_first_requested_combo():
     producer = _stage("05_01_compute_hippomaps_gradients.py")
     with pytest.raises(ValueError, match="4mm.*L"):
         producer.select_alignment_anchor([SimpleNamespace(smoothing="2mm",hemi="R")])
+
+
+def test_strong_null_ari_permutes_validity_masks_with_subject_fc(monkeypatch):
+    atlas = _stage("05_02_run_group_atlas.py")
+    captured = {}
+
+    def fake_split(**kwargs):
+        captured["feature_bank"] = kwargs["feature_bank"]
+        captured["valid_masks_by_subject"] = kwargs["valid_masks_by_subject"]
+        captured["gradient_options"] = kwargs["gradient_options"]
+        return {"values": [0.0]}
+
+    monkeypatch.setattr(atlas, "subject_split_ari", fake_split)
+    fc_a = np.arange(20, dtype=np.float32).reshape(10, 2)
+    mask_a = np.array([True, True, False, True, False, True, True, False, True, True])
+    fc_a[~mask_a] = np.nan
+    atlas.strong_null_ari(
+        method="gradient-ward",
+        feature_bank={"a": fc_a},
+        valid_masks_by_subject={"a": mask_a},
+        subjects=["a"],
+        tau=1.0,
+        adjacency_full=None,
+        k=3,
+        seeds=[20260420],
+    )
+    perm = captured["gradient_options"]["alignment_vertex_permutations"]["a"]
+    assert np.array_equal(captured["valid_masks_by_subject"]["a"], mask_a[perm])
+    assert np.array_equal(np.isfinite(captured["feature_bank"]["a"][:, 0]), captured["valid_masks_by_subject"]["a"])
+    empty = atlas.strong_null_ari(
+        method="gradient-ward",
+        feature_bank={"a": fc_a},
+        valid_masks_by_subject={"a": mask_a},
+        subjects=["a"],
+        tau=1.0,
+        adjacency_full=None,
+        k=3,
+        seeds=[],
+    )
+    assert empty["values"] == [] and empty["n_requested"] == 0
+
+
+def test_group_atlas_resume_validates_gradient_manifest_and_summary_settings(tmp_path):
+    atlas = _stage("05_02_run_group_atlas.py")
+    grad_dir = tmp_path / "gradients" / "pfm" / "2mm" / "hemi_L"
+    grad_dir.mkdir(parents=True)
+    grad_array = grad_dir / "hippomaps_gradients_full.npy"
+    np.save(grad_array, np.ones((8, 5), dtype=np.float32))
+    grad_manifest = grad_dir / "hippomaps_gradient_manifest.json"
+    grad_manifest.write_text(json.dumps({
+        "status": "ok",
+        "group_fc_shape": [8, 400],
+        "feature_count": 400,
+        "gradient_random_state": 0,
+        "gradient_preprocessing": adapter.gradient_preprocessing_settings(
+            400, feature_scaling="col_zscore", sparsify_stage="features", sparsity=0.9,
+        ),
+        "outputs": {"hippomaps_gradients_full": str(grad_array)},
+    }), encoding="utf-8")
+    summary_path = tmp_path / "group_gradient_feature_summary.json"
+    summary_path.write_text(json.dumps({
+        "hippomaps_gradient_manifest": str(grad_manifest),
+        "hippomaps_gradients_full": str(grad_array),
+        "gradient_preprocessing": adapter.gradient_preprocessing_settings(
+            400, feature_scaling="col_zscore", sparsify_stage="features", sparsity=0.9,
+        ),
+        "clustering_feature_transform": {"scaling": "none", "n_vertices_fit": 8},
+    }), encoding="utf-8")
+    options = {
+        "feature_scaling": "col_zscore",
+        "sparsify_stage": "features",
+        "sparsity": 0.9,
+        "random_state": 0,
+        "clustering_feature_scaling": "none",
+        "rbf_scale": 1.0,
+    }
+    recorded = atlas.gradient_resume_inputs(
+        gradient_root=tmp_path / "gradients", cohort=None, variant="36p",
+        gradient_options=options, route="pfm", smoothing="2mm", hemi="L",
+    )
+    sig = atlas.canonical_json_sha256(recorded)
+    manifest_path = tmp_path / "group_atlas_manifest.json"
+    manifest_path.write_text(json.dumps({
+        "method": "gradient-spectral-rbf",
+        "rbf_scale": 1.0,
+        "feature_count": 400,
+        "resume_input_signature_version": atlas.RESUME_SIGNATURE_VERSION,
+        "resume_input_signature": sig,
+        "resume_input_signature_payload": {"gradient_options": options},
+        "group_gradient_feature_summary": str(summary_path),
+        "gradient_source_manifest": str(grad_manifest),
+    }), encoding="utf-8")
+    ok, reason = atlas.resume_manifest_matches(manifest_path, sig, gradient_options=options)
+    assert ok is True and reason == "signature_match"
+
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    payload["rbf_scale"] = 1.000001
+    manifest_path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ValueError, match="rbf_scale"):
+        atlas.resume_manifest_matches(manifest_path, sig, gradient_options=options)
+    payload["rbf_scale"] = 1.0
+    manifest_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    # Corrupting upstream gradient manifest preprocessing must raise an explicit regeneration error even on resume
+    grad_manifest.write_text(json.dumps({
+        "status": "ok",
+        "group_fc_shape": [8, 400],
+        "feature_count": 400,
+        "gradient_random_state": 0,
+        "outputs": {"hippomaps_gradients_full": str(grad_array)},
+    }), encoding="utf-8")
+    with pytest.raises(ValueError, match="gradient_preprocessing.*regenerate"):
+        atlas.resume_manifest_matches(manifest_path, sig, gradient_options=options)
+
+
+@pytest.mark.parametrize("case", ["missing_summary", "missing_source", "conflicting_source"])
+def test_gradient_resume_rejects_missing_or_conflicting_provenance(tmp_path, case):
+    atlas = _stage("05_02_run_group_atlas.py")
+    options = {
+        "feature_scaling": "none",
+        "sparsify_stage": "affinity",
+        "sparsity": 0.9,
+        "random_state": 0,
+        "clustering_feature_scaling": "none",
+    }
+    settings = adapter.gradient_preprocessing_settings(
+        400, feature_scaling="none", sparsify_stage="affinity", sparsity=0.9,
+    )
+    gradient = {
+        "group_fc_shape": [8, 400],
+        "gradient_random_state": 0,
+        "gradient_preprocessing": settings,
+    }
+    first_source = tmp_path / "first_gradient_manifest.json"
+    second_source = tmp_path / "second_gradient_manifest.json"
+    first_source.write_text(json.dumps(gradient), encoding="utf-8")
+    second_source.write_text(json.dumps(gradient), encoding="utf-8")
+    summary = {
+        "gradient_preprocessing": settings,
+        "clustering_feature_transform": {"scaling": "none"},
+        "hippomaps_gradient_manifest": str(first_source),
+    }
+    if case == "missing_source":
+        del summary["hippomaps_gradient_manifest"]
+    summary_path = tmp_path / "group_gradient_feature_summary.json"
+    summary_path.write_text(json.dumps(summary), encoding="utf-8")
+    payload = {
+        "status": "ok",
+        "method": "gradient-ward",
+        "resume_input_signature_version": atlas.RESUME_SIGNATURE_VERSION,
+        "resume_input_signature": "matching",
+        "resume_input_signature_payload": {"gradient_options": options},
+        "group_gradient_feature_summary": str(summary_path),
+        "gradient_source_manifest": str(first_source),
+    }
+    if case == "missing_summary":
+        del payload["group_gradient_feature_summary"]
+    elif case == "missing_source":
+        del payload["gradient_source_manifest"]
+    else:
+        payload["gradient_source_manifest"] = str(second_source)
+    manifest = tmp_path / "group_atlas_manifest.json"
+    manifest.write_text(json.dumps(payload), encoding="utf-8")
+
+    field = "group_gradient_feature_summary" if case == "missing_summary" else "gradient_source_manifest"
+    with pytest.raises(ValueError, match=field):
+        atlas.resume_manifest_matches(manifest, "matching", gradient_options=options)
+
+
+@pytest.mark.parametrize("status", ["skipped_no_valid_k", "skipped_no_k_survived_constraints"])
+def test_gradient_resume_preserves_matching_skipped_results(tmp_path, status):
+    atlas = _stage("05_02_run_group_atlas.py")
+    options = {
+        "feature_scaling": "none",
+        "sparsify_stage": "affinity",
+        "sparsity": 0.9,
+        "random_state": 0,
+        "clustering_feature_scaling": "none",
+        "rbf_scale": 1.0,
+    }
+    settings = adapter.gradient_preprocessing_settings(
+        400, feature_scaling="none", sparsify_stage="affinity", sparsity=0.9,
+    )
+    source = tmp_path / "hippomaps_gradient_manifest.json"
+    source.write_text(json.dumps({
+        "group_fc_shape": [8, 400],
+        "gradient_random_state": 0,
+        "gradient_preprocessing": settings,
+    }), encoding="utf-8")
+    summary = tmp_path / "group_gradient_feature_summary.json"
+    if status == "skipped_no_k_survived_constraints":
+        summary.write_text(json.dumps({
+            "gradient_preprocessing": settings,
+            "clustering_feature_transform": {"scaling": "none"},
+            "hippomaps_gradient_manifest": str(source),
+        }), encoding="utf-8")
+    manifest = tmp_path / "group_atlas_manifest.json"
+    manifest.write_text(json.dumps({
+        "status": status,
+        "method": "gradient-spectral-rbf",
+        "resume_input_signature_version": atlas.RESUME_SIGNATURE_VERSION,
+        "resume_input_signature": "matching",
+        "resume_input_signature_payload": {"gradient_options": options},
+        "group_gradient_feature_summary": str(summary),
+    }), encoding="utf-8")
+
+    assert atlas.resume_manifest_matches(manifest, "matching", gradient_options=options) == (True, "signature_match")
+    assert atlas.resume_manifest_matches(manifest, "changed", gradient_options=options) == (False, "upstream_signature_changed")
