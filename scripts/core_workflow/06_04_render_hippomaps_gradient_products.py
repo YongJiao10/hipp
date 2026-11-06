@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Process Step Description:
-Render HippoMaps gradient products. Renders computed continuous functional gradient data into standard visualization products (including unfolded/folded surface renderings, explained variance plots, and endpoint functional connectivity contrasts).
+Render HippoMaps gradient products. Renders computed continuous functional gradient data into standard visualization products (including unfolded/folded surface renderings and explained variance plots).
 
 Main Flow Path:
 - 9th step in the numbered pipeline sequence (first stage of presentation output generation, run in parallel with 06_01, 06_02, 06_03, 06_05, 06_06, 06_07):
@@ -23,13 +23,11 @@ Inputs:
   - --display-color-trim-fraction: Quantile trim for shared per-component color ranges (default: 0.05).
 - Physical inputs:
   - Gradient output arrays and manifests: `{gradient_root}/{route}/[<cohort>/]{smoothing}/hemi_{hemi}/hippomaps_gradient_manifest.json` and matching `*.npy`/`*.gii` files.
-  - Group-level FC matrix: `{routes_root}/intrinsic_group_fc_smooth-{smoothing}_hemi-{hemi}.npy` or matching path.
 
 Outputs:
 - File outputs:
   - Folded/Unfolded gradient surface rendering PNG: `{present_root}/{route}/[<cohort>/]{smoothing}/hippomaps_gradients_{route}_{smoothing}_{out_tag}_g1g2g3.png`
   - Explained variance fraction plot PNG: `{present_root}/{route}/[<cohort>/]{smoothing}/hippomaps_ev_{route}_{smoothing}_{out_tag}.png`
-  - Endpoint FC contrast plot PNG: `{present_root}/{route}/[<cohort>/]{smoothing}/hippomaps_endpoint_fc_contrast_{route}_{smoothing}_{out_tag}.png`
   - Manifest JSON: `{present_root}/{route}/[<cohort>/]{smoothing}/hippomaps_gradient_products_{route}_{smoothing}_{out_tag}_manifest.json`
 """
 from __future__ import annotations
@@ -427,37 +425,6 @@ def render_bilateral_gradient_figure(
     return stitch_hemi_gradient_images(side_paths["L"], side_paths["R"], output_png)
 
 
-def endpoint_fc_contrast(
-    *,
-    gradient_full: np.ndarray,
-    group_fc_full: np.ndarray,
-    support_mask: np.ndarray,
-    endpoint_fraction: float = 0.25,
-) -> np.ndarray:
-    grad = np.asarray(gradient_full, dtype=np.float32).reshape(-1)
-    fc = np.asarray(group_fc_full, dtype=np.float32)
-    support = np.asarray(support_mask, dtype=bool).reshape(-1)
-    if fc.ndim != 2:
-        raise ValueError(f"Expected 2D group FC full matrix, got shape={fc.shape}")
-    if grad.size != support.size or fc.shape[0] != support.size:
-        raise ValueError(f"Shape mismatch: gradient={grad.shape} fc={fc.shape} support={support.shape}")
-    finite = support & np.isfinite(grad) & np.all(np.isfinite(fc), axis=1)
-    vals = grad[finite]
-    if vals.size == 0:
-        raise RuntimeError("No finite supported vertices available for endpoint contrast")
-    frac = float(endpoint_fraction)
-    if frac <= 0.0 or frac >= 0.5:
-        raise ValueError(f"endpoint_fraction must be within (0, 0.5), got {endpoint_fraction}")
-    lo = float(np.nanquantile(vals, frac))
-    hi = float(np.nanquantile(vals, 1.0 - frac))
-    finite_idx = np.flatnonzero(finite)
-    bottom_idx = finite_idx[grad[finite] <= lo]
-    top_idx = finite_idx[grad[finite] >= hi]
-    if bottom_idx.size == 0 or top_idx.size == 0:
-        raise RuntimeError(f"Endpoint selection is empty: bottom={bottom_idx.size} top={top_idx.size}")
-    return (np.nanmean(fc[top_idx, :], axis=0) - np.nanmean(fc[bottom_idx, :], axis=0)).astype(np.float32)
-
-
 def render_ev_plot(manifests: dict[str, dict[str, Any]], output_png: Path) -> Path:
     fig, ax = plt.subplots(figsize=(7.0, 3.8))
     for hemi, manifest in sorted(manifests.items()):
@@ -467,30 +434,6 @@ def render_ev_plot(manifests: dict[str, dict[str, Any]], output_png: Path) -> Pa
     ax.set_ylabel("EV (%)")
     ax.spines[["top", "right"]].set_visible(False)
     ax.legend(frameon=False)
-    output_png.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(output_png, dpi=220, bbox_inches="tight")
-    plt.close(fig)
-    return output_png
-
-
-def render_endpoint_contrast_plot(contrasts: dict[tuple[str, str], np.ndarray], output_png: Path) -> Path:
-    keys = sorted(contrasts.keys())
-    max_len = max(int(contrasts[k].size) for k in keys)
-    mat = np.full((len(keys), max_len), np.nan, dtype=np.float32)
-    for row, key in enumerate(keys):
-        vec = contrasts[key]
-        mat[row, : vec.size] = vec
-    vmax = float(np.nanmax(np.abs(mat))) if np.any(np.isfinite(mat)) else 1.0
-    if not np.isfinite(vmax) or vmax <= 0.0:
-        vmax = 1.0
-    fig, ax = plt.subplots(figsize=(8.0, 0.65 * len(keys) + 2.2))
-    im = ax.imshow(mat, aspect="auto", cmap="coolwarm", vmin=-vmax, vmax=vmax)
-    ax.set_yticks(np.arange(len(keys)))
-    ax.set_yticklabels([f"{hemi} {comp}" for hemi, comp in keys])
-    ax.set_xlabel("Kong2022 ROI")
-    ax.set_ylabel("Endpoint")
-    ax.spines[["top", "right"]].set_visible(False)
-    fig.colorbar(im, ax=ax, fraction=0.025, pad=0.02, label="Top 25% - bottom 25% Fisher-z FC")
     output_png.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output_png, dpi=220, bbox_inches="tight")
     plt.close(fig)
@@ -521,7 +464,6 @@ def render_combo(
     manifests: dict[str, dict[str, Any]] = {}
     gradients_by_hemi: dict[str, np.ndarray] = {}
     support_by_hemi: dict[str, np.ndarray] = {}
-    group_fc_by_hemi: dict[str, np.ndarray] = {}
     for hemi in hemis:
         run_dir = branch_root / smoothing / f"hemi_{hemi}"
         manifest_path = run_dir / "hippomaps_gradient_manifest.json"
@@ -530,7 +472,6 @@ def render_combo(
         manifests[hemi] = load_json(manifest_path)
         gradients_by_hemi[hemi] = np.load(run_dir / "hippomaps_gradients_full.npy").astype(np.float32)
         support_by_hemi[hemi] = np.load(run_dir / "group_support_mask.npy").astype(bool)
-        group_fc_by_hemi[hemi] = np.load(run_dir / "group_mean_fisherz_fc_full.npy").astype(np.float32)
 
     comp_indices = [int(c) - 1 for c in selected_components]
     display_gradients_by_hemi = gradients_by_hemi
@@ -593,19 +534,6 @@ def render_combo(
         )
 
     ev_png = render_ev_plot(manifests, combo_root / f"hippomaps_ev_{route}_{smoothing}_{out_tag}.png")
-    contrasts: dict[tuple[str, str], np.ndarray] = {}
-    for hemi in hemis:
-        for comp in selected_components:
-            contrasts[(hemi, f"G{comp}")] = endpoint_fc_contrast(
-                gradient_full=gradients_by_hemi[hemi][:, int(comp) - 1],
-                group_fc_full=group_fc_by_hemi[hemi],
-                support_mask=support_by_hemi[hemi],
-                endpoint_fraction=0.25,
-            )
-    contrast_png = render_endpoint_contrast_plot(
-        contrasts,
-        combo_root / f"hippomaps_endpoint_fc_contrast_{route}_{smoothing}_{out_tag}.png",
-    )
     if tuple(hemis) == HEMIS:
         ensure_bilateral_gradient_annotations(
             side_paths={
@@ -663,11 +591,9 @@ def render_combo(
                 else None
             ),
             "display_color_trim_fraction": display_color_trim_fraction,
-            "endpoint_contrast": "top_25pct_minus_bottom_25pct_gradient_vertices_by_kong2022_roi",
             "outputs": {
                 "gradient_figure": str(gradient_png.resolve()),
                 "ev_plot": str(ev_png.resolve()),
-                "endpoint_fc_contrast_plot": str(contrast_png.resolve()),
             },
         },
     )
@@ -759,7 +685,7 @@ if __name__ == "__main__":
         run_stage(
             StageSpec(
                 step_id="06_04_render_hippomaps_gradient_products",
-                purpose="Render HippoMaps folded/unfolded gradient figures, EV plots, and endpoint FC contrasts.",
+                purpose="Render HippoMaps folded/unfolded gradient figures and EV plots.",
                 stage_main=main,
                 upstream_defaults=("05_01_compute_hippomaps_gradients",),
             )

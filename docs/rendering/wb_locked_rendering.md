@@ -98,4 +98,4 @@ Use `06_04_render_hippomaps_gradient_products.py` and consume:
 - `outputs_hcp/present/gradients/pfm/{2mm,4mm}/`
 - `outputs_hcp/present/gradients/fixed/{2mm,4mm}/`
 
-These are the maintained final gradient products (G1-G3 figure, EV plot, endpoint FC contrast, and manifest).
+These are the maintained final gradient products (G1-G3 figure, EV plot, and manifest).

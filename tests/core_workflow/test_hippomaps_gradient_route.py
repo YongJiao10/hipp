@@ -855,28 +855,6 @@ def test_gradient_alignment_anchor_combo_is_identity_without_raw_outputs() -> No
     assert meta["raw_arrays_saved"] is False, meta
 
 
-def test_endpoint_fc_contrast_uses_top_minus_bottom_gradient_quartiles() -> None:
-    gradient_full = np.asarray([np.nan, 1.0, 2.0, 3.0, 4.0], dtype=np.float32)
-    group_fc_full = np.asarray(
-        [
-            [np.nan, np.nan],
-            [1.0, 10.0],
-            [2.0, 20.0],
-            [3.0, 30.0],
-            [4.0, 40.0],
-        ],
-        dtype=np.float32,
-    )
-    support = np.asarray([False, True, True, True, True], dtype=bool)
-    got = render_mod.endpoint_fc_contrast(
-        gradient_full=gradient_full,
-        group_fc_full=group_fc_full,
-        support_mask=support,
-        endpoint_fraction=0.25,
-    )
-    assert np.allclose(got, [3.0, 30.0]), got
-
-
 def test_render_gradient_figure_calls_official_hippomaps_plotter_options(tmp_path) -> None:
     calls: list[dict[str, object]] = []
 
@@ -1174,7 +1152,6 @@ def main() -> int:
     test_full_surface_reconstruction_keeps_nan_outside_support()
     test_gradient_alignment_reorders_components_and_flips_sign_to_anchor()
     test_gradient_alignment_anchor_combo_is_identity_without_raw_outputs()
-    test_endpoint_fc_contrast_uses_top_minus_bottom_gradient_quartiles()
     test_render_gradient_figure_calls_official_hippomaps_plotter_options()
     test_cross_route_display_alignment_flips_negative_components_without_mutating_source()
     test_shared_display_color_ranges_use_component_bounds_across_routes()
