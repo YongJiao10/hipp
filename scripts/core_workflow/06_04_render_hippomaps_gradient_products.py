@@ -425,6 +425,13 @@ def render_bilateral_gradient_figure(
     return stitch_hemi_gradient_images(side_paths["L"], side_paths["R"], output_png)
 
 
+EV_FONT_DELTA_PT = 4
+EV_TITLE_FS = 12 + EV_FONT_DELTA_PT  # 16
+EV_LABEL_FS = 10 + EV_FONT_DELTA_PT  # 14
+EV_TICK_FS = 10 + EV_FONT_DELTA_PT   # 14
+EV_LEGEND_FS = 10 + EV_FONT_DELTA_PT # 14
+
+
 def render_ev_plot(
     manifests: dict[str, dict[str, Any]],
     output_png: Path,
@@ -436,16 +443,17 @@ def render_ev_plot(
         ev = np.asarray(manifest["ev_fractions"], dtype=np.float64) * 100.0
         max_components = max(max_components, int(ev.size))
         ax.plot(np.arange(1, ev.size + 1), ev, marker="o", linewidth=1.5, label=f"hemi {hemi}")
+    ax.tick_params(axis="both", labelsize=EV_TICK_FS)
     if max_components > 0:
         ticks = np.arange(1, max_components + 1)
         ax.set_xticks(ticks)
-        ax.set_xticklabels([str(t) for t in ticks])
-    ax.set_xlabel("Gradient")
-    ax.set_ylabel("EV (%)")
+        ax.set_xticklabels([str(t) for t in ticks], fontsize=EV_TICK_FS)
+    ax.set_xlabel("Gradient", fontsize=EV_LABEL_FS)
+    ax.set_ylabel("EV (%)", fontsize=EV_LABEL_FS)
     if title:
-        ax.set_title(title)
+        ax.set_title(title, fontsize=EV_TITLE_FS)
     ax.spines[["top", "right"]].set_visible(False)
-    ax.legend(frameon=False)
+    ax.legend(frameon=False, fontsize=EV_LEGEND_FS)
     output_png.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output_png, dpi=220, bbox_inches="tight")
     plt.close(fig)
