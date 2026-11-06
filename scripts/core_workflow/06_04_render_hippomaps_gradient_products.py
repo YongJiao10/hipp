@@ -427,9 +427,15 @@ def render_bilateral_gradient_figure(
 
 def render_ev_plot(manifests: dict[str, dict[str, Any]], output_png: Path) -> Path:
     fig, ax = plt.subplots(figsize=(7.0, 3.8))
+    max_components = 0
     for hemi, manifest in sorted(manifests.items()):
         ev = np.asarray(manifest["ev_fractions"], dtype=np.float64) * 100.0
+        max_components = max(max_components, int(ev.size))
         ax.plot(np.arange(1, ev.size + 1), ev, marker="o", linewidth=1.5, label=f"hemi {hemi}")
+    if max_components > 0:
+        ticks = np.arange(1, max_components + 1)
+        ax.set_xticks(ticks)
+        ax.set_xticklabels([str(t) for t in ticks])
     ax.set_xlabel("Gradient")
     ax.set_ylabel("EV (%)")
     ax.spines[["top", "right"]].set_visible(False)

@@ -855,6 +855,17 @@ def test_gradient_alignment_anchor_combo_is_identity_without_raw_outputs() -> No
     assert meta["raw_arrays_saved"] is False, meta
 
 
+def test_render_ev_plot_sets_integer_ticks(tmp_path: Path) -> None:
+    manifests = {
+        "L": {"ev_fractions": [0.4, 0.2, 0.15, 0.1, 0.05]},
+        "R": {"ev_fractions": [0.45, 0.2, 0.15, 0.08, 0.07]},
+    }
+    out_png = tmp_path / "test_ev.png"
+    res = render_mod.render_ev_plot(manifests, out_png)
+    assert res.exists()
+    assert res.stat().st_size > 0
+
+
 def test_render_gradient_figure_calls_official_hippomaps_plotter_options(tmp_path) -> None:
     calls: list[dict[str, object]] = []
 
