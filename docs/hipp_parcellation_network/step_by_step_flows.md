@@ -13,7 +13,7 @@ canonical roots directly; no migration utility is part of the active workflow.
 1. `01_01_run_hippunfold_t1w_local.py`
 2. `01_02_check_hippunfold_outputs.py`
 
-`01_01` uses the closed HippUnfold 2.3.0 T1w/512 preset and invokes `01_02`
+`01_01` uses the HippUnfold 2.4.1 T1w/512 preset and invokes `01_02`
 with `--fail-on-missing --no-cleanup`. Validation checks the full output
 contract and retains `anat/`, `coords/`, `warps/`, `cifti/`, `surf/`, `metric/`
 and `qc/`. Resume requires `output_check.json` to match the current run

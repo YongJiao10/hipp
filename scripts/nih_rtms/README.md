@@ -85,9 +85,9 @@ analysis.
 
 ## 3. How to Submit on Argon
 
-### Downstream HippUnfold v2.3.0 QC
+### Downstream HippUnfold QC
 
-The local reconstruction has 44 official v2.3.0 completion records under
+The local reconstruction has 44 official completion records under
 `outputs_nih_rtms/inputs/hippunfold/dense_corobl_batch/`. The shared
 `scripts/core_workflow/02_01_prepare_group_inputs.py` and `02_02_build_qc_manifest.py`
 accept `--dataset nih_rtms`. Functional QC uses separate visit routes at
@@ -101,7 +101,7 @@ Motion selection uses original post-dummy, pre-censor frames; coverage uses
 the shorter retained NIfTI series. The outlier table binds those two lengths.
 The registration transform is paired with the exact fMRIPrep T1w consumed by
 HippUnfold, supporting both longitudinal subject-level and single-visit
-session-level anatomical exports. Use `--require-hippunfold-version 2.3.0`; the remaining criteria are bilateral
+session-level anatomical exports. Use `--require-hippunfold-version 2.4.1`; the remaining criteria are bilateral
 Dice >=0.70 and <=20 unusable den-512 vertices per hemisphere.
 Reports are `qc/t1only_hippunfold_qc.{json,tsv}` and pass lists are
 `manifests/nih_rtms_hippocampus_fmri_qc_pass_t1only_latest.txt` within each route.

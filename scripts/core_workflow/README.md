@@ -175,7 +175,7 @@ For censored XCP-D volumes, add `temporal_mask_path` for the exact outlier TSV:
 motion uses original post-dummy frames, while `n_timepoints` and coverage use
 the retained BOLD frames. NIH rTMS uses `--dataset nih_rtms` and separate
 `outputs_nih_rtms/inputs/kong2022/ses-1/` and `ses-2/` roots.
-Use `--require-hippunfold-version 2.3.0` when assessing the current reconstruction.
+Use `--require-hippunfold-version 2.4.1` when assessing the reconstruction.
 Task/non-HCP preparation requires its own `--route-root`, `--shared-root`, and
 an explicit `--template-root` for group-average preparation.
 Pass lists use the selected dataset/task prefix; HCP rest retains `hcp_7t`.

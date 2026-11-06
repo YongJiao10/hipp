@@ -64,7 +64,7 @@ cohorts. Run `02_01` stages `raw` and `validity`, then `qc`; `all` also
 runs smoothing and the group-template stage. The hippocampal mask uses NIfTI
 support and finite, nonconstant signal within every physical run.
 
-For v2.3.0 cohorts, supply `--require-hippunfold-version 2.3.0` to the QC
+For cohorts requiring pinned release verification, supply `--require-hippunfold-version 2.4.1` to the QC
 entrypoint. Official completion metadata must match that release; an
 incomplete reconstruction cannot enter through a high Dice score. Retained
 post-cleanup surfaces remain usable for functional QC when their completed
@@ -183,7 +183,7 @@ failures and zero unassessable participants. The accepted roster is
 `outputs_hcp/inputs/kong2022/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt`.
 
 HCP3T EMOTION includes 159 task participants. All 159 pass motion; 155 have
-recorded official v2.3.0 completion and pass bilateral Dice. All 155 also pass
+recorded official completion and pass bilateral Dice. All 155 also pass
 NIfTI coverage, with zero unusable vertices in either hemisphere. Raw sampling
 and vertex masks are complete. The report is
 `outputs_hcp/inputs/kong2022/shared_inputs/task-emotion/qc/t1only_hippunfold_qc.json`;
@@ -196,7 +196,7 @@ Raw sampling and vertex masks are complete. The report and final roster are
 under the corresponding `task-wm/qc/` and `task-wm/manifests/` directories,
 with prefix `hcp_3t_wm`.
 
-BANDA has 203 attempted structural participants, with 196 v2.3.0 completion
+BANDA has 203 attempted structural participants, with 196 official completion
 records. Among the 202 participants with declared resting runs, 199 pass
 motion; BANDA028, BANDA116 and BANDA195 exceed mean FD 0.50 mm. Exactly 193
 pass motion and completed anatomy/Dice. All 808 declared Legacy Volume BOLD
@@ -208,7 +208,7 @@ BANDA199 has no run-level rest declaration; six other participants lack
 structural completion records after motion selection. The current report is
 `outputs_banda/inputs/kong2022/qc/t1only_hippunfold_qc.json`.
 
-PDC has 455 attempted visits, with 442 v2.3.0 completion records. Motion passes
+PDC has 455 attempted visits, with 442 official completion records. Motion passes
 451 visits; e0020s01, k0082s01, s0063s01 and s0066s02 exceed mean FD 0.50 mm.
 Exactly 438 pass motion and completed anatomy/Dice. There are 982 of 984
 declared Legacy Volume BOLD runs present. Coverage sampling and vertex masks
@@ -247,7 +247,7 @@ consumes those paths directly. Do not convert the selected CIFTI grayordinates
 into a replacement volume or use a reference image as the time series.
 
 NIH rTMS currently has 43 functional participants and 66 resting-state scans;
-D16 is anatomical-only. All 44 anatomical participants have official v2.3.0
+D16 is anatomical-only. All 44 anatomical participants have official
 completion records. The retained functional cohort comprises 42 ses-1 and
 24 ses-2 scans; their visit-specific input tables are
 `outputs_nih_rtms/inputs/kong2022/ses-<1|2>/manifests/nih_rtms_qc_runs.tsv`.

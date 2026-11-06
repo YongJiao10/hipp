@@ -1,7 +1,7 @@
 # HippUnfold shared-host performance measurement
 
 The measurements below used the official v2.2.0 scientific runtime before
-the current v2.3.0 reconstruction. They inform resource allocation; the
+the current reconstruction. They inform resource allocation; the
 [runtime manifest](hippo2_reproducibility_manifest.md) defines the current
 scientific runtime and retained-output requirements.
 The complete structural roster remains `manifests/hcp_7t_hippocampus_struct_complete_166.txt`.
@@ -99,7 +99,7 @@ lock, model gate, cache reuse and full-output checks remain unchanged.
 
 The first eight-subject full-run wave completed eight people in approximately
 50 minutes. These measurements do not establish the whole-subject throughput
-of the current v2.3.0 reconstruction.
+of the current reconstruction.
 The CPU stage benchmark at twelve workers measured 187.7 registration tasks per
 hour, but that is not a full-subject throughput estimate. The profile has more
 than 40 total worker/helper processes; user approval covers this HCP-specific

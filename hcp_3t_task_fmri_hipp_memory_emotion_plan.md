@@ -60,16 +60,16 @@ Task preparation uses its own `--route-root` and `--shared-root`. The
 
 Apply [the shared fMRI QC policy](docs/hipp_parcellation_network/fmri_qc.md)
 separately within each task: overall mean Power FD <=0.50 mm, recorded official
-v2.3.0 reconstruction plus bilateral Dice >=0.70, and <=20 unusable
+HippUnfold reconstruction plus bilateral Dice >=0.70, and <=20 unusable
 NIfTI-sampled vertices per hemisphere. Never pool EMOTION and WM to pass FD.
-All 159 participants pass task motion; 155 have completed v2.3.0 anatomy and
+All 159 participants pass task motion; 155 have completed official anatomy and
 pass bilateral Dice before coverage selection. The other four are 182739
 (right Dice <0.70), 233326, 249947 and 942658 (official workflow failures).
 
 `02_01_prepare_group_inputs.py` and `02_02_build_qc_manifest.py` use the
 shared `--qc-run-inputs` table. Set `--dataset hcp --task emotion|wm`, explicit
 `--route-root` and `--shared-root`, and
-`--require-hippunfold-version 2.3.0`. Run preparation stages `raw` and `validity`
+`--require-hippunfold-version 2.4.1`. Run preparation stages `raw` and `validity`
 followed by `qc`; no task-design EVs are needed
 for coverage QC. Both the participant count and persisted vertex masks use
 positive NIfTI trilinear support and finite, nonconstant signal within each
