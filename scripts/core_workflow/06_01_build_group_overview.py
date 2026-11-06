@@ -139,13 +139,23 @@ def ctxdrop_original_fc_annotation_provenance(
     *,
     manifest_paths: list[Path],
     manifests: list[dict[str, object]],
+    layout: str = "dual-smoothing",
 ) -> dict[str, object]:
     """Validate and describe the accepted ctxdrop cluster annotation source."""
-    if len(manifest_paths) != 4 or len(manifests) != 4:
-        raise ValueError(
-            "ctxdrop original-FC annotation provenance requires exactly four "
-            "2mm/4mm by L/R manifests"
-        )
+    if layout == "dual-interpretation":
+        if len(manifest_paths) != 2 or len(manifests) != 2:
+            raise ValueError(
+                "ctxdrop original-FC annotation provenance requires exactly two "
+                "2mm L/R manifests for dual-interpretation layout"
+            )
+        expected_grid = {("2mm", "L"), ("2mm", "R")}
+    else:
+        if len(manifest_paths) != 4 or len(manifests) != 4:
+            raise ValueError(
+                "ctxdrop original-FC annotation provenance requires exactly four "
+                "2mm/4mm by L/R manifests"
+            )
+        expected_grid = {("2mm", "L"), ("2mm", "R"), ("4mm", "L"), ("4mm", "R")}
 
     known_routes = ("pfm_ctxdrop", "pfm_ctxreg", "pfm")
     path_route_hints: list[str | None] = []
@@ -176,7 +186,6 @@ def ctxdrop_original_fc_annotation_provenance(
             f"{route_tags}"
         )
 
-    expected_grid = {("2mm", "L"), ("2mm", "R"), ("4mm", "L"), ("4mm", "R")}
     observed_grid = {(str(m.get("smoothing", "")), str(m.get("hemi", ""))) for m in manifests}
     if observed_grid != expected_grid:
         raise ValueError(
@@ -244,6 +253,7 @@ def overview_source_provenance(
     method: str,
     manifest_paths: list[Path],
     manifests: list[dict[str, object]],
+    layout: str = "dual-smoothing",
 ) -> dict[str, object]:
     provenance: dict[str, object] = {
         "source_group_manifests": [str(path) for path in manifest_paths],
@@ -255,6 +265,7 @@ def overview_source_provenance(
             ctxdrop_original_fc_annotation_provenance(
                 manifest_paths=manifest_paths,
                 manifests=manifests,
+                layout=layout,
             )
         )
     return provenance
@@ -265,6 +276,10 @@ def overview_manifest_item(
 ) -> dict[str, object]:
     item = dict(base)
     for key in (
+        "layout",
+        "assignment_variant",
+        "assignment_variants",
+        "rows",
         "rendered_title",
         "overview_scope",
         "subject_split_ari",
@@ -1351,6 +1366,7 @@ def overview_png_path(
     assignment_variant: str | None,
     gradient_comp_tag: str = "",
     output_name: str | None = None,
+    layout: str = "dual-smoothing",
 ) -> Path:
     if output_name is not None:
         name = str(output_name).strip()
@@ -1362,6 +1378,16 @@ def overview_png_path(
         if out_name.suffix == "":
             out_name = out_name.with_suffix(".png")
         return Path(present_dir) / out_name
+
+    if layout == "dual-interpretation":
+        name_bits = [atlas, method, "group_overview_2mm_dual_interpretation"]
+        if gradient_comp_tag:
+            name_bits.append(gradient_comp_tag)
+        if route_tag:
+            name_bits.append(route_tag)
+        if mode_tag:
+            name_bits.append(mode_tag)
+        return Path(present_dir) / f"{'_'.join(name_bits)}.png"
 
     name_bits = [atlas, method, "group_overview"]
     if gradient_comp_tag:
@@ -1390,6 +1416,8 @@ def render_combo(
     overview_scope: str = "Group",
     skip_subject_split_ari: bool = False,
     group_name: str | None = None,
+    layout: str = "dual-smoothing",
+    profile_vmax_by_variant: dict[str, float] | None = None,
     ) -> dict[str, object]:
     if assignment_variant is None:
         assignment_variant = default_render_assignment_variant(method, atlas)
@@ -1407,23 +1435,31 @@ def render_combo(
     effective_assignment_variant = (
         str(assignment_variant) if method in CLUSTERLESS_METHODS else str(assignment_variant)
     )
-    surface_assignment_title = effective_assignment_variant.replace("_", " ")
     family17_overview = route_tag in {"pfm_17net", "fixed_17net"} or effective_assignment_variant == "ovr_logistic_family17"
     diagnostic_hspace = 0.06 if family17_overview else 0.035
     manifest_paths: list[Path] = []
-    for smoothing in SMOOTHINGS:
-        manifest_paths.extend(
-            [
-                _build_run_dir(group_root, method, atlas, smoothing, coverage_tag, hemi, gradient_comp_tag=gradient_comp_tag)
-                / "group_atlas_manifest.json"
-                for hemi in ("L", "R")
-            ]
-        )
+    if layout == "dual-interpretation":
+        manifest_paths = [
+            _build_run_dir(group_root, method, atlas, "2mm", coverage_tag, "L", gradient_comp_tag=gradient_comp_tag)
+            / "group_atlas_manifest.json",
+            _build_run_dir(group_root, method, atlas, "2mm", coverage_tag, "R", gradient_comp_tag=gradient_comp_tag)
+            / "group_atlas_manifest.json",
+        ]
+    else:
+        for smoothing in SMOOTHINGS:
+            manifest_paths.extend(
+                [
+                    _build_run_dir(group_root, method, atlas, smoothing, coverage_tag, hemi, gradient_comp_tag=gradient_comp_tag)
+                    / "group_atlas_manifest.json"
+                    for hemi in ("L", "R")
+                ]
+            )
     source_manifests = [load_json(path) for path in manifest_paths]
     source_provenance = overview_source_provenance(
         method=method,
         manifest_paths=manifest_paths,
         manifests=source_manifests,
+        layout=layout,
     )
     assignment_validation_results: dict[tuple[str, str, str], dict[str, object]] = {}
     if atlas == "kong2022" and _is_gradient_method(method):
@@ -1440,7 +1476,7 @@ def render_combo(
         # gradient assignment asset.
         for index, (path, manifest) in enumerate(zip(manifest_paths, source_manifests, strict=True)):
             ensure_gradient_assignment_variants(path, manifest)
-            smoothing_name = SMOOTHINGS[index // 2]
+            smoothing_name = "2mm" if layout == "dual-interpretation" else SMOOTHINGS[index // 2]
             hemi_name = "L" if index % 2 == 0 else "R"
             for variant_name in sorted(manifest["assignment_variants"]):
                 assignment_validation_results[(smoothing_name, hemi_name, str(variant_name))] = (
@@ -1455,9 +1491,31 @@ def render_combo(
         gs = fig.add_gridspec(nrows=2, ncols=2, width_ratios=[1.65, 1.30] if family17_overview else [1.40, 1.30], hspace=0.06, wspace=0.05)
     rows_meta: list[dict[str, object]] = []
 
-    for ridx, smoothing in enumerate(SMOOTHINGS):
-        left_manifest, right_manifest = manifest_paths[2 * ridx : 2 * ridx + 2]
-        m_l, m_r = source_manifests[2 * ridx : 2 * ridx + 2]
+    if layout == "dual-interpretation":
+        row_specs = [
+            ("fisherz", "2mm", "2mm Fisher-z"),
+            ("ovr_logistic_canonical7", "2mm", "2mm canonical7 OVR"),
+        ]
+    else:
+        row_specs = [
+            (effective_assignment_variant, sm, sm)
+            for sm in SMOOTHINGS
+        ]
+
+    for ridx, (row_variant, smoothing, row_label) in enumerate(row_specs):
+        if layout == "dual-interpretation":
+            left_manifest, right_manifest = manifest_paths[0], manifest_paths[1]
+            m_l, m_r = source_manifests[0], source_manifests[1]
+            effective_assignment_variant = row_variant
+        else:
+            left_manifest, right_manifest = manifest_paths[2 * ridx : 2 * ridx + 2]
+            m_l, m_r = source_manifests[2 * ridx : 2 * ridx + 2]
+        surface_assignment_title = effective_assignment_variant.replace("_", " ")
+        row_meta = {
+            "smoothing": smoothing,
+            "assignment_variant": effective_assignment_variant,
+            "row_label": row_label,
+        }
         d_l = left_manifest.parent
         d_r = right_manifest.parent
         if method not in CLUSTERLESS_METHODS and effective_assignment_variant == "fisherz":
@@ -1481,7 +1539,7 @@ def render_combo(
             plot_vertex_assignment_counts(
                 ax_left,
                 rows_all,
-                f"{smoothing} | vertex assignment counts",
+                f"{row_label} | vertex assignment counts",
                 title_fs=WTA_OVERVIEW_SIDE_PANEL_TITLE_FS,
                 label_fs=WTA_OVERVIEW_SIDE_PANEL_LABEL_FS,
                 tick_fs=WTA_OVERVIEW_SIDE_PANEL_TICK_FS,
@@ -1516,7 +1574,7 @@ def render_combo(
                         rows=profile_rows,
                         network_names=network_names,
                         hemi=hemi,
-                        title=f"{smoothing} | hemi-{hemi} long-axis profile",
+                        title=f"{row_label} | hemi-{hemi} long-axis profile",
                         show_ylabel=(hemi == "L"),
                     )
             except Exception as exc:
@@ -1546,7 +1604,7 @@ def render_combo(
                     fontsize=FS_MISSING,
                 )
             else:
-                with tempfile.TemporaryDirectory(prefix="present_group_surface_render_") as tmp:
+                with tempfile.TemporaryDirectory(prefix="present_group_surface_render_", dir=REPO_ROOT / "tmp") as tmp:
                     render = render_locked_grid(
                         subject=template_subject,
                         scene=scene,
@@ -1561,11 +1619,11 @@ def render_combo(
                     )
                     big = Path(str(render["biglegend_png"]))
                     ax_big.imshow(plt.imread(big))
-            ax_big.set_title(f"{smoothing} | functional atlas surface", fontsize=FS_BIG_TITLE)
+            ax_big.set_title(f"{row_label} | functional atlas surface", fontsize=FS_BIG_TITLE)
             ax_big.axis("off")
             rows_meta.append(
                 {
-                    "smoothing": smoothing,
+                    **row_meta,
                     "k_final_L": None,
                     "k_final_R": None,
                     "n_subjects": int(m_l["n_subjects"]),
@@ -1636,7 +1694,7 @@ def render_combo(
             none_hemis = "/".join(h for h, k in [("L", k_l_raw), ("R", k_r_raw)] if k is None)
             ax_big.text(0.5, 0.5, f"No K selected\n(hemi-{none_hemis})",
                         ha="center", va="center", fontsize=FS_MISSING, color="#cc0000")
-            rows_meta.append({"smoothing": smoothing, "k_final_L": k_l_raw,
+            rows_meta.append({**row_meta, "k_final_L": k_l_raw,
                                "k_final_R": k_r_raw, "n_subjects": int(m_l["n_subjects"])})
             continue
 
@@ -1699,7 +1757,7 @@ def render_combo(
         rows_l = read_tsv(d_l / "k_selection_summary.tsv")
         rows_r = read_tsv(d_r / "k_selection_summary.tsv")
         if skip_subject_split_ari:
-            plot_subject_split_ari_skipped(ax0, smoothing=smoothing)
+            plot_subject_split_ari_skipped(ax0, smoothing=row_label)
         else:
             missing_ari_hemis: list[str] = []
             for hemi, rows, color in [("L", rows_l, "#1f77b4"), ("R", rows_r, "#d62728")]:
@@ -1736,13 +1794,13 @@ def render_combo(
             handlelength=2.1,
         )
         if not skip_subject_split_ari:
-            ax0.set_title(f"{smoothing} | K selection (ARI)", fontsize=FS_TITLE)
+            ax0.set_title(f"{row_label} | K selection (ARI)", fontsize=FS_TITLE)
         ax0.set_xlabel("K", fontsize=FS_LABEL)
         ax0.set_ylabel("Subject-split ARI", fontsize=FS_LABEL)
         ax0.tick_params(labelsize=FS_TICK)
         if skip_subject_split_ari:
             ax0.clear()
-            plot_subject_split_ari_skipped(ax0, smoothing=smoothing)
+            plot_subject_split_ari_skipped(ax0, smoothing=row_label)
 
         ax1 = fig.add_subplot(sub[0, 1])
         nets = (list(validated_l["network_names"]) if effective_assignment_variant in OVR_VARIANTS else
@@ -1789,13 +1847,20 @@ def render_combo(
             )
         profile_is_normalized_count = effective_assignment_variant == "normalized_top20_count"
         profile_title = (
-            f"{smoothing} | cluster_network_profile "
+            f"{row_label} | cluster_network_profile "
             f"({'normalized topN counts' if profile_is_normalized_count else 'signed'})"
         )
         if effective_assignment_variant in OVR_VARIANTS:
-            profile_title = f"{smoothing} | OVR raw beta (per 1 Fisher-z unit; zero reference)"
+            profile_title = f"{row_label} | OVR raw beta (per 1 Fisher-z unit; zero reference)"
         prof_lr, yt_prof, yl_prof = concat_lr(prof_l_o, row_lbl_l, prof_r_o, row_lbl_r)
-        if profile_is_normalized_count:
+        if profile_vmax_by_variant is not None:
+            vmax = float(profile_vmax_by_variant[effective_assignment_variant])
+            im1 = style_imshow(
+                ax1, prof_lr, profile_title,
+                vmin=0.0 if profile_is_normalized_count else -vmax,
+                vmax=vmax, cmap="magma" if profile_is_normalized_count else "coolwarm",
+            )
+        elif profile_is_normalized_count:
             vmax = float(np.nanmax(prof_lr)) if np.isfinite(prof_lr).any() else 1.0
             im1 = style_imshow(ax1, prof_lr, profile_title, vmin=0.0, vmax=max(1.0, vmax), cmap="magma")
         else:
@@ -1819,17 +1884,17 @@ def render_combo(
             rows_r=rows_r,
             k_l=k_l,
             k_r=k_r,
-            smoothing=smoothing,
+            smoothing=row_label,
         )
 
         ax3 = fig.add_subplot(sub[1, 1])
         if effective_assignment_variant in OVR_VARIANTS:
             plot_ovr_association_panel(
-                ax3, profile=prof_lr, row_positions=yt_prof, row_labels=yl_prof, smoothing=smoothing
+                ax3, profile=prof_lr, row_positions=yt_prof, row_labels=yl_prof, smoothing=row_label
             )
         else:
             conf_rows = confidence_rows(status_l, "L", cids_l) + confidence_rows(status_r, "R", cids_r)
-            plot_confidence_panel(ax3, conf_rows, f"{smoothing} | cluster confidence / ambiguity")
+            plot_confidence_panel(ax3, conf_rows, f"{row_label} | cluster confidence / ambiguity")
 
         ax_big = fig.add_subplot(gs[ridx, 1])
         left_label = left_label_variant
@@ -1844,7 +1909,7 @@ def render_combo(
                 fontsize=FS_MISSING,
             )
         else:
-            with tempfile.TemporaryDirectory(prefix="present_group_surface_render_") as tmp:
+            with tempfile.TemporaryDirectory(prefix="present_group_surface_render_", dir=REPO_ROOT / "tmp") as tmp:
                 render = render_locked_grid(
                     subject=template_subject,
                     scene=scene,
@@ -1859,17 +1924,31 @@ def render_combo(
                 )
                 big = Path(str(render["biglegend_png"]))
                 ax_big.imshow(plt.imread(big))
-        ax_big.set_title(f"{smoothing} | functional atlas surface", fontsize=FS_BIG_TITLE)
+        ax_big.set_title(f"{row_label} | functional atlas surface", fontsize=FS_BIG_TITLE)
         ax_big.axis("off")
 
         rows_meta.append(
             {
-                "smoothing": smoothing,
+                **row_meta,
                 "k_final_L": k_l,
                 "k_final_R": k_r,
                 "n_subjects": int(m_l["n_subjects"]),
+                "profile_vmin": float(im1.get_clim()[0]),
+                "profile_vmax": float(im1.get_clim()[1]),
             }
         )
+
+    if layout == "dual-interpretation":
+        for axis in fig.axes:
+            title = axis.get_title()
+            if " | " not in title:
+                continue
+            label, detail = title.split(" | ", 1)
+            if detail.startswith("OVR raw beta"):
+                detail = "Raw beta (zero reference)"
+            elif detail.startswith("cluster_network_profile"):
+                detail = "Network FC profile"
+            axis.set_title(f"{label}\n{detail}", fontsize=axis.title.get_fontsize())
 
     out_png = overview_png_path(
         present_dir=present_dir,
@@ -1880,6 +1959,7 @@ def render_combo(
         assignment_variant=effective_assignment_variant,
         gradient_comp_tag=gradient_comp_tag,
         output_name=output_name,
+        layout=layout,
     )
     inferred_group_name = (
         group_name
@@ -1887,12 +1967,20 @@ def render_combo(
         or infer_group_name_from_path(present_dir)
     )
     n_sub = rows_meta[0]["n_subjects"] if rows_meta and "n_subjects" in rows_meta[0] else None
+    assignment_metadata = {
+        "layout": layout,
+        "assignment_variant": "dual-interpretation" if layout == "dual-interpretation" else assignment_variant,
+        "assignment_variants": list(dict.fromkeys(variant for variant, _, _ in row_specs)),
+    }
     rendered_title = overview_title(
         atlas=atlas,
         method=method,
         route_tag=route_tag,
         mode_tag=effective_mode_tag,
-        assignment_variant=effective_assignment_variant,
+        assignment_variant=(
+            "2mm Fisher-z + canonical7 OVR"
+            if layout == "dual-interpretation" else effective_assignment_variant
+        ),
         surface_affinity=source_provenance.get("surface_affinity"),
         overview_scope=overview_scope,
         group_name=inferred_group_name,
@@ -1923,7 +2011,7 @@ def render_combo(
             "overview_png_sha256": sha256_file(out_png),
             "method": str(method),
             "atlas": str(atlas),
-            "assignment_variant": str(effective_assignment_variant),
+            **assignment_metadata,
             "source_manifests": [str(path.resolve()) for path in manifest_paths],
             "assignment_assets": assignment_assets,
         },
@@ -1937,6 +2025,7 @@ def render_combo(
         "subject_split_ari": "skipped" if skip_subject_split_ari else "rendered",
         "assignment_annotation_note": assignment_annotation_note,
         "assignment_assets": assignment_assets,
+        **assignment_metadata,
         **source_provenance,
     }
 
@@ -2011,6 +2100,7 @@ def ensure_combo_ready(
     route_tag: str | None = None,
     smoothings: list[str] | None = None,
     hemis: list[str] | None = None,
+    layout: str = "dual-smoothing",
 ) -> None:
     sm = smoothings or ["2mm", "4mm"]
     hs = hemis or ["L", "R"]
@@ -2094,6 +2184,12 @@ def main() -> int:
         help="Output manifest filename under --present-dir.",
     )
     p.add_argument(
+        "--layout",
+        choices=["dual-smoothing", "dual-interpretation"],
+        default="dual-smoothing",
+        help="Overview layout: dual-smoothing (2mm/4mm) or dual-interpretation (2mm Fisher-z / 2mm OVR).",
+    )
+    p.add_argument(
         "--skip-readme",
         action="store_true",
         help="Skip writing README.md (useful when an upstream driver writes a consolidated README).",
@@ -2139,15 +2235,20 @@ def main() -> int:
                 atlas=atlas,
                 coverage_tag=tau_tag,
                 route_tag=args.route_tag,
+                smoothings=["2mm"] if args.layout == "dual-interpretation" else ["2mm", "4mm"],
+                layout=args.layout,
             )
             comp_tags = _discover_gradient_comp_tags(
                 group_root, method, atlas, SMOOTHINGS[0], tau_tag,
             )
-            render_variants = resolve_render_assignment_variants(
-                method,
-                str(args.assignment_variant),
-                atlas=atlas,
-            )
+            if args.layout == "dual-interpretation":
+                render_variants = ["fisherz"]
+            else:
+                render_variants = resolve_render_assignment_variants(
+                    method,
+                    str(args.assignment_variant),
+                    atlas=atlas,
+                )
             for comp_tag in comp_tags:
                 for assignment_variant in render_variants:
                     meta = render_combo(
@@ -2163,6 +2264,7 @@ def main() -> int:
                         gradient_comp_tag=comp_tag,
                         output_name=args.output_name,
                         group_name=args.group_name,
+                        layout=args.layout,
                     )
                     row_meta = meta["rows"]
                     metric = (

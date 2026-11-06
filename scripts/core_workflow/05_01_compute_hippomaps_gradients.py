@@ -447,13 +447,18 @@ def compute_combo(
     )
 
 
-def select_alignment_anchor(results: list[GradientComboResult]) -> tuple[GradientComboResult, str]:
+def select_alignment_anchor(
+    results: list[GradientComboResult],
+    anchor_smoothing: str = "4mm",
+) -> tuple[GradientComboResult, str]:
     if not results:
         raise ValueError("No gradient combinations were computed for alignment")
     for result in results:
-        if result.smoothing == "4mm" and result.hemi == "L":
-            return result, "preferred_4mm_hemi_L"
-    raise ValueError("Alignment requires the newly fitted 4mm hemi L anchor; include 4mm and L explicitly")
+        if result.smoothing == anchor_smoothing and result.hemi == "L":
+            return result, f"preferred_{anchor_smoothing}_hemi_L"
+    raise ValueError(
+        f"Alignment requires the newly fitted {anchor_smoothing} hemi L anchor; include {anchor_smoothing} and L explicitly"
+    )
 
 
 def write_aligned_combo_outputs(
@@ -580,8 +585,13 @@ def write_aligned_combo_outputs(
     return manifest_path
 
 
-def align_and_write_route_results(*, results: list[GradientComboResult], selected_components: list[int]) -> list[Path]:
-    anchor, anchor_selection = select_alignment_anchor(results)
+def align_and_write_route_results(
+    *,
+    results: list[GradientComboResult],
+    selected_components: list[int],
+    anchor_smoothing: str = "4mm",
+) -> list[Path]:
+    anchor, anchor_selection = select_alignment_anchor(results, anchor_smoothing=anchor_smoothing)
     component_labels = [f"G{i + 1}" for i in range(int(anchor.gradients_full.shape[1]))]
     written: list[Path] = []
     for result in results:
@@ -615,7 +625,7 @@ def align_and_write_route_results(*, results: list[GradientComboResult], selecte
     return written
 
 
-def parse_args() -> argparse.Namespace:
+def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Compute HippoMaps-style continuous gradients from Kong2022 FC caches.")
     parser.add_argument("--routes", nargs="+", choices=sorted(ROUTE_TO_SHARED_DIR), default=["pfm", "fixed"])
     parser.add_argument(
@@ -634,6 +644,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--subjects-manifest", default=str(DEFAULT_SUBJECTS))
     parser.add_argument("--smoothings", nargs="+", choices=SMOOTHINGS, default=list(SMOOTHINGS))
     parser.add_argument("--hemis", nargs="+", choices=HEMIS, default=list(HEMIS))
+    parser.add_argument(
+        "--alignment-anchor-smoothing",
+        choices=SMOOTHINGS,
+        default="4mm",
+        help="Smoothing level of the left-hemisphere reference anchor for gradient component and sign alignment.",
+    )
     parser.add_argument("--coverage-threshold", type=float, default=0.80)
     parser.add_argument("--group-average-surfaces-dir", default=str(DEFAULT_GROUP_AVG_SURFACES_DIR))
     parser.add_argument("--out-root", default=str(DEFAULT_OUT_ROOT))
@@ -653,13 +669,19 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--selected-components", default="1,2,3")
     parser.add_argument("--max-subjects", type=int, default=None, help="Optional smoke-test cap after loading the manifest.")
     parser.add_argument("--force", action="store_true")
-    return parser.parse_args()
+    return parser
+
+
+def parse_args() -> argparse.Namespace:
+    return build_arg_parser().parse_args()
 
 
 def main() -> int:
     args = parse_args()
-    if "4mm" not in args.smoothings or "L" not in args.hemis:
-        raise ValueError("Gradient alignment requires explicit 4mm hemi L input in --smoothings and --hemis")
+    if args.alignment_anchor_smoothing not in args.smoothings or "L" not in args.hemis:
+        raise ValueError(
+            f"Gradient alignment requires explicit {args.alignment_anchor_smoothing} hemi L input in --smoothings and --hemis"
+        )
     hippomaps_root = ensure_hippomaps_on_path(Path(args.hippomaps_root))
     subjects_manifest = Path(args.subjects_manifest).resolve()
     subjects = load_subject_ids(subjects_manifest)
@@ -709,7 +731,11 @@ def main() -> int:
                         sparsity=args.sparsity,
                     )
                 )
-        align_and_write_route_results(results=route_results, selected_components=selected_components)
+        align_and_write_route_results(
+            results=route_results,
+            selected_components=selected_components,
+            anchor_smoothing=args.alignment_anchor_smoothing,
+        )
     return 0
 
 

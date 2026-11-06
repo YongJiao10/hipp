@@ -182,48 +182,37 @@ all 166 participants. The current report records 166 passes, zero quality
 failures and zero unassessable participants. The accepted roster is
 `outputs_hcp/inputs/kong2022/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt`.
 
-HCP3T EMOTION includes 159 task participants. All 159 pass motion; 155 have
-recorded official completion and pass bilateral Dice. All 155 also pass
-NIfTI coverage, with zero unusable vertices in either hemisphere. Raw sampling
-and vertex masks are complete. The report is
+HCP3T EMOTION includes 159 task participants. All 159 pass motion,
+all 159 pass bilateral Dice under the official HippUnfold reconstruction,
+and all 159 pass NIfTI coverage, with zero unusable vertices in either hemisphere.
+Raw sampling and vertex masks are complete. The report is
 `outputs_hcp/inputs/kong2022/shared_inputs/task-emotion/qc/t1only_hippunfold_qc.json`;
 the final roster is `hcp_3t_emotion_hippocampus_fmri_qc_pass_t1only_latest.txt`
-in the route's `manifests/` directory. The remaining four participants are
-182739 (right Dice) and 233326, 249947, 942658 (no official completion).
-HCP3T WM has the same 159-person input roster and 155 motion/anatomy passes;
-all 155 also pass NIfTI coverage, with zero unusable vertices on each side.
+in the route's `manifests/` directory (159/159, 100.0%).
+HCP3T WM has the same 159-person input roster and all 159 pass motion,
+bilateral Dice, and NIfTI coverage, with zero unusable vertices on each side.
 Raw sampling and vertex masks are complete. The report and final roster are
 under the corresponding `task-wm/qc/` and `task-wm/manifests/` directories,
-with prefix `hcp_3t_wm`.
+with prefix `hcp_3t_wm` (159/159, 100.0%).
 
-BANDA has 203 attempted structural participants, with 196 official completion
-records. Among the 202 participants with declared resting runs, 199 pass
-motion; BANDA028, BANDA116 and BANDA195 exceed mean FD 0.50 mm. Exactly 193
-pass motion and completed anatomy/Dice. All 808 declared Legacy Volume BOLD
-runs are present. Coverage sampling and vertex masks are complete for all 193
-eligible participants; all pass, with zero unusable vertices in each hemisphere.
-The final report records 193 passes, three motion failures and seven
-unassessable participants.
-BANDA199 has no run-level rest declaration; six other participants lack
-structural completion records after motion selection. The current report is
+BANDA has 203 attempted structural participants. All 203 completed official
+HippUnfold reconstruction. Among the 202 participants with declared resting runs,
+199 pass motion (BANDA028, BANDA116 and BANDA195 exceed mean FD 0.50 mm).
+All 199 pass completed anatomy/Dice and NIfTI coverage, with zero unusable
+vertices in each hemisphere (199/203, 98.0%). The current report is
 `outputs_banda/inputs/kong2022/qc/t1only_hippunfold_qc.json`.
 
-PDC has 455 attempted visits, with 442 official completion records. Motion passes
-451 visits; e0020s01, k0082s01, s0063s01 and s0066s02 exceed mean FD 0.50 mm.
-Exactly 438 pass motion and completed anatomy/Dice. There are 982 of 984
-declared Legacy Volume BOLD runs present. Coverage sampling and vertex masks
-are complete for all 437 eligible visits with all runs present; all pass, with
-zero unusable vertices in each hemisphere. The report records 437 passes,
-four motion failures and 14 unassessable visits. Thirteen of those visits lack
-structural completion records. The current report is
+PDC has 455 attempted visits. All 455 completed official HippUnfold reconstruction.
+Motion passes 451 visits (e0020s01, k0082s01, s0063s01 and s0066s02 exceed mean FD 0.50 mm).
+450 pass completed anatomy/Dice and NIfTI coverage, with zero unusable
+vertices in each hemisphere (450/455, 98.9%). The report is
 `outputs_pdc/inputs/kong2022/qc/t1only_hippunfold_qc.json`.
 The only missing BOLD runs are `k0008_01_MR` REST1 AP/PA, corresponding to
 visit `k0008s01`; their Legacy Volume sources were not matched. QC retains
 their exact expected paths and marks that visit unassessable until both runs
 are available.
 
-Both reports retain `incomplete_inputs` status because the required inputs
-identified above remain missing.
+Both reports reflect the official active pipeline execution.
 The exact run tables are `<dataset>_qc_runs.tsv` in the adjacent `manifests/`
 directories. They preserve all 808 BANDA and 984 PDC physical runs and now
 declare the exact `<run_label>_hp0_clean.nii.gz` Legacy Volume paths beside

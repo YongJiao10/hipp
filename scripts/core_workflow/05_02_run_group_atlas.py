@@ -408,6 +408,19 @@ def _validate_gradient_resume_contract(
         else str(opts.get("clustering_feature_scaling", "none"))
     )
     expected_seed = opts.get("random_state", DEFAULT_GRADIENT_RANDOM_STATE)
+    expected_anchor = (
+        str(expected_gradient_meta["gradient_alignment"]["anchor_smoothing"])
+        if isinstance(expected_gradient_meta, dict)
+        and isinstance(expected_gradient_meta.get("gradient_alignment"), dict)
+        and "anchor_smoothing" in expected_gradient_meta["gradient_alignment"]
+        else str(opts.get("alignment_anchor_smoothing", "4mm"))
+    )
+    recorded_anchor_opt = recorded_opts.get("alignment_anchor_smoothing")
+    if recorded_anchor_opt is not None and str(recorded_anchor_opt) != expected_anchor:
+        raise ValueError(
+            f"alignment_anchor_smoothing mismatch in {manifest_path} options: "
+            f"requested={expected_anchor}, recorded={recorded_anchor_opt}; explicitly regenerate"
+        )
     if not summary_raw:
         raise ValueError(
             f"Missing group_gradient_feature_summary declaration in {manifest_path}; explicitly regenerate"
@@ -429,6 +442,32 @@ def _validate_gradient_resume_contract(
             f"requested={expected_scaling}, recorded={recorded_scaling}; explicitly regenerate"
         )
     summary_source = summary_obj.get("hippomaps_gradient_manifest")
+    summary_align = summary_obj.get("gradient_alignment")
+    if isinstance(summary_align, dict):
+        summary_anchor = summary_align.get("anchor_smoothing")
+        summary_hemi = summary_align.get("anchor_hemi")
+        if summary_hemi not in {None, "L"}:
+            raise ValueError(
+                f"Invalid anchor_hemi in {summary_path}: recorded={summary_hemi!r}; expected 'L'"
+            )
+    else:
+        summary_anchor = summary_obj.get("alignment_anchor_smoothing")
+
+    if expected_anchor == "2mm":
+        if summary_anchor != "2mm":
+            raise ValueError(
+                f"alignment_anchor_smoothing mismatch in {summary_path}: "
+                f"requested={expected_anchor}, recorded={summary_anchor}; explicitly regenerate"
+            )
+        if isinstance(summary_align, dict) and summary_align.get("enabled") is False:
+            raise ValueError(
+                f"gradient_alignment not enabled in {summary_path}; explicitly regenerate"
+            )
+    elif summary_anchor is not None and str(summary_anchor) != expected_anchor:
+        raise ValueError(
+            f"alignment_anchor_smoothing mismatch in {summary_path}: "
+            f"requested={expected_anchor}, recorded={summary_anchor}; explicitly regenerate"
+        )
     if not summary_source:
         raise ValueError(
             f"Missing gradient_source_manifest declaration in {summary_path}; explicitly regenerate"
@@ -463,6 +502,32 @@ def _validate_gradient_resume_contract(
                 f"gradient_random_state mismatch in {grad_manifest_path}: "
                 f"requested={expected_seed}, recorded={grad_manifest.get('gradient_random_state')}; "
                 "explicitly regenerate"
+            )
+        grad_align = grad_manifest.get("gradient_alignment")
+        if isinstance(grad_align, dict):
+            recorded_grad_anchor = grad_align.get("anchor_smoothing")
+            recorded_grad_hemi = grad_align.get("anchor_hemi")
+            if recorded_grad_hemi not in {None, "L"}:
+                raise ValueError(
+                    f"Invalid anchor_hemi in {grad_manifest_path}: recorded={recorded_grad_hemi!r}; expected 'L'"
+                )
+        else:
+            recorded_grad_anchor = None
+
+        if expected_anchor == "2mm":
+            if recorded_grad_anchor != "2mm":
+                raise ValueError(
+                    f"alignment_anchor_smoothing mismatch in {grad_manifest_path}: "
+                    f"requested={expected_anchor}, recorded={recorded_grad_anchor}; explicitly regenerate"
+                )
+            if isinstance(grad_align, dict) and grad_align.get("enabled") is False:
+                raise ValueError(
+                    f"gradient_alignment not enabled in {grad_manifest_path}; explicitly regenerate"
+                )
+        elif recorded_grad_anchor is not None and str(recorded_grad_anchor) != expected_anchor:
+            raise ValueError(
+                f"alignment_anchor_smoothing mismatch in {grad_manifest_path}: "
+                f"requested={expected_anchor}, recorded={recorded_grad_anchor}; explicitly regenerate"
             )
     if method == "gradient-spectral-rbf":
         expected_rbf = float(opts.get("rbf_scale", 1.0))
@@ -1323,6 +1388,7 @@ def build_group_gradient_features(
     options = dict(gradient_options or {})
     alignment_meta = {"enabled": False, "role": "native_reference_fit"}
     if "alignment_fc_paths" in options:
+        anchor_smoothing = str(options.get("alignment_anchor_smoothing", "4mm"))
         anchor_fc, anchor_masks = [], []
         for subject in subjects_subset:
             fc_path = Path(options["alignment_fc_paths"][subject])
@@ -1331,7 +1397,7 @@ def build_group_gradient_features(
             mask = np.asarray(np.load(options["alignment_mask_paths"][subject]), dtype=bool)
             raw_fc = np.asarray(np.load(fc_path), dtype=np.float32)
             if raw_fc.shape != (mask.size, group_fc.shape[1]):
-                raise ValueError(f"4mm-left anchor FC/mask mismatch: {fc_path}: {raw_fc.shape} vs {mask.shape}")
+                raise ValueError(f"{anchor_smoothing}-left anchor FC/mask mismatch: {fc_path}: {raw_fc.shape} vs {mask.shape}")
             permutation = options.get("alignment_vertex_permutations", {}).get(subject)
             if permutation is not None:
                 raw_fc, mask = raw_fc[permutation], mask[permutation]
@@ -1341,7 +1407,7 @@ def build_group_gradient_features(
             anchor_masks.append(mask)
         anchor_support = np.mean(np.stack(anchor_masks), axis=0) >= float(options["alignment_coverage_threshold"])
         if anchor_support.size != support_mask.size:
-            raise ValueError("4mm-left anchor and target vertex counts differ")
+            raise ValueError(f"{anchor_smoothing}-left anchor and target vertex counts differ")
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", RuntimeWarning)
             anchor_mean = np.nanmean(np.stack(anchor_fc)[:, anchor_support], axis=0)
@@ -1359,7 +1425,7 @@ def build_group_gradient_features(
             active=gradients, full=target_full, lambdas=lambdas, ev_fractions=ev_fractions,
             reference_full=reference_full, component_labels=[f"G{i+1}" for i in range(gradients.shape[1])],
         )
-        alignment_meta.update(enabled=True, anchor_smoothing="4mm", anchor_hemi="L",
+        alignment_meta.update(enabled=True, anchor_smoothing=anchor_smoothing, anchor_hemi="L",
                               training_subjects=list(subjects_subset))
     selected = gradients[:, [int(c) - 1 for c in comps]]
     selected[~np.isfinite(selected)] = 0.0
@@ -1416,6 +1482,7 @@ def load_hippomaps_gradient_features(
     sparsity: float | None = None,
     clustering_feature_scaling: str = "none",
     gradient_random_state: int = DEFAULT_GRADIENT_RANDOM_STATE,
+    alignment_anchor_smoothing: str = "4mm",
 ) -> tuple[np.ndarray, dict[str, object]]:
     comps = parse_gradient_components(",".join(str(c) for c in gradient_components))
     run_dir = resolve_cohort_gradient_root(
@@ -1543,7 +1610,40 @@ def load_hippomaps_gradient_features(
         "feature_family": manifest.get("feature_family"),
     }
     if "gradient_alignment" in manifest:
-        meta["gradient_alignment"] = manifest["gradient_alignment"]
+        grad_align = manifest["gradient_alignment"]
+        if not isinstance(grad_align, dict):
+            raise ValueError(
+                f"Malformed gradient_alignment in HippoMaps gradient manifest: {manifest_path}; "
+                f"expected dict, got {type(grad_align).__name__}"
+            )
+        meta["gradient_alignment"] = grad_align
+        recorded_anchor = grad_align.get("anchor_smoothing")
+        recorded_hemi = grad_align.get("anchor_hemi")
+        if recorded_hemi not in {None, "L"}:
+            raise ValueError(
+                f"HippoMaps gradient alignment anchor_hemi mismatch in {manifest_path}: "
+                f"recorded={recorded_hemi!r}; expected 'L'"
+            )
+        if alignment_anchor_smoothing == "2mm":
+            if recorded_anchor != "2mm":
+                raise ValueError(
+                    f"HippoMaps gradient alignment anchor mismatch: expected={alignment_anchor_smoothing!r} "
+                    f"recorded={recorded_anchor!r} path={manifest_path}"
+                )
+            if grad_align.get("enabled") is not True:
+                raise ValueError(
+                    f"HippoMaps gradient alignment is disabled in {manifest_path}; expected enabled=True"
+                )
+        elif recorded_anchor is not None and str(recorded_anchor) != alignment_anchor_smoothing:
+            raise ValueError(
+                f"HippoMaps gradient alignment anchor mismatch: expected={alignment_anchor_smoothing!r} "
+                f"recorded={recorded_anchor!r} path={manifest_path}"
+            )
+    elif alignment_anchor_smoothing == "2mm":
+        raise ValueError(
+            f"HippoMaps gradient manifest lacks gradient_alignment declaration: {manifest_path}; "
+            f"expected anchor={alignment_anchor_smoothing!r}"
+        )
     for key in (
         "ev_fractions",
         "lambdas",
@@ -2055,6 +2155,9 @@ def _load_kong_gradient_identity(
     identity_fields["selected_components"] = selected_components
     identity_fields["gradient_preprocessing"] = preprocessing
     identity_fields["clustering_feature_transform"] = gradient_summary.get("clustering_feature_transform")
+    align = manifest.get("gradient_alignment")
+    anchor_smoothing = align.get("anchor_smoothing") if isinstance(align, dict) else None
+    identity_fields["anchor_smoothing"] = anchor_smoothing
     identity_fields["gradient_manifest"] = str(manifest_path)
     identity_fields["selected_gradient_sha256"] = _sha256_file(selected_path)
     identity_fields["fc_sha256"] = _sha256_file(fc_path)
@@ -2179,6 +2282,29 @@ def load_fixed_cluster_reuse(
                     "Fixed-cluster source active gradient features mismatch: "
                     f"{source_run / 'group_gradient_features_active.npy'}; explicitly regenerate"
                 )
+        source_align = source_summary_obj.get("gradient_alignment") if isinstance(source_summary_obj, dict) else None
+        target_align = target_gradient_feature_summary.get("gradient_alignment") if isinstance(target_gradient_feature_summary, dict) else None
+        source_anchor = (
+            source_align.get("anchor_smoothing")
+            if isinstance(source_align, dict)
+            else (source_summary_obj.get("alignment_anchor_smoothing") if isinstance(source_summary_obj, dict) else None)
+        )
+        target_anchor = (
+            target_align.get("anchor_smoothing")
+            if isinstance(target_align, dict)
+            else (target_gradient_feature_summary.get("alignment_anchor_smoothing") if isinstance(target_gradient_feature_summary, dict) else None)
+        )
+        if target_anchor == "2mm":
+            if source_anchor != "2mm":
+                raise ValueError(
+                    f"Fixed-cluster source alignment anchor mismatch: {source_manifest_path} "
+                    f"source={source_anchor!r} target={target_anchor!r}; explicitly regenerate"
+                )
+        elif source_anchor is not None and target_anchor is not None and source_anchor != target_anchor:
+            raise ValueError(
+                f"Fixed-cluster source alignment anchor mismatch: {source_manifest_path} "
+                f"source={source_anchor!r} target={target_anchor!r}; explicitly regenerate"
+            )
     if is_gradient_method(target_method) and target_atlas == "kong2022":
         if target_gradient_feature_summary is None:
             raise ValueError(
@@ -2198,7 +2324,7 @@ def load_fixed_cluster_reuse(
         identity_fields = (
             "route", "smoothing", "hemi", "feature_taxonomy", "feature_family",
             "feature_count", "group_fc_shape", "gradient_shape_full", "gradient_components",
-            "selected_components", "gradientmaps_kernel",
+            "selected_components", "gradientmaps_kernel", "anchor_smoothing",
             "gradient_preprocessing", "clustering_feature_transform",
         )
         mismatches = [
@@ -4772,6 +4898,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--atlases", nargs="+", default=DEFAULT_ATLASES, choices=ATLASES)
     parser.add_argument("--smoothings", nargs="+", default=SMOOTHINGS)
     parser.add_argument("--hemis", nargs="+", default=HEMIS)
+    parser.add_argument(
+        "--alignment-anchor-smoothing",
+        choices=SMOOTHINGS,
+        default="4mm",
+        help="Smoothing level of the left-hemisphere reference anchor for gradient component and sign alignment.",
+    )
     parser.add_argument("--coverage-thresholds", nargs="+", type=float, default=[0.80])
     parser.add_argument("--k-min", type=int, default=2)
     parser.add_argument("--k-max", type=int, default=8)
@@ -4900,6 +5032,7 @@ def main() -> int:
         "random_state": args.gradient_random_state,
         "clustering_feature_scaling": args.clustering_feature_scaling,
         "rbf_scale": args.rbf_scale,
+        "alignment_anchor_smoothing": args.alignment_anchor_smoothing,
     }
     suppress_known_runtime_warnings()
     print(
@@ -5140,8 +5273,10 @@ def main() -> int:
                             flush=True,
                         )
                         if is_gradient_method(method):
+                            anchor_smoothing = str(args.alignment_anchor_smoothing)
                             gradient_options = {**gradient_options,
-                                "alignment_fc_paths": {s: str(shared_root / f"sub-{s}" / "fc" / atlas / "4mm" / "hemi_L" / network_feature_filename(method, atlas)) for s in subjects},
+                                "alignment_anchor_smoothing": anchor_smoothing,
+                                "alignment_fc_paths": {s: str(shared_root / f"sub-{s}" / "fc" / atlas / anchor_smoothing / "hemi_L" / network_feature_filename(method, atlas)) for s in subjects},
                                 "alignment_mask_paths": {s: str(surface_root / f"sub-{s}" / "surface" / "validity" / f"sub-{s}_hemi-L_valid_mask.npy") for s in subjects},
                                 "alignment_coverage_threshold": float(tau),
                                 "alignment_run_ids": sorted(run_feature_banks),
@@ -5179,6 +5314,7 @@ def main() -> int:
                                 sparsity=args.sparsity,
                                 clustering_feature_scaling=args.clustering_feature_scaling,
                                 gradient_random_state=args.gradient_random_state,
+                                alignment_anchor_smoothing=args.alignment_anchor_smoothing,
                             )
                         resume_signature_payload = {
                             "resume_input_signature_version": int(RESUME_SIGNATURE_VERSION),
@@ -5609,6 +5745,7 @@ def main() -> int:
                                     sparsity=args.sparsity,
                                     clustering_feature_scaling=args.clustering_feature_scaling,
                                     gradient_random_state=args.gradient_random_state,
+                                    alignment_anchor_smoothing=args.alignment_anchor_smoothing,
                                 )
                         else:
                             group_features_active = group_feature_matrix(

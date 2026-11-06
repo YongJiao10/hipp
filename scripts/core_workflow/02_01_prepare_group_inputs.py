@@ -95,6 +95,16 @@ HEMIS = ["L", "R"]
 SMOOTHINGS = ["2mm", "4mm"]
 
 
+def resolve_max_workbench_jobs(default: int = MAX_WORKBENCH_SUBJECT_JOBS) -> int:
+    raw = os.environ.get("HIPP_WORKBENCH_JOBS", "").strip()
+    if not raw:
+        return default
+    try:
+        return max(1, int(raw))
+    except ValueError:
+        return default
+
+
 def resolve_max_concurrency() -> int:
     raw = os.environ.get("HIPP_MAX_CONCURRENCY", "").strip()
     if not raw:
@@ -813,7 +823,8 @@ def main() -> int:
     max_concurrency = resolve_max_concurrency()
     requested_jobs = int(args.jobs)
     jobs = max(1, min(requested_jobs, max_concurrency))
-    workbench_jobs = max(1, min(jobs, MAX_WORKBENCH_SUBJECT_JOBS))
+    max_workbench_jobs = resolve_max_workbench_jobs()
+    workbench_jobs = max(1, min(jobs, max_workbench_jobs))
     if requested_jobs > max_concurrency:
         print(
             f"[warn] requested jobs={requested_jobs} exceeds max_concurrency={max_concurrency}; using jobs={jobs}",

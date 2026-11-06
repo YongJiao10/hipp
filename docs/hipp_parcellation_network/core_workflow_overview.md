@@ -47,7 +47,10 @@ sparsification. Pearson affinity is constructed explicitly, clipped
 nonnegative and mean-symmetrized, retaining its kernel diagonal; embedding
 uses `GradientMaps(kernel=None).fit(affinity, sparsity=None)`. The producer
 aligns component order and sign within each preprocessing setting/route to the
-required `4mm/hemi_L` anchor, and writes only the aligned arrays. `05_02`
+anchor hemisphere (`hemi_L`), which defaults to `4mm` for historical production parity
+and supports explicit `--alignment-anchor-smoothing {2mm,4mm}`. `05_02` accepts the same
+`--alignment-anchor-smoothing` flag to enforce anchor consistency during resume and
+downstream artifact validation, and writes only the aligned arrays. `05_02`
 selects aligned G1-G3 by default (`--gradient-components 1,2,3`) and applies
 the separate declared clustering scaling (`none` or component-wise `unit_sd`).
 The full effective preprocessing contract is required for gradient reuse,
@@ -86,6 +89,15 @@ the reporting units of the same fitted model. These associations are
 descriptive and are not directly comparable with Kember's different input and
 standardization procedure. `--assignment-variant both` continues to select
 Fisher-z and normalized Top-20 only; request each OVR variant explicitly.
+
+`06_01_build_group_overview.py --layout dual-interpretation` renders a
+single 2 mm result as Fisher-z and canonical7 OVR rows, using the same spatial
+clusters and the declared K diagnostic table. Both layouts enforce the existing
+upstream-gradient and assignment contracts. Programmatic comparison callers
+can supply `profile_vmax_by_variant` to `render_combo` for shared, separately
+specified Fisher-z and raw-beta color limits. Rendering scratch files remain
+under the repository temporary workspace. Comparison-only experiments do not
+introduce numbered workflow steps.
 
 `06_04_render_hippomaps_gradient_products.py` renders the same continuous
 gradient artifacts with `hippomaps.plotting.surfplot_canonical_foldunfold`,
