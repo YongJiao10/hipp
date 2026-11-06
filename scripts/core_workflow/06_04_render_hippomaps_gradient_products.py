@@ -425,7 +425,11 @@ def render_bilateral_gradient_figure(
     return stitch_hemi_gradient_images(side_paths["L"], side_paths["R"], output_png)
 
 
-def render_ev_plot(manifests: dict[str, dict[str, Any]], output_png: Path) -> Path:
+def render_ev_plot(
+    manifests: dict[str, dict[str, Any]],
+    output_png: Path,
+    title: str = "Variance Explained by Gradients",
+) -> Path:
     fig, ax = plt.subplots(figsize=(7.0, 3.8))
     max_components = 0
     for hemi, manifest in sorted(manifests.items()):
@@ -438,6 +442,8 @@ def render_ev_plot(manifests: dict[str, dict[str, Any]], output_png: Path) -> Pa
         ax.set_xticklabels([str(t) for t in ticks])
     ax.set_xlabel("Gradient")
     ax.set_ylabel("EV (%)")
+    if title:
+        ax.set_title(title)
     ax.spines[["top", "right"]].set_visible(False)
     ax.legend(frameon=False)
     output_png.parent.mkdir(parents=True, exist_ok=True)

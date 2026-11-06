@@ -865,6 +865,10 @@ def test_render_ev_plot_sets_integer_ticks(tmp_path: Path) -> None:
     assert res.exists()
     assert res.stat().st_size > 0
 
+    out_custom = tmp_path / "test_ev_custom.png"
+    res_custom = render_mod.render_ev_plot(manifests, out_custom, title="Custom Title")
+    assert res_custom.exists()
+
 
 def test_render_gradient_figure_calls_official_hippomaps_plotter_options(tmp_path) -> None:
     calls: list[dict[str, object]] = []
