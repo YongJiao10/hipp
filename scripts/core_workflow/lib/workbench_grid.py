@@ -174,8 +174,8 @@ def build_grid_canvas(
 
     row_gap = 48
     col_gap = 64
-    outer_pad = 34
-    header_h = 86
+    outer_pad = 40
+    header_h = 140
 
     if layout == "1x2":
         cell_w = max(ventral_panels["L"].width, ventral_panels["R"].width)
@@ -218,7 +218,7 @@ def build_grid_canvas(
         paste_center(canvas, panels[("bottom", "R")], outer_pad + cell_w + col_gap, bottom_y, cell_w, bottom_h)
 
     draw = ImageDraw.Draw(canvas)
-    lr_font = load_font(60)
+    lr_font = load_font(52)
     left_cx = outer_pad + cell_w // 2
     right_cx = outer_pad + cell_w + col_gap + cell_w // 2
     is_dark = (bg_color[0] + bg_color[1] + bg_color[2]) / 3 < 128
@@ -243,6 +243,7 @@ def compose_wb_grid_with_legend(
     legend_group: str = "label",
     title: str = "",
     bg_color: tuple[int, int, int, int] = (255, 255, 255, 255),
+    min_panel_w: int = 520,
 ) -> Path:
     ventral = Image.open(ventral_image).convert("RGBA")
     dorsal = Image.open(dorsal_image).convert("RGBA") if dorsal_image else None
@@ -274,13 +275,13 @@ def compose_wb_grid_with_legend(
         group_name = label_name.rsplit("_", 1)[-1] if legend_group == "network" else label_name
         group_colors[group_name] = tuple(int(round(v)) for v in rgba[:4])
 
-    title_font = load_font(48)
-    item_font = load_font(44)
-    side_pad = 34
-    gap_after_swatch = 18
-    swatch_w = 40
-    swatch_h = 40
-    row_h = 56
+    title_font = load_font(36)
+    item_font = load_font(32)
+    side_pad = 28
+    gap_after_swatch = 14
+    swatch_w = 32
+    swatch_h = 32
+    row_h = 44
     title_text = title.strip()
 
     measure_image = Image.new("RGBA", (8, 8), (0, 0, 0, 0))
@@ -293,17 +294,17 @@ def compose_wb_grid_with_legend(
     for text in all_item_texts:
         bbox = measure_draw.textbbox((0, 0), text, font=item_font)
         max_text_w = max(max_text_w, bbox[2] - bbox[0])
-    panel_w = side_pad * 2 + swatch_w + gap_after_swatch + max_text_w + 8
+    panel_w = max(min_panel_w, side_pad * 2 + swatch_w + gap_after_swatch + max_text_w + 8)
 
     left_title = f"{title_text} (Left)" if title_text else "Left"
     left_title_lines = wrap_text(measure_draw, left_title, title_font, max(panel_w - 2 * side_pad, 1))
     right_title = f"{title_text} (Right)" if title_text else "Right"
     right_title_lines = wrap_text(measure_draw, right_title, title_font, max(panel_w - 2 * side_pad, 1))
 
-    top_pad = 24
-    bottom_pad = 24
-    inter_legend_gap = 60
-    title_line_h = 54
+    top_pad = 20
+    bottom_pad = 20
+    inter_legend_gap = 48
+    title_line_h = 42
 
     def legend_block_height(title_lines: list[str], item_count: int) -> int:
         height = 0

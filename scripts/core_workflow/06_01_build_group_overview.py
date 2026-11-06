@@ -40,6 +40,7 @@ import json
 import re
 import tempfile
 import textwrap
+import warnings
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -66,7 +67,12 @@ from lib.gifti_labels import (
 from lib.network_colors import load_network_hex_colors
 from lib.gradient_assignment_contract import validate_gradient_assignment, sha256_file
 from lib.gradient_clustering import is_gradient_method, validate_gradient_method_provenance
-from lib.network_ovr import OVR_VARIANTS
+try:
+    from lib.network_ovr import ALL_OVR_VARIANTS, NETWORK_TS_OVR_VARIANT, OVR_VARIANTS
+except ImportError:
+    from lib.network_ovr import OVR_VARIANTS  # type: ignore[no-redef]
+    NETWORK_TS_OVR_VARIANT = "ovr_logistic_canonical7_network_ts"
+    ALL_OVR_VARIANTS = (*OVR_VARIANTS, NETWORK_TS_OVR_VARIANT)
 from lib.surface_affinity import (
     GRADIENT_SPECTRAL_AFFINITY,
     GRADIENT_SPECTRAL_AFFINITY_DESCRIPTION,
@@ -106,7 +112,14 @@ FS_MISSING = 13
 FS_BIG_TITLE = 13
 FS_SUPTITLE = 18
 CLUSTERLESS_METHODS = {"wta-top"}
-ASSIGNMENT_VARIANTS = ("fisherz", "normalized_top20_count", "weighted_fisherz", *OVR_VARIANTS)
+ASSIGNMENT_VARIANTS = (
+    "fisherz",
+    "normalized_top20_count",
+    "weighted_fisherz",
+    "network_ts_fisherz",
+    *ALL_OVR_VARIANTS,
+)
+ANNOTATION_PAIR_CHOICES = ("roi-fisherz", "network-ts-fisherz", "top20")
 DEFAULT_RENDER_ASSIGNMENT_VARIANTS = ("fisherz", "normalized_top20_count")
 ASSIGNMENT_VARIANT_CHOICES = ASSIGNMENT_VARIANTS + ("both",)
 WTA_OVERVIEW_PROFILE_BINS = 20
@@ -142,13 +155,14 @@ def ctxdrop_original_fc_annotation_provenance(
     layout: str = "dual-smoothing",
 ) -> dict[str, object]:
     """Validate and describe the accepted ctxdrop cluster annotation source."""
-    if layout == "dual-interpretation":
+    if layout in {"dual-interpretation", "annotation-pair", "single-smoothing"}:
         if len(manifest_paths) != 2 or len(manifests) != 2:
             raise ValueError(
-                "ctxdrop original-FC annotation provenance requires exactly two "
-                "2mm L/R manifests for dual-interpretation layout"
+                f"ctxdrop original-FC annotation provenance requires exactly two "
+                f"manifests for {layout} layout"
             )
-        expected_grid = {("2mm", "L"), ("2mm", "R")}
+        sm = str(manifests[0].get("smoothing", "2mm"))
+        expected_grid = {(sm, "L"), (sm, "R")}
     else:
         if len(manifest_paths) != 4 or len(manifests) != 4:
             raise ValueError(
@@ -721,14 +735,18 @@ def style_imshow(ax, data: np.ndarray, title: str, *, vmin: float | None = None,
     return im
 
 
-def add_cbar(fig, ax, im, label: str, ticks: list[float] | None = None, ticklabels: list[str] | None = None) -> None:
-    div = make_axes_locatable(ax)
-    cax = div.append_axes("right", size="3%", pad=0.06)
+def add_cbar(
+    fig, ax, im, label: str, ticks: list[float] | None = None, ticklabels: list[str] | None = None, cax=None
+) -> object:
+    if cax is None:
+        div = make_axes_locatable(ax)
+        cax = div.append_axes("right", size="3%", pad=0.06)
     cb = fig.colorbar(im, cax=cax, ticks=ticks)
     if ticklabels is not None:
         cb.set_ticklabels(ticklabels)
     cb.ax.tick_params(labelsize=FS_TICK)
     cb.set_label(label, fontsize=FS_LABEL)
+    return cax
 
 
 def concat_lr(a: np.ndarray, la: list[str], b: np.ndarray, lb: list[str]) -> tuple[np.ndarray, list[int], list[str]]:
@@ -740,15 +758,115 @@ def concat_lr(a: np.ndarray, la: list[str], b: np.ndarray, lb: list[str]) -> tup
 
 
 def plot_ovr_association_panel(
-    ax, *, profile: np.ndarray, row_positions: list[int], row_labels: list[str], smoothing: str
+    ax,
+    *,
+    profile: np.ndarray,
+    row_positions: list[int],
+    row_labels: list[str],
+    smoothing: str,
+    network_names: list[str] | None = None,
+    title: str | None = None,
+    style: str | None = None,
 ) -> None:
-    """Summarize actual cluster rows, excluding the L/R heatmap separator."""
-    largest = np.max(profile[row_positions], axis=1)
-    ax.axhline(0., color="black", linewidth=.8, linestyle="--")
-    ax.bar(np.arange(len(largest)), largest)
-    ax.set_xticks(np.arange(len(largest)), row_labels, rotation=45)
-    ax.set_ylabel("Largest raw beta")
-    ax.set_title(f"{smoothing} | descriptive OVR association")
+    """Summarize OVR positive-beta associations as horizontal winner/runner-up bars, or legacy vertical bars."""
+    if style == "legacy_vertical" or (style is None and network_names is None):
+        largest = np.max(profile[row_positions], axis=1)
+        ax.axhline(0., color="black", linewidth=.8, linestyle="--")
+        ax.bar(np.arange(len(largest)), largest)
+        ax.set_xticks(np.arange(len(largest)), row_labels, rotation=45)
+        ax.set_ylabel("Largest raw beta")
+        ax.set_title(title or f"{smoothing} | descriptive OVR association")
+        return
+
+    n_rows = len(row_positions)
+    y = np.arange(n_rows, dtype=float)
+
+    top1_vals: list[float] = []
+    top2_vals: list[float] = []
+    top1_colors: list[str] = []
+    top2_edges: list[str] = []
+    has_top1: list[bool] = []
+    has_top2: list[bool] = []
+    display_labels: list[str] = []
+    diff_texts: list[tuple[float, str, str]] = []
+
+    for idx, (pos, row_lbl) in enumerate(zip(row_positions, row_labels, strict=True)):
+        betas = np.asarray(profile[pos], dtype=float)
+        pos_idx = np.flatnonzero(betas > 0.0)
+        if pos_idx.size == 0:
+            top1_vals.append(0.0)
+            top2_vals.append(0.0)
+            top1_colors.append("#9a9a9a")
+            top2_edges.append("#111111")
+            has_top1.append(False)
+            has_top2.append(False)
+            display_labels.append(f"{row_lbl}")
+            diff_texts.append((0.005, "No positive β", "#777777"))
+        elif pos_idx.size == 1:
+            w_idx = int(pos_idx[0])
+            w_val = float(betas[w_idx])
+            w_net = str(network_names[w_idx]) if w_idx < len(network_names) else f"Net{w_idx+1}"
+            color = str(NETWORK_BAR_COLORS.get(w_net, "#9a9a9a"))
+            top1_vals.append(w_val)
+            top2_vals.append(0.0)
+            top1_colors.append(color)
+            top2_edges.append("#111111")
+            has_top1.append(True)
+            has_top2.append(False)
+            display_labels.append(f"{row_lbl} {w_net}")
+            diff_texts.append((w_val + 0.005, "", "#333333"))
+        else:
+            order = pos_idx[np.argsort(-betas[pos_idx])]
+            w_idx = int(order[0])
+            r_idx = int(order[1])
+            w_val = float(betas[w_idx])
+            r_val = float(betas[r_idx])
+            w_net = str(network_names[w_idx]) if w_idx < len(network_names) else f"Net{w_idx+1}"
+            r_net = str(network_names[r_idx]) if r_idx < len(network_names) else f"Net{r_idx+1}"
+            color = str(NETWORK_BAR_COLORS.get(w_net, "#9a9a9a"))
+            top1_vals.append(w_val)
+            top2_vals.append(r_val)
+            top1_colors.append(color)
+            top2_edges.append("#111111")
+            has_top1.append(True)
+            has_top2.append(True)
+            display_labels.append(f"{row_lbl} {w_net} | {r_net}")
+            diff = w_val - r_val
+            diff_texts.append((w_val + 0.005, f"Δβ={diff:.3f}", "#333333"))
+
+    t1_arr = np.array(top1_vals, dtype=float)
+    t2_arr = np.array(top2_vals, dtype=float)
+
+    for yi, val, col, active in zip(y, t1_arr, top1_colors, has_top1, strict=True):
+        if active and val > 0:
+            ax.barh(yi, val, height=0.62, color=col, alpha=0.88)
+    for yi, val, edge, active in zip(y, t2_arr, top2_edges, has_top2, strict=True):
+        if active and val > 0:
+            ax.barh(yi, val, height=0.32, color="none", edgecolor=edge, linewidth=0.9)
+
+    for yi, (xpos, txt, col) in zip(y, diff_texts, strict=True):
+        if txt:
+            style = "italic" if "No positive" in txt else "normal"
+            ax.text(xpos, yi, txt, va="center", ha="left", fontsize=FS_TICK, color=col, style=style)
+
+    ax.set_yticks(y)
+    ax.set_yticklabels(display_labels, fontsize=FS_TICK)
+    ax.invert_yaxis()
+
+    pos_vals = [v for v, act in zip(t1_arr, has_top1, strict=True) if act and v > 0]
+    xmax = max(0.12, float(np.max(pos_vals)) * 1.30) if pos_vals else 0.15
+    ax.set_xlim(0.0, xmax)
+    ax.set_xlabel("OVR Raw Beta", fontsize=FS_LABEL)
+    ax.set_title(title or f"{smoothing} | OVR conditional association", fontsize=FS_TITLE)
+    ax.tick_params(labelsize=FS_TICK)
+    ax.grid(axis="x", color="#dddddd", lw=0.5, alpha=0.7)
+
+    legend_loc = "upper right" if (len(t1_arr) > 0 and t1_arr[-1] > t1_arr[0]) else "lower right"
+    legend_handles = [
+        Rectangle((0, 0), 1, 1, facecolor="#555555", alpha=0.88, label="1st (winner)"),
+        Rectangle((0, 0), 1, 1, facecolor="none", edgecolor="#111111", linewidth=0.9, label="2nd (runner-up)"),
+    ]
+    ax.legend(handles=legend_handles, fontsize=FS_TICK, loc=legend_loc)
 
 
 def ordered_cluster_ids_by_position(labels: np.ndarray, order: np.ndarray, k: int) -> list[int]:
@@ -1028,7 +1146,7 @@ def plot_confidence_panel(ax, rows: list[dict[str, object]], title: str) -> None
             max(float(row["top1_value"]), float(row["top2_value"])) + 0.005,
             yi,
             (
-                f"Δn_norm={float(row['margin']):.3f}"
+                f"Δn={float(row['margin']):.3f}"
                 if is_normalized_count
                 else f"Δz={float(row['margin']):.3f}"
             ),
@@ -1118,11 +1236,13 @@ def plot_ari_summary_curve(ax, rows: list[dict[str, str]], *, hemi: str, color: 
     se = _metric_array(rows, "group_ari_se")
     finite = np.isfinite(mean)
     if bool(finite.any()):
-        ax.plot(ks, mean, marker="o", lw=1.3, color=color, label=hemi)
+        ax.plot(ks, mean, marker="o", lw=1.3, color=color, label=f"hemi-{hemi} (mean±SE)")
         ax.fill_between(ks, mean - se, mean + se, color=color, alpha=0.18)
     null_ref = _metric_array(rows, "ARI_null_5pct")
     if bool(np.isfinite(null_ref).any()):
-        ax.plot(ks, null_ref, ls=":", lw=1.0, color=color, alpha=0.85)
+        ax.plot(ks, null_ref, ls=":", lw=1.0, color=color, alpha=0.85, label=f"hemi-{hemi} (null 5th%)")
+    ax.set_xticks(np.arange(2, 9, dtype=int))
+    ax.set_xlim(1.5, 8.5)
     return bool(finite.any())
 
 
@@ -1180,6 +1300,7 @@ def plot_k_gate_panel(
     k_l: int,
     k_r: int,
     smoothing: str,
+    redundancy_threshold: float = 0.90,
 ) -> None:
     rows_l = sorted(rows_l, key=lambda r: int(r["k"]))
     rows_r = sorted(rows_r, key=lambda r: int(r["k"]))
@@ -1196,10 +1317,14 @@ def plot_k_gate_panel(
 
     ax.plot(ks_l, max_sim_l, color="#1f77b4", lw=1.3, marker="o")
     ax.plot(ks_r, max_sim_r, color="#d62728", lw=1.3, marker="o")
-    ax.axhline(0.80, color="#b00020", lw=1.0, ls=":", alpha=0.9)
+    ax.axhline(redundancy_threshold, color="#b00020", lw=1.0, ls=":", alpha=0.9)
     ax.axvline(int(k_l), color="#1f77b4", ls="--", lw=1.0)
     ax.axvline(int(k_r), color="#d62728", ls="--", lw=1.0)
-    ax.set_ylim(-0.02, 1.02)
+    ax.set_ylim(0.50, 1.02)
+    ax.set_yticks([0.50, 0.60, 0.70, 0.80, 0.90, 1.00])
+    ax.set_yticklabels(["0.50", "0.60", "0.70", "0.80", "0.90", "1.00"])
+    ax.set_xticks(np.arange(2, 9, dtype=int))
+    ax.set_xlim(1.5, 8.5)
     ax.set_xlabel("K", fontsize=FS_LABEL)
     ax.set_ylabel("max_profile_similarity", fontsize=FS_LABEL)
     ax.set_title(f"{smoothing} | redundancy gate", fontsize=FS_TITLE)
@@ -1209,10 +1334,10 @@ def plot_k_gate_panel(
         handles=[
             Line2D([0], [0], color="#1f77b4", lw=1.6, marker="o", label="Left hemisphere"),
             Line2D([0], [0], color="#d62728", lw=1.6, marker="o", label="Right hemisphere"),
-            Line2D([0], [0], color="#b00020", lw=1.2, ls=":", label="Redundancy threshold"),
+            Line2D([0], [0], color="#b00020", lw=1.2, ls=":", label=f"Redundancy threshold ({redundancy_threshold:.2f})"),
             Line2D([0], [0], color="#555555", lw=1.2, ls="--", label="Selected K*"),
         ],
-        loc="center",
+        loc="lower left",
         fontsize=FS_LEGEND_SMALL,
         framealpha=0.9,
         edgecolor="#dddddd",
@@ -1367,6 +1492,7 @@ def overview_png_path(
     gradient_comp_tag: str = "",
     output_name: str | None = None,
     layout: str = "dual-smoothing",
+    annotation_pair: str | None = None,
 ) -> Path:
     if output_name is not None:
         name = str(output_name).strip()
@@ -1378,6 +1504,13 @@ def overview_png_path(
         if out_name.suffix == "":
             out_name = out_name.with_suffix(".png")
         return Path(present_dir) / out_name
+
+    if layout == "annotation-pair":
+        pair_str = annotation_pair or "annotation_pair"
+        return Path(present_dir) / f"{pair_str}_ovr_overview.png"
+
+    if layout == "single-smoothing":
+        return Path(present_dir) / "wta_overview.png"
 
     if layout == "dual-interpretation":
         name_bits = [atlas, method, "group_overview_2mm_dual_interpretation"]
@@ -1418,7 +1551,14 @@ def render_combo(
     group_name: str | None = None,
     layout: str = "dual-smoothing",
     profile_vmax_by_variant: dict[str, float] | None = None,
-    ) -> dict[str, object]:
+    annotation_pair: str | None = None,
+    smoothing: str | None = None,
+) -> dict[str, object]:
+    if annotation_pair is not None:
+        layout = "annotation-pair"
+    elif method in CLUSTERLESS_METHODS and smoothing is not None:
+        layout = "single-smoothing"
+
     if assignment_variant is None:
         assignment_variant = default_render_assignment_variant(method, atlas)
     if method in CLUSTERLESS_METHODS:
@@ -1438,18 +1578,19 @@ def render_combo(
     family17_overview = route_tag in {"pfm_17net", "fixed_17net"} or effective_assignment_variant == "ovr_logistic_family17"
     diagnostic_hspace = 0.06 if family17_overview else 0.035
     manifest_paths: list[Path] = []
-    if layout == "dual-interpretation":
+    if layout in {"dual-interpretation", "annotation-pair", "single-smoothing"}:
+        target_sm = smoothing or "2mm"
         manifest_paths = [
-            _build_run_dir(group_root, method, atlas, "2mm", coverage_tag, "L", gradient_comp_tag=gradient_comp_tag)
+            _build_run_dir(group_root, method, atlas, target_sm, coverage_tag, "L", gradient_comp_tag=gradient_comp_tag)
             / "group_atlas_manifest.json",
-            _build_run_dir(group_root, method, atlas, "2mm", coverage_tag, "R", gradient_comp_tag=gradient_comp_tag)
+            _build_run_dir(group_root, method, atlas, target_sm, coverage_tag, "R", gradient_comp_tag=gradient_comp_tag)
             / "group_atlas_manifest.json",
         ]
     else:
-        for smoothing in SMOOTHINGS:
+        for sm in SMOOTHINGS:
             manifest_paths.extend(
                 [
-                    _build_run_dir(group_root, method, atlas, smoothing, coverage_tag, hemi, gradient_comp_tag=gradient_comp_tag)
+                    _build_run_dir(group_root, method, atlas, sm, coverage_tag, hemi, gradient_comp_tag=gradient_comp_tag)
                     / "group_atlas_manifest.json"
                     for hemi in ("L", "R")
                 ]
@@ -1476,22 +1617,49 @@ def render_combo(
         # gradient assignment asset.
         for index, (path, manifest) in enumerate(zip(manifest_paths, source_manifests, strict=True)):
             ensure_gradient_assignment_variants(path, manifest)
-            smoothing_name = "2mm" if layout == "dual-interpretation" else SMOOTHINGS[index // 2]
+            smoothing_name = (smoothing or "2mm") if layout in {"dual-interpretation", "annotation-pair", "single-smoothing"} else SMOOTHINGS[index // 2]
             hemi_name = "L" if index % 2 == 0 else "R"
             for variant_name in sorted(manifest["assignment_variants"]):
                 assignment_validation_results[(smoothing_name, hemi_name, str(variant_name))] = (
                     validate_gradient_assignment(path.parent, manifest, str(variant_name))
                 )
 
-    if method in CLUSTERLESS_METHODS:
+    if layout == "single-smoothing":
+        fig = plt.figure(figsize=(19.0, 7.5), dpi=180, constrained_layout=True)
+        gs = fig.add_gridspec(nrows=1, ncols=3, width_ratios=[0.72, 1.14, 1.40], wspace=0.06)
+    elif method in CLUSTERLESS_METHODS:
         fig = plt.figure(figsize=(19.0, 12.8), dpi=180, constrained_layout=True)
         gs = fig.add_gridspec(nrows=2, ncols=3, width_ratios=[0.62, 1.18, 1.42], hspace=0.08, wspace=0.06)
     else:
         fig = plt.figure(figsize=(22.0, 14.0) if family17_overview else (15.4, 12.2), dpi=180, constrained_layout=True)
-        gs = fig.add_gridspec(nrows=2, ncols=2, width_ratios=[1.65, 1.30] if family17_overview else [1.40, 1.30], hspace=0.06, wspace=0.05)
+        gs = fig.add_gridspec(nrows=2, ncols=2, width_ratios=[1.65, 1.30] if family17_overview else [1.50, 1.20], hspace=0.06, wspace=0.05)
     rows_meta: list[dict[str, object]] = []
 
-    if layout == "dual-interpretation":
+    if layout == "annotation-pair":
+        target_sm = smoothing or "2mm"
+        if annotation_pair == "roi-fisherz":
+            row_specs = [
+                ("fisherz", target_sm, f"{target_sm} ROI Fisher-z"),
+                ("ovr_logistic_canonical7", target_sm, f"{target_sm} canonical7 OVR"),
+            ]
+        elif annotation_pair == "network-ts-fisherz":
+            row_specs = [
+                ("network_ts_fisherz", target_sm, f"{target_sm} network-TS Fisher-z"),
+                (NETWORK_TS_OVR_VARIANT, target_sm, f"{target_sm} network-TS canonical7 OVR"),
+            ]
+        elif annotation_pair == "top20":
+            row_specs = [
+                ("normalized_top20_count", target_sm, f"{target_sm} normalized Top20"),
+                ("ovr_logistic_canonical7", target_sm, f"{target_sm} canonical7 OVR"),
+            ]
+        else:
+            raise ValueError(f"Unknown annotation pair: {annotation_pair!r}")
+    elif layout == "single-smoothing":
+        target_sm = smoothing or "2mm"
+        row_specs = [
+            (effective_assignment_variant, target_sm, target_sm),
+        ]
+    elif layout == "dual-interpretation":
         row_specs = [
             ("fisherz", "2mm", "2mm Fisher-z"),
             ("ovr_logistic_canonical7", "2mm", "2mm canonical7 OVR"),
@@ -1502,17 +1670,23 @@ def render_combo(
             for sm in SMOOTHINGS
         ]
 
-    for ridx, (row_variant, smoothing, row_label) in enumerate(row_specs):
-        if layout == "dual-interpretation":
+    if method not in CLUSTERLESS_METHODS and layout != "single-smoothing" and len(row_specs) == 2:
+        sub_diag = gs[:, 0].subgridspec(4, 3, width_ratios=[0.90, 1.10, 0.045], wspace=0.05, hspace=0.06)
+    else:
+        sub_diag = None
+
+    for ridx, (row_variant, smoothing_val, row_label) in enumerate(row_specs):
+        if layout in {"dual-interpretation", "annotation-pair", "single-smoothing"}:
             left_manifest, right_manifest = manifest_paths[0], manifest_paths[1]
             m_l, m_r = source_manifests[0], source_manifests[1]
             effective_assignment_variant = row_variant
         else:
             left_manifest, right_manifest = manifest_paths[2 * ridx : 2 * ridx + 2]
             m_l, m_r = source_manifests[2 * ridx : 2 * ridx + 2]
+            effective_assignment_variant = row_variant
         surface_assignment_title = effective_assignment_variant.replace("_", " ")
         row_meta = {
-            "smoothing": smoothing,
+            "smoothing": smoothing_val,
             "assignment_variant": effective_assignment_variant,
             "row_label": row_label,
         }
@@ -1540,7 +1714,7 @@ def render_combo(
                 ax_left,
                 rows_all,
                 f"{row_label} | vertex assignment counts",
-                title_fs=WTA_OVERVIEW_SIDE_PANEL_TITLE_FS,
+                title_fs=FS_TITLE,
                 label_fs=WTA_OVERVIEW_SIDE_PANEL_LABEL_FS,
                 tick_fs=WTA_OVERVIEW_SIDE_PANEL_TICK_FS,
             )
@@ -1551,7 +1725,7 @@ def render_combo(
                 left_run_dir=d_l,
                 right_run_dir=d_r,
             )
-            profile_sub = gs[ridx, 1].subgridspec(1, 2, wspace=0.18)
+            profile_sub = gs[ridx, 1].subgridspec(1, 2, wspace=0.28)
             profile_axes = [fig.add_subplot(profile_sub[0, 0]), fig.add_subplot(profile_sub[0, 1])]
             try:
                 label_map = load_default_functional_label_map(d_l, m_l)
@@ -1574,7 +1748,7 @@ def render_combo(
                         rows=profile_rows,
                         network_names=network_names,
                         hemi=hemi,
-                        title=f"{row_label} | hemi-{hemi} long-axis profile",
+                        title=f"hemi-{hemi} long-axis profile",
                         show_ylabel=(hemi == "L"),
                     )
             except Exception as exc:
@@ -1661,7 +1835,7 @@ def render_combo(
                     Line2D([0], [0], color="#d62728", lw=1.6, marker="o", label="Right hemisphere"),
                     Line2D([0], [0], color="#555555", lw=1.2, ls=":", label="Null baseline"),
                 ],
-                loc="center",
+                loc="lower right",
                 fontsize=FS_LEGEND_SMALL,
                 framealpha=0.9,
                 edgecolor="#dddddd",
@@ -1700,8 +1874,12 @@ def render_combo(
 
         k_l = int(k_l_raw)
         k_r = int(k_r_raw)
-        prof_l = np.load(d_l / "cluster_network_profile.npy").astype(np.float32)
-        prof_r = np.load(d_r / "cluster_network_profile.npy").astype(np.float32)
+        if effective_assignment_variant == "network_ts_fisherz":
+            prof_l = np.load(d_l / "cluster_network_ts_profile.npy").astype(np.float32)
+            prof_r = np.load(d_r / "cluster_network_ts_profile.npy").astype(np.float32)
+        else:
+            prof_l = np.load(d_l / "cluster_network_profile.npy").astype(np.float32)
+            prof_r = np.load(d_r / "cluster_network_profile.npy").astype(np.float32)
         lbl_l = np.load(d_l / "group_labels_final.npy").astype(np.int32)
         lbl_r = np.load(d_r / "group_labels_final.npy").astype(np.int32)
         assert effective_assignment_variant is not None
@@ -1709,26 +1887,26 @@ def render_combo(
         status_r_path, right_label_variant = resolve_assignment_variant_paths(d_r, m_r, effective_assignment_variant)
         if not status_l_path.exists() or not status_r_path.exists():
             raise FileNotFoundError(
-                f"Missing assignment variant status for {method} {atlas} {smoothing} variant={effective_assignment_variant}: "
+                f"Missing assignment variant status for {method} {atlas} {smoothing_val} variant={effective_assignment_variant}: "
                 f"left={status_l_path} right={status_r_path}"
             )
         if not left_label_variant.exists() or not right_label_variant.exists():
             raise FileNotFoundError(
-                f"Missing assignment variant functional labels for {method} {atlas} {smoothing} variant={effective_assignment_variant}: "
+                f"Missing assignment variant functional labels for {method} {atlas} {smoothing_val} variant={effective_assignment_variant}: "
                 f"left={left_label_variant} right={right_label_variant}"
             )
         if _is_gradient_method(method) and atlas == "kong2022":
-            validated_l = assignment_validation_results[(str(smoothing), "L", effective_assignment_variant)]
-            validated_r = assignment_validation_results[(str(smoothing), "R", effective_assignment_variant)]
+            validated_l = assignment_validation_results[(str(smoothing_val), "L", effective_assignment_variant)]
+            validated_r = assignment_validation_results[(str(smoothing_val), "R", effective_assignment_variant)]
         elif _is_gradient_method(method):
             validated_l = validate_gradient_assignment(d_l, m_l, effective_assignment_variant)
             validated_r = validate_gradient_assignment(d_r, m_r, effective_assignment_variant)
-            assignment_validation_results[(str(smoothing), "L", effective_assignment_variant)] = validated_l
-            assignment_validation_results[(str(smoothing), "R", effective_assignment_variant)] = validated_r
+            assignment_validation_results[(str(smoothing_val), "L", effective_assignment_variant)] = validated_l
+            assignment_validation_results[(str(smoothing_val), "R", effective_assignment_variant)] = validated_r
         else:
             validated_l = {}
             validated_r = {}
-        if effective_assignment_variant in OVR_VARIANTS:
+        if effective_assignment_variant in ALL_OVR_VARIANTS:
             validated_l = validate_gradient_assignment(d_l, m_l, effective_assignment_variant)
             validated_r = validate_gradient_assignment(d_r, m_r, effective_assignment_variant)
             if validated_l["network_names"] != validated_r["network_names"]:
@@ -1752,8 +1930,22 @@ def render_combo(
         row_lbl_l = [f"L-C{i}" for i in range(1, len(cids_l) + 1)]
         row_lbl_r = [f"R-C{i}" for i in range(1, len(cids_r) + 1)]
 
-        sub = gs[ridx, 0].subgridspec(2, 2, wspace=0.08, hspace=diagnostic_hspace)
-        ax0 = fig.add_subplot(sub[0, 0])
+        if sub_diag is not None:
+            base_r = ridx * 2
+            ax0 = fig.add_subplot(sub_diag[base_r, 0])
+            ax1 = fig.add_subplot(sub_diag[base_r, 1])
+            cax1 = fig.add_subplot(sub_diag[base_r, 2])
+            ax2 = fig.add_subplot(sub_diag[base_r + 1, 0])
+            ax3 = fig.add_subplot(sub_diag[base_r + 1, 1])
+            cax_empty = fig.add_subplot(sub_diag[base_r + 1, 2])
+            cax_empty.axis("off")
+        else:
+            sub = gs[ridx, 0].subgridspec(2, 2, wspace=0.08, hspace=diagnostic_hspace)
+            cax1 = None
+            ax0 = fig.add_subplot(sub[0, 0])
+            ax1 = fig.add_subplot(sub[0, 1])
+            ax2 = fig.add_subplot(sub[1, 0])
+            ax3 = fig.add_subplot(sub[1, 1])
         rows_l = read_tsv(d_l / "k_selection_summary.tsv")
         rows_r = read_tsv(d_r / "k_selection_summary.tsv")
         if skip_subject_split_ari:
@@ -1785,7 +1977,7 @@ def render_combo(
             legend_handles.append(Line2D([0], [0], color="#555555", lw=1.2, ls=":", label="Automatic K"))
         ax0.legend(
             handles=legend_handles,
-            loc="center",
+            loc="lower right",
             fontsize=FS_LEGEND_SMALL,
             framealpha=0.9,
             edgecolor="#dddddd",
@@ -1802,23 +1994,22 @@ def render_combo(
             ax0.clear()
             plot_subject_split_ari_skipped(ax0, smoothing=row_label)
 
-        ax1 = fig.add_subplot(sub[0, 1])
-        nets = (list(validated_l["network_names"]) if effective_assignment_variant in OVR_VARIANTS else
+        nets = (list(validated_l["network_names"]) if effective_assignment_variant in ALL_OVR_VARIANTS else
                 [str(x) for x in load_json(d_l / "group_feature_summary.json")["network_names"]])
-        if effective_assignment_variant in {"fisherz", "weighted_fisherz"}:
+        if effective_assignment_variant in {"fisherz", "weighted_fisherz", "network_ts_fisherz"}:
             validate_fisher_status_matches_profile(
                 profile_ordered=prof_l_o,
                 status_payload=status_l,
                 network_names=nets,
                 cluster_ids=cids_l,
-                context=f"{method} {atlas} {smoothing} hemi-L variant={effective_assignment_variant}",
+                context=f"{method} {atlas} {smoothing_val} hemi-L variant={effective_assignment_variant}",
             )
             validate_fisher_status_matches_profile(
                 profile_ordered=prof_r_o,
                 status_payload=status_r,
                 network_names=nets,
                 cluster_ids=cids_r,
-                context=f"{method} {atlas} {smoothing} hemi-R variant={effective_assignment_variant}",
+                context=f"{method} {atlas} {smoothing_val} hemi-R variant={effective_assignment_variant}",
             )
         elif effective_assignment_variant == "normalized_top20_count":
             prof_l_o = normalized_count_profile_from_status(
@@ -1836,21 +2027,21 @@ def render_combo(
                 status_payload=status_l,
                 network_names=nets,
                 cluster_ids=cids_l,
-                context=f"{method} {atlas} {smoothing} hemi-L variant={effective_assignment_variant}",
+                context=f"{method} {atlas} {smoothing_val} hemi-L variant={effective_assignment_variant}",
             )
             validate_normalized_count_status_matches_profile(
                 profile_ordered=prof_r_o,
                 status_payload=status_r,
                 network_names=nets,
                 cluster_ids=cids_r,
-                context=f"{method} {atlas} {smoothing} hemi-R variant={effective_assignment_variant}",
+                context=f"{method} {atlas} {smoothing_val} hemi-R variant={effective_assignment_variant}",
             )
         profile_is_normalized_count = effective_assignment_variant == "normalized_top20_count"
         profile_title = (
             f"{row_label} | cluster_network_profile "
             f"({'normalized topN counts' if profile_is_normalized_count else 'signed'})"
         )
-        if effective_assignment_variant in OVR_VARIANTS:
+        if effective_assignment_variant in ALL_OVR_VARIANTS:
             profile_title = f"{row_label} | OVR raw beta (per 1 Fisher-z unit; zero reference)"
         prof_lr, yt_prof, yl_prof = concat_lr(prof_l_o, row_lbl_l, prof_r_o, row_lbl_r)
         if profile_vmax_by_variant is not None:
@@ -1874,10 +2065,17 @@ def render_combo(
                             ha="center" if len(nets) > 8 else "right")
         annotate_profile_values(ax1, prof_lr, vmax)
         highlight_top1_profile_cells(ax1, prof_lr)
-        add_cbar(fig, ax1, im1, "Raw beta per Fisher-z unit" if effective_assignment_variant in OVR_VARIANTS else
-                 "Normalized TopN ROI count" if profile_is_normalized_count else "Fisher-z")
+        add_cbar(
+            fig, ax1, im1,
+            "Raw beta per Fisher-z unit" if effective_assignment_variant in ALL_OVR_VARIANTS else
+            "Normalized Top20 count" if profile_is_normalized_count else "Fisher-z",
+            cax=cax1,
+        )
 
-        ax2 = fig.add_subplot(sub[1, 0])
+        red_thresh = float(
+            m_l.get("redundancy_threshold",
+            m_l.get("redundancy_aware_thresholds", {}).get("max_profile_similarity_lte", 0.90))
+        )
         plot_k_gate_panel(
             ax2,
             rows_l=rows_l,
@@ -1885,16 +2083,23 @@ def render_combo(
             k_l=k_l,
             k_r=k_r,
             smoothing=row_label,
+            redundancy_threshold=red_thresh,
         )
 
-        ax3 = fig.add_subplot(sub[1, 1])
-        if effective_assignment_variant in OVR_VARIANTS:
+        if effective_assignment_variant in ALL_OVR_VARIANTS:
             plot_ovr_association_panel(
-                ax3, profile=prof_lr, row_positions=yt_prof, row_labels=yl_prof, smoothing=row_label
+                ax3,
+                profile=prof_lr,
+                row_positions=yt_prof,
+                row_labels=yl_prof,
+                smoothing=row_label,
+                network_names=nets,
             )
         else:
             conf_rows = confidence_rows(status_l, "L", cids_l) + confidence_rows(status_r, "R", cids_r)
             plot_confidence_panel(ax3, conf_rows, f"{row_label} | cluster confidence / ambiguity")
+
+
 
         ax_big = fig.add_subplot(gs[ridx, 1])
         left_label = left_label_variant
@@ -1914,8 +2119,8 @@ def render_combo(
                     subject=template_subject,
                     scene=scene,
                     outdir=Path(tmp),
-                    name=f"merged_group_cluster_wta_{method}_{atlas}_{smoothing}",
-                    title=f"{str(overview_scope).strip() or 'Group'} functional atlas {method} {atlas} {smoothing} {surface_assignment_title}",
+                    name=f"merged_group_cluster_wta_{method}_{atlas}_{smoothing_val}",
+                    title=f"{str(overview_scope).strip() or 'Group'} functional atlas {method} {atlas} {smoothing_val} {surface_assignment_title}",
                     left_labels=left_label,
                     right_labels=right_label,
                     left_surface=surf_l,
@@ -1938,7 +2143,9 @@ def render_combo(
             }
         )
 
-    if layout == "dual-interpretation":
+
+
+    if layout in {"dual-interpretation", "annotation-pair"}:
         for axis in fig.axes:
             title = axis.get_title()
             if " | " not in title:
@@ -1948,6 +2155,10 @@ def render_combo(
                 detail = "Raw beta (zero reference)"
             elif detail.startswith("cluster_network_profile"):
                 detail = "Network FC profile"
+            elif detail.startswith("OVR conditional association"):
+                detail = "OVR conditional association"
+            elif detail.startswith("cluster confidence / ambiguity"):
+                detail = "Cluster confidence / ambiguity"
             axis.set_title(f"{label}\n{detail}", fontsize=axis.title.get_fontsize())
 
     out_png = overview_png_path(
@@ -1960,6 +2171,7 @@ def render_combo(
         gradient_comp_tag=gradient_comp_tag,
         output_name=output_name,
         layout=layout,
+        annotation_pair=annotation_pair,
     )
     inferred_group_name = (
         group_name
@@ -1969,7 +2181,10 @@ def render_combo(
     n_sub = rows_meta[0]["n_subjects"] if rows_meta and "n_subjects" in rows_meta[0] else None
     assignment_metadata = {
         "layout": layout,
-        "assignment_variant": "dual-interpretation" if layout == "dual-interpretation" else assignment_variant,
+        "assignment_variant": (
+            annotation_pair if layout == "annotation-pair" else
+            ("dual-interpretation" if layout == "dual-interpretation" else assignment_variant)
+        ),
         "assignment_variants": list(dict.fromkeys(variant for variant, _, _ in row_specs)),
     }
     rendered_title = overview_title(
@@ -1978,8 +2193,9 @@ def render_combo(
         route_tag=route_tag,
         mode_tag=effective_mode_tag,
         assignment_variant=(
-            "2mm Fisher-z + canonical7 OVR"
-            if layout == "dual-interpretation" else effective_assignment_variant
+            f"{smoothing or '2mm'} {annotation_pair}"
+            if layout == "annotation-pair"
+            else ("2mm Fisher-z + canonical7 OVR" if layout == "dual-interpretation" else effective_assignment_variant)
         ),
         surface_affinity=source_provenance.get("surface_affinity"),
         overview_scope=overview_scope,
@@ -2184,6 +2400,18 @@ def main() -> int:
         help="Output manifest filename under --present-dir.",
     )
     p.add_argument(
+        "--smoothing",
+        choices=["2mm", "4mm"],
+        default=None,
+        help="Optional single smoothing selection (2mm or 4mm).",
+    )
+    p.add_argument(
+        "--annotation-pair",
+        choices=ANNOTATION_PAIR_CHOICES,
+        default=None,
+        help="Formal paired-interpretation overview branch (roi-fisherz, network-ts-fisherz, or top20).",
+    )
+    p.add_argument(
         "--layout",
         choices=["dual-smoothing", "dual-interpretation"],
         default="dual-smoothing",
@@ -2225,6 +2453,24 @@ def main() -> int:
 
     methods_explicit = args.methods is not None
     items: list[dict[str, object]] = []
+
+    if args.annotation_pair is not None:
+        effective_layout = "annotation-pair"
+        req_smoothings = [args.smoothing or "2mm"]
+        render_variants = [args.annotation_pair]
+    elif args.smoothing is not None:
+        effective_layout = "single-smoothing"
+        req_smoothings = [args.smoothing]
+        render_variants = ["single-smoothing"]
+    elif args.layout == "dual-interpretation":
+        effective_layout = "dual-interpretation"
+        req_smoothings = ["2mm"]
+        render_variants = ["fisherz"]
+    else:
+        effective_layout = "dual-smoothing"
+        req_smoothings = ["2mm", "4mm"]
+        render_variants = None
+
     for atlas in args.atlases:
         methods = tuple(args.methods) if methods_explicit else default_methods_for_atlas(atlas)
         for method in methods:
@@ -2235,22 +2481,22 @@ def main() -> int:
                 atlas=atlas,
                 coverage_tag=tau_tag,
                 route_tag=args.route_tag,
-                smoothings=["2mm"] if args.layout == "dual-interpretation" else ["2mm", "4mm"],
-                layout=args.layout,
+                smoothings=req_smoothings,
+                layout=effective_layout,
             )
             comp_tags = _discover_gradient_comp_tags(
-                group_root, method, atlas, SMOOTHINGS[0], tau_tag,
+                group_root, method, atlas, req_smoothings[0], tau_tag,
             )
-            if args.layout == "dual-interpretation":
-                render_variants = ["fisherz"]
+            if render_variants is not None:
+                current_variants = render_variants
             else:
-                render_variants = resolve_render_assignment_variants(
+                current_variants = resolve_render_assignment_variants(
                     method,
                     str(args.assignment_variant),
                     atlas=atlas,
                 )
             for comp_tag in comp_tags:
-                for assignment_variant in render_variants:
+                for assignment_variant in current_variants:
                     meta = render_combo(
                         group_root=group_root,
                         present_dir=present_dir,
@@ -2260,11 +2506,16 @@ def main() -> int:
                         scene=Path(args.scene).resolve(),
                         route_tag=args.route_tag,
                         mode_tag=args.mode_tag,
-                        assignment_variant=(assignment_variant or "fisherz"),
+                        assignment_variant=(
+                            None if effective_layout == "annotation-pair"
+                            else (assignment_variant if assignment_variant != "single-smoothing" else None)
+                        ),
                         gradient_comp_tag=comp_tag,
                         output_name=args.output_name,
                         group_name=args.group_name,
-                        layout=args.layout,
+                        layout=effective_layout,
+                        annotation_pair=args.annotation_pair,
+                        smoothing=args.smoothing or (req_smoothings[0] if len(req_smoothings) == 1 else None),
                     )
                     row_meta = meta["rows"]
                     metric = (
