@@ -42,12 +42,12 @@ def prepare(tmp_path, monkeypatch, subjects=("100610",), *, increments=(0.8, 0.1
             "run_labels": [QC_RUN_LABELS[run] for run in range(1, len(increments) + 1)],
             "run_lengths": [2] * len(increments),
             "density_evidence": {"density": "512", "n_vertices": {"L": 512, "R": 512}},
-            "hemispheres": {h: {"n_vertices_total": 512, "n_vertices_unsupported": 20,
+            "hemispheres": {h: {"n_vertices_total": 512, "n_vertices_unsupported": 10,
                 "nifti_support_path": str(coverage.parent / f"sub-{subject}_hemi-{h}_nifti_support.npy")}
                 for h in ("L", "R")},
         }))
         for h in ("L", "R"):
-            support = np.ones(512, dtype=np.float32); support[-20:] = 0
+            support = np.ones(512, dtype=np.float32); support[-10:] = 0
             if write_support:
                 np.save(coverage.parent / f"sub-{subject}_hemi-{h}_nifti_support.npy", support)
             signal = np.tile(np.arange(2 * len(increments), dtype=np.float32), (512, 1))
@@ -207,5 +207,5 @@ def test_roster_counts_current_runwise_signal_validity_not_recorded_counts(tmp_p
         raw / 'sub-100610_hemi-R_space-T1w_den-512_label-hipp_bold.func.gii')
     assert QC.main() == 0
     row = result(out)['rows'][0]
-    assert row['unsupported_vertices_R'] == 21
+    assert row['unsupported_vertices_R'] == 11
     assert row['qc_status'] == 'fail'

@@ -229,7 +229,7 @@ def main() -> int:
     parser.add_argument("--subjects-manifest", type=Path, help="Complete participant or visit roster, one ID per line.")
     parser.add_argument("--dice-threshold", type=float, default=0.70)
     parser.add_argument("--fd-threshold", type=float, default=0.50)
-    parser.add_argument("--max-unsupported-vertices", type=int, default=20)
+    parser.add_argument("--max-unsupported-vertices", type=int, default=10)
     args = parser.parse_args()
     if args.qc_run_inputs and not (args.subjects or args.subjects_manifest):
         parser.error('--qc-run-inputs requires the complete roster via --subjects or --subjects-manifest')

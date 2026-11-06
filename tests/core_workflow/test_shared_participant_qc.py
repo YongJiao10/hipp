@@ -210,7 +210,7 @@ def test_censored_run_uses_original_fd_and_retained_signal_lengths(tmp_path, mon
     payload['run_labels'] = ['ses-1_task-rest']
     coverage.write_text(json.dumps(payload))
     unsupported, _ = QC.read_coverage(coverage, '100610', measured)
-    assert unsupported == {'L': 20, 'R': 20}
+    assert unsupported == {'L': 10, 'R': 10}
 
 
 @pytest.mark.parametrize('session', [None, 'ses-1'])

@@ -83,8 +83,8 @@ Apply these criteria in order, stopping at the first failure:
 1. **Motion:** overall mean Power FD <=0.50 mm. Perform this step before
    HippUnfold when processing new inputs.
 2. **Anatomy:** HippUnfold Dice >=0.70 in both hemispheres.
-3. **Hippocampal coverage:** at most 20 unusable vertices in each consumed
-   den-512 hippocampal hemisphere (20/512 = 3.90625%). A vertex is unusable
+3. **Hippocampal coverage:** at most 10 unusable vertices in each consumed
+   den-512 hippocampal hemisphere (10/512 = 1.953125%). A vertex is unusable
    when it has no trilinear NIfTI image-grid support, or its sampled signal is
    nonfinite or constant in any included physical run.
 
@@ -144,7 +144,7 @@ The matching `from-MNI152NLin6Asym_to-T1w_mode-image_xfm.h5` shares that source'
 directory and entity prefix. This preserves both longitudinal subject-level
 and single-anatomical-visit session-level exports.
 
-Passing participant selection permits up to 20 unusable vertices per side;
+Passing participant selection permits up to 10 unusable vertices per side;
 it does not make those vertices usable. HCP7T downstream smoothing uses the
 same positive NIfTI support and runwise finite/nonconstant mask as participant
 QC. FC and activation must consume the resulting masked signals and declared
@@ -241,19 +241,21 @@ completion records. The retained functional cohort comprises 42 ses-1 and
 24 ses-2 scans; their visit-specific input tables are
 `outputs_nih_rtms/inputs/kong2022/ses-<1|2>/manifests/nih_rtms_qc_runs.tsv`.
 Raw sampling, vertex masks and final coverage assessment are complete for
-all 64 motion/anatomy-passing scans. The final rosters contain **37/42 ses-1**
-and **24/24 ses-2** scans, totaling **61/66**. The two motion exclusions are
+all 64 motion/anatomy-passing scans. The final rosters contain **34/42 ses-1**
+and **23/24 ses-2** scans, totaling **57/66** (34/44 ses-1 and 23/44 ses-2 against all registered participants). The two motion exclusions are
 D11 ses-1 (0.589030 mm) and D12 ses-1 (0.751863 mm), using XCP-D's unfiltered
-Power FD before censoring and after dummy removal. Three further ses-1 scans
-fail sampled-signal coverage: D08 has 55 unusable right vertices, D09 has 29
-unusable left vertices, and D28 has 85 unusable left vertices. All their
+Power FD before censoring and after dummy removal. Six ses-1 scans
+fail sampled-signal coverage under the <=10 threshold: D08 has 55 unusable right vertices, D09 has 29
+unusable left vertices, D28 has 85 unusable left vertices, D06 has 12 unusable right vertices,
+D20 has 19 unusable right vertices, and HVS10 has 12 unusable left vertices. One ses-2 scan fails coverage:
+D14 has 12 unusable right vertices. All their
 vertices have positive image-grid support; the excluded vertices have invalid
-sampled signals. All other assessed hemispheres satisfy the <=20 rule.
+sampled signals (constant zero values at anatomical boundary/pole rows). All other assessed hemispheres satisfy the <=10 rule.
 
 Each visit's report is `qc/t1only_hippunfold_qc.json` and its final roster
 is `manifests/nih_rtms_hippocampus_fmri_qc_pass_t1only_latest.txt` within that
 visit route. Both reports have `done` status, with no unassessable scans.
-Of the 23 TRD participants with both treatment visits, **18 retain both
+Of the 23 TRD participants with both treatment visits, **15 retain both
 visits** after all three criteria. Use session-level decisions for treatment
 analyses; do not pool pre/post visits to rescue an excluded visit. Mean-FD
 participant/visit selection and XCP-D's existing per-frame censoring at
@@ -269,9 +271,10 @@ affect FD, and mean FD can conceal brief large movements.
 
 [Kember et al., Nature Communications 2026](https://www.nature.com/articles/s41467-026-74572-1)
 provide the anatomical and functional-GM coverage precedent. Their published
-coverage criterion is >=20 mm² improperly interpolated surface, not 20 vertices.
-The project's vertex-count threshold and NIfTI sampled-signal validity rule
-are explicit adaptations for den-512 functional nodes. Kember's description
+coverage criterion is >=20 mm² improperly interpolated surface. On our den-512
+midthickness mesh (mean vertex area ~2.15 mm²), 20 mm² corresponds to 20 / 2.15 = 9.3
+vertices. The project's accepted threshold of <=10 unusable vertices directly
+instantiates Kember's 20 mm² physical area criterion for den-512 functional nodes. Kember's description
 does not identify its functional gray-matter mask as a CIFTI hippocampal
 BrainModel or specify the exact interpolation-support classifier. A NIfTI file
 format itself does not define gray matter. Positive support is not proof of
