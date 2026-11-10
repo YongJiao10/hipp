@@ -181,7 +181,58 @@ def expected_overview_path(
     return present_dir / route_tag / f"{'_'.join(bits)}.png"
 
 
-def write_readme(present_dir: Path, items: list[dict[str, str]]) -> None:
+def discover_hcp_profile_overviews(present_dir: Path) -> list[dict[str, object]]:
+    items: list[dict[str, object]] = []
+    overviews_base = Path(present_dir).resolve()
+    pfm_root = overviews_base / "pfm"
+    if not pfm_root.is_dir():
+        return items
+
+    for profile, method, role in [
+        ("topsim", "gradient-ward", "primary"),
+        ("topfc", "gradient-spectral", "historical_baseline"),
+        ("topsim", "gradient-gmm", "comparison_display"),
+    ]:
+        for smoothing in ("2mm", "4mm"):
+            dir_path = pfm_root / profile / method / smoothing
+            if not dir_path.is_dir():
+                continue
+            for pair in ("roi-fisherz", "network-ts-fisherz", "top20"):
+                png_path = dir_path / f"{pair}_ovr_overview.png"
+                if png_path.is_file():
+                    items.append({
+                        "profile": profile,
+                        "method": method,
+                        "role": role,
+                        "smoothing": smoothing,
+                        "annotation_pair": pair,
+                        "k": 3,
+                        "selected_default": (profile == "topsim" and method == "gradient-ward" and smoothing == "2mm" and pair == "roi-fisherz"),
+                        "overview_png": str(png_path.resolve()),
+                    })
+
+    for smoothing in ("2mm", "4mm"):
+        dir_path = pfm_root / "wta-top" / smoothing
+        if dir_path.is_dir():
+            png_path = dir_path / "wta_overview.png"
+            if png_path.is_file():
+                items.append({
+                    "profile": None,
+                    "method": "wta-top",
+                    "role": "clusterless",
+                    "smoothing": smoothing,
+                    "annotation_pair": None,
+                    "k": None,
+                    "selected_default": False,
+                    "overview_png": str(png_path.resolve()),
+                })
+    return items
+
+
+discover_formal_hcp_overviews = discover_hcp_profile_overviews
+
+
+def write_readme(present_dir: Path, items: list[dict[str, str]], formal_items: list[dict[str, object]] | None = None) -> None:
     lines = [
         "# HCP 7T hippocampus overview matrix",
         "",
@@ -190,9 +241,32 @@ def write_readme(present_dir: Path, items: list[dict[str, str]]) -> None:
         "No 10perc/full, legacy fixedk_work, or auto-K presentation split is maintained in this exporter.",
         "Each method exports its overviews into the corresponding route subdirectory.",
         "",
+    ]
+    if formal_items:
+        lines.extend([
+            "## Formal HCP PFM Parcellation Products",
+            "",
+            "Primary selection: **TopSim + Ward** at K=3 (2mm).",
+            "Baseline: **TopFC + spectral**; Comparison: **TopSim + GMM**; Clusterless: **WTA**.",
+            "",
+            "| profile | method | role | smoothing | annotation_pair | selected_default | overview |",
+            "|---|---|---|---|---|---|---|",
+        ])
+        for fitem in formal_items:
+            png_name = Path(str(fitem["overview_png"])).relative_to(present_dir).as_posix()
+            lines.append(
+                f"| {fitem.get('profile') or '-'} | {fitem['method']} | {fitem['role']} | "
+                f"{fitem['smoothing']} | {fitem.get('annotation_pair') or '-'} | "
+                f"{'**PRIMARY**' if fitem.get('selected_default') else 'no'} | [{png_name}]({png_name}) |"
+            )
+        lines.append("")
+
+    lines.extend([
+        "## General Route Matrix",
+        "",
         "| route | mode | assignment | method | overview | source_group_root |",
         "|---|---|---|---|---|---|",
-    ]
+    ])
     for item in items:
         png_name = Path(item["overview_png"]).relative_to(present_dir).as_posix()
         lines.append(
@@ -214,6 +288,7 @@ def main() -> int:
     p.add_argument("--coverage-threshold", type=float, default=0.80)
     p.add_argument("--manifest-name", default=DEFAULT_MANIFEST_NAME)
     p.add_argument("--scene", default=None, help="Optional override for wb scene path.")
+    p.add_argument("--index-only", action="store_true", help="Index existing overview products without re-running 06_01 render jobs.")
     args = p.parse_args()
 
     group_atlas_root = resolve_group_atlas_base_root(Path(args.group_atlas_root))
@@ -223,67 +298,97 @@ def main() -> int:
     records: list[dict[str, str]] = []
     jobs = build_render_jobs(group_atlas_root, routes=tuple(args.routes), methods=tuple(args.methods),
                              assignment_variants=ASSIGNMENT_VARIANTS if args.assignment_variant == "both" else (args.assignment_variant,))
-    for job in jobs:
-        group_root = Path(job.group_root).resolve()
-        if not group_root.exists():
-            raise FileNotFoundError(f"Missing group_root: {group_root}")
-        route_present_dir = present_dir / job.route_tag
-        cmd = [
-            args.python_exe,
-            str(BUILD_PRESENT_SCRIPT),
-            "--group-root",
-            str(group_root),
-            "--present-dir",
-            str(route_present_dir),
-            "--atlases",
-            ATLAS,
-            "--methods",
-            job.method,
-            "--coverage-threshold",
-            f"{float(args.coverage_threshold):.2f}",
-            "--route-tag",
-            job.route_tag,
-            "--skip-manifest",
-            "--skip-readme",
-        ]
-        if job.mode_tag:
-            cmd.extend(["--mode-tag", job.mode_tag])
-        if job.assignment_variant:
-            cmd.extend(["--assignment-variant", job.assignment_variant])
-        if args.scene:
-            cmd.extend(["--scene", str(Path(args.scene).resolve())])
-        subprocess.run(cmd, check=True, cwd=str(REPO_ROOT))
-        overview_png = expected_overview_path(
-            present_dir,
-            method=job.method,
-            route_tag=job.route_tag,
-            mode_tag=job.mode_tag,
-            assignment_variant=job.assignment_variant,
-        ).resolve()
-        if not overview_png.exists():
-            raise FileNotFoundError(f"Expected overview not found: {overview_png}")
-        records.append(
-            {
-                "route_tag": job.route_tag,
-                "mode_tag": "" if job.mode_tag is None else job.mode_tag,
-                "method": job.method,
-                "assignment_variant": "" if job.assignment_variant is None else job.assignment_variant,
-                "source_group_root": str(group_root),
-                "overview_png": str(overview_png),
-            }
-        )
+    if args.index_only:
+        for job in jobs:
+            overview_png = expected_overview_path(
+                present_dir,
+                method=job.method,
+                route_tag=job.route_tag,
+                mode_tag=job.mode_tag,
+                assignment_variant=job.assignment_variant,
+            ).resolve()
+            if overview_png.exists():
+                records.append(
+                    {
+                        "route_tag": job.route_tag,
+                        "mode_tag": "" if job.mode_tag is None else job.mode_tag,
+                        "method": job.method,
+                        "assignment_variant": "" if job.assignment_variant is None else job.assignment_variant,
+                        "source_group_root": str(job.group_root),
+                        "overview_png": str(overview_png),
+                    }
+                )
+    else:
+        for job in jobs:
+            group_root = Path(job.group_root).resolve()
+            if not group_root.exists():
+                raise FileNotFoundError(f"Missing group_root: {group_root}")
+            route_present_dir = present_dir / job.route_tag
+            cmd = [
+                args.python_exe,
+                str(BUILD_PRESENT_SCRIPT),
+                "--group-root",
+                str(group_root),
+                "--present-dir",
+                str(route_present_dir),
+                "--atlases",
+                ATLAS,
+                "--methods",
+                job.method,
+                "--coverage-threshold",
+                f"{float(args.coverage_threshold):.2f}",
+                "--route-tag",
+                job.route_tag,
+                "--skip-manifest",
+                "--skip-readme",
+            ]
+            if job.mode_tag:
+                cmd.extend(["--mode-tag", job.mode_tag])
+            if job.assignment_variant:
+                cmd.extend(["--assignment-variant", job.assignment_variant])
+            if args.scene:
+                cmd.extend(["--scene", str(Path(args.scene).resolve())])
+            subprocess.run(cmd, check=True, cwd=str(REPO_ROOT))
+            overview_png = expected_overview_path(
+                present_dir,
+                method=job.method,
+                route_tag=job.route_tag,
+                mode_tag=job.mode_tag,
+                assignment_variant=job.assignment_variant,
+            ).resolve()
+            if not overview_png.exists():
+                raise FileNotFoundError(f"Expected overview not found: {overview_png}")
+            records.append(
+                {
+                    "route_tag": job.route_tag,
+                    "mode_tag": "" if job.mode_tag is None else job.mode_tag,
+                    "method": job.method,
+                    "assignment_variant": "" if job.assignment_variant is None else job.assignment_variant,
+                    "source_group_root": str(group_root),
+                    "overview_png": str(overview_png),
+                }
+            )
 
-    expected = len(jobs)
-    if len(records) != expected:
-        raise RuntimeError(f"Expected {expected} overview outputs, got {len(records)}")
+        expected = len(jobs)
+        if len(records) != expected:
+            raise RuntimeError(f"Expected {expected} overview outputs, got {len(records)}")
 
+    formal_items = discover_formal_hcp_overviews(present_dir)
     payload = {
         "present_dir": str(present_dir),
         "count": len(records),
         "items": records,
+        "hcp_pfm_profile_products": formal_items,
+        "primary_profile_selection": next(
+            (item for item in formal_items if item.get("selected_default")), None
+        ),
+        "formal_hcp_pfm_products": formal_items,
+        "formal_primary_selection": next(
+            (item for item in formal_items if item.get("selected_default")), None
+        ),
     }
     (present_dir / args.manifest_name).write_text(json.dumps(payload, indent=2), encoding="utf-8")
-    write_readme(present_dir, records)
+    write_readme(present_dir, records, formal_items=formal_items)
     print(json.dumps({"present_dir": str(present_dir), "manifest": args.manifest_name, "count": len(records)}, indent=2))
     return 0
 

@@ -212,3 +212,40 @@ def test_coefficient_plots_use_zero_and_or_one_references_with_explicit_units(in
     finally:
         import matplotlib.pyplot as plt
         plt.close(fig)
+
+
+def test_fit_network_ovr_from_network_profiles_coexistence(tmp_path):
+    rng = np.random.default_rng(42)
+    n_sub, n_clust, n_net = 16, 3, 7
+    net_profiles = rng.normal(0, 0.4, (n_sub, n_clust, n_net))
+    # Give cluster c distinct positive affinity for network c
+    for c in range(n_clust):
+        net_profiles[:, c, c] += 1.5
+
+    subjects = [f"sub-{i+1:03d}" for i in range(n_sub)]
+    clusters = [1, 2, 3]
+    network_names = [f"Net{i+1}" for i in range(n_net)]
+
+    res = ovr.fit_network_ovr_from_network_profiles(
+        net_profiles,
+        subjects,
+        clusters,
+        network_names,
+        taxonomy="canonical7",
+        feature_source="network_ts",
+    )
+
+    assert res["feature_source"] == "network_ts"
+    assert res["prefix"] == "network_ovr_canonical7_network_ts"
+    assert res["beta"].shape == (3, 7)
+    assert len(res["assignment_rows"]) == 3
+    # Check that winning networks match the expected strongest network
+    for c in range(3):
+        assert res["assignment_rows"][c]["top1_network"] == f"Net{c+1}"
+
+    # Export and verify filenames don't collide with standard ROI OVR
+    paths = ovr.export_network_ovr(res, tmp_path)
+    assert "network_ovr_canonical7_network_ts_beta.npy" in str(paths["beta"])
+    assert (tmp_path / "network_ovr_canonical7_network_ts_beta.npy").exists()
+    assert (tmp_path / "network_ovr_canonical7_network_ts_inputs.tsv").exists()
+    assert (tmp_path / "network_ovr_canonical7_network_ts.json").exists()

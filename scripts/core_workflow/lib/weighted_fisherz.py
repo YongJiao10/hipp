@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import csv
+import json
 import math
+from pathlib import Path
 from typing import Sequence
 
 import numpy as np
@@ -270,3 +273,76 @@ def assign_weighted_network_profile_rows(
             }
         )
     return rows
+
+
+def subjectwise_cluster_network_fisherz_profile(
+    *,
+    group_labels_final: np.ndarray,
+    support_mask: np.ndarray,
+    subjects: Sequence[str],
+    surface_root: Path,
+    reference_root: Path,
+    smoothing: str,
+    hemi: str,
+    valid_masks_by_subject: dict[str, np.ndarray],
+    network_names: Sequence[str],
+    reference_atlas: str = "kong2022",
+    network_column: str = "canonical7",
+    array_loader=np.load,
+) -> tuple[np.ndarray, np.ndarray, list[str]]:
+    """Compute subjectwise cluster-to-network Fisher-z against weighted network time series."""
+    labels = np.asarray(group_labels_final, dtype=np.int32).reshape(-1)
+    support = np.asarray(support_mask, dtype=bool).reshape(-1)
+    k_final = int(np.nanmax(labels)) if labels.size else 0
+    if k_final <= 0:
+        raise ValueError("Kong2022 cluster network profile requires at least one positive cluster label")
+
+    profiles: list[np.ndarray] = []
+    used_subjects: list[str] = []
+    for subject in subjects:
+        ts_path = surface_root / f"sub-{subject}" / "surface" / smoothing / f"sub-{subject}_hemi-{hemi}_timeseries.npy"
+        ref_dir = reference_root / f"sub-{subject}" / "reference" / reference_atlas
+        roi_path = ref_dir / "cortex_roi_parcel_timeseries.npy"
+        roi_tsv = ref_dir / "cortex_roi_parcels.tsv"
+        summary_json = ref_dir / "reference_summary.json"
+
+        missing = [str(p) for p in (ts_path, roi_path, roi_tsv) if not p.is_file()]
+        if missing:
+            raise FileNotFoundError(
+                f"Missing Kong2022 cluster annotation input for sub-{subject}: "
+                + ", ".join(missing)
+            )
+        if subject not in valid_masks_by_subject:
+            raise ValueError(f"Missing valid mask for sub-{subject}")
+
+        valid_mask = np.asarray(valid_masks_by_subject[subject], dtype=bool).reshape(-1)
+        subj_support = support & valid_mask
+
+        ts = array_loader(ts_path).astype(np.float32, copy=False)
+        roi = array_loader(roi_path).astype(np.float32, copy=False)
+
+        with roi_tsv.open("r", encoding="utf-8", newline="") as f:
+            rows = list(csv.DictReader(f, delimiter="\t"))
+
+        run_lengths: list[int] | None = None
+        if summary_json.is_file():
+            with summary_json.open("r", encoding="utf-8") as f:
+                meta = json.load(f)
+                run_lengths = meta.get("run_lengths")
+
+        prof = weighted_cluster_network_fisherz_profile_from_timeseries(
+            group_labels_final=labels,
+            support_mask=subj_support,
+            hippocampal_timeseries=ts,
+            roi_timeseries=roi,
+            roi_rows=rows,
+            network_names=network_names,
+            network_column=network_column,
+            run_lengths=run_lengths,
+        )
+        profiles.append(prof)
+        used_subjects.append(str(subject))
+
+    stack = np.stack(profiles, axis=0).astype(np.float32)
+    mean = np.nanmean(stack, axis=0).astype(np.float32)
+    return stack, mean, used_subjects

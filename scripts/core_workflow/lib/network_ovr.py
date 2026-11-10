@@ -15,6 +15,8 @@ from .io_utils import write_tsv
 from .workflow_utils import write_json
 
 OVR_VARIANTS = ("ovr_logistic_canonical7", "ovr_logistic_family17")
+NETWORK_TS_OVR_VARIANT = "ovr_logistic_canonical7_network_ts"
+ALL_OVR_VARIANTS = (*OVR_VARIANTS, NETWORK_TS_OVR_VARIANT)
 OVR_ASSIGNMENT_METRIC = "largest_positive_raw_beta"
 INTERPRETATION = (
     "Descriptive conditional association; observations from the same subject are dependent. "
@@ -121,6 +123,100 @@ def fit_network_ovr(roi_profiles, subject_ids, cluster_ids, roi_registry, *, tax
     return result
 
 
+def fit_network_ovr_from_network_profiles(
+    network_profiles,
+    subject_ids,
+    cluster_ids,
+    network_names,
+    *,
+    taxonomy: str = "canonical7",
+    feature_source: str = "network_ts",
+    prefix: str | None = None,
+) -> dict:
+    """Fit descriptive OVR from direct subjectwise cluster-to-network Fisher-z features."""
+    data = np.asarray(network_profiles, dtype=np.float64)
+    subjects, clusters = list(map(str, subject_ids)), list(map(int, cluster_ids))
+    names = list(map(str, network_names))
+    if data.ndim != 3 or data.shape != (len(subjects), len(clusters), len(names)):
+        raise ValueError(
+            f"OVR network features require shape ({len(subjects)}, {len(clusters)}, {len(names)}), got {data.shape}"
+        )
+    if not subjects or len(set(subjects)) != len(subjects):
+        raise ValueError("OVR requires nonempty unique subject IDs")
+    if len(clusters) < 2 or len(set(clusters)) != len(clusters) or min(clusters) < 1:
+        raise ValueError("OVR requires at least two unique positive cluster IDs")
+    missing = np.argwhere(~np.isfinite(data))
+    if missing.size:
+        detail = "; ".join(
+            f"subject={subjects[s]} cluster={clusters[c]} network={names[n]}"
+            for s, c, n in missing[:5]
+        )
+        raise ValueError(f"Missing required OVR network feature: {detail}")
+    x = data.reshape(-1, len(names))
+    y = np.tile(clusters, len(subjects))
+    model = OneVsRestClassifier(
+        LogisticRegression(
+            solver="liblinear", C=1.0, tol=1e-4, max_iter=1000, random_state=20260420
+        ),
+        n_jobs=1,
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", ConvergenceWarning)
+        try:
+            model.fit(x, y)
+        except ConvergenceWarning as exc:
+            raise RuntimeError(f"OVR {taxonomy} ({feature_source}) failed to converge") from exc
+    classes = list(map(int, model.classes_))
+    if set(classes) != set(clusters):
+        raise RuntimeError(f"OVR estimator classes differ: {classes} vs {clusters}")
+    if len(classes) == 2:
+        coefficient = model.estimators_[0].coef_[0]
+        intercept = float(model.estimators_[0].intercept_[0])
+        beta_by_class = {classes[0]: -coefficient, classes[1]: coefficient}
+        intercept_by_class = {classes[0]: -intercept, classes[1]: intercept}
+    else:
+        beta_by_class = {c: estimator.coef_[0] for c, estimator in zip(classes, model.estimators_, strict=True)}
+        intercept_by_class = {c: float(estimator.intercept_[0]) for c, estimator in zip(classes, model.estimators_, strict=True)}
+    beta = np.stack([beta_by_class[c] for c in clusters])
+    sd = np.std(x, axis=0, ddof=0)
+    standardized = beta * sd
+    out_prefix = prefix or f"network_ovr_{taxonomy}_{feature_source}"
+    result = {
+        "taxonomy": taxonomy,
+        "variant": f"ovr_logistic_{taxonomy}_{feature_source}",
+        "feature_source": feature_source,
+        "prefix": out_prefix,
+        "subject_ids": subjects,
+        "cluster_ids": clusters,
+        "network_names": names,
+        "estimator_classes": classes,
+        "network_profiles": data,
+        "beta": beta,
+        "intercept": np.asarray([intercept_by_class[c] for c in clusters]),
+        "odds_ratio": np.exp(beta),
+        "feature_sd": sd,
+        "standardized_beta": standardized,
+        "standardized_odds_ratio": np.exp(standardized),
+        "assignment_rows": assignment_rows(beta, clusters, names),
+        "feature_sd_ddof": 0,
+        "feature_sd_population": "exact_flattened_subject_by_cluster_fitting_observations",
+        "n_observations": len(x),
+        "interpretation": INTERPRETATION,
+        "input_fc_definition": "subject_cluster_mean_hippocampal_timeseries_to_cortical_network_timeseries_fisher_z",
+        "network_aggregation": "weighted_by_roi_n_grayordinates_used",
+        "solver": "liblinear",
+        "C": 1.0,
+        "tol": 1e-4,
+        "max_iter": 1000,
+        "random_state": 20260420,
+        "regularization": "default_L2",
+        "predictor_scaling": "none",
+        "class_weight": None,
+        "n_iter": [int(np.max(estimator.n_iter_)) for estimator in model.estimators_],
+    }
+    return result
+
+
 def plot_network_ovr(result: dict):
     import matplotlib.pyplot as plt
     fig, axes = plt.subplots(2, 2, figsize=(15, 10), layout="constrained")
@@ -146,27 +242,27 @@ def plot_network_ovr(result: dict):
     return fig
 
 
-def export_network_ovr(result: dict, out_dir: Path) -> dict[str, Path]:
+def export_network_ovr(result: dict, out_dir: Path, *, prefix: str | None = None) -> dict[str, Path]:
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    prefix = f"network_ovr_{result['taxonomy']}"
+    out_prefix = prefix or result.get("prefix", f"network_ovr_{result['taxonomy']}")
     paths = {}
     arrays = ("network_profiles", "beta", "intercept", "odds_ratio", "feature_sd",
               "standardized_beta", "standardized_odds_ratio")
     for key in arrays:
-        paths[key] = out_dir / f"{prefix}_{key}.npy"
+        paths[key] = out_dir / f"{out_prefix}_{key}.npy"
         np.save(paths[key], result[key])
-    paths["input_table"] = out_dir / f"{prefix}_inputs.tsv"
+    paths["input_table"] = out_dir / f"{out_prefix}_inputs.tsv"
     rows = [{"subject_id": sid, "cluster_id": cid,
              **dict(zip(result["network_names"], result["network_profiles"][s, c].tolist(), strict=True))}
             for s, sid in enumerate(result["subject_ids"]) for c, cid in enumerate(result["cluster_ids"])]
     write_tsv(paths["input_table"], rows, ["subject_id", "cluster_id", *result["network_names"]])
-    paths["coefficient_figure"] = out_dir / f"{prefix}_coefficients.png"
+    paths["coefficient_figure"] = out_dir / f"{out_prefix}_coefficients.png"
     fig = plot_network_ovr(result)
     fig.savefig(paths["coefficient_figure"], dpi=160)
     import matplotlib.pyplot as plt
     plt.close(fig)
-    paths["metadata"] = out_dir / f"{prefix}.json"
+    paths["metadata"] = out_dir / f"{out_prefix}.json"
     metadata = {key: value for key, value in result.items() if key not in arrays}
     metadata["artifacts"] = {key: str(path.resolve()) for key, path in paths.items()}
     write_json(paths["metadata"], metadata)

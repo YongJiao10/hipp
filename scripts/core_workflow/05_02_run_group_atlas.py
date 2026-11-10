@@ -68,13 +68,14 @@ Outputs:
 """
 import argparse
 import csv
+import sys
 import hashlib
 import importlib.metadata
 import json
 import math
 import os
 import warnings
-from collections.abc import Iterable  # noqa: E402
+from collections.abc import Iterable, Sequence  # noqa: E402
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
@@ -147,6 +148,30 @@ from lib.output_layout import (
     DEFAULT_KONG2022_TEMPLATE_ROOT,
     DEFAULT_ROUTEA_GROUP_ATLAS_ROOT,
     resolve_cohort_gradient_root,
+    resolve_cohort_group_atlas_root,
+)
+from lib.gradient_profiles import (
+    GRADIENT_RANDOM_STATE,
+    RESAMPLE_HALF_SEED_OFFSETS,
+    GRADIENT_PROFILE_CHOICES,
+    gradient_profile_config,
+    gradient_profile_role,
+    gradient_profile_earlier_label,
+    get_gradient_profile,
+    validate_gradient_combination,
+    # Backward compatibility aliases
+    FORMAL_GRADIENT_RANDOM_STATE,
+    FORMAL_RESAMPLE_HALF_SEED_OFFSETS,
+    FORMAL_PROFILE_CHOICES,
+    formal_profile_config,
+    formal_profile_role,
+    formal_profile_earlier_label,
+    get_formal_profile,
+    validate_formal_combination,
+)
+from lib.weighted_fisherz import (
+    assignment_status_from_weighted_network_profile,
+    subjectwise_cluster_network_fisherz_profile,
 )
 from lib.route_tags import (
     ROUTE_TAG_CHOICES,
@@ -167,7 +192,15 @@ from lib.io_utils import load_subject_ids, load_json, write_tsv, load_run_segmen
 from lib.group_atlas_lineage import validate_group_atlas_lineage, gradient_computation_provenance
 from lib.network_colors import load_cluster_palette, load_network_colors
 from lib.gradient_alignment import align_gradient_components_to_reference
-from lib.network_ovr import OVR_VARIANTS, OVR_ASSIGNMENT_METRIC, fit_network_ovr, export_network_ovr
+from lib.network_ovr import (
+    ALL_OVR_VARIANTS,
+    NETWORK_TS_OVR_VARIANT,
+    OVR_ASSIGNMENT_METRIC,
+    OVR_VARIANTS,
+    export_network_ovr,
+    fit_network_ovr,
+    fit_network_ovr_from_network_profiles,
+)
 from lib.cluster_roi_profile_contract import (
     GRADIENT_PROFILE_CONTRACT_TAG,
     atlas_produces_cluster_roi_profile,
@@ -345,7 +378,12 @@ def gradient_resume_inputs(
         "gradient_anchor_inputs": file_state_list([
             Path(path) for field in ("alignment_fc_paths", "alignment_mask_paths")
             for path in (gradient_options or {}).get(field, {}).values()
-        ] + [Path(path).parent / "runs" / f"run-{rid}" / Path(path).name
+        ] + [
+            (
+                Path(path).parent / "runs" / f"run-{rid}" / Path(path).name
+                if (Path(path).parent / "runs" / f"run-{rid}" / Path(path).name).exists()
+                else Path(path).parent / "runs" / f"run-{rid}" / (Path(path).stem + "_active.npy")
+            )
              for path in (gradient_options or {}).get("alignment_fc_paths", {}).values()
              for rid in (gradient_options or {}).get("alignment_run_ids", [])]),
     }
@@ -593,7 +631,9 @@ def centered_cosine_similarity(a: np.ndarray, b: np.ndarray | None = None) -> np
     return sim.astype(np.float32)
 
 
-def profile_redundancy_metrics(profile: np.ndarray) -> tuple[float, int]:
+def profile_redundancy_metrics(
+    profile: np.ndarray, *, threshold: float = PROFILE_REDUNDANCY_MAX_SIM,
+) -> tuple[float, int]:
     p = np.asarray(profile, dtype=np.float32)
     if p.ndim != 2 or int(p.shape[0]) <= 1:
         return 0.0, 0
@@ -603,7 +643,7 @@ def profile_redundancy_metrics(profile: np.ndarray) -> tuple[float, int]:
     if vals.size == 0:
         return 0.0, 0
     max_sim = float(np.max(vals))
-    redundant_pairs = int(np.sum(vals > float(PROFILE_REDUNDANCY_MAX_SIM)))
+    redundant_pairs = int(np.sum(vals > float(threshold)))
     return max_sim, redundant_pairs
 
 
@@ -981,6 +1021,11 @@ def comparison_primary_k(k: int) -> dict:
     return {"chosen_k_final": int(k), "automatic_k_final": None, "primary_k_source": "fixed_comparison"}
 
 
+def primary_k_row(rows: list[dict], k: int) -> dict:
+    """Return diagnostics for the partition actually exported and displayed."""
+    return next(row for row in rows if int(row["k"]) == int(k))
+
+
 def effective_k_values(k_values: list[int], *, n_support: int, v_min: int, mode: str) -> tuple[int, list[int]]:
     maximum = (n_support - 1 if mode == "fixed-comparison" else
                min(max(k_values), n_support // max(1, v_min)))
@@ -1032,6 +1077,35 @@ def primary_k_provenance(
         "automatic_k_final": automatic_k_final,
         "primary_k_source": primary_k_source,
     }
+
+
+def resolve_selected_primary_k(
+    *,
+    k_final: int,
+    k_selection_mode: str,
+    forced_fixed_k: bool,
+    candidate_pool: list[dict],
+    survivors: list[dict],
+    force_final_k: int | None,
+    default_k: int | None,
+) -> dict[str, int | str | None]:
+    """Record the rendered K without requiring redundancy diagnostics in fixed mode."""
+    if k_selection_mode == "fixed-comparison":
+        return comparison_primary_k(k_final)
+
+    automatic_k_final = None if (forced_fixed_k or not candidate_pool) else int(survivors[0]["k"])
+    primary_k = primary_k_provenance(
+        force_final_k=force_final_k,
+        default_k=default_k,
+        automatic_k_final=automatic_k_final,
+    )
+    if not forced_fixed_k and not candidate_pool and default_k is not None:
+        return {
+            "chosen_k_final": int(default_k),
+            "primary_k_source": "default_k",
+            "automatic_k_final": None,
+        }
+    return primary_k
 
 
 def is_clusterless_method(method: str) -> bool:
@@ -1393,9 +1467,19 @@ def build_group_gradient_features(
         for subject in subjects_subset:
             fc_path = Path(options["alignment_fc_paths"][subject])
             if "alignment_run_id" in options:
-                fc_path = fc_path.parent / "runs" / f"run-{options['alignment_run_id']}" / fc_path.name
+                run_dir = fc_path.parent / "runs" / f"run-{options['alignment_run_id']}"
+                run_fc_path = run_dir / fc_path.name
+                if not run_fc_path.exists():
+                    alt = run_dir / (fc_path.stem + "_active.npy")
+                    if alt.exists():
+                        run_fc_path = alt
+                fc_path = run_fc_path
             mask = np.asarray(np.load(options["alignment_mask_paths"][subject]), dtype=bool)
             raw_fc = np.asarray(np.load(fc_path), dtype=np.float32)
+            if raw_fc.shape[0] == int(np.sum(mask)) and raw_fc.shape[1] == group_fc.shape[1]:
+                full_raw = np.full((mask.size, group_fc.shape[1]), np.nan, dtype=np.float32)
+                full_raw[mask, :] = raw_fc
+                raw_fc = full_raw
             if raw_fc.shape != (mask.size, group_fc.shape[1]):
                 raise ValueError(f"{anchor_smoothing}-left anchor FC/mask mismatch: {fc_path}: {raw_fc.shape} vs {mask.shape}")
             permutation = options.get("alignment_vertex_permutations", {}).get(subject)
@@ -1483,10 +1567,11 @@ def load_hippomaps_gradient_features(
     clustering_feature_scaling: str = "none",
     gradient_random_state: int = DEFAULT_GRADIENT_RANDOM_STATE,
     alignment_anchor_smoothing: str = "4mm",
+    profile: str | None = None,
 ) -> tuple[np.ndarray, dict[str, object]]:
     comps = parse_gradient_components(",".join(str(c) for c in gradient_components))
     run_dir = resolve_cohort_gradient_root(
-        route=route, cohort=cohort, variant=variant, base_root=Path(gradient_root).resolve(),
+        route=route, cohort=cohort, variant=variant, base_root=Path(gradient_root).resolve(), profile=profile,
     ) / smoothing / f"hemi_{hemi}"
     manifest_path = run_dir / "hippomaps_gradient_manifest.json"
     if not manifest_path.exists():
@@ -2626,6 +2711,447 @@ def cluster_for_subset(
     )
 
 
+DEFAULT_HALF_FIT_SEED_OFFSETS = (1001, 2001)
+
+
+def half_fit_seeds(
+    outer_seed: int,
+    offsets: tuple[int, int] = DEFAULT_HALF_FIT_SEED_OFFSETS,
+) -> tuple[int, int]:
+    """Derive the two deterministic diffusion/clustering seeds for one repetition."""
+    return int(outer_seed + offsets[0]), int(outer_seed + offsets[1])
+
+
+@dataclass(frozen=True)
+class RepetitionOutcome:
+    repetition_index: int
+    resample_type: str  # "split" or "null"
+    seed: int
+    k: int
+    ari: float
+    status: str  # "ok" or "failed"
+    reason: str
+    n_overlap: int = 0
+
+
+@dataclass
+class FittedHalf:
+    half_index: int
+    seed: int
+    features: np.ndarray | None = None
+    support: np.ndarray | None = None
+    reason: str | None = None
+    full: np.ndarray | None = None
+
+
+def split_seed_for_index(index: int, base_seed: int = 20260420) -> int:
+    return int(base_seed + 1 + 13 * index)
+
+
+def null_seed_for_index(index: int, base_seed: int = 20260420) -> int:
+    return int(base_seed + 5000 + 17 * index)
+
+
+def compute_resample_statistics(records: Sequence[RepetitionOutcome], requested: int = 20) -> dict[str, object]:
+    valid_vals = [r.ari for r in records if r.status == "ok" and math.isfinite(r.ari)]
+    failed_count = sum(1 for r in records if r.status != "ok" or not math.isfinite(r.ari))
+    if valid_vals:
+        arr = np.asarray(valid_vals, dtype=np.float64)
+        mean = float(np.mean(arr))
+        se = float(np.std(arr, ddof=1) / math.sqrt(len(arr))) if len(arr) > 1 else 0.0
+    else:
+        mean = math.nan
+        se = math.nan
+    return {
+        "group_ari_mean": mean,
+        "group_ari_se": se,
+        "subject_split_requested": int(requested),
+        "subject_split_used": int(len(valid_vals)),
+        "subject_split_failed": int(failed_count),
+    }
+
+
+def compute_null_statistics(records: Sequence[RepetitionOutcome], requested: int = 20) -> dict[str, object]:
+    valid_vals = [r.ari for r in records if r.status == "ok" and math.isfinite(r.ari)]
+    failed_count = sum(1 for r in records if r.status != "ok" or not math.isfinite(r.ari))
+    if valid_vals:
+        arr = np.asarray(valid_vals, dtype=np.float64)
+        mean = float(np.mean(arr))
+        pct5 = float(np.percentile(arr, 5.0))
+    else:
+        mean = math.nan
+        pct5 = math.nan
+    return {
+        "ARI_null_mean": mean,
+        "ARI_null_5pct": pct5,
+        "B_null_requested": int(requested),
+        "B_null_used_strong": int(len(valid_vals)),
+        "null_failed": int(failed_count),
+    }
+
+
+def compute_half_group_fc(
+    fc_dict: dict[str, np.ndarray],
+    half_subjects: Sequence[str],
+    support_mask: np.ndarray,
+    *,
+    valid_masks: dict[str, np.ndarray] | None = None,
+) -> np.ndarray:
+    """Average the already Fisher-z-transformed subject feature bank once."""
+    active_idx = np.flatnonzero(np.asarray(support_mask, dtype=bool))
+    if active_idx.size == 0:
+        raise ValueError("Empty support mask for half group FC")
+    mats = []
+    for s in half_subjects:
+        sub_fc = np.asarray(fc_dict[s][active_idx, :], dtype=np.float32)
+        if valid_masks is not None and s in valid_masks:
+            sub_valid = np.asarray(valid_masks[s], dtype=bool)[active_idx]
+            if not np.all(sub_valid):
+                sub_fc = sub_fc.copy()
+                sub_fc[~sub_valid, :] = np.nan
+        mats.append(sub_fc)
+    group_fc = np.nanmean(np.stack(mats, axis=0).astype(np.float32), axis=0)
+    group_fc[~np.isfinite(group_fc)] = 0.0
+    return group_fc.astype(np.float32)
+
+
+def fit_and_align_half_gradient(
+    group_fc_active: np.ndarray,
+    support_mask: np.ndarray,
+    vertex_count: int,
+    *,
+    feature_scaling: str,
+    sparsify_stage: str,
+    sparsity: float,
+    seed: int,
+    reference_full: np.ndarray | None = None,
+    n_components: int = 5,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Fit diffusion gradients for a half and optionally align to reference_full."""
+    active_g, lambdas, ev = brainspace_diffusion_gradients(
+        group_fc_active,
+        n_components=n_components,
+        hippomaps_root=HIPPOMAPS_ROOT_OVERRIDE,
+        gradient_options={
+            "feature_scaling": feature_scaling,
+            "sparsify_stage": sparsify_stage,
+            "sparsity": sparsity,
+            "random_state": int(seed),
+        },
+    )
+    full_g = np.full((int(vertex_count), int(n_components)), np.nan, dtype=np.float32)
+    full_g[np.asarray(support_mask, dtype=bool)] = active_g
+    if reference_full is not None:
+        component_labels = [f"G{i+1}" for i in range(n_components)]
+        active_g, full_g, _, _, _ = align_gradient_components_to_reference(
+            active=active_g,
+            full=full_g,
+            lambdas=lambdas,
+            ev_fractions=ev,
+            reference_full=reference_full,
+            component_labels=component_labels,
+        )
+    return active_g, full_g
+
+
+def evaluate_half_pair_for_k(
+    half_a: FittedHalf,
+    half_b: FittedHalf,
+    adjacency_full: sparse.csr_matrix,
+    method: str,
+    k: int,
+    repetition_index: int,
+    resample_type: str,
+    seed: int,
+) -> RepetitionOutcome:
+    if half_a.reason:
+        return RepetitionOutcome(
+            repetition_index, resample_type, seed, k, math.nan, "failed", f"Half A: {half_a.reason}"
+        )
+    if half_b.reason:
+        return RepetitionOutcome(
+            repetition_index, resample_type, seed, k, math.nan, "failed", f"Half B: {half_b.reason}"
+        )
+    assert half_a.support is not None and half_b.support is not None
+    assert half_a.features is not None and half_b.features is not None
+
+    overlap = half_a.support & half_b.support
+    if int(overlap.sum()) <= int(k):
+        return RepetitionOutcome(
+            repetition_index,
+            resample_type,
+            seed,
+            k,
+            math.nan,
+            "failed",
+            f"Overlap vertices ({int(overlap.sum())}) <= k ({k})",
+            n_overlap=int(overlap.sum()),
+        )
+
+    try:
+        _, full_a = cluster_from_precomputed_group_features(
+            method=method,
+            group_features=half_a.features,
+            support_mask=half_a.support,
+            adjacency_full=adjacency_full,
+            k=int(k),
+            seed=int(half_a.seed),
+        )
+        _, full_b = cluster_from_precomputed_group_features(
+            method=method,
+            group_features=half_b.features,
+            support_mask=half_b.support,
+            adjacency_full=adjacency_full,
+            k=int(k),
+            seed=int(half_b.seed),
+        )
+        ref = full_a[overlap]
+        tgt = full_b[overlap]
+        ari = float(adjusted_rand_score(ref, tgt))
+        return RepetitionOutcome(
+            repetition_index, resample_type, seed, k, ari, "ok", "", n_overlap=int(overlap.sum())
+        )
+    except Exception as exc:
+        return RepetitionOutcome(
+            repetition_index, resample_type, seed, k, math.nan, "failed", str(exc), n_overlap=int(overlap.sum())
+        )
+
+
+def _fit_single_half(
+    fc_stack_or_mean: np.ndarray,
+    support_mask: np.ndarray,
+    vertex_count: int,
+    half_index: int,
+    seed: int,
+    feature_scaling: str,
+    sparsify_stage: str,
+    sparsity: float,
+    reference_full: np.ndarray | None,
+    n_components: int = 5,
+    selected_components: tuple[int, ...] = (1, 2, 3),
+) -> FittedHalf:
+    try:
+        active_g, full_g = fit_and_align_half_gradient(
+            fc_stack_or_mean,
+            support_mask,
+            vertex_count=vertex_count,
+            feature_scaling=feature_scaling,
+            sparsify_stage=sparsify_stage,
+            sparsity=sparsity,
+            seed=seed,
+            reference_full=reference_full,
+            n_components=n_components,
+        )
+        col_indices = [c - 1 for c in selected_components]
+        features = active_g[:, col_indices].astype(np.float32)
+        return FittedHalf(half_index=half_index, seed=seed, features=features, support=support_mask, full=full_g)
+    except Exception as exc:
+        return FittedHalf(half_index=half_index, seed=seed, reason=str(exc))
+
+
+def _resolve_half_reference(
+    reference_full: np.ndarray | None,
+    reference_half: FittedHalf | None,
+) -> tuple[np.ndarray | None, str | None]:
+    if reference_half is not None:
+        if reference_half.reason:
+            return None, f"Left reference failed: {reference_half.reason}"
+        return reference_half.full, None
+    return reference_full, None
+
+
+def _prepare_one_split_repetition(
+    repetition_index: int,
+    subjects: Sequence[str],
+    feature_bank: dict[str, np.ndarray],
+    valid_masks: dict[str, np.ndarray],
+    tau: float,
+    base_seed: int,
+    feature_scaling: str,
+    sparsify_stage: str,
+    sparsity: float,
+    reference_full: np.ndarray | None,
+    n_components: int = 5,
+    selected_components: tuple[int, ...] = (1, 2, 3),
+    half_fit_seed_offsets: tuple[int, int] = DEFAULT_HALF_FIT_SEED_OFFSETS,
+    reference_pair: tuple[FittedHalf, FittedHalf] | None = None,
+) -> tuple[int, FittedHalf, FittedHalf]:
+    seed = split_seed_for_index(repetition_index, base_seed)
+    rng = np.random.RandomState(seed)
+    perm = list(subjects)
+    rng.shuffle(perm)
+    half = len(perm) // 2
+    sub_a = perm[:half]
+    sub_b = perm[half:]
+
+    cov_a = np.mean([valid_masks[s] for s in sub_a], axis=0)
+    cov_b = np.mean([valid_masks[s] for s in sub_b], axis=0)
+    mask_a = cov_a >= float(tau)
+    mask_b = cov_b >= float(tau)
+
+    seed_a, seed_b = half_fit_seeds(seed, half_fit_seed_offsets)
+    ref_full_a, ref_err_a = _resolve_half_reference(reference_full, reference_pair[0] if reference_pair is not None else None)
+    ref_full_b, ref_err_b = _resolve_half_reference(reference_full, reference_pair[1] if reference_pair is not None else None)
+
+    if ref_err_a is not None:
+        half_a = FittedHalf(half_index=0, seed=seed_a, reason=ref_err_a)
+    elif int(mask_a.sum()) < 2:
+        half_a = FittedHalf(half_index=0, seed=seed_a, reason=f"Mask A vertices ({int(mask_a.sum())}) < 2")
+    else:
+        fc_a = compute_half_group_fc(feature_bank, sub_a, mask_a, valid_masks=valid_masks)
+        half_a = _fit_single_half(
+            fc_a, mask_a, vertex_count=mask_a.size, half_index=0, seed=seed_a,
+            feature_scaling=feature_scaling, sparsify_stage=sparsify_stage, sparsity=sparsity,
+            reference_full=ref_full_a, n_components=n_components, selected_components=selected_components,
+        )
+
+    if ref_err_b is not None:
+        half_b = FittedHalf(half_index=1, seed=seed_b, reason=ref_err_b)
+    elif int(mask_b.sum()) < 2:
+        half_b = FittedHalf(half_index=1, seed=seed_b, reason=f"Mask B vertices ({int(mask_b.sum())}) < 2")
+    else:
+        fc_b = compute_half_group_fc(feature_bank, sub_b, mask_b, valid_masks=valid_masks)
+        half_b = _fit_single_half(
+            fc_b, mask_b, vertex_count=mask_b.size, half_index=1, seed=seed_b,
+            feature_scaling=feature_scaling, sparsify_stage=sparsify_stage, sparsity=sparsity,
+            reference_full=ref_full_b, n_components=n_components, selected_components=selected_components,
+        )
+
+    return repetition_index, half_a, half_b
+
+
+def _prepare_one_null_repetition(
+    repetition_index: int,
+    subjects: Sequence[str],
+    feature_bank: dict[str, np.ndarray],
+    valid_masks: dict[str, np.ndarray],
+    tau: float,
+    base_seed: int,
+    feature_scaling: str,
+    sparsify_stage: str,
+    sparsity: float,
+    reference_full: np.ndarray | None,
+    n_components: int = 5,
+    selected_components: tuple[int, ...] = (1, 2, 3),
+    half_fit_seed_offsets: tuple[int, int] = DEFAULT_HALF_FIT_SEED_OFFSETS,
+    reference_pair: tuple[FittedHalf, FittedHalf] | None = None,
+) -> tuple[int, FittedHalf, FittedHalf]:
+    seed = null_seed_for_index(repetition_index, base_seed)
+    half = len(subjects) // 2
+    null_fc_bank: dict[str, np.ndarray] = {}
+    null_masks: dict[str, np.ndarray] = {}
+    for s_idx, s in enumerate(subjects):
+        rng_s = np.random.RandomState(seed + s_idx)
+        n_verts = feature_bank[s].shape[0]
+        perm = rng_s.permutation(n_verts)
+        null_fc_bank[s] = feature_bank[s][perm, :].astype(np.float32)
+        null_masks[s] = valid_masks[s][perm]
+
+    sub_a = list(subjects[:half])
+    sub_b = list(subjects[half:])
+
+    cov_a = np.mean([null_masks[s] for s in sub_a], axis=0)
+    cov_b = np.mean([null_masks[s] for s in sub_b], axis=0)
+    mask_a = cov_a >= float(tau)
+    mask_b = cov_b >= float(tau)
+
+    seed_a, seed_b = half_fit_seeds(seed, half_fit_seed_offsets)
+    ref_full_a, ref_err_a = _resolve_half_reference(reference_full, reference_pair[0] if reference_pair is not None else None)
+    ref_full_b, ref_err_b = _resolve_half_reference(reference_full, reference_pair[1] if reference_pair is not None else None)
+
+    if ref_err_a is not None:
+        half_a = FittedHalf(half_index=0, seed=seed_a, reason=ref_err_a)
+    elif int(mask_a.sum()) < 2:
+        half_a = FittedHalf(half_index=0, seed=seed_a, reason=f"Null mask A vertices ({int(mask_a.sum())}) < 2")
+    else:
+        fc_a = compute_half_group_fc(null_fc_bank, sub_a, mask_a, valid_masks=null_masks)
+        half_a = _fit_single_half(
+            fc_a, mask_a, vertex_count=mask_a.size, half_index=0, seed=seed_a,
+            feature_scaling=feature_scaling, sparsify_stage=sparsify_stage, sparsity=sparsity,
+            reference_full=ref_full_a, n_components=n_components, selected_components=selected_components,
+        )
+
+    if ref_err_b is not None:
+        half_b = FittedHalf(half_index=1, seed=seed_b, reason=ref_err_b)
+    elif int(mask_b.sum()) < 2:
+        half_b = FittedHalf(half_index=1, seed=seed_b, reason=f"Null mask B vertices ({int(mask_b.sum())}) < 2")
+    else:
+        fc_b = compute_half_group_fc(null_fc_bank, sub_b, mask_b, valid_masks=null_masks)
+        half_b = _fit_single_half(
+            fc_b, mask_b, vertex_count=mask_b.size, half_index=1, seed=seed_b,
+            feature_scaling=feature_scaling, sparsify_stage=sparsify_stage, sparsity=sparsity,
+            reference_full=ref_full_b, n_components=n_components, selected_components=selected_components,
+        )
+
+    return repetition_index, half_a, half_b
+
+
+def prepare_all_split_halves(
+    subjects: Sequence[str],
+    feature_bank: dict[str, np.ndarray],
+    valid_masks: dict[str, np.ndarray],
+    tau: float,
+    *,
+    feature_scaling: str,
+    sparsify_stage: str,
+    sparsity: float,
+    reference_full: np.ndarray | None,
+    n_repetitions: int = 20,
+    base_seed: int = 20260420,
+    max_workers: int = 8,
+    selected_components: tuple[int, ...] = (1, 2, 3),
+    half_fit_seed_offsets: tuple[int, int] = DEFAULT_HALF_FIT_SEED_OFFSETS,
+    reference_halves: Sequence[tuple[FittedHalf, FittedHalf]] | None = None,
+) -> list[tuple[FittedHalf, FittedHalf]]:
+    """Compute split-half gradient fits across all repetitions."""
+    results: list[tuple[int, FittedHalf, FittedHalf]] = []
+    for i in range(n_repetitions):
+        results.append(
+            _prepare_one_split_repetition(
+                i, subjects, feature_bank, valid_masks, tau, base_seed,
+                feature_scaling, sparsify_stage, sparsity, reference_full,
+                selected_components=selected_components,
+                half_fit_seed_offsets=half_fit_seed_offsets,
+                reference_pair=reference_halves[i] if reference_halves is not None else None,
+            )
+        )
+    results.sort(key=lambda r: r[0])
+    return [(r[1], r[2]) for r in results]
+
+
+def prepare_all_null_halves(
+    subjects: Sequence[str],
+    feature_bank: dict[str, np.ndarray],
+    valid_masks: dict[str, np.ndarray],
+    tau: float,
+    *,
+    feature_scaling: str,
+    sparsify_stage: str,
+    sparsity: float,
+    reference_full: np.ndarray | None,
+    n_repetitions: int = 20,
+    base_seed: int = 20260420,
+    max_workers: int = 8,
+    selected_components: tuple[int, ...] = (1, 2, 3),
+    half_fit_seed_offsets: tuple[int, int] = DEFAULT_HALF_FIT_SEED_OFFSETS,
+    reference_halves: Sequence[tuple[FittedHalf, FittedHalf]] | None = None,
+) -> list[tuple[FittedHalf, FittedHalf]]:
+    """Compute null-half gradient fits across all repetitions."""
+    results: list[tuple[int, FittedHalf, FittedHalf]] = []
+    for i in range(n_repetitions):
+        results.append(
+            _prepare_one_null_repetition(
+                i, subjects, feature_bank, valid_masks, tau, base_seed,
+                feature_scaling, sparsify_stage, sparsity, reference_full,
+                selected_components=selected_components,
+                half_fit_seed_offsets=half_fit_seed_offsets,
+                reference_pair=reference_halves[i] if reference_halves is not None else None,
+            )
+        )
+    results.sort(key=lambda r: r[0])
+    return [(r[1], r[2]) for r in results]
+
+
 def subject_split_ari(
     *,
     method: str,
@@ -2887,6 +3413,9 @@ def evaluate_k_candidate(
     gradient_components: tuple[int, ...] = DEFAULT_GRADIENT_COMPONENTS,
     allow_diagnostic_failures: bool = False,
     gradient_options: dict[str, object] | None = None,
+    precomputed_split_halves: list[tuple[FittedHalf, FittedHalf]] | None = None,
+    precomputed_null_halves: list[tuple[FittedHalf, FittedHalf]] | None = None,
+    redundancy_threshold: float = PROFILE_REDUNDANCY_MAX_SIM,
 ) -> tuple[int, np.ndarray, dict[str, object]]:
     clustering_metadata: dict[str, object] = {}
     labels_active, labels_full = cluster_from_precomputed_group_features(
@@ -2921,49 +3450,98 @@ def evaluate_k_candidate(
     max_components = int(max(comp.values())) if comp else 0
     min_coh, mean_coh = cluster_profile_coherence(group_features_active, labels_active, int(k))
 
-    ari_obj = subject_split_ari(
-        method=method,
-        feature_bank=feature_bank,
-        valid_masks_by_subject=valid_masks,
-        subjects=subjects,
-        tau=float(tau),
-        adjacency_full=adjacency_full,
-        k=int(k),
-        seeds=split_seeds,
-        gradient_components=gradient_components,
-        allow_diagnostic_failures=allow_diagnostic_failures,
-        gradient_options=gradient_options,
-    )
-    ari_vals = list(ari_obj["values"])
-    if not ari_vals:
-        if not allow_diagnostic_failures:
-            raise RuntimeError(f"No valid ARI resamples for combo={combo} k={k}")
-        ari_mean = math.nan
-        ari_se = math.nan
-        ari_status = "no_valid_subject_split_resamples"
+    if precomputed_split_halves is not None:
+        split_records = [
+            evaluate_half_pair_for_k(
+                half_a, half_b, adjacency_full, method, int(k), i, "split",
+                split_seeds[i] if i < len(split_seeds) else split_seed_for_index(i, int(seed_base))
+            )
+            for i, (half_a, half_b) in enumerate(precomputed_split_halves)
+        ]
+        split_stats = compute_resample_statistics(split_records, requested=len(precomputed_split_halves))
+        ari_vals = [r.ari for r in split_records if r.status == "ok" and math.isfinite(r.ari)]
+        ari_mean = split_stats["group_ari_mean"]
+        ari_se = split_stats["group_ari_se"]
+        ari_status = "ok" if split_stats["subject_split_failed"] == 0 else "partial_resample_failures_skipped"
+        n_split_req = int(split_stats["subject_split_requested"])
+        n_split_used = int(split_stats["subject_split_used"])
+        n_split_overlap = sum(1 for r in split_records if "Overlap vertices" in r.reason)
+        n_split_empty = 0
+        n_split_fail = int(split_stats["subject_split_failed"])
     else:
-        ari_arr = np.asarray(ari_vals, dtype=np.float64)
-        ari_mean = float(np.mean(ari_arr))
-        ari_se = float(np.std(ari_arr, ddof=1) / np.sqrt(ari_arr.size)) if ari_arr.size > 1 else 0.0
-        ari_status = "ok" if int(ari_obj["n_skipped_failure"]) == 0 else "partial_resample_failures_skipped"
+        split_records = None
+        ari_obj = subject_split_ari(
+            method=method,
+            feature_bank=feature_bank,
+            valid_masks_by_subject=valid_masks,
+            subjects=subjects,
+            tau=float(tau),
+            adjacency_full=adjacency_full,
+            k=int(k),
+            seeds=split_seeds,
+            gradient_components=gradient_components,
+            allow_diagnostic_failures=allow_diagnostic_failures,
+            gradient_options=gradient_options,
+        )
+        ari_vals = list(ari_obj["values"])
+        if not ari_vals:
+            if not allow_diagnostic_failures:
+                raise RuntimeError(f"No valid ARI resamples for combo={combo} k={k}")
+            ari_mean = math.nan
+            ari_se = math.nan
+            ari_status = "no_valid_subject_split_resamples"
+        else:
+            ari_arr = np.asarray(ari_vals, dtype=np.float64)
+            ari_mean = float(np.mean(ari_arr))
+            ari_se = float(np.std(ari_arr, ddof=1) / np.sqrt(ari_arr.size)) if ari_arr.size > 1 else 0.0
+            ari_status = "ok" if int(ari_obj["n_skipped_failure"]) == 0 else "partial_resample_failures_skipped"
+        n_split_req = int(ari_obj["n_requested"])
+        n_split_used = int(ari_obj["n_used"])
+        n_split_overlap = int(ari_obj["n_skipped_overlap"])
+        n_split_empty = int(ari_obj["n_skipped_empty"])
+        n_split_fail = int(ari_obj["n_skipped_failure"])
 
-    weak_obj = weak_null_ari(int(k), int(n_support), null_seeds)
-    weak = list(weak_obj["values"])
-    strong_obj = strong_null_ari(
-        method=method,
-        feature_bank=feature_bank,
-        valid_masks_by_subject=valid_masks,
-        subjects=subjects,
-        tau=float(tau),
-        adjacency_full=adjacency_full,
-        k=int(k),
-        seeds=null_seeds,
-        gradient_components=gradient_components,
-        allow_diagnostic_failures=allow_diagnostic_failures,
-        gradient_options=gradient_options,
-    )
-    strong = list(strong_obj["values"])
-    strong_arr = np.asarray(strong, dtype=np.float64) if strong else np.array([0.0], dtype=np.float64)
+    if precomputed_null_halves is not None:
+        null_records = [
+            evaluate_half_pair_for_k(
+                null_a, null_b, adjacency_full, method, int(k), i, "null",
+                null_seeds[i] if i < len(null_seeds) else null_seed_for_index(i, int(seed_base))
+            )
+            for i, (null_a, null_b) in enumerate(precomputed_null_halves)
+        ]
+        null_stats = compute_null_statistics(null_records, requested=len(precomputed_null_halves))
+        strong = [r.ari for r in null_records if r.status == "ok" and math.isfinite(r.ari)]
+        strong_arr = np.asarray(strong, dtype=np.float64) if strong else np.array([0.0], dtype=np.float64)
+        null_mean = float(null_stats["ARI_null_mean"])
+        null_pct5 = float(null_stats["ARI_null_5pct"])
+        n_null_req = int(null_stats["B_null_requested"])
+        n_null_used = int(null_stats["B_null_used_strong"])
+        n_null_fail = int(null_stats["null_failed"])
+        weak = []
+    else:
+        null_records = None
+        weak_obj = weak_null_ari(int(k), int(n_support), null_seeds)
+        weak = list(weak_obj["values"])
+        strong_obj = strong_null_ari(
+            method=method,
+            feature_bank=feature_bank,
+            valid_masks_by_subject=valid_masks,
+            subjects=subjects,
+            tau=float(tau),
+            adjacency_full=adjacency_full,
+            k=int(k),
+            seeds=null_seeds,
+            gradient_components=gradient_components,
+            allow_diagnostic_failures=allow_diagnostic_failures,
+            gradient_options=gradient_options,
+        )
+        strong = list(strong_obj["values"])
+        strong_arr = np.asarray(strong, dtype=np.float64) if strong else np.array([0.0], dtype=np.float64)
+        null_mean = float(np.mean(strong_arr))
+        null_pct5 = float(np.percentile(strong_arr, 5.0))
+        n_null_req = int(null_resamples)
+        n_null_used = int(strong_obj["n_used"])
+        n_null_fail = int(strong_obj["n_skipped_failure"])
 
     run_obj = run_aware_ari(
         method=method,
@@ -3003,7 +3581,9 @@ def evaluate_k_candidate(
             roi_fc_bank=roi_fc_bank_for_redundancy,
             valid_masks_by_subject=valid_masks,
         )
-        max_profile_similarity, redundant_pair_count = profile_redundancy_metrics(redundancy_profile)
+        max_profile_similarity, redundant_pair_count = profile_redundancy_metrics(
+            redundancy_profile, threshold=redundancy_threshold,
+        )
         redundancy_profile_status = "ok"
 
     row = {
@@ -3019,24 +3599,24 @@ def evaluate_k_candidate(
         "group_ari_mean": ari_mean,
         "group_ari_se": ari_se,
         "group_ari_diagnostic_status": ari_status,
-        "subject_split_requested": int(ari_obj["n_requested"]),
-        "subject_split_used": int(ari_obj["n_used"]),
-        "subject_split_skipped_overlap": int(ari_obj["n_skipped_overlap"]),
-        "subject_split_skipped_empty": int(ari_obj["n_skipped_empty"]),
-        "subject_split_skipped_failure": int(ari_obj["n_skipped_failure"]),
+        "subject_split_requested": n_split_req,
+        "subject_split_used": n_split_used,
+        "subject_split_skipped_overlap": n_split_overlap,
+        "subject_split_skipped_empty": n_split_empty,
+        "subject_split_skipped_failure": n_split_fail,
         "run_aware_ari_mean": run_ari_mean,
         "run_aware_ari_se": run_ari_se,
         "run_aware_ari_status": run_ari_status,
         "run_aware_n_pairs": int(run_obj["n_pairs"]),
         "run_aware_n_used": int(run_obj["n_used"]),
         "run_aware_skipped_failure": int(run_obj["n_skipped_failure"]),
-        "ARI_null_mean": float(np.mean(strong_arr)),
-        "ARI_null_5pct": float(np.percentile(strong_arr, 5.0)),
-        "ARI_weak_null_mean": float(np.mean(np.asarray(weak, dtype=np.float64))),
-        "B_null_requested": int(null_resamples),
-        "B_null_used_strong": int(strong_obj["n_used"]),
-        "B_null_used_weak": int(weak_obj["n_used"]),
-        "B_null_skipped_failure_strong": int(strong_obj["n_skipped_failure"]),
+        "ARI_null_mean": null_mean,
+        "ARI_null_5pct": null_pct5,
+        "ARI_weak_null_mean": float(np.mean(np.asarray(weak, dtype=np.float64))) if weak else math.nan,
+        "B_null_requested": n_null_req,
+        "B_null_used_strong": n_null_used,
+        "B_null_used_weak": int(weak_obj["n_used"]) if "weak_obj" in locals() else 0,
+        "B_null_skipped_failure_strong": n_null_fail,
         "min_cluster_size": int(min_size),
         "max_components_per_cluster": int(max_components),
         "affinity_graph_diagnostics": graph_diagnostics,
@@ -3049,9 +3629,10 @@ def evaluate_k_candidate(
         "max_profile_similarity": float(max_profile_similarity),
         "redundant_pair_count": int(redundant_pair_count),
         "redundancy_profile_status": redundancy_profile_status,
+        "redundancy_threshold": float(redundancy_threshold),
         "nonredundant_ok": int(
             np.isfinite(max_profile_similarity)
-            and max_profile_similarity <= float(PROFILE_REDUNDANCY_MAX_SIM)
+            and max_profile_similarity <= float(redundancy_threshold)
             and int(redundant_pair_count) == 0
         ),
         "reject_nontrivial_fail": 0,
@@ -3059,6 +3640,10 @@ def evaluate_k_candidate(
         "reject_reason_primary": "",
         "selected_final": 0,
     }
+    if split_records is not None:
+        row["split_repetitions"] = [r.__dict__ for r in split_records]
+    if null_records is not None:
+        row["null_repetitions"] = [r.__dict__ for r in null_records]
     return int(k), labels_full.astype(np.int32), row
 
 
@@ -3516,6 +4101,8 @@ def read_kong2022_roi_tsv(path: Path) -> list[dict[str, object]]:
                 "hemisphere": str(row["hemisphere"]),
                 "subregion": str(row.get("subregion", "")),
                 "rank": int(row.get("rank", "0")),
+                "n_grayordinates_used": int(row.get("n_grayordinates_used", "0")),
+                "n_grayordinates_total": int(row.get("n_grayordinates_total", "0")),
             }
         )
     return out
@@ -4361,10 +4948,10 @@ def cluster_assignment_variants_from_kong2022_roi_profile(
 
 
 def requested_ovr_variants(variants: list[str], *, atlas: str, method: str) -> list[str]:
-    unknown = set(variants) - {"both", "fisherz", "normalized_top20_count", *OVR_VARIANTS}
+    unknown = set(variants) - {"both", "fisherz", "normalized_top20_count", "network_ts_fisherz", *ALL_OVR_VARIANTS}
     if unknown:
         raise ValueError(f"Unknown assignment variants: {sorted(unknown)}")
-    selected = [variant for variant in OVR_VARIANTS if variant in variants]
+    selected = [variant for variant in ALL_OVR_VARIANTS if variant in variants]
     if selected and (atlas != "kong2022" or is_clusterless_method(method)):
         raise ValueError("OVR requires the declared Kong2022 400-ROI subjectwise cluster profile contract")
     return selected
@@ -4376,7 +4963,7 @@ def build_ovr_assignment_specs(*, roi_profile_3d: np.ndarray, subjects: list[str
     specs = {}
     for variant in variants:
         if variant not in OVR_VARIANTS:
-            raise ValueError(f"Expected explicit OVR variant, got {variant}")
+            continue
         taxonomy = variant.removeprefix("ovr_logistic_")
         model = fit_network_ovr(roi_profile_3d, subjects, cluster_ids, roi_registry, taxonomy=taxonomy)
         paths = export_network_ovr(model, out_dir)
@@ -4923,8 +5510,26 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--null-resamples", type=int, default=100)
     parser.add_argument("--seed", type=int, default=20260420)
     parser.add_argument("--assignment-variant", nargs="+", default=["both"],
-                        choices=["both", "fisherz", "normalized_top20_count", *OVR_VARIANTS],
+                        choices=["both", "fisherz", "normalized_top20_count", "network_ts_fisherz", *ALL_OVR_VARIANTS],
                         help="Fisher-z and Top-20 retain their existing exports; explicitly select OVR taxonomies to add regression annotations.")
+    parser.add_argument(
+        "--profile",
+        choices=GRADIENT_PROFILE_CHOICES,
+        default=None,
+        help="HCP PFM gradient profile name ('topfc' or 'topsim'). Automatically configures feature scaling, sparsify stage, sparsity, clustering scaling, and default roots.",
+    )
+    parser.add_argument(
+        "--redundancy-threshold",
+        type=float,
+        default=None,
+        help="Cluster redundancy maximum profile similarity threshold (default: 0.90 for active profile, 0.80 otherwise).",
+    )
+    parser.add_argument(
+        "--resampling-workers",
+        type=int,
+        default=8,
+        help="Number of worker processes for split/null resampling gradient fitting (default: 8, bounded by IDAS cap 16).",
+    )
     parser.add_argument("--v-min-fraction", type=float, default=0.03)
     parser.add_argument("--max-components-threshold", type=int, default=3)
     parser.add_argument("--min-profile-coherence", type=float, default=0.0)
@@ -4950,7 +5555,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--feature-scaling", choices=("none", "col_zscore"), default="col_zscore")
     parser.add_argument("--sparsify-stage", choices=("features", "affinity", "none"), default="features")
     parser.add_argument("--sparsity", type=float, default=None)
-    parser.add_argument("--gradient-random-state", type=int, default=DEFAULT_GRADIENT_RANDOM_STATE)
+    parser.add_argument("--gradient-random-state", type=int, default=None,
+                        help="Gradient seed (default: 20260420 for a formal profile, 0 otherwise).")
     parser.add_argument("--rbf-scale", type=float, default=1.0)
     parser.add_argument("--clustering-feature-scaling", choices=("none", "unit_sd"), default="none")
     parser.add_argument("--resume", action="store_true", help="Skip combos that already have group_atlas_manifest.json.")
@@ -5025,6 +5631,19 @@ def _resolve_methods_and_taxonomy(args: argparse.Namespace) -> str:
 def main() -> int:
     parser = build_arg_parser()
     args = parser.parse_args()
+    if args.gradient_random_state is None:
+        args.gradient_random_state = (
+            GRADIENT_RANDOM_STATE if args.profile is not None else DEFAULT_GRADIENT_RANDOM_STATE
+        )
+    if args.profile is not None:
+        p_cfg = gradient_profile_config(args.profile)
+        args.feature_scaling = str(p_cfg["feature_scaling"])
+        args.sparsify_stage = str(p_cfg["sparsify_stage"])
+        args.sparsity = float(p_cfg["sparsity"])
+        args.clustering_feature_scaling = "none"
+        if "--alignment-anchor-smoothing" not in sys.argv:
+            args.alignment_anchor_smoothing = "2mm"
+
     gradient_options = {
         "feature_scaling": args.feature_scaling,
         "sparsify_stage": args.sparsify_stage,
@@ -5070,11 +5689,17 @@ def main() -> int:
         network_taxonomy=network_taxonomy,
     )
     signal_branch = resolve_signal_branch_for_route(route_tag, args.signal_branch)
+    if args.profile is not None:
+        for m in args.methods:
+            validate_gradient_combination(args.profile, m)
+
     out_root, out_root_adjusted = resolve_group_atlas_out_root(
         args.out_root,
         route_tag,
         default_routea_out_root_selected=args.out_root == str(DEFAULT_ROUTEA_GROUP_ATLAS_ROOT),
     )
+    if args.profile is not None and (args.out_root == str(DEFAULT_OUT_ROOT) or args.out_root == str(DEFAULT_ROUTEA_GROUP_ATLAS_ROOT)):
+        out_root = resolve_cohort_group_atlas_root(dataset="hcp", route=route_tag, variant=args.variant, profile=args.profile)
     if out_root_adjusted:
         print(f"[info] Automatically adjusted --out-root to matching route directory: {out_root}", flush=True)
     validate_group_atlas_root_for_route(out_root, route_tag)
@@ -5125,6 +5750,12 @@ def main() -> int:
     gradient_route_tag = gradient_route_for_route_tag(route_tag)
     hippunfold_batch_root = Path(args.hippunfold_batch_root).resolve()
 
+    redundancy_threshold = (
+        float(args.redundancy_threshold)
+        if args.redundancy_threshold is not None
+        else (0.90 if args.profile is not None else float(PROFILE_REDUNDANCY_MAX_SIM))
+    )
+
     subjects_manifest_path = Path(args.subjects_manifest).resolve()
     subjects = load_subject_ids(subjects_manifest_path)
     subject_fc_mode = resolve_subject_fc_mode(args.subject_fc_mode, args.subject_fc_top_percent)
@@ -5143,9 +5774,13 @@ def main() -> int:
             f"--default-k must be within requested K range [{min(k_values)}, {max(k_values)}], "
             f"got {args.default_k}"
         )
-    rng = np.random.RandomState(int(args.seed))
-    split_seeds = [int(x) for x in rng.randint(1, 2_000_000_000, size=int(args.instability_resamples))]
-    null_seeds = [int(x) for x in rng.randint(1, 2_000_000_000, size=int(args.null_resamples))]
+    if args.profile is not None:
+        split_seeds = [split_seed_for_index(i, int(args.seed)) for i in range(20)]
+        null_seeds = [null_seed_for_index(i, int(args.seed)) for i in range(20)]
+    else:
+        rng = np.random.RandomState(int(args.seed))
+        split_seeds = [int(x) for x in rng.randint(1, 2_000_000_000, size=int(args.instability_resamples))]
+        null_seeds = [int(x) for x in rng.randint(1, 2_000_000_000, size=int(args.null_resamples))]
     config = GroupAtlasConfig(
         args=args,
         shared_root=shared_root,
@@ -5228,6 +5863,12 @@ def main() -> int:
         canonical_network_order_by_atlas[atlas] = verify_canonical_network_order_consistency(
             reference_root, subjects, atlas, network_taxonomy=network_taxonomy
         )
+
+    precomputed_resample_cache: dict[
+        tuple[object, ...],
+        tuple[list[tuple[FittedHalf, FittedHalf]], list[tuple[FittedHalf, FittedHalf]]],
+    ] = {}
+    anchor_inputs_cache: dict[tuple[str, str], tuple[dict[str, np.ndarray], dict[str, np.ndarray]]] = {}
 
     for method in config.args.methods:
         for atlas in config.args.atlases:
@@ -5315,6 +5956,7 @@ def main() -> int:
                                 clustering_feature_scaling=args.clustering_feature_scaling,
                                 gradient_random_state=args.gradient_random_state,
                                 alignment_anchor_smoothing=args.alignment_anchor_smoothing,
+                                profile=args.profile,
                             )
                         resume_signature_payload = {
                             "resume_input_signature_version": int(RESUME_SIGNATURE_VERSION),
@@ -5336,6 +5978,12 @@ def main() -> int:
                             "seed": int(args.seed),
                             "instability_resamples": int(args.instability_resamples),
                             "null_resamples": int(args.null_resamples),
+                            "resample_half_seed_offsets": (
+                                list(RESAMPLE_HALF_SEED_OFFSETS)
+                                if args.profile is not None
+                                else list(DEFAULT_HALF_FIT_SEED_OFFSETS)
+                            ),
+                            "resample_alignment_reference": "half_specific_anchor_hemi_L",
                             "diagnostic_failure_policy": (
                                 "skip_invalid_gradient_resamples_for_fixed_k"
                                 if bool(is_gradient_method(method) and args.force_final_k is not None and args.k_selection_mode != "fixed-comparison")
@@ -5434,6 +6082,7 @@ def main() -> int:
                             "max_profile_similarity",
                             "redundant_pair_count",
                             "redundancy_profile_status",
+                            "redundancy_threshold",
                             "nonredundant_ok",
                             "reject_nontrivial_fail",
                             "reject_redundant",
@@ -5797,6 +6446,146 @@ def main() -> int:
                         if is_gradient_method(method):
                             np.save(run_dir / "group_gradient_features_active.npy", group_features_active.astype(np.float32))
                             write_json(run_dir / "group_gradient_feature_summary.json", group_gradient_meta)
+
+                        precomputed_split_halves = None
+                        precomputed_null_halves = None
+                        if is_gradient_method(method) and fixed_cluster_reuse is None and (args.profile is not None or len(split_seeds) <= 20):
+                            half_fit_seed_offsets = (
+                                RESAMPLE_HALF_SEED_OFFSETS
+                                if args.profile is not None
+                                else DEFAULT_HALF_FIT_SEED_OFFSETS
+                            )
+                            anchor_smoothing = str(args.alignment_anchor_smoothing)
+                            n_resamples = len(split_seeds)
+                            base_resample_key = (
+                                atlas,
+                                str(args.feature_scaling),
+                                str(args.sparsify_stage),
+                                float(args.sparsity) if args.sparsity is not None else None,
+                                anchor_smoothing,
+                                float(tau),
+                                int(args.seed),
+                                int(n_resamples),
+                                int(len(null_seeds)),
+                                tuple(gradient_components),
+                                tuple(half_fit_seed_offsets),
+                            )
+                            anchor_cache_key = (*base_resample_key, anchor_smoothing, "L")
+                            if anchor_cache_key not in precomputed_resample_cache:
+                                if smoothing == anchor_smoothing and hemi == "L":
+                                    anchor_fb = feature_bank
+                                    anchor_vm = valid_masks
+                                else:
+                                    anchor_input_key = (atlas, anchor_smoothing)
+                                    if anchor_input_key not in anchor_inputs_cache:
+                                        anchor_vm_loaded = {
+                                            s: subject_valid_mask(surface_root, shared_root, s, anchor_smoothing, "L")
+                                            for s in subjects
+                                        }
+                                        anchor_fb_loaded = {}
+                                        for s in subjects:
+                                            raw_anchor = subject_network_feature(
+                                                shared_root,
+                                                s,
+                                                atlas,
+                                                anchor_smoothing,
+                                                "L",
+                                                method,
+                                                reference_root=reference_root,
+                                            )
+                                            anchor_fb_loaded[s] = preprocess_subject_fc_matrix(
+                                                method=method,
+                                                fc=raw_anchor,
+                                                subject_fc_mode=subject_fc_mode,
+                                            )
+                                        anchor_inputs_cache[anchor_input_key] = (anchor_fb_loaded, anchor_vm_loaded)
+                                    anchor_fb, anchor_vm = anchor_inputs_cache[anchor_input_key]
+                                print(
+                                    f"  [resample-precompute] Precomputing {n_resamples} anchor ({anchor_smoothing} hemi_L) split & null halves...",
+                                    flush=True,
+                                )
+                                anchor_splits = prepare_all_split_halves(
+                                    subjects=subjects,
+                                    feature_bank=anchor_fb,
+                                    valid_masks=anchor_vm,
+                                    tau=float(tau),
+                                    feature_scaling=args.feature_scaling,
+                                    sparsify_stage=args.sparsify_stage,
+                                    sparsity=args.sparsity,
+                                    reference_full=None,
+                                    n_repetitions=n_resamples,
+                                    base_seed=int(args.seed),
+                                    max_workers=int(args.resampling_workers),
+                                    selected_components=gradient_components,
+                                    half_fit_seed_offsets=half_fit_seed_offsets,
+                                    reference_halves=None,
+                                )
+                                anchor_nulls = prepare_all_null_halves(
+                                    subjects=subjects,
+                                    feature_bank=anchor_fb,
+                                    valid_masks=anchor_vm,
+                                    tau=float(tau),
+                                    feature_scaling=args.feature_scaling,
+                                    sparsify_stage=args.sparsify_stage,
+                                    sparsity=args.sparsity,
+                                    reference_full=None,
+                                    n_repetitions=len(null_seeds),
+                                    base_seed=int(args.seed),
+                                    max_workers=int(args.resampling_workers),
+                                    selected_components=gradient_components,
+                                    half_fit_seed_offsets=half_fit_seed_offsets,
+                                    reference_halves=None,
+                                )
+                                precomputed_resample_cache[anchor_cache_key] = (anchor_splits, anchor_nulls)
+
+                            combo_cache_key = (*base_resample_key, smoothing, hemi)
+                            if combo_cache_key not in precomputed_resample_cache:
+                                anchor_splits, anchor_nulls = precomputed_resample_cache[anchor_cache_key]
+                                print(
+                                    f"  [resample-precompute] Precomputing {n_resamples} split & null halves for {smoothing} hemi_{hemi}...",
+                                    flush=True,
+                                )
+                                combo_splits = prepare_all_split_halves(
+                                    subjects=subjects,
+                                    feature_bank=feature_bank,
+                                    valid_masks=valid_masks,
+                                    tau=float(tau),
+                                    feature_scaling=args.feature_scaling,
+                                    sparsify_stage=args.sparsify_stage,
+                                    sparsity=args.sparsity,
+                                    reference_full=None,
+                                    n_repetitions=n_resamples,
+                                    base_seed=int(args.seed),
+                                    max_workers=int(args.resampling_workers),
+                                    selected_components=gradient_components,
+                                    half_fit_seed_offsets=half_fit_seed_offsets,
+                                    reference_halves=anchor_splits,
+                                )
+                                combo_nulls = prepare_all_null_halves(
+                                    subjects=subjects,
+                                    feature_bank=feature_bank,
+                                    valid_masks=valid_masks,
+                                    tau=float(tau),
+                                    feature_scaling=args.feature_scaling,
+                                    sparsify_stage=args.sparsify_stage,
+                                    sparsity=args.sparsity,
+                                    reference_full=None,
+                                    n_repetitions=len(null_seeds),
+                                    base_seed=int(args.seed),
+                                    max_workers=int(args.resampling_workers),
+                                    selected_components=gradient_components,
+                                    half_fit_seed_offsets=half_fit_seed_offsets,
+                                    reference_halves=anchor_nulls,
+                                )
+                                precomputed_resample_cache[combo_cache_key] = (combo_splits, combo_nulls)
+                                print("  [resample-precompute] Precomputation complete.", flush=True)
+                            else:
+                                print(
+                                    f"  [resample-precompute] Reusing cached split & null halves for {smoothing} hemi_{hemi}.",
+                                    flush=True,
+                                )
+                            precomputed_split_halves, precomputed_null_halves = precomputed_resample_cache[combo_cache_key]
+
                         redundancy_early_stop_enabled = bool(
                             args.redundancy_early_stop
                             and fixed_cluster_reuse is None
@@ -5838,6 +6627,9 @@ def main() -> int:
                                     gradient_components=gradient_components,
                                     allow_diagnostic_failures=allow_gradient_diagnostic_failures,
                                     gradient_options=gradient_options,
+                                    precomputed_split_halves=precomputed_split_halves,
+                                    precomputed_null_halves=precomputed_null_halves,
+                                    redundancy_threshold=redundancy_threshold,
                                 )
                                 print(f"  [k-done] {k_result}", flush=True)
                                 labels_by_k[int(k_result)] = labels_full
@@ -5850,7 +6642,7 @@ def main() -> int:
                                     )
                                     break
                         else:
-                            k_eval_jobs = resolve_k_eval_jobs(int(args.jobs), len(k_eff))
+                            k_eval_jobs = 1 if precomputed_split_halves is not None else resolve_k_eval_jobs(int(args.jobs), len(k_eff))
                             print(
                                 f"  [k-parallel] n_k={len(k_eff)} jobs={k_eval_jobs}",
                                 flush=True,
@@ -5885,6 +6677,9 @@ def main() -> int:
                                         gradient_components=gradient_components,
                                         allow_diagnostic_failures=allow_gradient_diagnostic_failures,
                                         gradient_options=gradient_options,
+                                        precomputed_split_halves=precomputed_split_halves,
+                                        precomputed_null_halves=precomputed_null_halves,
+                                        redundancy_threshold=redundancy_threshold,
                                     ): int(k)
                                     for k in k_eff
                                 }
@@ -5936,6 +6731,7 @@ def main() -> int:
                                 f"k={forced_fixed_k_target}, evaluated={[int(r['k']) for r in rows]}, combo={combo}"
                             )
                         forced_fixed_k = forced_fixed_k_target is not None
+                        candidate_pool: list[dict] = []
                         if forced_fixed_k:
                             k_forced = int(forced_fixed_k_target)
                             for row in rows:
@@ -5954,7 +6750,7 @@ def main() -> int:
                                 row["nonredundant_ok"] = int(
                                     (
                                         np.isfinite(float(row["max_profile_similarity"]))
-                                        and float(row["max_profile_similarity"]) <= float(PROFILE_REDUNDANCY_MAX_SIM)
+                                        and float(row["max_profile_similarity"]) <= float(redundancy_threshold)
                                         and int(row["redundant_pair_count"]) == 0
                                     )
                                 )
@@ -5987,86 +6783,104 @@ def main() -> int:
                                         row["reject_reason_primary"] = ""
                                 survivors = [r for r in rows if int(r["selected_final"]) == 1]
                         if not survivors:
-                            skip_reason = "no_k_survived_selection_constraints"
-                            skip_detail = f"No K survived selection constraints for combo={combo}"
-                            write_tsv(run_dir / "k_selection_summary.tsv", rows, k_selection_fields)
-                            write_json(
-                                run_dir / "k_selection_summary.json",
-                                {
-                                    "rows": rows,
-                                    "k_final": None,
+                            if args.default_k is not None and int(args.default_k) in labels_by_k:
+                                k_final = int(args.default_k)
+                                for row in rows:
+                                    if int(row["k"]) == k_final:
+                                        row["selected_final"] = 1
+                                        row["reject_reason_primary"] = "default_k_displayed"
+                                    else:
+                                        row["selected_final"] = 0
+                                decision_path = "default_k_displayed_no_survivors"
+                                automatic_k_final = None
+                                primary_k = {
+                                    "chosen_k_final": k_final,
+                                    "primary_k_source": "default_k",
+                                    "automatic_k_final": None,
+                                    "force_final_k": None,
+                                    "default_k": k_final,
+                                }
+                            else:
+                                skip_reason = "no_k_survived_selection_constraints"
+                                skip_detail = f"No K survived selection constraints for combo={combo}"
+                                write_tsv(run_dir / "k_selection_summary.tsv", rows, k_selection_fields)
+                                write_json(
+                                    run_dir / "k_selection_summary.json",
+                                    {
+                                        "rows": rows,
+                                        "k_final": None,
+                                        "skip_reason": skip_reason,
+                                        "skip_detail": skip_detail,
+                                    },
+                                )
+                                manifest = {
+                                    "status": "skipped_no_k_survived_constraints",
+                                    **signal_provenance,
                                     "skip_reason": skip_reason,
                                     "skip_detail": skip_detail,
-                                },
-                            )
-                            manifest = {
-                                "status": "skipped_no_k_survived_constraints",
-                                **signal_provenance,
-                                "skip_reason": skip_reason,
-                                "skip_detail": skip_detail,
-                                "method": method,
-                                "atlas": atlas,
-                                "smoothing": smoothing,
-                                "hemi": hemi,
-                                "k_selection_mode": str(args.k_selection_mode),
-                                "force_final_k": int(args.force_final_k) if args.force_final_k is not None else None,
-                            "default_k": int(args.default_k) if args.default_k is not None else None,
-                                "coverage_threshold": float(tau),
-                                "V_min_fraction": float(args.v_min_fraction),
-                                "V_min_effective": int(v_min),
-                                "feature_family": feature_family_for_method(method, atlas, gradient_components),
-                                "fc_mode": fc_mode_for_method(method, atlas),
-                                "gradient_components": [int(c) for c in gradient_components] if is_gradient_method(method) else None,
-                                "candidate_k_range_requested": [int(min(k_values)), int(max(k_values))],
-                                "candidate_k_range_effective": [int(min(k_eff)), int(max(k_eff))],
-                                "candidate_k_values_evaluated": [int(r["k"]) for r in rows],
-                                "redundancy_early_stop_enabled": bool(redundancy_early_stop_enabled),
-                                "chosen_k_final": None,
-                                "subject_split_seeds": split_seeds,
-                                "null_seeds": null_seeds,
-                                "n_subjects": int(len(subjects)),
-                                "subjects": [f"sub-{s}" for s in subjects],
-                                "n_support_vertices": int(n_support),
-                                "n_excluded_vertices": int(n_vertices - n_support),
-                                "actual_consumed_input_paths": actual_input_paths,
-                                "resume_input_signature_version": int(RESUME_SIGNATURE_VERSION),
-                                "resume_input_signature": resume_input_signature,
-                                "resume_input_signature_payload": resume_signature_payload,
-                                "subject_fc_preprocessing": subject_fc_preprocessing,
-                                "group_gradient_features_active": (
-                                    str((run_dir / "group_gradient_features_active.npy").resolve())
-                                    if is_gradient_method(method)
-                                    else None
-                                ),
-                                "group_gradient_feature_summary": (
-                                    str((run_dir / "group_gradient_feature_summary.json").resolve())
-                                    if is_gradient_method(method)
-                                    else None
-                                ),
-                                "nontriviality_thresholds": {
+                                    "method": method,
+                                    "atlas": atlas,
+                                    "smoothing": smoothing,
+                                    "hemi": hemi,
+                                    "k_selection_mode": str(args.k_selection_mode),
+                                    "force_final_k": int(args.force_final_k) if args.force_final_k is not None else None,
+                                "default_k": int(args.default_k) if args.default_k is not None else None,
+                                    "coverage_threshold": float(tau),
                                     "V_min_fraction": float(args.v_min_fraction),
-                                    "max_components_threshold": int(args.max_components_threshold),
-                                    "min_profile_coherence": float(args.min_profile_coherence),
-                                },
-                                "redundancy_aware_thresholds": {
-                                    "max_profile_similarity_lte": float(PROFILE_REDUNDANCY_MAX_SIM),
-                                    "redundant_pair_count_eq": 0,
-                                },
-                                "density_evidence": {
-                                    "surface_path": str(surfaces[hemi]),
-                                    "n_vertices": int(surface_meta[hemi]["n_vertices"]),
-                                    "n_faces": int(surface_meta[hemi]["n_faces"]),
-                                },
-                                "surface_topology_audit": topology_audit[hemi],
-                                "group_support_mask": str((run_dir / "group_support_mask.npy").resolve()),
-                                "subject_coverage_count": str((run_dir / "subject_coverage_count.npy").resolve()),
-                                "subject_coverage_fraction": str((run_dir / "subject_coverage_fraction.npy").resolve()),
-                                "k_selection_summary_tsv": str((run_dir / "k_selection_summary.tsv").resolve()),
-                                "k_selection_summary_json": str((run_dir / "k_selection_summary.json").resolve()),
-                            }
-                            write_json(manifest_path, manifest)
-                            print(f"  [skip] {skip_detail}", flush=True)
-                            continue
+                                    "V_min_effective": int(v_min),
+                                    "feature_family": feature_family_for_method(method, atlas, gradient_components),
+                                    "fc_mode": fc_mode_for_method(method, atlas),
+                                    "gradient_components": [int(c) for c in gradient_components] if is_gradient_method(method) else None,
+                                    "candidate_k_range_requested": [int(min(k_values)), int(max(k_values))],
+                                    "candidate_k_range_effective": [int(min(k_eff)), int(max(k_eff))],
+                                    "candidate_k_values_evaluated": [int(r["k"]) for r in rows],
+                                    "redundancy_early_stop_enabled": bool(redundancy_early_stop_enabled),
+                                    "chosen_k_final": None,
+                                    "subject_split_seeds": split_seeds,
+                                    "null_seeds": null_seeds,
+                                    "n_subjects": int(len(subjects)),
+                                    "subjects": [f"sub-{s}" for s in subjects],
+                                    "n_support_vertices": int(n_support),
+                                    "n_excluded_vertices": int(n_vertices - n_support),
+                                    "actual_consumed_input_paths": actual_input_paths,
+                                    "resume_input_signature_version": int(RESUME_SIGNATURE_VERSION),
+                                    "resume_input_signature": resume_input_signature,
+                                    "resume_input_signature_payload": resume_signature_payload,
+                                    "subject_fc_preprocessing": subject_fc_preprocessing,
+                                    "group_gradient_features_active": (
+                                        str((run_dir / "group_gradient_features_active.npy").resolve())
+                                        if is_gradient_method(method)
+                                        else None
+                                    ),
+                                    "group_gradient_feature_summary": (
+                                        str((run_dir / "group_gradient_feature_summary.json").resolve())
+                                        if is_gradient_method(method)
+                                        else None
+                                    ),
+                                    "nontriviality_thresholds": {
+                                        "V_min_fraction": float(args.v_min_fraction),
+                                        "max_components_threshold": int(args.max_components_threshold),
+                                        "min_profile_coherence": float(args.min_profile_coherence),
+                                    },
+                                    "redundancy_aware_thresholds": {
+                                        "max_profile_similarity_lte": float(redundancy_threshold),
+                                        "redundant_pair_count_eq": 0,
+                                    },
+                                    "density_evidence": {
+                                        "surface_path": str(surfaces[hemi]),
+                                        "n_vertices": int(surface_meta[hemi]["n_vertices"]),
+                                        "n_faces": int(surface_meta[hemi]["n_faces"]),
+                                    },
+                                    "surface_topology_audit": topology_audit[hemi],
+                                    "group_support_mask": str((run_dir / "group_support_mask.npy").resolve()),
+                                    "subject_coverage_count": str((run_dir / "subject_coverage_count.npy").resolve()),
+                                    "subject_coverage_fraction": str((run_dir / "subject_coverage_fraction.npy").resolve()),
+                                    "k_selection_summary_tsv": str((run_dir / "k_selection_summary.tsv").resolve()),
+                                    "k_selection_summary_json": str((run_dir / "k_selection_summary.json").resolve()),
+                                }
+                                write_json(manifest_path, manifest)
+                                print(f"  [skip] {skip_detail}", flush=True)
+                                continue
                         selected_rows = [row for row in rows if int(row["selected_final"]) == 1]
                         if len(selected_rows) != 1:
                             raise RuntimeError(
@@ -6074,14 +6888,15 @@ def main() -> int:
                             )
                         k_final = int(selected_rows[0]["k"])
                         decision_path = str(selected_rows[0]["k_final_decision_path"])
-                        automatic_k_final = None if forced_fixed_k else int(k_final)
-                        primary_k = primary_k_provenance(
+                        primary_k = resolve_selected_primary_k(
+                            k_final=k_final,
+                            k_selection_mode=str(args.k_selection_mode),
+                            forced_fixed_k=forced_fixed_k,
+                            candidate_pool=candidate_pool,
+                            survivors=survivors,
                             force_final_k=args.force_final_k,
                             default_k=args.default_k,
-                            automatic_k_final=automatic_k_final,
                         )
-                        if args.k_selection_mode == "fixed-comparison":
-                            primary_k = comparison_primary_k(k_final)
                         if primary_k["chosen_k_final"] is None:
                             raise RuntimeError(f"No primary K available for combo={combo}")
                         k_final = int(primary_k["chosen_k_final"])
@@ -6090,6 +6905,7 @@ def main() -> int:
                                 f"Primary K={k_final} was not evaluated for combo={combo}; "
                                 f"evaluated={sorted(labels_by_k)}"
                             )
+                        primary_row = primary_k_row(rows, k_final)
                         labels_final = reorder_labels_by_long_axis(
                             labels_by_k[k_final],
                             long_axis_order_by_hemi[hemi],
@@ -6117,6 +6933,9 @@ def main() -> int:
                         roi_top20: dict[str, object] | None = None
                         roi_normalized_status_rows: list[dict[str, object]] | None = None
                         ovr_variants = requested_ovr_variants(args.assignment_variant, atlas=atlas, method=method)
+                        if args.profile is not None and not is_clusterless_method(method) and atlas == "kong2022":
+                            if "ovr_logistic_canonical7" not in ovr_variants:
+                                ovr_variants = list(ovr_variants) + ["ovr_logistic_canonical7"]
                         if method_uses_kong2022_topn_cluster_annotation(method, atlas):
                             (
                                 profile,
@@ -6229,6 +7048,58 @@ def main() -> int:
                                 cluster_ids=list(range(1, k_final + 1)), roi_registry=roi_registry,
                                 variants=ovr_variants, out_dir=run_dir,
                             ))
+                        if atlas == "kong2022" and not is_clusterless_method(method):
+                            if args.profile is not None or "network_ts_fisherz" in args.assignment_variant or NETWORK_TS_OVR_VARIANT in args.assignment_variant:
+                                net_ts_3d, net_ts_mean, net_ts_subs = subjectwise_cluster_network_fisherz_profile(
+                                    group_labels_final=labels_final,
+                                    support_mask=support,
+                                    subjects=subjects,
+                                    surface_root=config.profile_surface_root,
+                                    reference_root=reference_root,
+                                    smoothing=smoothing,
+                                    hemi=hemi,
+                                    valid_masks_by_subject=valid_masks,
+                                    network_names=network_names,
+                                    network_column=resolve_kong2022_network_registry_column(network_taxonomy),
+                                )
+                                np.save(run_dir / "cluster_network_ts_profile.npy", net_ts_mean.astype(np.float32))
+                                net_ts_status_rows, net_ts_dominant = assignment_status_from_weighted_network_profile(
+                                    net_ts_mean,
+                                    network_names,
+                                )
+                                assignment_variant_specs["network_ts_fisherz"] = {
+                                    "status_rows": net_ts_status_rows,
+                                    "dominant": net_ts_dominant,
+                                    "assignment_metric": "top1_network_ts_fisher_z",
+                                    "network_names": network_names,
+                                    "network_taxonomy": network_taxonomy,
+                                    "profile_units": "Fisher_z",
+                                    "q_threshold": None,
+                                    "top_n_cap": None,
+                                }
+                                net_ts_ovr_res = fit_network_ovr_from_network_profiles(
+                                    network_profiles=net_ts_3d,
+                                    subject_ids=net_ts_subs,
+                                    cluster_ids=list(range(1, k_final + 1)),
+                                    network_names=list(network_names),
+                                )
+                                net_ts_ovr_paths = export_network_ovr(
+                                    net_ts_ovr_res,
+                                    run_dir,
+                                    prefix=NETWORK_TS_OVR_VARIANT,
+                                )
+                                assignment_variant_specs[NETWORK_TS_OVR_VARIANT] = {
+                                    "status_rows": net_ts_ovr_res["assignment_rows"],
+                                    "dominant": [row["top1_network"] for row in net_ts_ovr_res["assignment_rows"]],
+                                    "assignment_metric": OVR_ASSIGNMENT_METRIC,
+                                    "q_threshold": None,
+                                    "top_n_cap": None,
+                                    "network_names": net_ts_ovr_res["network_names"],
+                                    "network_taxonomy": "canonical7",
+                                    "network_profile": str(net_ts_ovr_paths["beta"].resolve()),
+                                    "profile_units": "raw_beta_per_Fisher_z_unit",
+                                    "ovr_model_metadata": str(net_ts_ovr_paths["metadata"].resolve()),
+                                }
                         default_assignment_variant = select_cluster_level_default_assignment_variant(
                             assignment_variant_specs
                         )
@@ -6287,7 +7158,7 @@ def main() -> int:
                                 "group_functional_atlas_labels": str((run_dir / f"group_functional_atlas_labels_{variant_name}.npy").resolve()),
                                 "group_functional_atlas_label_map": str((run_dir / f"group_functional_atlas_label_map_{variant_name}.json").resolve()),
                             }
-                            if variant_name in OVR_VARIANTS:
+                            if variant_name in ALL_OVR_VARIANTS:
                                 functional_variant_payloads[variant_name].update({
                                     field: variant_spec[field] for field in
                                     ("network_profile", "ovr_model_metadata", "profile_units")
@@ -6352,6 +7223,13 @@ def main() -> int:
                             "dataset": dataset,
                             "expected_source_root": str(expected_source_root),
                             **signal_provenance,
+                            "profile": get_gradient_profile(args.profile).name if args.profile is not None else None,
+                            "profile_role": gradient_profile_role(args.profile) if args.profile is not None else None,
+                            "profile_earlier_label": gradient_profile_earlier_label(args.profile) if args.profile is not None else None,
+                            "formal_profile": get_gradient_profile(args.profile).name if args.profile is not None else None,
+                            "formal_profile_role": gradient_profile_role(args.profile) if args.profile is not None else None,
+                            "formal_profile_earlier_label": gradient_profile_earlier_label(args.profile) if args.profile is not None else None,
+                            "redundancy_threshold": float(redundancy_threshold),
                             "method": method,
                             "atlas": atlas,
                             "smoothing": smoothing,
@@ -6407,13 +7285,9 @@ def main() -> int:
                             "surface_affinity": method_surface_affinity_metadata(method)[0],
                             "rbf_scale": float(args.rbf_scale) if method == "gradient-spectral-rbf" else None,
                             "bandwidth_rule": "rbf_scale * median(positive unique-undirected-mesh-edge distance)" if method == "gradient-spectral-rbf" else None,
-                            "gradient_clustering": selected_rows[0].get("gradient_clustering") if is_gradient_method(method) else None,
+                            "gradient_clustering": primary_row.get("gradient_clustering") if is_gradient_method(method) else None,
                             "affinity_description": method_surface_affinity_metadata(method)[1],
-                            "affinity_graph_diagnostics": next(
-                                row["affinity_graph_diagnostics"]
-                                for row in rows
-                                if int(row["k"]) == int(k_final)
-                            ),
+                            "affinity_graph_diagnostics": primary_row["affinity_graph_diagnostics"],
                             "candidate_k_range_requested": [int(min(k_values)), int(max(k_values))],
                             "candidate_k_range_effective": [int(min(k_eff)), int(max(k_eff))],
                             "candidate_k_values_evaluated": [int(r["k"]) for r in rows],
@@ -6434,7 +7308,7 @@ def main() -> int:
                                 "min_profile_coherence": float(args.min_profile_coherence),
                             },
                             "redundancy_aware_thresholds": {
-                                "max_profile_similarity_lte": float(PROFILE_REDUNDANCY_MAX_SIM),
+                                "max_profile_similarity_lte": float(redundancy_threshold),
                                 "redundant_pair_count_eq": 0,
                             },
                             "density_evidence": {
@@ -6466,6 +7340,21 @@ def main() -> int:
                             "cluster_assignment_status_normalized_top20_count": (
                                 str(functional_variant_payloads["normalized_top20_count"]["cluster_assignment_status"])
                                 if "normalized_top20_count" in functional_variant_payloads
+                                else None
+                            ),
+                            "cluster_assignment_status_network_ts_fisherz": (
+                                str(functional_variant_payloads["network_ts_fisherz"]["cluster_assignment_status"])
+                                if "network_ts_fisherz" in functional_variant_payloads
+                                else None
+                            ),
+                            "cluster_assignment_status_ovr_logistic_canonical7_network_ts": (
+                                str(functional_variant_payloads[NETWORK_TS_OVR_VARIANT]["cluster_assignment_status"])
+                                if NETWORK_TS_OVR_VARIANT in functional_variant_payloads
+                                else None
+                            ),
+                            "cluster_network_ts_profile": (
+                                str((run_dir / "cluster_network_ts_profile.npy").resolve())
+                                if (run_dir / "cluster_network_ts_profile.npy").is_file()
                                 else None
                             ),
                             "cluster_roi_topn_assignment_status": (

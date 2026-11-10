@@ -505,7 +505,7 @@ def validate_file_fingerprints(
 ) -> None:
     if not isinstance(recorded, Mapping):
         raise ValueError(f"{context} fingerprint metadata is missing")
-    expected = fingerprint_files(paths)
+    expected = fingerprint_files(paths, use_cache=False)
     normalized_recorded = {
         str(key): dict(value) if isinstance(value, Mapping) else value
         for key, value in recorded.items()

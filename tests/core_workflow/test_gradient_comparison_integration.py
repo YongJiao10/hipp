@@ -58,6 +58,24 @@ def test_fixed_comparison_requests_one_k_and_leaves_automatic_k_unset():
         atlas.comparison_k_values(args)
 
 
+def test_fixed_comparison_primary_selection_bypasses_redundancy_pool():
+    atlas = stage("05_02_run_group_atlas.py")
+    primary = atlas.resolve_selected_primary_k(
+        k_final=3,
+        k_selection_mode="fixed-comparison",
+        forced_fixed_k=True,
+        candidate_pool=[],
+        survivors=[{"k": 3}],
+        force_final_k=None,
+        default_k=3,
+    )
+    assert primary == {
+        "chosen_k_final": 3,
+        "automatic_k_final": None,
+        "primary_k_source": "fixed_comparison",
+    }
+
+
 def test_fixed_comparison_fails_when_requested_k_cannot_fit_support():
     atlas = stage("05_02_run_group_atlas.py")
     with pytest.raises(ValueError, match="requested K.*supported"):

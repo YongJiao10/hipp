@@ -436,8 +436,12 @@ def resolve_cohort_group_atlas_root(
     route: str = "pfm",
     cohort: str | None = None,
     variant: str = "36p",
+    *,
+    profile: str | None = None,
 ) -> Path:
     base = resolve_group_atlas_root(dataset) / _variant_suffixed_route(route, variant)
+    if profile is not None:
+        base = base / str(profile).strip().lower()
     return base if cohort is None else base / str(cohort).strip()
 
 
@@ -448,9 +452,12 @@ def resolve_cohort_gradient_root(
     variant: str = "36p",
     *,
     base_root: Path | None = None,
+    profile: str | None = None,
 ) -> Path:
     stage_root = resolve_hippomaps_gradient_root(dataset) if base_root is None else Path(base_root)
     base = stage_root / _variant_suffixed_route(route, variant)
+    if profile is not None:
+        base = base / str(profile).strip().lower()
     return base if cohort is None else base / str(cohort).strip()
 
 
@@ -459,8 +466,12 @@ def resolve_cohort_overview_root(
     route: str = "pfm",
     cohort: str | None = None,
     variant: str = "36p",
+    *,
+    profile: str | None = None,
 ) -> Path:
     base = resolve_overviews_dir(dataset) / _variant_suffixed_route(route, variant)
+    if profile is not None:
+        base = base / str(profile).strip().lower()
     return base if cohort is None else base / str(cohort).strip()
 
 

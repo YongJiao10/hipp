@@ -34,6 +34,44 @@ def test_cli_alignment_anchor_smoothing_arguments_and_defaults():
     assert parsed_05_02_custom.alignment_anchor_smoothing == "2mm"
 
 
+@pytest.mark.parametrize(
+    ("profile", "extra", "expected_seed"),
+    [
+        ("topsim", [], 20260420),
+        ("topfc", [], 20260420),
+        (None, [], 0),
+        ("topsim", ["--gradient-random-state", "0"], 0),
+    ],
+)
+def test_gradient_producer_uses_formal_seed_unless_explicitly_overridden(
+    monkeypatch, profile, extra, expected_seed
+):
+    mod = stage("05_01_compute_hippomaps_gradients.py")
+    argv = [
+        "05_01_compute_hippomaps_gradients.py", "--routes", "pfm",
+        "--smoothings", "2mm", "--hemis", "L",
+        "--alignment-anchor-smoothing", "2mm",
+    ]
+    if profile:
+        argv += ["--profile", profile]
+    monkeypatch.setattr(sys, "argv", argv + extra)
+    monkeypatch.setattr(mod, "ensure_hippomaps_on_path", lambda path: path)
+    monkeypatch.setattr(mod, "load_subject_ids", lambda path: ["01"])
+    observed = []
+
+    class Captured(Exception):
+        pass
+
+    def capture_compute_combo(**kwargs):
+        observed.append(kwargs["gradient_random_state"])
+        raise Captured
+
+    monkeypatch.setattr(mod, "compute_combo", capture_compute_combo)
+    with pytest.raises(Captured):
+        mod.main()
+    assert observed == [expected_seed]
+
+
 def test_05_01_select_alignment_anchor_and_validation(monkeypatch):
     mod_05_01 = stage("05_01_compute_hippomaps_gradients.py")
     from types import SimpleNamespace

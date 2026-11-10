@@ -9,15 +9,22 @@ from typing import Any, Mapping
 
 import nibabel as nib
 import numpy as np
-from .network_ovr import OVR_VARIANTS, OVR_ASSIGNMENT_METRIC
+from .network_ovr import ALL_OVR_VARIANTS, NETWORK_TS_OVR_VARIANT, OVR_VARIANTS, OVR_ASSIGNMENT_METRIC
 
 
-ASSIGNMENT_VARIANTS = ("normalized_top20_count", "fisherz", "weighted_fisherz", *OVR_VARIANTS)
+ASSIGNMENT_VARIANTS = (
+    "normalized_top20_count",
+    "fisherz",
+    "weighted_fisherz",
+    "network_ts_fisherz",
+    *ALL_OVR_VARIANTS,
+)
 EXPECTED_METRICS = {
     "normalized_top20_count": "top20_count_normalized_by_network_roi_count",
     "fisherz": "top1_fisher_z",
     "weighted_fisherz": "top1_weighted_network_fisher_z",
-    **{variant: OVR_ASSIGNMENT_METRIC for variant in OVR_VARIANTS},
+    "network_ts_fisherz": "top1_network_ts_fisher_z",
+    **{variant: OVR_ASSIGNMENT_METRIC for variant in ALL_OVR_VARIANTS},
 }
 
 
@@ -256,7 +263,7 @@ def _validate_status_items(
                     f"Gradient assignment contract ({variant}): cluster "
                     f"{cid} has invalid normalized counts: {run_dir}"
                 )
-        elif variant in OVR_VARIANTS:
+        elif variant in ALL_OVR_VARIANTS:
             if profile is None or profile_names is None:
                 raise ValueError(f"OVR missing exact coefficients: {run_dir}")
             values = dict(zip(profile_names, map(float, profile[cid - 1]), strict=True))
@@ -266,7 +273,7 @@ def _validate_status_items(
                 for name, value in values.items()
             ):
                 raise ValueError(f"OVR status coefficients disagree: cluster={cid}: {run_dir}")
-        elif variant in {"fisherz", "weighted_fisherz"}:
+        elif variant in {"fisherz", "weighted_fisherz", "network_ts_fisherz"}:
             if profile is None or profile_names is None:
                 raise ValueError(
                     f"Gradient assignment contract ({variant}): missing "
@@ -623,11 +630,11 @@ def validate_gradient_assignment(
     profile: np.ndarray | None = None
     profile_names: list[str] | None = None
     dependencies: list[Path] = [cluster_path, *paths.values()]
-    if variant in OVR_VARIANTS:
+    if variant in ALL_OVR_VARIANTS:
         coefficient_path = _declared_path(row, "network_profile", run_dir, variant)
         metadata_path = _declared_path(row, "ovr_model_metadata", run_dir, variant)
         model = _read_json(metadata_path, label="OVR model", variant=variant, run_dir=run_dir)
-        taxonomy = variant.removeprefix("ovr_logistic_")
+        taxonomy = "canonical7" if variant == NETWORK_TS_OVR_VARIANT else variant.removeprefix("ovr_logistic_")
         if model.get("taxonomy") != taxonomy or model.get("variant") != variant:
             raise ValueError(f"OVR taxonomy/variant mismatch: {metadata_path}")
         if (model.get("cluster_ids") != actual_ids or model.get("network_names") != names
@@ -640,8 +647,11 @@ def validate_gradient_assignment(
         if profile.shape != (len(actual_ids), len(names)) or not np.isfinite(profile).all():
             raise ValueError(f"OVR coefficient shape/values mismatch: {coefficient_path}")
         dependencies.extend([coefficient_path, metadata_path])
-    if variant in {"fisherz", "weighted_fisherz"}:
-        if variant == "weighted_fisherz" or manifest.get(
+    if variant in {"fisherz", "weighted_fisherz", "network_ts_fisherz"}:
+        if variant == "network_ts_fisherz":
+            profile_raw = manifest.get("cluster_network_ts_profile") or str(run_dir / "cluster_network_ts_profile.npy")
+            declaration = "network-ts"
+        elif variant == "weighted_fisherz" or manifest.get(
             "default_assignment_variant"
         ) == "weighted_fisherz":
             profile_raw = row.get("cluster_network_profile")

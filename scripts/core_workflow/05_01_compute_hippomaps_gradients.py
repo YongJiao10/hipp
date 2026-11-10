@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -51,6 +52,7 @@ from lib.branch_config import (
 )
 from lib.fc_math import fisher_z_transform_fc
 from lib.gradient_alignment import finite_pearson_corr, best_abs_correlation_assignment, align_gradient_components_to_reference
+from lib.gradient_profiles import GRADIENT_RANDOM_STATE, get_gradient_profile
 from lib.hippomaps_adapter import (
     DEFAULT_GRADIENT_RANDOM_STATE,
     DEFAULT_HIPPOMAPS_ROOT,
@@ -142,6 +144,7 @@ class GradientComboResult:
     feature_scaling: str = "col_zscore"
     sparsify_stage: str = "features"
     sparsity: float | None = None
+    profile: str | None = None
 
 
 def group_mean_fisherz_fc(
@@ -340,6 +343,7 @@ def compute_combo(
     feature_scaling: str = "col_zscore",
     sparsify_stage: str = "features",
     sparsity: float | None = None,
+    profile: str | None = None,
 ) -> GradientComboResult:
     surface_path = (
         group_average_surfaces_dir
@@ -407,7 +411,7 @@ def compute_combo(
     group_fc_full = reconstruct_full_surface(group_fc_active, support_mask, vertex_count)
 
     run_dir = resolve_cohort_gradient_root(
-        route=route, cohort=cohort, variant=variant, base_root=out_root,
+        route=route, cohort=cohort, variant=variant, base_root=out_root, profile=profile,
     ) / smoothing / f"hemi_{hemi}"
     manifest_path = run_dir / "hippomaps_gradient_manifest.json"
     if manifest_path.exists() and not force:
@@ -444,6 +448,7 @@ def compute_combo(
         feature_scaling=feature_scaling,
         sparsify_stage=sparsify_stage,
         sparsity=sparsity,
+        profile=profile,
     )
 
 
@@ -570,15 +575,23 @@ def write_aligned_combo_outputs(
         "hippomaps_repo": str(Path(result.hippomaps_root).resolve()),
         "hippomaps_import_path": hippomaps_import_path(result.hippomaps_root),
         "hippomaps_commit": hippomaps_commit(result.hippomaps_root),
-        "outputs": {
-            "group_support_mask": str((run_dir / "group_support_mask.npy").resolve()),
-            "group_mean_fisherz_fc_active": str((run_dir / "group_mean_fisherz_fc_active.npy").resolve()),
-            "group_mean_fisherz_fc_full": str((run_dir / "group_mean_fisherz_fc_full.npy").resolve()),
-            "hippomaps_gradients_active": str((run_dir / "hippomaps_gradients_active.npy").resolve()),
-            "hippomaps_gradients_full": str((run_dir / "hippomaps_gradients_full.npy").resolve()),
-            "hippomaps_lambdas": str((run_dir / "hippomaps_lambdas.npy").resolve()),
-            "hippomaps_ev_fractions": str((run_dir / "hippomaps_ev_fractions.npy").resolve()),
-        },
+    }
+    if result.profile is not None:
+        prof_obj = get_gradient_profile(result.profile)
+        manifest["profile"] = result.profile
+        manifest["profile_role"] = prof_obj.role
+        manifest["profile_earlier_label"] = prof_obj.earlier_label
+        manifest["formal_profile"] = result.profile
+        manifest["formal_profile_role"] = prof_obj.role
+        manifest["formal_profile_earlier_label"] = prof_obj.earlier_label
+    manifest["outputs"] = {
+        "group_support_mask": str((run_dir / "group_support_mask.npy").resolve()),
+        "group_mean_fisherz_fc_active": str((run_dir / "group_mean_fisherz_fc_active.npy").resolve()),
+        "group_mean_fisherz_fc_full": str((run_dir / "group_mean_fisherz_fc_full.npy").resolve()),
+        "hippomaps_gradients_active": str((run_dir / "hippomaps_gradients_active.npy").resolve()),
+        "hippomaps_gradients_full": str((run_dir / "hippomaps_gradients_full.npy").resolve()),
+        "hippomaps_lambdas": str((run_dir / "hippomaps_lambdas.npy").resolve()),
+        "hippomaps_ev_fractions": str((run_dir / "hippomaps_ev_fractions.npy").resolve()),
     }
     write_json(manifest_path, manifest, sort_keys=True, trailing_newline=True)
     print(json.dumps({"status": "ok", "manifest": str(manifest_path), "n_subjects": len(result.subjects)}, indent=2), flush=True)
@@ -661,10 +674,16 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--sparsify-stage", choices=("features", "affinity", "none"), default="features")
     parser.add_argument("--sparsity", type=float, default=None)
     parser.add_argument(
+        "--profile",
+        choices=("topfc", "topsim"),
+        default=None,
+        help="HCP PFM gradient parcellation profile name. When specified, automatically configures feature scaling, sparsify stage, sparsity, and output directory below pfm/.",
+    )
+    parser.add_argument(
         "--gradient-random-state",
         type=int,
-        default=DEFAULT_GRADIENT_RANDOM_STATE,
-        help="Random seed passed to BrainSpace GradientMaps for reproducible diffusion initialization.",
+        default=None,
+        help="Gradient seed (default: 20260420 for an active profile, 0 otherwise).",
     )
     parser.add_argument("--selected-components", default="1,2,3")
     parser.add_argument("--max-subjects", type=int, default=None, help="Optional smoke-test cap after loading the manifest.")
@@ -678,6 +697,12 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    if args.gradient_random_state is None:
+        args.gradient_random_state = (
+            GRADIENT_RANDOM_STATE if args.profile is not None else DEFAULT_GRADIENT_RANDOM_STATE
+        )
+    if args.profile is not None and "--alignment-anchor-smoothing" not in sys.argv:
+        args.alignment_anchor_smoothing = "2mm"
     if args.alignment_anchor_smoothing not in args.smoothings or "L" not in args.hemis:
         raise ValueError(
             f"Gradient alignment requires explicit {args.alignment_anchor_smoothing} hemi L input in --smoothings and --hemis"
@@ -691,6 +716,15 @@ def main() -> int:
     for comp in selected_components:
         if comp > int(args.n_components):
             raise ValueError(f"Selected G{comp} exceeds --n-components={args.n_components}")
+    feature_scaling = args.feature_scaling
+    sparsify_stage = args.sparsify_stage
+    sparsity = args.sparsity
+    profile = args.profile
+    if profile is not None:
+        prof_obj = get_gradient_profile(profile)
+        feature_scaling = prof_obj.feature_scaling
+        sparsify_stage = prof_obj.sparsify_stage
+        sparsity = prof_obj.sparsity
     for route in args.routes:
         signal_branch = resolve_signal_branch_for_route(route, args.signal_branch)
         shared_root = resolve_gradient_shared_root(Path(args.shared_inputs_root), route)
@@ -726,9 +760,10 @@ def main() -> int:
                         force=bool(args.force),
                         cohort=args.cohort,
                         variant=args.variant,
-                        feature_scaling=args.feature_scaling,
-                        sparsify_stage=args.sparsify_stage,
-                        sparsity=args.sparsity,
+                        feature_scaling=feature_scaling,
+                        sparsify_stage=sparsify_stage,
+                        sparsity=sparsity,
+                        profile=profile,
                     )
                 )
         align_and_write_route_results(
