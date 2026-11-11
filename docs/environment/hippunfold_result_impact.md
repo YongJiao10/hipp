@@ -1,11 +1,12 @@
 # Official HippUnfold v2.3.0 baseline and reconstruction scope
 
-The scientific baseline is the official
+This assessment records the reconstruction using the official
 [v2.3.0 release](https://github.com/khanlab/hippunfold/releases/tag/v2.3.0),
 with the documented resource/inference runtime adapters only. Retired local
 boundary, reference-plane and Workbench corrections are not part of this
 method, and their candidate results do not establish the new release's
-scientific outcomes.
+scientific outcomes. The current runtime is specified in the
+[runtime manifest](hippo2_reproducibility_manifest.md).
 
 ## Upstream fixes
 
@@ -26,7 +27,7 @@ v2.3.0:
 
 The release also includes geometric-centre initialization and surface topology
 QC. See the [complete tagged comparison](https://github.com/khanlab/hippunfold/compare/v2.2.0...v2.3.0).
-Use this release rather than development main: the maintainer states that the
+The v2.3.0 reconstruction used the release rather than development main: the maintainer states that the
 newer surface filtering requires a newly generated unfolded atlas. See the
 [release guidance](https://github.com/khanlab/hippunfold/issues/580#issuecomment-6398866471).
 

@@ -103,14 +103,14 @@ function test or a pair of meshes is insufficient.
 The 156 completed HCP subjects present in the 3T task dataset underwent
 approved 01_02 cleanup of anat, coords, warps and CIFTI. Their retained outputs
 do not satisfy the full 96-product resume contract; see the
-[current status](../../docs/environment/hippunfold_result_impact.md).
+[v2.3.0 reconstruction assessment](../../docs/environment/hippunfold_result_impact.md).
 
 The upstream release includes fixes for terminal fragmentation and ineffective
 unfolded registration. Do not apply the retired local scientific patches or
 use development `main` in place of the release. The HCP166 dependency review
 found that upstream volumes/transforms had been pruned, so the new complete
 formal outputs require their regeneration even though those algorithms did
-not change. See the [current rebuild scope and status](../../docs/environment/hippunfold_result_impact.md).
+not change. See the [v2.3.0 reconstruction scope and results](../../docs/environment/hippunfold_result_impact.md).
 For `IncompleteFilesException`, wait for active workers to exit, activate
 hippo2, and rerun the subject's exact `hippunfold_argv` from preset `--dry-run`
 with `--rerun-incomplete`. Then resume the normal manifest command.
@@ -175,7 +175,7 @@ For censored XCP-D volumes, add `temporal_mask_path` for the exact outlier TSV:
 motion uses original post-dummy frames, while `n_timepoints` and coverage use
 the retained BOLD frames. NIH rTMS uses `--dataset nih_rtms` and separate
 `outputs_nih_rtms/inputs/kong2022/ses-1/` and `ses-2/` roots.
-Use `--require-hippunfold-version 2.4.1` when assessing the reconstruction.
+Use `--require-hippunfold-version` with the version expected for the reconstruction being assessed.
 Task/non-HCP preparation requires its own `--route-root`, `--shared-root`, and
 an explicit `--template-root` for group-average preparation.
 Pass lists use the selected dataset/task prefix; HCP rest retains `hcp_7t`.

@@ -64,8 +64,8 @@ cohorts. Run `02_01` stages `raw` and `validity`, then `qc`; `all` also
 runs smoothing and the group-template stage. The hippocampal mask uses NIfTI
 support and finite, nonconstant signal within every physical run.
 
-For cohorts requiring pinned release verification, supply `--require-hippunfold-version 2.4.1` to the QC
-entrypoint. Official completion metadata must match that release; an
+For cohorts requiring release verification, supply `--require-hippunfold-version`
+with the version expected for that reconstruction to the QC entrypoint. Official completion metadata must match that release; an
 incomplete reconstruction cannot enter through a high Dice score. Retained
 post-cleanup surfaces remain usable for functional QC when their completed
 run is recorded; this does not satisfy the full structural-resume contract.
