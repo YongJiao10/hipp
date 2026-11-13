@@ -53,6 +53,8 @@ PARTICIPATING_VISUALIZATIONS: tuple[str, ...] = (
 # normalized_top20_count assignment; Lynch2024 WTA uses direct network
 # Fisher-z assignments from the vertex-to-network FC profile.
 COMPARISON_VERSION = "hcp_jjtms_7net"
+# HCP Kong2022 gradient products come from the formal topsim profile and its primary Ward partition.
+HCP_KONG_GRADIENT_RUN = "topsim/gradient-ward"
 COMPARISON_METHODS: tuple[str, ...] = ("kong2022_7net", "lynch2024_7net")
 
 
@@ -459,15 +461,14 @@ def resolve_cohort_paths(cohort_id: str, spec: GridSpec) -> dict[str, Path]:
             "group_root_grad": grp_base,
             "group_root_wta": grp_base,
             "grad_subpath": grp_base
-            / f"gradient-spectral/kong2022/{sm}/cov_0p80/g1g2g3",
+            / f"{HCP_KONG_GRADIENT_RUN}/kong2022/{sm}/cov_0p80/g1g2g3",
             "wta_subpath": grp_base / f"wta-top/kong2022/{sm}/cov_0p80",
             "present_dir": pres_base,
             "overview_grad": pres_base
-            / "kong2022_gradient-spectral_group_overview_g1g2g3_pfm_fisherz.png",
+            / f"{HCP_KONG_GRADIENT_RUN}/{sm}/roi-fisherz_ovr_overview.png",
             "overview_grad_normalized_top20_count": pres_base
-            / "kong2022_gradient-spectral_group_overview_g1g2g3_pfm_normalized_top20_count.png",
-            "overview_wta": pres_base
-            / "kong2022_wta-top_group_overview_pfm_normalized_top20_count.png",
+            / f"{HCP_KONG_GRADIENT_RUN}/{sm}/top20_overview.png",
+            "overview_wta": pres_base / f"wta-top/{sm}/wta_overview.png",
             "hippunfold_root": REPO_ROOT
             / "outputs_hcp/inputs/hippunfold/dense_corobl_batch",
         }
@@ -895,8 +896,10 @@ def resolve_comparison_paths(
     )
 
     overview_grad_normalized_name: str | None = None
+    gradient_run = "gradient-spectral"
     if cohort["dataset_key"] == "hcp":
         if method == "kong2022_7net":
+            gradient_run = HCP_KONG_GRADIENT_RUN
             group_root = dataset_root / "work/group_atlas/pfm"
             present_dir = dataset_root / "present/overviews/pfm"
             shared_root = dataset_root / "inputs/kong2022/shared_inputs"
@@ -904,9 +907,9 @@ def resolve_comparison_paths(
             # pfm branch; the parent shared_inputs directory is not an
             # input root and must never be used for subject resolution.
             reference_root = shared_root / "pfm"
-            overview_grad_name = "kong2022_gradient-spectral_group_overview_g1g2g3_pfm_fisherz.png"
-            overview_grad_normalized_name = "kong2022_gradient-spectral_group_overview_g1g2g3_pfm_normalized_top20_count.png"
-            overview_wta_name = "kong2022_wta-top_group_overview_pfm_normalized_top20_count.png"
+            overview_grad_name = f"{HCP_KONG_GRADIENT_RUN}/{sm}/roi-fisherz_ovr_overview.png"
+            overview_grad_normalized_name = f"{HCP_KONG_GRADIENT_RUN}/{sm}/top20_overview.png"
+            overview_wta_name = f"wta-top/{sm}/wta_overview.png"
         else:
             group_root = (
                 dataset_root / "work/group_atlas/lynch2024_7net"
@@ -967,11 +970,11 @@ def resolve_comparison_paths(
 
     # ``kong2022_7net`` is the comparison-branch namespace, while the
     # producer-published gradient artifacts remain under the canonical
-    # ``gradient-spectral/kong2022`` folder.
+    # ``<gradient run>/kong2022`` folder.
     gradient_atlas_folder = "kong2022" if method == "kong2022_7net" else method
     wta_atlas_folder = "kong2022" if method == "kong2022_7net" else method
     grad_subpath = (
-        group_root / f"gradient-spectral/{gradient_atlas_folder}/{sm}/cov_0p80/g1g2g3"
+        group_root / f"{gradient_run}/{gradient_atlas_folder}/{sm}/cov_0p80/g1g2g3"
     )
     wta_subpath = group_root / f"wta-top/{wta_atlas_folder}/{sm}/cov_0p80"
     return {

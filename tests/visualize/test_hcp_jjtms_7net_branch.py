@@ -254,16 +254,24 @@ def test_comparison_paths_are_method_and_grid_specific(tag: str, method: str):
 
         assert "routea_7net" not in str(paths)
         if method == "kong2022_7net":
-            if cohort_id == "hcp_7t":
-                assert paths["group_root"].name == "pfm"
             assert paths["atlas_folder"] == "kong2022"
             assert "/kong2022/" in str(paths["grad_subpath"])
             assert "/kong2022/" in str(paths["wta_subpath"])
             assert paths["assignment_variant"] == "normalized_top20_count"
-            assert paths["overview_grad_normalized_top20_count"].name.endswith(
-                "_normalized_top20_count.png"
-            )
-            assert paths["overview_wta"].name.endswith("normalized_top20_count.png")
+            if cohort_id == "hcp_7t":
+                assert paths["group_root"].name == "pfm"
+                formal_run = f"topsim/gradient-ward/kong2022/{spec.smoothing}/cov_0p80/g1g2g3"
+                assert paths["grad_subpath"] == paths["group_root"] / formal_run
+                figures = paths["present_dir"] / "topsim/gradient-ward" / spec.smoothing
+                assert paths["overview_grad"] == figures / "roi-fisherz_ovr_overview.png"
+                assert paths["overview_grad_normalized_top20_count"] == figures / "top20_overview.png"
+                assert paths["overview_wta"] == paths["present_dir"] / "wta-top" / spec.smoothing / "wta_overview.png"
+            else:
+                assert "/gradient-spectral/" in str(paths["grad_subpath"])
+                assert paths["overview_grad_normalized_top20_count"].name.endswith(
+                    "_normalized_top20_count.png"
+                )
+                assert paths["overview_wta"].name.endswith("normalized_top20_count.png")
         else:
             assert f"/{method}/" in str(paths["grad_subpath"])
             assert f"/{method}/" in str(paths["wta_subpath"])
@@ -322,9 +330,8 @@ def test_comparison_columns_declare_method_specific_subregion_metrics():
 
     assert kong["subregion_metric"] == "normalized_top20_count"
     assert lynch["subregion_metric"] == "fisherz_profile"
-    assert kong["overview_grad_normalized_top20_count"].name.endswith(
-        "_normalized_top20_count.png"
-    )
+    assert kong["id"] == "hcp_7t"
+    assert kong["overview_grad_normalized_top20_count"].name == "top20_overview.png"
     assert lynch["overview_grad"].name.endswith("_fisherz.png")
 
 

@@ -68,6 +68,12 @@ source is a vertex-by-400-ROI profile. The four canonical grids are recorded
 in `contrasts/canonical_all_grids.manifest.json` and carry `(N,7,400)`
 subject matrices.
 
+The standard-branch HCP gradient source is the formal topsim profile and its
+primary Ward partition,
+`outputs_hcp/work/group_atlas/pfm/topsim/gradient-ward/kong2022/<smoothing>/cov_0p80/g1g2g3`
+(`HCP_KONG_GRADIENT_RUN` in `scripts/visualize/lib/multidataset_cohorts.py`).
+The other cohorts read their `gradient-spectral` runs.
+
 Standard subject-level FC extraction uses separate, explicit input roots. HCP
 surface time series and masks come from
 `outputs_hcp/inputs/kong2022/shared_inputs/surface`, while its Kong2022
