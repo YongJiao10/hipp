@@ -45,6 +45,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import lib.native_threads  # noqa: F401  pins native threads; must precede numpy
 import numpy as np
 from lib.branch_config import (
     SIGNAL_BRANCH_CHOICES,

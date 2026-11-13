@@ -80,17 +80,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 
-# Hard guardrail: prevent hidden BLAS/OMP oversubscription from violating repo concurrency cap.
-NATIVE_THREAD_ENV_VARS = (
-    "OMP_NUM_THREADS",
-    "OPENBLAS_NUM_THREADS",
-    "MKL_NUM_THREADS",
-    "NUMEXPR_NUM_THREADS",
-    "VECLIB_MAXIMUM_THREADS",
-)
-NATIVE_THREAD_CAP_DEFAULT = 1
-for _env_name in NATIVE_THREAD_ENV_VARS:
-    os.environ[_env_name] = str(NATIVE_THREAD_CAP_DEFAULT)
+from lib.native_threads import NATIVE_THREAD_ENV_VARS  # pins native threads; must precede numpy
 
 import nibabel as nib
 import numpy as np
