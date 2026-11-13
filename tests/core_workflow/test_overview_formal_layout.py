@@ -102,10 +102,42 @@ def test_plot_k_gate_panel_axis_and_threshold():
 
 def test_plot_ari_summary_curve_k_range():
     fig, ax = plt.subplots(figsize=(6, 4))
-    rows = [{"k": str(k), "group_ari_mean": "0.45", "group_ari_se": "0.03", "ARI_null_5pct": "0.05"} for k in range(2, 9)]
+    rows = [{"k": str(k), "group_ari_mean": "0.45", "group_ari_se": "0.03", "ARI_null_95pct": "0.05"} for k in range(2, 9)]
 
     ok = plot_ari_summary_curve(ax, rows, hemi="L", color="#1f77b4")
     assert ok is True
     xticks = ax.get_xticks()
     assert list(xticks) == list(range(2, 9))
+    assert [line.get_label() for line in ax.lines] == ["hemi-L (mean±SE)", "hemi-L (null 95th%)"]
     plt.close(fig)
+
+
+def test_plot_ari_summary_curve_requires_null_95th_percentile():
+    fig, ax = plt.subplots(figsize=(6, 4))
+    rows = [{"k": str(k), "group_ari_mean": "0.45", "group_ari_se": "0.03", "ARI_null_5pct": "0.05"} for k in range(2, 9)]
+    with pytest.raises(ValueError, match="ARI_null_95pct.*rerun 05_02"):
+        plot_ari_summary_curve(ax, rows, hemi="L", color="#1f77b4")
+    plt.close(fig)
+
+
+def test_directory_manifest_keeps_other_figures_rendered_by_earlier_calls(tmp_path):
+    import json
+
+    first, second, gone = (tmp_path / name for name in ("roi-fisherz.png", "top20.png", "removed.png"))
+    first.write_bytes(b"a")
+    second.write_bytes(b"b")
+    manifest_path = tmp_path / "group_overview_manifest.json"
+    manifest_path.write_text(json.dumps({"items": [
+        {"overview_png": str(first), "assignment_variant": "roi-fisherz", "note": "old"},
+        {"overview_png": str(gone), "assignment_variant": "stale"},
+    ]}), encoding="utf-8")
+
+    merged = overview_mod.merge_overview_manifest_items(
+        manifest_path, [{"overview_png": str(second), "assignment_variant": "top20"}],
+    )
+    assert [item["assignment_variant"] for item in merged] == ["roi-fisherz", "top20"]
+
+    replaced = overview_mod.merge_overview_manifest_items(
+        manifest_path, [{"overview_png": str(first), "assignment_variant": "roi-fisherz", "note": "new"}],
+    )
+    assert [item.get("note") for item in replaced] == ["new"]

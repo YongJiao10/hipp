@@ -15,14 +15,12 @@ from .network_ovr import ALL_OVR_VARIANTS, NETWORK_TS_OVR_VARIANT, OVR_VARIANTS,
 ASSIGNMENT_VARIANTS = (
     "normalized_top20_count",
     "fisherz",
-    "weighted_fisherz",
     "network_ts_fisherz",
     *ALL_OVR_VARIANTS,
 )
 EXPECTED_METRICS = {
     "normalized_top20_count": "top20_count_normalized_by_network_roi_count",
     "fisherz": "top1_fisher_z",
-    "weighted_fisherz": "top1_weighted_network_fisher_z",
     "network_ts_fisherz": "top1_network_ts_fisher_z",
     **{variant: OVR_ASSIGNMENT_METRIC for variant in ALL_OVR_VARIANTS},
 }
@@ -273,7 +271,7 @@ def _validate_status_items(
                 for name, value in values.items()
             ):
                 raise ValueError(f"OVR status coefficients disagree: cluster={cid}: {run_dir}")
-        elif variant in {"fisherz", "weighted_fisherz", "network_ts_fisherz"}:
+        elif variant in {"fisherz", "network_ts_fisherz"}:
             if profile is None or profile_names is None:
                 raise ValueError(
                     f"Gradient assignment contract ({variant}): missing "
@@ -647,15 +645,10 @@ def validate_gradient_assignment(
         if profile.shape != (len(actual_ids), len(names)) or not np.isfinite(profile).all():
             raise ValueError(f"OVR coefficient shape/values mismatch: {coefficient_path}")
         dependencies.extend([coefficient_path, metadata_path])
-    if variant in {"fisherz", "weighted_fisherz", "network_ts_fisherz"}:
+    if variant in {"fisherz", "network_ts_fisherz"}:
         if variant == "network_ts_fisherz":
             profile_raw = manifest.get("cluster_network_ts_profile") or str(run_dir / "cluster_network_ts_profile.npy")
             declaration = "network-ts"
-        elif variant == "weighted_fisherz" or manifest.get(
-            "default_assignment_variant"
-        ) == "weighted_fisherz":
-            profile_raw = row.get("cluster_network_profile")
-            declaration = "variant-local"
         else:
             profile_raw = manifest.get("cluster_network_profile")
             declaration = "top-level ordinary-run"
@@ -717,7 +710,7 @@ def validate_gradient_assignment(
                 f"Gradient assignment contract ({variant}): invalid profile "
                 f"shape or nonfinite values: {run_dir}"
             )
-        if variant in {"fisherz", "weighted_fisherz"} and actual_ids != list(
+        if variant == "fisherz" and actual_ids != list(
             range(1, len(actual_ids) + 1)
         ):
             raise ValueError(

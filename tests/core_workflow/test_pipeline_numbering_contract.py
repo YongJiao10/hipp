@@ -27,7 +27,6 @@ EXPECTED_NUMBERED_SCRIPTS = [
     "05_02_run_group_atlas.py",
     "05_03_run_spectral_fast_rerun.py",
     "05_04_compute_confidence_maps.py",
-    "05_05_build_weighted_fisherz_branch.py",
     "05_06_build_task_activation_group.py",
     "06_01_build_group_overview.py",
     "06_02_materialize_group_labels.py",
@@ -76,7 +75,6 @@ def test_kong2022_canonical7_is_the_unsuffixed_routea_branch() -> None:
     for step_id in (
         "03_02_build_kong2022_routea_reference",
         "05_02_run_group_atlas",
-        "05_05_build_weighted_fisherz_branch",
         "06_01_build_group_overview",
     ):
         assert "kong2022_pfm_7net" not in steps[step_id]["branches"]

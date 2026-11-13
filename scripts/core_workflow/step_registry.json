@@ -243,17 +243,6 @@
       "recommended_manifest": "manifests/core_workflow/05_04_compute_confidence_maps.json"
     },
     {
-      "step_id": "05_05_build_weighted_fisherz_branch",
-      "stage": "05_group_atlas",
-      "purpose": "Build PFM weighted_fisherz comparison branch using the canonical7 network-timeseries Fisher-z FC by default.",
-      "branches": [
-        "kong2022_pfm"
-      ],
-      "entry_script": "scripts/core_workflow/05_05_build_weighted_fisherz_branch.py",
-      "implementation_script": "scripts/core_workflow/05_05_build_weighted_fisherz_branch.py",
-      "recommended_manifest": "outputs_hcp/work/group_atlas/pfm_weighted/weighted_fisherz_branch_manifest.json"
-    },
-    {
       "step_id": "05_06_build_task_activation_group",
       "stage": "05_group_atlas",
       "purpose": "Build group-level task-activation products from an explicit complete analysis roster and all maintained task contrasts: group mean/t/d maps, per-subject and group cluster tables across hcp151_atlas/template_matching zones with native-area weighting, BH-FDR correction, and --min-valid-area-fraction coverage exclusions. Missing required subject products fail closed; the group manifest records the analysis roster and consumed inputs.",
@@ -366,13 +355,13 @@
     {
       "step_id": "06_08_render_hcp_subfield_composition",
       "stage": "06_presentation_products",
-      "purpose": "Render HCP weighted_fisherz gradient cluster subfield composition bars.",
+      "purpose": "Render HCP gradient cluster subfield composition bars.",
       "branches": [
         "kong2022_pfm"
       ],
       "entry_script": "scripts/core_workflow/06_08_render_hcp_subfield_composition.py",
       "implementation_script": "scripts/core_workflow/06_08_render_hcp_subfield_composition.py",
-      "recommended_manifest": "outputs_hcp/present/subfield_composition/hcp_pfm_weighted-fisherz_gradient-spectral_k3_g1g2g3_subfield_composition_manifest.json"
+      "recommended_manifest": "outputs_hcp/present/subfield_composition/hcp_pfm_gradient-spectral_k3_g1g2g3_subfield_composition_manifest.json"
     },
     {
       "step_id": "06_09_plot_cortex_kong2022_mshbm",

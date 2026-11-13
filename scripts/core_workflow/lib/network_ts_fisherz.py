@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import csv
-import json
 import math
 from pathlib import Path
 from typing import Sequence
@@ -9,6 +8,7 @@ from typing import Sequence
 import numpy as np
 
 from lib.fc_math import center_run_timeseries, corrcoef_rows, fisher_z_transform_fc
+from lib.io_utils import load_run_segment_metadata
 
 
 def _network_column(network_column: str) -> str:
@@ -125,7 +125,7 @@ def weighted_network_fisherz_profile_from_timeseries(
 ) -> np.ndarray:
     """Compute Fisher-z FC against vertex-count weighted network time series.
 
-    This is the strict weighted_fisherz definition: first reconstruct each
+    This is the network_ts_fisherz definition: first reconstruct each
     cortical network time series from its ROI mean time series and ROI vertex
     counts, then correlate hippocampal rows against those network time series.
     It is intentionally not equivalent to averaging precomputed ROI FC values.
@@ -316,6 +316,10 @@ def subjectwise_cluster_network_fisherz_profile(
             raise ValueError(f"Missing valid mask for sub-{subject}")
 
         valid_mask = np.asarray(valid_masks_by_subject[subject], dtype=bool).reshape(-1)
+        if valid_mask.shape != support.shape:
+            raise ValueError(
+                f"Subject valid mask vertex mismatch for sub-{subject}: mask={valid_mask.shape} support={support.shape}"
+            )
         subj_support = support & valid_mask
 
         ts = array_loader(ts_path).astype(np.float32, copy=False)
@@ -324,11 +328,8 @@ def subjectwise_cluster_network_fisherz_profile(
         with roi_tsv.open("r", encoding="utf-8", newline="") as f:
             rows = list(csv.DictReader(f, delimiter="\t"))
 
-        run_lengths: list[int] | None = None
-        if summary_json.is_file():
-            with summary_json.open("r", encoding="utf-8") as f:
-                meta = json.load(f)
-                run_lengths = meta.get("run_lengths")
+        # Declared physical runs are required: without them run means are not removed.
+        _run_ids, run_lengths = load_run_segment_metadata(summary_json)
 
         prof = weighted_cluster_network_fisherz_profile_from_timeseries(
             group_labels_final=labels,

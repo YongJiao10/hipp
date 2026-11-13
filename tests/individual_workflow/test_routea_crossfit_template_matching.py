@@ -395,8 +395,8 @@ def test_fit_fold_template_uses_only_training_subjects_and_records_density(
     )
     monkeypatch.setattr(
         workflow,
-        "fit_gradientmaps_pearson",
-        lambda matrix, n_components, random_state, **kwargs: (
+        "fit_diffusion_gradients",
+        lambda matrix, n_components, **kwargs: (
             gradients,
             np.asarray([3.0, 2.0, 1.0]),
             np.asarray([0.5, 1.0 / 3.0, 1.0 / 6.0]),
@@ -429,7 +429,6 @@ def test_fit_fold_template_uses_only_training_subjects_and_records_density(
         fold_by_subject={"01": 0, "02": 0, "03": 1},
         coverage_threshold=0.80,
         n_components=3,
-        gradient_random_state=0,
         cluster_seed=0,
     )
 
@@ -794,7 +793,6 @@ def test_resume_template_validation_rejects_parameter_or_training_mismatch(
         fold_by_subject={"01": 0, "02": 0, "03": 1},
         coverage_threshold=0.80,
         n_components=5,
-        gradient_random_state=0,
         cluster_seed=0,
     )
     manifest = {
@@ -810,7 +808,6 @@ def test_resume_template_validation_rejects_parameter_or_training_mismatch(
         "train_test_disjoint": True,
         "coverage_threshold": 0.80,
         "n_components": 5,
-        "gradient_random_state": 0,
         "cluster_seed": 0,
         "surface_affinity": "shifted-cosine",
         "k_final": 3,

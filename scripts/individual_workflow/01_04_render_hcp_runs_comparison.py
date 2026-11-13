@@ -222,8 +222,8 @@ def fit_split_half_template(
         support_mask=support,
     )
     options = dict(gradient_options or {})
-    grad_act, lambdas, evs = cf_module.fit_gradientmaps_pearson(
-        group_fc_act, n_components=5, random_state=options.get("random_state", 0),
+    grad_act, lambdas, evs = cf_module.fit_diffusion_gradients(
+        group_fc_act, n_components=5,
         feature_scaling=options.get("feature_scaling", "col_zscore"),
         sparsify_stage=options.get("sparsify_stage", "features"), sparsity=options.get("sparsity"),
     )
@@ -528,7 +528,6 @@ def main() -> None:
     parser.add_argument("--feature-scaling", choices=("none", "col_zscore"), default="col_zscore")
     parser.add_argument("--sparsify-stage", choices=("features", "affinity", "none"), default="features")
     parser.add_argument("--sparsity", type=float, default=None)
-    parser.add_argument("--gradient-random-state", type=int, default=0)
     parser.add_argument("--method", choices=sorted(GRADIENT_METHODS), default="gradient-spectral")
     parser.add_argument("--rbf-scale", type=float, default=1.0)
     parser.add_argument("--cluster-seed", type=int, default=0)
@@ -536,7 +535,7 @@ def main() -> None:
     args = parser.parse_args()
     gradient_options = {
         "feature_scaling": args.feature_scaling, "sparsify_stage": args.sparsify_stage,
-        "sparsity": args.sparsity, "random_state": args.gradient_random_state,
+        "sparsity": args.sparsity,
         "clustering_feature_scaling": args.clustering_feature_scaling,
         "method": args.method, "rbf_scale": args.rbf_scale, "cluster_seed": args.cluster_seed,
     }
@@ -592,7 +591,6 @@ def main() -> None:
                         cached_manifest, settings=preprocessing, manifest_path=manifest_path,
                     )
                     if (cached_manifest.get("clustering_feature_scaling") != args.clustering_feature_scaling
-                            or cached_manifest.get("gradient_random_state") != args.gradient_random_state
                             or cached_manifest.get("method") != args.method
                             or cached_manifest.get("rbf_scale") != args.rbf_scale
                             or cached_manifest.get("cluster_seed") != args.cluster_seed):
@@ -727,7 +725,6 @@ def main() -> None:
         "n_subjects": n_subjects,
         "split_metadata": SPLIT_METADATA,
         "gradient_preprocessing": preprocessing,
-        "gradient_random_state": args.gradient_random_state,
         "clustering_feature_scaling": args.clustering_feature_scaling,
         "method": args.method, "rbf_scale": args.rbf_scale, "cluster_seed": args.cluster_seed,
         "gradient_alignment_anchor": {"smoothing":"4mm", "hemi":"L", "population":"each_independent_fit"},

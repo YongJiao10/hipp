@@ -89,21 +89,21 @@ def test_cohort_gradient_producer_and_consumers_share_layout(tmp_path, monkeypat
     monkeypatch.setattr(compute_mod, "subject_valid_mask", lambda *_args: support)
     monkeypatch.setattr(compute_mod, "load_subject_fc", lambda *_args, **_kwargs: (np.zeros((3, 400)), tmp_path / "fc.npy"))
     monkeypatch.setattr(compute_mod, "load_kong2022_roi_fc_contract", lambda *_args, **_kwargs: {"roi_names": [str(i) for i in range(400)]})
-    monkeypatch.setattr(compute_mod, "fit_gradientmaps_pearson", lambda *_args, **_kwargs: (gradients, np.ones(3), np.ones(3) / 3))
+    monkeypatch.setattr(compute_mod, "fit_diffusion_gradients", lambda *_args, **_kwargs: (gradients, np.ones(3), np.ones(3) / 3))
 
     result = compute_mod.compute_combo(
         route="pfm", signal_branch="standard", shared_root=tmp_path, reference_root=tmp_path,
         atlas="kong2022", surface_root=tmp_path, subjects=["01"], subjects_manifest=tmp_path / "subjects.txt",
         smoothing="2mm", hemi="L", coverage_threshold=0.8, group_average_surfaces_dir=surface_dir,
         out_root=tmp_path / "gradients", hippomaps_root=tmp_path, n_components=3,
-        selected_components=[1, 2, 3], gradient_random_state=0, force=False,
+        selected_components=[1, 2, 3], force=False,
         cohort="nthc", variant=variant,
     )
     run_dir = tmp_path / "gradients" / branch / "nthc/2mm/hemi_L"
     assert result.run_dir == run_dir
     run_dir.mkdir(parents=True)
     np.save(run_dir / "hippomaps_gradients_full.npy", result.gradients_full)
-    (run_dir / "hippomaps_gradient_manifest.json").write_text(atlas_mod.json.dumps({"gradient_random_state": 0, "gradient_preprocessing": adapter.gradient_preprocessing_settings(400),
+    (run_dir / "hippomaps_gradient_manifest.json").write_text(atlas_mod.json.dumps({"gradient_preprocessing": adapter.gradient_preprocessing_settings(400),
         "status": "ok", "route": "pfm", "signal_branch": "standard", "cohort": "nthc", "variant": variant,
         "group_fc_shape": [3, 400], "feature_count": 400,
         "outputs": {"hippomaps_gradients_full": str(run_dir / "hippomaps_gradients_full.npy")},
@@ -235,25 +235,7 @@ def test_lynch20_fc_rejects_permuted_consumed_network_order(tmp_path: Path) -> N
 
 def test_gradientmaps_called_with_official_pearson_kernel_and_full_lambda_ev() -> None:
     calls: list[dict[str, object]] = []
-
-    class FakeGradientMaps:
-        def __init__(self, **kwargs):
-            calls.append({"init": kwargs})
-            self.gradients_ = np.asarray(
-                [
-                    [1.0, 2.0, 3.0],
-                    [4.0, 5.0, 6.0],
-                    [7.0, 8.0, 9.0],
-                    [10.0, 11.0, 12.0],
-                ],
-                dtype=np.float32,
-            )
-            self.lambdas_ = np.asarray([5.0, 3.0, 2.0], dtype=np.float32)
-
-        def fit(self, matrix, **kwargs):
-            calls.append({"fit_shape": tuple(matrix.shape), "fit_matrix": np.asarray(matrix).copy(), "fit_kwargs": kwargs})
-            return self
-
+    fake_gradients = np.arange(1, 13, dtype=np.float64).reshape(4, 3)
     raw = np.asarray(
         [
             [1.0, 10.0, 3.0, 5.0],
@@ -263,22 +245,26 @@ def test_gradientmaps_called_with_official_pearson_kernel_and_full_lambda_ev() -
         ],
         dtype=np.float32,
     )
+
     def fake_affinity(matrix, **kwargs):
         calls.append({"affinity_matrix": np.asarray(matrix).copy(), "affinity_kwargs": kwargs})
         return np.ones((matrix.shape[0], matrix.shape[0]))
 
-    with patch("brainspace.gradient.GradientMaps", FakeGradientMaps), patch(
+    def fake_embedding(affinity, **kwargs):
+        calls.append({"embedding_matrix": np.asarray(affinity).copy(), "embedding_kwargs": kwargs})
+        return fake_gradients, np.asarray([5.0, 3.0, 2.0])
+
+    with patch.object(adapter, "diffusion_map_embedding", fake_embedding), patch(
         "brainspace.gradient.kernels.compute_affinity", fake_affinity
     ):
-        gradients, lambdas, ev = adapter.fit_gradientmaps_pearson(
+        gradients, lambdas, ev = adapter.fit_diffusion_gradients(
             raw,
             n_components=3,
         )
     assert calls[0]["affinity_kwargs"] == {"kernel":"pearson", "sparsity":0.0, "pre_sparsify":True, "non_negative":True}
     assert np.allclose(calls[0]["affinity_matrix"], adapter.feature_zscore_columns(raw))
-    assert calls[1]["init"] == {"n_components":3, "kernel":None, "random_state":0}
-    assert calls[2]["fit_kwargs"] == {"sparsity":None}
-    assert np.array_equal(calls[2]["fit_matrix"], np.ones((4,4)))
+    assert calls[1]["embedding_kwargs"] == {"n_components": 3}
+    assert np.array_equal(calls[1]["embedding_matrix"], np.ones((4,4)))
     assert gradients.shape == (4, 3), gradients.shape
     assert np.allclose(lambdas, [5.0, 3.0, 2.0])
     assert np.allclose(ev, [0.5, 0.3, 0.2])
@@ -290,32 +276,9 @@ def test_gradientmaps_low_dimensional_sparsity_uses_full_graph() -> None:
     assert adapter.brainspace_sparsity_for_feature_count(400) == 0.9
 
 
-def test_gradientmaps_accepts_explicit_random_state() -> None:
-    calls: list[dict[str, object]] = []
-
-    class FakeGradientMaps:
-        def __init__(self, **kwargs):
-            calls.append({"init": kwargs})
-            self.gradients_ = np.ones((4, 2), dtype=np.float32)
-            self.lambdas_ = np.asarray([3.0, 1.0], dtype=np.float32)
-
-        def fit(self, matrix, **kwargs):
-            calls.append({"fit_kwargs": kwargs})
-            return self
-
-    raw = np.arange(16, dtype=np.float32).reshape(4, 4)
-    with patch("brainspace.gradient.GradientMaps", FakeGradientMaps), patch(
-        "brainspace.gradient.kernels.compute_affinity",
-        lambda matrix, **kwargs: np.ones((matrix.shape[0],matrix.shape[0])),
-    ):
-        adapter.fit_gradientmaps_pearson(
-            raw,
-            n_components=2,
-            random_state=17,
-        )
-
-    assert calls[0]["init"] == {"n_components": 2, "kernel": None, "random_state": 17}, calls
-    assert calls[1]["fit_kwargs"] == {"sparsity": None}, calls
+def test_gradient_fit_has_no_seed_argument() -> None:
+    with pytest.raises(TypeError, match="random_state"):
+        adapter.fit_diffusion_gradients(np.eye(6, dtype=np.float32), n_components=2, random_state=17)
 
 
 def test_group_atlas_gradient_spectral_uses_hippomaps_adapter_and_records_provenance() -> None:
@@ -382,7 +345,7 @@ def test_group_atlas_gradient_spectral_uses_hippomaps_adapter_and_records_proven
             support_mask=support_mask,
             gradient_components=(1, 3),
             hippomaps_root=Path("/mock/hippomaps"),
-            gradientmaps_fit_fn=fake_fit,
+            gradient_fit_fn=fake_fit,
         )
 
     assert int(calls["n_components"]) == atlas_mod.GRADIENT_N_COMPONENTS_COMPUTED
@@ -390,11 +353,12 @@ def test_group_atlas_gradient_spectral_uses_hippomaps_adapter_and_records_proven
     assert selected.shape == (6, 2), selected.shape
     assert np.allclose(selected[:, 0], [1.0, 6.0, 11.0, 16.0, 21.0, 26.0], atol=1e-6)
     assert np.allclose(selected[:, 1], [3.0, 8.0, 13.0, 18.0, 23.0, 28.0], atol=1e-6)
-    assert "compute_affinity" in meta["gradientmaps_call"]
-    assert "kernel=None" in meta["gradientmaps_call"]
+    assert "compute_affinity" in meta["gradient_embedding_call"]
+    assert "diffusion_map_embedding" in meta["gradient_embedding_call"]
     assert meta["gradient_preprocessing"]["feature_scaling"] == "col_zscore"
     assert np.isclose(meta["brainspace_sparsity"], 0.0), meta
-    assert meta["gradient_random_state"] == 0
+    assert meta["gradient_preprocessing"]["eigensolver"] == adapter.GRADIENT_EIGENSOLVER
+    assert "gradient_random_state" not in meta
     assert meta["feature_zscore_pre_gradientmaps"] == "col_zscore"
     assert meta["gradient_component_labels"] == ["G1", "G3"]
     assert meta["selected_components"] == ["G1", "G3"]
@@ -608,7 +572,7 @@ def test_group_atlas_gradient_spectral_loads_hippomaps_gradient_artifacts() -> N
             dtype=np.float32,
         )
         np.save(run_dir / "hippomaps_gradients_full.npy", gradients_full)
-        manifest = {"gradient_random_state": 0, "gradient_preprocessing": adapter.gradient_preprocessing_settings(400),
+        manifest = {"gradient_preprocessing": adapter.gradient_preprocessing_settings(400),
             "status": "ok",
             "route": "routea",
             "group_fc_shape": [5, 400],
@@ -616,7 +580,7 @@ def test_group_atlas_gradient_spectral_loads_hippomaps_gradient_artifacts() -> N
             "smoothing": "2mm",
             "hemi": "L",
             "n_components_computed": 5,
-            "gradientmaps_call": "brainspace.gradient.GradientMaps(n_components=N, kernel='pearson').fit(column_zscored_group_mean_fisherz_fc)",
+            "gradient_embedding_call": "brainspace.gradient.GradientMaps(n_components=N, kernel='pearson').fit(column_zscored_group_mean_fisherz_fc)",
             "gradient_alignment": {
                 "enabled": True,
                 "anchor_route": "routea",
@@ -660,7 +624,7 @@ def test_group_atlas_gradient_loader_rejects_signal_branch_mismatch() -> None:
         run_dir.mkdir(parents=True)
         gradients_full = np.ones((2, 3), dtype=np.float32)
         np.save(run_dir / "hippomaps_gradients_full.npy", gradients_full)
-        manifest = {"gradient_random_state": 0, "gradient_preprocessing": adapter.gradient_preprocessing_settings(400),
+        manifest = {"gradient_preprocessing": adapter.gradient_preprocessing_settings(400),
             "status": "ok",
             "route": "routea_ctxreg",
             "signal_branch": "standard",
@@ -694,7 +658,7 @@ def test_group_atlas_gradient_loader_rejects_stale_manifest_path() -> None:
         run_dir.mkdir(parents=True)
         np.save(run_dir / "hippomaps_gradients_full.npy", np.asarray([[1.0, 2.0, 3.0]], dtype=np.float32))
         stale_path = root / "old_location" / "hippomaps_gradients_full.npy"
-        manifest = {"gradient_random_state": 0, "gradient_preprocessing": adapter.gradient_preprocessing_settings(400),
+        manifest = {"gradient_preprocessing": adapter.gradient_preprocessing_settings(400),
             "status": "ok",
             "group_fc_shape": [1, 400],
             "feature_count": 400,
@@ -1150,7 +1114,7 @@ def test_route_auto_helpers_cover_renderers_and_confidence_choices() -> None:
 def main() -> int:
     test_group_mean_fc_applies_fisher_z_before_averaging()
     test_gradientmaps_called_with_official_pearson_kernel_and_full_lambda_ev()
-    test_gradientmaps_accepts_explicit_random_state()
+    test_gradient_fit_has_no_seed_argument()
     test_group_atlas_gradient_spectral_uses_hippomaps_adapter_and_records_provenance()
     test_gradient_split_diagnostic_failures_are_counted_when_allowed()
     test_evaluate_k_candidate_records_no_valid_gradient_diagnostic_status()

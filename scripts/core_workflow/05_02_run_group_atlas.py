@@ -103,11 +103,10 @@ from sklearn.metrics import adjusted_rand_score
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 from lib.hippomaps_adapter import (
-    DEFAULT_GRADIENT_RANDOM_STATE,
     DEFAULT_HIPPOMAPS_ROOT,
     brainspace_sparsity_for_feature_count,
     ensure_hippomaps_on_path,
-    fit_gradientmaps_pearson,
+    fit_diffusion_gradients,
     gradient_preprocessing_settings,
     validate_gradient_preprocessing,
     scale_gradient_features,
@@ -151,7 +150,6 @@ from lib.output_layout import (
     resolve_cohort_group_atlas_root,
 )
 from lib.gradient_profiles import (
-    GRADIENT_RANDOM_STATE,
     RESAMPLE_HALF_SEED_OFFSETS,
     GRADIENT_PROFILE_CHOICES,
     gradient_profile_config,
@@ -160,7 +158,6 @@ from lib.gradient_profiles import (
     get_gradient_profile,
     validate_gradient_combination,
     # Backward compatibility aliases
-    FORMAL_GRADIENT_RANDOM_STATE,
     FORMAL_RESAMPLE_HALF_SEED_OFFSETS,
     FORMAL_PROFILE_CHOICES,
     formal_profile_config,
@@ -169,7 +166,7 @@ from lib.gradient_profiles import (
     get_formal_profile,
     validate_formal_combination,
 )
-from lib.weighted_fisherz import (
+from lib.network_ts_fisherz import (
     assignment_status_from_weighted_network_profile,
     subjectwise_cluster_network_fisherz_profile,
 )
@@ -210,7 +207,8 @@ from lib.branch_config import (
     normalize_signal_branch,
     resolve_signal_branch_for_route,
 )
-from lib.workflow_utils import utc_now_iso, write_json
+from lib.stale_products import remind_stale_figures
+from lib.workflow_utils import code_provenance, option_was_given, utc_now_iso, write_json
 from lib.template_assets import canonical_dataset_key, canonicalize_template_manifest, dataset_key_from_path
 
 
@@ -445,7 +443,6 @@ def _validate_gradient_resume_contract(
         and "scaling" in expected_gradient_meta["clustering_feature_transform"]
         else str(opts.get("clustering_feature_scaling", "none"))
     )
-    expected_seed = opts.get("random_state", DEFAULT_GRADIENT_RANDOM_STATE)
     expected_anchor = (
         str(expected_gradient_meta["gradient_alignment"]["anchor_smoothing"])
         if isinstance(expected_gradient_meta, dict)
@@ -535,12 +532,6 @@ def _validate_gradient_resume_contract(
         validate_gradient_preprocessing(
             grad_manifest, settings=expected_preprocessing, manifest_path=grad_manifest_path,
         )
-        if grad_manifest.get("gradient_random_state") != expected_seed:
-            raise ValueError(
-                f"gradient_random_state mismatch in {grad_manifest_path}: "
-                f"requested={expected_seed}, recorded={grad_manifest.get('gradient_random_state')}; "
-                "explicitly regenerate"
-            )
         grad_align = grad_manifest.get("gradient_alignment")
         if isinstance(grad_align, dict):
             recorded_grad_anchor = grad_align.get("anchor_smoothing")
@@ -1361,30 +1352,12 @@ def brainspace_version() -> str:
         return "missing"
 
 
-def _extract_brainspace_array(model: object, primary_name: str, fallback_name: str, label: str) -> np.ndarray:
-    raw = getattr(model, primary_name, None)
-    if raw is None:
-        raw = getattr(model, fallback_name, None)
-    if raw is None:
-        raise RuntimeError(
-            f"BrainSpace fit output missing `{primary_name}`/`{fallback_name}` for {label}"
-        )
-    if isinstance(raw, list):
-        if len(raw) != 1:
-            raise RuntimeError(f"Expected a single dataset in BrainSpace {label}, got {len(raw)} entries")
-        raw = raw[0]
-    arr = np.asarray(raw, dtype=np.float32)
-    if arr.size == 0:
-        raise RuntimeError(f"BrainSpace {label} is empty")
-    return arr
-
-
 def brainspace_diffusion_gradients(
     features: np.ndarray,
     *,
     n_components: int = GRADIENT_N_COMPONENTS_COMPUTED,
     hippomaps_root: Path = DEFAULT_HIPPOMAPS_ROOT,
-    gradientmaps_fit_fn: object | None = None,
+    gradient_fit_fn: object | None = None,
     gradient_options: dict[str, object] | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     group_fc = np.asarray(features, dtype=np.float32)
@@ -1398,11 +1371,10 @@ def brainspace_diffusion_gradients(
             f"Not enough supported vertices to compute G1..G{n_comp}: n_vertices={group_fc.shape[0]}"
         )
     ensure_hippomaps_on_path(hippomaps_root)
-    fit_fn = fit_gradientmaps_pearson if gradientmaps_fit_fn is None else gradientmaps_fit_fn
+    fit_fn = fit_diffusion_gradients if gradient_fit_fn is None else gradient_fit_fn
     options = dict(gradient_options or {})
     gradients, lambdas, ev_fractions = fit_fn(
         group_fc, n_components=n_comp,
-        random_state=options.get("random_state", DEFAULT_GRADIENT_RANDOM_STATE),
         feature_scaling=options.get("feature_scaling", "col_zscore"),
         sparsify_stage=options.get("sparsify_stage", "features"),
         sparsity=options.get("sparsity"),
@@ -1438,7 +1410,7 @@ def build_group_gradient_features(
     support_mask: np.ndarray,
     gradient_components: tuple[int, ...] = DEFAULT_GRADIENT_COMPONENTS,
     hippomaps_root: Path = DEFAULT_HIPPOMAPS_ROOT,
-    gradientmaps_fit_fn: object | None = None,
+    gradient_fit_fn: object | None = None,
     gradient_options: dict[str, object] | None = None,
 ) -> tuple[np.ndarray, dict[str, object]]:
     idx = np.flatnonzero(support_mask)
@@ -1456,7 +1428,7 @@ def build_group_gradient_features(
         group_fc,
         n_components=GRADIENT_N_COMPONENTS_COMPUTED,
         hippomaps_root=hippomaps_root,
-        gradientmaps_fit_fn=gradientmaps_fit_fn,
+        gradient_fit_fn=gradient_fit_fn,
         gradient_options=gradient_options,
     )
     options = dict(gradient_options or {})
@@ -1498,7 +1470,7 @@ def build_group_gradient_features(
         anchor_mean[~np.isfinite(anchor_mean)] = 0.
         anchor_gradients, _, _ = brainspace_diffusion_gradients(
             anchor_mean, n_components=GRADIENT_N_COMPONENTS_COMPUTED,
-            hippomaps_root=hippomaps_root, gradientmaps_fit_fn=gradientmaps_fit_fn,
+            hippomaps_root=hippomaps_root, gradient_fit_fn=gradient_fit_fn,
             gradient_options=gradient_options,
         )
         target_full = np.full((support_mask.size, gradients.shape[1]), np.nan, dtype=np.float32)
@@ -1527,10 +1499,9 @@ def build_group_gradient_features(
         "gradient_components": [int(c) for c in comps],
         "gradient_component_labels": selected_labels,
         "selected_components": selected_labels,
-        "gradient_embedding_engine": "brainspace_gradientmaps_via_hippomaps_adapter",
+        "gradient_embedding_engine": "exact_diffusion_map_via_hippomaps_adapter",
         "brainspace_version": brainspace_version(),
-        "gradientmaps_call": "compute_affinity(explicitly_scaled_group_mean_fisherz_fc, kernel='pearson', pre_sparsify=declared_stage); mean_symmetrize; GradientMaps(kernel=None).fit(affinity, sparsity=None)",
-        "gradient_random_state": options.get("random_state", DEFAULT_GRADIENT_RANDOM_STATE),
+        "gradient_embedding_call": "compute_affinity(explicitly_scaled_group_mean_fisherz_fc, kernel='pearson', pre_sparsify=declared_stage); mean_symmetrize; diffusion_map_embedding(affinity, alpha=0.5, diffusion_time=0)",
         "feature_zscore_pre_gradientmaps": preprocessing["feature_scaling"],
         "gradient_preprocessing": preprocessing,
         "clustering_feature_transform": clustering_transform,
@@ -1565,7 +1536,6 @@ def load_hippomaps_gradient_features(
     sparsify_stage: str = "features",
     sparsity: float | None = None,
     clustering_feature_scaling: str = "none",
-    gradient_random_state: int = DEFAULT_GRADIENT_RANDOM_STATE,
     alignment_anchor_smoothing: str = "4mm",
     profile: str | None = None,
 ) -> tuple[np.ndarray, dict[str, object]]:
@@ -1588,8 +1558,6 @@ def load_hippomaps_gradient_features(
         sparsify_stage=sparsify_stage, sparsity=sparsity,
     )
     validate_gradient_preprocessing(manifest, settings=preprocessing, manifest_path=manifest_path)
-    if manifest.get("gradient_random_state") != gradient_random_state:
-        raise ValueError(f"gradient_random_state mismatch in {manifest_path}: requested={gradient_random_state}, recorded={manifest.get('gradient_random_state')}; explicitly regenerate")
     if cohort is not None or variant != "36p":
         for key, expected in (("cohort", cohort), ("variant", variant)):
             if manifest.get(key) != expected:
@@ -1688,7 +1656,7 @@ def load_hippomaps_gradient_features(
         "gradient_component_labels": labels,
         "selected_components": labels,
         "n_components_computed": int(manifest.get("n_components_computed", gradients_full.shape[1])),
-        "gradientmaps_call": manifest.get("gradientmaps_call"),
+        "gradient_embedding_call": manifest.get("gradient_embedding_call"),
         "gradient_shape_full": [int(x) for x in gradients_full.shape],
         "gradient_array_semantics": manifest.get("gradient_array_semantics", "legacy_unaligned_or_unspecified"),
         "feature_count": manifest.get("feature_count"),
@@ -2718,7 +2686,7 @@ def half_fit_seeds(
     outer_seed: int,
     offsets: tuple[int, int] = DEFAULT_HALF_FIT_SEED_OFFSETS,
 ) -> tuple[int, int]:
-    """Derive the two deterministic diffusion/clustering seeds for one repetition."""
+    """Derive the two clustering seeds (GMM and spectral initialisation) for one repetition."""
     return int(outer_seed + offsets[0]), int(outer_seed + offsets[1])
 
 
@@ -2778,12 +2746,15 @@ def compute_null_statistics(records: Sequence[RepetitionOutcome], requested: int
         arr = np.asarray(valid_vals, dtype=np.float64)
         mean = float(np.mean(arr))
         pct5 = float(np.percentile(arr, 5.0))
+        pct95 = float(np.percentile(arr, 95.0))
     else:
         mean = math.nan
         pct5 = math.nan
+        pct95 = math.nan
     return {
         "ARI_null_mean": mean,
         "ARI_null_5pct": pct5,
+        "ARI_null_95pct": pct95,
         "B_null_requested": int(requested),
         "B_null_used_strong": int(len(valid_vals)),
         "null_failed": int(failed_count),
@@ -2823,7 +2794,6 @@ def fit_and_align_half_gradient(
     feature_scaling: str,
     sparsify_stage: str,
     sparsity: float,
-    seed: int,
     reference_full: np.ndarray | None = None,
     n_components: int = 5,
 ) -> tuple[np.ndarray, np.ndarray]:
@@ -2836,7 +2806,6 @@ def fit_and_align_half_gradient(
             "feature_scaling": feature_scaling,
             "sparsify_stage": sparsify_stage,
             "sparsity": sparsity,
-            "random_state": int(seed),
         },
     )
     full_g = np.full((int(vertex_count), int(n_components)), np.nan, dtype=np.float32)
@@ -2938,7 +2907,6 @@ def _fit_single_half(
             feature_scaling=feature_scaling,
             sparsify_stage=sparsify_stage,
             sparsity=sparsity,
-            seed=seed,
             reference_full=reference_full,
             n_components=n_components,
         )
@@ -3040,10 +3008,13 @@ def _prepare_one_null_repetition(
     half = len(subjects) // 2
     null_fc_bank: dict[str, np.ndarray] = {}
     null_masks: dict[str, np.ndarray] = {}
-    for s_idx, s in enumerate(subjects):
-        rng_s = np.random.RandomState(seed + s_idx)
+    # One generator per repetition. Seeding each subject with `seed + index`
+    # reuses permutations across repetitions whose seeds differ by less than
+    # the subject count, so the null repetitions would not be independent.
+    rng = np.random.RandomState(seed)
+    for s in subjects:
         n_verts = feature_bank[s].shape[0]
-        perm = rng_s.permutation(n_verts)
+        perm = rng.permutation(n_verts)
         null_fc_bank[s] = feature_bank[s][perm, :].astype(np.float32)
         null_masks[s] = valid_masks[s][perm]
 
@@ -3266,39 +3237,50 @@ def strong_null_ari(
             "failure_examples": [],
             "permutation_scope": "subject_specific",
         }
-    null_bank: dict[str, np.ndarray] = {}
-    null_masks: dict[str, np.ndarray] = {}
-    permutations_by_subject = {}
-    for subject_index, s in enumerate(subjects):
-        arr = feature_bank[s]
-        mask = np.asarray(valid_masks_by_subject[s], dtype=bool).reshape(-1)
-        if mask.size != int(arr.shape[0]):
+    masks = {s: np.asarray(valid_masks_by_subject[s], dtype=bool).reshape(-1) for s in subjects}
+    for s in subjects:
+        if masks[s].size != int(feature_bank[s].shape[0]):
             raise ValueError(
-                f"Subject sub-{s} null FC/mask vertex mismatch: fc={arr.shape[0]} mask={mask.size}"
+                f"Subject sub-{s} null FC/mask vertex mismatch: fc={feature_bank[s].shape[0]} mask={masks[s].size}"
             )
-        rng = np.random.RandomState(int(seeds[0]) + subject_index)
-        perm = rng.permutation(arr.shape[0])
-        permutations_by_subject[s] = perm.tolist()
-        if method_uses_network_fc_input(method):
-            null_bank[s] = arr[perm, :].astype(np.float32)
-        else:
-            null_bank[s] = arr[np.ix_(perm, perm)].astype(np.float32)
-        null_masks[s] = mask[perm]
-    null_options = dict(gradient_options or {})
-    null_options["alignment_vertex_permutations"] = permutations_by_subject
-    out = subject_split_ari(
-        method=method,
-        feature_bank=null_bank,
-        valid_masks_by_subject=null_masks,
-        subjects=subjects,
-        tau=tau,
-        adjacency_full=adjacency_full,
-        k=k,
-        seeds=seeds,
-        gradient_components=gradient_components,
-        allow_diagnostic_failures=allow_diagnostic_failures,
-        gradient_options=null_options,
-    )
+    out: dict[str, object] = {
+        "values": [], "n_requested": 0, "n_used": 0, "n_skipped_overlap": 0,
+        "n_skipped_empty": 0, "n_skipped_failure": 0, "failure_examples": [],
+    }
+    for seed in seeds:
+        # One generator per repetition draws every subject's permutation, so
+        # repetitions share no permutation.
+        rng = np.random.RandomState(int(seed))
+        null_bank: dict[str, np.ndarray] = {}
+        null_masks: dict[str, np.ndarray] = {}
+        permutations_by_subject = {}
+        for s in subjects:
+            arr = feature_bank[s]
+            perm = rng.permutation(arr.shape[0])
+            permutations_by_subject[s] = perm.tolist()
+            if method_uses_network_fc_input(method):
+                null_bank[s] = arr[perm, :].astype(np.float32)
+            else:
+                null_bank[s] = arr[np.ix_(perm, perm)].astype(np.float32)
+            null_masks[s] = masks[s][perm]
+        null_options = dict(gradient_options or {})
+        null_options["alignment_vertex_permutations"] = permutations_by_subject
+        repetition = subject_split_ari(
+            method=method,
+            feature_bank=null_bank,
+            valid_masks_by_subject=null_masks,
+            subjects=subjects,
+            tau=tau,
+            adjacency_full=adjacency_full,
+            k=k,
+            seeds=[seed],
+            gradient_components=gradient_components,
+            allow_diagnostic_failures=allow_diagnostic_failures,
+            gradient_options=null_options,
+        )
+        for key, value in repetition.items():
+            out[key] = out[key] + value
+    out["failure_examples"] = out["failure_examples"][:MAX_DIAGNOSTIC_FAILURE_EXAMPLES]
     out["permutation_scope"] = "subject_specific"
     return out
 
@@ -3514,6 +3496,7 @@ def evaluate_k_candidate(
         strong_arr = np.asarray(strong, dtype=np.float64) if strong else np.array([0.0], dtype=np.float64)
         null_mean = float(null_stats["ARI_null_mean"])
         null_pct5 = float(null_stats["ARI_null_5pct"])
+        null_pct95 = float(null_stats["ARI_null_95pct"])
         n_null_req = int(null_stats["B_null_requested"])
         n_null_used = int(null_stats["B_null_used_strong"])
         n_null_fail = int(null_stats["null_failed"])
@@ -3539,6 +3522,7 @@ def evaluate_k_candidate(
         strong_arr = np.asarray(strong, dtype=np.float64) if strong else np.array([0.0], dtype=np.float64)
         null_mean = float(np.mean(strong_arr))
         null_pct5 = float(np.percentile(strong_arr, 5.0))
+        null_pct95 = float(np.percentile(strong_arr, 95.0))
         n_null_req = int(null_resamples)
         n_null_used = int(strong_obj["n_used"])
         n_null_fail = int(strong_obj["n_skipped_failure"])
@@ -3612,6 +3596,7 @@ def evaluate_k_candidate(
         "run_aware_skipped_failure": int(run_obj["n_skipped_failure"]),
         "ARI_null_mean": null_mean,
         "ARI_null_5pct": null_pct5,
+        "ARI_null_95pct": null_pct95,
         "ARI_weak_null_mean": float(np.mean(np.asarray(weak, dtype=np.float64))) if weak else math.nan,
         "B_null_requested": n_null_req,
         "B_null_used_strong": n_null_used,
@@ -5555,8 +5540,6 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--feature-scaling", choices=("none", "col_zscore"), default="col_zscore")
     parser.add_argument("--sparsify-stage", choices=("features", "affinity", "none"), default="features")
     parser.add_argument("--sparsity", type=float, default=None)
-    parser.add_argument("--gradient-random-state", type=int, default=None,
-                        help="Gradient seed (default: 20260420 for a formal profile, 0 otherwise).")
     parser.add_argument("--rbf-scale", type=float, default=1.0)
     parser.add_argument("--clustering-feature-scaling", choices=("none", "unit_sd"), default="none")
     parser.add_argument("--resume", action="store_true", help="Skip combos that already have group_atlas_manifest.json.")
@@ -5631,24 +5614,19 @@ def _resolve_methods_and_taxonomy(args: argparse.Namespace) -> str:
 def main() -> int:
     parser = build_arg_parser()
     args = parser.parse_args()
-    if args.gradient_random_state is None:
-        args.gradient_random_state = (
-            GRADIENT_RANDOM_STATE if args.profile is not None else DEFAULT_GRADIENT_RANDOM_STATE
-        )
     if args.profile is not None:
         p_cfg = gradient_profile_config(args.profile)
         args.feature_scaling = str(p_cfg["feature_scaling"])
         args.sparsify_stage = str(p_cfg["sparsify_stage"])
         args.sparsity = float(p_cfg["sparsity"])
         args.clustering_feature_scaling = "none"
-        if "--alignment-anchor-smoothing" not in sys.argv:
+        if not option_was_given("--alignment-anchor-smoothing"):
             args.alignment_anchor_smoothing = "2mm"
 
     gradient_options = {
         "feature_scaling": args.feature_scaling,
         "sparsify_stage": args.sparsify_stage,
         "sparsity": args.sparsity,
-        "random_state": args.gradient_random_state,
         "clustering_feature_scaling": args.clustering_feature_scaling,
         "rbf_scale": args.rbf_scale,
         "alignment_anchor_smoothing": args.alignment_anchor_smoothing,
@@ -5954,7 +5932,6 @@ def main() -> int:
                                 sparsify_stage=args.sparsify_stage,
                                 sparsity=args.sparsity,
                                 clustering_feature_scaling=args.clustering_feature_scaling,
-                                gradient_random_state=args.gradient_random_state,
                                 alignment_anchor_smoothing=args.alignment_anchor_smoothing,
                                 profile=args.profile,
                             )
@@ -5976,8 +5953,9 @@ def main() -> int:
                             "default_k": int(args.default_k) if args.default_k is not None else None,
                             "candidate_k_values": [int(k) for k in k_values],
                             "seed": int(args.seed),
-                            "instability_resamples": int(args.instability_resamples),
-                            "null_resamples": int(args.null_resamples),
+                            "instability_resamples": int(len(split_seeds)),
+                            "null_resamples": int(len(null_seeds)),
+                            "null_permutation_scheme": "one_generator_per_repetition",
                             "resample_half_seed_offsets": (
                                 list(RESAMPLE_HALF_SEED_OFFSETS)
                                 if args.profile is not None
@@ -6064,6 +6042,7 @@ def main() -> int:
                             "run_aware_skipped_failure",
                             "ARI_null_mean",
                             "ARI_null_5pct",
+                            "ARI_null_95pct",
                             "ARI_weak_null_mean",
                             "B_null_requested",
                             "B_null_used_strong",
@@ -6186,6 +6165,7 @@ def main() -> int:
 
                             manifest = {
                                 "status": "ok",
+                                **code_provenance(),
                                 "dataset": dataset,
                                 "expected_source_root": str(expected_source_root),
                                 **signal_provenance,
@@ -6393,7 +6373,6 @@ def main() -> int:
                                     sparsify_stage=args.sparsify_stage,
                                     sparsity=args.sparsity,
                                     clustering_feature_scaling=args.clustering_feature_scaling,
-                                    gradient_random_state=args.gradient_random_state,
                                     alignment_anchor_smoothing=args.alignment_anchor_smoothing,
                                 )
                         else:
@@ -7220,6 +7199,7 @@ def main() -> int:
                         default_variant_spec = functional_variant_payloads[default_assignment_variant]
                         manifest = {
                             "status": "ok",
+                            **code_provenance(),
                             "dataset": dataset,
                             "expected_source_root": str(expected_source_root),
                             **signal_provenance,
@@ -7403,6 +7383,7 @@ def main() -> int:
                         write_json(run_dir / "group_feature_summary.json", feature_summary)
                         write_json(manifest_path, manifest)
 
+    remind_stale_figures(out_root)
     print(json.dumps({"out_root": str(out_root), "status": "ok"}, indent=2))
     return 0
 

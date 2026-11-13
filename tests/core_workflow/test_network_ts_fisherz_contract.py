@@ -1,15 +1,21 @@
-"""Weighted cluster FC respects subject masks, physical runs, and missing signal."""
+"""Network-time-series cluster FC respects subject masks, physical runs, and missing signal."""
 from __future__ import annotations
 
-import importlib
 import json
+import sys
+from pathlib import Path
 
 import numpy as np
 import pytest
 
 
-branch = importlib.import_module("scripts.core_workflow.05_05_build_weighted_fisherz_branch")
-from lib.weighted_fisherz import (  # noqa: E402
+CORE_DIR = Path(__file__).resolve().parents[2] / "scripts" / "core_workflow"
+if str(CORE_DIR) not in sys.path:
+    sys.path.insert(0, str(CORE_DIR))
+
+from lib.network_ts_fisherz import (  # noqa: E402
+    assignment_status_from_weighted_network_profile,
+    subjectwise_cluster_network_fisherz_profile,
     weighted_cluster_network_fisherz_profile_from_timeseries,
     weighted_network_fisherz_profile_from_timeseries,
 )
@@ -96,12 +102,17 @@ def _write_subject(root, *, hipp=None, mask=(True, False), write_mask=True, writ
     return surface_root, reference_root, mask_path, summary
 
 
-def _load_subject(surface_root, reference_root):
-    return branch.load_subject_weighted_cluster_profile(
-        surface_root, reference_root, "01", "2mm", "L",
-        np.array([1, 1]), np.ones(2, bool), ["A"],
-        network_column="canonical7",
+def _load_subject(surface_root, reference_root, masks=None):
+    if masks is None:
+        mask_path = surface_root / "sub-01/surface/validity/sub-01_hemi-L_valid_mask.npy"
+        masks = {"01": np.load(mask_path)}
+    _, mean, used = subjectwise_cluster_network_fisherz_profile(
+        group_labels_final=np.array([1, 1]), support_mask=np.ones(2, bool), subjects=["01"],
+        surface_root=surface_root, reference_root=reference_root, smoothing="2mm", hemi="L",
+        valid_masks_by_subject=masks, network_names=["A"], network_column="canonical7",
     )
+    assert used == ["01"]
+    return mean
 
 
 def test_subject_loader_excludes_masked_nonconstant_vertex(tmp_path):
@@ -111,16 +122,16 @@ def test_subject_loader_excludes_masked_nonconstant_vertex(tmp_path):
     np.testing.assert_allclose(actual, [[expected]], atol=2e-7)
 
 
-def test_subject_loader_requires_exact_subject_mask(tmp_path):
-    surface_root, reference_root, mask_path, _ = _write_subject(tmp_path, write_mask=False)
-    with pytest.raises(FileNotFoundError, match=str(mask_path)):
-        _load_subject(surface_root, reference_root)
+def test_subject_loader_requires_the_subject_mask(tmp_path):
+    surface_root, reference_root, _, _ = _write_subject(tmp_path)
+    with pytest.raises(ValueError, match="Missing valid mask for sub-01"):
+        _load_subject(surface_root, reference_root, masks={})
 
 
 def test_subject_loader_rejects_mask_vertex_mismatch(tmp_path):
-    surface_root, reference_root, mask_path, _ = _write_subject(tmp_path, mask=[True])
-    with pytest.raises(ValueError, match=str(mask_path)):
-        _load_subject(surface_root, reference_root)
+    surface_root, reference_root, _, _ = _write_subject(tmp_path)
+    with pytest.raises(ValueError, match="valid mask vertex mismatch for sub-01"):
+        _load_subject(surface_root, reference_root, masks={"01": np.array([True])})
 
 
 def test_subject_loader_consumes_declared_physical_run_lengths(tmp_path):
@@ -141,43 +152,8 @@ def test_subject_loader_fails_for_missing_run_metadata(tmp_path):
         _load_subject(surface_root, reference_root)
 
 
-def test_group_writer_preserves_missing_cells_for_assignment(tmp_path, monkeypatch):
-    monkeypatch.setattr(branch, "ATLAS", "kong2022")
-    monkeypatch.setattr(branch, "NETWORK_COLUMN", "canonical7")
-    surface_root, reference_root, _, _ = _write_subject(tmp_path)
-    reference_dir = reference_root / "sub-01/reference/kong2022"
-    np.save(reference_dir / "cortex_roi_parcel_timeseries.npy", np.array([CORTEX, np.full(6, np.nan)]))
-    (reference_dir / "cortex_roi_parcels.tsv").write_text(
-        "canonical7\tn_grayordinates_used\nA\t1\nB\t1\n", encoding="utf-8"
-    )
-    dst = tmp_path / "outputs_hcp/work/group_atlas/weighted/gradient-spectral/kong2022/2mm/hemi_L"
-    dst.mkdir(parents=True)
-    np.save(dst / "group_labels_final.npy", np.array([1, 2]))
-    np.save(dst / "group_support_mask.npy", np.ones(2, bool))
-    np.save(dst / "cluster_network_profile.npy", np.zeros((2, 2), dtype=np.float32))
-    (dst / "group_feature_summary.json").write_text(json.dumps({"network_names": ["A", "B"]}), encoding="utf-8")
-    manifest_path = dst / "group_atlas_manifest.json"
-    manifest_path.write_text(json.dumps({
-        "subjects": ["01"], "n_subjects": 1, "smoothing": "2mm", "hemi": "L",
-        "surface_affinity": "shifted-cosine",
-        "affinity_description": "((1+cosine_similarity)/2)_hadamard_surface_adjacency_diag0",
-        "resume_input_signature_payload": {"subjects_manifest": str(tmp_path / "subjects.txt")},
-    }), encoding="utf-8")
-    # Lineage validation and GIFTI/template rendering concern unrelated assets;
-    # profile construction, aggregation, saving and assignment remain real.
-    monkeypatch.setattr(branch, "REPO_ROOT", tmp_path)
-    monkeypatch.setattr(branch, "validate_group_atlas_lineage", lambda path: None)
-    monkeypatch.setattr(branch, "normalize_copied_manifest_paths", lambda **kwargs: kwargs["manifest"])
-    monkeypatch.setattr(branch, "materialize_combo", lambda *args: True)
-    branch.recompute_gradient_weighted_run(
-        dst_run=dst, surface_root=surface_root, reference_root=reference_root,
-        color_map={}, template_surface_dir=tmp_path, template_spec=tmp_path / "unused.spec",
-        source_manifest=manifest_path,
-    )
-    profile = np.load(dst / "cluster_network_profile_weighted_fisherz.npy")
-    assert profile[0, 0] < 0
-    assert np.isnan(profile[:, 1]).all()
-    assert np.isnan(profile[1]).all()
-    statuses = json.loads((dst / "cluster_assignment_status_weighted_fisherz.json").read_text())["items"]
+def test_missing_profile_cells_stay_unassigned():
+    profile = np.array([[-0.4, np.nan], [np.nan, np.nan]], dtype=np.float32)
+    statuses, _ = assignment_status_from_weighted_network_profile(profile, ["A", "B"])
     assert statuses[0]["top1_network"] == "A"
     assert statuses[1]["status"] == "unassigned"

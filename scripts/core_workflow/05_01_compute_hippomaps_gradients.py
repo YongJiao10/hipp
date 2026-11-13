@@ -52,13 +52,12 @@ from lib.branch_config import (
 )
 from lib.fc_math import fisher_z_transform_fc
 from lib.gradient_alignment import finite_pearson_corr, best_abs_correlation_assignment, align_gradient_components_to_reference
-from lib.gradient_profiles import GRADIENT_RANDOM_STATE, get_gradient_profile
+from lib.gradient_profiles import get_gradient_profile
 from lib.hippomaps_adapter import (
-    DEFAULT_GRADIENT_RANDOM_STATE,
     DEFAULT_HIPPOMAPS_ROOT,
     brainspace_sparsity_for_feature_count,
     ensure_hippomaps_on_path,
-    fit_gradientmaps_pearson,
+    fit_diffusion_gradients,
     gradient_preprocessing_settings,
     hippomaps_commit,
     hippomaps_import_path,
@@ -80,7 +79,8 @@ from lib.output_layout import (
 )
 from lib.surface_utils import read_surface_vertex_count
 from lib.traceability import StageSpec, run_stage
-from lib.workflow_utils import write_json
+from lib.stale_products import remind_stale_figures
+from lib.workflow_utils import code_provenance, option_was_given, write_json
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_T1ONLY_ROOT = DEFAULT_KONG2022_SHARED_INPUTS_ROOT.parent
@@ -137,7 +137,6 @@ class GradientComboResult:
     run_dir: Path
     hippomaps_root: Path
     n_components: int
-    gradient_random_state: int | None
     network_order: list[str] | None
     cohort: str | None = None
     variant: str = "36p"
@@ -336,7 +335,6 @@ def compute_combo(
     hippomaps_root: Path,
     n_components: int,
     selected_components: list[int],
-    gradient_random_state: int | None,
     force: bool,
     cohort: str | None = None,
     variant: str = "36p",
@@ -399,10 +397,9 @@ def compute_combo(
         subjects=subjects,
         support_mask=support_mask,
     )
-    gradients_active, lambdas, ev_fractions = fit_gradientmaps_pearson(
+    gradients_active, lambdas, ev_fractions = fit_diffusion_gradients(
         group_fc_active,
         n_components=int(n_components),
-        random_state=gradient_random_state,
         feature_scaling=feature_scaling,
         sparsify_stage=sparsify_stage,
         sparsity=sparsity,
@@ -441,7 +438,6 @@ def compute_combo(
         run_dir=run_dir,
         hippomaps_root=hippomaps_root,
         n_components=int(n_components),
-        gradient_random_state=gradient_random_state,
         network_order=network_order,
         cohort=cohort,
         variant=variant,
@@ -559,13 +555,12 @@ def write_aligned_combo_outputs(
         "gradient_shape_active": [int(x) for x in gradients_active.shape],
         "gradient_shape_full": [int(x) for x in gradients_full.shape],
         "gradientmaps_kernel": "pearson",
-        "gradientmaps_call": "compute_affinity(explicitly_scaled_group_mean_fisherz_fc, kernel='pearson', pre_sparsify=declared_stage); mean_symmetrize; GradientMaps(kernel=None).fit(affinity, sparsity=None)",
+        "gradient_embedding_call": "compute_affinity(explicitly_scaled_group_mean_fisherz_fc, kernel='pearson', pre_sparsify=declared_stage); mean_symmetrize; diffusion_map_embedding(affinity, alpha=0.5, diffusion_time=0)",
         "brainspace_sparsity": gradient_preprocessing_settings(
             result.group_fc_active.shape[1], feature_scaling=result.feature_scaling,
             sparsify_stage=result.sparsify_stage, sparsity=result.sparsity,
         )["effective_sparsity"],
         "brainspace_sparsity_policy": "explicit setting; unspecified sparsity retains 0.0 for <=50 features and 0.9 otherwise",
-        "gradient_random_state": None if result.gradient_random_state is None else int(result.gradient_random_state),
         "n_components_computed": int(result.n_components),
         "selected_components": selected_labels,
         "lambdas": [float(x) for x in lambdas],
@@ -575,6 +570,7 @@ def write_aligned_combo_outputs(
         "hippomaps_repo": str(Path(result.hippomaps_root).resolve()),
         "hippomaps_import_path": hippomaps_import_path(result.hippomaps_root),
         "hippomaps_commit": hippomaps_commit(result.hippomaps_root),
+        **code_provenance(),
     }
     if result.profile is not None:
         prof_obj = get_gradient_profile(result.profile)
@@ -661,7 +657,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--alignment-anchor-smoothing",
         choices=SMOOTHINGS,
         default="4mm",
-        help="Smoothing level of the left-hemisphere reference anchor for gradient component and sign alignment.",
+        help="Smoothing level of the left-hemisphere reference anchor for gradient component and sign alignment "
+             "(an active profile uses 2mm unless this option is given).",
     )
     parser.add_argument("--coverage-threshold", type=float, default=0.80)
     parser.add_argument("--group-average-surfaces-dir", default=str(DEFAULT_GROUP_AVG_SURFACES_DIR))
@@ -679,12 +676,6 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default=None,
         help="HCP PFM gradient parcellation profile name. When specified, automatically configures feature scaling, sparsify stage, sparsity, and output directory below pfm/.",
     )
-    parser.add_argument(
-        "--gradient-random-state",
-        type=int,
-        default=None,
-        help="Gradient seed (default: 20260420 for an active profile, 0 otherwise).",
-    )
     parser.add_argument("--selected-components", default="1,2,3")
     parser.add_argument("--max-subjects", type=int, default=None, help="Optional smoke-test cap after loading the manifest.")
     parser.add_argument("--force", action="store_true")
@@ -697,11 +688,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    if args.gradient_random_state is None:
-        args.gradient_random_state = (
-            GRADIENT_RANDOM_STATE if args.profile is not None else DEFAULT_GRADIENT_RANDOM_STATE
-        )
-    if args.profile is not None and "--alignment-anchor-smoothing" not in sys.argv:
+    if args.profile is not None and not option_was_given("--alignment-anchor-smoothing"):
         args.alignment_anchor_smoothing = "2mm"
     if args.alignment_anchor_smoothing not in args.smoothings or "L" not in args.hemis:
         raise ValueError(
@@ -756,7 +743,6 @@ def main() -> int:
                         hippomaps_root=hippomaps_root,
                         n_components=int(args.n_components),
                         selected_components=selected_components,
-                        gradient_random_state=int(args.gradient_random_state),
                         force=bool(args.force),
                         cohort=args.cohort,
                         variant=args.variant,
@@ -771,6 +757,7 @@ def main() -> int:
             selected_components=selected_components,
             anchor_smoothing=args.alignment_anchor_smoothing,
         )
+    remind_stale_figures(args.out_root)
     return 0
 
 

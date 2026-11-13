@@ -62,40 +62,61 @@ def test_scaling_and_sparsification_are_separate_explicit_choices(monkeypatch, s
 
 def test_embedding_consumes_the_affinity_without_second_kernel_or_sparsification(monkeypatch):
     calls = []
+    real_embedding = adapter.diffusion_map_embedding
 
-    class Embedding:
-        def __init__(self, **kwargs):
-            calls.append(kwargs)
+    def embedding(affinity, **kwargs):
+        calls.append((affinity.copy(), kwargs))
+        return real_embedding(affinity, **kwargs)
 
-        def fit(self, affinity, **kwargs):
-            calls.append((affinity.copy(), kwargs))
-            self.gradients_ = np.arange(60).reshape(20, 3)
-            self.lambdas_ = np.array([3., 2., 1.])
-            return self
-
-    monkeypatch.setattr("brainspace.gradient.GradientMaps", Embedding)
+    monkeypatch.setattr(adapter, "diffusion_map_embedding", embedding)
     raw = np.random.default_rng(4).normal(size=(20, 30))
-    result = adapter.fit_gradientmaps_pearson(
-        raw, n_components=3, random_state=19,
-        feature_scaling="none", sparsify_stage="affinity", sparsity=0.3,
+    expected_affinity = adapter.build_pearson_affinity(
+        raw, feature_scaling="none", sparsify_stage="affinity", sparsity=0.3,
     )
-    assert calls[0] == {"n_components": 3, "kernel": None, "random_state": 19}
-    assert calls[1][1] == {"sparsity": None}
-    assert calls[1][0].shape == (20, 20)
-    assert result[0].shape == (20, 3)
-    assert np.allclose(result[2], [0.5, 1/3, 1/6])
+    gradients, lambdas, ev = adapter.fit_diffusion_gradients(
+        raw, n_components=3, feature_scaling="none", sparsify_stage="affinity", sparsity=0.3,
+    )
+    assert len(calls) == 1
+    assert calls[0][1] == {"n_components": 3}
+    assert np.array_equal(calls[0][0], expected_affinity)
+    assert gradients.shape == (20, 3)
+    assert np.allclose(ev, lambdas / lambdas.sum())
 
 
-def test_explicit_feature_route_preserves_current_brainspace_numerics():
+def test_exact_embedding_solves_the_diffusion_operator_and_has_no_seed():
     raw = np.random.default_rng(3).normal(size=(64, 80)).astype(np.float32)
-    legacy = GradientMaps(n_components=5, kernel="pearson", random_state=11)
-    legacy.fit(adapter.feature_zscore_columns(raw), sparsity=0.9)
-    gradients, lambdas, _ = adapter.fit_gradientmaps_pearson(
-        raw, n_components=5, random_state=11, feature_scaling="col_zscore",
-        sparsify_stage="features", sparsity=0.9,
-    )
-    assert np.allclose(lambdas, legacy.lambdas_, atol=1e-6)
-    assert np.allclose(np.abs(gradients), np.abs(legacy.gradients_), atol=1e-5)
+    affinity = adapter.build_pearson_affinity(raw, feature_scaling="col_zscore", sparsify_stage="features", sparsity=0.9)
+    gradients, lambdas = adapter.diffusion_map_embedding(affinity, n_components=5)
+    again, lambdas_again = adapter.diffusion_map_embedding(affinity, n_components=5)
+    assert np.array_equal(gradients, again) and np.array_equal(lambdas, lambdas_again)
+
+    weights = affinity.astype(np.float64)
+    scale = weights.sum(axis=1) ** -0.5
+    weights = weights * scale[:, None] * scale[None, :]
+    operator = weights / weights.sum(axis=1, keepdims=True)
+    eigenvalues = lambdas / (1 + lambdas)
+    eigenvectors = gradients / lambdas
+    assert np.allclose(operator @ eigenvectors, eigenvectors * eigenvalues, atol=1e-10)
+    assert np.all(np.diff(lambdas) < 0)
+    stationary = weights.sum(axis=1) / weights.sum()
+    assert np.allclose(stationary @ eigenvectors**2, 1)
+    assert np.allclose(eigenvectors.T @ (stationary[:, None] * eigenvectors), np.eye(5), atol=1e-10)
+    assert np.all(gradients[np.abs(gradients).argmax(axis=0), np.arange(5)] > 0)
+
+    # BrainSpace feeds the non-symmetric operator to a symmetric iterative
+    # solver; it approximates the same components but depends on its seed.
+    legacy = GradientMaps(n_components=5, kernel=None, random_state=11).fit(affinity, sparsity=None)
+    for component in range(5):
+        assert abs(np.corrcoef(gradients[:, component], legacy.gradients_[:, component])[0, 1]) > 0.9
+
+
+def test_exact_embedding_rejects_invalid_affinities():
+    with pytest.raises(ValueError, match="symmetric"):
+        adapter.diffusion_map_embedding(np.array([[1., .2, .1], [.9, 1., .3], [.1, .3, 1.]]), n_components=1)
+    with pytest.raises(ValueError, match="disconnected"):
+        adapter.diffusion_map_embedding(np.kron(np.eye(2), np.ones((3, 3))), n_components=2)
+    with pytest.raises(ValueError, match="n_components"):
+        adapter.diffusion_map_embedding(np.ones((3, 3)), n_components=3)
 
 
 def test_disconnected_diffusion_affinity_is_rejected():
@@ -171,7 +192,7 @@ def test_producer_forwards_and_exports_requested_preprocessing(tmp_path, monkeyp
         calls.append(kwargs)
         return gradient, np.ones(3), np.ones(3)/3
 
-    monkeypatch.setattr(producer, "fit_gradientmaps_pearson", fit)
+    monkeypatch.setattr(producer, "fit_diffusion_gradients", fit)
     monkeypatch.setattr(producer, "hippomaps_import_path", lambda _: "test")
     monkeypatch.setattr(producer, "hippomaps_commit", lambda _: "test")
     result = producer.compute_combo(
@@ -179,10 +200,10 @@ def test_producer_forwards_and_exports_requested_preprocessing(tmp_path, monkeyp
         atlas="kong2022", surface_root=tmp_path, subjects=["01"], subjects_manifest=tmp_path / "subjects.txt",
         smoothing="2mm", hemi="L", coverage_threshold=.8, group_average_surfaces_dir=surface_dir,
         out_root=tmp_path / "gradients", hippomaps_root=tmp_path, n_components=3,
-        selected_components=[1,2,3], gradient_random_state=11, force=False,
+        selected_components=[1,2,3], force=False,
         feature_scaling="none", sparsify_stage="affinity", sparsity=.6,
     )
-    assert calls == [{"n_components":3, "random_state":11, "feature_scaling":"none", "sparsify_stage":"affinity", "sparsity":.6}]
+    assert calls == [{"n_components":3, "feature_scaling":"none", "sparsify_stage":"affinity", "sparsity":.6}]
     path = producer.write_aligned_combo_outputs(
         result=result, gradients_active=gradient, gradients_full=gradient,
         lambdas=result.lambdas, ev_fractions=result.ev_fractions,
@@ -214,23 +235,23 @@ def test_group_atlas_loader_rejects_missing_or_other_preprocessing(tmp_path, rec
         )
 
 
-@pytest.mark.parametrize("recorded_seed", [None, 0])
-def test_group_atlas_loader_rejects_missing_or_other_gradient_seed(tmp_path, recorded_seed):
+def test_group_atlas_loader_rejects_gradients_from_the_seeded_solver(tmp_path):
     consumer = _stage("05_02_run_group_atlas.py")
     run = tmp_path / "pfm/2mm/hemi_L"
     run.mkdir(parents=True)
     array_path = run / "hippomaps_gradients_full.npy"
     np.save(array_path, np.random.default_rng(2).normal(size=(8,5)))
+    preprocessing = adapter.gradient_preprocessing_settings(400)
+    assert preprocessing["eigensolver"] == adapter.GRADIENT_EIGENSOLVER
+    del preprocessing["eigensolver"]
     manifest = {"status":"ok", "group_fc_shape":[8,400], "feature_count":400,
-                "gradient_preprocessing": adapter.gradient_preprocessing_settings(400),
+                "gradient_preprocessing": preprocessing, "gradient_random_state": 20260420,
                 "outputs":{"hippomaps_gradients_full":str(array_path)}}
-    if recorded_seed is not None:
-        manifest["gradient_random_state"] = recorded_seed
     (run / "hippomaps_gradient_manifest.json").write_text(json.dumps(manifest))
-    with pytest.raises(ValueError, match="gradient_random_state.*regenerate"):
+    with pytest.raises(ValueError, match="eigensolver.*regenerate"):
         consumer.load_hippomaps_gradient_features(
             gradient_root=tmp_path, route="pfm", smoothing="2mm", hemi="L",
-            support_mask=np.ones(8,dtype=bool), gradient_random_state=17,
+            support_mask=np.ones(8,dtype=bool),
         )
 
 
@@ -247,13 +268,13 @@ def test_subset_fit_uses_declared_preprocessing_and_its_own_component_sd(tmp_pat
         return raw, np.ones(5), np.ones(5)/5
 
     options = {"feature_scaling":"none", "sparsify_stage":"affinity", "sparsity":.7,
-               "random_state":29, "clustering_feature_scaling":"unit_sd"}
+               "clustering_feature_scaling":"unit_sd"}
     selected, meta = atlas.build_group_gradient_features(
         feature_bank={"a":np.ones((12,400))}, subjects_subset=["a"],
-        support_mask=np.ones(12,dtype=bool), gradientmaps_fit_fn=fit,
+        support_mask=np.ones(12,dtype=bool), gradient_fit_fn=fit,
         gradient_options=options,
     )
-    assert calls == [{"n_components":5, "random_state":29, "feature_scaling":"none", "sparsify_stage":"affinity", "sparsity":.7}]
+    assert calls == [{"n_components":5, "feature_scaling":"none", "sparsify_stage":"affinity", "sparsity":.7}]
     assert np.allclose(selected.std(axis=0), 1)
     assert meta["clustering_feature_transform"]["n_vertices_fit"] == 12
     assert meta["gradient_preprocessing"]["feature_scaling"] == "none"
@@ -297,12 +318,12 @@ def test_subset_alignment_refits_4mm_left_on_the_same_training_subjects(tmp_path
     def fit(data, **kwargs):
         calls.append((data.copy(), kwargs))
         return (reference if data[0, 0] > .4 else target), np.arange(5, 0, -1.), np.ones(5)/5
-    options = {"feature_scaling": "none", "sparsify_stage": "none", "random_state": 13,
+    options = {"feature_scaling": "none", "sparsify_stage": "none",
                "alignment_fc_paths": {"train": str(fc_path), "heldout": str(tmp_path / "never_read.npy")},
                "alignment_mask_paths": {"train": str(mask_path)}, "alignment_coverage_threshold": .8}
     actual, meta = atlas.build_group_gradient_features(
         feature_bank={"train": np.full((20, 400), .1)}, subjects_subset=["train"],
-        support_mask=np.ones(20, bool), gradient_options=options, gradientmaps_fit_fn=fit,
+        support_mask=np.ones(20, bool), gradient_options=options, gradient_fit_fn=fit,
     )
     assert len(calls) == 2
     assert calls[0][1] == calls[1][1]
@@ -388,7 +409,7 @@ def test_independent_comparison_fits_honor_the_same_options(tmp_path, monkeypatc
 
     cf = SimpleNamespace(
         _load_full_subject_fc=lambda *args:source,
-        fit_gradientmaps_pearson=fit,
+        fit_diffusion_gradients=fit,
         reconstruct_full_surface=adapter.reconstruct_full_surface,
         build_cluster_prototypes=lambda *args,**kwargs:np.zeros((3,400)),
     )
@@ -401,13 +422,13 @@ def test_independent_comparison_fits_honor_the_same_options(tmp_path, monkeypatc
     monkeypatch.setattr(driver,"long_axis_order",lambda path:np.arange(8))
     group = SimpleNamespace(group_mean_fisherz_fc=lambda **kwargs:source)
     options = {"feature_scaling":"none","sparsify_stage":"none","sparsity":None,
-               "random_state":13,"clustering_feature_scaling":"unit_sd"}
+               "clustering_feature_scaling":"unit_sd"}
     result = getattr(driver,function_name)(
         subjects=["01","02"],smoothing="2mm",hemi="L",core_atlas_module=core,
         group_grad_module=group,cf_module=cf,surface_path=tmp_path/"surface.gii",
         gradient_options=options,**extra,
     )
-    assert seen == [{"n_components":5,"random_state":13,"feature_scaling":"none","sparsify_stage":"none","sparsity":None}]
+    assert seen == [{"n_components":5,"feature_scaling":"none","sparsify_stage":"none","sparsity":None}]
     assert result["gradient_preprocessing"]["feature_scaling"] == "none"
     assert result["clustering_feature_transform"]["n_vertices_fit"] == 8
 
@@ -500,7 +521,6 @@ def test_group_atlas_resume_validates_gradient_manifest_and_summary_settings(tmp
         "status": "ok",
         "group_fc_shape": [8, 400],
         "feature_count": 400,
-        "gradient_random_state": 0,
         "gradient_preprocessing": adapter.gradient_preprocessing_settings(
             400, feature_scaling="col_zscore", sparsify_stage="features", sparsity=0.9,
         ),
@@ -519,7 +539,6 @@ def test_group_atlas_resume_validates_gradient_manifest_and_summary_settings(tmp
         "feature_scaling": "col_zscore",
         "sparsify_stage": "features",
         "sparsity": 0.9,
-        "random_state": 0,
         "clustering_feature_scaling": "none",
         "rbf_scale": 1.0,
     }
@@ -555,7 +574,6 @@ def test_group_atlas_resume_validates_gradient_manifest_and_summary_settings(tmp
         "status": "ok",
         "group_fc_shape": [8, 400],
         "feature_count": 400,
-        "gradient_random_state": 0,
         "outputs": {"hippomaps_gradients_full": str(grad_array)},
     }), encoding="utf-8")
     with pytest.raises(ValueError, match="gradient_preprocessing.*regenerate"):
@@ -569,7 +587,6 @@ def test_gradient_resume_rejects_missing_or_conflicting_provenance(tmp_path, cas
         "feature_scaling": "none",
         "sparsify_stage": "affinity",
         "sparsity": 0.9,
-        "random_state": 0,
         "clustering_feature_scaling": "none",
     }
     settings = adapter.gradient_preprocessing_settings(
@@ -577,7 +594,6 @@ def test_gradient_resume_rejects_missing_or_conflicting_provenance(tmp_path, cas
     )
     gradient = {
         "group_fc_shape": [8, 400],
-        "gradient_random_state": 0,
         "gradient_preprocessing": settings,
     }
     first_source = tmp_path / "first_gradient_manifest.json"
@@ -623,7 +639,6 @@ def test_gradient_resume_preserves_matching_skipped_results(tmp_path, status):
         "feature_scaling": "none",
         "sparsify_stage": "affinity",
         "sparsity": 0.9,
-        "random_state": 0,
         "clustering_feature_scaling": "none",
         "rbf_scale": 1.0,
     }
@@ -633,7 +648,6 @@ def test_gradient_resume_preserves_matching_skipped_results(tmp_path, status):
     source = tmp_path / "hippomaps_gradient_manifest.json"
     source.write_text(json.dumps({
         "group_fc_shape": [8, 400],
-        "gradient_random_state": 0,
         "gradient_preprocessing": settings,
     }), encoding="utf-8")
     summary = tmp_path / "group_gradient_feature_summary.json"
@@ -655,3 +669,26 @@ def test_gradient_resume_preserves_matching_skipped_results(tmp_path, status):
 
     assert atlas.resume_manifest_matches(manifest, "matching", gradient_options=options) == (True, "signature_match")
     assert atlas.resume_manifest_matches(manifest, "changed", gradient_options=options) == (False, "upstream_signature_changed")
+
+
+def test_unprofiled_null_draws_new_permutations_for_every_repetition(monkeypatch):
+    atlas = _stage("05_02_run_group_atlas.py")
+    seen = []
+
+    def record(**kwargs):
+        seen.append(kwargs["gradient_options"]["alignment_vertex_permutations"])
+        return {"values": [0.0], "n_requested": 1, "n_used": 1, "n_skipped_overlap": 0,
+                "n_skipped_empty": 0, "n_skipped_failure": 0, "failure_examples": []}
+
+    monkeypatch.setattr(atlas, "subject_split_ari", record)
+    subjects = [f"{index:02d}" for index in range(30)]
+    bank = {subject: np.arange(64, dtype=np.float32)[:, None] * np.ones((1, 4), np.float32) for subject in subjects}
+    out = atlas.strong_null_ari(
+        method="gradient-spectral", feature_bank=bank,
+        valid_masks_by_subject={subject: np.ones(64, bool) for subject in subjects},
+        subjects=subjects, tau=0.8, adjacency_full=None, k=3, seeds=[100, 117, 134],
+    )
+    assert out["n_requested"] == 3 and out["values"] == [0.0, 0.0, 0.0]
+    drawn = [{tuple(perm) for perm in repetition.values()} for repetition in seen]
+    assert all(len(repetition) == len(subjects) for repetition in drawn)
+    assert not (drawn[0] & drawn[1]) and not (drawn[1] & drawn[2]) and not (drawn[0] & drawn[2])

@@ -53,6 +53,7 @@ Outputs:
 import argparse
 import csv
 import json
+import zlib
 from pathlib import Path
 
 import matplotlib
@@ -592,7 +593,7 @@ def render_task_figure(
                         zorder=5,
                     )
                 subjects_vals = np.asarray(info["values"])
-                rng = np.random.default_rng(abs(hash((task, contrast, hemi, zone, cluster))) % (2**32))
+                rng = np.random.default_rng(zlib.crc32(repr((task, contrast, hemi, zone, cluster)).encode("utf-8")))
                 jitter = (rng.random(subjects_vals.size) - 0.5) * (0.22 if is_card else 0.24)
                 ax.scatter(
                     np.full(subjects_vals.size, pos) + jitter,

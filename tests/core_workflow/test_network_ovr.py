@@ -40,7 +40,7 @@ def test_ovr_matches_direct_estimator_classes_and_raw_per_sd_units(inputs, taxon
     x = result["network_profiles"].reshape(-1, count)
     y = np.tile(clusters, len(subjects))
     direct = OneVsRestClassifier(LogisticRegression(solver="liblinear", C=1., tol=1e-4,
-                                                   max_iter=1000, random_state=20260420)).fit(x, y)
+                                                   max_iter=1000)).fit(x, y)
     expected = np.stack([direct.estimators_[list(direct.classes_).index(c)].coef_[0] for c in clusters])
     assert np.allclose(result["beta"], expected)
     assert result["cluster_ids"] == clusters

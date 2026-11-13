@@ -58,6 +58,7 @@ from lib.hippomaps_adapter import (
 from lib.io_utils import load_json
 from lib.output_layout import DEFAULT_GRADIENTS_DIR, DEFAULT_HIPPOMAPS_GRADIENT_ROOT, resolve_cohort_gradient_root
 from lib.traceability import StageSpec, run_stage
+from lib.gradient_profiles import GRADIENT_PROFILE_CHOICES
 from lib.workflow_utils import write_json
 from PIL import Image, ImageDraw, ImageFont
 
@@ -191,10 +192,10 @@ def format_color_ranges_for_components(
 
 def load_gradient_arrays_for_display(
     *, gradient_root: Path, route: str, smoothing: str, hemis: list[str],
-    cohort: str | None = None, variant: str = "36p",
+    cohort: str | None = None, variant: str = "36p", profile: str | None = None,
 ) -> dict[str, np.ndarray]:
     branch_root = resolve_cohort_gradient_root(
-        route=route, cohort=cohort, variant=variant, base_root=gradient_root,
+        route=route, cohort=cohort, variant=variant, base_root=gradient_root, profile=profile,
     )
     return {
         hemi: np.load(branch_root / smoothing / f"hemi_{hemi}" / "hippomaps_gradients_full.npy").astype(np.float32)
@@ -213,6 +214,7 @@ def build_cross_route_display_specs(
     trim_fraction: float = 0.05,
     cohort: str | None = None,
     variant: str = "36p",
+    profile: str | None = None,
 ) -> dict[tuple[str, str], dict[str, Any]]:
     specs: dict[tuple[str, str], dict[str, Any]] = {}
     for smoothing in smoothings:
@@ -223,6 +225,7 @@ def build_cross_route_display_specs(
             hemis=hemis,
             cohort=cohort,
             variant=variant,
+            profile=profile,
         )
         aligned_sets: list[dict[str, np.ndarray]] = []
         pending: dict[str, tuple[dict[str, np.ndarray], dict[str, Any]]] = {}
@@ -234,6 +237,7 @@ def build_cross_route_display_specs(
                 hemis=hemis,
                 cohort=cohort,
                 variant=variant,
+                profile=profile,
             )
             display_by_hemi, alignment_meta = align_display_gradients_to_reference(
                 route=route,
@@ -473,13 +477,14 @@ def render_combo(
     display_spec: dict[str, Any] | None = None,
     cohort: str | None = None,
     variant: str = "36p",
+    profile: str | None = None,
 ) -> Path:
     hemis = normalize_hemis(hemis)
     branch_root = resolve_cohort_gradient_root(
-        route=route, cohort=cohort, variant=variant, base_root=gradient_root,
+        route=route, cohort=cohort, variant=variant, base_root=gradient_root, profile=profile,
     )
     combo_root = resolve_cohort_gradient_root(
-        route=route, cohort=cohort, variant=variant, base_root=present_root,
+        route=route, cohort=cohort, variant=variant, base_root=present_root, profile=profile,
     ) / smoothing
     manifests: dict[str, dict[str, Any]] = {}
     gradients_by_hemi: dict[str, np.ndarray] = {}
@@ -573,6 +578,7 @@ def render_combo(
             "smoothing": smoothing,
             "cohort": cohort,
             "variant": variant,
+            "profile": profile,
             "source_manifests": {hemi: str((branch_root / smoothing / f"hemi_{hemi}" / "hippomaps_gradient_manifest.json").resolve()) for hemi in hemis},
             "hippomaps_repo": str(Path(hippomaps_root).resolve()),
             "hippomaps_commit": hippomaps_commit(hippomaps_root),
@@ -636,6 +642,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--present-root", default=str(DEFAULT_PRESENT_ROOT))
     parser.add_argument("--cohort", default=None, help="Cohort directory below each route; omit for HCP.")
     parser.add_argument("--variant", choices=("36p",), default="36p")
+    parser.add_argument(
+        "--profile", choices=GRADIENT_PROFILE_CHOICES, default=None,
+        help="Formal gradient profile below each route (for example topsim); omit for unprofiled gradient banks.",
+    )
     parser.add_argument("--hippomaps-root", default=str(DEFAULT_HIPPOMAPS_ROOT))
     parser.add_argument("--routes", nargs="+", choices=ROUTES, default=list(ROUTES))
     parser.add_argument("--smoothings", nargs="+", choices=SMOOTHINGS, default=list(SMOOTHINGS))
@@ -681,6 +691,7 @@ def main() -> int:
             trim_fraction=float(args.display_color_trim_fraction),
             cohort=args.cohort,
             variant=args.variant,
+            profile=args.profile,
         )
     for route in args.routes:
         for smoothing in args.smoothings:
@@ -696,6 +707,7 @@ def main() -> int:
                 display_spec=display_specs.get((route, smoothing)),
                 cohort=args.cohort,
                 variant=args.variant,
+                profile=args.profile,
             )
     return 0
 

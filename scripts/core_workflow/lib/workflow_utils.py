@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import importlib.metadata
 import json
+import platform
 import subprocess
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -28,11 +31,36 @@ def utc_timestamp_compact_z() -> str:
 
 
 def git_commit(*, short: bool = True, repo_root: Path = REPO_ROOT) -> str | None:
-    cmd = ["git", "rev-parse", "--short" if short else "HEAD"]
+    cmd = ["git", "rev-parse", "--short", "HEAD"] if short else ["git", "rev-parse", "HEAD"]
     proc = subprocess.run(cmd, cwd=repo_root, text=True, capture_output=True, check=False)
     if proc.returncode != 0:
         return None
     return proc.stdout.strip()
+
+
+RUNTIME_VERSION_PACKAGES = ("numpy", "scipy", "scikit-learn", "brainspace", "nibabel")
+
+
+def runtime_versions() -> dict[str, str]:
+    """Installed versions of the numerical stack, for stage manifests."""
+    versions = {"python": platform.python_version()}
+    for package in RUNTIME_VERSION_PACKAGES:
+        try:
+            versions[package] = importlib.metadata.version(package)
+        except importlib.metadata.PackageNotFoundError:
+            versions[package] = "missing"
+    return versions
+
+
+def code_provenance() -> dict[str, object]:
+    """Commit and numerical-stack versions recorded in work-stage manifests."""
+    return {"git_commit": git_commit(short=False), "runtime_versions": runtime_versions()}
+
+
+def option_was_given(option: str, argv: list[str] | None = None) -> bool:
+    """Whether a long option appears on the command line, as `--opt value` or `--opt=value`."""
+    arguments = sys.argv[1:] if argv is None else argv
+    return any(argument.split("=", 1)[0] == option for argument in arguments)
 
 
 def file_meta(path: Path, *, resolve: bool = True) -> dict[str, object]:

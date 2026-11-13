@@ -241,7 +241,7 @@ def test_group_gradient_features_average_subject_roi_fc_then_select_components()
     assert np.all(np.isfinite(features)), features
     assert meta["gradient_components"] == [1, 2], meta
     assert meta["group_vertex_to_roi_fc_shape"] == [8, 12], meta
-    assert meta["gradient_embedding_engine"] == "brainspace_gradientmaps_via_hippomaps_adapter", meta
+    assert meta["gradient_embedding_engine"] == "exact_diffusion_map_via_hippomaps_adapter", meta
     assert meta["kernel"] == "pearson", meta
     assert np.isclose(meta["brainspace_sparsity"], 0.0), meta
     assert int(meta["n_components_computed"]) == 5, meta
@@ -253,11 +253,10 @@ def test_group_gradient_features_average_subject_roi_fc_then_select_components()
 def test_brainspace_adapter_uses_expected_parameters() -> None:
     calls: dict[str, object] = {}
 
-    def fake_fit(group_fc: np.ndarray, *, n_components: int, random_state, feature_scaling, sparsify_stage, sparsity):
+    def fake_fit(group_fc: np.ndarray, *, n_components: int, feature_scaling, sparsify_stage, sparsity):
         calls["fit"] = {
             "shape": tuple(np.asarray(group_fc).shape),
             "n_components": int(n_components),
-            "random_state": random_state,
             "feature_scaling": feature_scaling,
             "sparsify_stage": sparsify_stage,
             "sparsity": sparsity,
@@ -271,12 +270,11 @@ def test_brainspace_adapter_uses_expected_parameters() -> None:
     atlas_mod.ensure_hippomaps_on_path = lambda root: Path(root)
     try:
         x = np.arange(24, dtype=np.float32).reshape(6, 4)
-        grads, lambdas, ev = brainspace_diffusion_gradients(x, gradientmaps_fit_fn=fake_fit)
+        grads, lambdas, ev = brainspace_diffusion_gradients(x, gradient_fit_fn=fake_fit)
     finally:
         atlas_mod.ensure_hippomaps_on_path = old_ensure
 
     assert calls["fit"] == {"shape": (6, 4), "n_components": 5,
-                            "random_state": atlas_mod.DEFAULT_GRADIENT_RANDOM_STATE,
                             "feature_scaling": "col_zscore", "sparsify_stage": "features",
                             "sparsity": None}, calls
     assert grads.shape == (6, 5), grads.shape

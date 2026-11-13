@@ -241,7 +241,7 @@ def test_group_overview_direct_renderer_keeps_gradient_variants_but_wta_is_canon
     assert present_mod.resolve_render_assignment_variants("wta-top", "both") == ("normalized_top20_count",)
     assert present_mod.effective_overview_mode_tag("wta-top", "normalized_top20_count", "legacy") is None
     with pytest.raises(ValueError, match="normalized_top20_count"):
-        present_mod.resolve_render_assignment_variants("wta-top", "weighted_fisherz")
+        present_mod.resolve_render_assignment_variants("wta-top", "network_ts_fisherz")
 
 
 
@@ -255,15 +255,16 @@ def test_group_overview_rejects_family17_wta_route() -> None:
     present_mod.validate_method_route_compatibility("gradient-spectral", "fixed_17net")
 
 
-def test_group_overview_direct_renderer_accepts_weighted_fisherz_without_changing_both() -> None:
-    assert present_mod.resolve_render_assignment_variants("gradient-spectral", "weighted_fisherz") == ("weighted_fisherz",)
-    assert present_mod.resolve_render_assignment_variants("network-spectral", "weighted_fisherz") == ("weighted_fisherz",)
+def test_group_overview_direct_renderer_accepts_network_ts_fisherz_without_changing_both() -> None:
+    assert present_mod.resolve_render_assignment_variants("gradient-spectral", "network_ts_fisherz") == ("network_ts_fisherz",)
+    assert present_mod.resolve_render_assignment_variants("network-spectral", "network_ts_fisherz") == ("network_ts_fisherz",)
+    assert "weighted_fisherz" not in present_mod.ASSIGNMENT_VARIANTS
     assert present_mod.resolve_render_assignment_variants("gradient-spectral", "both") == ("fisherz", "normalized_top20_count")
 
 
-def test_group_overview_keeps_explicit_weighted_mode_tag_for_full_root(tmp_path: Path) -> None:
-    group_root = tmp_path / "routea_weighted_fisherz_full_k3"
-    assert present_mod.resolve_overview_mode_tag(group_root, "weighted_fisherz") == "weighted_fisherz"
+def test_group_overview_keeps_explicit_mode_tag_for_full_root(tmp_path: Path) -> None:
+    group_root = tmp_path / "comparison_full_k3"
+    assert present_mod.resolve_overview_mode_tag(group_root, "comparison") == "comparison"
     assert present_mod.resolve_overview_mode_tag(group_root, None) is None
 
 def test_group_overview_assignment_variant_paths_reject_stale_manifest_paths_without_fallback(tmp_path: Path) -> None:

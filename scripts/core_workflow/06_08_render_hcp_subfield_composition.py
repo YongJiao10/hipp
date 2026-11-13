@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 """
-Render HCP 151-subject weighted_fisherz gradient cluster subfield composition.
+Render HCP gradient cluster subfield composition.
 
-The figure overlaps RouteA weighted_fisherz K=3 gradient-spectral group labels
+The figure overlaps K=3 gradient-spectral group cluster labels
 with subject-level HippUnfold multihist7sgi subfield labels. Composition is
 computed within each subject first, using den-512 T1w midthickness vertex
 area weights, then averaged across subjects.
@@ -75,7 +75,7 @@ SUBFIELD_COLORS = {
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Render HCP weighted_fisherz K=3 gradient cluster subfield composition bars."
+        description="Render HCP K=3 gradient cluster subfield composition bars."
     )
     parser.add_argument("--group-root", default=str(DEFAULT_GROUP_ROOT))
     parser.add_argument("--hippunfold-root", default=str(DEFAULT_HIPPUNFOLD_ROOT))
@@ -435,7 +435,7 @@ def plot_stacked_bars(
     handles, labels = axes[0][0].get_legend_handles_labels()
     fig.legend(handles, labels, loc="lower center", ncol=len(plotted_subfields), frameon=False, fontsize=9)
     fig.suptitle(
-        "HCP 151 weighted_fisherz gradient clusters: HippUnfold subfield composition",
+        "HCP gradient clusters: HippUnfold subfield composition",
         fontsize=13,
         y=0.98,
     )
@@ -446,7 +446,7 @@ def plot_stacked_bars(
 
 
 def output_stem() -> str:
-    return "hcp_pfm_weighted-fisherz_gradient-spectral_k3_g1g2g3_subfield_composition"
+    return "hcp_pfm_gradient-spectral_k3_g1g2g3_subfield_composition"
 
 
 def run(args: argparse.Namespace) -> dict[str, Path]:

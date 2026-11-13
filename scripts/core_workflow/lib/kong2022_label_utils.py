@@ -233,7 +233,7 @@ def aggregate_kong2022_network_timeseries(
 ) -> np.ndarray:
     """Aggregate already extracted ROI means into an explicit network taxonomy.
 
-    This deliberately averages ROI means equally, matching the maintained canonical7 reference semantics. The weighted_fisherz branch uses a
+    This deliberately averages ROI means equally, matching the maintained canonical7 reference semantics. The network_ts_fisherz branch uses a
     separate vertex-count-weighted implementation.
     """
     values = np.asarray(roi_timeseries, dtype=np.float32)

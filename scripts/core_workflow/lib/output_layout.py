@@ -461,6 +461,11 @@ def resolve_cohort_gradient_root(
     return base if cohort is None else base / str(cohort).strip()
 
 
+def annotation_pair_overview_name(annotation_pair: str) -> str:
+    """Overview filename of one annotation pair; top20 has no OVR model, so no OVR rows."""
+    return "top20_overview.png" if annotation_pair == "top20" else f"{annotation_pair}_ovr_overview.png"
+
+
 def resolve_cohort_overview_root(
     dataset: str = DEFAULT_DATASET,
     route: str = "pfm",

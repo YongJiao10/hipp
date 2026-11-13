@@ -45,7 +45,11 @@ sparsification (`features`, `affinity`, or `none`) are independent explicit
 choices. The production default remains column z-scoring followed by feature
 sparsification. Pearson affinity is constructed explicitly, clipped
 nonnegative and mean-symmetrized, retaining its kernel diagonal; embedding
-uses `GradientMaps(kernel=None).fit(affinity, sparsity=None)`. The producer
+uses an exact diffusion map (alpha 0.5, multi-scale eigenvalues): the
+symmetric conjugate of the diffusion operator is decomposed completely with a
+direct solver, so gradients have no start vector and no random seed. Gradient
+manifests record `gradient_preprocessing.eigensolver = symmetric_eigh`; banks
+without it must be regenerated. The producer
 aligns component order and sign within each preprocessing setting/route to the
 anchor hemisphere (`hemi_L`), which defaults to `4mm` for historical production parity
 and supports explicit `--alignment-anchor-smoothing {2mm,4mm}`. `05_02` accepts the same
@@ -242,9 +246,9 @@ The formal HCP PFM canonical7 gradient parcellation workflow is defined by `GRAD
 - Former exploratory routes A and D are retired from active formal selection.
 
 ### 2. Geometry, Resampling, and Alignment Reference
-- **Gradients**: G1–G3 extracted from 5 fitted components, random seed `20260420`, coverage threshold `0.80`. Both `05_01` and `05_02` default to this seed when a formal profile is selected; an explicit `--gradient-random-state` overrides it, and unprofiled workflows retain their existing default of `0`. Both 2 mm and 4 mm use the 2 mm left-hemisphere anchor (`--alignment-anchor-smoothing 2mm`) as the alignment reference.
+- **Gradients**: G1–G3 extracted from 5 fitted components, coverage threshold `0.80`. The exact diffusion-map solver takes no seed, so the Ward partition is a deterministic function of the data. Both 2 mm and 4 mm use the 2 mm left-hemisphere anchor (`--alignment-anchor-smoothing 2mm`) as the alignment reference.
 - **K Range**: Full evaluation of $K=2, 3, 4, 5, 6, 7, 8$ across all 12 settings (3 methods × 2 smoothings × 2 hemispheres = 84 setting/K records). Displayed/default result is $K=3$.
-- **Resampling**: 20 subject-split repetitions (83/83 split, seeds `20260420 + 1 + 13*i`) and 20 null repetitions (row-permuted FC and valid mask, seeds `20260420 + 5000 + 17*i`). Split/null gradient halves are precomputed once per setting and reused across $K=2..8$. Failures are preserved as explicit `NaN` values with error reason (no zero-filling).
+- **Resampling**: 20 subject-split repetitions (83/83 split, seeds `20260420 + 1 + 13*i`) and 20 null repetitions (row-permuted FC and valid mask, seeds `20260420 + 5000 + 17*i`; one generator per repetition draws every subject's permutation, so repetitions share none). The K-selection table stores the null mean, 5th and 95th percentiles; the overview ARI panel draws the 95th percentile. Split/null gradient halves are precomputed once per setting and reused across $K=2..8$. Failures are preserved as explicit `NaN` values with error reason (no zero-filling).
 - **Diagnostics**: FC-coherence from raw FC feature bank; cluster redundancy diagnostic threshold is `0.90` for both maximum similarity and pair counts (while coverage remains `0.80`). Redundancy plots span y-limits `[0.50, 1.02]`. Clustering diagnostics describe the displayed K; automatic K remains separate.
 
 ### 3. Annotation Branches
@@ -261,7 +265,7 @@ outputs_hcp/work/group_atlas/pfm/{topfc,topsim}/{method}/kong2022/{2mm,4mm}/cov_
 outputs_hcp/present/overviews/pfm/{topfc,topsim}/{method}/{2mm,4mm}/
 outputs_hcp/present/overviews/pfm/wta-top/{2mm,4mm}/
 ```
-- **18 Clustering Overviews** (3 methods × 2 smoothings × 3 annotation pairs): `roi-fisherz_ovr_overview.png`, `network-ts-fisherz_ovr_overview.png`, `top20_ovr_overview.png`. Rendered at 30 × 24 inches (300 dpi) with consistent grid alignment (column widths match within 1%, heatmap heights match within 1%) and horizontal positive-beta winner/runner-up OVR association bars.
+- **18 Clustering Overviews** (3 methods × 2 smoothings × 3 annotation pairs): `roi-fisherz_ovr_overview.png`, `network-ts-fisherz_ovr_overview.png`, `top20_overview.png` (normalized Top20 only; no OVR model is fitted on Top20 counts, so this figure has no OVR rows). Rendered at 30 × 24 inches (300 dpi) with consistent grid alignment (column widths match within 1%, heatmap heights match within 1%) and horizontal positive-beta winner/runner-up OVR association bars.
 - **2 WTA Overviews** (2 mm and 4 mm): `wta_overview.png`, preserving the complete whole-hippocampus count panel, long-axis 20-bin curves, and native surface maps.
 - **Group Matrix Index**: Built via `07_01_build_group_matrix.py`, presenting TopSim + Ward at $K=3$ as primary selection.
 

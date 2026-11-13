@@ -27,8 +27,7 @@ output_layout = importlib.import_module("scripts.core_workflow.lib.output_layout
 atlas = importlib.import_module("scripts.core_workflow.05_02_run_group_atlas")
 gradients = importlib.import_module("scripts.core_workflow.05_01_compute_hippomaps_gradients")
 materializer = importlib.import_module("scripts.core_workflow.04_01_materialize_kong2022_roi_fc")
-weighted = importlib.import_module("scripts.core_workflow.lib.weighted_fisherz")
-weighted_branch = importlib.import_module("scripts.core_workflow.05_05_build_weighted_fisherz_branch")
+weighted = importlib.import_module("scripts.core_workflow.lib.network_ts_fisherz")
 overview = importlib.import_module("scripts.core_workflow.06_01_build_group_overview")
 reference_builder = importlib.import_module("scripts.core_workflow.03_02_build_kong2022_routea_reference")
 template_assets = importlib.import_module("scripts.core_workflow.lib.template_assets")
@@ -325,7 +324,6 @@ def test_default_parsers_select_canonical7_without_a_7net_suffix() -> None:
     assert reference_builder.DEFAULT_SHARED_ROOT.name == "pfm"
     assert extractor.build_arg_parser().parse_args(["--subject", "01", "--dataset", "hcp"]).atlas_slug == "kong2022"
     assert atlas.build_arg_parser().parse_args([]).network_taxonomy == "canonical7"
-    assert weighted_branch.build_arg_parser().parse_args([]).network_column == "canonical7"
 
 
 def test_canonical7_registry_is_derived_from_existing_kong2022_registry() -> None:
@@ -592,44 +590,6 @@ def test_template_surface_validation_rejects_foreign_dataset_path(
 
 
 
-def test_weighted_gradient_normalization_passes_run_dir_once(tmp_path: Path, monkeypatch) -> None:
-    from lineage_fixtures import make_run
-    source_manifest = make_run(tmp_path / "source")
-    dst_run = tmp_path / "weighted_run"
-    dst_run.mkdir(parents=True)
-    (dst_run / "group_atlas_manifest.json").write_text(
-        json.dumps({"status": "invalid"}),
-        encoding="utf-8",
-    )
-    calls = {}
-
-    def fake_normalize(
-        run_dir,
-        manifest,
-        *,
-        template_surface_dir,
-        template_spec,
-    ):
-        calls["run_dir"] = run_dir
-        return manifest
-
-    monkeypatch.setattr(weighted_branch, "normalize_copied_manifest_paths", fake_normalize)
-    monkeypatch.setattr(weighted_branch, "weighted_gradient_provenance", lambda manifest: {})
-
-    with pytest.raises(RuntimeError, match="Cannot recompute non-ok run"):
-        weighted_branch.recompute_gradient_weighted_run(
-            dst_run=dst_run,
-            surface_root=tmp_path / "surface",
-            reference_root=tmp_path / "reference",
-            color_map={},
-            template_surface_dir=tmp_path / "template",
-            template_spec=tmp_path / "template.spec",
-            source_manifest=source_manifest,
-        )
-
-    assert calls["run_dir"] == dst_run
-
-
 def test_05_02_group_atlas_rejects_retired_canonical8_taxonomy(monkeypatch) -> None:
     monkeypatch.setattr(
         sys,
@@ -647,24 +607,6 @@ def test_05_02_group_atlas_rejects_retired_canonical8_taxonomy(monkeypatch) -> N
     with pytest.raises(ValueError, match="canonical8 taxonomy is retired"):
         atlas.main()
 
-
-def test_05_05_weighted_fisherz_rejects_retired_canonical8(monkeypatch) -> None:
-    # The CLI mutates these module globals before rejecting the requested taxonomy.
-    monkeypatch.setattr(weighted_branch, "ATLAS", "kong2022")
-    monkeypatch.setattr(weighted_branch, "NETWORK_COLUMN", "canonical7")
-    monkeypatch.setattr(
-        sys,
-        "argv",
-        [
-            "05_05_build_weighted_fisherz_branch.py",
-            "--atlas",
-            "kong2022",
-            "--network-column",
-            "canonical8",
-        ],
-    )
-    with pytest.raises(ValueError, match="canonical8 taxonomy is retired"):
-        weighted_branch.main()
 
 def test_wta_registry_derives_canonical7_from_legacy_400_roi_schema(tmp_path: Path) -> None:
     subject = "100610"

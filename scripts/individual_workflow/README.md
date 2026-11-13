@@ -76,10 +76,10 @@ status and the network-label mapping are under
 ## Family17 gradient views
 
 The overview adapter's `--network-column family17` applies to gradient
-`fisherz`, `weighted_fisherz` and the retained `gradient_count` compatibility
+`fisherz`, `network_ts_fisherz` and the retained `gradient_count` compatibility
 alias for `normalized_top20_count`. Family17 filenames carry a distinct
 `gradient_family17_` prefix. Missing assignment declarations fail closed.
-Weighted profiles use grayordinate-count-weighted ROI time series, declared
+Network-time-series profiles use grayordinate-count-weighted ROI time series, declared
 runwise centering and intersected validity; undefined profiles remain unassigned.
 
 Individual WTA is separate: it uses the canonical8 ROI column and only

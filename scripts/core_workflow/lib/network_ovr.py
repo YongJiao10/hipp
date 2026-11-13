@@ -81,7 +81,7 @@ def fit_network_ovr(roi_profiles, subject_ids, cluster_ids, roi_registry, *, tax
     x = network.reshape(-1, len(names))
     y = np.tile(clusters, len(subjects))
     model = OneVsRestClassifier(LogisticRegression(
-        solver="liblinear", C=1., tol=1e-4, max_iter=1000, random_state=20260420,
+        solver="liblinear", C=1., tol=1e-4, max_iter=1000,
     ), n_jobs=1)
     with warnings.catch_warnings():
         warnings.simplefilter("error", ConvergenceWarning)
@@ -116,7 +116,7 @@ def fit_network_ovr(roi_profiles, subject_ids, cluster_ids, roi_registry, *, tax
         "input_fc_definition": "subject_cluster_mean_hippocampal_timeseries_to_cortical_roi_fisher_z",
         "network_aggregation": "equal_ROI_nanmean_within_authoritative_network",
         "solver": "liblinear", "C": 1., "tol": 1e-4, "max_iter": 1000,
-        "random_state": 20260420, "regularization": "default_L2",
+        "regularization": "default_L2",
         "predictor_scaling": "none", "class_weight": None,
         "n_iter": [int(np.max(estimator.n_iter_)) for estimator in model.estimators_],
     }
@@ -156,7 +156,7 @@ def fit_network_ovr_from_network_profiles(
     y = np.tile(clusters, len(subjects))
     model = OneVsRestClassifier(
         LogisticRegression(
-            solver="liblinear", C=1.0, tol=1e-4, max_iter=1000, random_state=20260420
+            solver="liblinear", C=1.0, tol=1e-4, max_iter=1000
         ),
         n_jobs=1,
     )
@@ -208,7 +208,6 @@ def fit_network_ovr_from_network_profiles(
         "C": 1.0,
         "tol": 1e-4,
         "max_iter": 1000,
-        "random_state": 20260420,
         "regularization": "default_L2",
         "predictor_scaling": "none",
         "class_weight": None,

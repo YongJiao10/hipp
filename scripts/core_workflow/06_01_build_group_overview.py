@@ -20,7 +20,7 @@ Inputs:
   - --scene: Path to standard wb scene template file.
   - --route-tag: Custom workflow branch tag to override automatic detection.
   - --mode-tag: Optional explicit overview label override (default: none). No automatic sparse/full inference is performed; all maintained formal runs are full.
-  - --assignment-variant: Network mapping variant: "fisherz", "normalized_top20_count", "weighted_fisherz", "ovr_logistic_canonical7", "ovr_logistic_family17", or "both" (default: "both").
+  - --assignment-variant: Network mapping variant: "fisherz", "normalized_top20_count", "network_ts_fisherz", "ovr_logistic_canonical7", "ovr_logistic_family17", or "both" (default: "both").
   - --manifest-name: Name of generated presentation manifest JSON (default: "group_overview_manifest.json").
   - --skip-readme: Skip writing the README.md summary in presentation directory.
   - --skip-manifest: Skip writing the overview manifest JSON file.
@@ -51,7 +51,7 @@ from matplotlib.patches import Rectangle
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from nibabel.gifti import GiftiDataArray, GiftiImage, GiftiLabel, GiftiLabelTable
 
-from lib.output_layout import DEFAULT_OVERVIEWS_DIR, DEFAULT_ROUTEA_GROUP_ATLAS_ROOT
+from lib.output_layout import DEFAULT_OVERVIEWS_DIR, DEFAULT_ROUTEA_GROUP_ATLAS_ROOT, annotation_pair_overview_name
 from lib.template_assets import validate_template_assets
 from lib.route_tags import ROUTE_TAG_CHOICES, infer_route_tag_from_group_root, validate_group_atlas_root_for_route
 from lib.workflow_utils import write_json
@@ -115,7 +115,6 @@ CLUSTERLESS_METHODS = {"wta-top"}
 ASSIGNMENT_VARIANTS = (
     "fisherz",
     "normalized_top20_count",
-    "weighted_fisherz",
     "network_ts_fisherz",
     *ALL_OVR_VARIANTS,
 )
@@ -861,12 +860,12 @@ def plot_ovr_association_panel(
     ax.tick_params(labelsize=FS_TICK)
     ax.grid(axis="x", color="#dddddd", lw=0.5, alpha=0.7)
 
-    legend_loc = "upper right" if (len(t1_arr) > 0 and t1_arr[-1] > t1_arr[0]) else "lower right"
     legend_handles = [
         Rectangle((0, 0), 1, 1, facecolor="#555555", alpha=0.88, label="1st (winner)"),
         Rectangle((0, 0), 1, 1, facecolor="none", edgecolor="#111111", linewidth=0.9, label="2nd (runner-up)"),
     ]
-    ax.legend(handles=legend_handles, fontsize=FS_TICK, loc=legend_loc)
+    # Below the axes: an in-axes legend covered the margin annotations.
+    ax.legend(handles=legend_handles, fontsize=FS_TICK, loc="upper right", bbox_to_anchor=(1.0, -0.2))
 
 
 def ordered_cluster_ids_by_position(labels: np.ndarray, order: np.ndarray, k: int) -> list[int]:
@@ -1165,7 +1164,8 @@ def plot_confidence_panel(ax, rows: list[dict[str, object]], title: str) -> None
     ax.tick_params(labelsize=FS_TICK)
     ax.axvline(0.05, color="#999999", lw=0.8, ls=":")
     ax.grid(axis="x", color="#dddddd", lw=0.5, alpha=0.7)
-    ax.legend(fontsize=FS_TICK, loc="lower right")
+    # Below the axes: an in-axes legend covered the margin annotations.
+    ax.legend(fontsize=FS_TICK, loc="upper right", bbox_to_anchor=(1.0, -0.2))
 
 
 def plot_vertex_assignment_counts(
@@ -1238,9 +1238,15 @@ def plot_ari_summary_curve(ax, rows: list[dict[str, str]], *, hemi: str, color: 
     if bool(finite.any()):
         ax.plot(ks, mean, marker="o", lw=1.3, color=color, label=f"hemi-{hemi} (mean±SE)")
         ax.fill_between(ks, mean - se, mean + se, color=color, alpha=0.18)
-    null_ref = _metric_array(rows, "ARI_null_5pct")
+    # Observed stability is compared with the upper tail of the null.
+    if any("ARI_null_95pct" not in row for row in rows):
+        raise ValueError(
+            "k_selection_summary.tsv lacks ARI_null_95pct; rerun 05_02_run_group_atlas.py "
+            "to regenerate the K-selection summary before rendering the ARI panel"
+        )
+    null_ref = _metric_array(rows, "ARI_null_95pct")
     if bool(np.isfinite(null_ref).any()):
-        ax.plot(ks, null_ref, ls=":", lw=1.0, color=color, alpha=0.85, label=f"hemi-{hemi} (null 5th%)")
+        ax.plot(ks, null_ref, ls=":", lw=1.0, color=color, alpha=0.85, label=f"hemi-{hemi} (null 95th%)")
     ax.set_xticks(np.arange(2, 9, dtype=int))
     ax.set_xlim(1.5, 8.5)
     return bool(finite.any())
@@ -1301,6 +1307,7 @@ def plot_k_gate_panel(
     k_r: int,
     smoothing: str,
     redundancy_threshold: float = 0.90,
+    k_label: str = "Primary K",
 ) -> None:
     rows_l = sorted(rows_l, key=lambda r: int(r["k"]))
     rows_r = sorted(rows_r, key=lambda r: int(r["k"]))
@@ -1335,7 +1342,7 @@ def plot_k_gate_panel(
             Line2D([0], [0], color="#1f77b4", lw=1.6, marker="o", label="Left hemisphere"),
             Line2D([0], [0], color="#d62728", lw=1.6, marker="o", label="Right hemisphere"),
             Line2D([0], [0], color="#b00020", lw=1.2, ls=":", label=f"Redundancy threshold ({redundancy_threshold:.2f})"),
-            Line2D([0], [0], color="#555555", lw=1.2, ls="--", label="Selected K*"),
+            Line2D([0], [0], color="#555555", lw=1.2, ls="--", label=k_label),
         ],
         loc="lower left",
         fontsize=FS_LEGEND_SMALL,
@@ -1478,7 +1485,7 @@ def plot_wta_overview_profile_axis(
     else:
         ax.set_yticklabels([])
     if not show_ylabel:
-        ax.legend(fontsize=WTA_OVERVIEW_SIDE_PANEL_LEGEND_FS, frameon=False, loc="lower right", handlelength=1.4, labelspacing=0.22)
+        ax.legend(fontsize=WTA_OVERVIEW_SIDE_PANEL_LEGEND_FS, frameon=False, loc="best", handlelength=1.4, labelspacing=0.22)
 
 
 def overview_png_path(
@@ -1506,8 +1513,9 @@ def overview_png_path(
         return Path(present_dir) / out_name
 
     if layout == "annotation-pair":
-        pair_str = annotation_pair or "annotation_pair"
-        return Path(present_dir) / f"{pair_str}_ovr_overview.png"
+        if annotation_pair is None:
+            raise ValueError("The annotation-pair layout requires an annotation pair")
+        return Path(present_dir) / annotation_pair_overview_name(annotation_pair)
 
     if layout == "single-smoothing":
         return Path(present_dir) / "wta_overview.png"
@@ -1624,15 +1632,6 @@ def render_combo(
                     validate_gradient_assignment(path.parent, manifest, str(variant_name))
                 )
 
-    if layout == "single-smoothing":
-        fig = plt.figure(figsize=(19.0, 7.5), dpi=180, constrained_layout=True)
-        gs = fig.add_gridspec(nrows=1, ncols=3, width_ratios=[0.72, 1.14, 1.40], wspace=0.06)
-    elif method in CLUSTERLESS_METHODS:
-        fig = plt.figure(figsize=(19.0, 12.8), dpi=180, constrained_layout=True)
-        gs = fig.add_gridspec(nrows=2, ncols=3, width_ratios=[0.62, 1.18, 1.42], hspace=0.08, wspace=0.06)
-    else:
-        fig = plt.figure(figsize=(22.0, 14.0) if family17_overview else (15.4, 12.2), dpi=180, constrained_layout=True)
-        gs = fig.add_gridspec(nrows=2, ncols=2, width_ratios=[1.65, 1.30] if family17_overview else [1.50, 1.20], hspace=0.06, wspace=0.05)
     rows_meta: list[dict[str, object]] = []
 
     if layout == "annotation-pair":
@@ -1648,9 +1647,9 @@ def render_combo(
                 (NETWORK_TS_OVR_VARIANT, target_sm, f"{target_sm} network-TS canonical7 OVR"),
             ]
         elif annotation_pair == "top20":
+            # Top20 counts are taken from the group-average profile; no OVR model is fitted on them.
             row_specs = [
                 ("normalized_top20_count", target_sm, f"{target_sm} normalized Top20"),
-                ("ovr_logistic_canonical7", target_sm, f"{target_sm} canonical7 OVR"),
             ]
         else:
             raise ValueError(f"Unknown annotation pair: {annotation_pair!r}")
@@ -1669,6 +1668,18 @@ def render_combo(
             (effective_assignment_variant, sm, sm)
             for sm in SMOOTHINGS
         ]
+
+    if layout == "single-smoothing":
+        fig = plt.figure(figsize=(19.0, 7.5), dpi=180, constrained_layout=True)
+        gs = fig.add_gridspec(nrows=1, ncols=3, width_ratios=[0.72, 1.14, 1.40], wspace=0.06)
+    elif method in CLUSTERLESS_METHODS:
+        fig = plt.figure(figsize=(19.0, 12.8), dpi=180, constrained_layout=True)
+        gs = fig.add_gridspec(nrows=2, ncols=3, width_ratios=[0.62, 1.18, 1.42], hspace=0.08, wspace=0.06)
+    else:
+        n_rows = len(row_specs)
+        width, height = (22.0, 14.0) if family17_overview else (15.4, 12.2)
+        fig = plt.figure(figsize=(width, height * n_rows / 2 + (0.5 if n_rows == 1 else 0.0)), dpi=180, constrained_layout=True)
+        gs = fig.add_gridspec(nrows=n_rows, ncols=2, width_ratios=[1.65, 1.30] if family17_overview else [1.50, 1.20], hspace=0.06, wspace=0.05)
 
     if method not in CLUSTERLESS_METHODS and layout != "single-smoothing" and len(row_specs) == 2:
         sub_diag = gs[:, 0].subgridspec(4, 3, width_ratios=[0.90, 1.10, 0.045], wspace=0.05, hspace=0.06)
@@ -1833,9 +1844,9 @@ def render_combo(
                 handles=[
                     Line2D([0], [0], color="#1f77b4", lw=1.6, marker="o", label="Left hemisphere"),
                     Line2D([0], [0], color="#d62728", lw=1.6, marker="o", label="Right hemisphere"),
-                    Line2D([0], [0], color="#555555", lw=1.2, ls=":", label="Null baseline"),
+                    Line2D([0], [0], color="#555555", lw=1.2, ls=":", label="Null 95th percentile"),
                 ],
-                loc="lower right",
+                loc="best",
                 fontsize=FS_LEGEND_SMALL,
                 framealpha=0.9,
                 edgecolor="#dddddd",
@@ -1965,19 +1976,19 @@ def render_combo(
         automatic_marker = False
         for automatic_k, primary_k, color in [(automatic_k_l, k_l, "#1f77b4"), (automatic_k_r, k_r, "#d62728")]:
             if automatic_k is not None and int(automatic_k) != int(primary_k):
-                ax0.axvline(int(automatic_k), color=color, ls=":", lw=1.0)
+                ax0.axvline(int(automatic_k), color=color, ls="-.", lw=1.0)
                 automatic_marker = True
         legend_handles = [
             Line2D([0], [0], color="#1f77b4", lw=1.6, marker="o", label="Left hemisphere"),
             Line2D([0], [0], color="#d62728", lw=1.6, marker="o", label="Right hemisphere"),
-            Line2D([0], [0], color="#555555", lw=1.2, ls=":", label="Null baseline"),
+            Line2D([0], [0], color="#555555", lw=1.2, ls=":", label="Null 95th percentile"),
             Line2D([0], [0], color="#555555", lw=1.2, ls="--", label=primary_label),
         ]
         if automatic_marker:
-            legend_handles.append(Line2D([0], [0], color="#555555", lw=1.2, ls=":", label="Automatic K"))
+            legend_handles.append(Line2D([0], [0], color="#555555", lw=1.2, ls="-.", label="Automatic K"))
         ax0.legend(
             handles=legend_handles,
-            loc="lower right",
+            loc="best",
             fontsize=FS_LEGEND_SMALL,
             framealpha=0.9,
             edgecolor="#dddddd",
@@ -1996,7 +2007,7 @@ def render_combo(
 
         nets = (list(validated_l["network_names"]) if effective_assignment_variant in ALL_OVR_VARIANTS else
                 [str(x) for x in load_json(d_l / "group_feature_summary.json")["network_names"]])
-        if effective_assignment_variant in {"fisherz", "weighted_fisherz", "network_ts_fisherz"}:
+        if effective_assignment_variant in {"fisherz", "network_ts_fisherz"}:
             validate_fisher_status_matches_profile(
                 profile_ordered=prof_l_o,
                 status_payload=status_l,
@@ -2053,7 +2064,7 @@ def render_combo(
             )
         elif profile_is_normalized_count:
             vmax = float(np.nanmax(prof_lr)) if np.isfinite(prof_lr).any() else 1.0
-            im1 = style_imshow(ax1, prof_lr, profile_title, vmin=0.0, vmax=max(1.0, vmax), cmap="magma")
+            im1 = style_imshow(ax1, prof_lr, profile_title, vmin=0.0, vmax=vmax, cmap="magma")
         else:
             vmax = float(np.nanmax(np.abs(prof_lr))) if np.isfinite(prof_lr).any() else 1.0
             im1 = style_imshow(ax1, prof_lr, profile_title, vmin=-vmax, vmax=vmax, cmap="coolwarm")
@@ -2084,6 +2095,7 @@ def render_combo(
             k_r=k_r,
             smoothing=row_label,
             redundancy_threshold=red_thresh,
+            k_label=primary_label,
         )
 
         if effective_assignment_variant in ALL_OVR_VARIANTS:
@@ -2153,6 +2165,8 @@ def render_combo(
             label, detail = title.split(" | ", 1)
             if detail.startswith("OVR raw beta"):
                 detail = "Raw beta (zero reference)"
+            elif detail.startswith("cluster_network_profile (normalized"):
+                detail = "Normalized Top20 count"
             elif detail.startswith("cluster_network_profile"):
                 detail = "Network FC profile"
             elif detail.startswith("OVR conditional association"):
@@ -2246,6 +2260,24 @@ def render_combo(
     }
 
 
+def merge_overview_manifest_items(manifest_path: Path, rendered: list[dict[str, object]]) -> list[dict[str, object]]:
+    """Keep records of other figures in this directory; several calls share one manifest.
+
+    A directory holds one figure per annotation pair, each rendered by its own
+    call. Records are keyed by figure path: this call replaces its own figures
+    and drops records whose figure no longer exists.
+    """
+    kept: list[dict[str, object]] = []
+    if manifest_path.is_file():
+        previous = json.loads(manifest_path.read_text(encoding="utf-8")).get("items", [])
+        current = {str(item["overview_png"]) for item in rendered}
+        kept = [
+            item for item in previous
+            if str(item.get("overview_png")) not in current and Path(str(item.get("overview_png"))).is_file()
+        ]
+    return sorted([*kept, *rendered], key=lambda item: str(item["overview_png"]))
+
+
 def write_readme(present_dir: Path, items: list[dict[str, object]]) -> None:
     lines = [
         "# HCP 7T hippocampus group overviews",
@@ -2253,7 +2285,7 @@ def write_readme(present_dir: Path, items: list[dict[str, object]]) -> None:
         "| atlas | method | route | mode | assignment | overview | smoothings | annotation | key metrics |",
         "|---|---|---|---|---|---|---|---|---|",
     ]
-    for item in sorted(items, key=lambda x: (str(x["atlas"]), str(x["method"]))):
+    for item in sorted(items, key=lambda x: (str(x["atlas"]), str(x["method"]), str(x["overview_png"]))):
         png = Path(str(item["overview_png"])).name
         sm = ", ".join(str(s) for s in item.get("smoothings", []))
         metric = str(item.get("metric_summary", ""))
@@ -2546,12 +2578,14 @@ def main() -> int:
                     )
                     items.append(item)
 
-    manifest = {"present_dir": str(present_dir), "count": len(items), "items": items}
+    rendered_count = len(items)
     if not bool(args.skip_manifest):
+        items = merge_overview_manifest_items(present_dir / args.manifest_name, items)
+        manifest = {"present_dir": str(present_dir), "count": len(items), "items": items}
         (present_dir / args.manifest_name).write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     if not bool(args.skip_readme):
         write_readme(present_dir, items)
-    print(json.dumps({"present_dir": str(present_dir), "count": len(items)}, indent=2))
+    print(json.dumps({"present_dir": str(present_dir), "count": rendered_count}, indent=2))
     return 0
 
 

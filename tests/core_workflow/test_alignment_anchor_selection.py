@@ -34,42 +34,13 @@ def test_cli_alignment_anchor_smoothing_arguments_and_defaults():
     assert parsed_05_02_custom.alignment_anchor_smoothing == "2mm"
 
 
-@pytest.mark.parametrize(
-    ("profile", "extra", "expected_seed"),
-    [
-        ("topsim", [], 20260420),
-        ("topfc", [], 20260420),
-        (None, [], 0),
-        ("topsim", ["--gradient-random-state", "0"], 0),
-    ],
-)
-def test_gradient_producer_uses_formal_seed_unless_explicitly_overridden(
-    monkeypatch, profile, extra, expected_seed
-):
-    mod = stage("05_01_compute_hippomaps_gradients.py")
-    argv = [
-        "05_01_compute_hippomaps_gradients.py", "--routes", "pfm",
-        "--smoothings", "2mm", "--hemis", "L",
-        "--alignment-anchor-smoothing", "2mm",
-    ]
-    if profile:
-        argv += ["--profile", profile]
-    monkeypatch.setattr(sys, "argv", argv + extra)
-    monkeypatch.setattr(mod, "ensure_hippomaps_on_path", lambda path: path)
-    monkeypatch.setattr(mod, "load_subject_ids", lambda path: ["01"])
-    observed = []
-
-    class Captured(Exception):
-        pass
-
-    def capture_compute_combo(**kwargs):
-        observed.append(kwargs["gradient_random_state"])
-        raise Captured
-
-    monkeypatch.setattr(mod, "compute_combo", capture_compute_combo)
-    with pytest.raises(Captured):
-        mod.main()
-    assert observed == [expected_seed]
+@pytest.mark.parametrize("script", ["05_01_compute_hippomaps_gradients.py", "05_02_run_group_atlas.py"])
+def test_gradient_stages_have_no_gradient_seed_option(script):
+    """The exact diffusion-map solver has no start vector, so no seed exists."""
+    parser = stage(script).build_arg_parser()
+    assert not hasattr(parser.parse_args([]), "gradient_random_state")
+    with pytest.raises(SystemExit):
+        parser.parse_args(["--gradient-random-state", "0"])
 
 
 def test_05_01_select_alignment_anchor_and_validation(monkeypatch):
@@ -133,7 +104,6 @@ def test_05_02_load_hippomaps_gradient_features_anchor_validation(tmp_path):
         "group_fc_shape": [10, 400],
         "feature_count": 400,
         "gradient_preprocessing": prep,
-        "gradient_random_state": 20260420,
         "outputs": {"hippomaps_gradients_full": str(grad_path)},
     }
 
@@ -149,7 +119,6 @@ def test_05_02_load_hippomaps_gradient_features_anchor_validation(tmp_path):
             hemi="L",
             support_mask=np.ones(10, dtype=bool),
             alignment_anchor_smoothing="2mm",
-            gradient_random_state=20260420,
         )
 
     # 2. Manifest with no gradient_alignment, request 2mm -> must reject
@@ -163,7 +132,6 @@ def test_05_02_load_hippomaps_gradient_features_anchor_validation(tmp_path):
             hemi="L",
             support_mask=np.ones(10, dtype=bool),
             alignment_anchor_smoothing="2mm",
-            gradient_random_state=20260420,
         )
 
     # 3. Manifest with 2mm anchor, request 4mm -> must reject symmetric mismatch
@@ -178,7 +146,6 @@ def test_05_02_load_hippomaps_gradient_features_anchor_validation(tmp_path):
             hemi="L",
             support_mask=np.ones(10, dtype=bool),
             alignment_anchor_smoothing="4mm",
-            gradient_random_state=20260420,
         )
 
     # 4. Manifest with 2mm anchor, request 2mm -> succeeds and returns meta with anchor_smoothing="2mm"
@@ -189,7 +156,6 @@ def test_05_02_load_hippomaps_gradient_features_anchor_validation(tmp_path):
         hemi="L",
         support_mask=np.ones(10, dtype=bool),
         alignment_anchor_smoothing="2mm",
-        gradient_random_state=20260420,
     )
     assert meta["gradient_alignment"]["anchor_smoothing"] == "2mm"
 
@@ -206,7 +172,6 @@ def test_05_02_resume_validation_symmetric_checks(tmp_path):
             "status": "ok",
             "group_fc_shape": [10, 400],
             "gradient_preprocessing": prep,
-            "gradient_random_state": 20260420,
         }
         if up_anchor is not None:
             up_data["gradient_alignment"] = {"enabled": True, "anchor_smoothing": up_anchor, "anchor_hemi": "L"}
@@ -236,7 +201,7 @@ def test_05_02_resume_validation_symmetric_checks(tmp_path):
         mod_05_02._validate_gradient_resume_contract(
             manifest_path,
             payload,
-            gradient_options={"alignment_anchor_smoothing": "2mm", "random_state": 20260420},
+            gradient_options={"alignment_anchor_smoothing": "2mm"},
         )
 
     # 2. Upstream 2mm, Summary 2mm, requested 4mm -> reject (symmetric check)
@@ -245,7 +210,7 @@ def test_05_02_resume_validation_symmetric_checks(tmp_path):
         mod_05_02._validate_gradient_resume_contract(
             manifest_path,
             payload,
-            gradient_options={"alignment_anchor_smoothing": "4mm", "random_state": 20260420},
+            gradient_options={"alignment_anchor_smoothing": "4mm"},
         )
 
     # 3. Partial mismatch: summary 2mm, upstream 4mm, requested 2mm -> reject
@@ -254,7 +219,7 @@ def test_05_02_resume_validation_symmetric_checks(tmp_path):
         mod_05_02._validate_gradient_resume_contract(
             manifest_path,
             payload,
-            gradient_options={"alignment_anchor_smoothing": "2mm", "random_state": 20260420},
+            gradient_options={"alignment_anchor_smoothing": "2mm"},
         )
 
     # 4. Matching 2mm -> succeeds
@@ -262,7 +227,7 @@ def test_05_02_resume_validation_symmetric_checks(tmp_path):
     mod_05_02._validate_gradient_resume_contract(
         manifest_path,
         payload,
-        gradient_options={"alignment_anchor_smoothing": "2mm", "random_state": 20260420},
+        gradient_options={"alignment_anchor_smoothing": "2mm"},
     )
 
 

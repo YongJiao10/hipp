@@ -506,7 +506,7 @@ def _append_boundary_rows(destination, base, rows, memberships, *, scope="indivi
 
 def _fit_individual_gradient(fc, valid, reference, reference_support, axis):
     """Fit raw five-component Kong400 gradients and align only in HCP reference space."""
-    from scripts.core_workflow.lib.hippomaps_adapter import fit_gradientmaps_pearson
+    from scripts.core_workflow.lib.hippomaps_adapter import fit_diffusion_gradients
 
     source_support = np.asarray(valid, bool) & np.isfinite(fc).all(axis=1)
     raw = np.full((512, 5), np.nan, dtype=np.float32)
@@ -517,10 +517,9 @@ def _fit_individual_gradient(fc, valid, reference, reference_support, axis):
         fit_reason = "fewer than six finite valid vertices for five-component gradient"
     else:
         try:
-            active, lambdas, ev = fit_gradientmaps_pearson(
+            active, lambdas, ev = fit_diffusion_gradients(
                 np.asarray(fc[source_support], dtype=np.float32),
                 n_components=5,
-                random_state=0,
             )
             if active.shape != (int(source_support.sum()), 5):
                 raise RuntimeError(f"unexpected individual gradient shape {active.shape}")
@@ -1007,6 +1006,8 @@ def _write_run_manifest(root, *, stage, outputs, extra=None):
 
 def run_analysis(output_root=DEFAULT_OUTPUT, *, workers=4, overwrite=False):
     """Derive metrics and statistics from one validated, explicit input inventory."""
+    from scripts.core_workflow.lib.hippomaps_adapter import GRADIENT_EIGENSOLVER
+
     root = _checked_output_root(output_root)
     system = detect_system()
     if system != "idas":
@@ -1167,7 +1168,7 @@ def run_analysis(output_root=DEFAULT_OUTPUT, *, workers=4, overwrite=False):
                 "features": "individual vertex-to-400-ROI Fisher-z FC",
                 "n_components": 5,
                 "kernel": "pearson",
-                "random_state": 0,
+                "eigensolver": GRADIENT_EIGENSOLVER,
                 "feature_zscore": "columnwise across vertices",
                 "brainspace_sparsity": 0.9,
                 "alignment": "unscaled, uncentered 5D orthogonal Procrustes to matching external HCP reference",

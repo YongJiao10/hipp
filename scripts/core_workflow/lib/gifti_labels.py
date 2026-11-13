@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from .network_ovr import OVR_VARIANTS
+from .network_ovr import ALL_OVR_VARIANTS
 import numpy as np
 from nibabel.gifti import GiftiDataArray, GiftiImage, GiftiLabel, GiftiLabelTable
 from pathlib import Path
@@ -280,7 +280,7 @@ def materialize_combo(manifest_path: Path, color_map: dict[str, tuple[int, int, 
         require_file=False,
     )
     manifest["template_cluster_label"] = str(cluster_lbl_path)
-    allowed = {"fisherz", "normalized_top20_count", "weighted_fisherz", *OVR_VARIANTS}
+    allowed = {"fisherz", "normalized_top20_count", "network_ts_fisherz", *ALL_OVR_VARIANTS}
     unknown = sorted(set(str(key) for key in variants) - allowed)
     if unknown:
         raise ValueError(f"Unsupported assignment variant(s) in manifest: {unknown}: {manifest_path}")
@@ -316,7 +316,7 @@ def materialize_combo(manifest_path: Path, color_map: dict[str, tuple[int, int, 
         _write_functional_variant(
             labels=labels,
             status_path=status_path,
-            network_names=([str(x) for x in raw_spec["network_names"]] if variant_name in OVR_VARIANTS else network_names),
+            network_names=([str(x) for x in raw_spec["network_names"]] if variant_name in ALL_OVR_VARIANTS else network_names),
             color_map=color_map,
             labels_path=variant_labels_path,
             map_path=variant_map_path,

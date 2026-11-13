@@ -30,9 +30,7 @@ For 36P, the formal roots relative to `outputs_stanford/` are:
 | Group-average surfaces | `inputs/kong2022/templates/hipp_group_average/group_average_surfaces/` |
 | Gradients | `work/hippomaps_gradients/pfm/<cohort>/` |
 | Base group atlases | `work/group_atlas/pfm/<cohort>/` |
-| Weighted Fisher-z group atlases | `work/group_atlas/pfm_weighted/<cohort>/` |
 | Base overviews | `present/overviews/pfm/<cohort>/` |
-| Weighted overviews | `present/overviews/pfm_weighted/<cohort>/` |
 
 Method, atlas, smoothing, coverage,
 gradient dimensions, and hemisphere remain below the stage roots. Fisher-z
@@ -40,7 +38,6 @@ and normalized Top-20 count assignments remain explicit filenames/metadata.
 Missing formal products must be reported by their exact paths.
 
 The maintained stages are `05_01_compute_hippomaps_gradients.py`,
-`05_02_run_group_atlas.py`, `05_05_build_weighted_fisherz_branch.py`, and
-`06_01_build_group_overview.py`. Pass Stanford's selected reference, surface,
+`05_02_run_group_atlas.py`, and `06_01_build_group_overview.py`. Pass Stanford's selected reference, surface,
 template, and cohort roots explicitly. Cortical reference data and their
 scientific/QC provenance are preserved during location-only cleanup.

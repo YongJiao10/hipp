@@ -48,14 +48,17 @@ def main() -> int:
     manifests = sorted(root.rglob("group_atlas_manifest.json"))
     cmap = network_color_map()
     n_done = 0
+    failed: list[str] = []
     for m in manifests:
         try:
             if materialize_combo(m, cmap):
                 n_done += 1
-        except Exception as e:  # pragma: no cover
-            print(f"[warn] failed {m}: {e}", flush=True)
-    print(json.dumps({"out_root": str(root), "manifests": len(manifests), "updated": int(n_done)}, indent=2))
-    return 0
+        except Exception as e:
+            failed.append(str(m))
+            print(f"[FAIL] {m}: {e}", flush=True)
+    print(json.dumps({"out_root": str(root), "manifests": len(manifests), "updated": int(n_done),
+                      "failed": failed}, indent=2))
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":

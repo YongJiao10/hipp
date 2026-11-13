@@ -60,14 +60,35 @@ Other entrypoints expose their own options and stage manifests.
 | `02` | `02_01` prepare inputs; `02_02` participant QC; `02_03` Lynch NSI audit | Sampled signals, masks, templates and analysis rosters |
 | `03` | `03_01` Fixed references; `03_02` PFM references; Lynch `03_04` then `03_03` | Cortical reference time series |
 | `04` | `04_00` cortex regression; `04_01` ROI FC/ctxdrop; `04_02` intrinsic FC | Branch-specific signals and FC |
-| `05` | `05_01` gradients; `05_02` group atlas; `05_04` confidence; `05_05` weighted comparison | Gradients, labels and assignment products |
+| `05` | `05_01` gradients; `05_02` group atlas; `05_04` confidence | Gradients, labels and assignment products |
 | `06` | Numbered renderers and `06_02` label materialization | Figures and GIFTI/CIFTI labels |
 | `07` | `07_01` presentation matrix | Overview index |
 
 Task analysis uses `04_03` for first-level activation, optional exploratory
 `04_04` background FC, `05_06` group statistics, and `06_11` rendering.
 `04_04` is not connected to the gradient pipeline. `06_05` is retired; use
-`06_04` for continuous-gradient rendering.
+`06_04` for continuous-gradient rendering. Pass `--profile topsim` or
+`--profile topfc` with `--routes pfm` to render a formal gradient bank into
+`present/gradients/pfm/<profile>/`; without `--profile` it renders the
+unprofiled bank.
+
+### Stale presentation products
+
+A figure is stale when the group-atlas or gradient manifest it was rendered
+from is newer than the figure, or when that group atlas is older than the
+gradient or parent atlas it was built from. `05_01` and `05_02` print a
+reminder when a run leaves figures stale. List them with:
+
+```bash
+/home/yojiao/.conda/envs/py314/bin/python \
+  scripts/core_workflow/07_01_build_group_matrix.py --check-sources
+```
+
+The command checks `present/overviews` and `present/gradients` by file
+modification time and exits nonzero when any figure is stale. Re-rendering a
+figure on a group atlas that predates the current gradient leaves it stale
+until `05_02` is rerun. `06_02` exits nonzero when any manifest fails, and
+accepts every assignment variant that `05_02` writes.
 
 ### HippUnfold
 
@@ -100,17 +121,8 @@ products with `--fail-on-missing --no-cleanup`. `--notemp` retains anatomy,
 coordinates, warps and CIFTI intermediates. Resume requires a current matching
 `output_check.json` and every declared output; a cleanup receipt, a boundary
 function test or a pair of meshes is insufficient.
-The 156 completed HCP subjects present in the 3T task dataset underwent
-approved 01_02 cleanup of anat, coords, warps and CIFTI. Their retained outputs
-do not satisfy the full 96-product resume contract; see the
-[v2.3.0 reconstruction assessment](../../docs/environment/hippunfold_result_impact.md).
-
-The upstream release includes fixes for terminal fragmentation and ineffective
-unfolded registration. Do not apply the retired local scientific patches or
-use development `main` in place of the release. The HCP166 dependency review
-found that upstream volumes/transforms had been pruned, so the new complete
-formal outputs require their regeneration even though those algorithms did
-not change. See the [v2.3.0 reconstruction scope and results](../../docs/environment/hippunfold_result_impact.md).
+Do not apply retired local scientific patches or use development `main` in
+place of the selected release.
 For `IncompleteFilesException`, wait for active workers to exit, activate
 hippo2, and rerun the subject's exact `hippunfold_argv` from preset `--dry-run`
 with `--rerun-incomplete`. Then resume the normal manifest command.
@@ -157,7 +169,7 @@ deleting volumes before changing that input contract produces missing-input
 status. New geometry or voxel-level analyses require the volumes again.
 
 The shared participant QC implements overall mean Power FD <=0.50 mm, bilateral Dice >=0.70,
-and at most 20 unusable vertices per consumed den-512 hemisphere. Unusable means
+and at most 10 unusable vertices per consumed den-512 hemisphere. Unusable means
 no trilinear NIfTI grid support or a nonfinite/constant sampled signal in any
 physical run. Coverage uses `*_nifti_support.npy` and
 `sub-<subject>_coverage_summary.json` with policy
@@ -198,8 +210,11 @@ Gradient producers and independent fit callers expose `--feature-scaling
 The defaults preserve column z-scoring and BrainSpace feature sparsification
 (0.9 for Kong400; 0.0 for banks with at most 50 features). Pearson affinity
 is constructed once, clipped nonnegative, mean-symmetrized with its kernel
-diagonal retained, then embedded with `GradientMaps(kernel=None)` and no
-second sparsification. Disconnected diffusion support is rejected.
+diagonal retained, then embedded with an exact diffusion map and no second
+sparsification. The embedding decomposes the symmetric conjugate of the
+diffusion operator with a direct solver, so it takes no random seed and
+Ward partitions are a deterministic function of the data. Disconnected
+diffusion support is rejected.
 
 `gradient_preprocessing` records the effective settings; missing or mismatched
 settings require explicit regeneration instead of cache reuse.
@@ -247,8 +262,12 @@ explicitly when a controlled signal root is separate.
 - Kong2022 retains all 400 ordered ROI rows, including NaN rows for empty
   parcels. Pooled FC removes each declared run mean at computation time and
   preserves within-run variance weighting. Undefined correlations remain NaN.
-- `05_05` builds a separate `weighted_fisherz` gradient-spectral comparison.
-  Select source, reference, surface and template roots for the intended dataset.
+- Gradient clusters have three network-assignment branches: `fisherz`
+  (correlate with each ROI, average z within network), `network_ts_fisherz`
+  (average ROI time series into a grayordinate-weighted network series, then
+  correlate) and `normalized_top20_count`. `wta-top` is the clusterless
+  fourth branch. OVR models exist for `fisherz` and `network_ts_fisherz`
+  inputs only; the Top20 overview has no OVR rows.
 - Renderers consume exact manifest-declared assignment and template assets.
   Select `--group-root`/`--out-root`, route and assignment variant explicitly
   for render-only runs. `07_01` defaults to `--routes pfm`; other routes and
@@ -292,8 +311,9 @@ adds separate descriptive OVR models to the existing Fisher-z and normalized
 Top-20 exports. Each model uses the same subject-by-cluster Kong400 profiles
 computed from cluster-mean hippocampal time series. It aggregates equal ROI
 Fisher-z means within each authoritative network, without imputing missing
-network values. The fixed liblinear L2 model uses C=1, tol=1e-4, max_iter=1000,
-and seed 20260420, without extra feature scaling or class weighting.
+network values. The fixed liblinear L2 model uses C=1, tol=1e-4 and max_iter=1000,
+without extra feature scaling or class weighting; its primal solver is
+deterministic and takes no seed.
 `both` continues to mean Fisher-z plus normalized Top-20; OVR requires explicit
 selection and does not change cluster boundaries. The largest strictly positive
 raw coefficient determines each OVR label; all other cases are unassigned.

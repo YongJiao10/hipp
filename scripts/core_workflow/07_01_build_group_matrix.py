@@ -38,9 +38,11 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+from lib.stale_products import print_stale_figures
 from lib.gradient_clustering import GRADIENT_METHODS
 from lib.network_ovr import OVR_VARIANTS
 from lib.output_layout import (
+    annotation_pair_overview_name,
     DEFAULT_FIXED_17NET_GROUP_ATLAS_ROOT,
     DEFAULT_FIXED_GROUP_ATLAS_ROOT,
     DEFAULT_GROUP_ATLAS_ROOT,
@@ -198,7 +200,7 @@ def discover_hcp_profile_overviews(present_dir: Path) -> list[dict[str, object]]
             if not dir_path.is_dir():
                 continue
             for pair in ("roi-fisherz", "network-ts-fisherz", "top20"):
-                png_path = dir_path / f"{pair}_ovr_overview.png"
+                png_path = dir_path / annotation_pair_overview_name(pair)
                 if png_path.is_file():
                     items.append({
                         "profile": profile,
@@ -289,7 +291,15 @@ def main() -> int:
     p.add_argument("--manifest-name", default=DEFAULT_MANIFEST_NAME)
     p.add_argument("--scene", default=None, help="Optional override for wb scene path.")
     p.add_argument("--index-only", action="store_true", help="Index existing overview products without re-running 06_01 render jobs.")
+    p.add_argument(
+        "--check-sources", nargs="*", default=None, metavar="PRESENT_ROOT",
+        help="Only list overview and gradient figures that are older than the work files they were rendered "
+             "from, then exit nonzero if any is stale. Defaults to --present-dir and its sibling gradients/.",
+    )
     args = p.parse_args()
+    if args.check_sources is not None:
+        roots = args.check_sources or [args.present_dir, Path(args.present_dir).resolve().parent / "gradients"]
+        return 1 if print_stale_figures(roots) else 0
 
     group_atlas_root = resolve_group_atlas_base_root(Path(args.group_atlas_root))
     present_dir = Path(args.present_dir).resolve()

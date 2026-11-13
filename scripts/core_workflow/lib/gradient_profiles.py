@@ -13,9 +13,8 @@ from dataclasses import dataclass
 from typing import Literal
 
 ProfileRole = Literal["primary", "historical_baseline", "comparison_display"]
-GRADIENT_RANDOM_STATE = 20260420
-# Route-C comparison split/null fits use the outer repetition seed for the
-# first half and the immediately following seed for the second half.
+# Split/null clustering (GMM and spectral initialisation) uses the outer
+# repetition seed for the first half and the following seed for the second.
 RESAMPLE_HALF_SEED_OFFSETS = (0, 1)
 
 
@@ -130,7 +129,6 @@ def comparison_display_combinations() -> list[tuple[str, str]]:
 
 # Backward compatibility aliases
 FormalProfile = GradientProfile
-FORMAL_GRADIENT_RANDOM_STATE = GRADIENT_RANDOM_STATE
 FORMAL_RESAMPLE_HALF_SEED_OFFSETS = RESAMPLE_HALF_SEED_OFFSETS
 FORMAL_PROFILES = GRADIENT_PROFILES
 FORMAL_PROFILE_CHOICES = GRADIENT_PROFILE_CHOICES

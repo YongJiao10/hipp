@@ -23,10 +23,9 @@ if str(CORE_WORKFLOW_DIR) not in sys.path:
 
 from lib.gifti_labels import make_named_label_gifti
 from lib.hippomaps_adapter import (
-    DEFAULT_GRADIENT_RANDOM_STATE,
     DEFAULT_HIPPOMAPS_ROOT,
     ensure_hippomaps_on_path,
-    fit_gradientmaps_pearson,
+    fit_diffusion_gradients,
     gradient_preprocessing_settings,
     scale_gradient_features,
     reconstruct_full_surface,
@@ -81,7 +80,6 @@ class CrossfitConfig:
     fold_by_subject: Mapping[str, int]
     coverage_threshold: float = 0.80
     n_components: int = 5
-    gradient_random_state: int = 0
     cluster_seed: int = 0
     feature_scaling: str = "col_zscore"
     sparsify_stage: str = "features"
@@ -274,11 +272,6 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--method", choices=sorted(GRADIENT_METHODS), default="gradient-spectral")
     parser.add_argument("--rbf-scale", type=float, default=1.0)
     parser.add_argument("--clustering-feature-scaling", choices=("none", "unit_sd"), default="none")
-    parser.add_argument(
-        "--gradient-random-state",
-        type=int,
-        default=DEFAULT_GRADIENT_RANDOM_STATE,
-    )
     parser.add_argument("--cluster-seed", type=int, default=0)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--resume", action="store_true")
@@ -659,7 +652,6 @@ def validate_template_manifest(
         "train_test_disjoint": True,
         "coverage_threshold": float(config.coverage_threshold),
         "n_components": int(config.n_components),
-        "gradient_random_state": int(config.gradient_random_state),
         "cluster_seed": int(config.cluster_seed),
         "gradient_preprocessing": gradient_preprocessing_settings(
             int(manifest.get("feature_count", 400)), feature_scaling=config.feature_scaling,
@@ -910,10 +902,9 @@ def fit_fold_template(
         subjects=list(training_subjects),
         support_mask=support_mask,
     )
-    gradients_active, lambdas, ev_fractions = fit_gradientmaps_pearson(
+    gradients_active, lambdas, ev_fractions = fit_diffusion_gradients(
         group_fc_active,
         n_components=int(config.n_components),
-        random_state=int(config.gradient_random_state),
         feature_scaling=config.feature_scaling,
         sparsify_stage=config.sparsify_stage,
         sparsity=config.sparsity,
@@ -1001,7 +992,6 @@ def fit_fold_template(
         "train_test_disjoint": set(training_subjects).isdisjoint(heldout_subjects),
         "coverage_threshold": float(config.coverage_threshold),
         "n_components": int(config.n_components),
-        "gradient_random_state": int(config.gradient_random_state),
         "cluster_seed": int(config.cluster_seed),
         **gradient_method_provenance(config.method, rbf_scale=config.rbf_scale),
         "gradient_clustering": clustering_metadata,
@@ -1568,7 +1558,6 @@ def run_config_payload(
         "hemis": [str(value) for value in args.hemis],
         "coverage_threshold": float(args.coverage_threshold),
         "n_components": int(args.n_components),
-        "gradient_random_state": int(args.gradient_random_state),
         "cluster_seed": int(args.cluster_seed),
         "gradient_preprocessing": gradient_preprocessing_settings(
             400, feature_scaling=args.feature_scaling,
@@ -1658,7 +1647,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         fold_by_subject=fold_by_subject,
         coverage_threshold=float(args.coverage_threshold),
         n_components=int(args.n_components),
-        gradient_random_state=int(args.gradient_random_state),
         cluster_seed=int(args.cluster_seed),
         feature_scaling=args.feature_scaling,
         sparsify_stage=args.sparsify_stage,
@@ -1705,7 +1693,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         "hemis": [str(value) for value in args.hemis],
         "coverage_threshold": float(args.coverage_threshold),
         "n_components": int(args.n_components),
-        "gradient_random_state": int(args.gradient_random_state),
         "cluster_seed": int(args.cluster_seed),
         **gradient_method_provenance(args.method, rbf_scale=args.rbf_scale),
         "k_final": DEFAULT_K,

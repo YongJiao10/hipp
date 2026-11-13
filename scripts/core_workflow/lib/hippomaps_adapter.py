@@ -13,7 +13,8 @@ import numpy as np
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_HIPPOMAPS_ROOT = REPO_ROOT / "external" / "hippomaps"
-DEFAULT_GRADIENT_RANDOM_STATE = 0
+GRADIENT_EIGENSOLVER = "symmetric_eigh"
+DIFFUSION_ALPHA = 0.5
 
 
 def ensure_hippomaps_on_path(hippomaps_root: Path = DEFAULT_HIPPOMAPS_ROOT) -> Path:
@@ -167,22 +168,6 @@ def feature_zscore_columns(matrix: np.ndarray) -> np.ndarray:
     return out.astype(np.float32)
 
 
-def _extract_gradientmaps_array(model: object, primary: str, fallback: str, label: str) -> np.ndarray:
-    raw: Any = getattr(model, primary, None)
-    if raw is None:
-        raw = getattr(model, fallback, None)
-    if raw is None:
-        raise RuntimeError(f"GradientMaps output missing {primary}/{fallback} for {label}")
-    if isinstance(raw, list):
-        if len(raw) != 1:
-            raise RuntimeError(f"Expected one GradientMaps dataset for {label}, got {len(raw)}")
-        raw = raw[0]
-    arr = np.asarray(raw)
-    if arr.size == 0:
-        raise RuntimeError(f"GradientMaps returned empty {label}")
-    return arr
-
-
 def brainspace_sparsity_for_feature_count(
     n_features: int,
     *,
@@ -220,8 +205,9 @@ def gradient_preprocessing_settings(
         "non_negative": True,
         "symmetrization": "arithmetic_mean",
         "diagonal": "retain_kernel_diagonal",
-        "diffusion_alpha": 0.5,
+        "diffusion_alpha": DIFFUSION_ALPHA,
         "diffusion_time": 0,
+        "eigensolver": GRADIENT_EIGENSOLVER,
     }
 
 
@@ -298,11 +284,60 @@ def scale_gradient_features(
     return scaled, dict(transform)
 
 
-def fit_gradientmaps_pearson(
+def diffusion_map_embedding(affinity: np.ndarray, *, n_components: int) -> tuple[np.ndarray, np.ndarray]:
+    """Exact multi-scale diffusion-map embedding of a symmetric, connected affinity.
+
+    The affinity is first normalised by degree^-DIFFUSION_ALPHA on both sides.
+    The resulting diffusion operator P = D^-1 W is not symmetric, but it shares
+    its eigenvalues with S = D^-1/2 W D^-1/2 and its right eigenvectors are
+    D^-1/2 times those of S. S is decomposed completely with a direct symmetric
+    solver, so the result has no start vector and no random seed.
+
+    The components are the eigenvectors with the algebraically largest
+    eigenvalues after the trivial one. Each eigenvector has unit norm under the
+    stationary distribution pi = degree / sum(degree), the standard diffusion-map
+    normalisation, and is scaled by its multi-scale eigenvalue w / (1 - w), so
+    Euclidean distance between rows is the multi-scale diffusion distance. The
+    largest-magnitude element of every component is positive. BrainSpace
+    normalises each eigenvector to unit unweighted norm instead, which rescales
+    components by a few percent relative to these.
+    """
+    weights = np.array(affinity, dtype=np.float64)
+    n_comp = int(n_components)
+    if weights.ndim != 2 or weights.shape[0] != weights.shape[1]:
+        raise ValueError(f"Diffusion affinity must be square, got {weights.shape}")
+    if not 0 < n_comp < weights.shape[0]:
+        raise ValueError(f"n_components must be in [1, {weights.shape[0] - 1}], got {n_components}")
+    if not np.isfinite(weights).all() or np.any(weights < 0):
+        raise ValueError("Diffusion affinity must be finite and nonnegative")
+    if not np.allclose(weights, weights.T, rtol=0.0, atol=1e-10):
+        raise ValueError("Diffusion affinity must be symmetric")
+    scale = np.power(weights.sum(axis=1), -DIFFUSION_ALPHA)
+    weights = weights * scale[:, None] * scale[None, :]
+    degree = weights.sum(axis=1)
+    if np.any(degree <= 0):
+        raise ValueError("Diffusion affinity has a vertex without positive weight")
+    root = np.sqrt(degree)
+    symmetric = weights / root[:, None] / root[None, :]
+    symmetric = (symmetric + symmetric.T) / 2
+    values, vectors = np.linalg.eigh(symmetric)
+    values = values[::-1][: n_comp + 1]
+    vectors = vectors[:, ::-1][:, : n_comp + 1] / root[:, None]
+    vectors = vectors / vectors[:, [0]]
+    values = values / values[0]
+    lambdas = values[1:]
+    if not np.all(lambdas < 1 - 1e-10):
+        raise ValueError("Diffusion affinity has a repeated leading eigenvalue; the graph is disconnected")
+    lambdas = lambdas / (1 - lambdas)
+    embedding = vectors[:, 1:] * lambdas[None, :]
+    embedding = embedding * np.sign(embedding[np.abs(embedding).argmax(axis=0), np.arange(n_comp)])
+    return embedding, lambdas
+
+
+def fit_diffusion_gradients(
     group_fc: np.ndarray,
     *,
     n_components: int,
-    random_state: int | None = DEFAULT_GRADIENT_RANDOM_STATE,
     feature_scaling: str = "col_zscore",
     sparsify_stage: str = "features",
     sparsity: float | None = None,
@@ -315,30 +350,14 @@ def fit_gradientmaps_pearson(
         raise ValueError(f"n_components must be positive, got {n_components}")
     if int(matrix.shape[0]) <= n_comp:
         raise RuntimeError(
-            f"Not enough supported vertices for GradientMaps: n_vertices={matrix.shape[0]} n_components={n_comp}"
+            f"Not enough supported vertices for gradients: n_vertices={matrix.shape[0]} n_components={n_comp}"
         )
-    from brainspace.gradient import GradientMaps
-
     affinity = build_pearson_affinity(
         matrix, feature_scaling=feature_scaling, sparsify_stage=sparsify_stage, sparsity=sparsity,
     )
-    model = GradientMaps(n_components=n_comp, kernel=None, random_state=random_state)
-    fitted = model.fit(affinity, sparsity=None)
-    model_out = fitted if fitted is not None else model
-    gradients = _extract_gradientmaps_array(model_out, "gradients_", "gradients", "gradients")
-    lambdas = _extract_gradientmaps_array(model_out, "lambdas_", "lambdas", "lambdas").reshape(-1)
-    gradients = np.asarray(gradients, dtype=np.float32)
-    lambdas = np.asarray(lambdas, dtype=np.float64)
-    if gradients.ndim != 2:
-        raise RuntimeError(f"Expected 2D gradients, got shape={gradients.shape}")
-    if gradients.shape[1] < n_comp:
-        raise RuntimeError(f"GradientMaps returned {gradients.shape[1]} gradients, expected {n_comp}")
-    if lambdas.size < n_comp:
-        raise RuntimeError(f"GradientMaps returned {lambdas.size} lambdas, expected at least {n_comp}")
-    gradients = gradients[:, :n_comp]
-    gradients[~np.isfinite(gradients)] = 0.0
-    if not np.all(np.isfinite(lambdas)):
-        raise RuntimeError(f"GradientMaps lambdas contain non-finite values: {lambdas.tolist()}")
+    gradients, lambdas = diffusion_map_embedding(affinity, n_components=n_comp)
+    if not np.all(np.isfinite(gradients)) or not np.all(np.isfinite(lambdas)):
+        raise RuntimeError("Diffusion-map embedding returned non-finite values")
     ev = ev_fractions_from_lambdas(lambdas)
     return gradients.astype(np.float32), lambdas.astype(np.float64), ev.astype(np.float64)
 

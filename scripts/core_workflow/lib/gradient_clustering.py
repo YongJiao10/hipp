@@ -170,13 +170,14 @@ def cluster_gradients(method: str, features, adjacency, *, k: int, seed: int, rb
     if k < 2 or k >= len(x):
         raise ValueError(f"Require 2 <= k < supported vertices, got {k} / {len(x)}")
     graph = binary_mesh_adjacency(adjacency, len(x))
-    meta = {"method": method, "seed": int(seed), "k": int(k)}
+    meta = {"method": method, "k": int(k)}
     if method == "gradient-ward":
         _require_connected(graph, "Supported mesh")
         model = AgglomerativeClustering(n_clusters=k, linkage="ward", metric="euclidean", connectivity=graph)
         labels = model.fit_predict(x) + 1
         meta.update(linkage="ward", metric="euclidean", spatial_connectivity="binary_mesh")
     elif method == "gradient-gmm":
+        meta["seed"] = int(seed)
         model = GaussianMixture(n_components=k, covariance_type="full", n_init=10,
                                 max_iter=1000, tol=1e-3, reg_covar=1e-6, random_state=seed)
         with warnings.catch_warnings(record=True) as caught:
@@ -199,6 +200,7 @@ def cluster_gradients(method: str, features, adjacency, *, k: int, seed: int, rb
             affinity = build_gradient_spectral_affinity(features, adjacency)
             affinity_meta = {"surface_affinity": GRADIENT_SPECTRAL_AFFINITY,
                              "affinity_description": GRADIENT_SPECTRAL_AFFINITY_DESCRIPTION}
+        meta["seed"] = int(seed)
         labels = SpectralClustering(n_clusters=k, affinity="precomputed", random_state=seed,
                                    assign_labels="kmeans", n_init=50, eigen_solver="arpack").fit_predict(affinity) + 1
         meta.update(affinity_meta)

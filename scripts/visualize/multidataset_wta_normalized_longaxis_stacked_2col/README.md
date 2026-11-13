@@ -52,7 +52,7 @@ The `hcp_jjtms_7net` branch adds Kong2022 7-Network and Lynch2024 7-Network meth
 ## 2. 架构保障机制（Single Source of Truth & Data Integrity Gate）
 
 - **单源真理原则（SSOT）**：彻底废除 Overview 静态截图截取方式，统一直接根据各队列 `group_root` 下的 `group_atlas_manifest.json` 解析 Canonical GIITI 标签文件，直接调用 Workbench 进行 4 视角图谱渲染，保证 3D 脑图视觉与右侧 20-Bin Stacked Bar 统计数据 100% 来源统一。
-- **运行时一致性门禁（Data Integrity Gate）**：在数据加载时，强制比对底层 NPY 数组与 GIITI 标签文件的逐顶点一致性，从源头杜绝不同分析分支（如 `fisherz` vs `weighted_fisherz`）的数据覆盖或混淆。
+- **运行时一致性门禁（Data Integrity Gate）**：在数据加载时，强制比对底层 NPY 数组与 GIITI 标签文件的逐顶点一致性，从源头杜绝不同分析分支（如 `fisherz` vs `network_ts_fisherz`）的数据覆盖或混淆。
 - **Canonical label fail-closed**：长轴统计只读取 `group_functional_atlas_labels.npy` 并与 manifest 指向的 GIFTI 逐顶点核对；不会把 `labels_count` 或其他旧 variant 静默当作当前 WTA。
 - **路径与 assignment 单一入口**：活跃默认路径由 `scripts/visualize/lib/multidataset_cohorts.py` 统一解析；Kong2022 使用 canonical7 的 `normalized_top20_count` WTA。canonical8 仅能通过显式 resolver 选择历史归档路径，不作为默认输入。
 

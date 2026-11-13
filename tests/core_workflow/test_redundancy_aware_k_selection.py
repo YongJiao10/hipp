@@ -211,6 +211,44 @@ def test_failed_left_reference_half_propagates_to_target_half() -> None:
     assert hb.reason == "Left reference failed: Diffusion affinity is disconnected"
 
 
+def test_null_repetitions_do_not_share_subject_permutations(monkeypatch) -> None:
+    """Consecutive null seeds differ by 17; no subject permutation may recur."""
+    n_subjects, n_vertices = 40, 64
+    subjects = [f"{index:03d}" for index in range(n_subjects)]
+    rows = np.arange(n_vertices, dtype=np.float32)[:, None] * np.ones((1, 3), dtype=np.float32)
+    feature_bank = {subject: rows.copy() for subject in subjects}
+    valid_masks = {subject: np.ones(n_vertices, dtype=bool) for subject in subjects}
+    captured: dict[int, dict[str, tuple[int, ...]]] = {}
+    state = {"repetition": -1}
+
+    def record_bank(fc_dict, half_subjects, support_mask, *, valid_masks=None):
+        store = captured.setdefault(state["repetition"], {})
+        for subject in half_subjects:
+            store[subject] = tuple(int(value) for value in fc_dict[subject][:, 0])
+        return np.zeros((n_vertices, 3), dtype=np.float32)
+
+    def skip_fit(*args, half_index, seed, **kwargs):
+        return atlas_mod.FittedHalf(half_index=half_index, seed=seed, reason="not fitted in this test")
+
+    monkeypatch.setattr(atlas_mod, "compute_half_group_fc", record_bank)
+    monkeypatch.setattr(atlas_mod, "_fit_single_half", skip_fit)
+    for repetition in range(3):
+        state["repetition"] = repetition
+        atlas_mod._prepare_one_null_repetition(
+            repetition, subjects, feature_bank, valid_masks, 0.8, 20260420,
+            "none", "affinity", 0.9, None,
+        )
+
+    for repetition in range(3):
+        permutations = captured[repetition]
+        assert set(permutations) == set(subjects)
+        assert all(sorted(perm) == list(range(n_vertices)) for perm in permutations.values())
+        assert len(set(permutations.values())) == n_subjects
+    for first in range(3):
+        for second in range(first + 1, 3):
+            assert not set(captured[first].values()) & set(captured[second].values())
+
+
 def main() -> int:
     test_redundancy_detects_duplicate_profiles()
     test_redundancy_passes_for_distinct_profiles()

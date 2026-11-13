@@ -27,9 +27,14 @@ parent-directory output fallbacks are not part of the formal runtime contract.
 
 ## Gradient comparison runtime
 
-The gradient parcellation revision uses the existing local py314 packages
-(scikit-learn 1.8.0 and BrainSpace 0.2.1), without a package or environment
-upgrade. OVR omits the deprecated explicit `penalty` argument and retains default
+Gradient parcellation uses the local py314 numerical stack: NumPy 2.5.4,
+SciPy 1.16.3, scikit-learn 1.9.1, BrainSpace 0.2.1 and numba 0.68.1 (required
+by NumPy 2.5). BrainSpace supplies the Pearson affinity; the diffusion-map
+eigendecomposition is the repository's exact solver in `lib/hippomaps_adapter.py`. Keep SciPy at 1.16.x: `06_04` imports HippoMaps plotting through
+`netneurotools`, whose releases up to 0.3.0 import a private SciPy function
+removed in SciPy 1.17. Stages `05_01` and `05_02` write the installed versions and the
+full git commit to their manifests as `runtime_versions` and `git_commit`.
+OVR omits the deprecated explicit `penalty` argument and retains default
 L2. Run the HCP comparison on IDAS with one heavy fit at a time and
 `OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1`;
 keep combined active work at or below 10. Exploratory results belong under the

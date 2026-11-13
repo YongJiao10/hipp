@@ -150,3 +150,17 @@ def test_crossfit_method_selection_is_explicit_in_configuration():
     assert args.method == "gradient-gmm"
     assert args.rbf_scale == 2.
     assert workflow.CrossfitConfig.__dataclass_fields__["method"].default == "gradient-spectral"
+
+
+def test_ward_records_no_seed_and_seeded_methods_do():
+    import numpy as np
+    from scipy import sparse
+    from lib.gradient_clustering import cluster_gradients
+
+    rng = np.random.default_rng(5)
+    features = np.vstack([rng.normal(loc, 0.1, size=(10, 2)) for loc in (0.0, 3.0)])
+    chain = sparse.diags([np.ones(19), np.ones(19)], [1, -1]).tocsr()
+    _, ward = cluster_gradients("gradient-ward", features, chain, k=2, seed=7)
+    _, gmm = cluster_gradients("gradient-gmm", features, chain, k=2, seed=7)
+    assert "seed" not in ward
+    assert gmm["seed"] == 7

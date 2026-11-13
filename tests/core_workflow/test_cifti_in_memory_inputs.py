@@ -208,7 +208,6 @@ def test_prepare_group_inputs_cli_only_exposes_volume_surface_sampling() -> None
         "04_01_materialize_kong2022_roi_fc.py",
         "05_01_compute_hippomaps_gradients.py",
         "05_02_run_group_atlas.py",
-        "05_05_build_weighted_fisherz_branch.py",
     ],
 )
 def test_core_workflow_cli_has_no_dataset_specific_source_guardrail(script_name: str) -> None:
