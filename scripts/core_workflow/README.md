@@ -268,6 +268,13 @@ explicitly when a controlled signal root is separate.
   correlate) and `normalized_top20_count`. `wta-top` is the clusterless
   fourth branch. OVR models exist for `fisherz` and `network_ts_fisherz`
   inputs only; the Top20 overview has no OVR rows.
+- Kong2022 gradient overviews of a three-cluster partition add a column of
+  cluster-to-cortex FC tiles (C1 Anterior, C2 Middle, C3 Posterior). Each tile
+  shows the left/right mean of the run's `cluster_roi_profile.npy` on the
+  inflated cortex (`RdBu_r`, +/-0.15 Fisher-z) with its ten most positive and
+  ten most negative ROIs. `lib/cortex_fc_tiles.py` draws the tile for the
+  overview and for the multi-dataset hippocampus/cortex figure. Family17 and
+  `wta-top` overviews have no such column.
 - Renderers consume exact manifest-declared assignment and template assets.
   Select `--group-root`/`--out-root`, route and assignment variant explicitly
   for render-only runs. `07_01` defaults to `--routes pfm`; other routes and

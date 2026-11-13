@@ -256,7 +256,7 @@
     {
       "step_id": "06_01_build_group_overview",
       "stage": "06_presentation_products",
-      "purpose": "Render canonical fixed-K=3 group overview products with stable filenames, branch-specific WTA assignments, visible shifted-cosine titles, source group manifests, and affinity provenance for gradient items.",
+      "purpose": "Render canonical fixed-K=3 group overview products with stable filenames, branch-specific WTA assignments, visible shifted-cosine titles, source group manifests, affinity provenance for gradient items, and a cluster-to-cortex FC column for three-cluster Kong2022 gradient runs.",
       "branches": [
         "kong2022_pfm",
         "kong2022_pfm_17net",

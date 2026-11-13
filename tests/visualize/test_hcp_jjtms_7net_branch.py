@@ -558,9 +558,9 @@ def test_render_cortex_tile_skips_workbench_on_valid_cache(tmp_path, monkeypatch
     )
 
     def fail_if_called(*args, **kwargs):
-        raise AssertionError("Workbench subprocess ran despite a valid cache")
+        raise AssertionError("Workbench render ran despite a valid cache")
 
-    monkeypatch.setattr(renderer.subprocess, "run", fail_if_called)
+    monkeypatch.setattr(renderer, "render_cortex_surface", fail_if_called)
     result = renderer.render_cortex_tile(
         panel_tag="smoke",
         values=values,

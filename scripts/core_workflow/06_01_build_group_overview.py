@@ -46,6 +46,8 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import nibabel as nib
 import numpy as np
+from matplotlib.cm import ScalarMappable
+from matplotlib.colors import Normalize
 from matplotlib.lines import Line2D
 from matplotlib.patches import Rectangle
 from mpl_toolkits.axes_grid1 import make_axes_locatable
@@ -58,6 +60,14 @@ from lib.workflow_utils import write_json
 from lib.surface_utils import equal_vertex_long_axis_bins, long_axis_order, render_locked_grid, network_color_map
 from lib.io_utils import load_json
 from lib.group_atlas_lineage import validate_group_atlas_lineage
+from lib.cluster_roi_profile_contract import (
+    KONG2022_CLUSTER_PROFILE_SUBREGIONS,
+    atlas_produces_cluster_roi_profile,
+    validate_cluster_roi_profile_manifest,
+)
+from lib.cortex_fc_tiles import COLORBAR_LABEL, COLORBAR_TICKS, COLORBAR_VMAX, DEFAULT_CMAP, render_cortex_fc_tile
+from lib.cortex_template_profiles import resolve_cortex_assets
+from lib.kong2022_label_utils import load_kong2022_bundle
 from lib.gifti_labels import (
     resolve_cluster_label_path,
     resolve_functional_atlas_array_paths,
@@ -84,6 +94,12 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_GROUP_ROOT = DEFAULT_ROUTEA_GROUP_ATLAS_ROOT
 DEFAULT_PRESENT_DIR = DEFAULT_OVERVIEWS_DIR
 DEFAULT_SCENE = REPO_ROOT / "config" / "wb_locked_native_view_lateral_medial.scene"
+CORTEX_SCENE = REPO_ROOT / "config" / "manual_wb_scenes" / "cortex_manual.scene"
+CORTEX_DATA_ROOT = REPO_ROOT / "data" / "hippunfold_input"
+CORTEX_DISPLAY_SUBJECT = "100610"
+CLUSTER_CORTEX_TITLE_COLORS = ("#d95f02", "#1b9e77", "#7570b3")
+# Width in inches of the cluster cortical-FC column: three tiles stacked over two rows, or side by side in one row.
+CLUSTER_CORTEX_COLUMN_WIDTH = {"stacked": 9.4, "side_by_side": 10.8}
 METHOD_CHOICES = [
     "network-spectral",
     "gradient-spectral",
@@ -307,6 +323,7 @@ def overview_manifest_item(
         "cluster_annotation_profile_surface_root",
         "cluster_annotation_reference_root",
         "assignment_annotation_note",
+        "cluster_cortex_fc_column",
     ):
         if key in meta:
             item[key] = meta[key]
@@ -1488,6 +1505,49 @@ def plot_wta_overview_profile_axis(
         ax.legend(fontsize=WTA_OVERVIEW_SIDE_PANEL_LEGEND_FS, frameon=False, loc="best", handlelength=1.4, labelspacing=0.22)
 
 
+def bilateral_cluster_roi_profile(manifest_paths: list[Path], manifests: list[dict]) -> np.ndarray | None:
+    """Left/right mean of one run's head-to-tail (3, 400) cluster FC profile.
+
+    Returns None when the run is not a three-cluster partition with a declared ROI profile.
+    """
+    if any(manifest.get("cluster_roi_profile") is None or manifest.get("chosen_k_final") != 3 for manifest in manifests):
+        return None
+    profiles = []
+    for manifest_path, manifest in zip(manifest_paths, manifests, strict=True):
+        profile_path = manifest_path.parent / "cluster_roi_profile.npy"
+        profile = np.load(profile_path).astype(np.float64)
+        validate_cluster_roi_profile_manifest(manifest, profile_path=profile_path, profile_shape=profile.shape)
+        profiles.append(profile)
+    return np.mean(profiles, axis=0)
+
+
+def draw_cluster_cortex_fc(fig, cell, profile: np.ndarray, *, stacked: bool, label: str) -> None:
+    """Draw one run's three cluster-to-cortex FC tiles in a grid cell, with their shared colour bar."""
+    bundle = load_kong2022_bundle()
+    grid = cell.subgridspec(3, 1, hspace=0.03) if stacked else cell.subgridspec(1, 3, wspace=0.02)
+    axes = []
+    with tempfile.TemporaryDirectory(prefix="present_group_cortex_tiles_", dir=REPO_ROOT / "tmp") as tmp:
+        assets = resolve_cortex_assets(CORTEX_DISPLAY_SUBJECT, CORTEX_DATA_ROOT, CORTEX_SCENE, sulc_dir=Path(tmp) / "sulc")
+        for index, (name, color) in enumerate(zip(KONG2022_CLUSTER_PROFILE_SUBREGIONS, CLUSTER_CORTEX_TITLE_COLORS, strict=True)):
+            tile = render_cortex_fc_tile(
+                panel_tag=f"cluster{index + 1}", values=profile[index], roi_registry=bundle["roi_registry"],
+                vertex_arrays=bundle["vertex_arrays"], cortex_assets=assets, panels_dir=Path(tmp),
+                bars="right" if stacked else "below",
+            )
+            ax = fig.add_subplot(grid[index, 0] if stacked else grid[0, index])
+            ax.imshow(plt.imread(tile))
+            ax.axis("off")
+            ax.set_title(f"{label} C{index + 1} {name} (L/R mean)", fontsize=FS_TITLE, fontweight="bold", color=color)
+            axes.append(ax)
+    cbar = fig.colorbar(
+        ScalarMappable(norm=Normalize(vmin=-COLORBAR_VMAX, vmax=COLORBAR_VMAX), cmap=DEFAULT_CMAP),
+        ax=axes, orientation="horizontal", shrink=0.45, fraction=0.04, pad=0.015, aspect=32,
+    )
+    cbar.set_ticks(list(COLORBAR_TICKS))
+    cbar.set_label(COLORBAR_LABEL, fontsize=FS_LABEL, fontweight="bold")
+    cbar.ax.tick_params(labelsize=FS_TICK)
+
+
 def overview_png_path(
     *,
     present_dir: Path,
@@ -1669,6 +1729,16 @@ def render_combo(
             for sm in SMOOTHINGS
         ]
 
+    # One block of cluster cortical-FC tiles per distinct run: the annotation layouts show one run in every row.
+    shared_run = layout in {"dual-interpretation", "annotation-pair"}
+    cortex_stacked = shared_run and len(row_specs) == 2
+    cortex_profiles: list[np.ndarray] = []
+    if _is_gradient_method(method) and atlas_produces_cluster_roi_profile(atlas) and not family17_overview:
+        run_slices = [slice(0, 2)] if shared_run else [slice(2 * i, 2 * i + 2) for i in range(len(row_specs))]
+        profiles = [bilateral_cluster_roi_profile(manifest_paths[run], source_manifests[run]) for run in run_slices]
+        if all(profile is not None for profile in profiles):
+            cortex_profiles = profiles
+
     if layout == "single-smoothing":
         fig = plt.figure(figsize=(19.0, 7.5), dpi=180, constrained_layout=True)
         gs = fig.add_gridspec(nrows=1, ncols=3, width_ratios=[0.72, 1.14, 1.40], wspace=0.06)
@@ -1678,8 +1748,13 @@ def render_combo(
     else:
         n_rows = len(row_specs)
         width, height = (22.0, 14.0) if family17_overview else (15.4, 12.2)
-        fig = plt.figure(figsize=(width, height * n_rows / 2 + (0.5 if n_rows == 1 else 0.0)), dpi=180, constrained_layout=True)
-        gs = fig.add_gridspec(nrows=n_rows, ncols=2, width_ratios=[1.65, 1.30] if family17_overview else [1.50, 1.20], hspace=0.06, wspace=0.05)
+        width_ratios = [1.65, 1.30] if family17_overview else [1.50, 1.20]
+        cortex_width = 0.0
+        if cortex_profiles:
+            cortex_width = CLUSTER_CORTEX_COLUMN_WIDTH["stacked" if cortex_stacked else "side_by_side"]
+            width_ratios.append(sum(width_ratios) * cortex_width / width)
+        fig = plt.figure(figsize=(width + cortex_width, height * n_rows / 2 + (0.5 if n_rows == 1 else 0.0)), dpi=180, constrained_layout=True)
+        gs = fig.add_gridspec(nrows=n_rows, ncols=len(width_ratios), width_ratios=width_ratios, hspace=0.06, wspace=0.05)
 
     if method not in CLUSTERLESS_METHODS and layout != "single-smoothing" and len(row_specs) == 2:
         sub_diag = gs[:, 0].subgridspec(4, 3, width_ratios=[0.90, 1.10, 0.045], wspace=0.05, hspace=0.06)
@@ -2157,6 +2232,12 @@ def render_combo(
 
 
 
+    if cortex_profiles and shared_run:
+        draw_cluster_cortex_fc(fig, gs[:, 2], cortex_profiles[0], stacked=cortex_stacked, label=row_specs[0][1])
+    else:
+        for ridx, profile in enumerate(cortex_profiles):
+            draw_cluster_cortex_fc(fig, gs[ridx, 2], profile, stacked=False, label=row_specs[ridx][1])
+
     if layout in {"dual-interpretation", "annotation-pair"}:
         for axis in fig.axes:
             title = axis.get_title()
@@ -2255,6 +2336,7 @@ def render_combo(
         "subject_split_ari": "skipped" if skip_subject_split_ari else "rendered",
         "assignment_annotation_note": assignment_annotation_note,
         "assignment_assets": assignment_assets,
+        "cluster_cortex_fc_column": bool(cortex_profiles),
         **assignment_metadata,
         **source_provenance,
     }

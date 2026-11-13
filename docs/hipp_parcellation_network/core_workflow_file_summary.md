@@ -51,6 +51,7 @@ for those details:
 | File | Purpose |
 |---|---|
 | `scripts/core_workflow/lib/branch_config.py` | Branch names, aliases, and explicit standard/ctxreg signal-branch mapping |
+| `scripts/core_workflow/lib/cortex_fc_tiles.py` | Cortical FC tile (four-view inflated cortex plus top-10 ROI bars) shared by the group overview and the multi-dataset figure |
 | `scripts/core_workflow/lib/cortex_template_profiles.py` | Shared subjectwise WTA pseudo-cluster and 400-ROI template calculations |
 | `scripts/core_workflow/lib/extract_cortex_kong2022_routeb_roi_timeseries.py` | RouteB Kong2022 cortex ROI time-series extraction from the public dlabel |
 | `scripts/core_workflow/lib/extract_cortex_kong2022_route_a_roi_timeseries.py` | RouteA flat label loading and ROI time-series extraction |

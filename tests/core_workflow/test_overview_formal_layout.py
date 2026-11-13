@@ -141,3 +141,61 @@ def test_directory_manifest_keeps_other_figures_rendered_by_earlier_calls(tmp_pa
         manifest_path, [{"overview_png": str(first), "assignment_variant": "roi-fisherz", "note": "new"}],
     )
     assert [item.get("note") for item in replaced] == ["new"]
+
+
+def _write_profile_run(root, hemi, profile, *, k=3, declare=True):
+    run_dir = root / f"hemi_{hemi}"
+    run_dir.mkdir(parents=True)
+    profile_path = run_dir / "cluster_roi_profile.npy"
+    np.save(profile_path, profile.astype(np.float32))
+    manifest = {
+        "status": "ok",
+        "chosen_k_final": k,
+        "cluster_roi_profile": str(profile_path.resolve()) if declare else None,
+        "cluster_roi_profile_contract": "roi_ap",
+        "cluster_label_ordering": "long_axis_head_to_tail",
+        "cluster_order_head_to_tail": [1, 2, 3],
+    }
+    return run_dir / "group_atlas_manifest.json", manifest
+
+
+def test_bilateral_cluster_roi_profile_is_the_left_right_mean(tmp_path):
+    left = np.full((3, 400), 0.2)
+    right = np.full((3, 400), 0.6)
+    paths, manifests = zip(_write_profile_run(tmp_path, "L", left), _write_profile_run(tmp_path, "R", right))
+    profile = overview_mod.bilateral_cluster_roi_profile(list(paths), list(manifests))
+    assert profile.shape == (3, 400)
+    np.testing.assert_allclose(profile, 0.4, rtol=1e-6)
+
+
+@pytest.mark.parametrize("override", [{"k": 4}, {"declare": False}])
+def test_bilateral_cluster_roi_profile_is_absent_without_a_declared_three_cluster_profile(tmp_path, override):
+    paths, manifests = zip(
+        _write_profile_run(tmp_path, "L", np.zeros((3, 400))),
+        _write_profile_run(tmp_path, "R", np.zeros((3, 400)), **override),
+    )
+    assert overview_mod.bilateral_cluster_roi_profile(list(paths), list(manifests)) is None
+
+
+def test_bilateral_cluster_roi_profile_rejects_a_profile_outside_the_contract(tmp_path):
+    paths, manifests = zip(
+        _write_profile_run(tmp_path, "L", np.zeros((3, 400))),
+        _write_profile_run(tmp_path, "R", np.zeros((3, 399))),
+    )
+    with pytest.raises(ValueError, match="shape"):
+        overview_mod.bilateral_cluster_roi_profile(list(paths), list(manifests))
+
+
+@pytest.mark.parametrize(("bars", "size"), [("below", (40, 68)), ("right", (88, 30))])
+def test_cortex_tile_places_the_bars_below_or_beside_the_surface(tmp_path, bars, size):
+    from PIL import Image
+
+    from lib.cortex_fc_tiles import join_surface_and_bars
+
+    Image.new("RGBA", (40, 30), "red").save(tmp_path / "surface.png")
+    Image.new("RGBA", (40, 30), "blue").save(tmp_path / "bars.png")
+    tile = join_surface_and_bars(tmp_path / "surface.png", tmp_path / "bars.png", tmp_path / "tile.png", bars=bars)
+    with Image.open(tile) as image:
+        assert image.size == size
+        assert image.getpixel((0, 0))[:3] == (255, 0, 0)
+        assert image.getpixel((size[0] - 1, size[1] - 1))[:3] == (0, 0, 255)

@@ -15,7 +15,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import subprocess
 import sys
 import warnings
 from pathlib import Path
@@ -51,8 +50,17 @@ from lib.cluster_roi_profile_contract import (
     validate_cluster_roi_profile_manifest,
     validate_wta_profile_cache_manifest,
 )
+from lib.cortex_fc_tiles import (
+    COLORBAR_TICKS,
+    COLORBAR_VMAX,
+    DEFAULT_CMAP,
+    NETWORK_BAR_COLORS,
+    render_cortex_surface,
+    render_cortex_top10_bars,
+    join_surface_and_bars,
+    strength_colors,
+)
 from lib.cortex_template_profiles import compute_subject_label_roi_profiles
-from lib.gifti_labels import make_named_label_gifti
 from lib.gradient_assignment_contract import validate_gradient_assignment
 from lib.group_atlas_lineage import validate_group_atlas_lineage
 from lib.kong2022_label_utils import KONG2022_DLABEL_PATH, load_kong2022_bundle
@@ -309,9 +317,6 @@ def _wta_display_order(is_7net: bool) -> tuple[str, ...]:
     return WTA_DISPLAY_ORDER_7NET if is_7net else WTA_DISPLAY_ORDER_8NET
 
 
-DEFAULT_NAN_RGBA = (0.65, 0.65, 0.65, 1.0)
-DEFAULT_CMAP = "RdBu_r"
-COLORBAR_VMAX = 0.15
 # Linear display range for the lower t maps. Statistical peak is retained
 # separately in the contrast receipt so clipped high HCP values remain auditable.
 T_DISPLAY_VMAX = 4.0
@@ -395,269 +400,6 @@ def resolve_cortex_assets() -> dict[str, Path]:
     }
 
 
-def strength_colors(values: np.ndarray, vmax: float = COLORBAR_VMAX) -> np.ndarray:
-    arr = np.asarray(values, dtype=np.float64)
-    norm = Normalize(vmin=-float(vmax), vmax=float(vmax), clip=True)
-    cmap = plt.get_cmap(DEFAULT_CMAP)
-    colors = np.asarray(cmap(norm(np.nan_to_num(arr, nan=0.0))), dtype=np.float64)
-    colors[np.isfinite(arr) & (arr == 0.0), :3] = 1.0
-    colors[~np.isfinite(arr), :] = np.asarray(DEFAULT_NAN_RGBA, dtype=np.float64)
-    return colors
-
-
-NETWORK_BAR_COLORS = {
-    "Default": "#de616c",
-    "Somatomotor": "#5297c8",
-    "Auditory": "#18b7c9",
-    "VentralAttention": "#da42f5",
-    "DorsalAttention": "#33a02c",
-    "Control": "#f39c12",
-    "Language": "#8b4513",
-    "Visual": "#6a3d9a",
-}
-
-
-def shorten_roi_label(roi: dict[str, Any]) -> str:
-    hemi = roi.get("hemi", "")
-    fam = str(roi.get("family17", ""))
-    fam_short = (
-        fam.replace("SalVenAttn", "VAN")
-        .replace("Default", "DMN")
-        .replace("Cont", "CON")
-        .replace("SomMot", "SMN")
-        .replace("DorsAttn", "DAN")
-        .replace("Visual", "VIS")
-        .replace("Language", "LAN")
-        .replace("Aud", "AUD")
-    )
-    sub = str(roi.get("subregion", ""))
-    rank = str(roi.get("rank", ""))
-    if sub:
-        return f"{hemi}_{fam_short}_{sub}_{rank}"
-    return f"{hemi}_{fam_short}_{rank}"
-
-
-def render_cortex_top10_bars(
-    *,
-    panel_tag: str,
-    values: np.ndarray,
-    roi_registry: list[dict[str, Any]],
-    panels_dir: Path,
-) -> Path:
-    panel_dir = panels_dir / panel_tag
-    panel_dir.mkdir(parents=True, exist_ok=True)
-    out_png = panel_dir / f"{panel_tag}_top10_bars_v3.png"
-
-    arr = np.asarray(values, dtype=np.float64)
-    pos_idx = np.where(np.isfinite(arr) & (arr > 0))[0]
-    neg_idx = np.where(np.isfinite(arr) & (arr < 0))[0]
-
-    top_pos = pos_idx[np.argsort(arr[pos_idx])[::-1][:10]]
-    top_neg = neg_idx[np.argsort(arr[neg_idx])[:10]]
-
-    pos_vals = arr[top_pos]
-    neg_vals = arr[top_neg]
-
-    pos_colors = [
-        NETWORK_BAR_COLORS.get(roi_registry[i].get("canonical7", "Visual"), "#de616c")
-        for i in top_pos
-    ]
-    neg_colors = [
-        NETWORK_BAR_COLORS.get(roi_registry[i].get("canonical7", "Visual"), "#33a02c")
-        for i in top_neg
-    ]
-
-    # Target 1000 x 700 px -> figsize=(5.0, 3.5) @ 200 DPI (matching cortical map height exactly)
-    fig, ax = plt.subplots(figsize=(5.0, 3.5), dpi=200)
-    fig.patch.set_facecolor("#ffffff")
-    ax.set_facecolor("#f8fafc")
-
-    y_pos = np.arange(10)
-    y_rev = 9 - y_pos
-
-    max_mag = max(
-        float(np.max(np.abs(pos_vals))) if len(pos_vals) > 0 else 0.10,
-        float(np.max(np.abs(neg_vals))) if len(neg_vals) > 0 else 0.10,
-        0.12,
-    )
-    x_lim = max_mag * 2.50
-
-    if len(pos_vals) > 0:
-        ax.barh(
-            y_rev[: len(pos_vals)],
-            pos_vals,
-            height=0.62,
-            color=pos_colors,
-            alpha=0.90,
-            edgecolor="#1e293b",
-            lw=0.8,
-            zorder=3,
-        )
-    if len(neg_vals) > 0:
-        ax.barh(
-            y_rev[: len(neg_vals)],
-            neg_vals,
-            height=0.62,
-            color=neg_colors,
-            alpha=0.90,
-            edgecolor="#1e293b",
-            lw=0.8,
-            zorder=3,
-        )
-
-    ax.axvline(0, color="#0f172a", lw=1.4, ls="-", zorder=4)
-    ax.set_xlim(-x_lim, x_lim)
-    ax.set_ylim(-0.8, 10.3)
-
-    for i in range(len(pos_vals)):
-        y = y_rev[i]
-        lbl = shorten_roi_label(roi_registry[top_pos[i]])
-        val = pos_vals[i]
-        ax.text(
-            val + x_lim * 0.020,
-            y,
-            f"{lbl} (+{val:.3f})",
-            va="center",
-            ha="left",
-            fontsize=8.2,
-            fontweight="bold",
-            color="#0f172a",
-            zorder=5,
-        )
-
-    for i in range(len(neg_vals)):
-        y = y_rev[i]
-        lbl = shorten_roi_label(roi_registry[top_neg[i]])
-        val = neg_vals[i]
-        ax.text(
-            val - x_lim * 0.020,
-            y,
-            f"({val:.3f}) {lbl}",
-            va="center",
-            ha="right",
-            fontsize=8.2,
-            fontweight="bold",
-            color="#0f172a",
-            zorder=5,
-        )
-
-    ax.set_yticks([])
-
-    import matplotlib.ticker as ticker
-
-    locator = ticker.MaxNLocator(nbins=5, symmetric=True)
-    ticks = np.asarray(locator.tick_values(-x_lim, x_lim), dtype=float)
-    ticks = ticks[(ticks >= -x_lim * 0.95) & (ticks <= x_lim * 0.95)]
-    ax.set_xticks(ticks)
-    ax.set_xticklabels(
-        [f"{t:+.2f}" if abs(t) >= 0.005 else "0" for t in ticks],
-        fontsize=7.6,
-        color="#334155",
-        fontweight="semibold",
-    )
-    ax.tick_params(axis="x", length=3.5, pad=2)
-    ax.grid(axis="x", alpha=0.45, ls=":", zorder=1)
-
-    ax.text(
-        -x_lim * 0.50,
-        9.85,
-        "◀ Top 10 Neg (Anticorr)",
-        ha="center",
-        va="bottom",
-        fontsize=9.5,
-        fontweight="bold",
-        color="#1e40af",
-    )
-    ax.text(
-        x_lim * 0.50,
-        9.85,
-        "Top 10 Pos (Corr) ▶",
-        ha="center",
-        va="bottom",
-        fontsize=9.5,
-        fontweight="bold",
-        color="#991b1b",
-    )
-
-    for s in ["top", "right", "left"]:
-        ax.spines[s].set_visible(False)
-    ax.spines["bottom"].set_color("#64748b")
-    ax.spines["bottom"].set_linewidth(1.0)
-
-    plt.tight_layout(pad=0.20)
-    fig.savefig(out_png, dpi=200, facecolor="#ffffff")
-    plt.close(fig)
-    return out_png
-
-
-def render_cortex_surface(
-    *,
-    panel_tag: str,
-    colors: np.ndarray,
-    roi_registry: list[dict[str, Any]],
-    vertex_arrays: dict[str, tuple[np.ndarray, np.ndarray]],
-    cortex_assets: dict[str, Path],
-    panel_dir: Path,
-    out_png: Path,
-) -> Path:
-    """Render the same 1000x700 four-view geometry for FC and t statistics."""
-    label_items = [(0, "Null", (166, 166, 166, 255))]
-    for idx, row in enumerate(roi_registry):
-        r, g, b, a = [int(round(float(v) * 255.0)) for v in colors[idx]]
-        label_items.append((int(row["roi_id"]), str(row["roi_name"]), (r, g, b, a)))
-
-    for hemi in ["L", "R"]:
-        vertex_idx, parcel_ids = vertex_arrays[hemi]
-        n_verts = int(np.max(vertex_idx)) + 1
-        hemi_values = np.zeros((n_verts,), dtype=np.int32)
-        hemi_values[vertex_idx.astype(np.int32)] = parcel_ids.astype(np.int32)
-        img = make_named_label_gifti(hemi_values, label_items)
-        nib.save(img, str(panel_dir / f"{panel_tag}.{hemi}.label.gii"))
-
-    left_label = panel_dir / f"{panel_tag}.L.label.gii"
-    right_label = panel_dir / f"{panel_tag}.R.label.gii"
-    out_scene = panel_dir / f"{panel_tag}.scene"
-    render_script = REPO_ROOT / "scripts/core_workflow/lib/render_cortex_pfm_scene.py"
-
-    cmd = [
-        sys.executable,
-        str(render_script),
-        "--source-scene",
-        str(cortex_assets["scene"]),
-        "--left-surface",
-        str(cortex_assets["left_inflated"]),
-        "--right-surface",
-        str(cortex_assets["right_inflated"]),
-        "--left-label",
-        str(left_label),
-        "--right-label",
-        str(right_label),
-        "--left-sulc",
-        str(cortex_assets["left_sulc"]),
-        "--right-sulc",
-        str(cortex_assets["right_sulc"]),
-        "--sulc-dscalar",
-        str(cortex_assets["sulc_dscalar"]),
-        "--dlabel",
-        str(cortex_assets["dlabel"]),
-        "--out-scene",
-        str(out_scene),
-        "--out-png",
-        str(out_png),
-        "--width",
-        "1000",
-        "--height",
-        "700",
-        "--renderer",
-        "OSMesa",
-    ]
-    proc = subprocess.run(cmd, text=True, capture_output=True)
-    if proc.returncode != 0:
-        raise RuntimeError(f"Cortex render failed for {panel_tag}: {proc.stderr}")
-
-    return out_png
-
-
 def render_cortex_tile(
     *,
     panel_tag: str,
@@ -713,16 +455,7 @@ def render_cortex_tile(
         roi_registry=roi_registry,
         panels_dir=panels_dir,
     )
-    with Image.open(out_png) as img_c_src, Image.open(bar_png) as img_b_src:
-        img_c = img_c_src.convert("RGBA")
-        img_b = img_b_src.convert("RGBA")
-    divider_h = 8
-    comp_w = img_c.width
-    comp_h = img_c.height + divider_h + img_b.height
-    comp = Image.new("RGBA", (comp_w, comp_h), "#ffffff")
-    comp.paste(img_c, (0, 0))
-    comp.paste(img_b, (0, img_c.height + divider_h))
-    comp.save(out_composite)
+    join_surface_and_bars(out_png, bar_png, out_composite)
     cache_manifest.write_text(
         json.dumps(
             _workbench_panel_cache_manifest(
@@ -3218,7 +2951,7 @@ def render_multidataset_hipp_cortex_figure_2col(
         cax=cbar_ax,
         orientation="horizontal",
     )
-    cbar.set_ticks([-0.15, -0.08, 0.0, 0.08, 0.15])
+    cbar.set_ticks(list(COLORBAR_TICKS))
     cbar.ax.tick_params(labelsize=22.0 if is_single_col else 24.0)
     for t in cbar.ax.xaxis.get_ticklabels():
         t.set_fontweight("bold")
