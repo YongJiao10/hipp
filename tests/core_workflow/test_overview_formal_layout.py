@@ -59,8 +59,8 @@ def test_plot_ovr_association_panel_two_one_zero_betas():
     # 3 y-ticks corresponding to the 3 clusters (none dropped)
     assert len(ax.get_yticks()) == 3
     labels = [t.get_text() for t in ax.get_yticklabels()]
-    assert "L-C1 Visual | Somatomotor" in labels[0]
-    assert "L-C2 Visual" in labels[1]
+    assert "L-C1 VN | SMN" in labels[0]
+    assert "L-C2 VN" in labels[1]
     assert "L-C3" in labels[2]
 
     # Check for text in ax: "No positive β" should be present for L-C3

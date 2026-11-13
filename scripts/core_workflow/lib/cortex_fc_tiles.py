@@ -59,7 +59,7 @@ def shorten_roi_label(roi: dict[str, Any]) -> str:
         .replace("Cont", "CON")
         .replace("SomMot", "SMN")
         .replace("DorsAttn", "DAN")
-        .replace("Visual", "VIS")
+        .replace("Visual", "VN")
         .replace("Language", "LAN")
         .replace("Aud", "AUD")
     )

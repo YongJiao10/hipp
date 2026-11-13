@@ -1,11 +1,13 @@
 # JJ_TMS Native-space hippocampal surface beta
 
+
+Newly generated figures use CON for the Control Network; existing figures generated before this convention may show FPCN.
 旧的 Standard/MNI-space beta 结果以及旧的 59 人 `all`/`healthy_1xxx` 运行已归档至 `wrong/outputs_iowa_jj_tms/archive/`。
 当前分析基于总样本 94 人中合格的 78 名被试（55 名健康被试 `healthy`，23 名患者被试 `patient`），使用 Native Float32 con 直接映射到同一被试的 HippUnfold 海马表面，并在 Healthy 与 Patient 双组下分别进行三网络海马激活与功能连接相关分析。
 
 ## 分析定义
 
-- 网络：`Control`、`Default`、`VentralAttention`，显示为 FPCN、DMN、VAN；Language（2 人）不进入本次三网络主分析。
+- 网络：`Control`、`Default`、`VentralAttention`，显示为 CON、DMN、VAN；Language（2 人）不进入本次三网络主分析。
 - 被试（78 人合格）：
   - `healthy`（健康组，ID 1xxx）：**55 人**（Control 9, Default 34, VentralAttention 10, Language 2）
   - `patient`（患者组，ID 3xxx）：**23 人**（Control 12, Default 6, VentralAttention 5）
@@ -80,14 +82,14 @@ outputs_iowa_jj_tms/work/sptms_hipp_cluster_surface_beta_native/runs/
 `--pdf` 才会额外生成 PDF：
 图中可见的数据集名称统一显示为 `Iowa 3T`；manifest 和输入表中的内部数据集标识仍为
 `jj_tms`。
-1. `three_network_healthy_profile_boxscatter.png`（三网络 HC 海马 Beta Profile；原始 55 名 HC 中，三网络图实际绘制 FPCN 9、DMN 34、VAN 10，Language 2 人排除）
+1. `three_network_healthy_profile_boxscatter.png`（三网络 HC 海马 Beta Profile；原始 55 名 HC 中，三网络图实际绘制 CON 9、DMN 34、VAN 10，Language 2 人排除）
 2. `three_network_patient_profile_boxscatter.png`（患者组三网络海马 Beta Profile）
 3. `surface_template_matching_hcp151_within_network_pairwise_8x4.png`（两组 × 两套模板 × 左右海马簇间配对检验）
 4. `fc_beta_network_by_cluster_pearson_heatmap_4x2.png`（4×2 布局：Healthy/Patient × Template/HCP151 行，左/右海马列 FC–Beta 相关热图）
 5. `fc_beta_hcp151_network_by_cluster_scatter_4x9.png`（4×9 布局：HCP151 下 FC–Beta 散点拟合图）
 
 HC profile 图在每个 parcellation × 海马侧 × cluster 的三网络组内，以 VAN 为核心分别与
-DMN 和 FPCN 做未校正 Welch 独立样本 t 检验（不做多重比较校正）。VAN 显著高于比较网络时，
+DMN 和 CON 做未校正 Welch 独立样本 t 检验（不做多重比较校正）。VAN 显著高于比较网络时，
 在对应两根箱线/散点组上方画红色括号并标 `*`、`**`、`***`；VAN 显著低于比较网络时使用蓝色。
 不显著时不画线、不标记。完整结果写入
 `healthy_van_vs_fpcn_dmn_ttests.csv`，共 24 个比较（2 parcellations × 2 hemispheres × 3 clusters × 2 comparators）。

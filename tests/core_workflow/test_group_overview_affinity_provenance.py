@@ -67,7 +67,7 @@ def test_confidence_panel_matches_the_routea_reference_layout():
         legend = ax.get_legend()
         assert legend._ncols == 1
         assert legend.get_frame_on() is True
-        assert ax.get_xlim()[1] == pytest.approx(.16 * 1.22)
+        assert ax.get_xlim()[1] == pytest.approx(.16 * 1.50)
         assert ax.get_ylim() == pytest.approx((1.391, -0.391))
     finally:
         plt.close(fig)

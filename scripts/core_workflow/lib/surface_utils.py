@@ -127,6 +127,7 @@ def render_locked_grid(
     left_surface: Path,
     right_surface: Path,
     spec_path: Path,
+    legend_display_names: dict[str, str] | None = None,
 ) -> dict[str, str]:
     outdir.mkdir(parents=True, exist_ok=True)
     native_root = outdir / "native"
@@ -155,6 +156,7 @@ def render_locked_grid(
         left_labels=left_labels,
         right_labels=right_labels,
         legend_group="label",
+        legend_display_names=legend_display_names,
         title=title,
         out=final_png,
     )

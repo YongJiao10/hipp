@@ -49,10 +49,10 @@ ABBREV_MAP: dict[str, str] = {
     "Somatomotor": "SMN",
     "DorsalAttention": "DAN",
     "VentralAttention": "VAN",
-    "Control": "FPN",
+    "Control": "CON",
     "Language": "LAN",
     "Auditory": "AUD",
-    "CinguloOpercular": "CON",
+    "CinguloOpercular": "CO",
 }
 
 

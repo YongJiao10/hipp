@@ -515,6 +515,18 @@ def load_network_bar_colors() -> dict[str, str]:
 
 NETWORK_BAR_COLORS = load_network_bar_colors()
 
+# Canonical display names; leave atlas-native labels and subnetwork names intact.
+NETWORK_DISPLAY_NAMES = {
+    "Default": "DMN", "Visual": "VN", "Somatomotor": "SMN",
+    "DorsalAttention": "DAN", "VentralAttention": "VAN",
+    "Control": "CON", "Language": "LAN", "Auditory": "AUD",
+    "Limbic": "LIM", "CinguloOpercular": "CO",
+}
+
+
+def network_display_name(name: str) -> str:
+    return NETWORK_DISPLAY_NAMES.get(name, name)
+
 
 
 
@@ -829,7 +841,7 @@ def plot_ovr_association_panel(
             top2_edges.append("#111111")
             has_top1.append(True)
             has_top2.append(False)
-            display_labels.append(f"{row_lbl} {w_net}")
+            display_labels.append(f"{row_lbl} {network_display_name(w_net)}")
             diff_texts.append((w_val + 0.005, "", "#333333"))
         else:
             order = pos_idx[np.argsort(-betas[pos_idx])]
@@ -846,7 +858,7 @@ def plot_ovr_association_panel(
             top2_edges.append("#111111")
             has_top1.append(True)
             has_top2.append(True)
-            display_labels.append(f"{row_lbl} {w_net} | {r_net}")
+            display_labels.append(f"{row_lbl} {network_display_name(w_net)} | {network_display_name(r_net)}")
             diff = w_val - r_val
             diff_texts.append((w_val + 0.005, f"Δβ={diff:.3f}", "#333333"))
 
@@ -870,7 +882,7 @@ def plot_ovr_association_panel(
     ax.invert_yaxis()
 
     pos_vals = [v for v, act in zip(t1_arr, has_top1, strict=True) if act and v > 0]
-    xmax = max(0.12, float(np.max(pos_vals)) * 1.30) if pos_vals else 0.15
+    xmax = max(0.12, float(np.max(pos_vals)) * 1.55) if pos_vals else 0.15
     ax.set_xlim(0.0, xmax)
     ax.set_xlabel("OVR Raw Beta", fontsize=FS_LABEL)
     ax.set_title(title or f"{smoothing} | OVR conditional association", fontsize=FS_TITLE)
@@ -878,11 +890,11 @@ def plot_ovr_association_panel(
     ax.grid(axis="x", color="#dddddd", lw=0.5, alpha=0.7)
 
     legend_handles = [
-        Rectangle((0, 0), 1, 1, facecolor="#555555", alpha=0.88, label="1st (winner)"),
-        Rectangle((0, 0), 1, 1, facecolor="none", edgecolor="#111111", linewidth=0.9, label="2nd (runner-up)"),
+        Rectangle((0, 0), 1, 1, facecolor="#555555", alpha=0.88, label="1st"),
+        Rectangle((0, 0), 1, 1, facecolor="none", edgecolor="#111111", linewidth=0.9, label="2nd"),
     ]
-    # Below the axes: an in-axes legend covered the margin annotations.
-    ax.legend(handles=legend_handles, fontsize=FS_TICK, loc="upper right", bbox_to_anchor=(1.0, -0.2))
+    ax.legend(handles=legend_handles, fontsize=FS_TICK, loc="center left",
+              bbox_to_anchor=(1.035, 0.5), borderaxespad=0)
 
 
 def ordered_cluster_ids_by_position(labels: np.ndarray, order: np.ndarray, k: int) -> list[int]:
@@ -1149,9 +1161,9 @@ def plot_confidence_panel(ax, rows: list[dict[str, object]], title: str) -> None
         top1_name = str(r.get("top1_network", "unassigned"))
         top2_name = str(r.get("top2_network", ""))
         if top2_name in {"", "none", "unassigned"}:
-            labels.append(f"{r['label']} {top1_name}")
+            labels.append(f"{r['label']} {network_display_name(top1_name)}")
         else:
-            labels.append(f"{r['label']} {top1_name} | {top2_name}")
+            labels.append(f"{r['label']} {network_display_name(top1_name)} | {network_display_name(top2_name)}")
     ax.barh(y, top1, height=0.62, color=colors, alpha=0.88, label="1st")
     ax.barh(y, top2, height=0.32, color="none", edgecolor="#111111", linewidth=0.9, label="2nd")
     is_normalized_count = metric == "normalized_count"
@@ -1174,15 +1186,19 @@ def plot_confidence_panel(ax, rows: list[dict[str, object]], title: str) -> None
     ax.set_yticks(y)
     ax.set_yticklabels(labels, fontsize=FS_TICK)
     ax.invert_yaxis()
-    xmax = max(0.12, float(np.max(top1)) * 1.22)
+    xmax = max(0.12, float(np.max(top1)) * 1.50)
     ax.set_xlim(0.0, xmax)
     ax.set_xlabel("Normalized TopN ROI count" if is_normalized_count else "Fisher-z", fontsize=FS_LABEL)
     ax.set_title(title, fontsize=FS_TITLE)
     ax.tick_params(labelsize=FS_TICK)
     ax.axvline(0.05, color="#999999", lw=0.8, ls=":")
     ax.grid(axis="x", color="#dddddd", lw=0.5, alpha=0.7)
-    # Below the axes: an in-axes legend covered the margin annotations.
-    ax.legend(fontsize=FS_TICK, loc="upper right", bbox_to_anchor=(1.0, -0.2))
+    legend_handles = [
+        Rectangle((0, 0), 1, 1, facecolor="#555555", alpha=0.88, label="1st"),
+        Rectangle((0, 0), 1, 1, facecolor="none", edgecolor="#111111", linewidth=0.9, label="2nd"),
+    ]
+    ax.legend(handles=legend_handles, fontsize=FS_TICK, loc="center left",
+              bbox_to_anchor=(1.035, 0.5), borderaxespad=0)
 
 
 def plot_vertex_assignment_counts(
@@ -1208,7 +1224,7 @@ def plot_vertex_assignment_counts(
     y = np.arange(len(names))
     ax.barh(y, vals, color="#2c7fb8", alpha=0.88)
     ax.set_yticks(y)
-    ax.set_yticklabels(names, fontsize=tick_fs)
+    ax.set_yticklabels([network_display_name(name) for name in names], fontsize=tick_fs)
     ax.invert_yaxis()
     ax.set_xlabel("Vertices", fontsize=label_fs)
     ax.set_title(title, fontsize=title_fs)
@@ -1483,7 +1499,7 @@ def plot_wta_overview_profile_axis(
                 lw=1.15,
                 marker="o",
                 markersize=2.1,
-                label=network_name,
+                label=network_display_name(network_name),
             )
     ax.set_title(title, fontsize=WTA_OVERVIEW_SIDE_PANEL_TITLE_FS)
     ax.set_xlabel("Vertices in bin (%)", fontsize=WTA_OVERVIEW_SIDE_PANEL_LABEL_FS)
@@ -1747,8 +1763,8 @@ def render_combo(
         gs = fig.add_gridspec(nrows=2, ncols=3, width_ratios=[0.62, 1.18, 1.42], hspace=0.08, wspace=0.06)
     else:
         n_rows = len(row_specs)
-        width, height = (22.0, 14.0) if family17_overview else (15.4, 12.2)
-        width_ratios = [1.65, 1.30] if family17_overview else [1.50, 1.20]
+        width, height = (22.0, 14.0) if family17_overview else (14.8, 12.2)
+        width_ratios = [1.65, 1.30] if family17_overview else [1.65, 1.05]
         cortex_width = 0.0
         if cortex_profiles:
             cortex_width = CLUSTER_CORTEX_COLUMN_WIDTH["stacked" if cortex_stacked else "side_by_side"]
@@ -1757,7 +1773,7 @@ def render_combo(
         gs = fig.add_gridspec(nrows=n_rows, ncols=len(width_ratios), width_ratios=width_ratios, hspace=0.06, wspace=0.05)
 
     if method not in CLUSTERLESS_METHODS and layout != "single-smoothing" and len(row_specs) == 2:
-        sub_diag = gs[:, 0].subgridspec(4, 3, width_ratios=[0.90, 1.10, 0.045], wspace=0.05, hspace=0.06)
+        sub_diag = gs[:, 0].subgridspec(4, 2, width_ratios=[1.0, 1.0], wspace=0.05, hspace=0.06)
     else:
         sub_diag = None
 
@@ -1876,6 +1892,7 @@ def render_combo(
                         left_surface=surf_l,
                         right_surface=surf_r,
                         spec_path=spec_path,
+                        legend_display_names=NETWORK_DISPLAY_NAMES,
                     )
                     big = Path(str(render["biglegend_png"]))
                     ax_big.imshow(plt.imread(big))
@@ -2020,14 +2037,10 @@ def render_combo(
             base_r = ridx * 2
             ax0 = fig.add_subplot(sub_diag[base_r, 0])
             ax1 = fig.add_subplot(sub_diag[base_r, 1])
-            cax1 = fig.add_subplot(sub_diag[base_r, 2])
             ax2 = fig.add_subplot(sub_diag[base_r + 1, 0])
             ax3 = fig.add_subplot(sub_diag[base_r + 1, 1])
-            cax_empty = fig.add_subplot(sub_diag[base_r + 1, 2])
-            cax_empty.axis("off")
         else:
             sub = gs[ridx, 0].subgridspec(2, 2, wspace=0.08, hspace=diagnostic_hspace)
-            cax1 = None
             ax0 = fig.add_subplot(sub[0, 0])
             ax1 = fig.add_subplot(sub[0, 1])
             ax2 = fig.add_subplot(sub[1, 0])
@@ -2146,11 +2159,13 @@ def render_combo(
         ax1.set_yticks(yt_prof)
         ax1.set_yticklabels(yl_prof, fontsize=FS_LABEL)
         ax1.set_xticks(np.arange(len(nets)))
-        ax1.set_xticklabels(nets, fontsize=FS_TICK,
+        ax1.set_xticklabels([network_display_name(name) for name in nets], fontsize=FS_TICK,
                             rotation=90 if len(nets) > 8 else 35,
                             ha="center" if len(nets) > 8 else "right")
         annotate_profile_values(ax1, prof_lr, vmax)
         highlight_top1_profile_cells(ax1, prof_lr)
+        # Align the colorbar with the legend beside the confidence panel.
+        cax1 = ax1.inset_axes([1.035, 0, 0.045, 1])
         add_cbar(
             fig, ax1, im1,
             "Raw beta per Fisher-z unit" if effective_assignment_variant in ALL_OVR_VARIANTS else
@@ -2186,6 +2201,10 @@ def render_combo(
             conf_rows = confidence_rows(status_l, "L", cids_l) + confidence_rows(status_r, "R", cids_r)
             plot_confidence_panel(ax3, conf_rows, f"{row_label} | cluster confidence / ambiguity")
 
+        # Keep the diagnostic plot boxes at height:width 3:4.
+        for diagnostic_ax in (ax0, ax1, ax2, ax3):
+            diagnostic_ax.set_box_aspect(3 / 4)
+
 
 
         ax_big = fig.add_subplot(gs[ridx, 1])
@@ -2213,10 +2232,12 @@ def render_combo(
                     left_surface=surf_l,
                     right_surface=surf_r,
                     spec_path=spec_path,
+                    legend_display_names=NETWORK_DISPLAY_NAMES,
                 )
                 big = Path(str(render["biglegend_png"]))
                 ax_big.imshow(plt.imread(big))
         ax_big.set_title(f"{row_label} | functional atlas surface", fontsize=FS_BIG_TITLE)
+        ax_big.set_anchor("E")
         ax_big.axis("off")
 
         rows_meta.append(

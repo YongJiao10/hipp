@@ -46,7 +46,7 @@ DEFAULT_RUN_DIR = (
 )
 
 NETWORKS = ("Control", "Default", "VentralAttention")
-NETWORK_DISPLAY = {"Control": "FPCN", "Default": "DMN", "VentralAttention": "VAN"}
+NETWORK_DISPLAY = {"Control": "CON", "Default": "DMN", "VentralAttention": "VAN"}
 NETWORK_COLORS = {"Control": "#F7AC4A", "Default": "#D85C6B", "VentralAttention": "#DC5CFF"}
 GROUPS = ("healthy", "patient")
 GROUP_DISPLAY = {"healthy": "Healthy participants", "patient": "Patient participants"}
@@ -199,7 +199,7 @@ def _welch_test(sample_a: np.ndarray, sample_b: np.ndarray) -> tuple[float, floa
 
 
 def van_network_comparisons(data: pd.DataFrame) -> pd.DataFrame:
-    """Compare healthy VAN beta with DMN and FPCN at every profile bar group."""
+    """Compare healthy VAN beta with DMN and CON at every profile bar group."""
     healthy = data.loc[
         (data["group"] == "healthy")
         & data["site_network"].isin(("Control", "Default", "VentralAttention"))
@@ -930,12 +930,12 @@ def main() -> int:
         [
             ("analysis", f"{DATASET_LABEL} surface-beta five-figure analysis"),
             ("groups", "healthy=NTHC+TEHC; patient=NTS+TIS"),
-            ("networks", "Control/FPCN; Default/DMN; VentralAttention/VAN"),
+            ("networks", "Control/CON; Default/DMN; VentralAttention/VAN"),
             ("parcellations", "individual template matching and HCP151 fixed atlas"),
             ("hippocampal_hemisphere", "L and R separate in every figure and statistic; no bilateral rows"),
             ("heatmap_layout", "rows=group x parcellation; left column=L hippocampus; right column=R hippocampus"),
             ("figure_observation_unit", "one subject x stimulation network x hippocampal hemisphere x cluster x parcellation after equal target-hemi averaging"),
-            ("healthy_van_network_comparisons", "uncorrected Welch tests of VAN minus Default/DMN and VAN minus Control/FPCN for every healthy profile bar group; draw only significant brackets"),
+            ("healthy_van_network_comparisons", "uncorrected Welch tests of VAN minus Default/DMN and VAN minus Control/CON for every healthy profile bar group; draw only significant brackets"),
             ("pairwise_tests", "four pre-defined within-network cluster contrasts; Holm within group x parcellation x hippocampal hemisphere"),
             ("fc_definition", "mean vertex-to-Kong2022-ROI Fisher-z FC across ROI columns assigned to the stimulation network"),
             ("fc_multiplicity", "raw exploratory Pearson p values, matching the JJ_TMS exploratory FC figure convention"),

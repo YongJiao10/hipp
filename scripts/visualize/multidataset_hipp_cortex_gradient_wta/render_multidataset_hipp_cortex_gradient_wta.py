@@ -295,7 +295,7 @@ WTA_TOP_NETWORKS_7NET = KONG2022_WTA_TOP4_NETWORK_ORDER
 WTA_DISPLAY_NAMES = {
     "Default": "DMN",
     "VentralAttention": "VAN",
-    "Auditory": "Aud",
+    "Auditory": "AUD",
     "Somatomotor": "SMN",
 }
 WTA_DISPLAY_ORDER_7NET = ("VentralAttention", "Somatomotor", "Language", "Default")
@@ -2546,7 +2546,7 @@ def render_multidataset_hipp_cortex_figure_2col(
             wta_col_titles = [
                 ("VAN (VentralAttn)", "#da42f5"),
                 ("SMN (Somatomotor)", "#5297c8"),
-                ("Aud (Auditory)", "#18b7c9"),
+                ("AUD (Auditory)", "#18b7c9"),
                 ("DMN (Default)", "#de616c"),
             ]
 
@@ -2795,7 +2795,7 @@ def render_multidataset_hipp_cortex_figure_2col(
             w_patches = [
                 ("DMN", "#de616c"),
                 ("VAN", "#da42f5"),
-                ("Aud", "#18b7c9"),
+                ("AUD", "#18b7c9"),
                 ("SMN", "#5297c8"),
                 ("DAN", "#33a02c"),
                 ("CON", "#f39c12"),
@@ -2900,7 +2900,7 @@ def render_multidataset_hipp_cortex_figure_2col(
             w_patches = [
                 ("DMN", "#de616c"),
                 ("VAN", "#da42f5"),
-                ("Aud", "#18b7c9"),
+                ("AUD", "#18b7c9"),
                 ("SMN", "#5297c8"),
                 ("DAN", "#33a02c"),
                 ("CON", "#f39c12"),

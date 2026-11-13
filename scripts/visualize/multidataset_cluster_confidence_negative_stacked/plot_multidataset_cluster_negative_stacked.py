@@ -57,7 +57,7 @@ DEFAULT_NET_COLORS = {
 NET_COLORS = {**DEFAULT_NET_COLORS, **COLOR_MAP}
 
 ABBREV_MAP = {
-    "Visual": "VIS",
+    "Visual": "VN",
     "Somatomotor": "SMN",
     "DorsalAttention": "DAN",
     "VentralAttention": "VAN",

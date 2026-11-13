@@ -171,11 +171,11 @@ def main() -> int:
         [
             ("analysis", "JJ_TMS Native-space five-figure analysis using the Stanford renderer"),
             ("groups", "healthy (1xxx) and patient (3xxx)"),
-            ("networks", "Control/FPCN; Default/DMN; VentralAttention/VAN"),
+            ("networks", "Control/CON; Default/DMN; VentralAttention/VAN"),
             ("parcellations", "individual template matching and HCP151 fixed atlas"),
             ("hippocampal_hemisphere", "L and R separate; no bilateral rows"),
             ("heatmap_layout", "rows=group x parcellation; left column=L; right column=R"),
-            ("healthy_van_network_comparisons", "uncorrected Welch tests of VAN minus Default/DMN and VAN minus Control/FPCN for every healthy profile bar group; draw only significant brackets"),
+            ("healthy_van_network_comparisons", "uncorrected Welch tests of VAN minus Default/DMN and VAN minus Control/CON for every healthy profile bar group; draw only significant brackets"),
             ("surface_to_volume", "not executed"),
         ],
         columns=["field", "value"],

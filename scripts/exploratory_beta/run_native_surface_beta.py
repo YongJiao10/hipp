@@ -45,7 +45,7 @@ MATCH_ROOTS = {
     "jj_tms": REPO_ROOT / "outputs_iowa_jj_tms/work/hcp151_fixed_template_matching/subjects",
 }
 HCP151_LABEL_ROOT = REPO_ROOT / "outputs_hcp/templates/hcp151_routea_full_k3_fisherz"
-NETWORK_DISPLAY = {"Control": "FPCN", "Default": "DMN", "VentralAttention": "VAN"}
+NETWORK_DISPLAY = {"Control": "CON", "Default": "DMN", "VentralAttention": "VAN"}
 CLUSTER_NAMES = {1: "Anterior_VAN", 2: "Middle_SMN", 3: "Posterior_DMN"}
 HEMIS = ("L", "R")
 PARCELLATIONS = ("template_matching", "hcp151")

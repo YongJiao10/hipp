@@ -35,7 +35,7 @@ Run from the repository root with the explicit interpreter:
 ```
 
 Figure scripts write PNG by default; request `--pdf` explicitly for PDF output.
-The healthy-profile VAN/DMN/FPCN Welch comparisons are exploratory and
+The healthy-profile VAN/DMN/CON Welch comparisons are exploratory and
 uncorrected; their raw results are exported with the figures.
 
 ## Selected JJ_TMS raw-beta figure

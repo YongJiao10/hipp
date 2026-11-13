@@ -244,6 +244,7 @@ def compose_wb_grid_with_legend(
     title: str = "",
     bg_color: tuple[int, int, int, int] = (255, 255, 255, 255),
     min_panel_w: int = 520,
+    legend_display_names: dict[str, str] | None = None,
 ) -> Path:
     ventral = Image.open(ventral_image).convert("RGBA")
     dorsal = Image.open(dorsal_image).convert("RGBA") if dorsal_image else None
@@ -286,8 +287,9 @@ def compose_wb_grid_with_legend(
 
     measure_image = Image.new("RGBA", (8, 8), (0, 0, 0, 0))
     measure_draw = ImageDraw.Draw(measure_image)
-    left_item_texts = [f"{n}  {left_group_props[n] * 100:.1f}%" for n in left_group_props]
-    right_item_texts = [f"{n}  {right_group_props[n] * 100:.1f}%" for n in right_group_props]
+    display_names = legend_display_names or {}
+    left_item_texts = [f"{display_names.get(n, n)}  {left_group_props[n] * 100:.1f}%" for n in left_group_props]
+    right_item_texts = [f"{display_names.get(n, n)}  {right_group_props[n] * 100:.1f}%" for n in right_group_props]
     all_item_texts = left_item_texts + right_item_texts
 
     max_text_w = 0
@@ -336,7 +338,7 @@ def compose_wb_grid_with_legend(
             y += 12
 
         group_names = sorted(group_props_map, key=lambda name: (-group_props_map[name], name))
-        item_texts = [f"{name}  {group_props_map[name] * 100:.1f}%" for name in group_names]
+        item_texts = [f"{display_names.get(name, name)}  {group_props_map[name] * 100:.1f}%" for name in group_names]
         for group_name, item_text in zip(group_names, item_texts):
             color = group_colors[group_name]
             draw.rectangle((x0, y + 5, x0 + swatch_w, y + 5 + swatch_h), fill=color, outline=swatch_outline)

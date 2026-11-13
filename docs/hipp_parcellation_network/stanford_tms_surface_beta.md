@@ -1,11 +1,13 @@
 # Stanford 三网络左右海马 Native-space surface beta
 
+
+Newly generated figures use CON for the Control Network; existing figures generated before this convention may show FPCN.
 这是 Stanford 当前的探索性 beta 分析入口。旧的 Standard/MNI-space beta 结果
 已归档；Native 分支尚未晋升为编号正式流程或冻结结果。
 
 ## 固定分析定义
 
-- 网络：`Control`、`Default`、`VentralAttention`，显示为 FPCN、DMN、VAN。
+- 网络：`Control`、`Default`、`VentralAttention`，显示为 CON、DMN、VAN。
 - 健康组：`NTHC + TEHC`；病人组：`NTS + TIS`。
 - 当前探索 cohort：966 个 `subject × site × condition` top-3 行。
 - 海马：左、右分别统计；不生成 `bilateral`。
@@ -100,7 +102,7 @@ PNG 和支持表写入该 run 的 `five_figures/`；默认不生成 PDF，显式
 旧 Standard-space 图位于归档目录。
 
 Healthy profile figure additionally performs uncorrected Welch independent-samples tests with
-VAN as the reference, comparing VAN against Default/DMN and Control/FPCN for every
+VAN as the reference, comparing VAN against Default/DMN and Control/CON for every
 parcellation × hippocampal hemisphere × cluster. Significant VAN-higher comparisons use red
 brackets and `*`/`**`/`***`; significant VAN-lower comparisons use blue brackets. Non-significant
 comparisons have no bracket or label. Results are written to

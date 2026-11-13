@@ -79,6 +79,33 @@ Other workflows retain their own limits.
   `density_evidence`, not arguments alone. Report disagreements and treat
   consumed assets as authoritative.
 
+## Functional network names
+
+Use the following names and abbreviations for project-authored text, figures and
+display fields. Define the full name on first use in prose. The machine-readable
+keys remain as shown; display abbreviations do not replace input or output keys.
+
+| Key | Full name | Display abbreviation |
+|---|---|---|
+| `Default` | Default Mode Network | DMN |
+| `Visual` | Visual Network | VN |
+| `Somatomotor` | Somatomotor Network | SMN |
+| `DorsalAttention` | Dorsal Attention Network | DAN |
+| `VentralAttention` | Ventral Attention Network | VAN |
+| `Control` | Control Network | CON |
+| `Language` | Language Network | LAN |
+| `Auditory` | Auditory Network | AUD |
+| `Limbic` | Limbic Network | LIM |
+| `CinguloOpercular` | Cingulo-Opercular Network | CO |
+
+CON means Control in this project; use CO for Cingulo-Opercular. Preserve
+atlas-native names, subnetwork suffixes and published terminology when reporting
+those specific labels, and identify the atlas or source. A cross-atlas merge is
+an analysis mapping, not a claim that its source networks are identical; use
+`config/cross_atlas_network_merge.json` for the defined Kong2022 and Lynch2024
+canonical7 mapping. Do not rename existing artifacts or change their selection
+contracts solely to conform to display terminology.
+
 ## Runtime
 
 - Use `/home/yojiao/.conda/envs/py314/bin/python` for local workflow scripts,
