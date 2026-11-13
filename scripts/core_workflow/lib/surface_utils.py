@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import os
 import re
+import tempfile
+from importlib.metadata import version
 from pathlib import Path
 
 import nibabel as nib
@@ -125,15 +127,66 @@ def render_hippocampal_grid(
     left_surface: Path,
     right_surface: Path,
     legend_display_names: dict[str, str] | None = None,
+    surface_cache_root: Path | None = None,
 ) -> dict[str, str]:
     """Render the selected subject surfaces and label GIFTIs with BrainSpace."""
     os.environ.setdefault("LP_NUM_THREADS", "1")
     os.environ.setdefault("VTK_SMP_MAX_THREADS", "1")
+    from PIL import Image
+
+    outdir.mkdir(parents=True, exist_ok=True)
+    inputs = tuple(Path(p).resolve(strict=True) for p in (left_surface, right_surface, left_labels, right_labels))
+    native_png = outdir / f"sub-{subject}_{name}_surface.png"
+    reuse_surface = False
+    if surface_cache_root is not None:
+        from vtkmodules.vtkCommonCore import vtkVersion
+
+        runtime = (
+            f"brainspace-{version('brainspace')}_vtk-{vtkVersion.GetVTKVersion()}"
+            f"_nibabel-{version('nibabel')}_matplotlib-{version('matplotlib')}"
+            f"_numpy-{version('numpy')}"
+        )
+        cache_dir = Path(surface_cache_root) / runtime
+        for part, path in zip(("left_surface", "right_surface", "left_labels", "right_labels"), inputs, strict=True):
+            cache_dir = cache_dir / part / path.relative_to(path.anchor)
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        native_png = cache_dir / "surface.png"
+        if native_png.is_file():
+            newest_source = max(
+                max(stat.st_mtime_ns, stat.st_ctime_ns)
+                for stat in (path.stat() for path in (*inputs, Path(__file__).resolve()))
+            )
+            if native_png.stat().st_mtime_ns >= newest_source:
+                try:
+                    with Image.open(native_png) as image:
+                        reuse_surface = image.format == "PNG" and image.size == (3200, 2048)
+                        image.verify()
+                except (OSError, ValueError, SyntaxError):
+                    reuse_surface = False
+    if not reuse_surface:
+        _render_hippocampal_label_surface(inputs, native_png)
+    final_png = outdir / f"sub-{subject}_wb_{name}_biglegend.png"
+    compose_wb_grid_with_legend(
+        ventral_image=native_png,
+        layout="1x2",
+        left_labels=left_labels,
+        right_labels=right_labels,
+        legend_group="label",
+        legend_display_names=legend_display_names or NETWORK_DISPLAY_NAMES,
+        title=title,
+        out=final_png,
+        scale=2,
+        adaptive_legend=True,
+    )
+    return {"surface_png": str(native_png), "biglegend_png": str(final_png)}
+
+
+def _render_hippocampal_label_surface(inputs: tuple[Path, ...], native_png: Path) -> None:
     from brainspace.mesh.mesh_io import read_surface
     from brainspace.plotting import plot_surf
     from matplotlib.colors import ListedColormap
 
-    outdir.mkdir(parents=True, exist_ok=True)
+    left_surface, right_surface, left_labels, right_labels = inputs
     surfaces = {}
     tables = {}
     for hemi, surface_path, label_path in (
@@ -159,7 +212,6 @@ def render_hippocampal_grid(
                               for key in range(min_key, max_key + 1)])
         for hemi in ("L", "R")
     }
-    native_png = outdir / f"sub-{subject}_{name}_surface.png"
     plotter = plot_surf(
         surfaces, [["L", "R"], ["L", "R"]], array_name="network",
         view=[["dorsal", "dorsal"], ["ventral", "ventral"]],
@@ -169,23 +221,12 @@ def render_hippocampal_grid(
         mapper__interpolateScalarsBeforeMapping=False, return_plotter=True,
     )
     try:
-        plotter.screenshot(str(native_png), transparent_bg=False, scale=(2, 2))
+        with tempfile.NamedTemporaryFile(dir=native_png.parent, suffix=".png", delete=False) as temporary:
+            temporary_path = Path(temporary.name)
+        plotter.screenshot(str(temporary_path), transparent_bg=False, scale=(2, 2))
+        os.replace(temporary_path, native_png)
     finally:
         plotter.close()
-    final_png = outdir / f"sub-{subject}_wb_{name}_biglegend.png"
-    compose_wb_grid_with_legend(
-        ventral_image=native_png,
-        layout="1x2",
-        left_labels=left_labels,
-        right_labels=right_labels,
-        legend_group="label",
-        legend_display_names=legend_display_names or NETWORK_DISPLAY_NAMES,
-        title=title,
-        out=final_png,
-        scale=2,
-        adaptive_legend=True,
-    )
-    return {"surface_png": str(native_png), "biglegend_png": str(final_png)}
 
 
 def render_hippocampal_metric(

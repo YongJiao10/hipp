@@ -10,6 +10,14 @@ composition. The right-hand legends show per-hemisphere vertex percentages
 and the project's network abbreviations; when both sides have at most three
 labels, the label text and color swatches are enlarged.
 
+The group overview explicitly reuses its rendered hippocampal surface panels
+under `tmp/overview_hippocampal_surfaces/`. Each cache path identifies the
+exact four input surfaces/label files and the rendering-library versions. A panel is
+redrawn when an input or the renderer code is newer, or when the cached PNG is
+invalid. The legend and full figure are composed again, so text and layout
+changes do not rerender unchanged surfaces. Callers that do not select this
+cache always render their surfaces normally.
+
 For HCP group overviews, `scripts/core_workflow/06_01_build_group_overview.py`
 consumes the manifest-declared group surfaces and exact assignment variants.
 The group overview does not take a hippocampal Workbench scene argument.

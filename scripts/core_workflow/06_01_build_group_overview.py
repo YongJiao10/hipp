@@ -1885,6 +1885,7 @@ def render_combo(
                         left_surface=surf_l,
                         right_surface=surf_r,
                         legend_display_names=NETWORK_DISPLAY_NAMES,
+                        surface_cache_root=REPO_ROOT / "tmp" / "overview_hippocampal_surfaces",
                     )
                     big = Path(str(render["biglegend_png"]))
                     ax_big.imshow(plt.imread(big))
@@ -2223,6 +2224,7 @@ def render_combo(
                     left_surface=surf_l,
                     right_surface=surf_r,
                     legend_display_names=NETWORK_DISPLAY_NAMES,
+                    surface_cache_root=REPO_ROOT / "tmp" / "overview_hippocampal_surfaces",
                 )
                 big = Path(str(render["biglegend_png"]))
                 ax_big.imshow(plt.imread(big))

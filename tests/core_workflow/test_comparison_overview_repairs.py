@@ -43,6 +43,7 @@ def render_inputs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         Path(path).write_bytes(image_path.read_bytes())
 
     def render_surface(**kwargs):
+        assert kwargs["surface_cache_root"] == overview.REPO_ROOT / "tmp" / "overview_hippocampal_surfaces"
         surface_titles.append(kwargs["title"])
         scratch_paths.append(kwargs["outdir"])
         return {"biglegend_png": str(image_path)}
