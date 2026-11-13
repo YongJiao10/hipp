@@ -356,6 +356,7 @@ def gradient_resume_inputs(
     route: str | None = None,
     smoothing: str | None = None,
     hemi: str | None = None,
+    profile: str | None = None,
 ) -> dict[str, object]:
     """Record the explicit gradient bank in the existing resume contract."""
     out: dict[str, object] = {
@@ -379,6 +380,7 @@ def gradient_resume_inputs(
         grad_run_dir = (
             resolve_cohort_gradient_root(
                 route=route, cohort=cohort, variant=variant, base_root=Path(gradient_root).resolve(),
+                profile=profile,
             )
             / smoothing
             / f"hemi_{hemi}"
@@ -5973,6 +5975,7 @@ def main() -> int:
                                     gradient_root=gradient_root, cohort=args.cohort, variant=args.variant,
                                     gradient_options=gradient_options,
                                     route=gradient_route_tag, smoothing=smoothing, hemi=hemi,
+                                    profile=args.profile,
                                 )
                                 if is_gradient_method(method)
                                 else {"gradient_root": None}

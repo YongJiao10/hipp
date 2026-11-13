@@ -120,6 +120,15 @@ def test_cohort_gradient_producer_and_consumers_share_layout(tmp_path, monkeypat
     assert np.array_equal(displayed["L"], gradients)
 
 
+def test_gradient_resume_fingerprints_the_profile_bank_the_run_reads(tmp_path):
+    recorded = atlas_mod.gradient_resume_inputs(
+        gradient_root=tmp_path, cohort=None, variant="36p",
+        route="pfm", smoothing="2mm", hemi="L", profile="topsim",
+    )
+    paths = [Path(item["path"]) for item in recorded["gradient_artifact_inputs"]]
+    assert {path.parent for path in paths} == {tmp_path / "pfm" / "topsim" / "2mm" / "hemi_L"}
+
+
 @pytest.mark.parametrize("cohort,variant,can_resume", [
     ("nthc", "36p", True), ("tehc", "36p", False),
 ])
