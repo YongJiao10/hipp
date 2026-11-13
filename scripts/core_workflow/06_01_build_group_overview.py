@@ -121,7 +121,8 @@ FS_LABEL = 10
 FS_TICK = 9
 FS_SMALL = 8.5
 FS_LEGEND_SMALL = FS_SMALL - 2.0
-FS_CELL = 6
+FS_CELL = 7.5
+FS_CELL_DENSE = 6
 FS_MISSING = 13
 FS_BIG_TITLE = 13
 FS_SUPTITLE = 18
@@ -941,7 +942,11 @@ def annotate_profile_values(
             linear = np.where(rgb <= 0.04045, rgb / 12.92, ((rgb + 0.055) / 1.055) ** 2.4)
             luminance = float(linear @ np.array([0.2126, 0.7152, 0.0722]))
             color = "white" if luminance < 0.179 else "#222222"
-            ax.text(c, r, f"{val:.2f}", ha="center", va="center", fontsize=FS_CELL, color=color)
+            ax.text(
+                c, r, f"{val:.2f}", ha="center", va="center",
+                fontsize=FS_CELL_DENSE if data.shape[1] > 8 else FS_CELL,
+                color=color,
+            )
 
 
 def highlight_top1_profile_cells(ax, data: np.ndarray) -> None:
