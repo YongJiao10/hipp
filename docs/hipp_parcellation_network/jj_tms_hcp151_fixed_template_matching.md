@@ -350,23 +350,25 @@ Run on main with:
   --signal-branch all
 ```
 
-Stanford atlas/heatmap panels reuse the locked Workbench scene with Stanford
-group-average surfaces and the Stanford `sub-1001` spec; panel caches are
-keyed by cohort (`stan_*`) so they never collide with Iowa panels.
+Stanford atlas and heatmap panels use BrainSpace with Stanford group-average
+surfaces; their panels are regenerated from the selected inputs.
 
 ## Fixed-template Static Subject Overviews
 
 After a complete fixed-roster validation, render one presentation PNG per
-subject with the shared locked Workbench layout:
+subject with the shared BrainSpace hippocampal layout:
 
 ```bash
 scripts/jj_tms/run_jj_tms_hcp151_fixed_template_overviews.sh \
   --jobs 2
 ```
 
+To redraw the complete declared roster in place with the current renderer, use
+`--resume --refresh-visuals`; the refresh updates the subject PNGs and their
+existing item and aggregate records.
+
 The launcher uses
-`/home/yojiao/.conda/envs/py314/bin/python` and the repository Workbench
-executable. It reads the completed mapping GIFTIs and consumed
+`/home/yojiao/.conda/envs/py314/bin/python` environment and the existing BrainSpace/VTK stack. It reads the completed mapping GIFTIs and consumed
 `den-512` surfaces, never rewrites those inputs, and validates their subject
 and combination manifest fingerprints before rendering. The display layer
 retains the established HCP style: canonical network colors

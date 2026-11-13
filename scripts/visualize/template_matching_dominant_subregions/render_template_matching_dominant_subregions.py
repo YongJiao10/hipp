@@ -70,11 +70,7 @@ for p in (CORE_DIR, VIS_LIB_DIR):
         sys.path.insert(0, str(p))
 
 
-from lib.surface_utils import make_network_label_gifti, render_locked_grid
-
-from lib.workbench_scene_batch import (
-    save_shape_gii, build_scene_root, capture_scene_root as _capture_scene_root,
-)
+from lib.surface_utils import make_network_label_gifti, render_hippocampal_grid, render_hippocampal_metric
 
 # Canonical Paths
 DEFAULT_36P_ROOT = (
@@ -83,19 +79,6 @@ DEFAULT_36P_ROOT = (
     / "work"
     / "hcp151_fixed_template_matching"
     / "subjects"
-)
-DEFAULT_SCENE = REPO_ROOT / "config" / "wb_locked_native_view_lateral_medial.scene"
-DEFAULT_SPEC = (
-    REPO_ROOT
-    / "outputs_iowa_jj_tms"
-    / "inputs"
-    / "hippunfold"
-    / "dense_corobl_batch"
-    / "sub-1001"
-    / "hippunfold"
-    / "sub-1001"
-    / "surf"
-    / "sub-1001_den-512_label-hipp_surfaces.spec"
 )
 DEFAULT_SURF_L = (
     REPO_ROOT
@@ -1372,10 +1355,10 @@ def build_tight_4view_composite(native_im: Image.Image) -> Image.Image:
         return img.crop((cmin, rmin, cmax + 1, rmax + 1))
 
     # Top: Front (Lateral), Bottom: Back (Medial)
-    v_l_front = trim_b(Image.fromarray(arr[0:512, 0:800]))
-    v_r_front = trim_b(Image.fromarray(arr[0:512, 800:1600]))
-    v_l_back = trim_b(Image.fromarray(arr[512:1024, 0:800]))
-    v_r_back = trim_b(Image.fromarray(arr[512:1024, 800:1600]))
+    v_l_front = trim_b(Image.fromarray(arr[: arr.shape[0] // 2, : arr.shape[1] // 2]))
+    v_r_front = trim_b(Image.fromarray(arr[: arr.shape[0] // 2, arr.shape[1] // 2 :]))
+    v_l_back = trim_b(Image.fromarray(arr[arr.shape[0] // 2 :, : arr.shape[1] // 2]))
+    v_r_back = trim_b(Image.fromarray(arr[arr.shape[0] // 2 :, arr.shape[1] // 2 :]))
 
     target_h = max(v_l_front.height, v_r_front.height, v_l_back.height, v_r_back.height)
 
@@ -1620,37 +1603,6 @@ def compute_cohort_data(
     return dominant_labels, dominance_pcts, stats_summary
 
 
-def apply_heatmap_metric_palette(
-    metric_path: Path,
-    palette_name: str = "magma",
-    vmin: float = 33.33,
-    vmax: float = 80.0,
-) -> None:
-    """Apply Workbench metric palette with explicit user min/max range."""
-    cmd = [
-        "wb_command",
-        "-metric-palette",
-        str(metric_path),
-        "MODE_USER_SCALE",
-        "-palette-name",
-        str(palette_name),
-        "-disp-pos",
-        "true",
-        "-disp-neg",
-        "false",
-        "-disp-zero",
-        "true",
-        "-interpolate",
-        "true",
-        "-normalization",
-        "NORMALIZATION_ALL_MAP_DATA",
-        "-pos-user",
-        str(vmin),
-        str(vmax),
-    ]
-    subprocess.run(cmd, check=True)
-
-
 def render_cohort_panels(
     cohort_key: str,
     smoothing: str,
@@ -1661,17 +1613,13 @@ def render_cohort_panels(
     scratch_dir: Path,
     surf_l: Path = DEFAULT_SURF_L,
     surf_r: Path = DEFAULT_SURF_R,
-    spec_path: Path = DEFAULT_SPEC,
-    scene_path: Path = DEFAULT_SCENE,
     vmin: float = 33.33,
     vmax: float = 80.0,
     palette_name: str = "magma",
-    force_rerender_heatmaps: bool = False,
-    force_rerender_panels: bool = False,
     signal_branch: str | None = None,
     subregion_names: dict[int, str] | None = None,
 ) -> tuple[Path, Path]:
-    """Render dominant atlas panel and dominance heatmap panel using Workbench."""
+    """Render dominant atlas and dominance heatmap panels using BrainSpace."""
     cache_tag = f"{variant}_{signal_branch}" if signal_branch else variant
     display_names = subregion_names or SUBREGION_NAMES
     network_names = (
@@ -1690,94 +1638,54 @@ def render_cohort_panels(
         / f"wb_{cohort_key}_{smoothing}_{cache_tag}_dominance_heatmap_tight4view.png"
     )
 
-    # 1. Render Dominant Subregion Atlas
-    if atlas_cached.is_file() and not force_rerender_panels:
-        atlas_comp_path = atlas_cached
-    else:
-        lbl_l_path = (
-            scratch_dir / f"lbl_{cohort_key}_{smoothing}_{cache_tag}_hemi-L.label.gii"
-        )
-        lbl_r_path = (
-            scratch_dir / f"lbl_{cohort_key}_{smoothing}_{cache_tag}_hemi-R.label.gii"
-        )
-        nib.save(
-            make_network_label_gifti(
-                labels=dominant_labels["L"],
-                network_names=network_names,
-                network_colors=network_colors,
-            ),
-            str(lbl_l_path),
-        )
-        nib.save(
-            make_network_label_gifti(
-                labels=dominant_labels["R"],
-                network_names=network_names,
-                network_colors=network_colors,
-            ),
-            str(lbl_r_path),
-        )
+    # Render the atlas with the current hippocampal renderer.
+    lbl_l_path = (
+        scratch_dir / f"lbl_{cohort_key}_{smoothing}_{cache_tag}_hemi-L.label.gii"
+    )
+    lbl_r_path = (
+        scratch_dir / f"lbl_{cohort_key}_{smoothing}_{cache_tag}_hemi-R.label.gii"
+    )
+    nib.save(
+        make_network_label_gifti(
+            labels=dominant_labels["L"],
+            network_names=network_names,
+            network_colors=network_colors,
+        ),
+        str(lbl_l_path),
+    )
+    nib.save(
+        make_network_label_gifti(
+            labels=dominant_labels["R"],
+            network_names=network_names,
+            network_colors=network_colors,
+        ),
+        str(lbl_r_path),
+    )
 
-        render_res = render_locked_grid(
-            subject="1001",
-            scene=scene_path,
-            outdir=scratch_dir / f"atlas_{cohort_key}_{smoothing}_{cache_tag}",
-            name=f"dominant_atlas_{cohort_key}_{smoothing}_{cache_tag}",
-            title=f"Dominant Atlas | {cohort_key} {smoothing} {cache_tag}",
-            left_labels=lbl_l_path,
-            right_labels=lbl_r_path,
-            left_surface=surf_l,
-            right_surface=surf_r,
-            spec_path=spec_path,
-        )
-        native_png = Path(render_res["native_scene_png"])
-        atlas_comp = build_tight_4view_composite(Image.open(native_png).convert("RGBA"))
-        atlas_comp.save(atlas_cached)
-        atlas_comp_path = atlas_cached
+    render_res = render_hippocampal_grid(
+        subject="1001",
+        outdir=scratch_dir / f"atlas_{cohort_key}_{smoothing}_{cache_tag}",
+        name=f"dominant_atlas_{cohort_key}_{smoothing}_{cache_tag}",
+        title=f"Dominant Atlas | {cohort_key} {smoothing} {cache_tag}",
+        left_labels=lbl_l_path,
+        right_labels=lbl_r_path,
+        left_surface=surf_l,
+        right_surface=surf_r,
+    )
+    native_png = Path(render_res["surface_png"])
+    atlas_comp = build_tight_4view_composite(Image.open(native_png).convert("RGBA"))
+    atlas_comp.save(atlas_cached)
+    atlas_comp_path = atlas_cached
 
-    # 2. Render Dominance Heatmap
-    if heatmap_cached.is_file() and not force_rerender_heatmaps:
-        heatmap_comp_path = heatmap_cached
-    else:
-        shp_l_path = (
-            scratch_dir / f"shape_{cohort_key}_{smoothing}_{cache_tag}_hemi-L.shape.gii"
-        )
-        shp_r_path = (
-            scratch_dir / f"shape_{cohort_key}_{smoothing}_{cache_tag}_hemi-R.shape.gii"
-        )
-        save_shape_gii(dominance_pcts["L"], shp_l_path)
-        save_shape_gii(dominance_pcts["R"], shp_r_path)
-
-        apply_heatmap_metric_palette(shp_l_path, palette_name, vmin=vmin, vmax=vmax)
-        apply_heatmap_metric_palette(shp_r_path, palette_name, vmin=vmin, vmax=vmax)
-
-        metric_scene_root = build_scene_root(
-            scene_path=scene_path,
-            template_subject="1001",
-            left_surface=surf_l,
-            right_surface=surf_r,
-            spec_path=spec_path,
-            left_shape=shp_l_path,
-            right_shape=shp_r_path,
-            vmin=vmin,
-            vmax=vmax,
-            palette_name=palette_name,
-        )
-
-        metric_native_png = (
-            scratch_dir / f"metric_{cohort_key}_{smoothing}_{cache_tag}_native.png"
-        )
-        _capture_scene_root(
-            root=metric_scene_root,
-            out_png=metric_native_png,
-            width=1600,
-            height=1024,
-            renderer="OSMesa",
-        )
-        heatmap_comp = build_tight_4view_composite(
-            Image.open(metric_native_png).convert("RGBA")
-        )
-        heatmap_comp.save(heatmap_cached)
-        heatmap_comp_path = heatmap_cached
+    metric_native_png = scratch_dir / f"metric_{cohort_key}_{smoothing}_{cache_tag}_native.png"
+    render_hippocampal_metric(
+        left_surface=surf_l, right_surface=surf_r,
+        left_values=dominance_pcts["L"], right_values=dominance_pcts["R"],
+        output_path=metric_native_png, cmap=palette_name, color_range=(vmin, vmax),
+    )
+    heatmap_comp = build_tight_4view_composite(Image.open(metric_native_png).convert("RGBA"))
+    heatmap_comp.save(heatmap_cached)
+    heatmap_comp_path = heatmap_cached
 
     return atlas_comp_path, heatmap_comp_path
 
@@ -2938,8 +2846,6 @@ def render_branch_outputs_ttest(
     out_dir: Path,
     repo_root: Path,
     data_root: Path,
-    force_heatmaps: bool,
-    force_rerender_panels: bool,
 ) -> None:
     """Branch t-test figures (formal): 2mm/36P standard/ctxreg, dual dataset.
 
@@ -2964,8 +2870,10 @@ def render_branch_outputs_ttest(
         "surf_l": STANFORD_SURF_L,
         "surf_r": STANFORD_SURF_R,
     }
-    scene_path = repo_root / "config" / "wb_locked_native_view_lateral_medial.scene"
-    required_inputs = {"scene": scene_path, **surface_paths, **{f"stan_{k}": v for k, v in stan_surface_paths.items()}}
+    required_inputs = {
+        **{k: v for k, v in surface_paths.items() if k != "spec"},
+        **{f"stan_{k}": v for k, v in stan_surface_paths.items() if k != "spec"},
+    }
     for label, path in required_inputs.items():
         if not path.is_file():
             raise FileNotFoundError(f"Missing branch-render input {label}: {path}")
@@ -3019,10 +2927,6 @@ def render_branch_outputs_ttest(
                 scratch_dir=scratch_dir,
                 surf_l=surfaces["surf_l"],
                 surf_r=surfaces["surf_r"],
-                spec_path=surfaces["spec"],
-                scene_path=scene_path,
-                force_rerender_heatmaps=force_heatmaps,
-                force_rerender_panels=force_rerender_panels,
                 signal_branch=data_branch,
                 subregion_names=names,
             )
@@ -3237,23 +3141,13 @@ def main() -> None:
         "--repo-root",
         type=Path,
         default=REPO_ROOT,
-        help="Formal repository root for manifests, scenes, and code.",
+        help="Formal repository root for manifests and code.",
     )
     parser.add_argument(
         "--data-root",
         type=Path,
         default=REPO_ROOT,
         help="Explicit data root containing outputs_iowa_jj_tms.",
-    )
-    parser.add_argument(
-        "--clean-cache",
-        action="store_true",
-        help="Force re-rendering of all intermediate panel composites.",
-    )
-    parser.add_argument(
-        "--force-heatmaps",
-        action="store_true",
-        help="Force re-rendering of dominance heatmap panels with updated contrast settings.",
     )
     args = parser.parse_args()
 
@@ -3270,8 +3164,6 @@ def main() -> None:
             out_dir=args.output_dir,
             repo_root=args.repo_root,
             data_root=args.data_root,
-            force_heatmaps=args.clean_cache or args.force_heatmaps,
-            force_rerender_panels=args.clean_cache,
         )
         print(f"\nCompleted {len(selected_branches)} t-test branch figure(s).")
         return
@@ -3285,8 +3177,6 @@ def main() -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     panels_dir = out_dir / "panels"
     panels_dir.mkdir(parents=True, exist_ok=True)
-
-    force_heatmaps = args.clean_cache or args.force_heatmaps
 
     grid_roots = {
         "36p": DEFAULT_36P_ROOT,
@@ -3326,7 +3216,6 @@ def main() -> None:
                     dominance_pcts=dom_pcts,
                     panels_dir=panels_dir,
                     scratch_dir=scratch_dir,
-                    force_rerender_heatmaps=force_heatmaps,
                 )
 
                 cohort_results.append(

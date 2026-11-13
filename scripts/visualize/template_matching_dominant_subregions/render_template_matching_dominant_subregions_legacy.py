@@ -50,7 +50,7 @@ for p in (CORE_DIR, VIS_LIB_DIR):
     if str(p) not in sys.path:
         sys.path.insert(0, str(p))
 
-from lib.surface_utils import render_locked_grid, make_network_label_gifti
+from lib.surface_utils import render_hippocampal_grid, make_network_label_gifti
 
 from lib.workbench_scene_batch import (
     save_shape_gii, build_scene_root, capture_scene_root as _capture_scene_root,
@@ -179,10 +179,10 @@ def build_tight_4view_composite(native_im: Image.Image) -> Image.Image:
         return img.crop((cmin, rmin, cmax + 1, rmax + 1))
 
     # Top: Front (Lateral), Bottom: Back (Medial)
-    v_l_front = trim_b(Image.fromarray(arr[0:512, 0:800]))
-    v_r_front = trim_b(Image.fromarray(arr[0:512, 800:1600]))
-    v_l_back  = trim_b(Image.fromarray(arr[512:1024, 0:800]))
-    v_r_back  = trim_b(Image.fromarray(arr[512:1024, 800:1600]))
+    v_l_front = trim_b(Image.fromarray(arr[: arr.shape[0] // 2, : arr.shape[1] // 2]))
+    v_r_front = trim_b(Image.fromarray(arr[: arr.shape[0] // 2, arr.shape[1] // 2 :]))
+    v_l_back  = trim_b(Image.fromarray(arr[arr.shape[0] // 2 :, : arr.shape[1] // 2]))
+    v_r_back  = trim_b(Image.fromarray(arr[arr.shape[0] // 2 :, arr.shape[1] // 2 :]))
 
     target_h = max(v_l_front.height, v_r_front.height, v_l_back.height, v_r_back.height)
 
@@ -372,9 +372,8 @@ def render_cohort_panels(
             str(lbl_r_path),
         )
 
-        render_res = render_locked_grid(
+        render_res = render_hippocampal_grid(
             subject="1001",
-            scene=scene_path,
             outdir=scratch_dir / f"atlas_{cohort_key}_{smoothing}_{variant}",
             name=f"dominant_atlas_{cohort_key}_{smoothing}_{variant}",
             title=f"Dominant Atlas | {cohort_key} {smoothing} {variant}",
@@ -382,9 +381,8 @@ def render_cohort_panels(
             right_labels=lbl_r_path,
             left_surface=surf_l,
             right_surface=surf_r,
-            spec_path=spec_path,
         )
-        native_png = Path(render_res["native_scene_png"])
+        native_png = Path(render_res["surface_png"])
         atlas_comp = build_tight_4view_composite(Image.open(native_png).convert("RGBA"))
         atlas_comp.save(atlas_cached)
         atlas_comp_path = atlas_cached

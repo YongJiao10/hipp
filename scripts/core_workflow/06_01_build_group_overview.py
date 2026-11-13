@@ -17,7 +17,6 @@ Inputs:
   - --methods: Parcellation methods to process: "intrinsic-spectral", "network-spectral", "gradient-spectral", "gradient-ward", "gradient-gmm", "gradient-spectral-rbf", "wta-top".
   - --atlases: Cortical atlases to process (default: Kong2022); Lynch2024 atlases support gradient-spectral and direct-network wta-top.
   - --coverage-threshold: Selected coverage threshold for overview outputs (default: 0.80).
-  - --scene: Path to standard wb scene template file.
   - --route-tag: Custom workflow branch tag to override automatic detection.
   - --mode-tag: Optional explicit overview label override (default: none). No automatic sparse/full inference is performed; all maintained formal runs are full.
   - --assignment-variant: Network mapping variant: "fisherz", "normalized_top20_count", "network_ts_fisherz", "ovr_logistic_canonical7", "ovr_logistic_family17", or "both" (default: "both").
@@ -57,7 +56,7 @@ from lib.output_layout import DEFAULT_OVERVIEWS_DIR, DEFAULT_ROUTEA_GROUP_ATLAS_
 from lib.template_assets import validate_template_assets
 from lib.route_tags import ROUTE_TAG_CHOICES, infer_route_tag_from_group_root, validate_group_atlas_root_for_route
 from lib.workflow_utils import write_json
-from lib.surface_utils import equal_vertex_long_axis_bins, long_axis_order, render_locked_grid, network_color_map
+from lib.surface_utils import equal_vertex_long_axis_bins, long_axis_order, render_hippocampal_grid, network_color_map
 from lib.io_utils import load_json
 from lib.group_atlas_lineage import validate_group_atlas_lineage
 from lib.cluster_roi_profile_contract import (
@@ -74,7 +73,7 @@ from lib.gifti_labels import (
     make_named_label_gifti,
     materialize_combo,
 )
-from lib.network_colors import load_network_hex_colors
+from lib.network_colors import NETWORK_DISPLAY_NAMES, load_network_hex_colors
 from lib.gradient_assignment_contract import validate_gradient_assignment, sha256_file
 from lib.gradient_clustering import is_gradient_method, validate_gradient_method_provenance
 try:
@@ -93,7 +92,6 @@ from lib.surface_affinity import (
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_GROUP_ROOT = DEFAULT_ROUTEA_GROUP_ATLAS_ROOT
 DEFAULT_PRESENT_DIR = DEFAULT_OVERVIEWS_DIR
-DEFAULT_SCENE = REPO_ROOT / "config" / "wb_locked_native_view_lateral_medial.scene"
 CORTEX_SCENE = REPO_ROOT / "config" / "manual_wb_scenes" / "cortex_manual.scene"
 CORTEX_DATA_ROOT = REPO_ROOT / "data" / "hippunfold_input"
 CORTEX_DISPLAY_SUBJECT = "100610"
@@ -324,6 +322,7 @@ def overview_manifest_item(
         "cluster_annotation_reference_root",
         "assignment_annotation_note",
         "cluster_cortex_fc_column",
+        "hippocampal_renderer",
     ):
         if key in meta:
             item[key] = meta[key]
@@ -514,15 +513,6 @@ def load_network_bar_colors() -> dict[str, str]:
 
 
 NETWORK_BAR_COLORS = load_network_bar_colors()
-
-# Canonical display names; leave atlas-native labels and subnetwork names intact.
-NETWORK_DISPLAY_NAMES = {
-    "Default": "DMN", "Visual": "VN", "Somatomotor": "SMN",
-    "DorsalAttention": "DAN", "VentralAttention": "VAN",
-    "Control": "CON", "Language": "LAN", "Auditory": "AUD",
-    "Limbic": "LIM", "CinguloOpercular": "CO",
-}
-
 
 def network_display_name(name: str) -> str:
     return NETWORK_DISPLAY_NAMES.get(name, name)
@@ -1624,7 +1614,6 @@ def render_combo(
     method: str,
     atlas: str,
     coverage_tag: str,
-    scene: Path,
     route_tag: str | None,
     mode_tag: str | None,
     assignment_variant: str | None = None,
@@ -1881,9 +1870,8 @@ def render_combo(
                 )
             else:
                 with tempfile.TemporaryDirectory(prefix="present_group_surface_render_", dir=REPO_ROOT / "tmp") as tmp:
-                    render = render_locked_grid(
+                    render = render_hippocampal_grid(
                         subject=template_subject,
-                        scene=scene,
                         outdir=Path(tmp),
                         name=f"merged_group_vertex_wta_{method}_{atlas}_{smoothing}",
                         title=f"{str(overview_scope).strip() or 'Group'} functional atlas {method} {atlas} {smoothing} {surface_assignment_title}",
@@ -1891,7 +1879,6 @@ def render_combo(
                         right_labels=right_label,
                         left_surface=surf_l,
                         right_surface=surf_r,
-                        spec_path=spec_path,
                         legend_display_names=NETWORK_DISPLAY_NAMES,
                     )
                     big = Path(str(render["biglegend_png"]))
@@ -2221,9 +2208,8 @@ def render_combo(
             )
         else:
             with tempfile.TemporaryDirectory(prefix="present_group_surface_render_", dir=REPO_ROOT / "tmp") as tmp:
-                render = render_locked_grid(
+                render = render_hippocampal_grid(
                     subject=template_subject,
-                    scene=scene,
                     outdir=Path(tmp),
                     name=f"merged_group_cluster_wta_{method}_{atlas}_{smoothing_val}",
                     title=f"{str(overview_scope).strip() or 'Group'} functional atlas {method} {atlas} {smoothing_val} {surface_assignment_title}",
@@ -2231,7 +2217,6 @@ def render_combo(
                     right_labels=right_label,
                     left_surface=surf_l,
                     right_surface=surf_r,
-                    spec_path=spec_path,
                     legend_display_names=NETWORK_DISPLAY_NAMES,
                 )
                 big = Path(str(render["biglegend_png"]))
@@ -2343,6 +2328,7 @@ def render_combo(
             "overview_png_sha256": sha256_file(out_png),
             "method": str(method),
             "atlas": str(atlas),
+            "hippocampal_renderer": "brainspace_hippocampal_grid",
             **assignment_metadata,
             "source_manifests": [str(path.resolve()) for path in manifest_paths],
             "assignment_assets": assignment_assets,
@@ -2358,6 +2344,7 @@ def render_combo(
         "assignment_annotation_note": assignment_annotation_note,
         "assignment_assets": assignment_assets,
         "cluster_cortex_fc_column": bool(cortex_profiles),
+        "hippocampal_renderer": "brainspace_hippocampal_grid",
         **assignment_metadata,
         **source_provenance,
     }
@@ -2515,7 +2502,6 @@ def main() -> int:
     )
     p.add_argument("--atlases", nargs="+", default=DEFAULT_ATLASES)
     p.add_argument("--coverage-threshold", type=float, default=0.80)
-    p.add_argument("--scene", default=str(DEFAULT_SCENE))
     p.add_argument("--route-tag", choices=ROUTE_TAG_CHOICES, default=None)
     p.add_argument("--mode-tag", default=None)
     p.add_argument(
@@ -2638,7 +2624,6 @@ def main() -> int:
                         method=method,
                         atlas=atlas,
                         coverage_tag=tau_tag,
-                        scene=Path(args.scene).resolve(),
                         route_tag=args.route_tag,
                         mode_tag=args.mode_tag,
                         assignment_variant=(

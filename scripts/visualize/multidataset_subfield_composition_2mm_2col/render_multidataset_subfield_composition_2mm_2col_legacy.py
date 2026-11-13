@@ -46,7 +46,7 @@ for p in (CORE_DIR, VIS_LIB_DIR):
     if str(p) not in sys.path:
         sys.path.insert(0, str(p))
 
-from lib.surface_utils import render_locked_grid
+from lib.surface_utils import render_hippocampal_grid
 from surface_panel_cache import panel_inputs, cache_matches, publish_cache
 from multidataset_cohorts import (
     COMPARISON_METHODS,
@@ -322,9 +322,8 @@ def render_cohort_surface_img(
         return Image.open(cached_png).convert('RGB')
 
     render_out = render_tmp_dir / f"wb_subfield_{cache_prefix}{ds_clean}_{cname_clean}_{atlas_tag}{smoothing}_{variant}"
-    render = render_locked_grid(
+    render = render_hippocampal_grid(
         subject=subject,
-        scene=REPO_ROOT / "config/wb_locked_native_view_lateral_medial.scene",
         outdir=render_out,
         name=f"k3_subfields_{cache_prefix}{cname_clean}_{smoothing}_{variant}",
         title=f"{cinfo['dataset_name']} {cinfo['cohort_name']}",
@@ -332,9 +331,8 @@ def render_cohort_surface_img(
         right_labels=lbl_r,
         left_surface=surf_l,
         right_surface=surf_r,
-        spec_path=spec_path,
     )
-    native_png = Path(render["native_scene_png"])
+    native_png = Path(render["surface_png"])
     im_native = Image.open(native_png).convert("RGBA")
     grid = build_grid_canvas(ventral=im_native, dorsal=None, layout="1x2")
     grid_rgb = grid.convert("RGB")

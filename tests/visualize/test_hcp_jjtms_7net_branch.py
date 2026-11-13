@@ -440,14 +440,14 @@ def test_wta_surface_cache_rerenders_when_source_label_changes(tmp_path, monkeyp
         )
 
     calls = []
-    def fake_render_locked_grid(**kwargs):
+    def fake_render_hippocampal_grid(**kwargs):
         calls.append(kwargs)
         png_path = kwargs["outdir"] / f"sub-100610_wb_{kwargs['name']}_biglegend.png"
         png_path.parent.mkdir(parents=True, exist_ok=True)
         renderer.Image.new("RGBA", (8, 8), "white").save(png_path)
         return {"biglegend_png": str(png_path)}
 
-    monkeypatch.setattr(renderer, "render_locked_grid", fake_render_locked_grid)
+    monkeypatch.setattr(renderer, "render_hippocampal_grid", fake_render_hippocampal_grid)
     cohort_entry = {
         "dataset_name": "HCP 7T",
         "cohort_name": "HCP 7T",
@@ -845,7 +845,7 @@ def test_workbench_comparison_contract_keeps_locked_3d_rendering():
         / "scripts/visualize/multidataset_workbench_hippocampus_overlay/"
         "render_multidataset_workbench_hippocampus_overlay.py"
     ).read_text(encoding="utf-8")
-    assert "render_locked_grid" in source
+    assert "render_hippocampal_grid" in source
     assert "np.vstack([left, right])" not in source
     assert "load_cohort_data_and_render_wb" in source
 

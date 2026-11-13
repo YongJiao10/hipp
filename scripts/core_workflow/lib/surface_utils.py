@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 
@@ -9,12 +10,10 @@ import numpy as np
 from nibabel.gifti import GiftiDataArray, GiftiImage, GiftiLabel, GiftiLabelTable
 
 from lib.workbench_grid import compose_wb_grid_with_legend
-from lib.workbench_scene_batch import render_scene_batch
-from lib.network_colors import GLOBAL_NETWORK_STYLE_JSON, load_network_colors
+from lib.network_colors import GLOBAL_NETWORK_STYLE_JSON, NETWORK_DISPLAY_NAMES, load_network_colors
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 NETWORK_STYLE_JSON = GLOBAL_NETWORK_STYLE_JSON
-DEFAULT_SCENE = REPO_ROOT / "config" / "wb_locked_native_view_lateral_medial.scene"
 
 
 def infer_density_from_surface(path: Path) -> str:
@@ -115,10 +114,9 @@ def make_network_label_gifti(
     return GiftiImage(darrays=[arr], labeltable=table)
 
 
-def render_locked_grid(
+def render_hippocampal_grid(
     *,
     subject: str,
-    scene: Path,
     outdir: Path,
     name: str,
     title: str,
@@ -126,29 +124,54 @@ def render_locked_grid(
     right_labels: Path,
     left_surface: Path,
     right_surface: Path,
-    spec_path: Path,
     legend_display_names: dict[str, str] | None = None,
 ) -> dict[str, str]:
+    """Render the selected subject surfaces and label GIFTIs with BrainSpace."""
+    os.environ.setdefault("LP_NUM_THREADS", "1")
+    os.environ.setdefault("VTK_SMP_MAX_THREADS", "1")
+    from brainspace.mesh.mesh_io import read_surface
+    from brainspace.plotting import plot_surf
+    from matplotlib.colors import ListedColormap
+
     outdir.mkdir(parents=True, exist_ok=True)
-    native_root = outdir / "native"
-    native_root.mkdir(parents=True, exist_ok=True)
-    render_scene_batch(
-        scene=scene,
-        subjects=[subject],
-        outdir=native_root / "batch",
-        scene_index=1,
-        width=1600,
-        height=1024,
-        renderer="OSMesa",
-        name=f"{name}_native",
-        no_template_scene=True,
-        left_label_template=str(left_labels),
-        right_label_template=str(right_labels),
-        left_surface_template=str(left_surface),
-        right_surface_template=str(right_surface),
-        spec_template=str(spec_path),
+    surfaces = {}
+    tables = {}
+    for hemi, surface_path, label_path in (
+        ("L", left_surface, left_labels), ("R", right_surface, right_labels)
+    ):
+        surface = read_surface(str(surface_path))
+        label_image = nib.load(str(label_path))
+        values = np.asarray(label_image.darrays[0].data)
+        if values.ndim != 1 or values.size != surface.n_points:
+            raise ValueError(f"Label/surface vertex mismatch: {label_path} and {surface_path}")
+        table = {int(label.key): tuple(float(c) for c in label.rgba)
+                 for label in label_image.labeltable.labels}
+        missing = set(np.unique(values).astype(int)) - set(table)
+        if missing:
+            raise ValueError(f"Label table in {label_path} is missing keys {sorted(missing)}")
+        surface.append_array(values.astype(np.float32), name="network", at="point")
+        surfaces[hemi], tables[hemi] = surface, table
+
+    min_key = min(min(table) for table in tables.values())
+    max_key = max(max(table) for table in tables.values())
+    cmaps = {
+        hemi: ListedColormap([tables[hemi].get(key, (0, 0, 0, 0))
+                              for key in range(min_key, max_key + 1)])
+        for hemi in ("L", "R")
+    }
+    native_png = outdir / f"sub-{subject}_{name}_surface.png"
+    plotter = plot_surf(
+        surfaces, [["L", "R"], ["L", "R"]], array_name="network",
+        view=[["dorsal", "dorsal"], ["ventral", "ventral"]],
+        cmap=[[cmaps["L"], cmaps["R"]], [cmaps["L"], cmaps["R"]]],
+        color_range=(min_key - 0.5, max_key + 0.5), zoom=1.1,
+        size=(1600, 1024), background=(1, 1, 1), offscreen=True,
+        mapper__interpolateScalarsBeforeMapping=False, return_plotter=True,
     )
-    native_png = native_root / "batch" / f"sub-{subject}" / f"sub-{subject}_wb_{name}_native_native.png"
+    try:
+        plotter.screenshot(str(native_png), transparent_bg=False, scale=(2, 2))
+    finally:
+        plotter.close()
     final_png = outdir / f"sub-{subject}_wb_{name}_biglegend.png"
     compose_wb_grid_with_legend(
         ventral_image=native_png,
@@ -156,11 +179,47 @@ def render_locked_grid(
         left_labels=left_labels,
         right_labels=right_labels,
         legend_group="label",
-        legend_display_names=legend_display_names,
+        legend_display_names=legend_display_names or NETWORK_DISPLAY_NAMES,
         title=title,
         out=final_png,
+        scale=2,
+        adaptive_legend=True,
     )
-    return {"native_scene_png": str(native_png), "biglegend_png": str(final_png)}
+    return {"surface_png": str(native_png), "biglegend_png": str(final_png)}
+
+
+def render_hippocampal_metric(
+    *, left_surface: Path, right_surface: Path,
+    left_values: np.ndarray, right_values: np.ndarray,
+    output_path: Path, cmap: str, color_range: tuple[float, float],
+) -> Path:
+    """Render continuous vertex values on the same four-view hippocampal layout."""
+    os.environ.setdefault("LP_NUM_THREADS", "1")
+    os.environ.setdefault("VTK_SMP_MAX_THREADS", "1")
+    from brainspace.mesh.mesh_io import read_surface
+    from brainspace.plotting import plot_surf
+
+    surfaces = {}
+    for hemi, path, values in (("L", left_surface, left_values), ("R", right_surface, right_values)):
+        surface = read_surface(str(path))
+        array = np.asarray(values, dtype=np.float32)
+        if array.ndim != 1 or array.size != surface.n_points:
+            raise ValueError(f"Metric/surface vertex mismatch: {path}")
+        surface.append_array(array, name="metric", at="point")
+        surfaces[hemi] = surface
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    plotter = plot_surf(
+        surfaces, [["L", "R"], ["L", "R"]], array_name="metric",
+        view=[["dorsal", "dorsal"], ["ventral", "ventral"]], cmap=cmap,
+        color_range=color_range, zoom=1.1, size=(1600, 1024),
+        background=(1, 1, 1), offscreen=True, return_plotter=True,
+    )
+    try:
+        plotter.screenshot(str(output_path), transparent_bg=False, scale=(2, 2))
+    finally:
+        plotter.close()
+    return output_path
 
 
 def read_surface_vertex_count(surface_path: Path) -> int:

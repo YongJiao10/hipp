@@ -303,7 +303,6 @@ def test_invalid_gradient_provenance_fails_before_figure_creation(
             method="gradient-spectral",
             atlas="kong2022",
             coverage_tag="cov_0p80",
-            scene=tmp_path / "scene",
             route_tag="routea",
             mode_tag=None,
             assignment_variant="fisherz",

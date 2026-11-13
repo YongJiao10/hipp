@@ -79,10 +79,13 @@ After all five fold templates exist, render the quantitative robustness review:
 
 ```bash
 /home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/01_02_validate_hcp_crossfit_robustness.py
-/home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/03_02_render_hcp_crossfit_folds_comparison.py
+/home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/01_03_run_and_render_hcp_crossfit_disjoint_folds.py
 ```
 
-The overview steps are intentionally modular: `03_01` is the group-level five-fold quantitative QC report (`robustness_summary.tsv` and `robustness_manifest.json`), `03_02` renders the direct five-fold 3D Workbench hippocampal surface parcellation comparison (`hcp_routea_crossfit_k3_five_folds_workbench_comparison.png`), while `04_01` renders one subject-level Workbench comparison PNG per held-out subject. They consume related artifacts but answer different review questions.
+The overview steps are modular: `01_02` produces the group-level five-fold
+quantitative QC report, `01_03` fits and renders a disjoint-fold comparison,
+and `02_01` renders one subject-level BrainSpace PNG per held-out subject.
+They consume related artifacts but answer different review questions.
 
 All commands accept explicit root overrides. Run `--help` for the complete
 interface. The default production combinations are 2 mm and 4 mm smoothing,
@@ -93,7 +96,7 @@ explicit QC roster selected by `--subjects-manifest`, defaulting to the current
 Kong2022 QC pass list. Retained reference directories do not determine analysis
 participation. Rebuild its session templates when the declared cohort changes.
 
-Render one compact 2 mm/4 mm standard-Workbench hippocampal figure per subject. To
+Render one compact 2 mm/4 mm BrainSpace hippocampal figure per subject. To
 replace the existing AP-labelled PNGs with the Fisher-z network display, use the
 explicit refresh request:
 
@@ -156,7 +159,7 @@ outputs_hcp/present/overviews/crossfit_template_matching/
   splithalf_2x2_robustness_summary.tsv
 ```
 
-The 3D Workbench overviews provide direct qualitative and quantitative
+The 3D hippocampal overviews provide direct qualitative and quantitative
 verification of template stability:
 - `01_03_run_and_render_hcp_crossfit_disjoint_folds.py`: independently fits and
   renders K=3 gradient-spectral templates for all 5 completely disjoint cohorts
@@ -176,7 +179,7 @@ verification of template stability:
 The individual surface renderer writes one compact PNG per subject under
 `outputs_hcp/present/overviews/crossfit_template_matching/individual/`, alongside
 `individual_overview_status.tsv`, `individual_overview_manifest.json`, and
-`network_label_mapping.json`. Each PNG has the fixed 2 mm locked-Workbench
+`network_label_mapping.json`. Each PNG has the fixed 2 mm BrainSpace
 hippocampal rendering above the fixed 4 mm rendering; single-smoothing and
 reversed-order requests are rejected. The composite header wraps before the subject
 identifier when needed, so the full `sub-…` title remains visible. Each row preserves
@@ -193,7 +196,7 @@ for each code in every template. The validated current mapping is
 stable in all 20 templates. It keeps compact names but uses canonical Kong2022
 style keys: VAN/VentralAttention `(220,92,255,255)`, SMN/Somatomotor
 `(99,150,194,255)`, and DMN/Default `(216,92,107,255)`. Scratch GIFTIs preserve the original int32 label codes but
-replace only their legend names/colors for Workbench; cross-fit source artifacts
+replace only their legend names/colors for rendering; cross-fit source artifacts
 are never modified. `network_label_mapping.json` records the template
 fingerprints, per-network Fisher-z means, stable mapping, colors, and a display
 contract fingerprint.
@@ -204,7 +207,7 @@ SHA-256 fingerprint, the exact subject/hemi den-512 consumed surface name, its
 recorded input fingerprint, surface point count, locked Workbench scene SHA-256,
 all template-profile fingerprints, and the display contract. Final PNGs are
 atomically published. Plain `--resume` decodes the existing PNG and requires an
-identical scene path/fingerprint, source-row record, saved image fingerprint, and
+identical scene path/fingerprint, source-row record, saved image fingerprint, renderer identity, and
 visual-label contract before reuse. A legacy AP-labelled or otherwise
 visual-contract-mismatched PNG is not silently overwritten; use
 `--resume --refresh-visuals` to replace it atomically. The aggregate items list

@@ -17,7 +17,7 @@ Any other missing declaration is an error, not a Standard substitute.
 
 The overlay consumes only the exact Fisher-z assignment files declared by
 each hemisphere manifest and the canonical group_labels_final.npy. The
-manifest-declared label assets are validated before Workbench rendering, and
+manifest-declared label assets are validated before BrainSpace rendering, and
 the branch is part of the panel provenance fingerprint and filename. This
 keeps the PNG, TSV, cache sidecar, and manifest-selected labels on the same
 signal branch.
@@ -25,7 +25,7 @@ signal branch.
 The active renderer entry point requires signal_branch explicitly; the
 historical legacy wrapper remains independently maintained and is not changed
 by this branch-aware implementation.
-The `hcp_jjtms_7net` branch adds Kong2022 7-Network and Lynch2024 7-Network method columns while retaining the original Workbench surface panels, dataset bands, side labels, and layout. It uses the fixed common roster HCP 7T `N=151`, Iowa HC `N=67`, Iowa Patient `N=26` (sub-3003 excluded), Pure MDD `N=7`, and Comorbid MDD `N=19`; Stanford is excluded from this comparison branch only. For the 2mm/36p standard and ctxreg cells, the suite additionally passes the WTA `--tm-contrast-manifest`, which renders a third template-matching column (TM Hippo Atlas + its left/right 512-vertex composition card for Anterior/VAN, Middle/SMN, and Posterior/DMN). The overlay does not recompute or substitute the TM atlas image: it consumes the exact WTA TM atlas PNG and its declared TM label GIFTIs from `multidataset_hipp_cortex_gradient_wta/panels/`, derives the vertex counts from those labels, and fails closed if an exact source is missing. HCP 7T has no TM dominant atlas and renders blank in that column; Lynch2024 has no TM atlas and is never substituted — the TM column follows the Kong2022 cohort roster.
+The `hcp_jjtms_7net` branch adds Kong2022 7-Network and Lynch2024 7-Network method columns while retaining the BrainSpace surface panels, dataset bands, side labels, and layout. It uses the fixed common roster HCP 7T `N=151`, Iowa HC `N=67`, Iowa Patient `N=26` (sub-3003 excluded), Pure MDD `N=7`, and Comorbid MDD `N=19`; Stanford is excluded from this comparison branch only. For the 2mm/36p standard and ctxreg cells, the suite additionally passes the WTA `--tm-contrast-manifest`, which renders a third template-matching column (TM Hippo Atlas + its left/right 512-vertex composition card for Anterior/VAN, Middle/SMN, and Posterior/DMN). The overlay does not recompute or substitute the TM atlas image: it consumes the exact WTA TM atlas PNG and its declared TM label GIFTIs from `multidataset_hipp_cortex_gradient_wta/panels/`, derives the vertex counts from those labels, and fails closed if an exact source is missing. HCP 7T has no TM dominant atlas and renders blank in that column; Lynch2024 has no TM atlas and is never substituted — the TM column follows the Kong2022 cohort roster.
 
 ---
 
@@ -56,7 +56,7 @@ The `hcp_jjtms_7net` branch adds Kong2022 7-Network and Lynch2024 7-Network meth
 每个 Cohort Row 包含 3 个子卡片，全图字号针对 48 英寸宽屏进行深度优化：
 
 1. **Cohort Profile**：数据集徽标（21pt）、群组名称（21–26pt heavy）、样本量 $(N)$（19pt bold）与临床描述（13–14.5pt italic）。
-2. **3D Hippocampus Atlas**：Workbench 1x2 锁角原生视角（Lateral & Medial）表面图谱（等比例高精渲染）。
+2. **3D Hippocampus Atlas**：BrainSpace 1x2 原生视角（Lateral & Medial）表面图谱（等比例高精渲染）。
 3. **Subregion Vertex Composition & Networks (L & R)**：
    - 左右半球各自独立的标题栏（19.5pt heavy）。
    - 顶点比例堆叠横向条形图（Anterior / Middle / Posterior，标签文字 15.5pt heavy，带黑色轮廓描边）。
@@ -78,7 +78,7 @@ The `hcp_jjtms_7net` branch adds Kong2022 7-Network and Lynch2024 7-Network meth
 | **2mm 36P 统计表 (TSV)** | [`stats/multidataset_workbench_hippocampus_overlay_2mm_36p_vertex_stats.tsv`](file:///home/yojiao/hpchome/hipp/scripts/visualize/multidataset_workbench_hippocampus_overlay/stats/multidataset_workbench_hippocampus_overlay_2mm_36p_vertex_stats.tsv) | 12 群组左右半球三亚区顶点数与连接网络全量统计 |
 | **4mm 36P 主图 (220 DPI)** | [`multidataset_workbench_hippocampus_overlay_4mm_36p.png`](file:///home/yojiao/hpchome/hipp/scripts/visualize/multidataset_workbench_hippocampus_overlay/multidataset_workbench_hippocampus_overlay_4mm_36p.png) | 2 列 12 群组 4mm 36P 高清总览图（清晰大字号） |
 | **4mm 36P 统计表 (TSV)** | [`stats/multidataset_workbench_hippocampus_overlay_4mm_36p_vertex_stats.tsv`](file:///home/yojiao/hpchome/hipp/scripts/visualize/multidataset_workbench_hippocampus_overlay/stats/multidataset_workbench_hippocampus_overlay_4mm_36p_vertex_stats.tsv) | 12 群组左右半球三亚区顶点数与连接网络全量统计 |
-| **渲染脚本** | [`render_multidataset_workbench_hippocampus_overlay.py`](file:///home/yojiao/hpchome/hipp/scripts/visualize/multidataset_workbench_hippocampus_overlay/render_multidataset_workbench_hippocampus_overlay.py) | 自动化提取、Workbench 原生渲染与排版整合脚本（内置 `panels/` 持久缓存，再次运行微调无需重复调用 workbench） |
+| **渲染脚本** | [`render_multidataset_workbench_hippocampus_overlay.py`](file:///home/yojiao/hpchome/hipp/scripts/visualize/multidataset_workbench_hippocampus_overlay/render_multidataset_workbench_hippocampus_overlay.py) | 自动化提取、BrainSpace 渲染与排版整合脚本（内置 `panels/` 缓存） |
 
 ---
 

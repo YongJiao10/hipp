@@ -163,13 +163,13 @@ def test_fixed_overview_renderer_writes_two_rows_and_provenance(
     scene = tmp_path / "scene.scene"
     scene.write_text("scene-v1\n", encoding="utf-8")
 
-    def fake_render_locked_grid(**kwargs):
+    def fake_render_hippocampal_grid(**kwargs):
         output = Path(kwargs["outdir"]) / "fake.png"
         output.parent.mkdir(parents=True, exist_ok=True)
         Image.new("RGB", (120, 60), (20, 30, 40)).save(output, format="PNG")
         return {"biglegend_png": str(output)}
 
-    monkeypatch.setattr(workflow, "render_locked_grid", fake_render_locked_grid)
+    monkeypatch.setattr(workflow, "render_hippocampal_grid", fake_render_hippocampal_grid)
     outputs = workflow.render_fixed_template_overviews(
         matching_root=matching_root,
         output_dir=tmp_path / "present",
@@ -201,14 +201,14 @@ def test_fixed_overview_resume_is_immutable_and_detects_input_drift(
     scene.write_text("scene-v1\n", encoding="utf-8")
     calls = {"count": 0}
 
-    def fake_render_locked_grid(**kwargs):
+    def fake_render_hippocampal_grid(**kwargs):
         calls["count"] += 1
         output = Path(kwargs["outdir"]) / "fake.png"
         output.parent.mkdir(parents=True, exist_ok=True)
         Image.new("RGB", (120, 60), (20, 30, 40)).save(output, format="PNG")
         return {"biglegend_png": str(output)}
 
-    monkeypatch.setattr(workflow, "render_locked_grid", fake_render_locked_grid)
+    monkeypatch.setattr(workflow, "render_hippocampal_grid", fake_render_hippocampal_grid)
     output_dir = tmp_path / "present"
     outputs = workflow.render_fixed_template_overviews(
         matching_root=matching_root,
@@ -223,7 +223,7 @@ def test_fixed_overview_resume_is_immutable_and_detects_input_drift(
     png_bytes = png.read_bytes()
     monkeypatch.setattr(
         workflow,
-        "render_locked_grid",
+        "render_hippocampal_grid",
         lambda **kwargs: (_ for _ in ()).throw(AssertionError("rendered on resume")),
     )
 
@@ -262,6 +262,42 @@ def test_fixed_overview_rejects_duplicate_subject_request(tmp_path: Path):
     workflow = load_module()
     with pytest.raises(ValueError, match="duplicate"):
         workflow.normalize_subjects(["1001", "sub-1001"])
+
+
+def test_full_roster_visual_refresh_replaces_old_renderer_records(tmp_path, monkeypatch):
+    workflow = load_module()
+    monkeypatch.setattr(workflow, "EXPECTED_SUBJECT_COUNT", 1)
+    matching_root = tmp_path / "matching"
+    _write_fixed_subject(matching_root)
+    scene = tmp_path / "scene.scene"
+    scene.write_text("scene-v1\n", encoding="utf-8")
+    roster = tmp_path / "subjects.txt"
+    roster.write_text("1001\n", encoding="utf-8")
+    calls = []
+
+    def fake_render(**kwargs):
+        calls.append(kwargs["name"])
+        output = Path(kwargs["outdir"]) / "fake.png"
+        output.parent.mkdir(parents=True, exist_ok=True)
+        Image.new("RGB", (120, 60), (20, 30, 40)).save(output, format="PNG")
+        return {"biglegend_png": str(output)}
+
+    monkeypatch.setattr(workflow, "render_hippocampal_grid", fake_render)
+    args = dict(matching_root=matching_root, output_dir=tmp_path / "present",
+                scene=scene, subjects=["1001"], subjects_manifest=roster, jobs=1)
+    outputs = workflow.render_fixed_template_overviews(**args)
+    manifest = json.loads(outputs["manifest"].read_text())
+    manifest["items"][0]["renderer"] = "workbench"
+    outputs["manifest"].write_text(json.dumps(manifest))
+    item_path = workflow.overview_item_record_path(args["output_dir"], "1001")
+    item = json.loads(item_path.read_text())
+    item["renderer"] = "workbench"
+    item_path.write_text(json.dumps(item))
+
+    workflow.render_fixed_template_overviews(**args, resume=True, refresh_visuals=True)
+    assert len(calls) == 4
+    assert json.loads(item_path.read_text())["renderer"] == workflow.RENDERER
+    assert json.loads(outputs["manifest"].read_text())["items"][0]["renderer"] == workflow.RENDERER
 
 
 
@@ -536,13 +572,13 @@ def test_fixed_overview_resume_validates_status_tsv_fingerprint(
     scene = tmp_path / "scene.scene"
     scene.write_text("scene-v1\n", encoding="utf-8")
 
-    def fake_render_locked_grid(**kwargs):
+    def fake_render_hippocampal_grid(**kwargs):
         output = Path(kwargs["outdir"]) / "fake.png"
         output.parent.mkdir(parents=True, exist_ok=True)
         Image.new("RGB", (120, 60), (20, 30, 40)).save(output, format="PNG")
         return {"biglegend_png": str(output)}
 
-    monkeypatch.setattr(workflow, "render_locked_grid", fake_render_locked_grid)
+    monkeypatch.setattr(workflow, "render_hippocampal_grid", fake_render_hippocampal_grid)
     output_dir = tmp_path / "present"
     workflow.render_fixed_template_overviews(
         matching_root=matching_root,
@@ -576,13 +612,13 @@ def test_fixed_overview_recovers_atomic_aggregate_partials(
     scene = tmp_path / "scene.scene"
     scene.write_text("scene-v1\n", encoding="utf-8")
 
-    def fake_render_locked_grid(**kwargs):
+    def fake_render_hippocampal_grid(**kwargs):
         output = Path(kwargs["outdir"]) / "fake.png"
         output.parent.mkdir(parents=True, exist_ok=True)
         Image.new("RGB", (120, 60), (20, 30, 40)).save(output, format="PNG")
         return {"biglegend_png": str(output)}
 
-    monkeypatch.setattr(workflow, "render_locked_grid", fake_render_locked_grid)
+    monkeypatch.setattr(workflow, "render_hippocampal_grid", fake_render_hippocampal_grid)
     output_dir = tmp_path / "present"
     workflow.render_fixed_template_overviews(
         matching_root=matching_root,

@@ -55,7 +55,7 @@ for p in (CORE_DIR, VIS_LIB_DIR):
     if str(p) not in sys.path:
         sys.path.insert(0, str(p))
 
-from lib.surface_utils import long_axis_order, render_locked_grid
+from lib.surface_utils import long_axis_order, render_hippocampal_grid
 from multidataset_cohorts import GridSpec, GRID_VARIANTS
 
 # -----------------------------------------------------------------------------
@@ -354,10 +354,10 @@ def build_2x2_composite(native_im: Image.Image) -> Image.Image:
     the hippocampal 3D surface occupies the exact same vertical height as the stacked bars.
     """
     arr = np.array(native_im)
-    v_l_front = trim_bounding_box(Image.fromarray(arr[0:512, 0:800]))
-    v_r_front = trim_bounding_box(Image.fromarray(arr[0:512, 800:1600]))
-    v_l_back  = trim_bounding_box(Image.fromarray(arr[512:1024, 0:800]))
-    v_r_back  = trim_bounding_box(Image.fromarray(arr[512:1024, 800:1600]))
+    v_l_front = trim_bounding_box(Image.fromarray(arr[: arr.shape[0] // 2, : arr.shape[1] // 2]))
+    v_r_front = trim_bounding_box(Image.fromarray(arr[: arr.shape[0] // 2, arr.shape[1] // 2 :]))
+    v_l_back  = trim_bounding_box(Image.fromarray(arr[arr.shape[0] // 2 :, : arr.shape[1] // 2]))
+    v_r_back  = trim_bounding_box(Image.fromarray(arr[arr.shape[0] // 2 :, arr.shape[1] // 2 :]))
 
     target_h = max(v_l_front.height, v_r_front.height, v_l_back.height, v_r_back.height)
     scaled = []
@@ -443,7 +443,8 @@ def render_branch_surface_2x2(
             s_data = json.loads(sources_json.read_text(encoding="utf-8"))
             curr_sha = hashlib.sha256(cached_png.read_bytes()).hexdigest()
             if (
-                s_data.get("output_sha256") == curr_sha
+                s_data.get("renderer") == "brainspace_hippocampal_grid"
+                and s_data.get("output_sha256") == curr_sha
                 and s_data.get("left_label_sha256") == lbl_l_sha
                 and s_data.get("right_label_sha256") == lbl_r_sha
             ):
@@ -451,11 +452,10 @@ def render_branch_surface_2x2(
         except Exception:
             pass
 
-    # Render via Workbench locked scene
+    # Render the selected hippocampal surfaces with BrainSpace.
     render_out = temp_dir / f"render_{branch_id}_{modality}_{smoothing}"
-    res = render_locked_grid(
+    res = render_hippocampal_grid(
         subject=subject,
-        scene=scene_path,
         outdir=render_out,
         name=f"comb_{branch_id}_{modality}_{smoothing}",
         title=f"{branch['cohort_name']} {modality}",
@@ -463,9 +463,8 @@ def render_branch_surface_2x2(
         right_labels=lbl_r,
         left_surface=surf_l,
         right_surface=surf_r,
-        spec_path=spec_path,
     )
-    native_im = Image.open(res["native_scene_png"]).convert("RGBA")
+    native_im = Image.open(res["surface_png"]).convert("RGBA")
     comp = build_2x2_composite(native_im)
 
     # Save to panels directory with provenance
@@ -476,6 +475,7 @@ def render_branch_surface_2x2(
         "branch_id": branch_id,
         "modality": modality,
         "smoothing": smoothing,
+        "renderer": "brainspace_hippocampal_grid",
         "left_manifest": str(ml_path),
         "right_manifest": str(mr_path),
         "left_label": str(lbl_l),
@@ -484,7 +484,6 @@ def render_branch_surface_2x2(
         "right_label_sha256": lbl_r_sha,
         "left_surface": str(surf_l),
         "right_surface": str(surf_r),
-        "scene": str(scene_path),
         "output_png": str(cached_png),
         "output_sha256": out_sha,
         "created_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),

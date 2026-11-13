@@ -168,14 +168,15 @@ def build_grid_canvas(
     dorsal: Image.Image | None,
     layout: str,
     bg_color: tuple[int, int, int, int] = (255, 255, 255, 255),
+    scale: int = 1,
 ) -> Image.Image:
     ventral_panels = split_native_hemi_panels(ventral.convert("RGBA"))
     dorsal_panels = split_native_hemi_panels(dorsal.convert("RGBA")) if dorsal is not None else None
 
-    row_gap = 48
-    col_gap = 64
-    outer_pad = 40
-    header_h = 140
+    row_gap = 48 * scale
+    col_gap = 64 * scale
+    outer_pad = 40 * scale
+    header_h = 140 * scale
 
     if layout == "1x2":
         cell_w = max(ventral_panels["L"].width, ventral_panels["R"].width)
@@ -218,7 +219,7 @@ def build_grid_canvas(
         paste_center(canvas, panels[("bottom", "R")], outer_pad + cell_w + col_gap, bottom_y, cell_w, bottom_h)
 
     draw = ImageDraw.Draw(canvas)
-    lr_font = load_font(52)
+    lr_font = load_font(52 * scale)
     left_cx = outer_pad + cell_w // 2
     right_cx = outer_pad + cell_w + col_gap + cell_w // 2
     is_dark = (bg_color[0] + bg_color[1] + bg_color[2]) / 3 < 128
@@ -245,10 +246,12 @@ def compose_wb_grid_with_legend(
     bg_color: tuple[int, int, int, int] = (255, 255, 255, 255),
     min_panel_w: int = 520,
     legend_display_names: dict[str, str] | None = None,
+    scale: int = 1,
+    adaptive_legend: bool = False,
 ) -> Path:
     ventral = Image.open(ventral_image).convert("RGBA")
     dorsal = Image.open(dorsal_image).convert("RGBA") if dorsal_image else None
-    grid = build_grid_canvas(ventral, dorsal, layout, bg_color=bg_color)
+    grid = build_grid_canvas(ventral, dorsal, layout, bg_color=bg_color, scale=scale)
     img_w, img_h = grid.size
 
     left_vals, left_table = load_labels(left_labels)
@@ -276,13 +279,17 @@ def compose_wb_grid_with_legend(
         group_name = label_name.rsplit("_", 1)[-1] if legend_group == "network" else label_name
         group_colors[group_name] = tuple(int(round(v)) for v in rgba[:4])
 
-    title_font = load_font(36)
-    item_font = load_font(32)
-    side_pad = 28
-    gap_after_swatch = 14
-    swatch_w = 32
-    swatch_h = 32
-    row_h = 44
+    def count_networks(props: dict[str, float]) -> int:
+        return sum(name.casefold() not in {"null", "none", "unassigned", "non-network/null"} for name in props)
+
+    few_labels = adaptive_legend and max(count_networks(left_group_props), count_networks(right_group_props)) <= 3
+    title_font = load_font(36 * scale)
+    item_font = load_font((48 if few_labels else 32) * scale)
+    side_pad = 28 * scale
+    gap_after_swatch = 14 * scale
+    swatch_w = (42 if few_labels else 32) * scale
+    swatch_h = swatch_w
+    row_h = (62 if few_labels else 44) * scale
     title_text = title.strip()
 
     measure_image = Image.new("RGBA", (8, 8), (0, 0, 0, 0))
@@ -296,22 +303,22 @@ def compose_wb_grid_with_legend(
     for text in all_item_texts:
         bbox = measure_draw.textbbox((0, 0), text, font=item_font)
         max_text_w = max(max_text_w, bbox[2] - bbox[0])
-    panel_w = max(min_panel_w, side_pad * 2 + swatch_w + gap_after_swatch + max_text_w + 8)
+    panel_w = max(min_panel_w * scale, side_pad * 2 + swatch_w + gap_after_swatch + max_text_w + 8 * scale)
 
     left_title = f"{title_text} (Left)" if title_text else "Left"
     left_title_lines = wrap_text(measure_draw, left_title, title_font, max(panel_w - 2 * side_pad, 1))
     right_title = f"{title_text} (Right)" if title_text else "Right"
     right_title_lines = wrap_text(measure_draw, right_title, title_font, max(panel_w - 2 * side_pad, 1))
 
-    top_pad = 20
-    bottom_pad = 20
-    inter_legend_gap = 48
-    title_line_h = 42
+    top_pad = 20 * scale
+    bottom_pad = 20 * scale
+    inter_legend_gap = 48 * scale
+    title_line_h = 42 * scale
 
     def legend_block_height(title_lines: list[str], item_count: int) -> int:
         height = 0
         if title_lines:
-            height += len(title_lines) * title_line_h + 12
+            height += len(title_lines) * title_line_h + 12 * scale
         height += item_count * row_h
         return height
 
@@ -335,13 +342,13 @@ def compose_wb_grid_with_legend(
             for line in title_lines:
                 draw.text((x0, y), line, fill=text_color, font=title_font)
                 y += title_line_h
-            y += 12
+            y += 12 * scale
 
         group_names = sorted(group_props_map, key=lambda name: (-group_props_map[name], name))
         item_texts = [f"{display_names.get(name, name)}  {group_props_map[name] * 100:.1f}%" for name in group_names]
         for group_name, item_text in zip(group_names, item_texts):
             color = group_colors[group_name]
-            draw.rectangle((x0, y + 5, x0 + swatch_w, y + 5 + swatch_h), fill=color, outline=swatch_outline)
+            draw.rectangle((x0, y + 5 * scale, x0 + swatch_w, y + 5 * scale + swatch_h), fill=color, outline=swatch_outline, width=scale)
             draw.text((x0 + swatch_w + gap_after_swatch, y), item_text, fill=text_color, font=item_font)
             y += row_h
         return y

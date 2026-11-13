@@ -48,7 +48,7 @@ def render_inputs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         return {"biglegend_png": str(image_path)}
 
     monkeypatch.setattr(Figure, "savefig", save_figure)
-    monkeypatch.setattr(overview, "render_locked_grid", render_surface)
+    monkeypatch.setattr(overview, "render_hippocampal_grid", render_surface)
     monkeypatch.setattr(overview, "resolve_template_pair_assets", lambda *_a, **_k: (
         tmp_path / "left.surf.gii", tmp_path / "right.surf.gii", "template", tmp_path / "template.spec"
     ))
@@ -106,7 +106,7 @@ def render_inputs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         meta = overview.render_combo(
             group_root=group_root, present_dir=tmp_path / "present",
             method="gradient-spectral", atlas="kong2022", coverage_tag="cov_0p80",
-            scene=tmp_path / "scene", route_tag="pfm", mode_tag=None,
+            route_tag="pfm", mode_tag=None,
             assignment_variant="fisherz", skip_subject_split_ari=True, layout=layout,
             **kwargs,
         )
@@ -224,6 +224,6 @@ def test_dual_interpretation_render_rejects_invalid_lineage_before_plotting(tmp_
         overview.render_combo(
             group_root=tmp_path / "group", present_dir=tmp_path / "present",
             method="gradient-spectral", atlas="kong2022", coverage_tag="cov_0p80",
-            scene=tmp_path / "scene", route_tag="pfm", mode_tag=None,
+            route_tag="pfm", mode_tag=None,
             assignment_variant="fisherz", layout="dual-interpretation",
         )

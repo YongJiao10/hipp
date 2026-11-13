@@ -16,6 +16,7 @@ def panel_inputs(paths, **selection):
         Path(__file__),
         root / 'scripts/core_workflow/lib/workbench_grid.py',
         root / 'scripts/core_workflow/lib/workbench_scene_batch.py',
+        root / 'scripts/core_workflow/lib/surface_utils.py',
         root / 'config/hipp_network_style.json',
     ]
     return {'schema': 2, 'selection': selection,

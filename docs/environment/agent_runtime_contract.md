@@ -25,6 +25,14 @@ Iowa derived cortex surfaces and their explicitly selected manifest belong in
 Lynch PFM concatenates explicit run inputs in memory. Worktree asset links and
 parent-directory output fallbacks are not part of the formal runtime contract.
 
+## Hippocampal figure runtime
+
+Hippocampal label panels use the existing py314 BrainSpace 0.2.1 and VTK 9.6.1
+stack. Run headless figure commands with `xvfb-run -a` when no display is
+available; `LP_NUM_THREADS=1` and `VTK_SMP_MAX_THREADS=1` limit rendering
+threads. Workbench remains required for cortical scene rendering and
+the documented image-processing and registration stages.
+
 ## Gradient comparison runtime
 
 Gradient parcellation uses the local py314 numerical stack: NumPy 2.5.4,

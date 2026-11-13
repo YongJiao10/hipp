@@ -8,6 +8,13 @@ GLOBAL_NETWORK_STYLE_JSON = REPO_ROOT / "config" / "hipp_network_style.json"
 
 RGBA = tuple[int, int, int, int]
 
+NETWORK_DISPLAY_NAMES = {
+    "Default": "DMN", "Visual": "VN", "Somatomotor": "SMN",
+    "DorsalAttention": "DAN", "VentralAttention": "VAN", "Control": "CON",
+    "Language": "LAN", "Auditory": "AUD", "Limbic": "LIM",
+    "CinguloOpercular": "CO",
+}
+
 
 def _parse_rgba(name: str, raw: object) -> RGBA:
     if not isinstance(raw, list) or len(raw) != 4:

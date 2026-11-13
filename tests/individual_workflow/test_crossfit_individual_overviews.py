@@ -171,7 +171,7 @@ def fake_locked_grid(calls: list[dict[str, object]]):
         )
         output = outdir / f"{smoothing}_render.png"
         image.save(output)
-        return {"native_scene_png": str(output), "biglegend_png": str(output)}
+        return {"surface_png": str(output), "biglegend_png": str(output)}
 
     return render
 
@@ -324,7 +324,7 @@ def test_renderer_uses_network_display_labels_and_records_visual_contract(
     contract = _stub_network_contract(overview, monkeypatch)
     crossfit_root, scene = build_crossfit_inputs(tmp_path)
     calls: list[dict[str, object]] = []
-    monkeypatch.setattr(overview, "render_locked_grid", fake_locked_grid(calls))
+    monkeypatch.setattr(overview, "render_hippocampal_grid", fake_locked_grid(calls))
     output_dir = tmp_path / "present" / "individual"
 
     outputs = overview.render_individual_overviews(
@@ -356,7 +356,7 @@ def test_renderer_requires_refresh_to_replace_legacy_visual_contract(
     _stub_network_contract(overview, monkeypatch)
     crossfit_root, scene = build_crossfit_inputs(tmp_path)
     calls: list[dict[str, object]] = []
-    monkeypatch.setattr(overview, "render_locked_grid", fake_locked_grid(calls))
+    monkeypatch.setattr(overview, "render_hippocampal_grid", fake_locked_grid(calls))
     output_dir = tmp_path / "present" / "individual"
 
     initial = overview.render_individual_overviews(
@@ -404,7 +404,7 @@ def test_renderer_writes_one_compact_png_with_2mm_and_4mm_rows(
     _stub_network_contract(overview, monkeypatch)
     crossfit_root, scene = build_crossfit_inputs(tmp_path)
     calls: list[dict[str, object]] = []
-    monkeypatch.setattr(overview, "render_locked_grid", fake_locked_grid(calls))
+    monkeypatch.setattr(overview, "render_hippocampal_grid", fake_locked_grid(calls))
     output_dir = tmp_path / "present" / "individual"
 
     outputs = overview.render_individual_overviews(
@@ -451,7 +451,7 @@ def test_renderer_rejects_stale_label_before_resume_reuses_png(
     _stub_network_contract(overview, monkeypatch)
     crossfit_root, scene = build_crossfit_inputs(tmp_path)
     calls: list[dict[str, object]] = []
-    monkeypatch.setattr(overview, "render_locked_grid", fake_locked_grid(calls))
+    monkeypatch.setattr(overview, "render_hippocampal_grid", fake_locked_grid(calls))
     output_dir = tmp_path / "present" / "individual"
 
     overview.render_individual_overviews(
@@ -558,7 +558,7 @@ def test_renderer_rejects_corrupt_png_during_resume(
     _stub_network_contract(overview, monkeypatch)
     crossfit_root, scene = build_crossfit_inputs(tmp_path)
     calls: list[dict[str, object]] = []
-    monkeypatch.setattr(overview, "render_locked_grid", fake_locked_grid(calls))
+    monkeypatch.setattr(overview, "render_hippocampal_grid", fake_locked_grid(calls))
     output_dir = tmp_path / "present" / "individual"
 
     overview.render_individual_overviews(
@@ -593,7 +593,7 @@ def test_renderer_rejects_valid_but_modified_png_during_resume(
     _stub_network_contract(overview, monkeypatch)
     crossfit_root, scene = build_crossfit_inputs(tmp_path)
     calls: list[dict[str, object]] = []
-    monkeypatch.setattr(overview, "render_locked_grid", fake_locked_grid(calls))
+    monkeypatch.setattr(overview, "render_hippocampal_grid", fake_locked_grid(calls))
     output_dir = tmp_path / "present" / "individual"
 
     overview.render_individual_overviews(
@@ -629,7 +629,7 @@ def test_renderer_refuses_legacy_resume_without_an_output_fingerprint(
     _stub_network_contract(overview, monkeypatch)
     crossfit_root, scene = build_crossfit_inputs(tmp_path)
     calls: list[dict[str, object]] = []
-    monkeypatch.setattr(overview, "render_locked_grid", fake_locked_grid(calls))
+    monkeypatch.setattr(overview, "render_hippocampal_grid", fake_locked_grid(calls))
     output_dir = tmp_path / "present" / "individual"
 
     outputs = overview.render_individual_overviews(
@@ -665,7 +665,7 @@ def test_renderer_refuses_resume_with_a_different_workbench_scene(
     _stub_network_contract(overview, monkeypatch)
     crossfit_root, scene = build_crossfit_inputs(tmp_path)
     calls: list[dict[str, object]] = []
-    monkeypatch.setattr(overview, "render_locked_grid", fake_locked_grid(calls))
+    monkeypatch.setattr(overview, "render_hippocampal_grid", fake_locked_grid(calls))
     output_dir = tmp_path / "present" / "individual"
 
     overview.render_individual_overviews(
@@ -703,7 +703,7 @@ def test_resume_subset_preserves_untouched_subject_provenance(
         additional_subjects=("100002",),
     )
     calls: list[dict[str, object]] = []
-    monkeypatch.setattr(overview, "render_locked_grid", fake_locked_grid(calls))
+    monkeypatch.setattr(overview, "render_hippocampal_grid", fake_locked_grid(calls))
     output_dir = tmp_path / "present" / "individual"
 
     initial = overview.render_individual_overviews(
@@ -746,7 +746,7 @@ def test_failed_scene_resume_preserves_valid_provenance_and_can_retry(
     _stub_network_contract(overview, monkeypatch)
     crossfit_root, scene = build_crossfit_inputs(tmp_path)
     calls: list[dict[str, object]] = []
-    monkeypatch.setattr(overview, "render_locked_grid", fake_locked_grid(calls))
+    monkeypatch.setattr(overview, "render_hippocampal_grid", fake_locked_grid(calls))
     output_dir = tmp_path / "present" / "individual"
 
     initial = overview.render_individual_overviews(
@@ -800,7 +800,7 @@ def test_failed_nonresume_subset_preserves_existing_aggregate_provenance(
         additional_subjects=("100002",),
     )
     calls: list[dict[str, object]] = []
-    monkeypatch.setattr(overview, "render_locked_grid", fake_locked_grid(calls))
+    monkeypatch.setattr(overview, "render_hippocampal_grid", fake_locked_grid(calls))
     output_dir = tmp_path / "present" / "individual"
 
     initial = overview.render_individual_overviews(

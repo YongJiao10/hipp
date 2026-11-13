@@ -23,7 +23,7 @@ for p in (CORE_DIR, VIS_LIB_DIR):
     if str(p) not in sys.path:
         sys.path.insert(0, str(p))
 
-from lib.surface_utils import render_locked_grid
+from lib.surface_utils import render_hippocampal_grid
 from surface_panel_cache import panel_inputs, cache_matches, publish_cache
 from multidataset_cohorts import (
     COMPARISON_VERSION,
@@ -263,9 +263,8 @@ def load_cohort_data_and_render_wb(
 
     if wb_image is None:
         render_out = temp_dir / f"wb_{cache_prefix}{ds_clean}_{cname_clean}_{atlas_tag}{smoothing}_{variant}"
-        render = render_locked_grid(
+        render = render_hippocampal_grid(
             subject=subject,
-            scene=scene_path,
             outdir=render_out,
             name=f"k3_{cache_prefix}{atlas_tag}{smoothing}_{variant}_{cname_clean}",
             title=f"{cohort_entry['dataset_name']} {cohort_entry['cohort_name']} (N={cohort_entry['n_subjects']})",
@@ -273,7 +272,6 @@ def load_cohort_data_and_render_wb(
             right_labels=lbl_r_gii,
             left_surface=surf_l,
             right_surface=surf_r,
-            spec_path=spec_path,
         )
         wb_biglegend_png = Path(render["biglegend_png"])
         wb_image = Image.open(wb_biglegend_png).convert("RGBA")

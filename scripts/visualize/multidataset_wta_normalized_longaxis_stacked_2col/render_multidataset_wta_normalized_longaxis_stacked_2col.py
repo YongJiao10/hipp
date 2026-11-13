@@ -42,7 +42,7 @@ for p in (CORE_DIR, VIS_LIB_DIR):
     if str(p) not in sys.path:
         sys.path.insert(0, str(p))
 
-from lib.surface_utils import long_axis_order, render_locked_grid
+from lib.surface_utils import long_axis_order, render_hippocampal_grid
 from lib.workbench_grid import load_labels
 from multidataset_cohorts import (
     COMPARISON_VERSION,
@@ -474,7 +474,7 @@ def _wta_surface_cache_inputs(
         },
         "render": {
             "subject": "100610",
-            "scene": "wb_locked_native_view_lateral_medial",
+            "renderer": "brainspace_hippocampal_grid",
         },
     }
 
@@ -642,9 +642,8 @@ def render_cohort_wta_surface_img(
             return cached_image.copy()
     t_str = f"{ds} {cn} (N={ns})"
 
-    res = render_locked_grid(
+    res = render_hippocampal_grid(
         subject=subject,
-        scene=scene_path,
         outdir=outdir,
         name=f"{cid}_wta",
         title=t_str,
@@ -652,7 +651,6 @@ def render_cohort_wta_surface_img(
         right_labels=lbl_r,
         left_surface=surf_l,
         right_surface=surf_r,
-        spec_path=spec_path,
     )
     rendered_path = Path(res["biglegend_png"]).resolve()
     if rendered_path != png_p.resolve():

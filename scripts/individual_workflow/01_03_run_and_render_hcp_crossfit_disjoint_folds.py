@@ -38,7 +38,7 @@ from lib.output_layout import (
     resolve_crossfit_template_matching_overview_root,
     resolve_crossfit_template_matching_root,
 )
-from lib.surface_utils import long_axis_order, render_locked_grid
+from lib.surface_utils import long_axis_order, render_hippocampal_grid
 from lib.workbench_grid import build_grid_canvas, load_font
 
 DEFAULT_SMOOTHINGS = ("2mm", "4mm")
@@ -646,9 +646,8 @@ def main() -> None:
                 lbl_l = disjoint_work_dir / fold_name / smoothing / "hemi_L" / "group_labels_k3.label.gii"
                 lbl_r = disjoint_work_dir / fold_name / smoothing / "hemi_R" / "group_labels_k3.label.gii"
 
-                render_res = render_locked_grid(
+                render_res = render_hippocampal_grid(
                     subject="100610",
-                    scene=scene_path,
                     outdir=fold_dir,
                     name=f"{fold_name}_{smoothing}",
                     title=f"{fold_name} | {smoothing}",
@@ -656,9 +655,8 @@ def main() -> None:
                     right_labels=lbl_r,
                     left_surface=DEFAULT_SURF_L,
                     right_surface=DEFAULT_SURF_R,
-                    spec_path=DEFAULT_SPEC,
                 )
-                native_png = Path(render_res["native_scene_png"])
+                native_png = Path(render_res["surface_png"])
                 native_im = Image.open(native_png).convert("RGBA")
                 grid_im = build_grid_canvas(native_im, None, layout="1x2")
                 grid_path = fold_dir / f"{fold_name}_{smoothing}_grid.png"

@@ -57,7 +57,7 @@ from lib.output_layout import (
     resolve_kong2022_surface_root,
     resolve_kong2022_routea_root,
 )
-from lib.surface_utils import render_locked_grid
+from lib.surface_utils import render_hippocampal_grid
 from lib.workbench import run_workbench
 from multidataset_cohorts import (
     GridSpec,
@@ -1184,9 +1184,8 @@ def render_hippo_grad_biglegend(
     ns = spec["n_subjects"]
     t_str = f"{ds} {cn} (N={ns})"
 
-    res = render_locked_grid(
+    res = render_hippocampal_grid(
         subject="100610",
-        scene=scene,
         outdir=outdir,
         name=f"{method_prefix}{cid}_{variant}_{atlas_prefix}grad_{smoothing}",
         title=t_str,
@@ -1194,7 +1193,6 @@ def render_hippo_grad_biglegend(
         right_labels=lbl_r,
         left_surface=surf_l,
         right_surface=surf_r,
-        spec_path=spec_path,
     )
     rendered = Path(res["biglegend_png"])
     cache_manifest.write_text(
@@ -1282,9 +1280,8 @@ def render_hippo_wta_biglegend(
     ns = spec["n_subjects"]
     t_str = f"{ds} {cn} (N={ns})"
 
-    res = render_locked_grid(
+    res = render_hippocampal_grid(
         subject="100610",
-        scene=scene,
         outdir=outdir,
         name=f"{method_prefix}{cid}_{variant}_{atlas_prefix}wta_{smoothing}",
         title=t_str,
@@ -1292,7 +1289,6 @@ def render_hippo_wta_biglegend(
         right_labels=lbl_r,
         left_surface=surf_l,
         right_surface=surf_r,
-        spec_path=spec_path,
     )
     rendered = Path(res["biglegend_png"])
     cache_manifest.write_text(

@@ -12,7 +12,7 @@ from PIL import Image
 from lib.gradient_assignment_contract import validate_gradient_assignment
 from lib.template_assets import validate_template_assets
 from lib.workbench_grid import build_grid_canvas
-from lib.workbench_scene_batch import render_scene_batch
+from lib.surface_utils import render_hippocampal_grid
 from surface_panel_cache import panel_inputs, publish_cache
 
 
@@ -158,11 +158,9 @@ def render_gradient_surface_panel(
             f"Gradient surface template subject/spec is missing: {runs}"
         )
 
-    scene = ROOT / "config" / "wb_locked_native_view_lateral_medial.scene"
     sources.extend(
         [
             spec,
-            scene,
             ROOT / "scripts" / "core_workflow" / "lib" / "gradient_assignment_contract.py",
             ROOT / "scripts" / "core_workflow" / "lib" / "surface_utils.py",
             ROOT / "scripts" / "core_workflow" / "lib" / "template_assets.py",
@@ -178,21 +176,15 @@ def render_gradient_surface_panel(
         "n_subjects": int(cohort["n_subjects"]),
     }
     inputs = panel_inputs(sources, **selection)
-    pngs = render_scene_batch(
-        scene=scene,
-        subjects=[subject],
-        outdir=outdir / "scene",
-        width=1600,
-        height=1024,
-        renderer="OSMesa",
+    rendered = render_hippocampal_grid(
+        subject=subject,
+        outdir=outdir / "surface_render",
         name="gradient_assignment",
-        left_label_template=str(results["L"]["label_path"]),
-        right_label_template=str(results["R"]["label_path"]),
-        left_surface_template=str(assets["L"][0]),
-        right_surface_template=str(assets["R"][0]),
-        spec_template=str(spec),
-        no_template_scene=True,
-        retain_scene=True,
+        title=str(cohort["id"]),
+        left_labels=Path(results["L"]["label_path"]),
+        right_labels=Path(results["R"]["label_path"]),
+        left_surface=assets["L"][0],
+        right_surface=assets["R"][0],
     )
     if inputs != panel_inputs(sources, **selection):
         raise ValueError(
@@ -200,8 +192,8 @@ def render_gradient_surface_panel(
             f"{outdir}"
         )
 
-    with Image.open(pngs[0]) as native:
-        grid = build_grid_canvas(native, None, "1x2").convert("RGB")
+    with Image.open(rendered["surface_png"]) as native:
+        grid = build_grid_canvas(native, None, "1x2", scale=2).convert("RGB")
     png = outdir / "surface.png"
     grid.save(png)
     publish_cache(png, inputs)

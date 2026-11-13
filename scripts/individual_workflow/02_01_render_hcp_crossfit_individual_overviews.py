@@ -37,7 +37,7 @@ from lib.output_layout import (  # noqa: E402
 from lib.surface_utils import (  # noqa: E402
     infer_spec_path,
     read_surface_vertex_count,
-    render_locked_grid,
+    render_hippocampal_grid,
 )
 from lib.workbench_grid import load_font, wrap_text  # noqa: E402
 
@@ -55,6 +55,7 @@ FISHERZ_NETWORK_DISPLAY_SPECS = {
 }
 VISUAL_LABEL_CONTRACT_SCHEMA_VERSION = 1
 WORKFLOW_NAME = "hcp_routea_crossfit_k3_individual_overviews"
+RENDERER = "brainspace_hippocampal_grid"
 THREAD_ENV_OVERRIDES = {
     "OMP_NUM_THREADS": "1",
     "OPENBLAS_NUM_THREADS": "1",
@@ -850,6 +851,7 @@ def _row(
         "subject": f"sub-{_normalize_subject(subject)}",
         "output": str(output_path.resolve()),
         "output_fingerprint": dict(output_fingerprint),
+        "renderer": RENDERER,
         "scene": str(Path(scene_path).resolve()),
         "scene_fingerprint": dict(scene_fingerprint),
         "visual_label_contract_fingerprint": str(
@@ -916,6 +918,11 @@ def _validate_resume_reuse(
     if previous_item.get("status") != "ok":
         raise ValueError(
             f"Existing individual overview provenance is not ok for sub-{subject}"
+        )
+    if previous_item.get("renderer") != RENDERER and not allow_visual_contract_mismatch:
+        raise ValueError(
+            f"Existing overview renderer differs for sub-{subject}; "
+            "use --resume --refresh-visuals to replace it"
         )
     try:
         previous_subject = _normalize_subject(str(previous_item.get("subject", "")))
@@ -1061,9 +1068,8 @@ def render_subject_overview(
                 output_path=display_root / "hemi-R.label.gii",
                 visual_label_contract=contract,
             )
-            rendered = render_locked_grid(
+            rendered = render_hippocampal_grid(
                 subject=subject_id,
-                scene=scene_path,
                 outdir=scratch_root / smoothing,
                 name=f"crossfit_template_matching_k3_{smoothing}",
                 title=(
@@ -1073,7 +1079,6 @@ def render_subject_overview(
                 right_labels=right_display,
                 left_surface=Path(str(left["subject_surface"])),
                 right_surface=Path(str(right["subject_surface"])),
-                spec_path=Path(str(left["spec_path"])),
             )
             image_path = Path(str(rendered["biglegend_png"]))
             if not image_path.exists():
@@ -1243,6 +1248,7 @@ def render_individual_overviews(
     summary: dict[str, object] = {
         "status": "failed" if attempt_failed else "ok",
         "workflow": WORKFLOW_NAME,
+        "renderer": RENDERER,
         "crossfit_root": str(root),
         "output_dir": str(destination),
         "scene": str(scene_path),

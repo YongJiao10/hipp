@@ -46,7 +46,7 @@ from lib.gifti_contracts import (  # noqa: E402
     validate_gifti_vector,
 )
 from lib.network_colors import require_network_colors  # noqa: E402
-from lib.surface_utils import infer_spec_path, render_locked_grid  # noqa: E402
+from lib.surface_utils import infer_spec_path, render_hippocampal_grid  # noqa: E402
 
 PRODUCTION_ROOT = Path("/home/yojiao/hpchome/hipp")
 DEFAULT_WB_COMMAND = (
@@ -78,6 +78,7 @@ HEMIS = ("L", "R")
 N_VERTICES = 512
 EXPECTED_SUBJECT_COUNT = 94
 WORKFLOW_NAME = "jj_tms_hcp151_fixed_template_matching_overviews"
+RENDERER = "brainspace_hippocampal_grid"
 STATUS_FIELDS = (
     "status",
     "subject",
@@ -805,9 +806,9 @@ def overview_item_record_path(output_dir: Path, subject: str) -> Path:
     )
 
 
-def _publish_item_record(output_dir: Path, item: Mapping[str, object]) -> None:
+def _publish_item_record(output_dir: Path, item: Mapping[str, object], *, refresh: bool = False) -> None:
     path = overview_item_record_path(output_dir, str(item["subject"]))
-    if path.exists():
+    if path.exists() and not refresh:
         return
     _write_json_exclusive(path, item)
 
@@ -827,6 +828,7 @@ def _item(
         "subject": str(source["subject"]),
         "output": str(Path(output).resolve()),
         "output_fingerprint": _validated_png_fingerprint(output),
+        "renderer": RENDERER,
         "scene": str(Path(scene).resolve()),
         "scene_fingerprint": dict(scene_fingerprint),
         "visual_label_contract_fingerprint": str(
@@ -851,6 +853,8 @@ def _validate_existing_item(
 ) -> dict[str, object]:
     if item.get("status") != "ok" or item.get("subject") != source["subject"]:
         raise ValueError(f"Existing overview item is not reusable: {source['subject']}")
+    if item.get("renderer") != RENDERER:
+        raise ValueError(f"Existing overview renderer differs: {source['subject']}")
     if item.get("output") != str(output.resolve()):
         raise ValueError(f"Existing overview output path mismatch: {source['subject']}")
     if item.get("scene") != str(scene.resolve()) or item.get(
@@ -898,6 +902,7 @@ def render_subject_overview(
     visual_contract: Mapping[str, object],
     resume: bool = False,
     previous_item: Mapping[str, object] | None = None,
+    refresh_visuals: bool = False,
 ) -> dict[str, object]:
     started = time.time()
     subject = normalize_subject(str(source["subject"]))
@@ -911,7 +916,7 @@ def render_subject_overview(
             raise FileExistsError(
                 f"Refusing to overwrite fixed-template overview: {output}; use --resume"
             )
-        if previous_item is not None:
+        if previous_item is not None and not refresh_visuals:
             try:
                 item = _validate_existing_item(
                     source=source,
@@ -944,9 +949,8 @@ def render_subject_overview(
                 output_path=display_root / "hemi-R.label.gii",
                 visual_label_contract=visual_contract,
             )
-            rendered = render_locked_grid(
+            rendered = render_hippocampal_grid(
                 subject=subject,
-                scene=scene_path,
                 outdir=scratch_root / smoothing,
                 name=f"hcp151_fixed_template_matching_{smoothing}",
                 title=(f"HCP151 fixed-template matching | sub-{subject} | {smoothing}"),
@@ -954,7 +958,6 @@ def render_subject_overview(
                 right_labels=right_display,
                 left_surface=Path(str(left["surface"]["path"])),
                 right_surface=Path(str(right["surface"]["path"])),
-                spec_path=Path(str(left["surface"]["spec_path"])),
             )
             image = Path(str(rendered["biglegend_png"]))
             _validated_png_fingerprint(image)
@@ -974,7 +977,7 @@ def render_subject_overview(
         resumed=False,
         started=started,
     )
-    _publish_item_record(output_dir, item)
+    _publish_item_record(output_dir, item, refresh=refresh_visuals)
     return item
 
 
@@ -992,6 +995,7 @@ def _worker(payload: Mapping[str, object]) -> dict[str, object]:
             visual_contract=payload["visual_contract"],
             resume=bool(payload["resume"]),
             previous_item=payload.get("previous_item"),
+            refresh_visuals=bool(payload.get("refresh_visuals", False)),
         )
     except Exception as exc:
         return {
@@ -1014,6 +1018,7 @@ def _run_workers(
     previous_items: Mapping[str, Mapping[str, object]],
     resume: bool,
     jobs: int,
+    refresh_visuals: bool = False,
 ) -> list[dict[str, object]]:
     tasks = [
         {
@@ -1022,6 +1027,7 @@ def _run_workers(
             "scene": str(scene),
             "visual_contract": dict(visual_contract),
             "resume": bool(resume),
+            "refresh_visuals": bool(refresh_visuals),
             "previous_item": previous_items.get(
                 normalize_subject(str(source["subject"]))
             ),
@@ -1186,10 +1192,10 @@ def _load_item_records(
     return records
 
 
-def _write_status_exclusive(path: Path, rows: Sequence[Mapping[str, object]]) -> None:
+def _write_status_exclusive(path: Path, rows: Sequence[Mapping[str, object]], *, refresh: bool = False) -> None:
     destination = Path(path)
     destination.parent.mkdir(parents=True, exist_ok=True)
-    if destination.exists():
+    if destination.exists() and not refresh:
         raise FileExistsError(f"Refusing to overwrite overview status: {destination}")
     temporary = destination.with_name(f".{destination.name}.tmp-{os.getpid()}")
     with temporary.open("x", encoding="utf-8", newline="") as stream:
@@ -1222,7 +1228,10 @@ def render_fixed_template_overviews(
     jobs: int = DEFAULT_JOBS,
     resume: bool = False,
     allow_subset: bool = False,
+    refresh_visuals: bool = False,
 ) -> dict[str, Path]:
+    if refresh_visuals and not resume:
+        raise ValueError("--refresh-visuals requires --resume")
     if not 1 <= int(jobs) <= MAX_JOBS:
         raise ValueError(f"jobs must be in [1, {MAX_JOBS}]")
     selected = (
@@ -1234,6 +1243,8 @@ def render_fixed_template_overviews(
     full_scope = selected == canonical_subjects
     if not full_scope and not allow_subset:
         raise ValueError("Subset overview rendering requires explicit --allow-subset")
+    if refresh_visuals and not full_scope:
+        raise ValueError("--refresh-visuals requires the full declared subject roster")
     scope = "full" if full_scope else "subset"
     matching = Path(matching_root).resolve()
     candidate_validation = (
@@ -1283,7 +1294,7 @@ def render_fixed_template_overviews(
         raise FileExistsError(
             f"Overview provenance already exists under {destination}; use --resume"
         )
-    item_records = _load_item_records(
+    item_records = {} if refresh_visuals else _load_item_records(
         destination=destination,
         sources=sources,
         scene=scene_path,
@@ -1292,7 +1303,7 @@ def render_fixed_template_overviews(
     )
 
     previous_items: dict[str, Mapping[str, object]] = {}
-    manifest_source = (
+    manifest_source = None if refresh_visuals else (
         manifest_path
         if manifest_path.exists()
         else manifest_partial_path
@@ -1405,7 +1416,7 @@ def render_fixed_template_overviews(
                     "manifest": manifest_path,
                 }
 
-    if any(path.exists() for path in aggregate_paths):
+    if any(path.exists() for path in aggregate_paths) and not refresh_visuals:
         if (
             manifest_path.exists()
             and isinstance(prior_summary, Mapping)
@@ -1461,6 +1472,7 @@ def render_fixed_template_overviews(
             previous_items=previous_items,
             resume=resume,
             jobs=effective_jobs,
+            refresh_visuals=refresh_visuals,
         ),
         key=lambda row: str(row.get("subject", "")),
     )
@@ -1486,7 +1498,7 @@ def render_fixed_template_overviews(
         "jobs": effective_jobs,
         "updated_at": _now(),
     }
-    _write_status_exclusive(status_partial_path, rows)
+    _write_status_exclusive(status_partial_path, rows, refresh=refresh_visuals)
     summary["status_tsv"] = str(status_path)
     summary["status_tsv_fingerprint"] = fingerprint(status_partial_path)
     _write_json_exclusive(
@@ -1523,6 +1535,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--validation-manifest", type=Path)
     parser.add_argument("--jobs", type=int, default=DEFAULT_JOBS)
     parser.add_argument("--resume", action="store_true")
+    parser.add_argument("--refresh-visuals", action="store_true")
     parser.add_argument("--allow-subset", action="store_true")
     return parser
 
@@ -1539,6 +1552,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         validation_manifest=args.validation_manifest,
         jobs=args.jobs,
         resume=args.resume,
+        refresh_visuals=args.refresh_visuals,
         allow_subset=args.allow_subset,
     )
     print(f"status_tsv={outputs['status_tsv']}")

@@ -23,7 +23,7 @@ for p in (CORE_DIR, VIS_LIB_DIR):
     if str(p) not in sys.path:
         sys.path.insert(0, str(p))
 
-from lib.surface_utils import render_locked_grid
+from lib.surface_utils import render_hippocampal_grid
 from lib.gradient_assignment_contract import validate_gradient_assignment
 from multidataset_cohorts import GridSpec, get_multidataset_cohorts
 
@@ -118,10 +118,10 @@ def build_tight_4view_composite(native_im: Image.Image) -> Image.Image:
         return img.crop((cmin, rmin, cmax + 1, rmax + 1))
 
     # Top: Front (Lateral), Bottom: Back (Medial)
-    v_l_front = trim_b(Image.fromarray(arr[0:512, 0:800]))
-    v_r_front = trim_b(Image.fromarray(arr[0:512, 800:1600]))
-    v_l_back  = trim_b(Image.fromarray(arr[512:1024, 0:800]))
-    v_r_back  = trim_b(Image.fromarray(arr[512:1024, 800:1600]))
+    v_l_front = trim_b(Image.fromarray(arr[: arr.shape[0] // 2, : arr.shape[1] // 2]))
+    v_r_front = trim_b(Image.fromarray(arr[: arr.shape[0] // 2, arr.shape[1] // 2 :]))
+    v_l_back  = trim_b(Image.fromarray(arr[arr.shape[0] // 2 :, : arr.shape[1] // 2]))
+    v_r_back  = trim_b(Image.fromarray(arr[arr.shape[0] // 2 :, arr.shape[1] // 2 :]))
 
     target_h = max(v_l_front.height, v_r_front.height, v_l_back.height, v_r_back.height)
 
@@ -167,11 +167,6 @@ def load_cohort_wb_overlay(
     cname_clean = atlas_dir.name.replace(" ", "_")
     if panels_dir is not None:
         cached_png = panels_dir / f"wb_{cname_clean}_2mm_tight4view.png"
-        if cached_png.exists() and cached_png.stat().st_size > 5000:
-            with Image.open(cached_png) as test_im:
-                corners = [test_im.getpixel((0, 0))[:3], test_im.getpixel((test_im.width - 1, 0))[:3]]
-                if all(sum(c) > 700 for c in corners):
-                    return test_im.copy()
     else:
         cached_png = None
 
@@ -189,9 +184,8 @@ def load_cohort_wb_overlay(
     spec_path = Path(ml["template_spec_path"])
 
     render_out = temp_dir / f"wb_{cname_clean}"
-    render = render_locked_grid(
+    render = render_hippocampal_grid(
         subject=subject,
-        scene=scene_path,
         outdir=render_out,
         name=f"k3_2mm_{cname_clean}",
         title=cname_clean,
@@ -199,9 +193,8 @@ def load_cohort_wb_overlay(
         right_labels=lbl_r_gii,
         left_surface=surf_l,
         right_surface=surf_r,
-        spec_path=spec_path,
     )
-    native_png = Path(render["native_scene_png"])
+    native_png = Path(render["surface_png"])
     native_im = Image.open(native_png).convert("RGBA")
     comp = build_tight_4view_composite(native_im)
     if cached_png is not None:

@@ -21,6 +21,57 @@ from workbench_grid import (
 from render_cortex_pfm_scene import ensure_scene_white_background
 
 
+@pytest.mark.parametrize(("count", "include_null", "expected_size"), [(2, False, 96), (3, True, 96), (7, False, 64)])
+def test_adaptive_legend_keeps_network_names_and_sizes(tmp_path, monkeypatch, count, include_null, expected_size):
+    import nibabel as nib
+    from nibabel.gifti import GiftiDataArray, GiftiImage, GiftiLabel, GiftiLabelTable
+    import workbench_grid
+
+    names = ["Default", "Visual", "Somatomotor", "DorsalAttention", "VentralAttention", "Control", "Language"]
+    display = {"Default": "DMN", "Visual": "VN", "Somatomotor": "SMN", "DorsalAttention": "DAN", "VentralAttention": "VAN", "Control": "CON", "Language": "LAN"}
+    table = GiftiLabelTable()
+    null = GiftiLabel(key=0, red=0.6, green=0.6, blue=0.6, alpha=1)
+    null.label = "Null"
+    table.labels.append(null)
+    for key, name in enumerate(names, 1):
+        label = GiftiLabel(key=key, red=key / 8, green=0.4, blue=0.6, alpha=1)
+        label.label = name
+        table.labels.append(label)
+    label_file = tmp_path / "labels.label.gii"
+    keys = np.arange(1, count + 1, dtype=np.int32)
+    if include_null:
+        keys = np.append(keys, np.int32(0))
+    nib.save(GiftiImage(darrays=[GiftiDataArray(data=keys, intent="NIFTI_INTENT_LABEL")], labeltable=table), label_file)
+    surface = np.full((200, 400, 3), 255, dtype=np.uint8)
+    surface[30:170, 50:150] = (180, 60, 60)
+    surface[30:170, 250:350] = (60, 60, 180)
+    image_file = tmp_path / "surface.png"
+    Image.fromarray(surface).save(image_file)
+    sizes = []
+    text = []
+    original_font = workbench_grid.load_font
+    original_text = workbench_grid.ImageDraw.ImageDraw.text
+
+    def record_font(size):
+        sizes.append(size)
+        return original_font(size)
+
+    def record_text(self, xy, value, *args, **kwargs):
+        text.append(value)
+        return original_text(self, xy, value, *args, **kwargs)
+
+    monkeypatch.setattr(workbench_grid, "load_font", record_font)
+    monkeypatch.setattr(workbench_grid.ImageDraw.ImageDraw, "text", record_text)
+    workbench_grid.compose_wb_grid_with_legend(
+        ventral_image=image_file, left_labels=label_file, right_labels=label_file,
+        out=tmp_path / "result.png", layout="1x2", scale=2,
+        adaptive_legend=True, legend_display_names=display,
+    )
+    assert expected_size in sizes
+    assert any(value.startswith("DMN ") for value in text)
+    assert not any(value.startswith("Default ") for value in text)
+
+
 def test_scene_templates_default_to_white_background():
     """Verify both scene templates default to white background (255) and black foreground (0)."""
     scene_paths = [
