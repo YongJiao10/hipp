@@ -51,9 +51,17 @@ def test_confidence_source_returns_gradient_feature() -> None:
     assert spec.metric == "cosine"
 
 
+def test_silhouette_metric_follows_the_clustering_geometry() -> None:
+    assert compute_mod.silhouette_metric_for_method("gradient-ward") == "euclidean"
+    assert compute_mod.silhouette_metric_for_method("gradient-gmm") == "euclidean"
+    assert compute_mod.silhouette_metric_for_method("gradient-spectral") == "cosine"
+    assert compute_mod.build_arg_parser().parse_args([]).metric is None
+
+
 def main() -> int:
     test_publication_display_clips_negatives_and_uses_positive_auto_upper()
     test_confidence_source_returns_gradient_feature()
+    test_silhouette_metric_follows_the_clustering_geometry()
     print("ok: confidence map checks passed")
     return 0
 

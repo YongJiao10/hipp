@@ -32,7 +32,7 @@ for those details:
 | `scripts/core_workflow/05_01_compute_hippomaps_gradients.py` | Compute aligned HippoMaps/BrainSpace gradient artifacts |
 | `scripts/core_workflow/05_02_run_group_atlas.py` | Build group atlas outputs and K diagnostics |
 | `scripts/core_workflow/05_03_run_spectral_fast_rerun.py` | Optional rerun orchestration after primary group-atlas construction |
-| `scripts/core_workflow/05_04_compute_confidence_maps.py` | Compute vertex-level gradient-spectral confidence maps; requested combos fail closed with a failure list and non-zero exit |
+| `scripts/core_workflow/05_04_compute_confidence_maps.py` | Compute vertex-level gradient-parcellation confidence maps (Euclidean silhouette for Ward/GMM, cosine for spectral); requested combos fail closed with a failure list and non-zero exit |
 | `scripts/core_workflow/lib/formal_cohorts.py` | Shared exact-size, canonical-syntax, unique-subject contracts for formal HCP, Lynch, and Stanford cohorts |
 | `scripts/core_workflow/06_01_build_group_overview.py` | Render per-method group overview figures |
 | `scripts/core_workflow/06_02_materialize_group_labels.py` | Materialize functional-atlas label arrays |

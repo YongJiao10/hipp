@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 """
-Render gradient-spectral confidence maps on folded and unfolded hippocampal surfaces.
+Render gradient-parcellation confidence maps on folded and unfolded hippocampal surfaces.
 Raw silhouette arrays remain signed; rendered figures use a Yeo/Buckner-style
 nonnegative display window from 0 to an automatically selected upper bound.
 """
@@ -19,6 +19,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 from lib.gradient_clustering import GRADIENT_METHODS
+from lib.gradient_profiles import GRADIENT_PROFILE_CHOICES
 from lib.confidence_map import publication_display_data, publication_display_upper
 from lib.hippomaps_adapter import (
     DEFAULT_HIPPOMAPS_ROOT, wait_for_stable_file, normalize_hemis,
@@ -246,10 +247,15 @@ def render_combo(
     thresh_str: str,
     display_vmax: float | None,
     method: str = "gradient-spectral",
+    profile: str | None = None,
 ) -> None:
     print(f"Rendering confidence map for smoothing={smoothing}")
-    output_dir = (present_root / route_tag / smoothing if method == "gradient-spectral"
-                  else present_root / route_tag / method / smoothing)
+    if profile is not None:
+        output_dir = present_root / route_tag / profile / method / smoothing
+    elif method == "gradient-spectral":
+        output_dir = present_root / route_tag / smoothing
+    else:
+        output_dir = present_root / route_tag / method / smoothing
     output_dir.mkdir(parents=True, exist_ok=True)
     plotter = load_hippomaps_plotter(hippomaps_root)
     for product in CONFIDENCE_PRODUCTS:
@@ -295,6 +301,7 @@ def main(args: argparse.Namespace) -> int:
                     thresh_str=thresh_str,
                     display_vmax=args.display_vmax,
                     method=args.method,
+                    profile=args.profile,
                 )
             except Exception as exc:
                 print(f"Failed rendering combo for smoothing={smoothing} thresh={thresh_str}: {exc}")
@@ -324,6 +331,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Render functional parcellation confidence maps.")
     parser.add_argument("--method", choices=sorted(GRADIENT_METHODS), default="gradient-spectral")
     parser.add_argument("--out-root", default=str(DEFAULT_ROUTEA_GROUP_ATLAS_ROOT))
+    parser.add_argument(
+        "--profile",
+        choices=GRADIENT_PROFILE_CHOICES,
+        default=None,
+        help="Formal gradient profile of --out-root; figures go to <present-root>/<route>/<profile>/<method>/<smoothing>/.",
+    )
     parser.add_argument("--route-tag", default="auto", choices=["auto", *ROUTE_TAG_CHOICES])
     parser.add_argument("--present-root", default=str(DEFAULT_GRADIENTS_DIR))
     parser.add_argument("--hippomaps-root", default=str(DEFAULT_HIPPOMAPS_ROOT))

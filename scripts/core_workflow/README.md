@@ -70,7 +70,9 @@ Task analysis uses `04_03` for first-level activation, optional exploratory
 `06_04` for continuous-gradient rendering. Pass `--profile topsim` or
 `--profile topfc` with `--routes pfm` to render a formal gradient bank into
 `present/gradients/pfm/<profile>/`; without `--profile` it renders the
-unprofiled bank.
+unprofiled bank. `05_04` and `06_06` take the profile group root as
+`--out-root`; `06_06 --profile` writes confidence figures to
+`present/gradients/pfm/<profile>/<method>/<smoothing>/`.
 
 ### Stale presentation products
 

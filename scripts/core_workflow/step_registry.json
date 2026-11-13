@@ -232,7 +232,7 @@
     {
       "step_id": "05_04_compute_confidence_maps",
       "stage": "05_group_atlas",
-      "purpose": "Compute gradient-spectral silhouette confidence maps.",
+      "purpose": "Compute gradient-parcellation silhouette confidence maps (Euclidean for Ward/GMM, cosine for spectral).",
       "branches": [
         "kong2022_pfm",
         "kong2022_pfm_ctxreg",
@@ -330,7 +330,7 @@
     {
       "step_id": "06_06_render_confidence_maps",
       "stage": "06_presentation_products",
-      "purpose": "Render gradient-spectral silhouette confidence maps on folded and unfolded hippocampal surfaces.",
+      "purpose": "Render gradient-parcellation silhouette confidence maps on folded and unfolded hippocampal surfaces.",
       "branches": [
         "kong2022_pfm",
         "kong2022_pfm_ctxreg",

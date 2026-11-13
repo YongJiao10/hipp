@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 """
-Compute vertex-level silhouette confidence maps for group-level gradient-spectral
+Compute vertex-level silhouette confidence maps for group-level gradient
 parcellations in the G1/G2/G3 feature space used by clustering.
 """
 
@@ -21,6 +21,15 @@ from lib.confidence_map import (
     silhouette_to_full_surface,
     silhouette_summary,
 )
+
+
+# Silhouette distance that matches each method's clustering geometry: Ward and GMM
+# partition Euclidean feature space; the spectral methods use cosine affinity.
+EUCLIDEAN_METHODS = frozenset({"gradient-ward", "gradient-gmm"})
+
+
+def silhouette_metric_for_method(method: str) -> str:
+    return "euclidean" if method in EUCLIDEAN_METHODS else "cosine"
 
 
 @dataclass(frozen=True)
@@ -160,7 +169,7 @@ def main(args: argparse.Namespace) -> int:
 
                         spec = confidence_source_spec(
                             run_dir=run_dir,
-                            metric=args.metric,
+                            metric=args.metric or silhouette_metric_for_method(method),
                         )
                         compute_one_source(
                             spec=spec,
@@ -196,7 +205,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default="1,2,3",
         help="Comma-separated gradient components to process (e.g. 1,2,3).",
     )
-    parser.add_argument("--metric", default="cosine", help="Silhouette distance metric.")
+    parser.add_argument(
+        "--metric",
+        default=None,
+        help="Silhouette distance metric; defaults to euclidean for gradient-ward and gradient-gmm, cosine otherwise.",
+    )
     return parser
 
 
