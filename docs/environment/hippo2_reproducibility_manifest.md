@@ -12,8 +12,7 @@ The environment manager remains Conda; the complete upstream Pixi stack is
 not installed.
 
 HCP runs use the complete official participant DAG and the output contract of
-the selected release. The [result assessment](hippunfold_result_impact.md)
-records observations from the earlier v2.3.0 reconstruction.
+the selected release.
 
 ## Runtime stack
 

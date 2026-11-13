@@ -8,7 +8,7 @@
 
 **Tech stack:** Existing `hippo2` for HippUnfold execution; explicit py314 interpreter for selection and numerical analysis; existing core-workflow registration, sampling and gradient functions.
 
-**Spec:** `docs/environment/hippunfold_result_impact.md` and the user's request to perform the proposed comparison.
+**Spec:** The user's request to perform the proposed comparison.
 
 ## Constraints
 
