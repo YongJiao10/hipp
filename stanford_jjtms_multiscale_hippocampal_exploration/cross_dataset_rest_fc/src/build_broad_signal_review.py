@@ -24,7 +24,7 @@ RESULT_ROOT = WORKFLOW_ROOT / "results" / RUN_ID
 FIGURE_ROOT = WORKFLOW_ROOT / "figures" / RUN_ID
 REPORT_ROOT = WORKFLOW_ROOT / "reports" / RUN_ID
 
-METHODS = ("hcp151_fixed", "hcp151_template_matching")
+METHODS = ("hcp_fixed", "hcp_template_matching")
 LEVEL_MODES = ("bilateral", "L", "R")
 COLORS = {
     "stanford": "#315E8A",
@@ -109,14 +109,14 @@ def summarize_components(table: pd.DataFrame, modes: tuple[str, ...]) -> pd.Data
                 ),
                 "fixed_median_d": float(
                     pd.to_numeric(
-                        group.loc[group["method"] == "hcp151_fixed", "standardized_effect"],
+                        group.loc[group["method"] == "hcp_fixed", "standardized_effect"],
                         errors="coerce",
                     ).median()
                 ),
                 "template_median_d": float(
                     pd.to_numeric(
                         group.loc[
-                            group["method"] == "hcp151_template_matching",
+                            group["method"] == "hcp_template_matching",
                             "standardized_effect",
                         ],
                         errors="coerce",
@@ -359,7 +359,7 @@ def plot_landscape(selected: pd.DataFrame, output: Path) -> None:
     ax.text(
         0,
         1.005,
-        "Fixed HCP151 + template matching; 2/4 mm; bilateral/L/R. "
+        "Fixed HCP + template matching; 2/4 mm; bilateral/L/R. "
         "Main layer: 100% sign consistency and |median d| ≥ 0.35; "
         "two lower-effect, direction-stable secondary leads are also retained for visual review.",
         transform=ax.transAxes,

@@ -26,7 +26,7 @@ Use the dataset method guides for cohorts, models, inputs and commands:
 | Statistical models | `stanford_tms_surface_model.R`, `jj_tms_sptms_native_surface_model.R` |
 | Diagnostic figures | `render_native_surface_beta_figures.py` |
 | Dataset figure sets | `stanford_tms_five_figures.py`, `render_jj_tms_five_figures.py` |
-| Selected 16-person HCP151 raw-beta figure | `render_jj_tms_beta_surface_bar.py` |
+| Selected 16-person HCP raw-beta figure | `render_jj_tms_beta_surface_bar.py` |
 
 Run from the repository root with the explicit interpreter:
 
@@ -42,7 +42,7 @@ uncorrected; their raw results are exported with the figures.
 
 `render_jj_tms_beta_surface_bar.py` uses the selected run's existing
 `five_figures/` outputs and original subject means. It requires 96 unique finite
-HCP151 beta cells for 16 subjects, keeping L/R separate. Missing metrics are
+HCP beta cells for 16 subjects, keeping L/R separate. Missing metrics are
 recovered serially on native T1w den-512 ribbons and checked against original
 area-weighted means; missing masks or mismatches stop rendering.
 

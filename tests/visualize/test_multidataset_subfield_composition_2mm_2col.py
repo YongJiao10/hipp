@@ -203,7 +203,7 @@ def test_analyzer_fails_closed_on_missing_individual_template_label(tmp_path, mo
 
     expected = (
         tmp_path
-        / "outputs_stanford/work/hcp151_fixed_template_matching/subjects/sub-001/"
+        / "outputs_stanford/work/hcp_fixed_template_matching/subjects/sub-001/"
         "matching/2mm/hemi-L/labels.npy"
     )
     with pytest.raises(FileNotFoundError, match=str(expected)):

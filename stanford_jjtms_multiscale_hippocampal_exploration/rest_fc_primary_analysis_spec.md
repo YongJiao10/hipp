@@ -89,8 +89,8 @@ contrast。四组 omnibus/global profile test 是辅助总览，不是第五种�
 
 ### 2.3 海马分区
 
-- `hcp151_fixed`：固定三region基线；
-- `hcp151_template_matching`：个体化三region分析。
+- `hcp_fixed`：固定三region基线；
+- `hcp_template_matching`：个体化三region分析。
 
 两种方法输出同构的FC张量并分别标记。它们是相关表征，不是独立复制。
 

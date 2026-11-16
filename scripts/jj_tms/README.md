@@ -3,16 +3,16 @@
 This directory is the dataset-specific surface for JJ_TMS orchestration and
 mapping. It contains the JJ_TMS HippUnfold batch runner, shared inputs and template
 materializer (`materialize_jj_tms_shared_inputs.py`), target-to-Kong2022
-mapping, HCP151 direct-template matcher, and fixed-template overview renderer.
+mapping, HCP direct-template matcher, and fixed-template overview renderer.
 
 JJ_TMS code does not belong in the protected multi-dataset numbered surfaces
 `scripts/core_workflow/` or `scripts/individual_workflow/`. The reusable
-HCP151 template builder remains numbered at
-`scripts/individual_workflow/03_01_build_hcp151_fixed_template.py`.
+HCP template builder remains numbered at
+`scripts/individual_workflow/03_01_build_hcp_fixed_template.py`.
 
 See:
 
-- `docs/hipp_parcellation_network/jj_tms_hcp151_fixed_template_matching.md`
+- `docs/hipp_parcellation_network/jj_tms_hcp_fixed_template_matching.md`
 - `docs/hipp_parcellation_network/jj_tms_target_network_mapping.md`
 
 ## Shared-input materializer
@@ -38,7 +38,7 @@ correlation. This adapter does not choose a new hippocampal QC policy.
 
 `scripts/jj_tms/jj_tms_ctxreg_fixed_template_matching.py` is a separate
 CtxReg adapter. It requires the exact template identity
-`hcp151_routea_ctxreg`, exact 2mm CtxReg FC caches under
+`hcp_routea_ctxreg`, exact 2mm CtxReg FC caches under
 `shared_inputs/pfm_ctxreg/`, the standard validity masks under
 `shared_inputs/surface/`, and the consumed HippUnfold
 `space-T1w_den-512` surfaces. It does not substitute the standard
@@ -52,8 +52,8 @@ use `space-T1w` filenames. If `04_00` or `04_01 --ctxdrop` is used with JJ_TMS
 native cortical meshes, explicitly pass `--cortex-coordinate-space T1w`.
 
 The default roster is the concatenation of the two existing caller-selected
-manifests `manifests/jj_tms_hc_67_subjects.txt` and
-`manifests/jj_tms_patient_26_subjects.txt` (67 + 26 = 93). No redundant
+manifests `manifests/jj_tms_hc_subjects.txt` and
+`manifests/jj_tms_patient_subjects.txt`. No redundant
 union manifest is created. The adapter supports `--mode preflight|run|validate`
 and caps `--jobs` at 10. A run preflights every selected subject before
 creating any subject output directory. Existing subject outputs are reused only
@@ -64,18 +64,18 @@ incompatible or malformed state fails closed. There is no `--overwrite`.
 The CtxReg template builder must be called with the explicit identity:
 
 ```bash
-/home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/03_01_build_hcp151_fixed_template.py \
+/home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/03_01_build_hcp_fixed_template.py \
   --mode preflight \
-  --template-id hcp151_routea_ctxreg \
+  --template-id hcp_routea_ctxreg \
   --group-root outputs_hcp/work/group_atlas/pfm_ctxreg \
   --gradient-root outputs_hcp/work/hippomaps_gradients/pfm_ctxreg \
-  --out-root outputs_hcp/templates/hcp151_routea_ctxreg
+  --out-root outputs_hcp/templates/hcp_routea_ctxreg
 ```
 
 The builder verifies the source manifests themselves identify
 `pfm_ctxreg`; changing only the output directory or template label cannot
 turn standard RouteA artifacts into a CtxReg template. Rebuilding an existing
-formal template or running the full 93-subject matcher is a separate,
+formal template or running the full-roster matcher is a separate,
 explicitly reviewed product operation.
 
 The JJ_TMS clinical/processing source is:
@@ -84,9 +84,9 @@ The JJ_TMS clinical/processing source is:
 
 Its `Sheet1` columns `C:E` contain the background `MDD`, `PTSD`, and
 `GAD` labels; column `K` contains QC status. Select `QC == "Yes"` for the
-fixed 94-subject imaging roster. Do not use `TMSfMRI_DataSharing.xlsx` to
+fixed imaging roster. Do not use `TMSfMRI_DataSharing.xlsx` to
 replace this roster or to infer whether a patient has usable fMRI data. The
-fixed Iowa3T two-group definitions and IDs are documented in the HCP151
+fixed Iowa3T two-group definitions and IDs are documented in the HCP
 matching document linked above.
 
 
@@ -94,8 +94,8 @@ matching document linked above.
 
 The fixed subgroup labels are `pure MDD` (`n=7`) and `comorbid MDD` (`n=19`);
 `JJ_TMS_3003` (past-only MDD/current GAD) is excluded. Their manifests are
-`manifests/jj_tms_pure_mdd_7_subjects.txt` and
-`manifests/jj_tms_comorbid_mdd_19_subjects.txt`.
+`manifests/jj_tms_pure_mdd_subjects.txt` and
+`manifests/jj_tms_comorbid_mdd_subjects.txt`.
 
 The default unversioned subgroup branch is 36P. Its subgroup FC caches are
 isolated under
@@ -115,7 +115,7 @@ Pass `--atlas-slug kong2022` to `03_02`, `--atlas kong2022` to `04_01`,
 `--atlases kong2022 --network-taxonomy canonical7 --route-tag pfm` to
 `05_02`. The existing renderers then consume the resulting direct branch.
 
-The fixed Iowa Patient cohort is 26 subjects with sub-3003 excluded. The
+The fixed Iowa Patient cohort excludes sub-3003. The
 active Patient branch uses `pfm/patient`; Lynch2024 7net uses the
 corresponding `lynch2024_7net_iowa3t_patient*` roots. There is no parallel
 27-person Patient branch.

@@ -52,7 +52,7 @@ Use explicit py314 for repository orchestration:
 
 ```bash
 /home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/01_01_run_hippunfold_t1w_local.py 102311 --dataset hcp --dry-run
-taskset --cpu-list 0-7,32-39 nice -n 10 /home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/01_01_run_hippunfold_t1w_local.py --dataset hcp --manifest manifests/hcp_7t_hippocampus_struct_complete_166.txt --jobs 12 --keep-going
+taskset --cpu-list 0-7,32-39 nice -n 10 /home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/01_01_run_hippunfold_t1w_local.py --dataset hcp --manifest manifests/hcp_7t_hippocampus_struct_complete.txt --jobs 12 --keep-going
 ```
 
 The first command prints the resolved contract; it does not execute the
@@ -108,12 +108,12 @@ updated surface processing with the regenerated multihist7sgi atlas. Do not
 install a local scientific patch or local Workbench binary to make a failed
 subject appear complete.
 
-## Complete HCP166 reconstruction
+## Complete HCP reconstruction
 
 The formal root is
 `outputs_hcp/inputs/hippunfold/dense_corobl_batch/`, with each subject's complete
 participant run under `sub-<id>/hippunfold/`. The source roster is
-`manifests/hcp_7t_hippocampus_struct_complete_166.txt`.
+`manifests/hcp_7t_hippocampus_struct_complete.txt`.
 
 The official all-target DAG generates the required volumes, surfaces,
 coordinates, CIFTI, transforms, spec files and QC. Do not force old surface
@@ -169,7 +169,7 @@ The selected atlas must use its own complete official output contract and an
 exact matching run contract. The standalone checker can inspect older results;
 the stage-01 launcher rejects an old-atlas contract when checking a new run.
 A retained-only cleanup receipt is not sufficient. The normal launcher stops
-new dispatch after a failure; the HCP166 reconstruction explicitly selects
+new dispatch after a failure; the HCP reconstruction explicitly selects
 manifest-only `--keep-going` to attempt the remaining subjects. That option
 preserves error-level QC and returns a nonzero final status if any subject
 fails; it does not turn failures into completed results.

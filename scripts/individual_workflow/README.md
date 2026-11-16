@@ -15,24 +15,24 @@ Native-space beta extraction, modeling and figures remain exploratory under
 |---|---|---|
 | `01` | `01_01`–`01_04` | HCP cross-fit matching, robustness and cohort/run comparisons |
 | `02` | `02_01`–`02_02` | Individual surface overviews and subject-template cluster FC |
-| `03` | `03_01` | Reusable HCP151 fixed-template construction |
+| `03` | `03_01` | Reusable HCP fixed-template construction |
 
 Use `/home/yojiao/.conda/envs/py314/bin/python` from the repository root.
 Stage `--help` describes its input and output selectors.
 
-## HCP151 Template Builder for Non-HCP Datasets
+## HCP Template Builder for Non-HCP Datasets
 
-`03_01_build_hcp151_fixed_template.py` builds the immutable HCP151 template
+`03_01_build_hcp_fixed_template.py` builds the immutable HCP template
 from matching `outputs_hcp/work/group_atlas/pfm/` and
-`outputs_hcp/work/hippomaps_gradients/pfm/` products for 151 subjects.
-The default identity is `hcp151_routea_full_k3_fisherz`.
-`--template-id hcp151_routea_ctxreg` requires source manifests identifying
+`outputs_hcp/work/hippomaps_gradients/pfm/` products for the current QC roster.
+The default identity is `hcp_routea_full_k3_fisherz`.
+`--template-id hcp_routea_ctxreg` requires source manifests identifying
 `pfm_ctxreg`; changing a directory or label cannot change template identity.
 
 Dataset adapters consume the validated template and native
 `space-T1w_den-512` subject meshes. Corobl label-GIFTI display filenames may
 retain corresponding vertex numbering without resampling the BOLD volume.
-The [JJ_TMS matching guide](../../docs/hipp_parcellation_network/jj_tms_hcp151_fixed_template_matching.md)
+The [JJ_TMS matching guide](../../docs/hipp_parcellation_network/jj_tms_hcp_fixed_template_matching.md)
 defines its complete matching and validation contract.
 
 For Stanford, `02_02_compute_subject_template_cluster_fc.py` averages each

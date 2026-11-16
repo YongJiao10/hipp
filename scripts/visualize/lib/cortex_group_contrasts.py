@@ -199,7 +199,7 @@ def read_subject_cache(path, subjects, panels, code):
         raise ValueError(f'Cannot reuse subject FC {path}: {exc}; explicitly run --rebuild-contrast-profiles after resolving input contracts') from exc
 
 
-ORIGINAL_ROOT = ROOT / 'outputs_iowa_jj_tms/work/hcp151_fixed_template_matching/subjects'
+ORIGINAL_ROOT = ROOT / 'outputs_iowa_jj_tms/work/hcp_fixed_template_matching/subjects'
 # Byte-identical surviving copy of the original producer's ROI registry; this
 # explicit recovery does not select a source by filesystem existence.
 ORIGINAL_REGISTRY = (

@@ -25,7 +25,7 @@
 - [x] Restore the direct-network WTA producer contract in `05_02_run_group_atlas.py`: admit `wta-top` for Lynch20/Lynch7, consume `hipp_vertex_to_network_fc.npy`, restore direct argmax assignment rows and global network summaries, and record `vertex_network_profile.npy`, `top1_fisher_z`, and `fisherz` provenance.
 - [x] Update `06_01_build_group_overview.py` so Lynch WTA accepts `both`/`fisherz` and resolves to Fisher-z, while Kong WTA remains normalized top-20 only; make omitted methods resolve to `gradient-spectral` plus `wta-top` for Lynch atlases.
 - [x] Update the focused tests and all current workflow documentation that describes Lynch as gradient-only, including producer/renderer commands and artifact semantics.
-- [x] Run focused tests, compile checks, and `git diff --check`; then run the Lynch7 WTA producer with the canonical HCP151 Lynch7 inputs and render the combined Lynch7 gradient/WTA overview using the default assignment mode.
+- [x] Run focused tests, compile checks, and `git diff --check`; then run the Lynch7 WTA producer with the canonical HCP Lynch7 inputs and render the combined Lynch7 gradient/WTA overview using the default assignment mode.
 - [x] Validate source manifests, WTA status/profile/label artifacts, presentation manifest entries, PNG integrity, and the absence of any implicit Kong ROI fallback in Lynch outputs.
 
 ## Verification Commands

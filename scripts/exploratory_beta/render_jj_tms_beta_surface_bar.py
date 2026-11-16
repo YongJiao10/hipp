@@ -1,5 +1,5 @@
 #!/home/yojiao/.conda/envs/py314/bin/python
-"""Selected JJ_TMS HCP151 raw beta surfaces and descriptive group bars.
+"""Selected JJ_TMS HCP raw beta surfaces and descriptive group bars.
 
 PNG by default; PDF requires --pdf. Never fits a model or reads archives.
 """
@@ -44,7 +44,7 @@ CONTROLS = '1006 1007 1017 1020 1023 1035 1041 1044 1052 1054'.split()
 SUBJECTS = [*CONTROLS, *PATIENTS]
 NETWORKS = {**dict.fromkeys(CONTROLS, 'VAN'), **PATIENTS}
 MDD_VAN_SUBJECTS = ('3017', '3020')
-STEM = 'jj_tms_hcp151_fixed_2mm_36p_beta_surface_bar_16sub'
+STEM = 'jj_tms_hcp_fixed_2mm_36p_beta_surface_bar'
 RUN = ROOT / 'outputs_iowa_jj_tms/work/sptms_hipp_cluster_surface_beta_native/runs/jj_tms_native_surface_beta_20260820_78sub'
 SCENE = ROOT / 'config/wb_locked_native_view_lateral_medial.scene'
 CMAP = plt.get_cmap('RdBu_r')
@@ -84,11 +84,11 @@ def combine_card_panels(card, gap=10):
 
 
 def select_rows(rows):
-    selected = [dict(r) for r in rows if r['subject'] in SUBJECTS and r['parcellation'] == 'hcp151']
+    selected = [dict(r) for r in rows if r['subject'] in SUBJECTS and r['parcellation'] == 'hcp']
     expected = {(s, h, c) for s in SUBJECTS for h in ('L', 'R') for c in (1, 2, 3)}
     keys = [(r['subject'], r['hippocampal_hemi'], int(r['cluster'])) for r in selected]
     if len(keys) != 96 or set(keys) != expected:
-        raise ValueError('Expected exactly 96 unique subject × L/R × HCP151 cluster cells')
+        raise ValueError('Expected exactly 96 unique subject × L/R × HCP cluster cells')
     for r in selected:
         if not np.isfinite(float(r['beta_mean'])) or int(r.get('n_sites', 1)) != 1:
             raise ValueError('Expected finite, single-site subject beta')
@@ -162,7 +162,7 @@ def prepare_metrics(rows, sites, out):
                         '-bad-vertices-out', str(bad_path)], check=True)
             values = mapping.load_gifti_vector(path)
             bad = mapping.load_gifti_vector(bad_path)
-            labels = beta.load_labels('jj_tms', s, h, 'hcp151')
+            labels = beta.load_labels('jj_tms', s, h, 'hcp')
             areas = beta.load_surface_areas(surfaces['midthickness'])
             expected = [float(next(r['beta_mean'] for r in rows if r['subject'] == s and r['hippocampal_hemi'] == h and int(r['cluster']) == c)) for c in (1, 2, 3)]
             if not np.allclose([float(r['beta_mean']) for r in cells], expected, rtol=1e-10, atol=1e-10):
@@ -268,7 +268,7 @@ def compose(rows, summaries, cards, limit, out, pdf=False):
     axes = fig.axes[-2:]
     lo = min(a.get_ylim()[0] for a in axes); hi = max(a.get_ylim()[1] for a in axes)
     for a in axes: a.set_ylim(lo,hi)
-    fig.suptitle('Iowa 3T · HCP151 fixed · HC (n=10) and Pure MDD (n=6)', fontsize=32, y=.985)
+    fig.suptitle('Iowa 3T · HCP fixed · HC (n=10) and Pure MDD (n=6)', fontsize=32, y=.985)
     fig.text(.5,.955,'Raw native T1w den-512 beta',ha='center',fontsize=18)
     fig.legend(handles=[
         Patch(facecolor='#407caa', edgecolor='none', alpha=.55, label='HC'),
@@ -310,7 +310,7 @@ def main():
         colorbar_layout={'grid_columns': 12, 'occupied_columns': '5:7', 'relative_width': '2/12'},
         bar_layout={'legend_anchor_y': .06, 'right_panel_ylabel': 'outside_right', 'footer_rows': 1},
         tms_site_network=NETWORKS, excluded={'3015':'Explicit exclusion in requested 16-subject cohort'},
-        n_records=len(rows), parcellation='hcp151_fixed', measurement='beta_mean',
+        n_records=len(rows), parcellation='hcp_fixed', measurement='beta_mean',
         ci='two-sided 95% Student t interval of independent subject means, df=n-1',
         source_tables={name:dict(path=str(args.run_dir.resolve()/name),sha256=hashlib.sha256((args.run_dir/name).read_bytes()).hexdigest()) for name in ('subject_network_beta.csv','site_level_beta.csv')},
         mapping=dict(method='ribbon-constrained',voxel_subdiv=3,roi='nonzero',surface_space='T1w',density_evidence='512 vertices in consumed native metrics and surfaces'),

@@ -306,7 +306,7 @@ def _artifact_paths(
     matching_hemi = (
         matching_root / "subjects" / subject / "matching" / smooth / f"hemi-{hemi}"
     )
-    template_root = _configured_path(config, "hcp151_template_root")
+    template_root = _configured_path(config, "hcp_template_root")
     hippunfold_root = _configured_path(config, "hippunfold_root")
     surf_path = (
         hippunfold_root
@@ -334,10 +334,10 @@ def _artifact_paths(
         / smooth
         / f"{subject}_hemi-{hemi}_timeseries.npy",
         "surface_gifti": surf_path,
-        "fixed_labels": template_root / f"hcp151_{smooth}_hemi-{hemi}_labels.npy",
-        "fixed_support": template_root / f"hcp151_{smooth}_hemi-{hemi}_support.npy",
-        "fixed_prototypes": template_root / f"hcp151_{smooth}_hemi-{hemi}_prototypes.npy",
-        "fixed_manifest": _configured_path(config, "hcp151_template_manifest"),
+        "fixed_labels": template_root / f"hcp_{smooth}_hemi-{hemi}_labels.npy",
+        "fixed_support": template_root / f"hcp_{smooth}_hemi-{hemi}_support.npy",
+        "fixed_prototypes": template_root / f"hcp_{smooth}_hemi-{hemi}_prototypes.npy",
+        "fixed_manifest": _configured_path(config, "hcp_template_manifest"),
         "matching_labels": matching_hemi / "labels.npy",
         "matching_scores": matching_hemi / "template_correlations.npy",
         "matching_margin": matching_hemi / "correlation_margin.npy",
@@ -381,16 +381,16 @@ def _coverage_row(
         "fc_path": str(paths["fc_vertex_to_network"]),
         "label_path": str(
             paths["fixed_labels"]
-            if method == "hcp151_fixed"
+            if method == "hcp_fixed"
             else paths["matching_labels"]
-            if method == "hcp151_template_matching"
+            if method == "hcp_template_matching"
             else ""
         ),
         "surface_timeseries_path": str(paths["surface_timeseries"]),
         "surface_midthickness_path": str(paths["surface_gifti"]),
         "manifest_path": str(
             paths["matching_manifest"]
-            if method == "hcp151_template_matching"
+            if method == "hcp_template_matching"
             else "not_applicable"
         ),
         "gradient_status": "not_applicable",
@@ -401,7 +401,7 @@ def _method_row(
     config: dict[str, Any], subject: str, smoothing_mm: int, hemi: str, method: str
 ) -> dict[str, Any]:
     paths = _artifact_paths(config, subject, smoothing_mm, hemi)
-    if method == "hcp151_fixed":
+    if method == "hcp_fixed":
         row = _coverage_row(
             method,
             subject,
@@ -418,9 +418,9 @@ def _method_row(
                 "surface_gifti",
             ),
         )
-        row["manifest_path"] = str(_configured_path(config, "hcp151_template_manifest"))
+        row["manifest_path"] = str(_configured_path(config, "hcp_template_manifest"))
         return row
-    if method == "hcp151_template_matching":
+    if method == "hcp_template_matching":
         return _coverage_row(
             method,
             subject,
@@ -451,17 +451,17 @@ def _representative_schema(config: dict[str, Any], subject: str) -> dict[str, An
         "fc_vertex_to_vertex": _array_schema(paths_l2["fc_vertex_to_vertex"]),
         "surface_timeseries": _array_schema(paths_l2["surface_timeseries"]),
         "surface_midthickness": _surface_schema(paths_l2["surface_gifti"]),
-        "hcp151_fixed_labels": _array_schema(paths_l2["fixed_labels"]),
-        "hcp151_fixed_support": _array_schema(paths_l2["fixed_support"]),
-        "hcp151_fixed_prototypes": _array_schema(paths_l2["fixed_prototypes"]),
+        "hcp_fixed_labels": _array_schema(paths_l2["fixed_labels"]),
+        "hcp_fixed_support": _array_schema(paths_l2["fixed_support"]),
+        "hcp_fixed_prototypes": _array_schema(paths_l2["fixed_prototypes"]),
         "template_matching_labels": _array_schema(paths_l2["matching_labels"]),
         "template_matching_scores": _array_schema(paths_l2["matching_scores"]),
         "template_matching_margin": _array_schema(paths_l2["matching_margin"]),
         "template_matching_valid_mask": _array_schema(paths_l2["matching_valid_mask"]),
         "template_matching_manifest": _json_schema(paths_l2["matching_manifest"]),
         "fc_summary_manifest": _json_schema(paths_l2["fc_summary"]),
-        "hcp151_template_manifest": _json_schema(
-            _configured_path(config, "hcp151_template_manifest")
+        "hcp_template_manifest": _json_schema(
+            _configured_path(config, "hcp_template_manifest")
         ),
         "template_matching_run_manifest": _json_schema(
             _configured_path(config, "template_matching_run_manifest")

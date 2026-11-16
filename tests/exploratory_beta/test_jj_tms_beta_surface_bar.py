@@ -9,7 +9,7 @@ import render_jj_tms_beta_surface_bar as renderer
 
 
 def fixture_rows():
-    return [dict(subject=s, parcellation='hcp151', hippocampal_hemi=h,
+    return [dict(subject=s, parcellation='hcp', hippocampal_hemi=h,
                  cluster=str(c), beta_mean=str(c), n_sites='1', roi_policy='nonzero')
             for s in renderer.SUBJECTS for h in ('L', 'R') for c in (1, 2, 3)]
 

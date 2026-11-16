@@ -32,7 +32,7 @@ def _features() -> pd.DataFrame:
                     rows.append(
                         {
                             "subject": subject,
-                            "method": "hcp151_template_matching",
+                            "method": "hcp_template_matching",
                             "smoothing_mm": 2,
                             "hemisphere": hemisphere,
                             "system": system,
@@ -50,7 +50,7 @@ def _effects() -> pd.DataFrame:
         [
             {
                 "contrast": "TIS PTSD−NTHC",
-                "method": "hcp151_template_matching",
+                "method": "hcp_template_matching",
                 "smoothing_mm": 2,
                 "hemisphere": hemisphere,
                 "system": system,
@@ -137,7 +137,7 @@ def _hcp_features() -> pd.DataFrame:
                     {
                         "subject": subject,
                         "cohort": "HCP 7T",
-                        "method": "hcp151_crossfit_template_matching",
+                        "method": "hcp_crossfit_template_matching",
                         "smoothing_mm": 2,
                         "hemisphere": hemisphere,
                         "system": system,
@@ -155,7 +155,7 @@ def _hcp_effects() -> pd.DataFrame:
                 "contrast": "HCP 7T−NTHC",
                 "case_group": "HCP 7T",
                 "reference_group": "NTHC",
-                "method": "hcp151_crossfit_template_matching",
+                "method": "hcp_crossfit_template_matching",
                 "smoothing_mm": 2,
                 "hemisphere": hemisphere,
                 "system": system,
@@ -181,7 +181,7 @@ def test_area_summary_renders_hcp_crossfit_reference_with_explicit_layout_contra
         reference_features=_hcp_features(),
         reference_effects=_hcp_effects(),
         reference_metadata={
-            "method": "hcp151_crossfit_template_matching",
+            "method": "hcp_crossfit_template_matching",
             "n_subjects": 151,
             "n_folds": 5,
             "family_aware": True,
@@ -190,7 +190,7 @@ def test_area_summary_renders_hcp_crossfit_reference_with_explicit_layout_contra
 
     assert manifest["display_group_order"][-1] == "HCP 7T"
     assert manifest["display_contrast_order"][-1] == "HCP 7T−NTHC"
-    assert manifest["reference_method"] == "hcp151_crossfit_template_matching"
+    assert manifest["reference_method"] == "hcp_crossfit_template_matching"
     assert manifest["reference_subject_count"] == 151
     assert manifest["feature_cohort_subject_counts"]["HCP 7T"] == 2
     assert manifest["source_reference_effect_rows"] == 6

@@ -6,7 +6,7 @@ EMOTION and WM each use the complete 159-participant task dataset at
 `/home/yojiao/LSS/jianglab/3_Data_Working/HCP_tast_3T/`.
 All 159 task participants have anatomy in the 166-participant HCP reconstruction.
 The current HCP7T functional reference roster contains 162 participants.
-The explicitly selected HCP151 atlas and crossfit products remain separate
+The explicitly selected HCP atlas and crossfit products remain separate
 analysis references; changing QC does not rebuild those downstream products.
 HippUnfold anatomy uses 512 vertices per hippocampal hemisphere.
 
@@ -53,8 +53,8 @@ labels. Runs are concatenated in memory in the declared order. Missing,
 misordered, or mismatched inputs are errors.
 
 Task preparation uses its own `--route-root` and `--shared-root`. The
-151-participant reference surfaces are reused from
-`outputs_hcp/inputs/kong2022/templates/hipp_group_average_t1only_151/group_average_surfaces/`.
+The group-average reference surfaces are reused from
+`outputs_hcp/inputs/kong2022/templates/hipp_group_average/group_average_surfaces/`.
 
 ## Preparation and QC
 
@@ -107,7 +107,7 @@ and selected contrasts. Missing required products cause an error.
 
 The two regional representations are:
 
-- `hcp151_atlas`: shared resting-state Anterior, Body, and Posterior labels.
+- `hcp_atlas`: shared resting-state Anterior, Body, and Posterior labels.
 - `template_matching`: individualized crossfit labels with the same functional
   identities; their spatial locations may vary across participants.
 

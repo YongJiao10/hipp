@@ -2,7 +2,7 @@
 
 # Fit the exploratory Native-space JJ_TMS L/R hippocampal surface beta models.
 # This fits healthy and patient groups separately, with separate branches for
-# individual template matching and HCP151 fixed atlas.
+# individual template matching and HCP fixed atlas.
 # This is not a numbered formal-workflow entry point.
 
 args <- commandArgs(trailingOnly = TRUE)
@@ -33,7 +33,7 @@ cluster_levels <- c("1", "2", "3")
 hipp_levels <- c("L", "R")
 target_levels <- c("L", "R")
 group_levels <- c("healthy", "patient")
-parcellation_levels <- c("template_matching", "hcp151")
+parcellation_levels <- c("template_matching", "hcp")
 
 read_beta_table <- function(path, source_name) {
   data <- read.csv(path, stringsAsFactors = FALSE, check.names = FALSE)

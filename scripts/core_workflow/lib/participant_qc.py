@@ -18,8 +18,8 @@ def cohort_prefix(dataset: str, task: str) -> str:
     return dataset if task == 'rest' else f'{dataset}_{task}'
 
 
-def pass_roster_name(dataset: str, task: str, count: int | str = 'latest') -> str:
-    return f'{cohort_prefix(dataset, task)}_hippocampus_fmri_qc_pass_t1only_{count}.txt'
+def pass_roster_name(dataset: str, task: str) -> str:
+    return f'{cohort_prefix(dataset, task)}_hippocampus_fmri_qc_pass_t1only_latest.txt'
 
 
 def load_qc_run_inputs(path: Path) -> dict[str, list[dict[str, object]]]:

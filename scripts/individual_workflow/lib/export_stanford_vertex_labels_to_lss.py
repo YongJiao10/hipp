@@ -12,7 +12,7 @@ import sys
 import numpy as np
 
 REPO_ROOT = Path("/home/yojiao/hpchome/hipp")
-SRC_ROOT = REPO_ROOT / "outputs_stanford" / "work" / "hcp151_fixed_template_matching" / "subjects"
+SRC_ROOT = REPO_ROOT / "outputs_stanford" / "work" / "hcp_fixed_template_matching" / "subjects"
 DST_ROOT = Path("/home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_CausalConnectome/template_matched_profiles")
 
 HEMIS = ("L", "R")
@@ -91,7 +91,7 @@ def main() -> int:
     readme_path = DST_ROOT / "README.md"
     readme_content = """# Stanford template-matched cluster FC and vertex-level labels
 
-Each subject directory contains the two hemispheres from the Stanford 2 mm HCP151 template-matching result.
+Each subject directory contains the two hemispheres from the Stanford 2 mm HCP template-matching result.
 
 ## Files per subject (`sub-<id>/`):
 

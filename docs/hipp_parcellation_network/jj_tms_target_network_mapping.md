@@ -118,7 +118,7 @@ This creates separate artifacts and leaves the individualized outputs intact:
   for the 94-subject/patient cohort (not the coordinate workbook above):
   `/home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_JJ_TMS/subject_infomation.xlsx`
 - Fixed roster:
-  `manifests/jj_tms_kong2022_70_subjects.txt`
+  `manifests/jj_tms_kong2022_subjects.txt`
 - Subject surfaces:
   `/home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_JJ_TMS/derivatives_surf/sub-*/anat/`
 - Individualized labels:

@@ -25,7 +25,7 @@ import plotting  # noqa: E402
 import reporting  # noqa: E402
 
 
-METHODS = ("hcp151_fixed", "hcp151_template_matching")
+METHODS = ("hcp_fixed", "hcp_template_matching")
 REGISTERED_METHODS = METHODS + ("group_atlas_gradient_spectral",)
 MODES = ("bilateral", "L", "R", "L-R")
 REGIONS = ("anterior", "middle", "posterior")
@@ -90,7 +90,7 @@ def _descriptives_fixture() -> pd.DataFrame:
         for group_index, group in enumerate(contrasts.STANFORD_CELLS):
             rows.append(
                 {
-                    "method": "hcp151_fixed",
+                    "method": "hcp_fixed",
                     "smoothing_mm": 2,
                     "hemisphere_mode": "bilateral",
                     "network_resolution": resolution,
@@ -131,8 +131,8 @@ def test_unified_branch_manifest_keeps_group_atlas_in_priority_plan() -> None:
     config = {
         "unified_branch_policy": {
             "method_order": [
-                "hcp151_fixed",
-                "hcp151_template_matching",
+                "hcp_fixed",
+                "hcp_template_matching",
                 "group_atlas_gradient_spectral",
             ],
             "subject_fc_estimands": {
@@ -207,12 +207,12 @@ def test_candidate_registry_is_small_and_untested_without_exhaustive_pairs() -> 
 def test_candidate_registry_deduplicates_pairs_before_applying_cap() -> None:
     rows = []
     effects = {"A": 0.01, "B": -0.03, "C": 0.02}
-    for method in ("hcp151_fixed", "hcp151_template_matching"):
+    for method in ("hcp_fixed", "hcp_template_matching"):
         for smoothing_mm in (2, 4):
             for network, coefficient in effects.items():
                 if (
                     network == "A"
-                    and method == "hcp151_template_matching"
+                    and method == "hcp_template_matching"
                     and smoothing_mm == 4
                 ):
                     coefficient = -coefficient
@@ -348,7 +348,7 @@ def test_artifact_direction_table_is_bounded_for_portable_layout() -> None:
 
 def test_portable_chart_snapshots_are_bounded_without_losing_both_resolutions() -> None:
     heatmap = reporting._heatmap_snapshot(_primary_fixture())
-    assert set(heatmap["method"]) == {"hcp151_fixed"}
+    assert set(heatmap["method"]) == {"hcp_fixed"}
     assert set(heatmap["resolution"]) == {8, 17}
     assert "failure_reason" not in heatmap.columns
     assert set(heatmap.columns) == {
@@ -395,7 +395,7 @@ def test_portable_chart_snapshots_are_bounded_without_losing_both_resolutions() 
             {
                 "dataset": "jjtms",
                 "estimand": "patient-healthy",
-                "method": "hcp151_fixed",
+                "method": "hcp_fixed",
                 "smoothing_mm": 2,
                 "hemisphere_mode": "bilateral",
                 "network_resolution": 8,

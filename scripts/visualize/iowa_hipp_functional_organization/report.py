@@ -442,12 +442,12 @@ METRIC_INFO = {
     ),
     'fixed_hcp_similarity': (
         'Fixed HCP Territory Similarity',
-        'HCP151 Reference Territory · vs. Healthy Controls',
+        'HCP Reference Territory · vs. Healthy Controls',
         'Correlation with the matched HCP template\ninside the same external HCP territory for every group'
     ),
     'fixed_hcp_advantage': (
         'Fixed HCP Territory Advantage',
-        'HCP151 Reference Territory · vs. Healthy Controls',
+        'HCP Reference Territory · vs. Healthy Controls',
         'Matched HCP template minus strongest competitor\ninside the same external HCP territory for every group'
     ),
     'segregation': (

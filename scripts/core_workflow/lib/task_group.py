@@ -22,13 +22,13 @@ from .task_design import normalize_task_branch
 ANATOMICAL_CLUSTER_NAMES = ("Anterior", "Middle", "Posterior")
 N_LONG_AXIS_BINS = 20
 
-# Subregion zone branches. hcp151_atlas = rest group K=3 labels shared by all
+# Subregion zone branches. hcp_atlas = rest group K=3 labels shared by all
 # subjects; template_matching = crossfit individualized K=3 labels per subject.
 # Names mirror the JJ_TMS PARCELLATIONS convention for cross-project consistency.
-PARCELLATION_HCP151_ATLAS = "hcp151_atlas"
+PARCELLATION_HCP_ATLAS = "hcp_atlas"
 PARCELLATION_TEMPLATE_MATCHING = "template_matching"
 PARCELLATION_CHOICES = (
-    PARCELLATION_HCP151_ATLAS,
+    PARCELLATION_HCP_ATLAS,
     PARCELLATION_TEMPLATE_MATCHING,
 )
 
@@ -435,7 +435,7 @@ def resolve_zone_subjects(
     file are excluded from this zone only and recorded; the group zone keeps
     the full roster.
     """
-    if zone == PARCELLATION_HCP151_ATLAS:
+    if zone == PARCELLATION_HCP_ATLAS:
         return list(used), {s: "group K=3 labels" for s in used}
     if zone != PARCELLATION_TEMPLATE_MATCHING:
         raise ValueError(f"Unknown zone: {zone!r}; expected one of {PARCELLATION_CHOICES}")

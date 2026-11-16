@@ -61,8 +61,8 @@ def test_endpoint_enumeration_is_exactly_432_combined_kember_units() -> None:
         "boundary_sharpness": 144,
     }
     assert set(endpoints["method"]) == {
-        "hcp151_template_matching",
-        "hcp151_fixed",
+        "hcp_template_matching",
+        "hcp_fixed",
     }
     assert set(endpoints["contrast"]) == {
         "TEHC−NTHC",
@@ -111,7 +111,7 @@ def test_active_direct_contract_rejects_a_single_method() -> None:
     module = _module()
     with pytest.raises(ValueError, match="exactly"):
         module.enumerate_direct_endpoints(
-            {"methods": ["hcp151_fixed"], "smoothings_mm": [2], "hemispheres": ["L"]}
+            {"methods": ["hcp_fixed"], "smoothings_mm": [2], "hemispheres": ["L"]}
         )
 
 
@@ -170,7 +170,7 @@ def _synthetic_feature_table() -> tuple[pd.DataFrame, dict[str, tuple[str, ...]]
     }
     values = {"sub-0001": 10.0, "sub-0002": 12.0, "sub-0003": 20.0, "sub-0004": np.nan}
     rows = []
-    for method in ("hcp151_template_matching", "hcp151_fixed"):
+    for method in ("hcp_template_matching", "hcp_fixed"):
         for subject, area in values.items():
             group = "NTHC" if subject in rosters["NTHC"] else "TEHC"
             for system in ("anterior", "middle", "posterior"):
@@ -193,7 +193,7 @@ def _synthetic_feature_table() -> tuple[pd.DataFrame, dict[str, tuple[str, ...]]
         "reference_group": "NTHC",
         "cohort_order": list(rosters),
         "contrasts": [{"contrast": "TEHC−NTHC", "case_group": "TEHC", "reference_group": "NTHC"}],
-        "methods": ["hcp151_template_matching", "hcp151_fixed"],
+        "methods": ["hcp_template_matching", "hcp_fixed"],
         "smoothings_mm": [2],
         "hemispheres": ["L"],
     }
@@ -205,8 +205,8 @@ def test_missing_values_only_reduce_the_corresponding_direct_endpoint() -> None:
     table, rosters, config = _synthetic_feature_table()
     effects, descriptives, coverage = module.compute_direct_contrast_statistics(table, config=config, rosters=rosters)
 
-    area = effects.query("method == \"hcp151_template_matching\" and metric == \"surface_area_mm2\" and system == \"anterior\"").iloc[0]
-    segregation = effects.query("method == \"hcp151_template_matching\" and metric == \"functional_segregation_d\" and system == \"anterior\"").iloc[0]
+    area = effects.query("method == \"hcp_template_matching\" and metric == \"surface_area_mm2\" and system == \"anterior\"").iloc[0]
+    segregation = effects.query("method == \"hcp_template_matching\" and metric == \"functional_segregation_d\" and system == \"anterior\"").iloc[0]
     assert area["case_n"] == 1
     assert area["reference_n"] == 2
     assert np.isnan(area["p_value"])
@@ -252,16 +252,16 @@ def test_run_direct_contrasts_writes_one_combined_method_table(
     effects = pd.read_csv(result / "direct_contrast_effects.tsv", sep="\t")
     manifest = json.loads((result / "run_manifest.json").read_text(encoding="utf-8"))
     assert set(effects["method"]) == {
-        "hcp151_template_matching",
-        "hcp151_fixed",
+        "hcp_template_matching",
+        "hcp_fixed",
     }
     assert manifest["methods"] == [
-        "hcp151_template_matching",
-        "hcp151_fixed",
+        "hcp_template_matching",
+        "hcp_fixed",
     ]
     assert manifest["endpoint_counts_by_method"] == {
-        "hcp151_fixed": 9,
-        "hcp151_template_matching": 9,
+        "hcp_fixed": 9,
+        "hcp_template_matching": 9,
     }
     assert effects["q_bh"].isna().all()
     assert effects["correction_status"].eq("deferred_until_analysis_set_freeze").all()

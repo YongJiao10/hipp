@@ -70,7 +70,7 @@
       },
       "parcellations": [
         {
-          "method": "hcp151_fixed",
+          "method": "hcp_fixed",
           "availability": "available",
           "fc_root": "outputs_stanford/inputs/kong2022/shared_inputs/routea",
           "fisher_z_pattern": "{subject}/fc/kong2022/{smoothing}mm/hemi_{hemisphere}/hipp_vertex_to_network_fc.npy",
@@ -81,7 +81,7 @@
               "pattern": "{subject}/reference/kong2022/reference_summary.json"
             },
             {
-              "root": "outputs_hcp/templates/hcp151_routea_full_k3_fisherz",
+              "root": "outputs_hcp/templates/hcp_routea_full_k3_fisherz",
               "pattern": "template_manifest.json"
             }
           ],
@@ -109,10 +109,10 @@
               ]
             }
           },
-          "labels_root": "outputs_hcp/templates/hcp151_routea_full_k3_fisherz",
-          "labels_pattern": "hcp151_{smoothing}mm_hemi-{hemisphere}_labels.npy",
-          "valid_mask_root": "outputs_hcp/templates/hcp151_routea_full_k3_fisherz",
-          "valid_mask_pattern": "hcp151_{smoothing}mm_hemi-{hemisphere}_support.npy",
+          "labels_root": "outputs_hcp/templates/hcp_routea_full_k3_fisherz",
+          "labels_pattern": "hcp_{smoothing}mm_hemi-{hemisphere}_labels.npy",
+          "valid_mask_root": "outputs_hcp/templates/hcp_routea_full_k3_fisherz",
+          "valid_mask_pattern": "hcp_{smoothing}mm_hemi-{hemisphere}_support.npy",
           "registry_path": "outputs_hcp/work/group_atlas/routea_full_k3_fisherz/gradient-spectral/kong2022/2mm/cov_0p80/g1g2g3/hemi_L/cluster_roi_registry.tsv",
           "fc_column_index_column": "roi_id",
           "fc_column_index_base": 1,
@@ -124,14 +124,14 @@
           "region_weight_source": "valid_vertex_count"
         },
         {
-          "method": "hcp151_template_matching",
+          "method": "hcp_template_matching",
           "availability": "available",
-          "fc_root": "outputs_stanford/work/hcp151_fixed_template_matching/subjects",
+          "fc_root": "outputs_stanford/work/hcp_fixed_template_matching/subjects",
           "fisher_z_pattern": "{subject}/matching/{smoothing}mm/hemi-{hemisphere}/vertex_to_roi_fisherz_fc.npy",
           "provenance_pattern": "{subject}/matching/{smoothing}mm/hemi-{hemisphere}/combo_manifest.json",
           "provenance_sidecar_patterns": [
             {
-              "root": "outputs_stanford/work/hcp151_fixed_template_matching/subjects",
+              "root": "outputs_stanford/work/hcp_fixed_template_matching/subjects",
               "pattern": "{subject}/subject_manifest.json"
             },
             {
@@ -184,9 +184,9 @@
         "patient": 27
       },
       "rosters": {
-        "healthy": "manifests/jj_tms_hc_67_subjects.txt",
+        "healthy": "manifests/jj_tms_hc_subjects.txt",
         "patient": "manifests/jj_tms_patient_27_subjects.txt",
-        "all_subjects": "manifests/jj_tms_hcp151_fixed_template_subjects.txt"
+        "all_subjects": "manifests/jj_tms_hcp_fixed_template_subjects.txt"
       },
       "input_gate": {
         "status": "ready",
@@ -194,7 +194,7 @@
         "source_scope": "rest-fMRI Fisher-z FC and provenance manifests only"
       },
       "fc_inputs": {
-        "root": "outputs_iowa_jj_tms/work/hcp151_fixed_template_matching/subjects",
+        "root": "outputs_iowa_jj_tms/work/hcp_fixed_template_matching/subjects",
         "fisher_z_pattern": "{subject}/matching/{smoothing}mm/hemi-{hemisphere}/vertex_to_roi_fisherz_fc.npy",
         "provenance_pattern": "{subject}/matching/{smoothing}mm/hemi-{hemisphere}/combo_manifest.json",
         "fc_estimator": "fisher_z",
@@ -202,18 +202,18 @@
       },
       "parcellations": [
         {
-          "method": "hcp151_fixed",
+          "method": "hcp_fixed",
           "availability": "available",
-          "fc_root": "outputs_iowa_jj_tms/work/hcp151_fixed_template_matching/subjects",
+          "fc_root": "outputs_iowa_jj_tms/work/hcp_fixed_template_matching/subjects",
           "fisher_z_pattern": "{subject}/matching/{smoothing}mm/hemi-{hemisphere}/vertex_to_roi_fisherz_fc.npy",
           "provenance_pattern": "{subject}/matching/{smoothing}mm/hemi-{hemisphere}/combo_manifest.json",
           "provenance_sidecar_patterns": [
             {
-              "root": "outputs_iowa_jj_tms/work/hcp151_fixed_template_matching/subjects",
+              "root": "outputs_iowa_jj_tms/work/hcp_fixed_template_matching/subjects",
               "pattern": "{subject}/subject_manifest.json"
             },
             {
-              "root": "outputs_hcp/templates/hcp151_routea_full_k3_fisherz",
+              "root": "outputs_hcp/templates/hcp_routea_full_k3_fisherz",
               "pattern": "template_manifest.json"
             }
           ],
@@ -240,10 +240,10 @@
               ]
             }
           },
-          "labels_root": "outputs_hcp/templates/hcp151_routea_full_k3_fisherz",
-          "labels_pattern": "hcp151_{smoothing}mm_hemi-{hemisphere}_labels.npy",
-          "valid_mask_root": "outputs_hcp/templates/hcp151_routea_full_k3_fisherz",
-          "valid_mask_pattern": "hcp151_{smoothing}mm_hemi-{hemisphere}_support.npy",
+          "labels_root": "outputs_hcp/templates/hcp_routea_full_k3_fisherz",
+          "labels_pattern": "hcp_{smoothing}mm_hemi-{hemisphere}_labels.npy",
+          "valid_mask_root": "outputs_hcp/templates/hcp_routea_full_k3_fisherz",
+          "valid_mask_pattern": "hcp_{smoothing}mm_hemi-{hemisphere}_support.npy",
           "registry_path": "outputs_hcp/work/group_atlas/routea_full_k3_fisherz/gradient-spectral/kong2022/2mm/cov_0p80/g1g2g3/hemi_L/cluster_roi_registry.tsv",
           "fc_column_index_column": "roi_id",
           "fc_column_index_base": 1,
@@ -255,14 +255,14 @@
           "region_weight_source": "valid_vertex_count"
         },
         {
-          "method": "hcp151_template_matching",
+          "method": "hcp_template_matching",
           "availability": "available",
-          "fc_root": "outputs_iowa_jj_tms/work/hcp151_fixed_template_matching/subjects",
+          "fc_root": "outputs_iowa_jj_tms/work/hcp_fixed_template_matching/subjects",
           "fisher_z_pattern": "{subject}/matching/{smoothing}mm/hemi-{hemisphere}/vertex_to_roi_fisherz_fc.npy",
           "provenance_pattern": "{subject}/matching/{smoothing}mm/hemi-{hemisphere}/combo_manifest.json",
           "provenance_sidecar_patterns": [
             {
-              "root": "outputs_iowa_jj_tms/work/hcp151_fixed_template_matching/subjects",
+              "root": "outputs_iowa_jj_tms/work/hcp_fixed_template_matching/subjects",
               "pattern": "{subject}/subject_manifest.json"
             }
           ],
@@ -306,8 +306,8 @@
   },
   "unified_branch_policy": {
     "method_order": [
-      "hcp151_fixed",
-      "hcp151_template_matching",
+      "hcp_fixed",
+      "hcp_template_matching",
       "group_atlas_gradient_spectral"
     ],
     "subject_fc_estimands": {

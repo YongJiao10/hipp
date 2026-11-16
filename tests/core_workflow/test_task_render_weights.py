@@ -111,13 +111,13 @@ def test_weighted_sides_reconstruct_load_x_places(tmp_path: Path) -> None:
 
 
 def test_parse_bh_fdr_p_requires_adjusted_value() -> None:
-    row = {"parcellation": "hcp151_atlas", "cluster_name": "Middle",
+    row = {"parcellation": "hcp_atlas", "cluster_name": "Middle",
            "contrast": "c", "hemi": "L", "group_p_fdr": "0.004",
            "group_p": "0.001"}
     assert render.parse_bh_fdr_p(row, contrast="c", hemi="L") == pytest.approx(0.004)
     for bad in ({"group_p": "0.001"}, {"group_p_fdr": ""}, {"group_p_fdr": "  "}):
         tagged = dict(bad)
-        tagged.update({"parcellation": "hcp151_atlas", "cluster_name": "Middle"})
+        tagged.update({"parcellation": "hcp_atlas", "cluster_name": "Middle"})
         with pytest.raises(ValueError, match="[Ff][Dd][Rr]"):
             render.parse_bh_fdr_p(tagged, contrast="c", hemi="L")
 
@@ -203,7 +203,7 @@ def test_region_brackets_drawn_with_legend(monkeypatch: pytest.MonkeyPatch, bin_
         labels = [t.get_text() for t in axes[1].texts]
         assert "***" in labels
         legend_labels = [t.get_text() for t in axes[1].get_legend().get_texts()]
-        assert legend_labels == ["hcp151", "tm"]
+        assert legend_labels == ["hcp", "tm"]
         lo, hi = axes[1].get_ylim()
         assert hi >= max(
             t.get_position()[1] for t in axes[1].texts if t.get_text() in ("+", "*", "**", "***")

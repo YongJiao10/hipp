@@ -1,11 +1,11 @@
-# JJ_TMS × HCP151 Fixed-Template Matching 执行计划
+# JJ_TMS × HCP Fixed-Template Matching 执行计划
 
 ## Summary
 
-- 先构建一次可复用的 HCP151 功能模板，再由 JJ_TMS adapter 引用，不复制模板到 JJ_TMS。
+- 先构建一次可复用的 HCP 功能模板，再由 JJ_TMS adapter 引用，不复制模板到 JJ_TMS。
 - 执行顺序：实现与测试 → 3 人 smoke（1001/1002/1003）→ 严格验证 → 固定 70 人全队列。
 - 使用全部 `task-rest` XCP-D denoised runs；sub-1016 的 2-run 情况作为合法输入，其余 69 人为 3 runs。
-- 计划在执行开始时保存到 `docs/superpowers/plans/2026-08-09-jj-tms-hcp151-fixed-template-matching.md`，并采用 inline `executing-plans` 工作流。
+- 计划在执行开始时保存到 `docs/superpowers/plans/2026-08-09-jj-tms-hcp-fixed-template-matching.md`，并采用 inline `executing-plans` 工作流。
 
 ## Implementation Changes
 
@@ -15,8 +15,8 @@
   - 现有 HCP cross-fit 改为调用该模块，结果与当前实现保持一致。
 - 新增 HCP 模板 builder，将四种 `2mm/4mm × L/R` 的 `group_labels_final.npy`、`group_support_mask.npy` 和 `group_mean_fisherz_fc_full.npy` 转换为严格的 `3×400` prototype；不得使用聚合定义不同的 `cluster_roi_profile.npy`。
 - 创建已确认的浅层共享目录：
-  - `outputs_hcp/templates/hcp151_routea_full_k3_fisherz/`
-  - 文件平铺命名为 `hcp151_<smoothing>_hemi-<L|R>_{labels,support,prototypes}.npy`，并写入包含 151 人、den-512、K=3、源路径和 SHA-256 的 `template_manifest.json`。
+  - `outputs_hcp/templates/hcp_routea_full_k3_fisherz/`
+  - 文件平铺命名为 `hcp_<smoothing>_hemi-<L|R>_{labels,support,prototypes}.npy`，并写入包含 151 人、den-512、K=3、源路径和 SHA-256 的 `template_manifest.json`。
 - 新增 JJ_TMS adapter：
   - 按数值 run 顺序逐 run 将 MNI XCP-D volume 采样到个体 corobl den-512 表面，保留每个 run 的 GIFTI，再沿时间轴拼接；不生成重复的大型 concat NIfTI。
   - 校验 volume 网格/affine、拼接时间点与 91k concat dtseries 完全一致。
@@ -24,8 +24,8 @@
   - 采用既有定义：海马逐 run 有效信号掩膜、2/4 mm surface smoothing、vertex-to-ROI Pearson FC、Fisher-z、与 HCP prototype 的 jointly-finite Pearson matching。
   - 输出 AP 标签 `1=Anterior/VAN, 2=Middle/SMN, 3=Posterior/DMN`、三个相关系数、top1-top2 margin、GIFTI、输入/输出指纹和 consumed-surface density evidence。
 - 创建已确认的 JJ_TMS 目录：
-  - `outputs_iowa_jj_tms/work/hcp151_fixed_template_matching/subjects/`
-  - `outputs_iowa_jj_tms/work/hcp151_fixed_template_matching/runs/`
+  - `outputs_iowa_jj_tms/work/hcp_fixed_template_matching/subjects/`
+  - `outputs_iowa_jj_tms/work/hcp_fixed_template_matching/runs/`
 - CLI 固定为 `--mode preflight|run|validate`，支持 `--subjects`、固定 roster manifest、`--run-id`、`--jobs 2`、`--resume` 和路径覆盖；不提供 `--overwrite`。失败的 `.partial` 和每-run中间产物保留，不执行删除。
 - 新增方法文档和 individual-workflow README 入口；不修改当前未提交的 JJ_TMS HippUnfold 文件。没有依赖或运行时栈变化，因此无需改环境 manifest。
 
@@ -39,7 +39,7 @@
   - 固定 400 ROI 缺失列为 NaN；matching 仅使用 jointly-finite features。
   - resume 只复用指纹、shape、dtype 和参数完全一致的产物；不覆盖不一致结果。
   - 现有 cross-fit 测试继续通过，证明共享模块抽取未改变 HCP 结果。
-- 使用已确认且当前不存在的 `/tmp/jj_tms_hcp151_pytest_20260809/` 作为 pytest `--basetemp`，测试后保留，不清理。
+- 使用已确认且当前不存在的 `/tmp/jj_tms_hcp_pytest_20260809/` 作为 pytest `--basetemp`，测试后保留，不清理。
 - 每次 Python 仓库任务先记录解释器，并只使用 `/home/yojiao/.conda/envs/py314/bin/python`。
 - Smoke 进入全队列的硬门槛：
   - 3/3 被试、4/4 smoothing×hemi 组合均为 `status=ok`。
@@ -53,8 +53,8 @@
 1. 运行共享模块、新 builder、JJ adapter 和既有 cross-fit 测试。
 2. 对 HCP builder 执行只读 preflight，然后生成共享模板并 validate。
 3. 对 1001/1002/1003 执行 JJ_TMS preflight。
-4. 以 `--jobs 2 --run-id jj_tms_hcp151_smoke_20260809` 运行 smoke，并执行 `--mode validate`。
-5. 只有 smoke 硬门槛全部通过后，以固定 manifest、`--jobs 2 --resume --run-id jj_tms_hcp151_full_20260809` 运行 70 人。
+4. 以 `--jobs 2 --run-id jj_tms_hcp_smoke_20260809` 运行 smoke，并执行 `--mode validate`。
+5. 只有 smoke 硬门槛全部通过后，以固定 manifest、`--jobs 2 --resume --run-id jj_tms_hcp_full_20260809` 运行 70 人。
 6. 执行全队列 validate，核对 70/70 manifest、SHA-256、label counts、margin summaries 和 density evidence。
 
 ## Assumptions

@@ -40,7 +40,7 @@ TM，不是 group dominant，也不是逐个体重新聚类。** WTA 保留原�
 
 分析包括：
 
-1. 模板身份与分化：signed 三模板相关、`Smax`、`margin`、固定 HCP151
+1. 模板身份与分化：signed 三模板相关、`Smax`、`margin`、固定 HCP
    A/B/P 空间 territory 内的 matched-template similarity 与 advantage，以及 TM 的
    Kember segregation 与 4 mm 测地邻域 boundary sharpness。固定 HCP territory
    在每个 branch × hemisphere 内相同；它不使用任何 Iowa 组 atlas 来定义取样区域。

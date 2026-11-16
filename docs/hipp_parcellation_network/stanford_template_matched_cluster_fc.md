@@ -1,16 +1,16 @@
 # Stanford 2 mm template-matched cluster FC
 
 `02_02_compute_subject_template_cluster_fc.py` produces the subject-level FC
-needed after HCP151 template matching. It uses each subject's own
+needed after HCP template matching. It uses each subject's own
 `matching/2mm/hemi-{L|R}/labels.npy` and `valid_mask.npy`, averages the
 subject's 2 mm hippocampal surface time series within labels 1, 2, and 3, and
 then correlates those three time series with the same subject's 400 Kong2022
 ROI time series. It does not average an existing `512 x 400` vertex-FC matrix.
 
-The default source roots are the current materialized Stanford HCP151 inputs:
+The default source roots are the current materialized Stanford HCP inputs:
 
 ```text
-outputs_stanford/work/hcp151_fixed_template_matching/subjects/
+outputs_stanford/work/hcp_fixed_template_matching/subjects/
 outputs_stanford/inputs/kong2022/shared_inputs/surface/
 outputs_stanford/inputs/kong2022/shared_inputs/pfm/
 ```
@@ -47,7 +47,7 @@ For each hemisphere, the repository-local output is written beside the
 template-matching labels:
 
 ```text
-outputs_stanford/work/hcp151_fixed_template_matching/subjects/sub-<id>/matching/2mm/hemi-<L|R>/
+outputs_stanford/work/hcp_fixed_template_matching/subjects/sub-<id>/matching/2mm/hemi-<L|R>/
   cluster_mean_timeseries_fc_pearson.npy
   cluster_mean_timeseries_fc_fisherz.npy
   cluster_mean_timeseries_fc_manifest.json

@@ -11,7 +11,7 @@
 > `primary_screen` 编排器：subject-level FC 分支与 Stanford group-atlas geometry
 > family 共用 branch manifest 和严格优先级 barrier。`external_group_atlas_analysis`
 > 保留为实现/报告兼容入口，不再是独立实验流程；Kember 严格只有
-> `hcp151_template_matching` 与 `hcp151_fixed` 两种方法；**禁止个体聚类**。
+> `hcp_template_matching` 与 `hcp_fixed` 两种方法；**禁止个体聚类**。
 
 ## 1. 核心研究架构
 
@@ -61,12 +61,12 @@ interaction               = (TIS - TEHC) - (NTS - NTHC)
 | Workflow | 实际定义 | 研究角色 | 主要限制 |
 |---|---|---|---|
 | `cross_dataset_rest_fc` | shared-label subject-level Fisher-z FC + unified group-atlas branch ledger | 跨数据集定位与 Stanford factorial inference；统一编排 geometry family | FC 行不回答面积，geometry 行不混入 FC 数值推断 |
-| `kember_metrics` | `hcp151_template_matching` 与 `hcp151_fixed` 的 subject-level Kember features | area、segregation、sharpness | 功能指标用 source-512；面积用 native metric |
+| `kember_metrics` | `hcp_template_matching` 与 `hcp_fixed` 的 subject-level Kember features | area、segregation、sharpness | 功能指标用 source-512；面积用 native metric |
 | `external_group_atlas_analysis` | unified group-atlas geometry family 的实现/报告兼容表面 | HC-referenced group-level geometry 与 agreement | 不独立调度，不回填 Kember subject-level inference |
 
 统计声明遵循下列规则：
 
-- Kember 的活跃方法严格只有 `hcp151_template_matching` 与 `hcp151_fixed`；没有第三种
+- Kember 的活跃方法严格只有 `hcp_template_matching` 与 `hcp_fixed`；没有第三种
   subject-level clustering method。
 - functional segregation 与 boundary sharpness 使用 consumed 512-source BOLD、labels
   与 source-512 midthickness geometry；system surface area 使用 native HippUnfold
@@ -144,8 +144,8 @@ Kember 的三个量必须分开：
 3. **Boundary sharpness**：边界局部内外相关分布的 Cohen’s d，不是边界面积。
 
 本项目可另外描述 boundary position/length、AP centroid 和 template similarity margin，
-但必须标为扩展指标。当前 `kember_metrics` 只使用 `hcp151_template_matching` 与
-`hcp151_fixed`；`group_atlas_gradient_spectral` 的实现仍位于
+但必须标为扩展指标。当前 `kember_metrics` 只使用 `hcp_template_matching` 与
+`hcp_fixed`；`group_atlas_gradient_spectral` 的实现仍位于
 `external_group_atlas_analysis`，但由 `cross_dataset_rest_fc` 的统一 branch ledger
 
 这一扩展先做 promising-first 描述和基础组间模型；只有出现清晰信号后，再投入
@@ -157,7 +157,7 @@ split-half、ICC、2/4/6 mm 邻域或空间 null 等严谨化工作。
 
 Stanford 主静息态队列使用现有 194-person QC roster，并把四个组 manifest 的并集、互斥性
 和 ID→T/S 映射写入新的 hashed subject table。`stanford_all_subjects.txt` 有 199 行而主
-template-matching roster 为 194；多出的 5 名只可在固定 HCP151 sensitivity 中出现，并须
+template-matching roster 为 194；多出的 5 名只可在固定 HCP sensitivity 中出现，并须
 在 flow diagram 明示，不能让不同方法的 n 静默变化。
 
 JJTMS rest-FC 使用冻结的 94-person template-matching roster（67 healthy、27 patient）。
@@ -234,7 +234,7 @@ Stanford 同一四 cell model 输出两项 marginal effect、interaction 和四�
 ### 5.4 Kember 拓扑扩展
 
 面积比例按 compositional outcome 处理，同时报告绝对 mm² 与 total hippocampal area。
-`hcp151_template_matching` 与 `hcp151_fixed` 的结果按 method 分开解释。group atlas
+`hcp_template_matching` 与 `hcp_fixed` 的结果按 method 分开解释。group atlas
 是登记在 `cross_dataset_rest_fc` 统一 branch ledger 下的 geometry family；
 `external_group_atlas_analysis` 只保留实现/报告兼容入口。它只提供群体描述，没有
 个体层 p/q，因此不能替代 subject-level Kember inference。
@@ -331,7 +331,7 @@ logs/         bounded execution logs
 3. Stanford HC-referenced group atlas 由 `cross_dataset_rest_fc` 的统一 branch ledger 调度：
    2 mm atlas cells 属 P0，4 mm atlas cells 属 P2；其 geometry 表与 subject-level FC
    数值行分开保存。严格先完成全部高优先级分支，再进入低优先级分支。
-4. 若继续 Kember 项，只采用 `hcp151_template_matching` 与 `hcp151_fixed` 两种方法，
+4. 若继续 Kember 项，只采用 `hcp_template_matching` 与 `hcp_fixed` 两种方法，
    保持 source-512 functional geometry 与 native `surfareacorobl` area 分离，并对六个
    contrast 输出 432 个 method-aware endpoint rows；只有结果 promising 后才启动更重的
    可靠性验证。

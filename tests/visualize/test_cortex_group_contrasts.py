@@ -213,7 +213,7 @@ def test_original_source_selection_is_explicit_and_only_iowa36p():
     g = r.GridSpec('2mm', '36p')
     cohort = {'dataset_key': 'iowa_jj_tms'}
     paths = contrasts.subject_input_paths(r, cohort, g, '3010', 'L', 'original-denoised')
-    assert str(paths[1]).endswith('hcp151_fixed_template_matching/subjects/sub-3010/cortex/kong2022_roi_timeseries.npy')
+    assert str(paths[1]).endswith('hcp_fixed_template_matching/subjects/sub-3010/cortex/kong2022_roi_timeseries.npy')
     current = contrasts.subject_input_paths(r, cohort, g, '3010', 'L', 'canonical')
     assert 'shared_inputs/pfm/' in str(current[1])
     with pytest.raises(ValueError):

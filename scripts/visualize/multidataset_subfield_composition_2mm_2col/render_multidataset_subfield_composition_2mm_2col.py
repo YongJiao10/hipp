@@ -4,12 +4,12 @@ render_multidataset_subfield_composition_2mm_2col.py
 
 2-Column Multi-Dataset Hippocampal Subfield Composition Panorama (10 Cohorts, N=528).
 Generates publication-quality figures and statistical summaries across THREE distinct functional atlas versions:
-  1. Version 1 (v1_fixed_hcp151_atlas):
-     All cohorts evaluated on the canonical HCP 151 Group Atlas functional boundaries.
+  1. Version 1 (v1_fixed_hcp_atlas):
+     All cohorts evaluated on the canonical HCP Group Atlas functional boundaries.
   2. Version 2 (v2_cohort_specific_atlas):
      Each cohort evaluated on its own intrinsic data-driven Route A Group Atlas.
   3. Version 3 (v3_individual_template_matching):
-     Each subject evaluated on individual-level functional boundaries (HCP 7T 5-Fold Cross-Fit & Stanford/Iowa HCP151 Fixed Template Matching).
+     Each subject evaluated on individual-level functional boundaries (HCP 7T 5-Fold Cross-Fit & Stanford/Iowa HCP Fixed Template Matching).
 """
 
 from __future__ import annotations
@@ -97,9 +97,9 @@ CLUSTER_FULL_NAMES = {
 }
 
 PANORAMA_VERSIONS = {
-    "v1_fixed_hcp151_atlas": {
-        "title_label": "VERSION 1: UNIFIED FIXED HCP151 GROUP ATLAS",
-        "file_tag": "v1_fixed_hcp151_atlas",
+    "v1_fixed_hcp_atlas": {
+        "title_label": "VERSION 1: UNIFIED FIXED HCP GROUP ATLAS",
+        "file_tag": "v1_fixed_hcp_atlas",
     },
     "v2_cohort_specific_atlas": {
         "title_label": "VERSION 2: COHORT-SPECIFIC INTRINSIC GROUP ATLAS",
@@ -247,7 +247,7 @@ def compute_cohort_subfield_composition(
         _validate_manifest_signal_branch(manifest, manifest_path, signal_branch)
         subjects = _manifest_subjects(manifest, manifest_path)
 
-        if atlas_mode == "v1_fixed_hcp151_atlas":
+        if atlas_mode == "v1_fixed_hcp_atlas":
             hdir_hcp = (
                 hcp_grp_root
                 / f"gradient-spectral/{atlas_folder}/{smoothing}/cov_0p80/g1g2g3/hemi_{hemi}"
@@ -306,12 +306,12 @@ def compute_cohort_subfield_composition(
                 elif "iowa" in cinfo["id"]:
                     indiv_label_path = (
                         REPO_ROOT
-                        / f"outputs_iowa_jj_tms/work/hcp151_fixed_template_matching/subjects/sub-{s}/matching/{smoothing}/hemi-{hemi}/labels.npy"
+                        / f"outputs_iowa_jj_tms/work/hcp_fixed_template_matching/subjects/sub-{s}/matching/{smoothing}/hemi-{hemi}/labels.npy"
                     )
                 else:
                     indiv_label_path = (
                         REPO_ROOT
-                        / f"outputs_stanford/work/hcp151_fixed_template_matching/subjects/sub-{s}/matching/{smoothing}/hemi-{hemi}/labels.npy"
+                        / f"outputs_stanford/work/hcp_fixed_template_matching/subjects/sub-{s}/matching/{smoothing}/hemi-{hemi}/labels.npy"
                     )
                 if not indiv_label_path.is_file():
                     raise FileNotFoundError(
@@ -1129,14 +1129,14 @@ def _render_grid():
 
     modes_to_run = (
         [
-            "v1_fixed_hcp151_atlas",
+            "v1_fixed_hcp_atlas",
             "v2_cohort_specific_atlas",
             "v3_individual_template_matching",
         ]
         if args.mode == "all"
         else [
             {
-                "v1": "v1_fixed_hcp151_atlas",
+                "v1": "v1_fixed_hcp_atlas",
                 "v2": "v2_cohort_specific_atlas",
                 "v3": "v3_individual_template_matching",
             }[args.mode]

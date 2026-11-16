@@ -195,7 +195,7 @@ Expected: every requested branch/variant is explicit; mismatch, missing GIFTI/NP
 
 **Files:**
 
-- Modify: `scripts/individual_workflow/03_01_build_hcp151_fixed_template.py`
+- Modify: `scripts/individual_workflow/03_01_build_hcp_fixed_template.py`
 - Create: `scripts/jj_tms/jj_tms_ctxreg_fixed_template_matching.py`
 - Modify: `scripts/jj_tms/README.md`
 - Test: `tests/individual_workflow/test_jj_tms_ctxreg_fixed_template_matching.py`
@@ -203,19 +203,19 @@ Expected: every requested branch/variant is explicit; mismatch, missing GIFTI/NP
 **Interfaces:**
 
 - `build_template(..., template_id: str)` produces a manifest carrying the selected template identity.
-- JJ_TMS matching requires a complete `hcp151_routea_ctxreg` template, exact 2mm CtxReg FC files, standard validity masks, and exact den-512 surfaces.
+- JJ_TMS matching requires a complete `hcp_routea_ctxreg` template, exact 2mm CtxReg FC files, standard validity masks, and exact den-512 surfaces.
 
 - [ ] **Step 1: Replace environment-dependent tests with temporary fixtures.**
 
 ```python
 template_root = tmp_path / "template"
-write_complete_template_fixture(template_root, template_id="hcp151_routea_ctxreg")
-assert load_template(template_root)["manifest"]["template_id"] == "hcp151_routea_ctxreg"
+write_complete_template_fixture(template_root, template_id="hcp_routea_ctxreg")
+assert load_template(template_root)["manifest"]["template_id"] == "hcp_routea_ctxreg"
 ```
 
 - [ ] **Step 2: Make template identity and resume behavior fail closed.**
 
-Require `template_id == "hcp151_routea_ctxreg"`; a malformed or incompatible resume manifest raises an actionable error rather than being silently ignored or overwritten.
+Require `template_id == "hcp_routea_ctxreg"`; a malformed or incompatible resume manifest raises an actionable error rather than being silently ignored or overwritten.
 
 - [ ] **Step 3: Preflight all selected subject inputs before creating per-subject output directories.**
 

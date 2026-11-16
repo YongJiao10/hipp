@@ -12,7 +12,7 @@ Cortical functional connectivity profiles of the hippocampus can be influenced b
 1. **Standard (Baseline Reference)**:
    - Group Atlas Root: `outputs_hcp/work/group_atlas/pfm`
    - Overview Root: `outputs_hcp/present/overviews/pfm`
-   - Description: Unconstrained full-cortex connectivity matrix ($N=151$, Young Adults, ICA-FIX).
+   - Description: Unconstrained full-cortex connectivity matrix (Young Adults, ICA-FIX).
 2. **CtxDrop (Adjacent Vertices Dropped)**:
    - Group Atlas Root: `outputs_hcp/work/group_atlas/pfm_ctxdrop`
    - Overview Root: `outputs_hcp/present/overviews/pfm_ctxdrop`

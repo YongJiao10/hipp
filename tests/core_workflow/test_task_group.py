@@ -199,15 +199,15 @@ def test_subject_cluster_rows_require_matching_areas() -> None:
 def test_parcellation_zone_names() -> None:
     from scripts.core_workflow.lib.task_group import (
         PARCELLATION_CHOICES,
-        PARCELLATION_HCP151_ATLAS,
+        PARCELLATION_HCP_ATLAS,
         PARCELLATION_TEMPLATE_MATCHING,
     )
 
     assert PARCELLATION_CHOICES == (
-        PARCELLATION_HCP151_ATLAS,
+        PARCELLATION_HCP_ATLAS,
         PARCELLATION_TEMPLATE_MATCHING,
     )
-    assert PARCELLATION_HCP151_ATLAS == "hcp151_atlas"
+    assert PARCELLATION_HCP_ATLAS == "hcp_atlas"
     assert PARCELLATION_TEMPLATE_MATCHING == "template_matching"
 
 
@@ -230,7 +230,7 @@ def test_resolve_zone_subjects_excludes_missing_only(tmp_path: Path) -> None:
     assert notes["a"] == "individual K=3 labels"
     assert "excluded" in notes["b"]
     kept_all, _ = resolve_zone_subjects(
-        zone="hcp151_atlas",
+        zone="hcp_atlas",
         used=["a", "b"],
         smoothing="2mm",
         hemi="L",

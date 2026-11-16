@@ -127,8 +127,8 @@ Task 1 冻结了文献/输入契约；Task 2 已在 `kember_metrics` 中落实�
 
 ### Stanford 2026-09-01 two-method 实现记录
 
-- 活跃实现位于 `kember_metrics/src/`，同时消费 `hcp151_template_matching` 与
-  `hcp151_fixed`。功能指标保留 512-source BOLD/labels；面积在标签经
+- 活跃实现位于 `kember_metrics/src/`，同时消费 `hcp_template_matching` 与
+  `hcp_fixed`。功能指标保留 512-source BOLD/labels；面积在标签经
   `ADAP_BARY_AREA` 对齐后消费 native `surfareacorobl`。
 - 每个 hemisphere、每个 anterior/middle/posterior system 输出三项：`surface_area_mm2`、`functional_segregation_d`、`boundary_sharpness_d`。`surface_area_fraction` 保存在 feature table 作为归一化上下文，不另算第四个 direct-comparison endpoint。
 - 本实现把文章所述的 ±4.0 mm 落实为 consumed source-512 midthickness 3D Euclidean radius 4.0 mm；这是本项目冻结的功能指标操作定义，记录为 `source_512_midthickness_euclidean_radius_mm`，不把它表述为已核验的作者源码细节。Native geometry/metric 只用于 system surface area。
@@ -181,13 +181,13 @@ Task 1 冻结了文献/输入契约；Task 2 已在 `kember_metrics` 中落实�
 | Workflow | 当前角色 | 关键边界 |
 |---|---|---|
 | `cross_dataset_rest_fc` | network × hippocampal-system Fisher-z FC 与 Stanford factorial inference；统一调度 group-atlas geometry | FC 行不解释为面积，geometry 行不混入 FC 数值推断 |
-| `kember_metrics` | `hcp151_template_matching` 与 `hcp151_fixed` 的 subject-level area、segregation、sharpness | 功能指标使用 source-512；面积使用 native `surfareacorobl` |
+| `kember_metrics` | `hcp_template_matching` 与 `hcp_fixed` 的 subject-level area、segregation、sharpness | 功能指标使用 source-512；面积使用 native `surfareacorobl` |
 | `external_group_atlas_analysis` | unified group-atlas geometry family 的实现/报告兼容入口 | 不独立调度，不作为第三个 Kember method，不回填 subject-level inference |
 
 `cross_dataset_rest_fc` 是权威统一编排器，subject-FC 分支和 group-atlas geometry
 family 共用 branch manifest、优先级顺序和失败 barrier。Kember 的 template 本身来自
 group-average connectivity gradients → GMM → subject-level matching，但当前 package 的
-方法仍严格只有 `hcp151_template_matching` 与 `hcp151_fixed`。Group-specific clustering
+方法仍严格只有 `hcp_template_matching` 与 `hcp_fixed`。Group-specific clustering
 只生成统一运行中的 geometry family，不进行个体聚类。
 
 **Template 规则（建议/推断）：**所有 Stanford 四组必须共用同一 template。首选与结局独立、年龄/采集相容的外部模板；否则在 Stanford 内做按组平衡的 training folds，并只在 held-out subjects 计算结局，重复 cross-fitting。绝不能各组各自建 template 后比较“面积”，因为标签定义已经随组改变。
@@ -242,7 +242,7 @@ null 建议：在保持每名受试者 label 面积/空间自相关的前提下�
 - 统一 BOLD/结构 QC、每组 QC 流失图、motion/clean-time 分布；
 - 统一 `cross_dataset_rest_fc` branch manifest 下的 subject-level FC 与 group-atlas geometry
   输出；两类表保持数据类型分离，`kember_metrics` 仍是独立的 Kember endpoint package；
-- Kember 仅预登记 `hcp151_template_matching` 与 `hcp151_fixed` 两种 method；
+- Kember 仅预登记 `hcp_template_matching` 与 `hcp_fixed` 两种 method；
 - 固定模板或 cross-fit 模板；
 - fixed/template coverage、template similarity margin 与必要的可靠性；
 - 问题 1 的 network × subregion omnibus model；
@@ -261,7 +261,7 @@ null 建议：在保持每名受试者 label 面积/空间自相关的前提下�
 当前由 `cross_dataset_rest_fc` 统一编排 subject-level FC 与 group-atlas geometry
 family；`external_group_atlas_analysis` 是兼容实现/报告入口，不是独立实验 workflow。
 Kember 严格只有
-`hcp151_template_matching` 与 `hcp151_fixed` 两种方法：functional segregation 和
+`hcp_template_matching` 与 `hcp_fixed` 两种方法：functional segregation 和
 boundary sharpness 保留 source-512 time series/labels/geometry，system surface area
 使用经 `ADAP_BARY_AREA` 对齐的 native labels 与 native HippUnfold `surfareacorobl`。
 六个 contrast 产生 432 个 method-aware endpoint rows。Group-specific atlas 仅为

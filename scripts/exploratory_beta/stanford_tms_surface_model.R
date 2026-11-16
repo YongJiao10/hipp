@@ -34,7 +34,7 @@ cluster_levels <- c("1", "2", "3")
 hipp_levels <- c("L", "R")
 target_levels <- c("L", "R")
 group_levels <- c("healthy", "patient")
-parcellation_levels <- c("template_matching", "hcp151")
+parcellation_levels <- c("template_matching", "hcp")
 
 fixed_formula <- beta_mean ~ site_network * cluster * hippocampal_hemi +
   target_hemi * cluster + target_hemi * hippocampal_hemi

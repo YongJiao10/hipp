@@ -19,6 +19,7 @@ if str(LIB_DIR) not in sys.path:
     sys.path.insert(0, str(LIB_DIR))
 
 from multidataset_cohorts import (  # noqa: E402
+    HCP_COHORT_SIZE,
     COMPARISON_METHODS,
     COMPARISON_VERSION,
     GRID_VARIANTS,
@@ -599,7 +600,7 @@ def test_hcp_comparison_uses_the_full_qc_cohort():
     spec = GridSpec("2mm", "36p")
     hcp = next(row for row in get_comparison_cohorts(spec)["kong2022_7net"] if row["id"] == "hcp_7t")
 
-    assert hcp["n_subjects"] == 151
+    assert hcp["n_subjects"] == HCP_COHORT_SIZE
     assert hcp["shared_root"].name == "shared_inputs"
     assert hcp["group_root"].name == "pfm"
 
@@ -883,9 +884,9 @@ def test_comparison_visual_rows_keep_dataset_bands_and_correct_counts():
 
     assert [row["dataset_name"] for row in col1] == ["HCP 7T", "Iowa 3T", "Iowa 3T", "Iowa 3T", "Iowa 3T"]
     assert [row["dataset_name"] for row in col2] == ["HCP 7T", "Iowa 3T", "Iowa 3T", "Iowa 3T", "Iowa 3T"]
-    assert [row["n_subjects"] for row in col1] == [151, 67, 26, 7, 19]
+    assert [row["n_subjects"] for row in col1] == [HCP_COHORT_SIZE, 67, 26, 7, 19]
     assert [row["method_name"] for row in col1] == ["Kong2022 7-Network"] * 5
-    assert [row["n_subjects"] for row in col2] == [151, 67, 26, 7, 19]
+    assert [row["n_subjects"] for row in col2] == [HCP_COHORT_SIZE, 67, 26, 7, 19]
     assert [row["method_name"] for row in col2] == ["Lynch2024 7-Network"] * 5
     assert {row["bg_color"] for row in col1} == {"#fafafa", "#f2f7fc"}
 

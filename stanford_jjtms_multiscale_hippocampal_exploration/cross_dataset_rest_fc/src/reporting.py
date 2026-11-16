@@ -62,7 +62,7 @@ PORTABLE_REPORT_CACHE_ROOT = Path(
 )
 DEFAULT_N_PERM = 499
 REPORT_TITLE = "JJTMS + Stanford resting-state hippocampal FC localisation"
-AVAILABLE_METHODS = ("hcp151_fixed", "hcp151_template_matching")
+AVAILABLE_METHODS = ("hcp_fixed", "hcp_template_matching")
 GROUP_ATLAS_METHOD = "group_atlas_gradient_spectral"
 REGISTERED_METHODS = AVAILABLE_METHODS + (GROUP_ATLAS_METHOD,)
 NETWORK_RESOLUTIONS = (8, 17)
@@ -501,7 +501,7 @@ def build_candidate_registry(primary: pd.DataFrame, *, cap: int = 5) -> pd.DataF
         else:
             stability[tuple(key)] = float(max(np.mean(signs > 0), np.mean(signs < 0)))
     reference = finite.loc[
-        finite["method"].eq("hcp151_fixed")
+        finite["method"].eq("hcp_fixed")
         & finite["smoothing_mm"].eq(2)
         & finite["hemisphere_mode"].eq("bilateral")
     ].copy()
@@ -558,7 +558,7 @@ def build_candidate_registry(primary: pd.DataFrame, *, cap: int = 5) -> pd.DataF
                         "source_row_id_b": ordered_second.get("source_row_id"),
                         "cross_spec_sign_consistency_a": ordered_first_stability,
                         "cross_spec_sign_consistency_b": ordered_second_stability,
-                        "selection_rule": "Absolute network-wise source rows only; reference hcp151_fixed/2mm/bilateral; opposite directions; each component sign agrees in at least 75% of available fixed/template × 2/4mm specifications; cap 5; no pair p/q test.",
+                        "selection_rule": "Absolute network-wise source rows only; reference hcp_fixed/2mm/bilateral; opposite directions; each component sign agrees in at least 75% of available fixed/template × 2/4mm specifications; cap 5; no pair p/q test.",
                         "future_validation_target": "Pre-registered held-out or external cohort with independent FC preprocessing and target-engagement validation.",
                     }
                 )
@@ -611,7 +611,7 @@ def build_specification_consistency(primary: pd.DataFrame, *, top_n: int = 12) -
     source["_abs"] = source["coefficient"].abs()
     component_keys = ["dataset", "estimand", "resolution", "region", "network"]
     top = (
-        source.loc[source["method"].eq("hcp151_fixed") & source["smoothing_mm"].eq(2)]
+        source.loc[source["method"].eq("hcp_fixed") & source["smoothing_mm"].eq(2)]
         .sort_values(["_abs", *component_keys], ascending=[False, True, True, True, True, True], kind="stable")
         .drop_duplicates(component_keys)
         .head(int(top_n))[component_keys]
@@ -755,7 +755,7 @@ def _top_primary_snapshot(primary: pd.DataFrame, limit: int = 48) -> pd.DataFram
 
 def _heatmap_snapshot(primary: pd.DataFrame, limit: int = 1600) -> pd.DataFrame:
     frame = primary.loc[
-        primary["method"].eq("hcp151_fixed")
+        primary["method"].eq("hcp_fixed")
         & primary["smoothing_mm"].eq(2)
         & primary["hemisphere_mode"].isin(("bilateral", "L-R"))
         & primary["estimand"].isin(("patient-healthy", "symptom_marginal"))
@@ -783,7 +783,7 @@ def _profile_snapshot(descriptives: pd.DataFrame, limit: int = 400) -> pd.DataFr
     if not isinstance(descriptives, pd.DataFrame) or not required.issubset(descriptives.columns):
         return pd.DataFrame()
     frame = descriptives.loc[
-        descriptives["method"].eq("hcp151_fixed")
+        descriptives["method"].eq("hcp_fixed")
         & descriptives["smoothing_mm"].eq(2)
         & descriptives["hemisphere_mode"].eq("bilateral")
         & descriptives["dataset"].eq("stanford")
@@ -813,7 +813,7 @@ def _auxiliary_snapshot(auxiliary: pd.DataFrame, limit: int = 300) -> pd.DataFra
     if not isinstance(auxiliary, pd.DataFrame) or not required.issubset(auxiliary.columns):
         return pd.DataFrame()
     frame = auxiliary.loc[
-        auxiliary["method"].eq("hcp151_fixed")
+        auxiliary["method"].eq("hcp_fixed")
         & auxiliary["smoothing_mm"].eq(2)
         & auxiliary["hemisphere_mode"].eq("bilateral")
         & auxiliary["network_resolution"].eq(8)
@@ -860,10 +860,10 @@ def _consistency_snapshot(consistency: pd.DataFrame, limit: int = 48) -> pd.Data
         return pd.DataFrame()
     frame = consistency.copy(deep=True)
     spec_order = {
-        ("hcp151_fixed", 2): 0.0,
-        ("hcp151_fixed", 4): 1.0,
-        ("hcp151_template_matching", 2): 2.0,
-        ("hcp151_template_matching", 4): 3.0,
+        ("hcp_fixed", 2): 0.0,
+        ("hcp_fixed", 4): 1.0,
+        ("hcp_template_matching", 2): 2.0,
+        ("hcp_template_matching", 4): 3.0,
     }
     frame["spec_index"] = [
         spec_order.get((str(method), int(smoothing)), np.nan)
@@ -957,7 +957,7 @@ def build_artifact(
         {
             "id": "primary_localisation_heatmaps",
             "title": "Primary localisation heatmap source rows",
-            "subtitle": "Bounded hcp151_fixed reference at 2 mm, bilateral and L-R, for 8/17 network resolutions; full tables and static figures retain template matching.",
+            "subtitle": "Bounded hcp_fixed reference at 2 mm, bilateral and L-R, for 8/17 network resolutions; full tables and static figures retain template matching.",
             "type": "scatter",
             "dataset": "primary_localisation_heatmaps",
             "sourceId": "primary_localisation",

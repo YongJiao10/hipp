@@ -34,7 +34,7 @@ roster and output roots explicitly; the core guide describes which stages and
 QC contracts are implemented for each branch.
 
 HCP individual labels use family-aware five-fold crossfit with an external
-`subject,family_id` map. Non-HCP datasets use the declared immutable HCP151
+`subject,family_id` map. Non-HCP datasets use the declared immutable HCP
 fixed template through dataset adapters. Details are in the individual guide.
 Native-space beta work remains exploratory; its entrypoint is
 `scripts/exploratory_beta/run_native_surface_beta.py`.

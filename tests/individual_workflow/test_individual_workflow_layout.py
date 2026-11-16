@@ -32,11 +32,11 @@ def test_protected_workflow_roots_have_numbered_entrypoints_only() -> None:
 def test_dataset_specific_and_individual_workflow_surfaces_are_explicit() -> None:
     assert (SCRIPTS_ROOT / "jj_tms" / "README.md").is_file()
     assert not (SCRIPTS_ROOT / "core_workflow" / "map_jj_tms_sites_to_kong2022.py").exists()
-    assert not (SCRIPTS_ROOT / "individual_workflow" / "jj_tms_hcp151_fixed_template_matching.py").exists()
+    assert not (SCRIPTS_ROOT / "individual_workflow" / "jj_tms_hcp_fixed_template_matching.py").exists()
 
     readme = (SCRIPTS_ROOT / "individual_workflow" / "README.md").read_text(
         encoding="utf-8"
     )
     assert "family-aware cross-validation" in readme
     assert "Never cluster an individual's hippocampal data" in readme
-    assert "HCP151 Template Builder for Non-HCP Datasets" in readme
+    assert "HCP Template Builder for Non-HCP Datasets" in readme

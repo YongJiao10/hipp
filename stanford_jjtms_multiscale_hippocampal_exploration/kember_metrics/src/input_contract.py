@@ -1,7 +1,7 @@
 """Explicit Stanford input audit for the Kember-method area workflow.
 
 The audit only probes paths named by the unified workflow configuration.
-It freezes a common cohort for fixed HCP151 and individual template matching
+It freezes a common cohort for fixed HCP and individual template matching
 without recursively discovering data.
 """
 
@@ -130,7 +130,7 @@ def audit_stanford_input_contract(
         raise ValueError("input configuration needs smoothing and hemisphere lists")
     required_paths = (
         "hippunfold_root",
-        "hcp151_template_root",
+        "hcp_template_root",
         "template_matching_root",
     )
     missing_paths = [name for name in required_paths if name not in paths]
@@ -140,7 +140,7 @@ def audit_stanford_input_contract(
         raise ValueError("input configuration lacks rosters.all_subjects")
 
     surface_root = _resolve(root, paths["hippunfold_root"])
-    fixed_root = _resolve(root, paths["hcp151_template_root"])
+    fixed_root = _resolve(root, paths["hcp_template_root"])
     matching_root = _resolve(root, paths["template_matching_root"]) / "subjects"
     subjects = _read_subjects(_resolve(root, rosters["all_subjects"]))
     combinations = [(int(smoothing), str(hemisphere)) for smoothing in smoothings for hemisphere in hemispheres]
@@ -148,9 +148,9 @@ def audit_stanford_input_contract(
     fixed_assets: list[str] = []
     for smoothing, hemisphere in combinations:
         for kind in ("labels", "support"):
-            path = fixed_root / f"hcp151_{smoothing}mm_hemi-{hemisphere}_{kind}.npy"
+            path = fixed_root / f"hcp_{smoothing}mm_hemi-{hemisphere}_{kind}.npy"
             if not path.is_file():
-                raise FileNotFoundError(f"required fixed HCP151 asset is missing: {path}")
+                raise FileNotFoundError(f"required fixed HCP asset is missing: {path}")
             fixed_assets.append(str(path))
 
     common_subjects: list[str] = []
@@ -237,11 +237,11 @@ def audit_stanford_input_contract(
         "excluded_subjects": excluded_subjects,
         "combinations_per_subject": len(combinations),
         "branches": {
-            "hcp151_fixed": {
+            "hcp_fixed": {
                 "status": "available",
                 "global_asset_count": len(fixed_assets),
             },
-            "hcp151_template_matching": {
+            "hcp_template_matching": {
                 "status": "available",
                 "asset_backed_density_vertex_counts": sorted(density_vertex_counts),
             },

@@ -4,7 +4,7 @@
 
 **Goal:** Replace the three group-dependent/low-interpretability identity metrics with two fixed-HCP-territory metrics and regenerate the Standard and Ctx-Reg identity figures.
 
-**Architecture:** The HCP151 template manifest supplies the exact, branch- and hemisphere-specific A/B/P labels and support mask. Each subject's already-existing three HCP-template scores are area-weighted only within those fixed HCP territories. The old group-dominant identity extraction is removed; group atlases remain only where they are required for descriptive maps and fingerprint analyses.
+**Architecture:** The HCP template manifest supplies the exact, branch- and hemisphere-specific A/B/P labels and support mask. Each subject's already-existing three HCP-template scores are area-weighted only within those fixed HCP territories. The old group-dominant identity extraction is removed; group atlases remain only where they are required for descriptive maps and fingerprint analyses.
 
 **Tech Stack:** Python 3.14, NumPy, unittest, Matplotlib.
 
@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Use the exact HCP151 template-manifest paths for `standard → routea` and `ctxreg → routea_ctxreg`; no artifact discovery or fallback.
+- Use the exact HCP template-manifest paths for `standard → routea` and `ctxreg → routea_ctxreg`; no artifact discovery or fallback.
 - Run local Python work with `/home/yojiao/.conda/envs/py314/bin/python` and one numerical-library thread.
 - The identity panel must contain exactly six metrics: `smax`, `margin`, `fixed_hcp_similarity`, `fixed_hcp_advantage`, `segregation`, and `boundary_sharpness`.
 - Remove `all_negative_fraction`, `designated_similarity`, and group-dominant `designated_advantage` from newly computed outputs, identity figures, and documentation.
@@ -60,7 +60,7 @@ Expected: failure because `fixed_hcp_identity` and the HCP-template inventory/in
 
 - [ ] **Step 3: Implement the minimal contract**
 
-Read only the exact `template_manifest.json` selected by the branch. Require HCP151, density 512, 400 ROI features, complete status, fixed A/B/P semantics, one 2 mm record for each hemisphere, binary support, and `labels != 0` exactly equal to support. Use HCP territory area as `total_area` and evaluable subject area as `valid_area`.
+Read only the exact `template_manifest.json` selected by the branch. Require HCP, density 512, 400 ROI features, complete status, fixed A/B/P semantics, one 2 mm record for each hemisphere, binary support, and `labels != 0` exactly equal to support. Use HCP territory area as `total_area` and evaluable subject area as `valid_area`.
 
 - [ ] **Step 4: Run tests to verify they pass**
 

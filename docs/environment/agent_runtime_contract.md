@@ -74,7 +74,7 @@ Use exactly one of these based on task type.
   correction are applied locally. Do not reapply a local scientific patch or
   substitute development `main`; follow the
   [runtime manifest](hippo2_reproducibility_manifest.md#scientific-parameters).
-- the HCP166 rebuild uses the complete official participant DAG. Previously
+- the HCP rebuild uses the complete official participant DAG. Previously
   pruned anatomy, coordinates and transforms must regenerate when required;
   retained surfaces alone do not satisfy the full structural contract.
 - retain the selected release's formal outputs with `--notemp`; the standard

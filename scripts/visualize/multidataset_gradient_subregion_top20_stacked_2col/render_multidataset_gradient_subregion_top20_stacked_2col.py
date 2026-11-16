@@ -32,6 +32,7 @@ for p in (CORE_DIR, VIS_LIB_DIR):
 from gradient_surface_panel import render_gradient_surface_panel
 from lib.gradient_assignment_contract import validate_gradient_assignment
 from multidataset_cohorts import (
+    HCP_COHORT_SIZE,
     COMPARISON_METHODS,
     COMPARISON_VERSION,
     GRID_VARIANTS,
@@ -173,7 +174,7 @@ COHORTS_COL1 = [
         "dataset_name": "HCP 7T",
         "cohort_name": "HCP 7T",
         "cohort_desc": "Healthy Young Adults",
-        "n_subjects": 151,
+        "n_subjects": HCP_COHORT_SIZE,
         "group_root": REPO_ROOT
         / "outputs_hcp/work/group_atlas/pfm",
         "present_dir": REPO_ROOT / "outputs_hcp/present/overviews/pfm",

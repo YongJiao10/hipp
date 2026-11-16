@@ -1177,8 +1177,8 @@ def run_analysis(output_root=DEFAULT_OUTPUT, *, workers=4, overwrite=False):
                 "individual_tm": ["smax", "margin", "segregation", "boundary_sharpness"],
                 "fixed_hcp_territory": {
                     "metrics": ["fixed_hcp_similarity", "fixed_hcp_advantage"],
-                    "definition": "area-weighted HCP-template score and matched-template-minus-competitor score within the branch- and hemisphere-matched external HCP151 A/B/P territory",
-                    "provenance": "exact HCP151 labels/support/prototypes are declared in input_manifest.json; subject scores must use the same prototype file",
+                    "definition": "area-weighted HCP-template score and matched-template-minus-competitor score within the branch- and hemisphere-matched external HCP A/B/P territory",
+                    "provenance": "exact HCP labels/support/prototypes are declared in input_manifest.json; subject scores must use the same prototype file",
                 },
             },
             "wta_pseudoclusters": {

@@ -33,7 +33,7 @@
 **Interfaces:**
 - `load_hcp7t_area_features(config, output_dir, workbench_command) -> tuple[pd.DataFrame, dict[str, object]]`
 - `compute_hcp7t_reference_effect(hcp_features, nthc_features) -> pd.DataFrame`
-- The returned feature rows contain `subject`, `cohort="HCP 7T"`, `method="hcp151_crossfit_template_matching"`, `smoothing_mm=2`, `hemisphere`, `system`, and `surface_area_mm2`.
+- The returned feature rows contain `subject`, `cohort="HCP 7T"`, `method="hcp_crossfit_template_matching"`, `smoothing_mm=2`, `hemisphere`, `system`, and `surface_area_mm2`.
 - The returned provenance records the cross-fit manifest, five-fold/family-aware contract, held-out count, native area convention, and exact source/label paths.
 
 - [x] **Step 1: Write failing tests** for rejecting a non-family-aware or non-five-fold HCP manifest, accepting a held-out combo manifest only when `subject_was_in_template` is false, and producing the HCP 7T minus NTHC effect from two small real DataFrames.
@@ -77,7 +77,7 @@
 
 ## Self-Review Checklist
 
-- HCP labels are read from per-subject cross-fit outputs, not from `outputs_hcp/templates/hcp151_routea_full_k3_fisherz/`.
+- HCP labels are read from per-subject cross-fit outputs, not from `outputs_hcp/templates/hcp_routea_full_k3_fisherz/`.
 - Every HCP subject is checked against its combo manifest's held-out contract.
 - Native HCP area uses the same `surfareacorobl` and native-label transfer convention as the Stanford Kember endpoint.
 - The HCP comparison is clearly separated from Stanford's six clinical contrasts and FDR family.

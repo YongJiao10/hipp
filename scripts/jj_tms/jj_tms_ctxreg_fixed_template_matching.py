@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Strict Iowa JJ_TMS CtxReg matching against the HCP151 CtxReg template."""
+"""Strict Iowa JJ_TMS CtxReg matching against the HCP CtxReg template."""
 from __future__ import annotations
 
 import argparse
@@ -52,7 +52,7 @@ N_ROIS = 400
 K = 3
 MAX_JOBS = 10
 DEFAULT_JOBS = 4
-TEMPLATE_ID = "hcp151_routea_ctxreg"
+TEMPLATE_ID = "hcp_routea_ctxreg"
 ARTIFACT_CONTRACT_SCHEMA_VERSION = 2
 DEFAULT_HCP_OUTPUTS_ROOT = resolve_outputs_root("hcp")
 DEFAULT_IOWA_OUTPUTS_ROOT = resolve_outputs_root("iowa_jj_tms")
@@ -80,12 +80,12 @@ DEFAULT_HIPPUNFOLD_ROOT = (
 DEFAULT_OUT_ROOT = (
     DEFAULT_IOWA_OUTPUTS_ROOT
     / "work"
-    / "hcp151_fixed_template_matching"
+    / "hcp_fixed_template_matching"
     / "pfm_ctxreg"
 )
 DEFAULT_MANIFESTS = (
-    REPO_ROOT / "manifests" / "jj_tms_hc_67_subjects.txt",
-    REPO_ROOT / "manifests" / "jj_tms_patient_26_subjects.txt",
+    REPO_ROOT / "manifests" / "jj_tms_hc_subjects.txt",
+    REPO_ROOT / "manifests" / "jj_tms_patient_subjects.txt",
 )
 RUN_ID_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
 LABEL_ITEMS = [
@@ -259,7 +259,6 @@ def load_subjects(
             raise ValueError("At least one subject is required")
         return subjects
 
-    using_default_roster = manifest_paths is None
     selected_paths = list(DEFAULT_MANIFESTS if manifest_paths is None else manifest_paths)
     if not selected_paths:
         raise ValueError("At least one subject manifest is required")
@@ -274,22 +273,16 @@ def load_subjects(
                 )
             seen.add(subject)
             subjects.append(subject)
-    if using_default_roster and [len(_read_subject_manifest(path)) for path in selected_paths] != [67, 26]:
-        raise ValueError(
-            "Default JJ_TMS CtxReg roster must be HC-67 plus Patient-26"
-        )
-    if using_default_roster and len(subjects) != 93:
-        raise ValueError(
-            f"Default JJ_TMS CtxReg roster must contain 93 subjects, got {len(subjects)}"
-        )
+    if not subjects:
+        raise ValueError("JJ_TMS CtxReg roster contains no subjects")
     return subjects
 
 
 def _normalize_template_subjects(raw: object, *, path: Path) -> tuple[str, ...]:
-    if not isinstance(raw, list) or len(raw) != 151:
-        raise ValueError(f"CtxReg template source roster must contain 151 subjects: {path}")
+    if not isinstance(raw, list) or not raw:
+        raise ValueError(f"CtxReg template source roster must be a non-empty list: {path}")
     subjects = tuple(normalize_subject(value) for value in raw)
-    if len(set(subjects)) != 151:
+    if len(set(subjects)) != len(subjects):
         raise ValueError(f"Duplicate subjects in CtxReg template roster: {path}")
     return subjects
 
@@ -327,7 +320,6 @@ def _validate_ctxreg_source_manifests(
         ("atlas", "kong2022"),
         ("smoothing", smoothing),
         ("hemi", hemi),
-        ("n_subjects", 151),
     ):
         if group.get(key) != expected:
             raise ValueError(
@@ -337,7 +329,6 @@ def _validate_ctxreg_source_manifests(
     for key, expected in (
         ("smoothing", smoothing),
         ("hemi", hemi),
-        ("n_subjects", 151),
         ("route", "pfm_ctxreg"),
     ):
         if gradient.get(key) != expected:
@@ -360,6 +351,12 @@ def _validate_ctxreg_source_manifests(
         raise ValueError(
             f"CtxReg template group/gradient roster mismatch: {group_path} {gradient_path}"
         )
+    for manifest, path in ((group, group_path), (gradient, gradient_path)):
+        if manifest.get("n_subjects") != len(group_subjects):
+            raise ValueError(
+                f"CtxReg template source n_subjects mismatch in {path}: "
+                f"{manifest.get('n_subjects')!r} != {len(group_subjects)!r}"
+            )
     return group_subjects
 
 
@@ -488,7 +485,7 @@ def load_template(template_root: Path) -> dict[str, object]:
             raise ValueError(
                 f"CtxReg template output record mismatch for {smoothing} hemi-{hemi}"
             )
-        prefix = root / f"hcp151_{smoothing}_hemi-{hemi}"
+        prefix = root / f"hcp_{smoothing}_hemi-{hemi}"
         output_contracts = {
             "labels": (prefix.with_name(prefix.name + "_labels.npy"), (N_VERTICES,), np.int32),
             "support": (prefix.with_name(prefix.name + "_support.npy"), (N_VERTICES,), np.uint8),
@@ -724,7 +721,7 @@ def _expected_output_paths(out_root: Path, subject: str) -> dict[str, Path]:
         paths[f"{prefix}_margin"] = combo_dir / "correlation_margin.npy"
         paths[f"{prefix}_label_gifti"] = combo_dir / (
             f"{sub_id}_hemi-{hemi}_space-corobl_den-512_"
-            f"label-hcp151_fixed_template_k3_{SMOOTHING}.label.gii"
+            f"label-hcp_fixed_template_k3_{SMOOTHING}.label.gii"
         )
         paths[f"{prefix}_combo_manifest"] = combo_dir / "combo_manifest.json"
     paths["subject_manifest"] = subject_dir / "subject_manifest.json"
@@ -1048,7 +1045,7 @@ def _validate_run_id(raw: str | None) -> str:
 
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Run strict Iowa JJ_TMS CtxReg HCP151 fixed-template matching."
+        description="Run strict Iowa JJ_TMS CtxReg HCP fixed-template matching."
     )
     parser.add_argument("--mode", choices=("preflight", "run", "validate"), required=True)
     parser.add_argument("--subjects", nargs="+")

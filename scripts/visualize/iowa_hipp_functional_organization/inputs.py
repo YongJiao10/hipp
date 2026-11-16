@@ -9,13 +9,13 @@ import nibabel as nib
 
 ROOT = Path(__file__).resolve().parents[3]
 HERE = Path(__file__).resolve().parent
-ROSTERS = {'hc':'jj_tms_hc_67_subjects.txt','patient':'jj_tms_patient_26_subjects.txt',
-           'pure_mdd':'jj_tms_pure_mdd_7_subjects.txt','comorbid_mdd':'jj_tms_comorbid_mdd_19_subjects.txt'}
+ROSTERS = {'hc':'jj_tms_hc_subjects.txt','patient':'jj_tms_patient_subjects.txt',
+           'pure_mdd':'jj_tms_pure_mdd_subjects.txt','comorbid_mdd':'jj_tms_comorbid_mdd_subjects.txt'}
 COHORTS={'hc':'iowa_hc','patient':'iowa_pat','pure_mdd':'iowa_pure_mdd','comorbid_mdd':'iowa_comorbid_mdd'}
 NETWORKS={'Default':'DMN','Somatomotor':'SMN','VentralAttention':'VAN','DorsalAttention':'DAN','Control':'CON','Language':'LAN','Visual':'VN'}
 HCP_TEMPLATE_SPECS={
-    'standard':{'directory':'hcp151_routea_full_k3_fisherz','template_id':'hcp151_routea_full_k3_fisherz'},
-    'ctxreg':{'directory':'hcp151_routea_ctxreg','template_id':'hcp151_routea_ctxreg'},
+    'standard':{'directory':'hcp_routea_full_k3_fisherz','template_id':'hcp_routea_full_k3_fisherz'},
+    'ctxreg':{'directory':'hcp_routea_ctxreg','template_id':'hcp_routea_ctxreg'},
 }
 HCP_TEMPLATE_SEMANTICS={'1':'Anterior/VAN','2':'Middle/SMN','3':'Posterior/DMN'}
 
@@ -82,8 +82,8 @@ def load_rosters():
     rosters={}
     for key,filename in ROSTERS.items():
         values=['sub-'+s.strip() for s in (ROOT/'manifests'/filename).read_text().splitlines() if s.strip() and not s.startswith('#')]
-        if len(values)!=len(set(values)) or len(values)!={'hc':67,'patient':26,'pure_mdd':7,'comorbid_mdd':19}[key]:
-            raise ValueError(f'roster count/duplicates: {filename}')
+        if not values or len(values)!=len(set(values)):
+            raise ValueError(f'roster empty/duplicates: {filename}')
         rosters[key]=values
     if set(rosters['hc']) & set(rosters['patient']): raise ValueError('HC/patient overlap')
     if set(rosters['pure_mdd']) & set(rosters['comorbid_mdd']) or set(rosters['pure_mdd'])|set(rosters['comorbid_mdd'])!=set(rosters['patient']):
@@ -118,7 +118,7 @@ def make_inventory():
             template_manifest=ROOT/'outputs_hcp/templates'/template_spec['directory']/'template_manifest.json'
             template_payload=read_json(template_manifest)
             if (template_payload.get('status')!='complete' or template_payload.get('template_id')!=template_spec['template_id']
-                    or template_payload.get('n_subjects')!=151 or template_payload.get('n_rois')!=400
+                    or template_payload.get('n_subjects')!=len(template_payload.get('subjects') or []) or template_payload.get('n_rois')!=400
                     or template_payload.get('density')!=512 or template_payload.get('k')!=3
                     or template_payload.get('fc_space')!='subject-mean Fisher-z vertex-to-Kong2022-ROI FC'
                     or template_payload.get('cluster_label_semantics')!=HCP_TEMPLATE_SEMANTICS):
@@ -143,7 +143,7 @@ def make_inventory():
             inventory['hcp_templates'].append(template_entry)
             gp=ROOT/f'outputs_hcp/work/hippomaps_gradients/{hcp_route}/2mm/hemi_{hemi}/hippomaps_gradient_manifest.json'
             gm=read_json(gp)
-            if gm['feature_count']!=400 or gm['n_components_computed']!=5 or gm['n_subjects']!=151 or gm['route']!=hcp_route or gm['hemi']!=hemi or gm['smoothing']!='2mm':
+            if gm['feature_count']!=400 or gm['n_components_computed']!=5 or gm['n_subjects']!=len(gm.get('subjects') or []) or gm['route']!=hcp_route or gm['hemi']!=hemi or gm['smoothing']!='2mm':
                 raise ValueError(f'HCP external gradient reference contract: {gp}')
             inventory['references'].append(dict(branch=branch,hemi=hemi,manifest=rec(gp),gradients=rec(gm['outputs']['hippomaps_gradients_full']),support=rec(gm['outputs']['group_support_mask'])))
         for cohort,cid in COHORTS.items():
@@ -167,7 +167,7 @@ def make_inventory():
         c=specs['iowa_hc']
         for subject in rosters['hc']+rosters['patient']:
             for hemi in ['L','R']:
-                base=ROOT/'outputs_iowa_jj_tms/work/hcp151_fixed_template_matching'
+                base=ROOT/'outputs_iowa_jj_tms/work/hcp_fixed_template_matching'
                 subject_root={'standard':base/'subjects','ctxreg':base/'routea_ctxreg/subjects'}[branch]
                 mp=subject_root/subject/f'matching/2mm/hemi-{hemi}/combo_manifest.json'; m=read_json(mp)
                 check_branch(m,branch,mp,standard_schema=True)
@@ -205,7 +205,7 @@ def make_inventory():
                 if not np.allclose(ordered[:,-1]-ordered[:,-2],margin,equal_nan=True,atol=1e-6): raise ValueError(f'existing margin mismatch: {mp}')
                 row['n_timepoints']=ts.shape[1]
                 inventory['subjects'].append(row)
-        print(f'Inventoried {branch}: 93 subjects x 2 hemispheres',flush=True)
+        print(f'Inventoried {branch}: all roster subjects x 2 hemispheres',flush=True)
     inventory['registry']=registered
     inventory['cortex_statistics']=rec(HERE.parent/'cortex_network_area/stats/network_area_statistics.csv')
     inventory['cortex_subjects']=rec(HERE.parent/'cortex_network_area/stats/subject_network_area_metrics.csv')

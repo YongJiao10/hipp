@@ -692,11 +692,11 @@ def _check_provenance_identity(
         if expected_method == "synthetic_registry":
             if "synthetic_registry" not in text:
                 raise ValueError(f"provenance method mismatch: {value!r} != {method!r}")
-        elif expected_method == "hcp151_fixed":
-            if not any(token in text for token in ("hcp151", "fixed", "template_matching")):
+        elif expected_method == "hcp_fixed":
+            if not any(token in text for token in ("hcp", "fixed", "template_matching")):
                 raise ValueError(f"provenance method mismatch: {value!r} != {method!r}")
-        elif expected_method == "hcp151_template_matching":
-            if not any(token in text for token in ("template_matching", "hcp151_fixed")):
+        elif expected_method == "hcp_template_matching":
+            if not any(token in text for token in ("template_matching", "hcp_fixed")):
                 raise ValueError(f"provenance method mismatch: {value!r} != {method!r}")
         elif expected_method not in text:
             raise ValueError(f"provenance method mismatch: {value!r} != {method!r}")

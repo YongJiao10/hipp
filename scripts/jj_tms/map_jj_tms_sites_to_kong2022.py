@@ -38,7 +38,7 @@ PACKAGE_REL_NS = "http://schemas.openxmlformats.org/package/2006/relationships"
 CELL_REF_RE = re.compile(r"^(?P<column>[A-Z]+)(?P<row>[1-9][0-9]*)$")
 
 DEFAULT_WORKBOOK = REPO_ROOT / "outputs_iowa_jj_tms" / "TMSfMRI_DataSharing.xlsx"
-DEFAULT_SUBJECTS_FILE = REPO_ROOT / "manifests" / "jj_tms_kong2022_70_subjects.txt"
+DEFAULT_SUBJECTS_FILE = REPO_ROOT / "manifests" / "jj_tms_kong2022_subjects.txt"
 DEFAULT_JJ_TMS_ROOT = Path(
     "/home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_JJ_TMS"
 )

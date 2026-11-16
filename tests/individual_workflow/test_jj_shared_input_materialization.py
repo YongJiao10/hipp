@@ -73,7 +73,7 @@ def source(tmp_path, monkeypatch):
                               'dtseries_timepoints': 4, 'grayordinates': 91282} for rid in ids]}
         metadata = sub/'subject_manifest.json'
         metadata.write_text(json.dumps({
-            'subject': 'sub-1001', 'workflow': 'jj_tms_hcp151_fixed_template_matching',
+            'subject': 'sub-1001', 'workflow': 'jj_tms_hcp_fixed_template_matching',
             'parameters': {'task': 'rest', 'validity_policy': 'finite_nonconstant_series',
                            'cortex_validity_policy': 'finite_cortex_signal'},
             'inputs': {}, 'header_evidence': evidence,

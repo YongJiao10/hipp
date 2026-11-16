@@ -4,14 +4,14 @@ The portable template root is:
 `/home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_Iowa7T/HCP_templates`.
 Directory spelling is `HCP_templates`.
 
-The package recipes use the complete HCP151 dataset and its formal inputs.
+The package recipes use the complete HCP dataset and its formal inputs.
 
 ## Current sources
 
-Use the explicit 151-subject QC roster:
-`outputs_hcp/inputs/qc/vertex_qc_t1only/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_151.txt`.
+Use the explicit current QC roster:
+`outputs_hcp/inputs/qc/vertex_qc_t1only/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt`.
 
-- Gradient prototypes: `outputs_hcp/templates/hcp151_routea_full_k3_fisherz/`.
+- Gradient prototypes: `outputs_hcp/templates/hcp_routea_full_k3_fisherz/`.
 - Retained 400-ROI group WTA FC and support:
   `outputs_hcp/work/group_atlas/pfm/wta-top/kong2022/`.
 - Original hippocampal time series/masks:
@@ -22,7 +22,7 @@ Use the explicit 151-subject QC roster:
 ## Template recipes
 
 All packages have rows `2mm_L`, `2mm_R`, `4mm_L`, `4mm_R` and columns Kong2022
-ROI IDs 1 through 400. Every source manifest must match the exact HCP151
+ROI IDs 1 through 400. Every source manifest must match the exact HCP
 roster. The consumed surfaces have 512 vertices per hemisphere.
 
 - `gradient_spectral`: Anterior, Middle, Posterior. Copy the current formal
@@ -48,8 +48,8 @@ package recipe.
 
 For each WTA pseudo-cluster, average its supported, individually valid
 hippocampal vertex time series within each subject, correlate that mean with
-each cortical ROI time series, apply Fisher-z, then average over all 151
-subjects. Keep unobserved rows/ROIs as NaN. Do not replace this operation by
+each cortical ROI time series, apply Fisher-z, then average over all
+roster subjects. Keep unobserved rows/ROIs as NaN. Do not replace this operation by
 averaging vertex-to-ROI correlations. The legacy `wta_normalized/7net` package
 name stays in place; its metadata must declare `fisherz` / `top1_fisher_z`.
 

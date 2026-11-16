@@ -19,8 +19,8 @@ from branch_plan import (  # noqa: E402
 CONFIG = {
     "unified_branch_policy": {
         "method_order": [
-            "hcp151_fixed",
-            "hcp151_template_matching",
+            "hcp_fixed",
+            "hcp_template_matching",
             "group_atlas_gradient_spectral",
         ],
         "subject_fc_estimands": {
@@ -66,8 +66,8 @@ def test_unified_plan_has_three_methods_and_excludes_individual_gradient() -> No
     plan = build_branch_plan(CONFIG)
     methods = {branch.method for branch in plan}
     assert methods == {
-        "hcp151_fixed",
-        "hcp151_template_matching",
+        "hcp_fixed",
+        "hcp_template_matching",
         "group_atlas_gradient_spectral",
     }
     assert all("individual_gradient" not in branch.method for branch in plan)

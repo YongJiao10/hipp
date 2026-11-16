@@ -79,10 +79,10 @@ TM_GIFTI_RGBA: dict[int, tuple[int, int, int, int]] = {
 }
 
 TM_COHORT_ROSTERS: dict[str, str] = {
-    "iowa_hc": "jj_tms_hc_67_subjects.txt",
-    "iowa_pat": "jj_tms_patient_26_subjects.txt",
-    "iowa_pure_mdd": "jj_tms_pure_mdd_7_subjects.txt",
-    "iowa_comorbid_mdd": "jj_tms_comorbid_mdd_19_subjects.txt",
+    "iowa_hc": "jj_tms_hc_subjects.txt",
+    "iowa_pat": "jj_tms_patient_subjects.txt",
+    "iowa_pure_mdd": "jj_tms_pure_mdd_subjects.txt",
+    "iowa_comorbid_mdd": "jj_tms_comorbid_mdd_subjects.txt",
 }
 
 
@@ -119,7 +119,7 @@ def renderer_module():
 
 def _branch_matching_roots(data_root: Path = ROOT) -> dict[str, Path]:
     root = Path(data_root).resolve()
-    base = root / "outputs_iowa_jj_tms" / "work" / "hcp151_fixed_template_matching"
+    base = root / "outputs_iowa_jj_tms" / "work" / "hcp_fixed_template_matching"
     return {
         "standard": base / "subjects",
         "ctxreg": base / "pfm_ctxreg" / "subjects",

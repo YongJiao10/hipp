@@ -7,13 +7,13 @@ Testing differences in MultiHist7 hippocampal subfield compositions across
 Stanford clinical cohorts and HCP 7T benchmark relative to the Stanford NTHC baseline.
 
 Supports THREE distinct functional atlas partitioning paradigms:
-  1. Version 1 (v1_fixed_hcp151_atlas):
-     Unified fixed HCP 151 Group Atlas functional boundaries applied across all cohorts.
+  1. Version 1 (v1_fixed_hcp_atlas):
+     Unified fixed HCP Group Atlas functional boundaries applied across all cohorts.
   2. Version 2 (v2_cohort_specific_atlas):
      Cohort-specific intrinsic Group Atlas functional boundaries derived from each cohort's own gradients.
   3. Version 3 (v3_individual_template_matching):
      Subject-level functional boundaries (HCP 7T uses 5-Fold Cross-Fit Template Matching;
-     Stanford cohorts use HCP151 Fixed Template Matching).
+     Stanford cohorts use HCP Fixed Template Matching).
 """
 
 from __future__ import annotations
@@ -50,7 +50,7 @@ for p in (CORE_DIR, VIS_LIB_DIR):
     if str(p) not in sys.path:
         sys.path.insert(0, str(p))
 
-from multidataset_cohorts import GridSpec, GRID_VARIANTS
+from multidataset_cohorts import GridSpec, GRID_VARIANTS, HCP_COHORT_SIZE
 
 HIPPUNFOLD_ROOT = REPO_ROOT / "outputs_stanford/inputs/hippunfold/dense_corobl_batch"
 HCP_GROUP_ROOT = REPO_ROOT / "outputs_hcp/work/group_atlas/pfm"
@@ -141,7 +141,7 @@ def get_diff_cohorts(spec: GridSpec | None = None) -> list[dict]:
         if cinfo["id"] == "hcp_7t":
             cinfo["group_root"] = REPO_ROOT / "outputs_hcp/work/group_atlas/pfm"
             cinfo["hippunfold_root"] = REPO_ROOT / "outputs_hcp/inputs/hippunfold/dense_corobl_batch"
-            cinfo["n"] = 151
+            cinfo["n"] = HCP_COHORT_SIZE
         else:
             stem = cinfo["stem"]
             var_sfx = ""
@@ -184,11 +184,11 @@ SUBREGION_NAMES = {1: "Ant", 2: "Middle", 3: "Post"}
 SUBREGION_FULL_NAMES = {1: "Anterior", 2: "Middle", 3: "Posterior"}
 
 ATLAS_VERSIONS = {
-    "v1_fixed_hcp151_atlas": {
-        "title_label": "VERSION 1: UNIFIED FIXED HCP151 GROUP ATLAS",
-        "subtitle": "Functional Subregions Defined Uniformly by Canonical HCP 151 Group Atlas | Subfields: Native MultiHist7",
-        "file_tag": "v1_fixed_hcp151_atlas",
-        "paradox_note": "• Unified Fixed HCP151 Group Atlas eliminates cross-group functional boundary variance.",
+    "v1_fixed_hcp_atlas": {
+        "title_label": "VERSION 1: UNIFIED FIXED HCP GROUP ATLAS",
+        "subtitle": "Functional Subregions Defined Uniformly by Canonical HCP Group Atlas | Subfields: Native MultiHist7",
+        "file_tag": "v1_fixed_hcp_atlas",
+        "paradox_note": "• Unified Fixed HCP Group Atlas eliminates cross-group functional boundary variance.",
     },
     "v2_cohort_specific_atlas": {
         "title_label": "VERSION 2: COHORT-SPECIFIC INTRINSIC GROUP ATLAS",
@@ -198,7 +198,7 @@ ATLAS_VERSIONS = {
     },
     "v3_individual_template_matching": {
         "title_label": "VERSION 3: INDIVIDUAL-LEVEL TEMPLATE MATCHING ATLAS",
-        "subtitle": "Functional Subregions: Subject-Level Matching (HCP 7T: 5-Fold Cross-Fit; Stanford: Fixed HCP151) | Subfields: Native MultiHist7",
+        "subtitle": "Functional Subregions: Subject-Level Matching (HCP 7T: 5-Fold Cross-Fit; Stanford: Fixed HCP) | Subfields: Native MultiHist7",
         "file_tag": "v3_individual_template_matching",
         "paradox_note": "• Individual Template Matching accounts for subject-specific functional topography shifts.",
     },
@@ -260,7 +260,7 @@ def load_all_subject_data(atlas_mode: str, spec: GridSpec | None = None) -> tupl
 
             hipp_root = cinfo.get("hippunfold_root", HIPPUNFOLD_ROOT)
 
-            if atlas_mode == "v1_fixed_hcp151_atlas":
+            if atlas_mode == "v1_fixed_hcp_atlas":
                 hdir_hcp = HCP_GROUP_ROOT / f"gradient-spectral/kong2022/{spec.smoothing}/cov_0p80/g1g2g3/hemi_{hemi}"
                 labels = np.asarray(np.load(hdir_hcp / "group_labels_final.npy"), dtype=np.int32).reshape(-1)
                 support = np.asarray(np.load(hdir_hcp / "group_support_mask.npy"), dtype=bool).reshape(-1)
@@ -284,7 +284,7 @@ def load_all_subject_data(atlas_mode: str, spec: GridSpec | None = None) -> tupl
                     if cinfo["id"] == "hcp_7t":
                         indiv_label_path = REPO_ROOT / f"outputs_hcp/work/crossfit_template_matching/subjects/sub-{s}/{spec.smoothing}/hemi_{hemi}/individual_labels_k3.npy"
                     else:
-                        indiv_label_path = REPO_ROOT / f"outputs_stanford/work/hcp151_fixed_template_matching/subjects/sub-{s}/matching/{spec.smoothing}/hemi-{hemi}/labels.npy"
+                        indiv_label_path = REPO_ROOT / f"outputs_stanford/work/hcp_fixed_template_matching/subjects/sub-{s}/matching/{spec.smoothing}/hemi-{hemi}/labels.npy"
                     tasks.append((cinfo, cname, s, hemi, None, None, lp, sp, indiv_label_path))
 
     def _process_subject(item):
@@ -678,7 +678,7 @@ def generation_plan(requested_mode: str) -> list[tuple[str, str]]:
         return [(TARGET_GENERATION_MODE, TARGET_ATLAS_MODE)]
 
     mode_by_short_name = {
-        "v1": "v1_fixed_hcp151_atlas",
+        "v1": "v1_fixed_hcp_atlas",
         "v2": "v2_cohort_specific_atlas",
         "v3": "v3_individual_template_matching",
     }

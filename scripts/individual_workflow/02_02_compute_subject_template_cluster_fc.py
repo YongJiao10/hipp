@@ -56,11 +56,11 @@ LABEL_SEMANTICS = {
     "2": "Middle/SMN",
     "3": "Posterior/DMN",
 }
-WORKFLOW = "stanford_hcp151_template_matched_cluster_mean_fc"
+WORKFLOW = "stanford_hcp_template_matched_cluster_mean_fc"
 ARTIFACT_CONTRACT_SCHEMA_VERSION = 1
 
 DEFAULT_MATCH_ROOT = (
-    REPO_ROOT / "outputs_stanford" / "work" / "hcp151_fixed_template_matching" / "subjects"
+    REPO_ROOT / "outputs_stanford" / "work" / "hcp_fixed_template_matching" / "subjects"
 )
 DEFAULT_SURFACE_ROOT = (
     REPO_ROOT / "outputs_stanford" / "inputs" / "kong2022" / "shared_inputs" / "surface"
@@ -840,7 +840,7 @@ def _process_subject(
 
 
 def _root_readme() -> str:
-    return """# Stanford template-matched cluster FC\n\nEach subject directory contains the two hemispheres from the Stanford 2 mm HCP151 template-matching result. Every `*_pearson.npy` and `*_fisherz.npy` file has shape `(3, 400)`.\n\nRows are the subject-specific template-match clusters in this fixed order:\n\n1. Anterior / VAN\n2. Middle / SMN\n3. Posterior / DMN\n\nColumns are Kong2022 ROI IDs 1 through 400 in the order recorded by the subject's `cortex_roi_parcels.tsv`. The cluster time series are averaged from that subject's hippocampal surface time series before FC is calculated. The Fisher-z files are the usual template-matching analysis scale; Pearson files are retained alongside them.\n\nEach subject directory has a JSON provenance manifest. The repository-local per-hemisphere manifests remain beside the original template-matching labels under `outputs_stanford/work/hcp151_fixed_template_matching/subjects/`.\n"""
+    return """# Stanford template-matched cluster FC\n\nEach subject directory contains the two hemispheres from the Stanford 2 mm HCP template-matching result. Every `*_pearson.npy` and `*_fisherz.npy` file has shape `(3, 400)`.\n\nRows are the subject-specific template-match clusters in this fixed order:\n\n1. Anterior / VAN\n2. Middle / SMN\n3. Posterior / DMN\n\nColumns are Kong2022 ROI IDs 1 through 400 in the order recorded by the subject's `cortex_roi_parcels.tsv`. The cluster time series are averaged from that subject's hippocampal surface time series before FC is calculated. The Fisher-z files are the usual template-matching analysis scale; Pearson files are retained alongside them.\n\nEach subject directory has a JSON provenance manifest. The repository-local per-hemisphere manifests remain beside the original template-matching labels under `outputs_stanford/work/hcp_fixed_template_matching/subjects/`.\n"""
 
 
 def _root_manifest(

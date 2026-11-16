@@ -2,7 +2,7 @@
 
 > **当前统一海马分支与 Kember 规范：** 边界见 [docs/analysis_map.md](docs/analysis_map.md)，
 > Kember 细节见 [docs/kember_area_method.md](docs/kember_area_method.md)，重建记录见 [docs/restructure_record.md](docs/restructure_record.md)。subject-level FC
-> 的方法严格为 `hcp151_template_matching` 与 `hcp151_fixed`，统一海马分支另登记
+> 的方法严格为 `hcp_template_matching` 与 `hcp_fixed`，统一海马分支另登记
 > `group_atlas_gradient_spectral` 几何 family。functional segregation
 > 和 boundary sharpness 使用 512-source BOLD、labels 与 source-512 midthickness geometry；
 > system surface area 单独使用 native HippUnfold `surfareacorobl` 逐顶点 mm² metric。
@@ -36,7 +36,7 @@ Fisher-z FC 分解，并通过同一 branch ledger 调度 group-atlas geometry�
 subject-level FC 行保留不同的 `analysis_family`，不混入 FC 推断。
 
 统一 Kember workflow 位于 `kember_metrics/`。`feature_build.py` 在一个
-subject-level feature table 中写入 `hcp151_template_matching` 与 `hcp151_fixed`
+subject-level feature table 中写入 `hcp_template_matching` 与 `hcp_fixed`
 两种 method；`contrasts.py` 以 method 为显式轴，在一个 direct-contrast table 中完成
 六个 case−NTHC Welch 比较。每个 hemisphere 的三个 system 各有三项 Kember 文章
 指标：system surface area、functional segregation、boundary sharpness。
@@ -60,7 +60,7 @@ surface-area fraction 仅保留为归一化上下文，不作为第四个 direct
 
 1. `cross_dataset_rest_fc`：回答 cortex ↔ hippocampal-system Fisher-z FC 的定位、
    JJTMS 组差异和 Stanford `trauma × symptomatic` factorial 问题。
-2. `kember_metrics`：以 `hcp151_template_matching` 与 `hcp151_fixed` 两种方法计算
+2. `kember_metrics`：以 `hcp_template_matching` 与 `hcp_fixed` 两种方法计算
    subject-level system surface area、functional segregation 和 boundary sharpness。
    功能指标保留 512-source geometry；只有面积消费 native `surfareacorobl`。
 3. `group_atlas_gradient_spectral`（代码位于 `external_group_atlas_analysis`）：描述
@@ -86,7 +86,7 @@ Markdown report, static figures, tables, and SHA-256 manifest remain authoritati
 当前权威统计输出是
 `cross_dataset_rest_fc/*/primary_screen/`。其统一 branch ledger 可写成：
 `JJTMS/Stanford × 8/17net × bilateral/L/R/L-R × anterior/middle/posterior × 2/4mm ×
-hcp151_fixed/template_matching × network-wise/profile`。
+hcp_fixed/template_matching × network-wise/profile`。
 Stanford 的四个 parent factorial map、三个 nested clinical cohort map 与 HC reference
 map 也登记在同一 ledger 中；它们的 geometry 表不回填 subject-level FC 数值，
 但当前 run manifest 统一记录这些 atlas 分支。
@@ -164,7 +164,7 @@ group-map 表中重复。统一输出位于 `cross_dataset_rest_fc/results/prima
   `Auditory − VentralAttention` 相对连接在 anterior 和 middle 均向 symptomatic
   方向增加，并在 2/4 mm、普通和 weighted-Fisher-z 分支方向一致；它尚未回答
   `trauma × symptomatic` 交互。
-- Stanford HCP151 个体 template-matching 运行清单显示 194/194 complete。
+- Stanford HCP 个体 template-matching 运行清单显示 194/194 complete。
 
 ## 执行边界
 
@@ -175,7 +175,7 @@ group-map 表中重复。统一输出位于 `cross_dataset_rest_fc/results/prima
 ## 当前 Kember method 规格（2026-09-01）
 
 [当前规范](docs/kember_area_method.md) 只保留两个 Kember methods：
-`hcp151_template_matching` 与 `hcp151_fixed`。两者的 functional segregation 和
+`hcp_template_matching` 与 `hcp_fixed`。两者的 functional segregation 和
 boundary sharpness 都在 consumed 512-source time series、labels 与 midthickness
 geometry 上计算；标签经 `ADAP_BARY_AREA` 对齐到 native 网格后，system surface area
 才使用 native HippUnfold `surfareacorobl` 求和。六个 contrast 的完整 method-aware

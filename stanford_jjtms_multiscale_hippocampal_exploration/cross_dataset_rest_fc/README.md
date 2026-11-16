@@ -16,8 +16,8 @@ provenance manifests. The only registered FC estimator is exactly
 `fisher_z`; a Pearson or other estimator is returned as `status=blocked` and
 is never reported as a usable input. The frozen group counts are:
 
-The subject-level FC registry contains `hcp151_fixed` and
-`hcp151_template_matching` for both datasets. The unified analysis registry
+The subject-level FC registry contains `hcp_fixed` and
+`hcp_template_matching` for both datasets. The unified analysis registry
 also contains `group_atlas_gradient_spectral`, which consumes current
 group-average K=3 atlas maps as a separate geometry family. Both FC methods
 have explicit FC,

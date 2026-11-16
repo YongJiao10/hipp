@@ -11,7 +11,7 @@ Main Flow Path:
 Inputs:
 - Command-line arguments:
   - --run-id: Unique identifier for the smoke run directory (default: `smoke5_<timestamp>`).
-  - --source-subjects: Text file list containing bare source subject IDs to choose from (default: `outputs_hcp/inputs/qc/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_151.txt`).
+  - --source-subjects: Text file list containing bare source subject IDs to choose from (default: `outputs_hcp/inputs/qc/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt`).
   - --subjects: Explicit space-separated subject list to override --source-subjects.
   - --subject-count: Number of subjects to include in the smoke run (default: 5).
   - --python-exe: Explicit python interpreter path for commands (default: `/home/yojiao/.conda/envs/py314/bin/python`).
@@ -47,7 +47,7 @@ from lib.io_utils import normalize_subject_id, load_subject_ids
 
 
 PYTHON_EXE = "/home/yojiao/.conda/envs/py314/bin/python"
-DEFAULT_SOURCE_SUBJECTS = DEFAULT_QC_ROOT / "manifests" / "hcp_7t_hippocampus_fmri_qc_pass_t1only_151.txt"
+DEFAULT_SOURCE_SUBJECTS = DEFAULT_QC_ROOT / "manifests" / "hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt"
 DEFAULT_FALLBACK_SMOKE_SUBJECTS = ("100610", "102311", "104416", "105923", "108323")
 DEFAULT_INPUT_DIR = REPO_ROOT / "data" / "hippunfold_input"
 CANONICAL_HIPPUNFOLD_BATCH_ROOT = REPO_ROOT / "outputs_hcp/inputs/hippunfold/dense_corobl_batch"

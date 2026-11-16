@@ -5,7 +5,7 @@ Extracts data corresponding to:
 scripts/visualize/multidataset_cluster_confidence_stacked/multidataset_cluster_confidence_stacked_2mm_36p.png
 
 Datasets & Cohorts (12 cohorts total):
-- HCP 7T: HCP 7T (N=151)
+- HCP 7T: HCP 7T
 - Iowa 3T: HC (N=67), Patient (N=26), Pure MDD (N=7), Comorbid MDD (N=19)
 - Stanford: NTHC (N=51), TEHC (N=40), NTS (N=56), NTS Any MDD (N=43), NTS Pure MDD (N=11), TIS (N=47), TIS PTSD (N=35)
 

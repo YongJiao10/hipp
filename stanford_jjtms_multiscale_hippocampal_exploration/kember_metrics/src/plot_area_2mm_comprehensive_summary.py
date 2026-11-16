@@ -114,7 +114,7 @@ FONT_SIZES = {
 
 SYSTEMS = ("anterior", "middle", "posterior")
 HEMISPHERES = ("L", "R")
-METHOD = "hcp151_template_matching"
+METHOD = "hcp_template_matching"
 SMOOTHING_MM = 2
 
 GROUP_COLORS = {

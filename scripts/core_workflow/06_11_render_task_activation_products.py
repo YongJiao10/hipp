@@ -11,7 +11,7 @@ summary top row long-axis profile lines (weighted beta sides + contrast,
 subject-level bin means, lower-panel contrast-vs-zero BH-FDR grayscale bands,
 no curve markers or CI bands;
 bins numbered 1-20 head to tail),
-bottom row bar+scatter cluster plots (contrast, hcp151_atlas + template_matching,
+bottom row bar+scatter cluster plots (contrast, hcp_atlas + template_matching,
 Ant/Mid/Post, light fills with dark dots, single red 95% CI error bars,
 FDR markers, black paired-subregion brackets with range-scaled end caps,
 one BH-FDR family; axes tops expand so markers never overflow).
@@ -72,7 +72,7 @@ from lib.surface_utils import equal_vertex_long_axis_bins, long_axis_order
 from lib.task_design import TASK_CONTRASTS, normalize_task_branch
 from lib.task_group import (
     N_LONG_AXIS_BINS,
-    PARCELLATION_HCP151_ATLAS,
+    PARCELLATION_HCP_ATLAS,
     PARCELLATION_TEMPLATE_MATCHING,
     fdr_adjust,
     sig_marker,
@@ -92,21 +92,21 @@ DEFAULT_GROUP_AVG_SURFACES_DIR = (
 )
 CLUSTER_ORDER = ["Anterior", "Middle", "Posterior"]
 CLUSTER_SHORT = {"Anterior": "Ant", "Middle": "Mid", "Posterior": "Post"}
-ZONE_ORDER = [PARCELLATION_HCP151_ATLAS, PARCELLATION_TEMPLATE_MATCHING]
+ZONE_ORDER = [PARCELLATION_HCP_ATLAS, PARCELLATION_TEMPLATE_MATCHING]
 ZONE_SHORT = {
-    PARCELLATION_HCP151_ATLAS: "hcp151",
+    PARCELLATION_HCP_ATLAS: "hcp",
     PARCELLATION_TEMPLATE_MATCHING: "tm",
 }
 ZONE_COLORS = {
-    PARCELLATION_HCP151_ATLAS: "#93C5FD",
+    PARCELLATION_HCP_ATLAS: "#93C5FD",
     PARCELLATION_TEMPLATE_MATCHING: "#FDE68A",
 }
 ZONE_EDGE_COLORS = {
-    PARCELLATION_HCP151_ATLAS: "#1D4ED8",
+    PARCELLATION_HCP_ATLAS: "#1D4ED8",
     PARCELLATION_TEMPLATE_MATCHING: "#D97706",
 }
 ZONE_DOT_COLORS = {
-    PARCELLATION_HCP151_ATLAS: "#1E3A8A",
+    PARCELLATION_HCP_ATLAS: "#1E3A8A",
     PARCELLATION_TEMPLATE_MATCHING: "#92400E",
 }
 # Bracket palette: black = subregion difference within one method.
@@ -339,9 +339,9 @@ def draw_bin_legend(fig) -> None:
     )
 
 
-ZONE_ORDER = [PARCELLATION_HCP151_ATLAS, PARCELLATION_TEMPLATE_MATCHING]
+ZONE_ORDER = [PARCELLATION_HCP_ATLAS, PARCELLATION_TEMPLATE_MATCHING]
 ZONE_LABELS = {
-    PARCELLATION_HCP151_ATLAS: "hcp151",
+    PARCELLATION_HCP_ATLAS: "hcp",
     PARCELLATION_TEMPLATE_MATCHING: "tm",
 }
 
@@ -477,7 +477,7 @@ def render_task_figure(
         ax.set_xlim(0.5, N_LONG_AXIS_BINS + 0.5)
         ax.set_xticks([1, 5, 10, 15, 20])
         panel_n = len(group_roster(group_root, smoothing="2mm", hemi=hemi, contrast=contrast))
-        panel_cov = panel_coverage(subject_table, contrast=contrast, hemi=hemi, zone=PARCELLATION_HCP151_ATLAS)
+        panel_cov = panel_coverage(subject_table, contrast=contrast, hemi=hemi, zone=PARCELLATION_HCP_ATLAS)
 
         if is_card:
             ax.set_title(f"hemi-{hemi}", fontsize=9, fontweight="bold", pad=4)
@@ -674,7 +674,7 @@ def render_task_figure(
                 )
         else:
             panel_cov = panel_coverage(
-                subject_table, contrast=contrast, hemi=hemi, zone=PARCELLATION_HCP151_ATLAS
+                subject_table, contrast=contrast, hemi=hemi, zone=PARCELLATION_HCP_ATLAS
             )
             ax.set_title(
                 f"{contrast_display(contrast)}\nhemi-{hemi} clusters (effective n per bar, coverage={panel_cov:.0%})",

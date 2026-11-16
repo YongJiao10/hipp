@@ -113,7 +113,7 @@ HCP defaults to eight subjects and accepts `--jobs` up to twelve; other datasets
 use two, with BANDA serial. The approved HCP launch, CPU affinity, GPU slots and
 resource patches are maintained in the [runtime manifest](../../docs/environment/hippo2_reproducibility_manifest.md#batch-resources-and-retained-outputs).
 
-For the complete HCP166 reconstruction, manifest mode explicitly uses
+For the complete HCP reconstruction, manifest mode explicitly uses
 `--keep-going` to attempt independent subjects after an individual failure.
 The default remains stop-on-failure. A keep-going batch still returns a
 nonzero final status if any subject fails and does not bypass official QC.

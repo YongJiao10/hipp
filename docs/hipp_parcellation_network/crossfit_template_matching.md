@@ -163,14 +163,14 @@ The 3D hippocampal overviews provide direct qualitative and quantitative
 verification of template stability:
 - `01_03_run_and_render_hcp_crossfit_disjoint_folds.py`: independently fits and
   renders K=3 gradient-spectral templates for all 5 completely disjoint cohorts
-  (n≈30 each, 0% sample overlap, 0% family leakage). Even with only ~30 subjects
-  and zero shared subjects, pairwise Macro-Dice exceeds 0.954–0.972 and
+  (equal-sized folds, 0% sample overlap, 0% family leakage). Even with only a fifth of
+  the roster per template and zero shared subjects, pairwise Macro-Dice exceeds 0.954–0.972 and
   long-axis modal vertex agreement exceeds 97.4%–98.4%, demonstrating robust
   biological replication across independent cohorts.
 - `01_04_render_hcp_runs_comparison.py`: renders comparative K=3 templates
   across independent acquisition sessions and spatial smoothing scales in a 2×2
   factorial layout (Rows: 2 mm vs 4 mm; Columns: Day 1 Runs 1+2 vs Day 2 Runs 3+4).
-  Across all n=151 subjects, Day 1 vs Day 2 Macro-Dice averages 0.9777 (2 mm: L 0.9924,
+  Across all subjects, Day 1 vs Day 2 Macro-Dice averages 0.9777 (2 mm: L 0.9924,
   R 0.9507; 4 mm: L 0.9828, R 0.9848) with 97.7% vertex agreement, demonstrating
   near-perfect test-retest reliability across scanning days and stability across
   spatial smoothing scales. The script also supports individual 4-run comparisons

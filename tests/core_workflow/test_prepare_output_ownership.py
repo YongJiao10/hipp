@@ -1,4 +1,4 @@
-"""Task prep must not replace rest QC lists or the formal HCP151 surface."""
+"""Task prep must not replace rest QC lists or the formal HCP surface."""
 from __future__ import annotations
 
 import importlib
@@ -26,8 +26,8 @@ OTHER_SUBJECTS = ["200001", "200002"]
 def roots(tmp_path, monkeypatch):
     rest = tmp_path / "rest"
     shared = rest / "surface"
-    template = rest / "templates/hcp151"
-    roster = tmp_path / "vertex_qc/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_151.txt"
+    template = rest / "templates/hcp"
+    roster = tmp_path / "vertex_qc/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt"
     roster.parent.mkdir(parents=True)
     roster.write_text("\n".join(FORMAL) + "\n")
     for module in (PREP, QC):

@@ -25,7 +25,7 @@ signal branch.
 The active renderer entry point requires signal_branch explicitly; the
 historical legacy wrapper remains independently maintained and is not changed
 by this branch-aware implementation.
-The `hcp_jjtms_7net` branch adds Kong2022 7-Network and Lynch2024 7-Network method columns while retaining the BrainSpace surface panels, dataset bands, side labels, and layout. It uses the fixed common roster HCP 7T `N=151`, Iowa HC `N=67`, Iowa Patient `N=26` (sub-3003 excluded), Pure MDD `N=7`, and Comorbid MDD `N=19`; Stanford is excluded from this comparison branch only. For the 2mm/36p standard and ctxreg cells, the suite additionally passes the WTA `--tm-contrast-manifest`, which renders a third template-matching column (TM Hippo Atlas + its left/right 512-vertex composition card for Anterior/VAN, Middle/SMN, and Posterior/DMN). The overlay does not recompute or substitute the TM atlas image: it consumes the exact WTA TM atlas PNG and its declared TM label GIFTIs from `multidataset_hipp_cortex_gradient_wta/panels/`, derives the vertex counts from those labels, and fails closed if an exact source is missing. HCP 7T has no TM dominant atlas and renders blank in that column; Lynch2024 has no TM atlas and is never substituted — the TM column follows the Kong2022 cohort roster.
+The `hcp_jjtms_7net` branch adds Kong2022 7-Network and Lynch2024 7-Network method columns while retaining the BrainSpace surface panels, dataset bands, side labels, and layout. It uses the fixed common roster HCP 7T, Iowa HC, Iowa Patient (sub-3003 excluded), Pure MDD, and Comorbid MDD (sizes come from the formal roster manifests); Stanford is excluded from this comparison branch only. For the 2mm/36p standard and ctxreg cells, the suite additionally passes the WTA `--tm-contrast-manifest`, which renders a third template-matching column (TM Hippo Atlas + its left/right 512-vertex composition card for Anterior/VAN, Middle/SMN, and Posterior/DMN). The overlay does not recompute or substitute the TM atlas image: it consumes the exact WTA TM atlas PNG and its declared TM label GIFTIs from `multidataset_hipp_cortex_gradient_wta/panels/`, derives the vertex counts from those labels, and fails closed if an exact source is missing. HCP 7T has no TM dominant atlas and renders blank in that column; Lynch2024 has no TM atlas and is never substituted — the TM column follows the Kong2022 cohort roster.
 
 ---
 
@@ -34,7 +34,7 @@ The `hcp_jjtms_7net` branch adds Kong2022 7-Network and Lynch2024 7-Network meth
 图表采用标准 **2 列 × 6 行** 宽屏横版排版（220 DPI，约 `10350 × 7258` 像素）：
 
 - **左列（Column 1: Controls, Clinical & MDD Subgroups, 6 cohorts, N=362）**：
-  1. **HCP 7T** (Healthy Young Adults, N=151)
+  1. **HCP 7T** (Healthy Young Adults)
   2. **Iowa 3T HC** (Healthy Controls, N=67)
   3. **Iowa 3T Patient** (Depression Patients, N=26; sub-3003 excluded)
   4. **Iowa 3T Pure MDD** (Pure MDD Subgroup, N=7)

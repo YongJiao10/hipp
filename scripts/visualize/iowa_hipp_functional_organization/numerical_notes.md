@@ -11,7 +11,7 @@ must be positive. Labels are 0 (unassigned), 1 (A), 2 (B), or 3 (P).
   mask is true and all three scores are finite. Whole-side totals retain the
   full side area, while `valid_area` reports the actually eligible area.
   System rows use only valid vertices of the requested individual TM label.
-- Fixed-HCP identity: HCP151 labels and support define one external A/B/P
+- Fixed-HCP identity: HCP labels and support define one external A/B/P
   territory per branch and hemisphere for every cohort. Within each territory,
   similarity is the matched HCP-template score and advantage is that score
   minus the maximum competing HCP-template score. `total_area` is the whole

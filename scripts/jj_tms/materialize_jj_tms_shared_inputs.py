@@ -28,13 +28,13 @@ from lib.task_quality import CORTEX_VALIDITY_POLICY
 
 materialize_fc = importlib.import_module("04_01_materialize_kong2022_roi_fc").materialize_fc
 
-JJ_MATCH_ROOT = REPO_ROOT / "outputs_iowa_jj_tms/work/hcp151_fixed_template_matching/subjects"
+JJ_MATCH_ROOT = REPO_ROOT / "outputs_iowa_jj_tms/work/hcp_fixed_template_matching/subjects"
 BATCH_ROOT = REPO_ROOT / "outputs_iowa_jj_tms/inputs/hippunfold/dense_corobl_batch"
 KONG_ROOT = REPO_ROOT / "outputs_iowa_jj_tms/inputs/kong2022"
 SHARED_SURFACE_ROOT = KONG_ROOT / "shared_inputs" / "surface"
 SHARED_ROUTEA_ROOT = KONG_ROOT / "shared_inputs" / "pfm"
 TEMPLATE_ROOT = KONG_ROOT / "templates" / "hipp_group_average" / "group_average_surfaces"
-MANIFEST_94 = REPO_ROOT / "manifests" / "jj_tms_94_subjects.txt"
+MANIFEST_94 = REPO_ROOT / "manifests" / "jj_tms_subjects.txt"
 
 HEMIS = ["L", "R"]
 SMOOTHINGS = ["2mm", "4mm"]
@@ -94,7 +94,7 @@ def read_cortex_reference_policy(source_manifest: Path, *, subject: str) -> dict
     dataset = "iowa_jj_tms"
     policy = CORTEX_VALIDITY_POLICY
     if (payload.get("subject") != f"sub-{subject}"
-            or payload.get("workflow") != "jj_tms_hcp151_fixed_template_matching"
+            or payload.get("workflow") != "jj_tms_hcp_fixed_template_matching"
             or parameters.get("task") != "rest"
             or parameters.get("cortex_validity_policy") != policy):
         raise ValueError(f"Rebuild JJ cortex inputs with finite-signal validity: {source_manifest}")

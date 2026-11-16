@@ -18,7 +18,7 @@ NETWORKS = ("Control", "Default", "VentralAttention")
 CLUSTERS = (1, 2, 3)
 HEMIS = ("L", "R")
 GROUPS = ("healthy", "patient")
-PARCELLATIONS = ("template_matching", "hcp151")
+PARCELLATIONS = ("template_matching", "hcp")
 
 
 def cell_descriptives(data: pd.DataFrame) -> pd.DataFrame:

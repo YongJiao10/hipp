@@ -631,7 +631,7 @@ def test_shipped_config_smoke_is_callable_and_reports_every_family() -> None:
     summary = features.run_config_smoke(CONFIG_PATH, subjects_per_dataset=1)
     assert set(summary["dataset"]) == {"stanford", "jjtms"}
     assert set(summary["method"]) == {
-        "hcp151_fixed",
-        "hcp151_template_matching",
+        "hcp_fixed",
+        "hcp_template_matching",
     }
     assert summary["status"].isin({"available", "unavailable", "failed", "missing"}).all()

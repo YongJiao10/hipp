@@ -10,7 +10,7 @@ This directory provides the production-grade visualization script for multi-data
 ## Layout & Design Specifications
 
 1. **5 Rows × 2 Columns Format:**
-   - **Column 1 (5 cohorts):** HCP 7T (N=151), Iowa 3T HC (N=67), Iowa 3T Patient (N=26; sub-3003 excluded), Stanford NTHC (N=51), Stanford TEHC (N=40).
+   - **Column 1 (5 cohorts):** HCP 7T, Iowa 3T HC (N=67), Iowa 3T Patient (N=26; sub-3003 excluded), Stanford NTHC (N=51), Stanford TEHC (N=40).
    - **Column 2 (5 cohorts):** Stanford NTS (N=56), Stanford NTS Any MDD (N=43), Stanford NTS Pure MDD (N=11), Stanford TIS (N=47), Stanford TIS PTSD (N=35).
 2. **Compact & Snug Geometry (`38.0 × 13.0` inches @ 300 DPI):**
    - **Snug 3D Hippocampus Overlay:** Width ratio `0.430` with `wspace=0.005` ensures the 4-view composite sits flush against both the left and right midline y-axes with zero lateral gaps.

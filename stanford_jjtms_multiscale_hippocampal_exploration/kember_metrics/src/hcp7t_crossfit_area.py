@@ -35,9 +35,8 @@ except ImportError:  # pragma: no cover - direct source-directory execution
 REPO_ROOT = Path(__file__).resolve().parents[3]
 WORKFLOW_ROOT = Path(__file__).resolve().parents[1]
 HCP_GROUP = "HCP 7T"
-HCP_METHOD = "hcp151_crossfit_template_matching"
+HCP_METHOD = "hcp_crossfit_template_matching"
 HCP_SMOOTHING_MM = 2
-EXPECTED_HCP_SUBJECTS = 151
 EXPECTED_HCP_FOLDS = 5
 EXPECTED_HCP_TEMPLATE_FITS = 20
 SYSTEMS = ("anterior", "middle", "posterior")
@@ -80,8 +79,8 @@ def _normalise_subject(value: Any) -> str:
 def validate_crossfit_run_manifest(manifest: Mapping[str, Any]) -> dict[str, Any]:
     """Require the maintained family-aware five-fold HCP contract."""
 
-    if int(manifest.get("n_subjects", -1)) != EXPECTED_HCP_SUBJECTS:
-        raise ValueError("HCP cross-fit run must contain 151 subjects")
+    if int(manifest.get("n_subjects", -1)) < 1:
+        raise ValueError("HCP cross-fit run must record a positive n_subjects")
     if int(manifest.get("n_folds", -1)) != EXPECTED_HCP_FOLDS:
         raise ValueError("HCP cross-fit run must use five-fold cross-fitting")
     if int(manifest.get("template_fits_completed", -1)) != EXPECTED_HCP_TEMPLATE_FITS:
@@ -200,8 +199,10 @@ def _subject_list(run_manifest: Mapping[str, Any]) -> tuple[str, ...]:
     if not isinstance(subjects, list):
         raise ValueError("HCP cross-fit manifest lacks run_config.subjects")
     normalised = tuple(_normalise_subject(value) for value in subjects)
-    if len(normalised) != EXPECTED_HCP_SUBJECTS or len(set(normalised)) != len(normalised):
-        raise ValueError("HCP cross-fit subject list must contain 151 unique subjects")
+    if not normalised or len(set(normalised)) != len(normalised):
+        raise ValueError("HCP cross-fit subject list must be non-empty and contain unique subjects")
+    if int(run_manifest.get("n_subjects", -1)) != len(normalised):
+        raise ValueError("HCP cross-fit n_subjects does not match run_config.subjects")
     return tuple(sorted(normalised, key=lambda value: int(value[4:])))
 
 
@@ -405,9 +406,6 @@ def load_hcp7t_area_features(
     hippunfold_root = _resolve_repo_path(str(reference["hippunfold_root"]))
     shared_surface_root = _resolve_repo_path(str(reference["shared_surface_root"]))
     smoothing_mm = int(reference.get("smoothing_mm", HCP_SMOOTHING_MM))
-    expected_subjects = int(reference.get("expected_n", EXPECTED_HCP_SUBJECTS))
-    if expected_subjects != EXPECTED_HCP_SUBJECTS:
-        raise ValueError("HCP 7T reference configuration must specify 151 subjects")
     if smoothing_mm != HCP_SMOOTHING_MM:
         raise ValueError("HCP 7T reference is defined only for 2 mm smoothing")
     run_manifest = validate_crossfit_run_manifest(_load_json(crossfit_manifest_path))
@@ -422,7 +420,7 @@ def load_hcp7t_area_features(
     )
     source_manifest_sha256 = _sha256(crossfit_manifest_path)
     destination = Path(output_dir).expanduser().resolve()
-    expected_rows = EXPECTED_HCP_SUBJECTS * len(HEMISPHERES) * len(SYSTEMS)
+    expected_rows = len(subjects) * len(HEMISPHERES) * len(SYSTEMS)
     cached = _load_current_cache(
         destination,
         source_manifest_sha256=source_manifest_sha256,

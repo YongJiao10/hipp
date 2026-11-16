@@ -30,6 +30,7 @@ for p in (CORE_DIR, VIS_LIB_DIR):
 from lib.gradient_assignment_contract import validate_gradient_assignment
 from lib.surface_utils import render_hippocampal_grid
 from multidataset_cohorts import (
+    HCP_COHORT_SIZE,
     COMPARISON_VERSION,
     GRID_VARIANTS,
     SIGNAL_BRANCHES,
@@ -203,7 +204,7 @@ COHORTS_COL1 = [
         "dataset_name": "HCP 7T",
         "cohort_name": "HCP 7T",
         "cohort_desc": "Healthy Young Adults",
-        "n_subjects": 151,
+        "n_subjects": HCP_COHORT_SIZE,
         "group_root": REPO_ROOT
         / "outputs_hcp/work/group_atlas/pfm",
         "bg_color": "#ffffff",

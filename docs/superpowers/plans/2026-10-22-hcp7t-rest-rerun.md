@@ -5,7 +5,7 @@ motion, anatomy and NIfTI sampling-coverage rules, then cross-validate and match
 held-out individuals to group-trained templates.
 
 **Inputs:** The complete structural-source roster is
-`manifests/hcp_7t_hippocampus_struct_complete_166.txt`. Physical-run motion paths
+`manifests/hcp_7t_hippocampus_struct_complete.txt`. Physical-run motion paths
 come from `manifests/hcp7t_motion_transfer_20261019.tsv`. Existing concatenated
 BOLD and CIFTI files are read without creating new concatenated images. Native
 T1w surfaces use the declared HCP native-to-BOLD registration.
@@ -34,7 +34,7 @@ T1w surfaces use the declared HCP native-to-BOLD registration.
 
 1. Commit the completed removal of individual-clustering code and instructions.
    Completed in `b715994`.
-2. Implement and test HCP7T QC without the historical HCP151-result restriction.
+2. Implement and test HCP7T QC without the historical HCP-result restriction.
 3. Integrate actual BOLD NIfTI grid support and runwise sampled-signal validity
    into registered sampling and the consumed vertex mask. Keep unusable
    vertices excluded from smoothing and FC. Use explicit physical-run metadata

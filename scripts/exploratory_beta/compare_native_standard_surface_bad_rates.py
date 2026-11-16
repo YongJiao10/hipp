@@ -231,7 +231,7 @@ def build_jobs(dataset: str) -> list[dict[str, Any]]:
         return jobs
 
     # JJ_TMS branch: 78 eligible subjects
-    manifest_78 = REPO_ROOT / "manifests/jj_tms_78_eligible_subjects.txt"
+    manifest_78 = REPO_ROOT / "manifests/jj_tms_eligible_subjects.txt"
     if manifest_78.is_file():
         eligible_subs = [
             line.strip()

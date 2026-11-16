@@ -4,7 +4,7 @@ This directory contains the visualization, statistical modeling, and experimenta
 
 ## Additive HCP/JJ_TMS 7-network comparison
 
-The `hcp_jjtms_7net` branch adds Kong2022 7-Network and Lynch2024 7-Network comparison columns without changing the original subfield layout or Workbench rendering. The comparison roster is fixed to HCP 7T `N=151`, Iowa HC `N=67`, Iowa Patient `N=26` (sub-3003 excluded), Pure MDD `N=7`, and Comorbid MDD `N=19`; Stanford remains in the legacy branch only.
+The `hcp_jjtms_7net` branch adds Kong2022 7-Network and Lynch2024 7-Network comparison columns without changing the original subfield layout or Workbench rendering. The comparison roster is fixed to HCP 7T, Iowa HC, Iowa Patient (sub-3003 excluded), Pure MDD, and Comorbid MDD (sizes come from the formal roster manifests); Stanford remains in the legacy branch only.
 
 The comparison panorama omits the single-atlas version tag (`[VERSION 2: ...]`) and cohort-count subtitle from its figure header to maintain a clean method-comparison title. CLI flags `--show-version-label` / `--no-show-version-label` and `--show-subtitle` / `--no-show-subtitle` allow explicitly overriding header labels.
 
@@ -121,7 +121,7 @@ In **NTS Pure MDD vs NTHC**, we discovered a massive, bilaterally symmetric anat
 
 To ensure that clinical findings (e.g. Pure MDD body subicular atrophy) are genuine psychiatric neurobiological alterations rather than scanner, field strength (3T vs. 7T), or site artifacts, we conducted an **independent cross-site normative baseline validation** comparing:
 
-1. **Stanford NTHC (3T, N=51)** vs. **HCP 7T (7T, N=151)**
+1. **Stanford NTHC (3T, N=51)** vs. **HCP 7T (7T)**
 2. **Stanford NTHC (3T, N=51)** vs. **Iowa HC (7T, N=67)**
 
 ### 2. Key Findings
@@ -139,9 +139,9 @@ To ensure that clinical findings (e.g. Pure MDD body subicular atrophy) are genu
 
 To rigorously evaluate subfield composition across different spatial parcellation paradigms, the pipeline implements **Three Canonical Atlas Versions** with dedicated, distinct figure names, statistical tables, and subject-level long datasets:
 
-### 1. Version 1: Unified Fixed HCP151 Group Atlas (`v1_fixed_hcp151_atlas`)
+### 1. Version 1: Unified Fixed HCP Group Atlas (`v1_fixed_hcp_atlas`)
 
-- **Functional Boundary Source**: The canonical HCP 151-subject Route A Group Atlas functional boundaries ($K=3$: Anterior, Middle, Posterior) are applied **uniformly across all cohorts**.
+- **Functional Boundary Source**: The canonical HCP Route A Group Atlas functional boundaries ($K=3$: Anterior, Middle, Posterior) are applied **uniformly across all cohorts**.
 - **Histological Subfields**: Each subject's native HippUnfold MultiHist7 subfields ($Sub, CA1, CA2, CA3, CA4$) on midthickness surface.
 - **Scientific Role**: Completely eliminates cross-group functional boundary variance, evaluating purely histological subfield geometry within fixed spatial coordinates.
 
@@ -154,9 +154,9 @@ To rigorously evaluate subfield composition across different spatial parcellatio
 ### 3. Version 3: Individual-Level Template Matching Atlas (`v3_individual_template_matching`)
 
 - **Functional Boundary Source**:
-  - **HCP 7T ($N=151$)**: **5-Fold Cross-Fit Template Matching** individual labels (`outputs_hcp/work/crossfit_template_matching`).
-  - **Stanford Cohorts (7 groups)**: **HCP151 Fixed Template Matching** individual labels (`outputs_stanford/work/hcp151_fixed_template_matching`).
-  - **Iowa Cohorts (2 groups)**: **HCP151 Fixed Template Matching** individual labels (`outputs_iowa_jj_tms/work/hcp151_fixed_template_matching`).
+  - **HCP 7T**: **5-Fold Cross-Fit Template Matching** individual labels (`outputs_hcp/work/crossfit_template_matching`).
+  - **Stanford Cohorts (7 groups)**: **HCP Fixed Template Matching** individual labels (`outputs_stanford/work/hcp_fixed_template_matching`).
+  - **Iowa Cohorts (2 groups)**: **HCP Fixed Template Matching** individual labels (`outputs_iowa_jj_tms/work/hcp_fixed_template_matching`).
 - **Histological Subfields**: Each subject's native HippUnfold MultiHist7 subfields.
 - **Scientific Role**: Fully accounts for subject-specific functional topography variations and resting-state connectivity adaptations.
 
@@ -191,7 +191,7 @@ Both the 10/12-cohort cross-dataset panorama and the Stanford clinical group dif
 
 ### 📦 Archived Methodological Suites (`archive_v1_v3/`)
 
-All Version 1 (Unified Fixed HCP151 Group Atlas) and Version 3 (Individual-Level Template Matching Atlas) artifacts and explicit suffix files are archived in:
+All Version 1 (Unified Fixed HCP Group Atlas) and Version 3 (Individual-Level Template Matching Atlas) artifacts and explicit suffix files are archived in:
 
 - Directory: `scripts/visualize/multidataset_subfield_composition_2mm_2col/archive_v1_v3/`
 

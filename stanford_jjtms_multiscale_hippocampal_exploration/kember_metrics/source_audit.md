@@ -40,7 +40,7 @@ arithmetic mean of the left and right hemisphere fractions.
 
 The current workflow therefore makes every input and adaptation explicit:
 
-- use `hcp151_template_matching` first, `hcp151_fixed` second, and a shared
+- use `hcp_template_matching` first, `hcp_fixed` second, and a shared
   group-specific clustering solution third;
 - require actual native HippUnfold `surfareacorobl` per-vertex area assets;
 - transfer each fixed 512 label field to native vertices with Workbench

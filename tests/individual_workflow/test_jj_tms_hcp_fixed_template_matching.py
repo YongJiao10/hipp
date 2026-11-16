@@ -16,14 +16,14 @@ MODULE_PATH = (
     REPO_ROOT
     / "scripts"
     / "jj_tms"
-    / "jj_tms_hcp151_fixed_template_matching.py"
+    / "jj_tms_hcp_fixed_template_matching.py"
 )
 
 
 def load_module():
     assert MODULE_PATH.is_file(), "JJ_TMS fixed-template adapter is missing"
     spec = importlib.util.spec_from_file_location(
-        "jj_tms_hcp151_fixed_template_matching",
+        "jj_tms_hcp_fixed_template_matching",
         MODULE_PATH,
     )
     assert spec is not None and spec.loader is not None
@@ -545,7 +545,7 @@ def test_subject_resume_rejects_combo_manifest_output_rewrite(tmp_path: Path):
 def test_run_resume_contract_rejects_immutable_context_drift(field: str):
     workflow = load_module()
     expected = {
-        "workflow": "jj_tms_hcp151_fixed_template_matching",
+        "workflow": "jj_tms_hcp_fixed_template_matching",
         "run_id": "smoke",
         "scope": "subset",
         "subjects": ["sub-1001"],
@@ -817,7 +817,7 @@ def test_empty_failed_subject_resume_allocates_next_attempt_number(tmp_path: Pat
 
 def _run_resume_base() -> dict[str, object]:
     return {
-        "workflow": "jj_tms_hcp151_fixed_template_matching",
+        "workflow": "jj_tms_hcp_fixed_template_matching",
         "run_id": "run-1",
         "scope": "subset",
         "subjects": ["sub-1001"],
@@ -912,7 +912,7 @@ def test_full_run_smoke_gate_requires_complete_fingerprinted_canonical_smoke(
         tmp_path
         / "outputs"
         / "runs"
-        / "jj_tms_hcp151_smoke_20260809"
+        / "jj_tms_hcp_smoke_20260809"
     )
     run_dir.mkdir(parents=True)
     run_manifest = run_dir / "run_manifest.json"
@@ -920,7 +920,7 @@ def test_full_run_smoke_gate_requires_complete_fingerprinted_canonical_smoke(
         json.dumps(
             {
                 "status": "complete",
-                "run_id": "jj_tms_hcp151_smoke_20260809",
+                "run_id": "jj_tms_hcp_smoke_20260809",
                 "scope": "subset",
                 "subjects": ["sub-1001", "sub-1002", "sub-1003"],
                 "subject_count": 3,
@@ -953,7 +953,7 @@ def test_full_run_smoke_gate_requires_complete_fingerprinted_canonical_smoke(
         json.dumps(
             {
                 "status": "complete",
-                "run_id": "jj_tms_hcp151_smoke_20260809",
+                "run_id": "jj_tms_hcp_smoke_20260809",
                 "scope": "subset",
                 "subject_count": 3,
                 "complete_subject_count": 3,

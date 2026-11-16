@@ -88,9 +88,9 @@ Shared arguments:
 
 - `--shared-root $BASE/shared_inputs/routea`
 - `--surface-root $BASE/shared_inputs/surface`
-- `--subjects-manifest $BASE/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_151.txt`
+- `--subjects-manifest $BASE/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt`
 - `--hippunfold-batch-root outputs_hcp/inputs/hippunfold/dense_corobl_batch`
-- `--group-average-surfaces-dir $BASE/templates/hipp_group_average_t1only_151/group_average_surfaces`
+- `--group-average-surfaces-dir $BASE/templates/hipp_group_average/group_average_surfaces`
 - `--k-selection-mode redundancy-aware`
 
 ### 3) Restore full K curves

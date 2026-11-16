@@ -111,7 +111,7 @@
 - `surface_area.compute_system_surface_area(vertex_area_mm2, labels, valid_mask=None) -> dict[str, Any]` remains the sole Kember area aggregation function.
 - `native_label_alignment.align_labels_to_native(...) -> tuple[np.ndarray, np.ndarray, dict[str, Any]]` transfers 512-source labels to the native surface with `ADAP_BARY_AREA` and returns the native valid ROI plus provenance.
 - `feature_build.compute_kember_metrics(...)` receives a native area vector explicitly; it never calls a mesh-area reconstruction function.
-- `feature_build.run_feature_build(config_path, output_dir, ...)` writes one combined subject-level feature table containing both `hcp151_template_matching` and `hcp151_fixed` rows.
+- `feature_build.run_feature_build(config_path, output_dir, ...)` writes one combined subject-level feature table containing both `hcp_template_matching` and `hcp_fixed` rows.
 - `contrasts.run_direct_contrasts(feature_table, config, output_dir)` writes one combined direct-contrast table with a `method` column rather than parallel duplicate output trees.
 
 - [ ] **Step 1: Add the failing native-area integration test.**
@@ -161,7 +161,7 @@
 
 - [ ] **Step 6: Migrate and adapt tests.**
 
-  Keep pure area tests, native input-contract tests, source-lock tests, Kember functional metric tests, direct contrast tests, visualization tests, and end-to-end manifest tests. Update imports and assertions to the new package name and stable output paths. Add a contract asserting that only `hcp151_template_matching` and `hcp151_fixed` are active in the current combined feature table.
+  Keep pure area tests, native input-contract tests, source-lock tests, Kember functional metric tests, direct contrast tests, visualization tests, and end-to-end manifest tests. Update imports and assertions to the new package name and stable output paths. Add a contract asserting that only `hcp_template_matching` and `hcp_fixed` are active in the current combined feature table.
 
 - [ ] **Step 7: Run the unified Kember unit suite.**
 

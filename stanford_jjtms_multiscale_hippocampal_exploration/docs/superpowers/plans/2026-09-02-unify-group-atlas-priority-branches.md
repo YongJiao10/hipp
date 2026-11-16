@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- The active hippocampal method axis is exactly `hcp151_fixed`, `hcp151_template_matching`, and `group_atlas_gradient_spectral`; `individual_gradient_k3_full` is never reintroduced.
+- The active hippocampal method axis is exactly `hcp_fixed`, `hcp_template_matching`, and `group_atlas_gradient_spectral`; `individual_gradient_k3_full` is never reintroduced.
 - The group-atlas reference is the existing `HC` map (`routea_hc_full_k3_fisherz` and its weighted counterpart), and every other configured group is compared only to `HC`.
 - Priority is strict: 8-network/2-mm work is tier P0; 8-network/4-mm and 17-network/2-mm work are tier P1; 17-network/4-mm work is tier P2. A lower tier cannot start until every higher-tier branch is complete.
 - Group-atlas branches have K=3 region labels and no cortical network-resolution axis; their 2-mm cells are P0 and their 4-mm cells are P2.
@@ -39,8 +39,8 @@ def test_unified_plan_has_three_methods_and_excludes_individual_gradient() -> No
     plan = build_branch_plan(CONFIG)
     methods = {branch.method for branch in plan}
     assert methods == {
-        "hcp151_fixed",
-        "hcp151_template_matching",
+        "hcp_fixed",
+        "hcp_template_matching",
         "group_atlas_gradient_spectral",
     }
     assert all("individual_gradient" not in branch.method for branch in plan)
@@ -123,8 +123,8 @@ def test_group_comparisons_use_hc_reference_only() -> None:
 ```json
 "unified_branch_policy": {
   "method_order": [
-    "hcp151_fixed",
-    "hcp151_template_matching",
+    "hcp_fixed",
+    "hcp_template_matching",
     "group_atlas_gradient_spectral"
   ],
   "subject_fc_priority": [

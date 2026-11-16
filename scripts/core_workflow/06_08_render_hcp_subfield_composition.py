@@ -118,8 +118,6 @@ def group_run_dir(
 
 
 def validate_group_manifest(manifest: dict[str, Any], manifest_path: Path) -> list[str]:
-    if int(manifest.get("n_subjects", -1)) != 151:
-        raise ValueError(f"Expected n_subjects=151 in {manifest_path}, got {manifest.get('n_subjects')}")
     if int(manifest.get("chosen_k_final", -1)) != 3:
         raise ValueError(f"Expected chosen_k_final=3 in {manifest_path}, got {manifest.get('chosen_k_final')}")
     if manifest.get("cluster_label_ordering") != "long_axis_head_to_tail":
@@ -131,8 +129,12 @@ def validate_group_manifest(manifest: dict[str, Any], manifest_path: Path) -> li
     if not raw_subjects:
         raw_subjects = [f"sub-{key}" for key in sorted(manifest.get("actual_consumed_input_paths", {}))]
     subjects = [str(subject).removeprefix("sub-") for subject in raw_subjects]
-    if len(subjects) != 151:
-        raise ValueError(f"Expected 151 subjects in {manifest_path}, got {len(subjects)}")
+    if not subjects or len(set(subjects)) != len(subjects):
+        raise ValueError(f"Expected a non-empty list of unique subjects in {manifest_path}")
+    if int(manifest.get("n_subjects", -1)) != len(subjects):
+        raise ValueError(
+            f"n_subjects={manifest.get('n_subjects')} does not match {len(subjects)} subjects in {manifest_path}"
+        )
     return subjects
 
 

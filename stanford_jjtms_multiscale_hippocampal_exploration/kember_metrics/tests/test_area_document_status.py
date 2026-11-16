@@ -49,7 +49,7 @@ def test_source_lock_freezes_the_current_native_area_contract() -> None:
     )
     assert implementation["implementation_scope"] == (
         "The unified subject-level workflow has exactly two active methods: "
-        "hcp151_template_matching and hcp151_fixed."
+        "hcp_template_matching and hcp_fixed."
     )
     assert implementation["no_per_subject_clustering"] == (
         "Group-specific clustering belongs only to "
@@ -65,7 +65,7 @@ def test_canonical_docs_define_three_workflows_and_two_kember_methods() -> None:
         assert "cross_dataset_rest_fc" in document
         assert "kember_metrics" in document
         assert "external_group_atlas_analysis" in document
-        assert document.index("hcp151_template_matching") < document.index("hcp151_fixed")
+        assert document.index("hcp_template_matching") < document.index("hcp_fixed")
         assert "432" in document
         assert "512" in document
         assert "surfareacorobl" in document

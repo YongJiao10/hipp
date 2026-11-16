@@ -47,7 +47,7 @@ def _density_evidence(*, n_vertices: int = 4) -> dict[str, object]:
     }
 
 
-def _record(*, hemisphere: str = "L", branch: str = "hcp151_fixed") -> dict[str, object]:
+def _record(*, hemisphere: str = "L", branch: str = "hcp_fixed") -> dict[str, object]:
     return evaluate_hemisphere_area(
         branch=branch,
         subject="sub-1001",
@@ -66,7 +66,7 @@ def test_evaluate_hemisphere_area_requires_matching_asset_backed_density_evidenc
 
     with pytest.raises(ValueError, match="asset-backed density evidence"):
         evaluate_hemisphere_area(
-            branch="hcp151_fixed",
+            branch="hcp_fixed",
             subject="sub-1001",
             smoothing_mm=2,
             hemisphere="L",
@@ -81,9 +81,9 @@ def test_evaluate_hemisphere_area_requires_matching_asset_backed_density_evidenc
 def test_evaluate_hemisphere_area_keeps_branch_identity_and_area_contract() -> None:
     """Per-hemisphere records retain branch provenance with Kember area output."""
 
-    record = _record(branch="hcp151_template_matching")
+    record = _record(branch="hcp_template_matching")
 
-    assert record["branch"] == "hcp151_template_matching"
+    assert record["branch"] == "hcp_template_matching"
     assert record["subject"] == "sub-1001"
     assert record["hemisphere"] == "L"
     assert record["density_evidence"] == _density_evidence()
@@ -141,7 +141,7 @@ def test_write_area_run_hashes_tabular_outputs_and_overwrites_current_run(tmp_pa
     assert manifest_data["outputs"][bilateral.name]["sha256"] == hashlib.sha256(
         bilateral.read_bytes()
     ).hexdigest()
-    assert "hcp151_fixed" in manifest_data["branches"]
+    assert "hcp_fixed" in manifest_data["branches"]
 
     write_area_run(
         output_dir,
@@ -165,7 +165,7 @@ def test_freeze_input_manifest_precedes_calculation_and_overwrites_current_run(
         source_lock={"tag": "v1", "commit": "5fd2858ca8979891216f518b45751d4517e037a0"},
         input_contract={"common_subjects": ["sub-1001"]},
         consumed_inputs={
-            "hcp151_fixed": {
+            "hcp_fixed": {
                 "surface": {"density_evidence": _density_evidence()},
             }
         },
@@ -175,7 +175,7 @@ def test_freeze_input_manifest_precedes_calculation_and_overwrites_current_run(
     assert result["input_manifest_path"] == str(manifest_path)
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     assert manifest["status"] == "frozen_precalculation"
-    assert manifest["consumed_inputs"]["hcp151_fixed"]["surface"]["density_evidence"] == _density_evidence()
+    assert manifest["consumed_inputs"]["hcp_fixed"]["surface"]["density_evidence"] == _density_evidence()
     freeze_input_manifest(
         output_dir,
         source_lock={"tag": "v1", "commit": "5fd2858ca8979891216f518b45751d4517e037a0"},
@@ -236,7 +236,7 @@ def test_small_dual_hemi_runner_freezes_inputs_before_writing_branch_results(
                 "rosters": {"all_subjects": "rosters/all_subjects.txt"},
                 "paths": {
                     "hippunfold_root": "hippunfold",
-                    "hcp151_template_root": "fixed",
+                    "hcp_template_root": "fixed",
                     "template_matching_root": "matching",
                 },
             }
@@ -279,8 +279,8 @@ def test_small_dual_hemi_runner_freezes_inputs_before_writing_branch_results(
         }
         fixed = root / "fixed"
         fixed.mkdir(parents=True, exist_ok=True)
-        np.save(fixed / f"hcp151_2mm_hemi-{hemisphere}_labels.npy", labels)
-        np.save(fixed / f"hcp151_2mm_hemi-{hemisphere}_support.npy", np.ones(4, dtype=bool))
+        np.save(fixed / f"hcp_2mm_hemi-{hemisphere}_labels.npy", labels)
+        np.save(fixed / f"hcp_2mm_hemi-{hemisphere}_support.npy", np.ones(4, dtype=bool))
         matching = (
             root
             / "matching"
@@ -334,7 +334,7 @@ def test_small_dual_hemi_runner_freezes_inputs_before_writing_branch_results(
         subject="sub-1001",
         smoothing_mm=2,
         workbench_command="/bin/true",
-        branches=("hcp151_fixed", "hcp151_template_matching"),
+        branches=("hcp_fixed", "hcp_template_matching"),
     )
 
     assert result["output_dir"] == str(output_dir)
@@ -343,6 +343,6 @@ def test_small_dual_hemi_runner_freezes_inputs_before_writing_branch_results(
     assert len((output_dir / "system_surface_area_per_hemisphere.csv").read_text().splitlines()) == 5
     assert len((output_dir / "system_surface_area_bilateral.csv").read_text().splitlines()) == 3
     run_manifest = json.loads((output_dir / "run_manifest.json").read_text(encoding="utf-8"))
-    assert run_manifest["branches"] == ["hcp151_fixed", "hcp151_template_matching"]
+    assert run_manifest["branches"] == ["hcp_fixed", "hcp_template_matching"]
     assert run_manifest["vertex_area_convention"] == "HippUnfold native per-vertex surface-area metric in mm^2"
     assert len(run_manifest["runtime_provenance"]["native_label_resampling"]) == 4

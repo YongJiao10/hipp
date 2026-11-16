@@ -100,7 +100,7 @@ exact inventory and explicit user confirmation.
 
 ## Default Cohort Reminder
 
-Default Kong2022 analysis cohort remains the QC-passed 151-subject set. Lynch2024 comparison routes use the same 151-subject base QC manifest from `02_03`; NSI values are recorded for audit only. Historical 78-subject NSI-filtered outputs remain separate and are not current inputs. See `fmri_qc.md` for the base QC manifest paths and exclusion rationale.
+Default Kong2022 analysis cohort remains the current QC-passed set. Lynch2024 comparison routes use the same base QC manifest from `02_03`; NSI values are recorded for audit only. Historical NSI-filtered outputs remain separate and are not current inputs. See `fmri_qc.md` for the base QC manifest paths and exclusion rationale.
 
 ## Canonical References
 

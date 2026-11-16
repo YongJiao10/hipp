@@ -12,9 +12,9 @@ import pandas as pd
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[2]
 WORKBOOK = ROOT / 'outputs_iowa_jj_tms/TMSfMRI_DataSharing.xlsx'
-ROSTERS = {'hc': 'jj_tms_hc_67_subjects.txt', 'patient': 'jj_tms_patient_26_subjects.txt',
-           'pure_mdd': 'jj_tms_pure_mdd_7_subjects.txt',
-           'comorbid_mdd': 'jj_tms_comorbid_mdd_19_subjects.txt'}
+ROSTERS = {'hc': 'jj_tms_hc_subjects.txt', 'patient': 'jj_tms_patient_subjects.txt',
+           'pure_mdd': 'jj_tms_pure_mdd_subjects.txt',
+           'comorbid_mdd': 'jj_tms_comorbid_mdd_subjects.txt'}
 FORMS = {'phq9': ('PHQ', 'Depression'), 'bdiii': ('BDI-II', 'Depression'),
          'madrssr': ('MADRS-SR', 'Depression'), 'pre_tms_panassf': ('PANAS', 'Affect'),
          'gad7': ('GAD-7', 'Anxiety'), 'stai': ('STAI', 'Anxiety'),
@@ -61,8 +61,8 @@ def load_rosters():
     for name, filename in ROSTERS.items():
         lines = active_path(ROOT / 'manifests' / filename).read_text().splitlines()
         ids = ['sub-' + s.strip().removeprefix('sub-') for s in lines if s.strip() and not s.startswith('#')]
-        if len(ids) != len(set(ids)) or len(ids) != {'hc':67,'patient':26,'pure_mdd':7,'comorbid_mdd':19}[name]:
-            raise ValueError(f'Roster count/duplicate mismatch: {filename}')
+        if not ids or len(ids) != len(set(ids)):
+            raise ValueError(f'Roster empty/duplicate mismatch: {filename}')
         result[name] = ids
     if set(result['hc']) & set(result['patient']):
         raise ValueError('HC / patient overlap')
@@ -246,7 +246,7 @@ def load_inputs():
     if set(imaging.subject) != set(ids):
         raise ValueError('Imaging/clinical roster mismatch')
     for (branch, hemi, system, metric), part in imaging.groupby(['branch','hemi','system','metric']):
-        if len(part) != 93:
+        if len(part) != len(set(ids)):
             raise ValueError(f'Incomplete subject cells: {branch}/{hemi}/{system}/{metric}')
     expected = {(b,h,s,m) for b in ['standard','ctxreg'] for h in ['L','R'] for s in ['A','B','P']
                 for m in ['area_percent','segregation','margin']}

@@ -16,14 +16,14 @@ MODULE_PATH = (
     REPO_ROOT
     / "scripts"
     / "individual_workflow"
-    / "03_01_build_hcp151_fixed_template.py"
+    / "03_01_build_hcp_fixed_template.py"
 )
 
 
 def load_module():
-    assert MODULE_PATH.is_file(), "HCP151 fixed-template builder is missing"
+    assert MODULE_PATH.is_file(), "HCP fixed-template builder is missing"
     spec = importlib.util.spec_from_file_location(
-        "build_hcp151_fixed_template",
+        "build_hcp_fixed_template",
         MODULE_PATH,
     )
     assert spec is not None and spec.loader is not None
@@ -48,7 +48,8 @@ def _combo_dir(group_root: Path, smoothing: str, hemi: str) -> Path:
 def _write_sources(
     root: Path,
     *,
-    n_subjects: int = 151,
+    n_subjects: int = 7,
+    manifest_n_subjects: int | None = None,
     k: int = 3,
     n_vertices: int = 512,
     manifest_smoothing_override: str | None = None,
@@ -118,7 +119,7 @@ def _write_sources(
                 "atlas": "kong2022",
                 "smoothing": manifest_smoothing_override or smoothing,
                 "hemi": manifest_hemi_override or hemi,
-                "n_subjects": n_subjects,
+                "n_subjects": n_subjects if manifest_n_subjects is None else manifest_n_subjects,
                 "subjects": subjects,
                 "chosen_k_final": k,
                 "cluster_label_ordering": "long_axis_head_to_tail",
@@ -143,7 +144,7 @@ def _write_sources(
                 "status": "ok",
                 "smoothing": manifest_smoothing_override or smoothing,
                 "hemi": manifest_hemi_override or hemi,
-                "n_subjects": n_subjects,
+                "n_subjects": n_subjects if manifest_n_subjects is None else manifest_n_subjects,
                 "subjects": subjects,
                 "fisher_z_preprocessing": (
                     "arctanh clipped to +/-0.999999 before subject averaging"
@@ -168,7 +169,7 @@ def test_build_writes_four_strict_templates_from_group_mean_fisherz_fc(tmp_path:
     )
 
     assert manifest["status"] == "complete"
-    assert manifest["n_subjects"] == 151
+    assert manifest["n_subjects"] == 7
     assert manifest["density"] == 512
     assert manifest["k"] == 3
     assert manifest["n_rois"] == 400
@@ -177,7 +178,7 @@ def test_build_writes_four_strict_templates_from_group_mean_fisherz_fc(tmp_path:
     assert len(registry_sha) == 64
     for smoothing in ("2mm", "4mm"):
         for hemi in ("L", "R"):
-            prefix = out_root / f"hcp151_{smoothing}_hemi-{hemi}"
+            prefix = out_root / f"hcp_{smoothing}_hemi-{hemi}"
             labels = np.load(prefix.with_name(prefix.name + "_labels.npy"))
             support = np.load(prefix.with_name(prefix.name + "_support.npy"))
             prototypes = np.load(prefix.with_name(prefix.name + "_prototypes.npy"))
@@ -227,12 +228,12 @@ def test_build_supports_explicit_ctxreg_template_identity_only_with_ctxreg_sourc
         template_id=workflow.CTXREG_TEMPLATE_ID,
     )
 
-    assert manifest["template_id"] == "hcp151_routea_ctxreg"
+    assert manifest["template_id"] == "hcp_routea_ctxreg"
     assert manifest["signal_branch"] == "ctxreg"
     assert workflow.validate_template(
         out_root=out_root,
         template_id=workflow.CTXREG_TEMPLATE_ID,
-    )["template_id"] == "hcp151_routea_ctxreg"
+    )["template_id"] == "hcp_routea_ctxreg"
 
 
 def test_ctxreg_template_identity_rejects_standard_route_sources(tmp_path: Path):
@@ -268,7 +269,7 @@ def test_validate_rejects_direct_duplicate_template_roster(tmp_path: Path):
 @pytest.mark.parametrize(
     ("fixture_kwargs", "message"),
     [
-        ({"n_subjects": 150}, "151"),
+        ({"manifest_n_subjects": 6}, "n_subjects"),
         ({"k": 2}, "chosen_k_final=3"),
         ({"n_vertices": 511}, "512"),
         ({"manifest_smoothing_override": "8mm"}, "smoothing"),
@@ -320,7 +321,7 @@ def test_validate_rejects_output_shape_or_dtype_drift(tmp_path: Path):
         gradient_root=gradient_root,
         out_root=out_root,
     )
-    labels_path = out_root / "hcp151_2mm_hemi-L_labels.npy"
+    labels_path = out_root / "hcp_2mm_hemi-L_labels.npy"
     np.save(labels_path, np.ones(512, dtype=np.int16))
 
     with pytest.raises(ValueError, match="dtype"):
@@ -349,7 +350,7 @@ def test_preflight_mode_does_not_create_output_directory(tmp_path: Path):
     assert not out_root.exists()
 
 
-def test_preflight_rejects_duplicate_subject_ids_even_with_151_entries(tmp_path: Path):
+def test_preflight_rejects_duplicate_subject_ids(tmp_path: Path):
     workflow = load_module()
     group_root, gradient_root = _write_sources(tmp_path / "sources")
     manifest_paths = []

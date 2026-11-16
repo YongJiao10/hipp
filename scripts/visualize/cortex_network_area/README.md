@@ -24,7 +24,7 @@ This code integration does not authorize rebuilding existing surface products.
 
 The analysis writes `subject_network_area_metrics.csv`, `network_area_statistics.csv`, `input_audit.csv`, and `run_manifest.json` under `stats/`. The independent plotting entry point reads the statistics table and writes PNG forest figures under `figures/`; all comparisons retain every network, using uncorrected two-sided Welch significance symbols (`*` p<0.05, `**` p<0.01, `***` p<0.001; p≥0.05 is blank). BH-FDR q values are recorded as auxiliary values and do not determine the displayed significance symbols.
 
-The fixed rosters are HCP HC 151, Iowa HC 67, Patient 26 (sub-3003 excluded), Pure MDD 7, and Comorbid MDD 19. The six patient-group contrasts plus Iowa HC–HCP HC are represented explicitly. Patient subgroups overlap, and the HC–HC comparison is a cross-dataset baseline comparison rather than an equivalence test.
+The fixed rosters are HCP HC, Iowa HC, Patient (sub-3003 excluded), Pure MDD, and Comorbid MDD. The six patient-group contrasts plus Iowa HC–HCP HC are represented explicitly. Patient subgroups overlap, and the HC–HC comparison is a cross-dataset baseline comparison rather than an equivalence test.
 
 ## Figure layout and independent redraw
 

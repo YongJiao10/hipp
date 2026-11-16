@@ -28,6 +28,16 @@ if str(CORE_LIB_DIR) not in sys.path:
     sys.path.insert(0, str(CORE_LIB_DIR))
 
 from lib.group_atlas_lineage import validate_group_atlas_lineage
+from lib.formal_cohorts import load_formal_subjects
+
+# HCP cohort size is the length of the current formal QC roster, never a literal.
+HCP_COHORT_SIZE: int = len(
+    load_formal_subjects(
+        REPO_ROOT
+        / "outputs_hcp/inputs/kong2022/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt",
+        "hcp",
+    )
+)
 
 GRID_VARIANTS: tuple[str, ...] = ("2mm_36p", "4mm_36p")
 SIGNAL_BRANCHES: tuple[str, ...] = ("standard", "ctxreg")
@@ -153,7 +163,7 @@ COHORT_SPECS_COL1: list[dict[str, Any]] = [
         "dataset_name": "HCP 7T",
         "cohort_name": "HCP 7T",
         "cohort_desc": "Healthy Young Adults",
-        "n_subjects": 151,
+        "n_subjects": HCP_COHORT_SIZE,
         "bg_color": "#ffffff",
         "badge_bg": "#0b3c5d",
         "badge_fg": "#ffffff",
@@ -655,7 +665,7 @@ COMPARISON_COHORT_SPECS: tuple[dict[str, Any], ...] = (
         "dataset_name": "HCP 7T",
         "cohort_name": "HCP 7T",
         "cohort_desc": "Healthy Young Adults",
-        "n_subjects": 151,
+        "n_subjects": HCP_COHORT_SIZE,
         "bg_color": "#f4f8fc",
         "badge_bg": "#0b3c5d",
         "badge_fg": "#ffffff",
@@ -1150,10 +1160,10 @@ def _comparison_overview_input_errors(
 
 
 _COMPARISON_IOWA_ROSTER_MANIFESTS: dict[str, str] = {
-    "iowa_hc": "manifests/jj_tms_hc_67_subjects.txt",
-    "iowa_pat": "manifests/jj_tms_patient_26_subjects.txt",
-    "iowa_pure_mdd": "manifests/jj_tms_pure_mdd_7_subjects.txt",
-    "iowa_comorbid_mdd": "manifests/jj_tms_comorbid_mdd_19_subjects.txt",
+    "iowa_hc": "manifests/jj_tms_hc_subjects.txt",
+    "iowa_pat": "manifests/jj_tms_patient_subjects.txt",
+    "iowa_pure_mdd": "manifests/jj_tms_pure_mdd_subjects.txt",
+    "iowa_comorbid_mdd": "manifests/jj_tms_comorbid_mdd_subjects.txt",
 }
 _PERSISTENT_CONCAT_PATH_COMPONENT_RE = re.compile(r"^xcpd_surf_concat$", re.IGNORECASE)
 

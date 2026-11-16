@@ -77,7 +77,7 @@ DEFAULT_36P_ROOT = (
     REPO_ROOT
     / "outputs_iowa_jj_tms"
     / "work"
-    / "hcp151_fixed_template_matching"
+    / "hcp_fixed_template_matching"
     / "subjects"
 )
 DEFAULT_SURF_L = (
@@ -164,7 +164,7 @@ STANFORD_TM_ROOT = (
     REPO_ROOT
     / "outputs_stanford"
     / "work"
-    / "hcp151_fixed_template_matching"
+    / "hcp_fixed_template_matching"
     / "subjects"
 )
 STANFORD_HIPPUNFOLD_BATCH_ROOT = (
@@ -1162,7 +1162,7 @@ def branch_network_colors(
 
 def branch_matching_roots(data_root: Path) -> dict[str, Path]:
     root = Path(data_root).resolve()
-    base = root / "outputs_iowa_jj_tms" / "work" / "hcp151_fixed_template_matching"
+    base = root / "outputs_iowa_jj_tms" / "work" / "hcp_fixed_template_matching"
     return {
         "standard": base / "subjects",
         "ctxreg": base / "pfm_ctxreg" / "subjects",
@@ -1290,8 +1290,8 @@ COHORTS_DEF = [
         "badge_color": "#0b3c5d",
         "bg_color": "#f8fafc",
         "desc": "Baseline Healthy Volunteers",
-        "roster_file": "jj_tms_hc_67_subjects.txt",
-        "subjects": load_manifest_roster("jj_tms_hc_67_subjects.txt"),
+        "roster_file": "jj_tms_hc_subjects.txt",
+        "subjects": load_manifest_roster("jj_tms_hc_subjects.txt"),
     },
     {
         "key": "iowa_pat",
@@ -1300,8 +1300,8 @@ COHORTS_DEF = [
         "badge_color": "#831843",
         "bg_color": "#fff1f2",
         "desc": "Clinical MDD (sub-3003 excluded)",
-        "roster_file": "jj_tms_patient_26_subjects.txt",
-        "subjects": load_manifest_roster("jj_tms_patient_26_subjects.txt"),
+        "roster_file": "jj_tms_patient_subjects.txt",
+        "subjects": load_manifest_roster("jj_tms_patient_subjects.txt"),
     },
     {
         "key": "iowa_pure_mdd",
@@ -1310,8 +1310,8 @@ COHORTS_DEF = [
         "badge_color": "#854d0e",
         "bg_color": "#fefce8",
         "desc": "MDD without Clinical Anxiety",
-        "roster_file": "jj_tms_pure_mdd_7_subjects.txt",
-        "subjects": load_manifest_roster("jj_tms_pure_mdd_7_subjects.txt"),
+        "roster_file": "jj_tms_pure_mdd_subjects.txt",
+        "subjects": load_manifest_roster("jj_tms_pure_mdd_subjects.txt"),
     },
     {
         "key": "iowa_comorbid_mdd",
@@ -1320,8 +1320,8 @@ COHORTS_DEF = [
         "badge_color": "#14532d",
         "bg_color": "#f0fdf4",
         "desc": "MDD with MINI-confirmed GAD",
-        "roster_file": "jj_tms_comorbid_mdd_19_subjects.txt",
-        "subjects": load_manifest_roster("jj_tms_comorbid_mdd_19_subjects.txt"),
+        "roster_file": "jj_tms_comorbid_mdd_subjects.txt",
+        "subjects": load_manifest_roster("jj_tms_comorbid_mdd_subjects.txt"),
     },
 ]
 

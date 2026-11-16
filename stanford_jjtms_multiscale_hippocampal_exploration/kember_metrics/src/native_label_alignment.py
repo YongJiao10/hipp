@@ -43,8 +43,8 @@ else:  # pragma: no cover - direct source-directory execution
 
 BRANCHES = frozenset(
     {
-        "hcp151_fixed",
-        "hcp151_template_matching",
+        "hcp_fixed",
+        "hcp_template_matching",
     }
 )
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
@@ -709,7 +709,7 @@ def _prepare_branch_input(
     hemisphere: str,
 ) -> dict[str, object]:
     surface_root = _configured_path(root, config, "hippunfold_root")
-    fixed_root = _configured_path(root, config, "hcp151_template_root")
+    fixed_root = _configured_path(root, config, "hcp_template_root")
     matching_root = _configured_path(root, config, "template_matching_root")
     assert surface_root is not None
     assert fixed_root is not None
@@ -795,9 +795,9 @@ def _prepare_branch_input(
         "native_area_metric_path": native_area_metric_path,
     }
 
-    if branch == "hcp151_fixed":
-        labels_path = fixed_root / f"hcp151_{smoothing_mm}mm_hemi-{hemisphere}_labels.npy"
-        support_path = fixed_root / f"hcp151_{smoothing_mm}mm_hemi-{hemisphere}_support.npy"
+    if branch == "hcp_fixed":
+        labels_path = fixed_root / f"hcp_{smoothing_mm}mm_hemi-{hemisphere}_labels.npy"
+        support_path = fixed_root / f"hcp_{smoothing_mm}mm_hemi-{hemisphere}_support.npy"
         raw_labels = _load_vector(labels_path, dtype=np.int32)
         support = _load_vector(support_path, dtype=bool)
         if raw_labels.size != source_n_vertices or support.size != source_n_vertices:
@@ -818,7 +818,7 @@ def _prepare_branch_input(
         )
         return entry
 
-    if branch == "hcp151_template_matching":
+    if branch == "hcp_template_matching":
         matching = (
             matching_root
             / "subjects"
@@ -871,8 +871,8 @@ def run_kember_method_area(
     smoothing_mm: int,
     workbench_command: str | Path | None = None,
     branches: Sequence[str] = (
-        "hcp151_fixed",
-        "hcp151_template_matching",
+        "hcp_fixed",
+        "hcp_template_matching",
     ),
 ) -> dict[str, object]:
     """Run one dual-hemisphere, all-inputs-frozen Kember-method area pilot."""

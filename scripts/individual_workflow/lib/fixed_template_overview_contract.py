@@ -426,7 +426,7 @@ def preflight_subject_sources(
                     combo_path.parent
                     / (
                         f"sub-{subject}_hemi-{hemi}_space-corobl_den-512_"
-                        f"label-hcp151_fixed_template_k3_{smoothing}.label.gii"
+                        f"label-hcp_fixed_template_k3_{smoothing}.label.gii"
                     )
                 ).resolve()
                 if label_path != expected_label_path:

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Render the canonical Kong2022 seven-network hippocampus/cortex figure.
 
-The maintained five-row suite contains HCP 7T (151), Iowa HC (67), Iowa
+The maintained five-row suite contains HCP 7T, Iowa HC (67), Iowa
 Patient (26), Pure MDD (7), and Comorbid MDD (19). Each cortical panel carries
 its mean FC/bar tile and, when a validated contrast receipt is supplied, a
 significant-only group-minus-Iowa-HC t map. The latter uses the explicit
@@ -60,6 +60,7 @@ from lib.output_layout import (
 from lib.surface_utils import render_hippocampal_grid
 from lib.workbench import run_workbench
 from multidataset_cohorts import (
+    HCP_COHORT_SIZE,
     GridSpec,
     GRID_VARIANTS,
     get_multidataset_cohorts,
@@ -77,7 +78,7 @@ COHORTS_COL1_SPEC = [
         "dataset_name": "HCP 7T",
         "cohort_name": "HCP 7T",
         "cohort_desc": "Healthy Young Adults",
-        "n_subjects": 151,
+        "n_subjects": HCP_COHORT_SIZE,
         "group_root_grad": REPO_ROOT / "outputs_hcp/work/group_atlas/pfm",
         "group_root_wta": REPO_ROOT / "outputs_hcp/work/group_atlas/pfm",
         "overview_grad": REPO_ROOT / "outputs_hcp/present/overviews/pfm/kong2022_gradient-spectral_group_overview_g1g2g3_pfm_fisherz.png",

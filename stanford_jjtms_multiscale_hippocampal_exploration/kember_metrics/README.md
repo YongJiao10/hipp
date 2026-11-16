@@ -3,7 +3,7 @@
 `KEMBER_METHOD_NATIVE_AREA_WORKFLOW_READY`
 
 This package is the sole active Stanford Kember workflow; HCP 7T is an explicitly separate descriptive reference branch. Its Stanford subject-level methods are
-`hcp151_template_matching` and `hcp151_fixed`; no subject-level clustering is
+`hcp_template_matching` and `hcp_fixed`; no subject-level clustering is
 performed here.
 禁止个体聚类。
 
@@ -78,7 +78,7 @@ proportion view by default to
 `--analysis-mode proportion` is the explicit equivalent of the default. Both
 modes retain the same figure layout and effect-size scale.
 
-The figure displays the seven Stanford cohorts as the formal direct-to-NTHC result view and appends `HCP 7T` as a separate reference cohort. The HCP reference uses the maintained family-aware five-fold held-out cross-fit template-matching labels (`hcp151_crossfit_template_matching`), not the full HCP template that supplied those labels. Each held-out 512-source label map is transferred with `ADAP_BARY_AREA` and summed against native HippUnfold `surfareacorobl` values. Its six HCP 7T−NTHC effects are descriptive cross-dataset references and are excluded from any current correction family.
+The figure displays the seven Stanford cohorts as the formal direct-to-NTHC result view and appends `HCP 7T` as a separate reference cohort. The HCP reference uses the maintained family-aware five-fold held-out cross-fit template-matching labels (`hcp_crossfit_template_matching`), not the full HCP template that supplied those labels. Each held-out 512-source label map is transferred with `ADAP_BARY_AREA` and summed against native HippUnfold `surfareacorobl` values. Its six HCP 7T−NTHC effects are descriptive cross-dataset references and are excluded from any current correction family.
 The forest panel keeps category y-axis labels on the left hemisphere panel only; the repeated right-panel labels are intentionally hidden so they cannot intrude into the neighboring plot. The GridSpec uses compact row spacing and a reserved left margin for the long category labels. The exported typography is deliberately enlarged across titles, axes, ticks, value labels, significance labels, legend; the right forest panel retains no duplicate ticks. The footer is intentionally omitted to reduce dead space; the area-effect forest uses light-gray horizontal separators between groups instead of an unexplained gray x-grid.
 
 The HCP source and cache paths are declared under `reference_hcp7t` in `config/analysis_config.json`; the generated cache, effect table, and run manifest live under `work/reference_hcp7t_crossfit_area/`. The entry point still writes one PNG only and does not generate or overwrite PDFs.

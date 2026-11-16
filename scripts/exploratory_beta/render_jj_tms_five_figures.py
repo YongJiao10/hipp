@@ -24,7 +24,7 @@ import stanford_tms_five_figures as common
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-JJ_MATCH_ROOT = REPO_ROOT / "outputs_iowa_jj_tms/work/hcp151_fixed_template_matching/subjects"
+JJ_MATCH_ROOT = REPO_ROOT / "outputs_iowa_jj_tms/work/hcp_fixed_template_matching/subjects"
 JJ_DATASET_LABEL = "Iowa 3T"
 
 
@@ -172,7 +172,7 @@ def main() -> int:
             ("analysis", "JJ_TMS Native-space five-figure analysis using the Stanford renderer"),
             ("groups", "healthy (1xxx) and patient (3xxx)"),
             ("networks", "Control/CON; Default/DMN; VentralAttention/VAN"),
-            ("parcellations", "individual template matching and HCP151 fixed atlas"),
+            ("parcellations", "individual template matching and HCP fixed atlas"),
             ("hippocampal_hemisphere", "L and R separate; no bilateral rows"),
             ("heatmap_layout", "rows=group x parcellation; left column=L; right column=R"),
             ("healthy_van_network_comparisons", "uncorrected Welch tests of VAN minus Default/DMN and VAN minus Control/CON for every healthy profile bar group; draw only significant brackets"),

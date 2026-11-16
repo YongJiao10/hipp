@@ -4,7 +4,7 @@
 
 **Goal:** Produce a Stanford-only, individual-level Fisher-z FC evidence summary that separates inferential findings from non-inferential group-atlas descriptions.
 
-**Architecture:** Read only the sealed attempt8 subject-level localisation and four-group descriptive tables. Aggregate fixed HCP151 and individual template-matching specifications as correlated sensitivity views, write non-overwriting derivative tables and a Chinese scientific report, then link the result from active README files. The group-atlas branch is named only as descriptive context and is excluded from every inferential result table.
+**Architecture:** Read only the sealed attempt8 subject-level localisation and four-group descriptive tables. Aggregate fixed HCP and individual template-matching specifications as correlated sensitivity views, write non-overwriting derivative tables and a Chinese scientific report, then link the result from active README files. The group-atlas branch is named only as descriptive context and is excluded from every inferential result table.
 
 **Tech Stack:** Python 3.14, pandas, sealed CSV.GZ tables, Markdown.
 
@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - Resting-state Fisher-z FC only; no beta, TMS-response, CON, native stimulation, or archive inputs.
-- Use only `hcp151_fixed` and `hcp151_template_matching`.
+- Use only `hcp_fixed` and `hcp_template_matching`.
 - Treat method, smoothing, and hemisphere specifications as correlated sensitivity views, not independent replications.
 - Keep `primary_screen_v1_20260824_attempt8` sealed and read-only.
 - Stanford group-atlas outputs have no individual-level inference and must not appear as individual FC discoveries.
@@ -38,7 +38,7 @@
 Run:
 
 ```bash
-/home/yojiao/.conda/envs/py314/bin/python -c "import pandas as pd; p='stanford_jjtms_multiscale_hippocampal_exploration/cross_dataset_rest_fc/results/primary_screen_v1_20260824_attempt8/primary_localisation.csv.gz'; d=pd.read_csv(p); q=d[(d.dataset=='stanford') & d.method.isin(['hcp151_fixed','hcp151_template_matching']) & d.failure_reason.isna()]; assert len(q)==8400; print(q.groupby('estimand').size().to_dict())"
+/home/yojiao/.conda/envs/py314/bin/python -c "import pandas as pd; p='stanford_jjtms_multiscale_hippocampal_exploration/cross_dataset_rest_fc/results/primary_screen_v1_20260824_attempt8/primary_localisation.csv.gz'; d=pd.read_csv(p); q=d[(d.dataset=='stanford') & d.method.isin(['hcp_fixed','hcp_template_matching']) & d.failure_reason.isna()]; assert len(q)==8400; print(q.groupby('estimand').size().to_dict())"
 ```
 
 Expected: Seven Stanford estimands and 8,400 finite subject-level localisation rows.
@@ -55,7 +55,7 @@ Write a short scope record that distinguishes:
 Run:
 
 ```bash
-rg -n "individual|group-atlas|hcp151_fixed|hcp151_template_matching|L-R" cross_dataset_rest_fc/reports/stanford_individual_results_v1_20260827/source_scope.md
+rg -n "individual|group-atlas|hcp_fixed|hcp_template_matching|L-R" cross_dataset_rest_fc/reports/stanford_individual_results_v1_20260827/source_scope.md
 ```
 
 Expected: All five scope constraints are stated.

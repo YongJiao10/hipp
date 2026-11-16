@@ -12,7 +12,7 @@ Newly generated figures use CON for the Control Network; existing figures genera
   - `healthy`（健康组，ID 1xxx）：**55 人**（Control 9, Default 34, VentralAttention 10, Language 2）
   - `patient`（患者组，ID 3xxx）：**23 人**（Control 12, Default 6, VentralAttention 5）
 - 海马：L/R 分开，永不生成 bilateral 行。
-- parcellation：individual template matching 和 HCP151 fixed atlas。
+- parcellation：individual template matching 和 HCP fixed atlas。
 - 测量：只执行 Native `volume → surface`；不执行 `surface → volume`。
 - con：Native-space Float32 `baseline_spTMS con_0001`，不 GrayZ、不重采样。
 - 表面：HippUnfold den-512 `space-T1w` inner/midthickness/outer。
@@ -67,7 +67,7 @@ outputs_iowa_jj_tms/work/sptms_hipp_cluster_surface_beta_native/runs/
   --run-dir outputs_iowa_jj_tms/work/sptms_hipp_cluster_surface_beta_native/runs/jj_tms_native_surface_beta_20260820_78sub
 ```
 
-`healthy` 与 `patient` 分组独立拟合，template matching 和 HCP151 分别拟合 primary subject-network 与 site-level sensitivity。
+`healthy` 与 `patient` 分组独立拟合，template matching 和 HCP 分别拟合 primary subject-network 与 site-level sensitivity。
 对于多目标侧组（patient），模型调整 target hemisphere；对于单目标侧组（healthy，全 L 侧），模型拟合标准海马侧向交互。三组 network pairwise contrasts 在每个 group × parcellation × source branch 内执行 Holm 校正。
 
 ## 五张图（Five Figures）生成
@@ -84,9 +84,9 @@ outputs_iowa_jj_tms/work/sptms_hipp_cluster_surface_beta_native/runs/
 `jj_tms`。
 1. `three_network_healthy_profile_boxscatter.png`（三网络 HC 海马 Beta Profile；原始 55 名 HC 中，三网络图实际绘制 CON 9、DMN 34、VAN 10，Language 2 人排除）
 2. `three_network_patient_profile_boxscatter.png`（患者组三网络海马 Beta Profile）
-3. `surface_template_matching_hcp151_within_network_pairwise_8x4.png`（两组 × 两套模板 × 左右海马簇间配对检验）
-4. `fc_beta_network_by_cluster_pearson_heatmap_4x2.png`（4×2 布局：Healthy/Patient × Template/HCP151 行，左/右海马列 FC–Beta 相关热图）
-5. `fc_beta_hcp151_network_by_cluster_scatter_4x9.png`（4×9 布局：HCP151 下 FC–Beta 散点拟合图）
+3. `surface_template_matching_hcp_within_network_pairwise_8x4.png`（两组 × 两套模板 × 左右海马簇间配对检验）
+4. `fc_beta_network_by_cluster_pearson_heatmap_4x2.png`（4×2 布局：Healthy/Patient × Template/HCP 行，左/右海马列 FC–Beta 相关热图）
+5. `fc_beta_hcp_network_by_cluster_scatter_4x9.png`（4×9 布局：HCP 下 FC–Beta 散点拟合图）
 
 HC profile 图在每个 parcellation × 海马侧 × cluster 的三网络组内，以 VAN 为核心分别与
 DMN 和 CON 做未校正 Welch 独立样本 t 检验（不做多重比较校正）。VAN 显著高于比较网络时，
@@ -94,7 +94,7 @@ DMN 和 CON 做未校正 Welch 独立样本 t 检验（不做多重比较校正�
 不显著时不画线、不标记。完整结果写入
 `healthy_van_vs_fpcn_dmn_ttests.csv`，共 24 个比较（2 parcellations × 2 hemispheres × 3 clusters × 2 comparators）。
 
-## 16 人 HCP151 fixed beta 大图
+## 16 人 HCP fixed beta 大图
 
 ```bash
 /home/yojiao/.conda/envs/py314/bin/python \
@@ -102,14 +102,14 @@ DMN 和 CON 做未校正 Welch 独立样本 t 检验（不做多重比较校正�
 ```
 
 默认只输出 PNG；仅显式传入 `--pdf` 时额外输出 PDF。所有产物放在现有 run
-的 `five_figures/`，前缀为 `jj_tms_hcp151_fixed_2mm_36p_beta_surface_bar_16sub`。
+的 `five_figures/`，前缀为 `jj_tms_hcp_fixed_2mm_36p_beta_surface_bar`。
 
 - HC（10 人）：1006、1007、1017、1020、1023、1035、1041、1044、1052、1054；
   TMS site network 均为 VAN。
 - Pure MDD（6 人）：3010=DMN、3011=CON、3017=VAN、3018=DMN、3020=VAN、3023=CON。
 - 3015 按本图指定范围排除，不进入任何 surface、bar 或 scatter。
 
-使用原 `subject_network_beta.csv` 的 HCP151 fixed `beta_mean`，要求恰好
+使用原 `subject_network_beta.csv` 的 HCP fixed `beta_mean`，要求恰好
 96 条 finite 记录。通过 `site_level_beta.csv` 的 `native_metric_path` 追溯
 逐顶点数据；仅恢复缺失的选中侧 metric（native T1w den-512、ribbon-constrained、
 nonzero ROI、voxel-subdiv=3），保存至 `five_figures/raw_metrics/`。不重跑整批

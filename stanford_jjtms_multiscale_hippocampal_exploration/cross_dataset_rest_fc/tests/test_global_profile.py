@@ -32,7 +32,7 @@ def _profile_rows(
     dataset: str = "jjtms",
     *,
     resolutions: tuple[int, ...] = (8,),
-    methods: tuple[str, ...] = ("hcp151_fixed",),
+    methods: tuple[str, ...] = ("hcp_fixed",),
     include_stanford: bool = False,
 ) -> pd.DataFrame:
     rows: list[dict[str, object]] = []
@@ -225,7 +225,7 @@ def test_freedman_lane_rows_match_reference_and_differ_from_cellwise_control() -
     scope_key = (
         "jjtms",
         "patient-healthy",
-        "hcp151_fixed",
+        "hcp_fixed",
         2,
         "bilateral",
         8,
@@ -326,7 +326,7 @@ def test_malformed_task2_schema_and_contrasts_fail_closed() -> None:
 
     tensor = _profile_rows()
     metadata = dict(tensor.attrs["network_ordinals"])
-    metadata[("hcp151_fixed", 8, "N08")] = 0
+    metadata[("hcp_fixed", 8, "N08")] = 0
     tensor.attrs["network_ordinals"] = metadata
     with pytest.raises(ValueError, match="ordinal|metadata"):
         run_global_tests(tensor, jjtms_contrast_matrix(), seed=1, n_perm=1)
@@ -414,7 +414,7 @@ def test_stanford_profile_public_p_matches_contrast_null_not_intercept_null() ->
         scope_key = (
             "stanford",
             estimand,
-            "hcp151_fixed",
+            "hcp_fixed",
             2,
             "bilateral",
             8,

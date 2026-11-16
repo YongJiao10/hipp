@@ -53,10 +53,10 @@ GROUP_COLORS = {
 GROUP_MARKERS = {"NTHC": "o", "TEHC": "s", "NTS": "^", "TIS": "D"}
 HEMISPHERES = ("L", "bilateral", "R", "L-R")
 SPECS = (
-    ("fixed", "hcp151_fixed", 2),
-    ("fixed", "hcp151_fixed", 4),
-    ("template", "hcp151_template_matching", 2),
-    ("template", "hcp151_template_matching", 4),
+    ("fixed", "hcp_fixed", 2),
+    ("fixed", "hcp_fixed", 4),
+    ("template", "hcp_template_matching", 2),
+    ("template", "hcp_template_matching", 4),
 )
 
 

@@ -52,7 +52,7 @@ def _config(root: Path) -> Path:
                 "rosters": {"all_subjects": "rosters/all_subjects.txt"},
                 "paths": {
                     "hippunfold_root": "hippunfold",
-                    "hcp151_template_root": "fixed",
+                    "hcp_template_root": "fixed",
                     "template_matching_root": "matching",
                 },
             }
@@ -61,8 +61,8 @@ def _config(root: Path) -> Path:
     )
     _write(root / "rosters/all_subjects.txt", "1001\n1002\n")
     for hemi in ("L", "R"):
-        _write(root / f"fixed/hcp151_2mm_hemi-{hemi}_labels.npy")
-        _write(root / f"fixed/hcp151_2mm_hemi-{hemi}_support.npy")
+        _write(root / f"fixed/hcp_2mm_hemi-{hemi}_labels.npy")
+        _write(root / f"fixed/hcp_2mm_hemi-{hemi}_support.npy")
     return config_path
 
 
@@ -120,8 +120,8 @@ def test_audit_freezes_only_subjects_with_all_retained_branch_inputs(tmp_path: P
         "template_matching:combo_manifest",
     ]
     assert set(contract["branches"]) == {
-        "hcp151_fixed",
-        "hcp151_template_matching",
+        "hcp_fixed",
+        "hcp_template_matching",
     }
 
 

@@ -17,7 +17,7 @@ WORKFLOWS = (
     "kember_metrics",
     "external_group_atlas_analysis",
 )
-METHODS = ("hcp151_template_matching", "hcp151_fixed")
+METHODS = ("hcp_template_matching", "hcp_fixed")
 
 
 def test_active_docs_share_the_frozen_three_workflow_kember_contract() -> None:

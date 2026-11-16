@@ -21,8 +21,8 @@ from lib.output_layout import DEFAULT_LYNCH2024_MANIFEST_ROOT
 from lib.workflow_utils import utc_now_iso, write_json
 
 
-DEFAULT_PASS_NAME = "hcp_7t_lynch2024_pass_151.txt"
-DEFAULT_AUDIT_NAME = "hcp_7t_lynch2024_nsi_audit_151.tsv"
+DEFAULT_PASS_NAME = "hcp_7t_lynch2024_pass_latest.txt"
+DEFAULT_AUDIT_NAME = "hcp_7t_lynch2024_nsi_audit_latest.tsv"
 DEFAULT_RUN_NAME = "hcp_7t_lynch2024_manifest.json"
 
 

@@ -23,12 +23,11 @@ from lib.template_matching import build_cluster_prototypes
 from lib.gifti_contracts import validate_gifti_pointset
 
 
-TEMPLATE_ID = "hcp151_routea_full_k3_fisherz"
-CTXREG_TEMPLATE_ID = "hcp151_routea_ctxreg"
+TEMPLATE_ID = "hcp_routea_full_k3_fisherz"
+CTXREG_TEMPLATE_ID = "hcp_routea_ctxreg"
 TEMPLATE_ID_CHOICES = (TEMPLATE_ID, CTXREG_TEMPLATE_ID)
 SMOOTHINGS = ("2mm", "4mm")
 HEMIS = ("L", "R")
-N_SUBJECTS = 151
 N_VERTICES = 512
 N_ROIS = 400
 K = 3
@@ -59,13 +58,13 @@ def _signal_branch_for_template(template_id: str) -> str:
 
 
 def _normalized_subjects(raw: object, *, manifest_path: Path) -> tuple[str, ...]:
-    if not isinstance(raw, list) or len(raw) != N_SUBJECTS:
-        raise ValueError(f"Expected exactly 151 subjects in {manifest_path}")
+    if not isinstance(raw, list) or not raw:
+        raise ValueError(f"Expected a non-empty subject list in {manifest_path}")
     subjects = tuple(str(value).strip().removeprefix("sub-") for value in raw)
     if any(not subject or not subject.isdigit() for subject in subjects):
         raise ValueError(f"Invalid subject ID in {manifest_path}")
-    if len(set(subjects)) != N_SUBJECTS:
-        raise ValueError(f"Expected 151 unique subjects in {manifest_path}")
+    if len(set(subjects)) != len(subjects):
+        raise ValueError(f"Subject IDs must be unique in {manifest_path}")
     return subjects
 
 
@@ -234,8 +233,8 @@ def _validate_source_combo(
         _require_manifest_value(manifest, "status", "ok", path)
         _require_manifest_value(manifest, "smoothing", smoothing, path)
         _require_manifest_value(manifest, "hemi", hemi, path)
-        _require_manifest_value(manifest, "n_subjects", N_SUBJECTS, path)
-        _normalized_subjects(manifest.get("subjects"), manifest_path=path)
+        manifest_subjects = _normalized_subjects(manifest.get("subjects"), manifest_path=path)
+        _require_manifest_value(manifest, "n_subjects", len(manifest_subjects), path)
 
     _validate_template_source_identity(
         group_manifest=group_manifest,
@@ -373,7 +372,7 @@ def preflight_sources(
     ]
     expected_subjects = rows[0].subjects
     if any(row.subjects != expected_subjects for row in rows[1:]):
-        raise ValueError("The four HCP source combinations do not use the same 151 subjects")
+        raise ValueError("The four HCP source combinations do not use the same subjects")
     registry_sha = _fingerprint(rows[0].roi_registry)["sha256"]
     for row in rows[1:]:
         if _fingerprint(row.roi_registry)["sha256"] != registry_sha:
@@ -392,7 +391,7 @@ def _write_json_exclusive(path: Path, payload: Mapping[str, object]) -> None:
 
 
 def _combo_prefix(out_root: Path, smoothing: str, hemi: str) -> Path:
-    return Path(out_root) / f"hcp151_{smoothing}_hemi-{hemi}"
+    return Path(out_root) / f"hcp_{smoothing}_hemi-{hemi}"
 
 
 def build_template(
@@ -462,13 +461,13 @@ def build_template(
     registry = _fingerprint(rows[0].roi_registry)
     manifest: dict[str, object] = {
         "status": "complete",
-        "workflow": "build_hcp151_fixed_template",
+        "workflow": "build_hcp_fixed_template",
         "template_id": template_id,
         "signal_branch": _signal_branch_for_template(template_id),
         "signal_control_route": (
             "pfm_ctxreg" if template_id == CTXREG_TEMPLATE_ID else "pfm"
         ),
-        "n_subjects": N_SUBJECTS,
+        "n_subjects": len(rows[0].subjects),
         "density": N_VERTICES,
         "k": K,
         "n_rois": N_ROIS,
@@ -543,7 +542,7 @@ def _validate_template_roster(
         )
     expected = source_rosters[0]
     if any(roster != expected for roster in source_rosters[1:]):
-        raise ValueError("Template source manifests do not share one exact 151-subject roster")
+        raise ValueError("Template source manifests do not share one exact subject roster")
     recorded = manifest.get("subjects")
     if recorded is None:
         return expected
@@ -567,7 +566,6 @@ def validate_template(
     for key, expected in (
         ("status", "complete"),
         ("template_id", expected_template_id),
-        ("n_subjects", N_SUBJECTS),
         ("density", N_VERTICES),
         ("k", K),
         ("n_rois", N_ROIS),
@@ -606,11 +604,15 @@ def validate_template(
     expected_keys = {(smoothing, hemi) for smoothing in SMOOTHINGS for hemi in HEMIS}
     if set(by_key) != expected_keys:
         raise ValueError(f"Template combination mismatch: {sorted(by_key)}")
-    _validate_template_roster(
+    roster = _validate_template_roster(
         manifest=manifest,
         combinations=list(by_key.values()),
         manifest_path=manifest_path,
     )
+    if manifest.get("n_subjects") != len(roster):
+        raise ValueError(
+            f"Template manifest n_subjects mismatch: {manifest.get('n_subjects')!r} != {len(roster)!r}"
+        )
 
     expected_contracts = {
         "labels": ((N_VERTICES,), np.dtype(np.int32)),
@@ -699,7 +701,7 @@ def validate_template(
 
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Build and validate the immutable HCP151 RouteA K=3 template."
+        description="Build and validate the immutable HCP RouteA K=3 template."
     )
     parser.add_argument("--mode", choices=("preflight", "build", "validate"), required=True)
     parser.add_argument("--group-root", type=Path, default=DEFAULT_GROUP_ROOT)
@@ -719,7 +721,7 @@ def _preflight_payload(
         "mode": "preflight",
         "template_id": template_id,
         "signal_branch": _signal_branch_for_template(template_id),
-        "n_subjects": N_SUBJECTS,
+        "n_subjects": len(rows[0].subjects),
         "density": N_VERTICES,
         "k": K,
         "n_rois": N_ROIS,

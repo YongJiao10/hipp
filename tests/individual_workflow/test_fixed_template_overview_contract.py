@@ -68,7 +68,7 @@ def write_render_inputs(tmp_path: Path) -> dict[str, Path]:
         {
             "status": "complete",
             "scope": "full",
-            "workflow": "stanford_hcp151_fixed_template_matching",
+            "workflow": "stanford_hcp_fixed_template_matching",
             "canonical_roster_count": 2,
             "subject_count": 2,
             "complete_count": 2,
@@ -121,7 +121,7 @@ def write_subject_sources(inputs: dict[str, Path]) -> None:
                 combo_dir = subject_dir / "matching" / smoothing / f"hemi-{hemi}"
                 label = combo_dir / (
                     f"sub-{subject}_hemi-{hemi}_space-corobl_den-512_"
-                    f"label-hcp151_fixed_template_k3_{smoothing}.label.gii"
+                    f"label-hcp_fixed_template_k3_{smoothing}.label.gii"
                 )
                 combo_dir.mkdir(parents=True, exist_ok=True)
                 label.write_text(
@@ -144,7 +144,7 @@ def write_subject_sources(inputs: dict[str, Path]) -> None:
                     combo,
                     {
                         "status": "ok",
-                        "workflow": "stanford_hcp151_fixed_template_matching",
+                        "workflow": "stanford_hcp_fixed_template_matching",
                         "subject": f"sub-{subject}",
                         "smoothing": smoothing,
                         "hemi": hemi,
@@ -175,7 +175,7 @@ def write_subject_sources(inputs: dict[str, Path]) -> None:
             subject_dir / "subject_manifest.json",
             {
                 "status": "ok",
-                "workflow": "stanford_hcp151_fixed_template_matching",
+                "workflow": "stanford_hcp_fixed_template_matching",
                 "subject": f"sub-{subject}",
                 "template_manifest": template_record,
                 "inputs": {
@@ -201,7 +201,7 @@ def test_preflight_locks_explicit_roster_to_matching_run(tmp_path: Path) -> None
         run_manifest=inputs["run_manifest"],
         roster_paths=(inputs["roster_1"], inputs["roster_2"]),
         scene=inputs["scene"],
-        expected_matching_workflow="stanford_hcp151_fixed_template_matching",
+        expected_matching_workflow="stanford_hcp_fixed_template_matching",
         expected_subject_count=2,
     )
 
@@ -221,7 +221,7 @@ def test_preflight_rejects_roster_closure_drift(tmp_path: Path) -> None:
             run_manifest=inputs["run_manifest"],
             roster_paths=(inputs["roster_1"], inputs["roster_2"]),
             scene=inputs["scene"],
-            expected_matching_workflow="stanford_hcp151_fixed_template_matching",
+            expected_matching_workflow="stanford_hcp_fixed_template_matching",
             expected_subject_count=2,
         )
 
@@ -234,7 +234,7 @@ def test_existing_receipt_rejects_changed_scene_before_reuse(tmp_path: Path) -> 
         run_manifest=inputs["run_manifest"],
         roster_paths=(inputs["roster_1"], inputs["roster_2"]),
         scene=inputs["scene"],
-        expected_matching_workflow="stanford_hcp151_fixed_template_matching",
+        expected_matching_workflow="stanford_hcp_fixed_template_matching",
         expected_subject_count=2,
     )
     receipt = tmp_path / "fixed_template_overview_manifest.json"
@@ -242,7 +242,7 @@ def test_existing_receipt_rejects_changed_scene_before_reuse(tmp_path: Path) -> 
         receipt,
         {
             "status": "complete",
-            "workflow": "stanford_hcp151_fixed_template_matching_overviews",
+            "workflow": "stanford_hcp_fixed_template_matching_overviews",
             "output_dir": str((tmp_path / "present").resolve()),
             "subjects": ["sub-1001", "sub-2002"],
             "subject_count": 2,
@@ -257,7 +257,7 @@ def test_existing_receipt_rejects_changed_scene_before_reuse(tmp_path: Path) -> 
         contract.validate_existing_receipt(
             receipt_path=receipt,
             preflight=preflight,
-            expected_overview_workflow="stanford_hcp151_fixed_template_matching_overviews",
+            expected_overview_workflow="stanford_hcp_fixed_template_matching_overviews",
             output_dir=tmp_path / "present",
         )
 
@@ -271,7 +271,7 @@ def test_subject_preflight_rejects_label_drift_before_rendering(tmp_path: Path) 
         run_manifest=inputs["run_manifest"],
         roster_paths=(inputs["roster_1"], inputs["roster_2"]),
         scene=inputs["scene"],
-        expected_matching_workflow="stanford_hcp151_fixed_template_matching",
+        expected_matching_workflow="stanford_hcp_fixed_template_matching",
         expected_subject_count=2,
     )
     label = (
@@ -282,14 +282,14 @@ def test_subject_preflight_rejects_label_drift_before_rendering(tmp_path: Path) 
         / "4mm"
         / "hemi-R"
         / "sub-2002_hemi-R_space-corobl_den-512_"
-        "label-hcp151_fixed_template_k3_4mm.label.gii"
+        "label-hcp_fixed_template_k3_4mm.label.gii"
     )
     label.write_text("drifted-label\n", encoding="utf-8")
 
     with pytest.raises(ValueError, match="label GIFTI fingerprint drift"):
         contract.preflight_subject_sources(
             preflight=preflight,
-            expected_matching_workflow="stanford_hcp151_fixed_template_matching",
+            expected_matching_workflow="stanford_hcp_fixed_template_matching",
             expected_label_semantics={
                 "1": "Anterior/VAN",
                 "2": "Middle/SMN",
@@ -310,13 +310,13 @@ def test_subject_preflight_returns_ordered_exact_sources(tmp_path: Path) -> None
         run_manifest=inputs["run_manifest"],
         roster_paths=(inputs["roster_1"], inputs["roster_2"]),
         scene=inputs["scene"],
-        expected_matching_workflow="stanford_hcp151_fixed_template_matching",
+        expected_matching_workflow="stanford_hcp_fixed_template_matching",
         expected_subject_count=2,
     )
 
     sources = contract.preflight_subject_sources(
         preflight=preflight,
-        expected_matching_workflow="stanford_hcp151_fixed_template_matching",
+        expected_matching_workflow="stanford_hcp_fixed_template_matching",
         expected_label_semantics={
             "1": "Anterior/VAN",
             "2": "Middle/SMN",
@@ -338,7 +338,7 @@ def test_subject_preflight_returns_ordered_exact_sources(tmp_path: Path) -> None
             / "2mm"
             / "hemi-L"
             / "sub-1001_hemi-L_space-corobl_den-512_"
-            "label-hcp151_fixed_template_k3_2mm.label.gii"
+            "label-hcp_fixed_template_k3_2mm.label.gii"
         ).resolve()
     )
     assert not (tmp_path / "present").exists()

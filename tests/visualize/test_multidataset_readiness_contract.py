@@ -45,7 +45,7 @@ def test_comparison_overview_readiness_rejects_ephemeral_asset(tmp_path):
 
 def test_lynch_pfm_readiness_rejects_temporary_dtseries(tmp_path, monkeypatch):
     fake_root = tmp_path / "repo"
-    roster = fake_root / "manifests/jj_tms_hc_67_subjects.txt"
+    roster = fake_root / "manifests/jj_tms_hc_subjects.txt"
     roster.parent.mkdir(parents=True)
     roster.write_text("1001\n", encoding="utf-8")
     manifest_dir = (
@@ -85,7 +85,7 @@ def test_lynch_pfm_readiness_accepts_complete_in_memory_run_inputs(
     tmp_path, monkeypatch
 ):
     fake_root = tmp_path / "repo"
-    roster = fake_root / "manifests/jj_tms_hc_67_subjects.txt"
+    roster = fake_root / "manifests/jj_tms_hc_subjects.txt"
     roster.parent.mkdir(parents=True)
     roster.write_text("1001\n", encoding="utf-8")
     manifest_dir = (

@@ -71,7 +71,7 @@ def test_fixed_and_matching_presence_requires_surface_prerequisite(
     coverage, _ = inspect_rest_artifacts(config)
 
     rows = coverage[
-        coverage["method"].isin(["hcp151_fixed", "hcp151_template_matching"])
+        coverage["method"].isin(["hcp_fixed", "hcp_template_matching"])
     ]
     assert set(rows["status"]) == {"missing"}
     assert all("surface" in value for value in rows["missing_components"])
@@ -102,14 +102,14 @@ def test_real_inventory_reports_method_axes_and_schema() -> None:
 
     config = json.loads(CONFIG_PATH.read_text())
     assert config["methods"] == [
-        "hcp151_template_matching",
-        "hcp151_fixed",
+        "hcp_template_matching",
+        "hcp_fixed",
     ]
     coverage, schema = inspect_rest_artifacts(config)
 
     assert set(coverage["method"]) == {
-        "hcp151_fixed",
-        "hcp151_template_matching",
+        "hcp_fixed",
+        "hcp_template_matching",
     }
     assert set(coverage["smoothing_mm"]) == {2, 4}
     assert set(coverage["hemisphere"]) == {"L", "R"}

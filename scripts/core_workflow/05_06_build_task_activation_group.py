@@ -5,7 +5,7 @@ from __future__ import annotations
 Process Step Description:
 Build group-level task-activation products. Stacks per-subject contrast maps
 across the resolved roster, writes group mean / one-sample t / Cohen's d
-maps, per-subject cluster tables in two subregion zones (hcp151_atlas group
+maps, per-subject cluster tables in two subregion zones (hcp_atlas group
 labels and template_matching individualized labels), and a group summary
 with roster provenance.
 
@@ -19,7 +19,7 @@ Inputs:
   - --shared-root: Task shared root holding per-subject contrasts (default: `outputs_hcp/inputs/kong2022/shared_inputs/task-<task>`).
   - --subjects / --subjects-manifest: Required complete analysis roster; missing subject products are errors.
   - --smoothings / --hemis / --contrasts: Combos to build; --contrasts defaults to all maintained contrasts.
-  - --zones: Subregion branches: hcp151_atlas (rest group K=3), template_matching (crossfit individualized K=3). Default: both.
+  - --zones: Subregion branches: hcp_atlas (rest group K=3), template_matching (crossfit individualized K=3). Default: both.
   - --group-atlas-root: Rest gradient-spectral root holding K=3 labels (default: routea_17net root, which reuses the RouteA gradient bank).
   - --group-average-surfaces-dir: Group-average midthickness surfaces for anatomical cluster naming.
   - --hippunfold-batch-root: Native HippUnfold input root for per-subject vertex areas.
@@ -54,7 +54,7 @@ from lib.surface_utils import equal_vertex_long_axis_bins, long_axis_order
 from lib.task_group import (
     N_LONG_AXIS_BINS,
     PARCELLATION_CHOICES,
-    PARCELLATION_HCP151_ATLAS,
+    PARCELLATION_HCP_ATLAS,
     PARCELLATION_TEMPLATE_MATCHING,
     anatomical_cluster_names,
     fdr_adjust,

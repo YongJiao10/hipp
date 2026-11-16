@@ -13,7 +13,7 @@ the unified runner.
 
 ## Additive HCP/JJ_TMS 7-network comparison
 
-The `hcp_jjtms_7net` branch is an additive comparison of Kong2022 7-Network and Lynch2024 7-Network outputs. It preserves the existing two-column layout, dataset background bands, side labels, and Workbench surface rendering; it only replaces the displayed comparison content. Both columns use HCP 7T `N=151`, Iowa HC `N=67`, Iowa Patient `N=26` (sub-3003 excluded), Pure MDD `N=7`, and Comorbid MDD `N=19`.
+The `hcp_jjtms_7net` branch is an additive comparison of Kong2022 7-Network and Lynch2024 7-Network outputs. It preserves the existing two-column layout, dataset background bands, side labels, and Workbench surface rendering; it only replaces the displayed comparison content. Both columns use HCP 7T, Iowa HC, Iowa Patient (sub-3003 excluded), Pure MDD, and Comorbid MDD (sizes come from the formal roster manifests).
 
 The Kong2022 column is labelled with the `kong2022_7net` presentation namespace,
 but its producer input is explicitly

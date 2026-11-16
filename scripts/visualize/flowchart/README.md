@@ -21,7 +21,7 @@ The sagittal MRI plane maximizes AP intersection span over x=-31 to -20 mm at
 
 The compact three-row 17-network legend matches the consumed GIFTI label table
 and leaves more space for the two individual cortical examples. Panel 7 uses actual
-sub-1016 FC and fixed HCP151 templates; all 1536 correlations and 512 argmax labels
+sub-1016 FC and fixed HCP templates; all 1536 correlations and 512 argmax labels
 are checked. Correlation maps share [-1,1]. Brain images are movable raster
 objects; text, callouts and selection boxes are editable PowerPoint objects.
 

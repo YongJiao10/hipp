@@ -18,13 +18,13 @@ MODULE_PATH = (
     REPO_ROOT
     / "scripts"
     / "jj_tms"
-    / "render_jj_tms_hcp151_fixed_template_overviews.py"
+    / "render_jj_tms_hcp_fixed_template_overviews.py"
 )
 
 
 def load_module():
     spec = importlib.util.spec_from_file_location(
-        "render_jj_tms_hcp151_fixed_template_overviews",
+        "render_jj_tms_hcp_fixed_template_overviews",
         MODULE_PATH,
     )
     assert spec is not None and spec.loader is not None
@@ -74,7 +74,7 @@ def _write_fixed_subject(root: Path, subject: str = "1001") -> None:
             combo_dir.mkdir(parents=True)
             labels_path = combo_dir / (
                 f"sub-{subject}_hemi-{hemi}_space-corobl_den-512_"
-                f"label-hcp151_fixed_template_k3_{smoothing}.label.gii"
+                f"label-hcp_fixed_template_k3_{smoothing}.label.gii"
             )
             labels = (np.arange(512, dtype=np.int32) % 3) + 1
             nib.save(
@@ -266,7 +266,6 @@ def test_fixed_overview_rejects_duplicate_subject_request(tmp_path: Path):
 
 def test_full_roster_visual_refresh_replaces_old_renderer_records(tmp_path, monkeypatch):
     workflow = load_module()
-    monkeypatch.setattr(workflow, "EXPECTED_SUBJECT_COUNT", 1)
     matching_root = tmp_path / "matching"
     _write_fixed_subject(matching_root)
     scene = tmp_path / "scene.scene"
@@ -310,7 +309,7 @@ def test_fixed_overview_rejects_orphan_png_without_manifest(tmp_path: Path):
     output_dir = tmp_path / "present"
     output_dir.mkdir()
     Image.new("RGB", (20, 20), (1, 2, 3)).save(
-        output_dir / "sub-1001_hcp151_fixed_template_matching_overview.png",
+        output_dir / "sub-1001_hcp_fixed_template_matching_overview.png",
         format="PNG",
     )
 
@@ -426,7 +425,7 @@ def test_fixed_overview_fallback_rejects_subject_output_record_drift(
         )
 
 
-def test_validation_backed_renderer_requires_full_roster_and_dependencies(
+def test_validation_backed_renderer_requires_complete_full_scope_run(
     tmp_path: Path,
 ):
     workflow = load_module()
@@ -512,7 +511,7 @@ def test_validation_backed_renderer_requires_full_roster_and_dependencies(
         encoding="utf-8",
     )
 
-    with pytest.raises(ValueError, match="full|70|root|parameter"):
+    with pytest.raises(ValueError, match="not complete|root|parameter"):
         workflow.load_source_manifest(
             matching_root=matching_root,
             subjects=["1001"],

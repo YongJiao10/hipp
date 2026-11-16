@@ -94,7 +94,7 @@
       "area_weighting_scope": "coronal midthickness surfaces are supplied only for categorical-label transfer",
       "area_measurement": "sum the actual native HippUnfold surfareacorobl per-vertex metric in mm^2"
     },
-    "implementation_scope": "The unified subject-level workflow has exactly two active methods: hcp151_template_matching and hcp151_fixed.",
+    "implementation_scope": "The unified subject-level workflow has exactly two active methods: hcp_template_matching and hcp_fixed.",
     "no_per_subject_clustering": "Group-specific clustering belongs only to external_group_atlas_analysis; kember_metrics has no clustering method.",
     "next_action_requires_user_authorization": false
   }

@@ -38,8 +38,8 @@ except ImportError:  # pragma: no cover - direct source-directory execution
 REPO_ROOT = WORKFLOW_ROOT.parents[1]
 DEFAULT_DIRECT_CONFIG_PATH = WORKFLOW_ROOT / "config" / "analysis_config.json"
 DEFAULT_DIRECT_RUN_ID = "direct_contrasts"
-DIRECT_METHOD = "hcp151_template_matching"
-DIRECT_METHODS = ("hcp151_template_matching", "hcp151_fixed")
+DIRECT_METHOD = "hcp_template_matching"
+DIRECT_METHODS = ("hcp_template_matching", "hcp_fixed")
 
 COHORT_ORDER = (
     "NTHC",
@@ -357,7 +357,7 @@ def _validate_axes(
     if methods != DIRECT_METHODS:
         raise ValueError(
             "direct workflow methods must be exactly "
-            "hcp151_template_matching and hcp151_fixed"
+            "hcp_template_matching and hcp_fixed"
         )
     smoothings = tuple(int(value) for value in config.get("smoothings_mm", (2, 4)))
     hemispheres = tuple(str(value) for value in config.get("hemispheres", ("L", "R")))
@@ -871,7 +871,7 @@ def write_analysis_summary(
         "",
         "## 指标与范围",
         "",
-        "本运行合并 `hcp151_template_matching` 与 `hcp151_fixed`，每个半球分别计算 Kember 的三类指标：system surface area、functional segregation、boundary sharpness。没有 transition、几何 boundary position、vertex fraction 或 AP centroid。",
+        "本运行合并 `hcp_template_matching` 与 `hcp_fixed`，每个半球分别计算 Kember 的三类指标：system surface area、functional segregation、boundary sharpness。没有 transition、几何 boundary position、vertex fraction 或 AP centroid。",
         "",
         "直接比较固定为 TEHC−NTHC、NTS−NTHC、NTS Any MDD−NTHC、NTS Pure MDD−NTHC、TIS−NTHC、TIS PTSD−NTHC；统计为 case−NTHC 的双侧 Welch test、95% Welch CI、pooled-SD Cohen d 和原始 p。",
         "Multiplicity correction is deferred until the final analysis-object set is frozen; q_value/q_bh remain empty and raw p values are descriptive only.",

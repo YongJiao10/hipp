@@ -1,5 +1,5 @@
 {
-  "cohort_name": "hcp_7t_hippocampus_struct_complete_166",
+  "cohort_name": "hcp_7t_hippocampus_struct_complete",
   "subject_count": 166,
   "source_subject_list": "/Volumes/yojiao/HCP_7T_Hippocampus/master/ashs_subjects.txt",
   "source_master_tsv": "/Volumes/yojiao/HCP_7T_Hippocampus/master/rest7t_175_master.tsv",

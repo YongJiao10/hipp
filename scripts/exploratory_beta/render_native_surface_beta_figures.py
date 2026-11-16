@@ -28,8 +28,8 @@ from matplotlib.patches import Patch
 NETWORKS = ("Control", "Default", "VentralAttention")
 NETWORK_DISPLAY = {"Control": "CON", "Default": "DMN", "VentralAttention": "VAN"}
 NETWORK_COLORS = {"Control": "#F7AC4A", "Default": "#D85C6B", "VentralAttention": "#DC5CFF"}
-PARCELLATIONS = ("template_matching", "hcp151")
-PARCELLATION_DISPLAY = {"template_matching": "Template matching", "hcp151": "HCP151 fixed atlas"}
+PARCELLATIONS = ("template_matching", "hcp")
+PARCELLATION_DISPLAY = {"template_matching": "Template matching", "hcp": "HCP fixed atlas"}
 HEMIS = ("L", "R")
 HEMI_DISPLAY = {"L": "Left hippocampus", "R": "Right hippocampus"}
 CLUSTERS = (1, 2, 3)

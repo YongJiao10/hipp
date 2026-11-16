@@ -60,7 +60,7 @@ except ImportError:  # pragma: no cover - direct source-directory execution
 
 SYSTEM_LABELS = (1, 2, 3)
 SYSTEM_NAMES = {1: "anterior", 2: "middle", 3: "posterior"}
-METHODS = ("hcp151_template_matching", "hcp151_fixed")
+METHODS = ("hcp_template_matching", "hcp_fixed")
 BOUNDARY_RADIUS_MM = 4.0
 PRIMARY_METRIC_FIELDS = (
     "surface_area_mm2",
@@ -324,7 +324,7 @@ def _sha256(path: Path) -> str:
 
 
 def _metadata(paths: Mapping[str, Path], method: str) -> dict[str, str]:
-    label_key = "matching_labels" if method == "hcp151_template_matching" else "fixed_labels"
+    label_key = "matching_labels" if method == "hcp_template_matching" else "fixed_labels"
     return {
         "source_timeseries_path": str(paths["surface_timeseries"]),
         "source_label_path": str(paths[label_key]),
@@ -474,7 +474,7 @@ def _compute_combo(
         label_metadata = consumed["labels"]
         valid_metadata = (
             consumed["valid_mask"]
-            if method == "hcp151_template_matching"
+            if method == "hcp_template_matching"
             else consumed["support"]
         )
         native_metric = consumed["native_area_metric"]

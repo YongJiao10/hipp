@@ -68,9 +68,9 @@
 - Move to `scripts/jj_tms/`:
   - `scripts/jj_tms/map_jj_tms_sites_to_kong2022.py`
   - `scripts/jj_tms/run_jj_tms_24_hippunfold_batch.py`
-  - `scripts/jj_tms/jj_tms_hcp151_fixed_template_matching.py`
-  - `scripts/jj_tms/render_jj_tms_hcp151_fixed_template_overviews.py`
-  - `scripts/jj_tms/run_jj_tms_hcp151_fixed_template_overviews.sh`
+  - `scripts/jj_tms/jj_tms_hcp_fixed_template_matching.py`
+  - `scripts/jj_tms/render_jj_tms_hcp_fixed_template_overviews.py`
+  - `scripts/jj_tms/run_jj_tms_hcp_fixed_template_overviews.sh`
 - Do not place either file in `scripts/individual_workflow/`.
 - Modify the moved mapping utility's core-library path setup to point explicitly at `scripts/core_workflow`.
 - Add `scripts/jj_tms/README.md` stating that this is the dataset-specific surface for JJ_TMS orchestration and mapping, not a mature multi-dataset workflow surface.
@@ -80,7 +80,7 @@ Mature reusable individual entrypoints are numbered in place:
 `01_01_run_hcp_crossfit_template_matching.py`,
 `01_02_validate_hcp_crossfit_robustness.py`,
 `02_01_render_hcp_crossfit_individual_overviews.py`,
-`03_01_build_hcp151_fixed_template.py`, and the `01_*` RouteA individual
+`03_01_build_hcp_fixed_template.py`, and the `01_*` RouteA individual
 runner/launcher. The large RouteA implementation is kept in
 `individual_workflow/lib/` rather than as an unnumbered root entrypoint.
 

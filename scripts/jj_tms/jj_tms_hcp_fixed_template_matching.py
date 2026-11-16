@@ -64,18 +64,17 @@ N_SURFACE_VERTICES_32K = 32492
 ARTIFACT_CONTRACT_SCHEMA_VERSION = 2
 LEGACY_PUBLISHED_RUN_IDS = frozenset(
     {
-        "jj_tms_hcp151_smoke_20260809",
-        "jj_tms_hcp151_full_20260809",
+        "jj_tms_hcp_smoke_20260809",
+        "jj_tms_hcp_full_20260809",
     }
 )
 N_ROIS = 400
 K = 3
 MAX_JOBS = 10
 DEFAULT_JOBS = 2
-EXPECTED_SUBJECT_COUNT = 94
 TWO_RUN_SUBJECT = "1016"
-TEMPLATE_ID = "hcp151_routea_full_k3_fisherz"
-SMOKE_RUN_ID = "jj_tms_hcp151_smoke_20260809"
+TEMPLATE_ID = "hcp_routea_full_k3_fisherz"
+SMOKE_RUN_ID = "jj_tms_hcp_smoke_20260809"
 SMOKE_SUBJECTS = ("1001", "1002", "1003")
 DEFAULT_DATA_ROOT = Path(
     "/home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_JJ_TMS"
@@ -101,10 +100,10 @@ DEFAULT_OUT_ROOT = (
     Path("/home/yojiao/hpchome/hipp")
     / "outputs_iowa_jj_tms"
     / "work"
-    / "hcp151_fixed_template_matching"
+    / "hcp_fixed_template_matching"
 )
 DEFAULT_SUBJECTS_MANIFEST = (
-    REPO_ROOT / "manifests" / "jj_tms_hcp151_fixed_template_subjects.txt"
+    REPO_ROOT / "manifests" / "jj_tms_hcp_fixed_template_subjects.txt"
 )
 DEFAULT_WB_COMMAND = (
     Path("/home/yojiao/hpchome/hipp")
@@ -179,13 +178,11 @@ def select_subjects(
     explicit_subjects: Sequence[str] | None,
 ) -> tuple[list[str], list[str]]:
     canonical = read_subject_manifest(DEFAULT_SUBJECTS_MANIFEST)
-    if len(canonical) != EXPECTED_SUBJECT_COUNT:
-        raise ValueError(
-            f"Canonical JJ_TMS roster must contain {EXPECTED_SUBJECT_COUNT} subjects, got {len(canonical)}"
-        )
+    if not canonical:
+        raise ValueError("Canonical JJ_TMS roster contains no subjects")
     requested_manifest = read_subject_manifest(subjects_manifest)
     if requested_manifest != canonical:
-        raise ValueError(f"Requested roster manifest differs from the fixed {EXPECTED_SUBJECT_COUNT}-subject roster")
+        raise ValueError(f"Requested roster manifest differs from the fixed canonical roster")
     if not explicit_subjects:
         return list(canonical), list(canonical)
     normalized = [normalize_subject(subject) for subject in explicit_subjects]
@@ -545,7 +542,7 @@ def build_subject_manifest(
 ) -> dict[str, object]:
     return {
         "status": "ok",
-        "workflow": "jj_tms_hcp151_fixed_template_matching",
+        "workflow": "jj_tms_hcp_fixed_template_matching",
         "artifact_contract_schema_version": ARTIFACT_CONTRACT_SCHEMA_VERSION,
         "subject": f"sub-{normalize_subject(subject)}",
         "parameters": dict(parameters),
@@ -897,11 +894,11 @@ def _normalized_template_roster(
     *,
     context: str,
 ) -> tuple[str, ...]:
-    if not isinstance(raw, list) or len(raw) != 151:
-        raise ValueError(f"Template roster must contain exactly 151 subjects: {context}")
+    if not isinstance(raw, list) or not raw:
+        raise ValueError(f"Template roster must be a non-empty list: {context}")
     subjects = tuple(normalize_subject(value) for value in raw)
-    if len(set(subjects)) != 151:
-        raise ValueError(f"Template roster must contain 151 unique subjects: {context}")
+    if len(set(subjects)) != len(subjects):
+        raise ValueError(f"Template roster must contain unique subjects: {context}")
     return subjects
 
 
@@ -921,7 +918,6 @@ def _load_template_contract(template_root: Path) -> TemplateContract:
     expected = {
         "status": "complete",
         "template_id": TEMPLATE_ID,
-        "n_subjects": 151,
         "density": N_VERTICES,
         "k": K,
         "n_rois": N_ROIS,
@@ -1008,6 +1004,10 @@ def _load_template_contract(template_root: Path) -> TemplateContract:
     )
     if subjects != expected_roster:
         raise ValueError("HCP template roster differs from fingerprinted source manifests")
+    if manifest.get("n_subjects") != len(subjects):
+        raise ValueError(
+            f"HCP template n_subjects mismatch: {manifest.get('n_subjects')!r} != {len(subjects)!r}"
+        )
     return TemplateContract(
         root=root,
         manifest_path=manifest_path,
@@ -1186,7 +1186,7 @@ def _expected_subject_output_paths(
             )
             paths[f"{smoothing}_hemi-{hemi}_label_gifti"] = combo_dir / (
                 f"sub-{subject}_hemi-{hemi}_space-corobl_den-512_"
-                f"label-hcp151_fixed_template_k3_{smoothing}.label.gii"
+                f"label-hcp_fixed_template_k3_{smoothing}.label.gii"
             )
             paths[f"{smoothing}_hemi-{hemi}_combo_manifest"] = (
                 combo_dir / "combo_manifest.json"
@@ -1214,7 +1214,7 @@ def _parameters(*, wb_command: Path) -> dict[str, object]:
         "cortex_validity_policy": CORTEX_VALIDITY_POLICY,
         "fc": "vertex-to-ROI Pearson",
         "fc_transform": "arctanh clipped to +/-0.999999",
-        "matching": "jointly-finite Pearson correlation to fixed HCP151 prototypes",
+        "matching": "jointly-finite Pearson correlation to fixed HCP prototypes",
         "roi_order": list(range(1, N_ROIS + 1)),
         "wb_command": str(Path(wb_command).resolve()),
     }
@@ -1557,7 +1557,7 @@ def _match_combinations(
                 "margin": combo_dir / "correlation_margin.npy",
                 "label_gifti": combo_dir / (
                     f"sub-{subject}_hemi-{hemi}_space-corobl_den-512_"
-                    f"label-hcp151_fixed_template_k3_{smoothing}.label.gii"
+                    f"label-hcp_fixed_template_k3_{smoothing}.label.gii"
                 ),
             }
             _save_npy_exclusive(paths["pearson_fc"], pearson.astype(np.float32))
@@ -2284,7 +2284,7 @@ def _run_batch(
     final_manifest = run_dir / "run_manifest.json"
     partial_manifest = run_dir / "run_manifest.partial.json"
     base = {
-        "workflow": "jj_tms_hcp151_fixed_template_matching",
+        "workflow": "jj_tms_hcp_fixed_template_matching",
         "artifact_contract_schema_version": ARTIFACT_CONTRACT_SCHEMA_VERSION,
         "run_id": run_id,
         "scope": "full" if list(subjects) == list(canonical_roster) else "subset",
@@ -2369,8 +2369,6 @@ def _run_batch(
     items.sort(key=lambda row: order[str(row["subject"]).removeprefix("sub-")])
     complete_count = sum(row.get("status") == "ok" for row in items)
     status = "complete" if complete_count == len(subjects) else "failed"
-    if list(subjects) == list(canonical_roster) and len(subjects) != EXPECTED_SUBJECT_COUNT:
-        status = "failed"
     payload = {
         **base,
         "status": status,
@@ -2695,8 +2693,8 @@ def _validate_run(
     if selected_subjects and list(selected_subjects) != subjects:
         raise ValueError("Validation --subjects differ from the run manifest")
     if run_manifest.get("scope") == "full":
-        if subjects != list(canonical_roster) or len(subjects) != EXPECTED_SUBJECT_COUNT:
-            raise ValueError(f"Full-run manifest does not contain the fixed {EXPECTED_SUBJECT_COUNT}-subject roster")
+        if subjects != list(canonical_roster):
+            raise ValueError("Full-run manifest does not contain the fixed canonical roster")
     if run_manifest.get("template_manifest") != dict(template.manifest_fingerprint):
         raise ValueError("Run template manifest fingerprint drift")
     if run_manifest.get("roi_registry") != dict(template.roi_registry_fingerprint):
@@ -2742,7 +2740,7 @@ def _validate_run(
         raise ValueError("Validation did not produce four combinations per subject")
     payload_base = {
         "status": "complete",
-        "workflow": "validate_jj_tms_hcp151_fixed_template_matching",
+        "workflow": "validate_jj_tms_hcp_fixed_template_matching",
         "artifact_contract_schema_version": ARTIFACT_CONTRACT_SCHEMA_VERSION,
         "run_id": run_id,
         "scope": run_manifest.get("scope"),
@@ -2762,7 +2760,7 @@ def _validate_run(
 
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Apply immutable HCP151 prototypes to fixed-roster JJ_TMS rest data."
+        description="Apply immutable HCP prototypes to fixed-roster JJ_TMS rest data."
     )
     parser.add_argument("--mode", choices=("preflight", "run", "validate"), required=True)
     parser.add_argument("--subjects", nargs="+")

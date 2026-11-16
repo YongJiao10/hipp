@@ -23,7 +23,7 @@ the signal branch, so Standard and CtxReg panels cannot reuse one another's
 products. The ctxreg WTA path is
 work/group_atlas/pfm_ctxreg[/cohort]/wta-top/kong2022/...; no extra
 wta-top level is valid.
-The `hcp_jjtms_7net` branch adds Kong2022 7-Network and Lynch2024 7-Network method columns while preserving the original WTA layout, dataset grouping, panel styling, and Workbench rendering. The fixed common roster is HCP 7T `N=151`, Iowa HC `N=67`, Iowa Patient `N=26` (sub-3003 excluded), Pure MDD `N=7`, and Comorbid MDD `N=19`; Stanford is retained only by the legacy branch.
+The `hcp_jjtms_7net` branch adds Kong2022 7-Network and Lynch2024 7-Network method columns while preserving the original WTA layout, dataset grouping, panel styling, and Workbench rendering. The fixed common roster is HCP 7T, Iowa HC, Iowa Patient (sub-3003 excluded), Pure MDD, and Comorbid MDD (sizes come from the formal roster manifests); Stanford is retained only by the legacy branch.
 
 ---
 
@@ -33,7 +33,7 @@ The `hcp_jjtms_7net` branch adds Kong2022 7-Network and Lynch2024 7-Network meth
 
 ### 左列 (Column 1 - 5 个对照与基准队列, N = 336)
 
-1. **HCP 7T** (Healthy Young Adults, $N=151$): 高分辨率青年健康基准
+1. **HCP 7T** (Healthy Young Adults): 高分辨率青年健康基准
 2. **Iowa 3T HC** (Healthy Controls, $N=67$): 临床对照组
 3. **Iowa 3T Patient** (Depression Patients, $N=26$, sub-3003 excluded): 重度抑郁症患者队列
 4. **Stanford NTHC** (Non-Trauma Healthy Controls, $N=51$): 斯坦福无创伤健康对照

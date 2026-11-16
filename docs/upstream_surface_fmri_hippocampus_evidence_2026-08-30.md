@@ -89,13 +89,13 @@
 
 ### 上游 CIFTI、volume 与结构选择
 
-- 对旧 36P canonical，`scripts/jj_tms/jj_tms_hcp151_fixed_template_matching.py:79-93` 固定 volume root `xcpd/restfmri`、run-level CIFTI root `xcpd_surf`、concat CIFTI root `xcpd_surf_concat` 和 HippUnfold root。
+- 对旧 36P canonical，`scripts/jj_tms/jj_tms_hcp_fixed_template_matching.py:79-93` 固定 volume root `xcpd/restfmri`、run-level CIFTI root `xcpd_surf`、concat CIFTI root `xcpd_surf_concat` 和 HippUnfold root。
 - 该 matcher 的 `:216-269` 同时解析每个 run 的 MNI 2 mm volume、fsLR 91k CIFTI 和 concat CIFTI；`:272-348` 检查 volume/CIFTI timepoints、grayordinate grid，并只记录左右 `CORTEX` vertex counts。
 - 旧 36P 证据对应下方 subject manifest；其海马 surface sampling 使用完整 volume。其 CIFTI 中的海马 grayordinates 没有被当成海马 surface 输入。
 
 ### JJTMS 36P canonical manifest 的实际路径与数字
 
-`outputs_iowa_jj_tms/work/hcp151_fixed_template_matching/subjects/sub-1001/subject_manifest.json` 提供旧 36P canonical 证据：
+`outputs_iowa_jj_tms/work/hcp_fixed_template_matching/subjects/sub-1001/subject_manifest.json` 提供旧 36P canonical 证据：
 
 - `:110-139` 的 `header_evidence` 为 concat `686` timepoints、`91282` grayordinates，run lengths 为 `230/228/228`；
 - `:183-221` 记录 concat CIFTI、三个 run-level fsLR 91k CIFTI，以及三个匹配的 MNI 2 mm denoised BOLD volumes；
@@ -104,9 +104,9 @@
 
 ### 海马 surface fMRI 的生成位置
 
-- `scripts/jj_tms/jj_tms_hcp151_fixed_template_matching.py:1322-1348` 对每个 run、每个 hemi 调用 Workbench `-volume-to-surface-mapping`，输入是 `run.volume` 和 `surfaces[hemi]["consumed_asset"]`。
+- `scripts/jj_tms/jj_tms_hcp_fixed_template_matching.py:1322-1348` 对每个 run、每个 hemi 调用 Workbench `-volume-to-surface-mapping`，输入是 `run.volume` 和 `surfaces[hemi]["consumed_asset"]`。
 - `:1350-1375` 要求 sampled GIFTI shape 为 `(512, expected_timepoints)`，之后才在内存中按时间轴拼接并写出 raw hippocampal GIFTI。
-- `scripts/jj_tms/jj_tms_hcp151_fixed_template_matching.py:331-348` 的 `cortex_vertex_counts` 只记录 `CORTEX_LEFT`/`CORTEX_RIGHT`；海马 CIFTI grayordinates没有进入该 cortex ROI 分支。
+- `scripts/jj_tms/jj_tms_hcp_fixed_template_matching.py:331-348` 的 `cortex_vertex_counts` 只记录 `CORTEX_LEFT`/`CORTEX_RIGHT`；海马 CIFTI grayordinates没有进入该 cortex ROI 分支。
 
 因此 JJTMS 旧 36P 与 HCP7T/Stanford 一样：上游 fsLR CIFTI 有海马皮层下 grayordinates，但不存在可证实为上游输入的 hippocampus-specific surface fMRI；现存 L/R `512`-vertex 海马 fMRI 是由匹配的完整体数据通过 Workbench 生成的下游 surface metric。
 

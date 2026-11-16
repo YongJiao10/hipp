@@ -63,6 +63,10 @@ Other workflows retain their own limits.
 - Behavior, path, cache, launcher, environment or output changes require matching
   documentation in the same change. Runtime-stack changes also require an
   environment-manifest update.
+- Names of files, directories, template IDs, routes, branches, constants and
+  figure stems never contain subject or cohort counts. Roster size is recorded in
+  manifests as `n_subjects` and validated against the roster length, never against
+  a hard-coded number.
 - Preserve real scientific branches, including 36P, method and atlas variants.
   Dates and run IDs belong in logs/manifests, not formal result-root names.
 - HCP cortex-control routes are exactly `pfm_ctxreg` and `pfm_ctxdrop` below

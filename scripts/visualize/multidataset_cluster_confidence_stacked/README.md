@@ -29,7 +29,7 @@ provenance contract; any other branch mismatch fails closed.
 ## Layout & Design Specifications
 
 1. **5 Rows × 2 Columns Format:**
-   - **Column 1 (5 cohorts):** HCP 7T (N=151), Iowa 3T HC (N=67), Iowa 3T Patient (N=26; sub-3003 excluded), Stanford NTHC (N=51), Stanford TEHC (N=40).
+   - **Column 1 (5 cohorts):** HCP 7T, Iowa 3T HC (N=67), Iowa 3T Patient (N=26; sub-3003 excluded), Stanford NTHC (N=51), Stanford TEHC (N=40).
    - **Column 2 (5 cohorts):** Stanford NTS (N=56), Stanford NTS Any MDD (N=43), Stanford NTS Pure MDD (N=11), Stanford TIS (N=47), Stanford TIS PTSD (N=35).
    - **Additive HCP/JJ_TMS comparison:** The two method columns are headed by `Kong2022 7-Network` and `Lynch2024 7-Network`; within each column, the original dataset-band convention is retained for `HCP 7T` and `Iowa 3T` with separate background colors and side labels. Stanford remains only in the legacy renderer.
    - The figure title is `Cross-Dataset Hippocampal Positive Functional Network Profiles`; it does not append `(Stacked)`.

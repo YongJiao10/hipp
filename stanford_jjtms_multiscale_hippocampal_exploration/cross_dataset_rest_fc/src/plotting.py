@@ -265,22 +265,22 @@ def plot_primary_localisation_heatmaps(
     """Render fixed/template reference heatmaps for both network resolutions."""
 
     panels = [
-        ("jjtms", "patient-healthy", "hcp151_fixed", "bilateral", 8),
-        ("jjtms", "patient-healthy", "hcp151_fixed", "L-R", 8),
-        ("jjtms", "patient-healthy", "hcp151_fixed", "bilateral", 17),
-        ("jjtms", "patient-healthy", "hcp151_fixed", "L-R", 17),
-        ("jjtms", "patient-healthy", "hcp151_template_matching", "bilateral", 8),
-        ("jjtms", "patient-healthy", "hcp151_template_matching", "L-R", 8),
-        ("jjtms", "patient-healthy", "hcp151_template_matching", "bilateral", 17),
-        ("jjtms", "patient-healthy", "hcp151_template_matching", "L-R", 17),
-        ("stanford", "symptom_marginal", "hcp151_fixed", "bilateral", 8),
-        ("stanford", "symptom_marginal", "hcp151_fixed", "L-R", 8),
-        ("stanford", "symptom_marginal", "hcp151_fixed", "bilateral", 17),
-        ("stanford", "symptom_marginal", "hcp151_fixed", "L-R", 17),
-        ("stanford", "symptom_marginal", "hcp151_template_matching", "bilateral", 8),
-        ("stanford", "symptom_marginal", "hcp151_template_matching", "L-R", 8),
-        ("stanford", "symptom_marginal", "hcp151_template_matching", "bilateral", 17),
-        ("stanford", "symptom_marginal", "hcp151_template_matching", "L-R", 17),
+        ("jjtms", "patient-healthy", "hcp_fixed", "bilateral", 8),
+        ("jjtms", "patient-healthy", "hcp_fixed", "L-R", 8),
+        ("jjtms", "patient-healthy", "hcp_fixed", "bilateral", 17),
+        ("jjtms", "patient-healthy", "hcp_fixed", "L-R", 17),
+        ("jjtms", "patient-healthy", "hcp_template_matching", "bilateral", 8),
+        ("jjtms", "patient-healthy", "hcp_template_matching", "L-R", 8),
+        ("jjtms", "patient-healthy", "hcp_template_matching", "bilateral", 17),
+        ("jjtms", "patient-healthy", "hcp_template_matching", "L-R", 17),
+        ("stanford", "symptom_marginal", "hcp_fixed", "bilateral", 8),
+        ("stanford", "symptom_marginal", "hcp_fixed", "L-R", 8),
+        ("stanford", "symptom_marginal", "hcp_fixed", "bilateral", 17),
+        ("stanford", "symptom_marginal", "hcp_fixed", "L-R", 17),
+        ("stanford", "symptom_marginal", "hcp_template_matching", "bilateral", 8),
+        ("stanford", "symptom_marginal", "hcp_template_matching", "L-R", 8),
+        ("stanford", "symptom_marginal", "hcp_template_matching", "bilateral", 17),
+        ("stanford", "symptom_marginal", "hcp_template_matching", "L-R", 17),
     ]
     values: list[float] = []
     for dataset, estimand, method, mode, resolution in panels:
@@ -366,8 +366,8 @@ def plot_primary_localisation_heatmaps(
         color=GREY,
     )
     caption = (
-        f"run={run_id}; source=primary_localisation.csv.gz; reference branches=hcp151_fixed and "
-        "hcp151_template_matching at 2mm, bilateral/L-R; 8net and 17net; "
+        f"run={run_id}; source=primary_localisation.csv.gz; reference branches=hcp_fixed and "
+        "hcp_template_matching at 2mm, bilateral/L-R; 8net and 17net; "
         "JJTMS patient-healthy and Stanford symptom_marginal; cell stars denote raw p thresholds (* p < .05, ** p < .01, *** p < .001)"
     )
     return _save(fig, out_dir, "primary_localisation_heatmaps", caption, caption_fontsize=9)
@@ -386,7 +386,7 @@ def plot_stanford_four_group_profiles(
 
     reference = descriptives.loc[
         descriptives["dataset"].eq("stanford")
-        & descriptives["method"].eq("hcp151_fixed")
+        & descriptives["method"].eq("hcp_fixed")
         & descriptives["smoothing_mm"].eq(2)
         & descriptives["hemisphere_mode"].eq("bilateral")
     ].copy()
@@ -442,14 +442,14 @@ def plot_stanford_four_group_profiles(
     fig.text(
         0.01,
         0.955,
-        "NTHC, TEHC, NTS, and TIS; hcp151_fixed, 2 mm, bilateral reference branch; values are absolute Fisher-z FC means.",
+        "NTHC, TEHC, NTS, and TIS; hcp_fixed, 2 mm, bilateral reference branch; values are absolute Fisher-z FC means.",
         ha="left",
         va="top",
         fontsize=8,
         color=GREY,
     )
     caption = (
-        f"run={run_id}; source=stanford_four_group_descriptives.csv.gz; reference=hcp151_fixed, 2mm, bilateral; "
+        f"run={run_id}; source=stanford_four_group_descriptives.csv.gz; reference=hcp_fixed, 2mm, bilateral; "
         "3 regions × 8/17 networks; common colour scale across resolutions; n, SD, and 95% CI remain in source table"
     )
     fig.subplots_adjust(
@@ -480,14 +480,14 @@ def plot_specification_consistency(
     frame["_abs"] = frame["coefficient"].abs()
     component_keys = ["dataset", "estimand", "resolution", "region", "network"]
     top = (
-        frame.loc[frame["method"].eq("hcp151_fixed")]
+        frame.loc[frame["method"].eq("hcp_fixed")]
         .sort_values(["_abs", *component_keys], ascending=[False, True, True, True, True, True], kind="stable")
         .drop_duplicates(component_keys)
         .head(12)
     )
     selected = frame.merge(top[component_keys], on=component_keys, how="inner")
     selected["component"] = selected["dataset"].str.upper() + " · " + selected["estimand"] + " · " + selected["region"] + "/" + selected["network"] + " · " + selected["resolution"].astype(str) + "net"
-    selected["spec"] = selected["method"].str.replace("hcp151_", "", regex=False) + " " + selected["smoothing_mm"].astype(str) + "mm"
+    selected["spec"] = selected["method"].str.replace("hcp_", "", regex=False) + " " + selected["smoothing_mm"].astype(str) + "mm"
     spec_order = {"fixed 2mm": 0, "fixed 4mm": 1, "template_matching 2mm": 2, "template_matching 4mm": 3, "template 2mm": 2, "template 4mm": 3}
     selected["spec_index"] = selected["spec"].map(spec_order).fillna(9)
     selected = selected.sort_values(["component", "spec_index"], kind="stable")
@@ -535,7 +535,7 @@ def plot_specification_consistency(
     ax.set_axisbelow(True)
     caption = (
         f"run={run_id}; source=primary_localisation.csv.gz; selection=top 12 absolute reference components at 2mm bilateral; "
-        "comparison across hcp151_fixed/template_matching and 2/4mm; no independence claim"
+        "comparison across hcp_fixed/template_matching and 2/4mm; no independence claim"
     )
     fig.tight_layout(rect=(0, 0.035, 1, 0.97))
     return _save(fig, out_dir, "specification_consistency", caption)
@@ -551,7 +551,7 @@ def plot_auxiliary_profile_overview(
     """Plot exploratory profile permutation p-values without gating localisation."""
 
     frame = auxiliary.loc[
-        auxiliary["method"].eq("hcp151_fixed")
+        auxiliary["method"].eq("hcp_fixed")
         & auxiliary["smoothing_mm"].eq(2)
         & auxiliary["hemisphere_mode"].eq("bilateral")
         & auxiliary["network_resolution"].eq(8)
@@ -589,7 +589,7 @@ def plot_auxiliary_profile_overview(
     ax.grid(axis="x", color=GREY_LIGHT, lw=0.65)
     ax.set_axisbelow(True)
     caption = (
-        f"run={run_id}; source=auxiliary_profiles.csv.gz; hcp151_fixed, 2mm, bilateral, 8net reference; "
+        f"run={run_id}; source=auxiliary_profiles.csv.gz; hcp_fixed, 2mm, bilateral, 8net reference; "
         f"n_perm={n_perm}; auxiliary permutation profile p-values are non-confirmatory and never gate localisation"
     )
     fig.tight_layout(rect=(0, 0.035, 1, 0.97))

@@ -57,7 +57,7 @@ from lib.workbench_scene_batch import (
 )
 
 # Canonical Paths
-DEFAULT_36P_ROOT = REPO_ROOT / "outputs_iowa_jj_tms" / "work" / "hcp151_fixed_template_matching" / "subjects"
+DEFAULT_36P_ROOT = REPO_ROOT / "outputs_iowa_jj_tms" / "work" / "hcp_fixed_template_matching" / "subjects"
 DEFAULT_SCENE = REPO_ROOT / "config" / "wb_locked_native_view_lateral_medial.scene"
 DEFAULT_SPEC = (
     REPO_ROOT
@@ -124,8 +124,8 @@ COHORTS_DEF = [
         "badge_color": "#0b3c5d",
         "bg_color": "#f8fafc",
         "desc": "Baseline Healthy Volunteers",
-        "roster_file": "jj_tms_hc_67_subjects.txt",
-        "subjects": load_manifest_roster("jj_tms_hc_67_subjects.txt"),
+        "roster_file": "jj_tms_hc_subjects.txt",
+        "subjects": load_manifest_roster("jj_tms_hc_subjects.txt"),
     },
     {
         "key": "iowa_pat",
@@ -134,8 +134,8 @@ COHORTS_DEF = [
         "badge_color": "#831843",
         "bg_color": "#fff1f2",
         "desc": "Clinical MDD (sub-3003 excluded)",
-        "roster_file": "jj_tms_patient_26_subjects.txt",
-        "subjects": load_manifest_roster("jj_tms_patient_26_subjects.txt"),
+        "roster_file": "jj_tms_patient_subjects.txt",
+        "subjects": load_manifest_roster("jj_tms_patient_subjects.txt"),
     },
     {
         "key": "iowa_pure_mdd",
@@ -144,8 +144,8 @@ COHORTS_DEF = [
         "badge_color": "#854d0e",
         "bg_color": "#fefce8",
         "desc": "MDD without Clinical Anxiety",
-        "roster_file": "jj_tms_pure_mdd_7_subjects.txt",
-        "subjects": load_manifest_roster("jj_tms_pure_mdd_7_subjects.txt"),
+        "roster_file": "jj_tms_pure_mdd_subjects.txt",
+        "subjects": load_manifest_roster("jj_tms_pure_mdd_subjects.txt"),
     },
     {
         "key": "iowa_comorbid_mdd",
@@ -154,8 +154,8 @@ COHORTS_DEF = [
         "badge_color": "#14532d",
         "bg_color": "#f0fdf4",
         "desc": "MDD with MINI-confirmed GAD",
-        "roster_file": "jj_tms_comorbid_mdd_19_subjects.txt",
-        "subjects": load_manifest_roster("jj_tms_comorbid_mdd_19_subjects.txt"),
+        "roster_file": "jj_tms_comorbid_mdd_subjects.txt",
+        "subjects": load_manifest_roster("jj_tms_comorbid_mdd_subjects.txt"),
     },
 ]
 

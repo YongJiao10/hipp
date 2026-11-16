@@ -24,7 +24,7 @@ Directly copied and adapted from the three canonical multi-dataset reference scr
      - Y-axis: Bin 1 (Ant) at top, Bin 20 (Post) at bottom (0-100% vertex count)
      - Hipp surface and stacked bars share the EXACT same height.
 
-Unified grid support: 2mm_36p and 4mm_36p (HCP 7T ICA-FIX Young Adults N=151).
+Unified grid support: 2mm_36p and 4mm_36p (HCP 7T ICA-FIX Young Adults).
 """
 
 from __future__ import annotations
@@ -56,7 +56,7 @@ for p in (CORE_DIR, VIS_LIB_DIR):
         sys.path.insert(0, str(p))
 
 from lib.surface_utils import long_axis_order, render_hippocampal_grid
-from multidataset_cohorts import GridSpec, GRID_VARIANTS
+from multidataset_cohorts import GridSpec, GRID_VARIANTS, HCP_COHORT_SIZE
 
 # -----------------------------------------------------------------------------
 # Canonical Styling & Palette (Exact Match to References)
@@ -121,7 +121,7 @@ BRANCHES: list[dict[str, Any]] = [
         "cohort_name": "Standard",
         "cohort_desc": "RouteA Baseline Reference",
         "dataset_name": "HCP 7T",
-        "n_subjects": 151,
+        "n_subjects": HCP_COHORT_SIZE,
         "badge_bg": "#0b3c5d",
         "badge_fg": "#ffffff",
         "bg_color": "#ffffff",
@@ -132,7 +132,7 @@ BRANCHES: list[dict[str, Any]] = [
         "cohort_name": "CtxDrop",
         "cohort_desc": "Adjacent Cortical Dropped",
         "dataset_name": "HCP 7T",
-        "n_subjects": 151,
+        "n_subjects": HCP_COHORT_SIZE,
         "badge_bg": "#1d5b79",
         "badge_fg": "#ffffff",
         "bg_color": "#f7faff",
@@ -143,7 +143,7 @@ BRANCHES: list[dict[str, Any]] = [
         "cohort_name": "CtxReg",
         "cohort_desc": "Adjacent Cortical Regressed",
         "dataset_name": "HCP 7T",
-        "n_subjects": 151,
+        "n_subjects": HCP_COHORT_SIZE,
         "badge_bg": "#8c4600",
         "badge_fg": "#ffffff",
         "bg_color": "#fffdf8",
@@ -955,7 +955,7 @@ def render_hcp_cortex_control_gradient_wta(
     fig.text(
         0.50,
         0.940,
-        f"Hippocampal Gradient (Fisher-z FC & Normalized Top-20 Count) and Winner-Take-All Parcellation  |  {smoothing}_{variant} (N = 151 Young Adults, ICA-FIX)",
+        f"Hippocampal Gradient (Fisher-z FC & Normalized Top-20 Count) and Winner-Take-All Parcellation  |  {smoothing}_{variant} (N = {HCP_COHORT_SIZE} Young Adults, ICA-FIX)",
         ha="center",
         va="top",
         fontsize=20.0,

@@ -122,7 +122,7 @@ for i in range(mesh.GetNumberOfCells()):
     ax.plot(pts[:,1],pts[:,2],color='#F0B44B',lw=1.5)
 ax.set_xlim(3,-49); ax.set_ylim(-34,16); ax.axis('off'); fig.savefig(ASSETS/'sagittal_AP.png',dpi=200); plt.close(fig)
 
-tm=read(ROOT/'outputs_hcp/templates/hcp151_routea_full_k3_fisherz/template_manifest.json')
+tm=read(ROOT/'outputs_hcp/templates/hcp_routea_full_k3_fisherz/template_manifest.json')
 rows=[r for r in tm['combinations'] if r['hemi']=='L' and r['smoothing']=='2mm']; assert len(rows)==1
 t=rows[0]; gm=read(t['source_files']['gradient_manifest']['path'])
 g=load(gm['outputs']['hippomaps_gradients_full']); group=load(t['outputs']['labels']['path']); support=load(t['outputs']['support']['path']).astype(bool)
@@ -147,7 +147,7 @@ im.crop((left,top,right,bottom)).save(ASSETS/'gradient_space.png')
 axis_points={name:[[(u*width-left)/(right-left),1-((1-v)*height-top)/(bottom-top)]
     for u,v in ends] for name,ends in axis_points.items()}
 
-ind=read(ROOT/'outputs_stanford/work/hcp151_fixed_template_matching/subjects/sub-1016/matching/2mm/hemi-L/combo_manifest.json')
+ind=read(ROOT/'outputs_stanford/work/hcp_fixed_template_matching/subjects/sub-1016/matching/2mm/hemi-L/combo_manifest.json')
 ifc=load(ind['outputs']['fisherz_fc']['path']); proto=load(t['outputs']['prototypes']['path'])
 scores=load(ind['outputs']['scores']['path']); ilabel=load(ind['outputs']['labels']['path'])
 assert ind['template_prototypes']['path']==t['outputs']['prototypes']['path']

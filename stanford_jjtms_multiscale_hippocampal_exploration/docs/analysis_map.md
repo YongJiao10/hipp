@@ -12,7 +12,7 @@ inputs to another estimand.
 | `kember_metrics` | kember_metrics/src/ | 512-source rest-fMRI/labels plus native HippUnfold surfareacorobl, aligned native labels, validity mask and provenance | subject-level Kember area, functional segregation and boundary sharpness for fixed and template-matching methods | one combined feature table, one combined direct-contrast table, figures and manifests at stable package paths | Do not use geometry-derived triangle-area/3 reconstruction or transition_area as Kember area; do not use group-level atlas areas as subject metrics |
 | `external_group_atlas_analysis` | external_group_atlas_analysis/ | HC plus seven parent/nested group-specific atlas labels, consumed surfaces and manifests | group_atlas_gradient_spectral group-level geometric description of atlas region areas, label agreement, and boundary geometry | 64-cell inventory, atlas_region_area_mm2, seven non-HC-versus-HC similarity/agreement summaries per specification, and descriptive reports under the unified primary run | Do not use atlas geometry rows as subject-level FC values or Kember inference; do not create non-HC all-pairs comparisons |
 
-The two active Kember methods are hcp151_template_matching and hcp151_fixed; no third subject-level method is defined.
+The two active Kember methods are hcp_template_matching and hcp_fixed; no third subject-level method is defined.
 六个 contrast 在两种 method、两种 smoothing、两侧、三类 metric 和三个 system 上形成 432 个 method-aware endpoint rows。
 
 The atlas registry contains the explicit `HC` reference plus the four parent factorial groups `NTHC`, `TEHC`,

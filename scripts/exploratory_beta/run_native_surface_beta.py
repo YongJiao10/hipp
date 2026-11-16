@@ -41,14 +41,14 @@ SURFACE_ROOTS = {
 }
 SURFACE_SPACES = {"stanford": "T1w", "jj_tms": "T1w"}
 MATCH_ROOTS = {
-    "stanford": REPO_ROOT / "outputs_stanford/work/hcp151_fixed_template_matching/subjects",
-    "jj_tms": REPO_ROOT / "outputs_iowa_jj_tms/work/hcp151_fixed_template_matching/subjects",
+    "stanford": REPO_ROOT / "outputs_stanford/work/hcp_fixed_template_matching/subjects",
+    "jj_tms": REPO_ROOT / "outputs_iowa_jj_tms/work/hcp_fixed_template_matching/subjects",
 }
-HCP151_LABEL_ROOT = REPO_ROOT / "outputs_hcp/templates/hcp151_routea_full_k3_fisherz"
+HCP_LABEL_ROOT = REPO_ROOT / "outputs_hcp/templates/hcp_routea_full_k3_fisherz"
 NETWORK_DISPLAY = {"Control": "CON", "Default": "DMN", "VentralAttention": "VAN"}
 CLUSTER_NAMES = {1: "Anterior_VAN", 2: "Middle_SMN", 3: "Posterior_DMN"}
 HEMIS = ("L", "R")
-PARCELLATIONS = ("template_matching", "hcp151")
+PARCELLATIONS = ("template_matching", "hcp")
 
 
 def read_csv(path: Path) -> list[dict[str, str]]:
@@ -113,7 +113,7 @@ def load_labels(dataset: str, subject: str, hemi: str, parcellation: str) -> np.
     if parcellation == "template_matching":
         path = MATCH_ROOTS[dataset] / f"sub-{subject}/matching/2mm/hemi-{hemi}/labels.npy"
     else:
-        path = HCP151_LABEL_ROOT / f"hcp151_2mm_hemi-{hemi}_labels.npy"
+        path = HCP_LABEL_ROOT / f"hcp_2mm_hemi-{hemi}_labels.npy"
     labels = np.asarray(np.load(path), dtype=np.int32).reshape(-1)
     if labels.shape != (512,) or not set(np.unique(labels)).issubset({0, 1, 2, 3}):
         raise ValueError(f"invalid K=3 hippocampal labels: {path}")
@@ -181,7 +181,7 @@ def extract_site(
             # QC-passed roster.  The Native con/mapping cohort is larger (966
             # site-level jobs), so the five HippUnfold-only subjects without
             # template-matching labels are excluded from this branch while the
-            # independent HCP151 fixed atlas remains estimable.  Missing HCP151
+            # independent HCP fixed atlas remains estimable.  Missing HCP
             # labels, or any JJ label, remains a hard extraction failure.
             if dataset == "stanford" and parcellation == "template_matching":
                 parcellation_exclusions.append(
@@ -316,10 +316,8 @@ def main() -> int:
     keys = [(row["subject"], row.get("site_dir", ""), row.get("cohort", "")) for row in jobs]
     if len(keys) != len(set(keys)):
         raise ValueError("native job table contains duplicate subject/site/cohort keys")
-    if dataset == "stanford" and len(jobs) != 966:
-        raise ValueError(f"expected 966 Stanford top-three native jobs, found {len(jobs)}")
-    if dataset == "jj_tms" and len(jobs) != 78:
-        raise ValueError(f"expected 78 JJ_TMS native jobs, found {len(jobs)}")
+    if not jobs:
+        raise ValueError(f"native job table for {dataset} is empty")
 
     run_dir.mkdir(parents=True, exist_ok=True)
     cohort_rows: list[dict[str, Any]] = []

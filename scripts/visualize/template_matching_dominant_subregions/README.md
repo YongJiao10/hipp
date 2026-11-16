@@ -104,18 +104,18 @@ All metrics across the 16 cohort $\times$ grid combinations are recorded in `tem
 ## 4. Input Sources & Provenance
 
 - **36P Template Matching Results**:
-  `outputs_iowa_jj_tms/work/hcp151_fixed_template_matching/subjects/sub-{id}/matching/{smoothing}/hemi-{hemi}/labels.npy`
+  `outputs_iowa_jj_tms/work/hcp_fixed_template_matching/subjects/sub-{id}/matching/{smoothing}/hemi-{hemi}/labels.npy`
 - **Explicit 2mm/36P signal branches**:
-  - Standard: `outputs_iowa_jj_tms/work/hcp151_fixed_template_matching/subjects/...`
-  - CtxReg: `outputs_iowa_jj_tms/work/hcp151_fixed_template_matching/pfm_ctxreg/subjects/...`
+  - Standard: `outputs_iowa_jj_tms/work/hcp_fixed_template_matching/subjects/...`
+  - CtxReg: `outputs_iowa_jj_tms/work/hcp_fixed_template_matching/pfm_ctxreg/subjects/...`
   Both branches require the exact per-hemisphere `combo_manifest.json` contract;
   the renderer resolves the manifest-declared `labels` and `scores` artifacts
   and validates the fixed-template label semantics before rendering.
 - **Cohort Manifests**:
-  - `manifests/jj_tms_hc_67_subjects.txt`
-  - `manifests/jj_tms_patient_26_subjects.txt`
-  - `manifests/jj_tms_pure_mdd_7_subjects.txt`
-  - `manifests/jj_tms_comorbid_mdd_19_subjects.txt`
+  - `manifests/jj_tms_hc_subjects.txt`
+  - `manifests/jj_tms_patient_subjects.txt`
+  - `manifests/jj_tms_pure_mdd_subjects.txt`
+  - `manifests/jj_tms_comorbid_mdd_subjects.txt`
 - **Group Template Surfaces**:
   `outputs_iowa_jj_tms/inputs/kong2022/templates/hipp_group_average/group_average_surfaces/group-average_hemi-{hemi}_space-corobl_den-512_label-hipp_midthickness.surf.gii`
 - **Surface Spec File**:

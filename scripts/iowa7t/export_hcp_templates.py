@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stage the four Iowa7T portable HCP151 templates from explicit live inputs."""
+"""Stage the four Iowa7T portable HCP templates from explicit live inputs."""
 from __future__ import annotations
 
 import argparse
@@ -39,8 +39,8 @@ DISPLAY = {
     "8net": ("DMN", "VAN", "Aud", "SMN"),
     "17net": SELECTED["17net"],
 }
-COHORT = ROOT / "outputs_hcp/inputs/qc/vertex_qc_t1only/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_151.txt"
-FIXED = ROOT / "outputs_hcp/templates/hcp151_routea_full_k3_fisherz"
+COHORT = ROOT / "outputs_hcp/inputs/qc/vertex_qc_t1only/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt"
+FIXED = ROOT / "outputs_hcp/templates/hcp_routea_full_k3_fisherz"
 BANK = ROOT / "outputs_hcp/work/group_atlas/pfm/wta-top/kong2022"
 SURFACE = ROOT / "outputs_hcp/inputs/kong2022/shared_inputs/surface"
 REFERENCE = ROOT / "outputs_hcp/inputs/kong2022/shared_inputs/pfm"
@@ -61,7 +61,7 @@ def read_source_manifest(path: Path, subjects: list[str]) -> dict:
     recorded = [f"sub-{str(s).removeprefix('sub-')}" for s in data.get("subjects", [])]
     if (data.get("status") not in ("ok", "complete") or
             data.get("n_subjects") != len(subjects) or recorded != subjects):
-        raise ValueError(f"HCP151 source cohort/status mismatch: {path}")
+        raise ValueError(f"HCP source cohort/status mismatch: {path}")
     return data
 
 
@@ -86,7 +86,7 @@ def subject_profile(ts: np.ndarray, roi: np.ndarray, valid: np.ndarray,
                     labels: np.ndarray, n_clusters: int) -> np.ndarray:
     """Fisher-z of each subject's cluster mean TS, retaining empty rows as NaN."""
     masks = [labels == i + 1 for i in range(n_clusters)]
-    return subject_label_fc(ts, roi, masks, valid, "HCP151 LSS template export")
+    return subject_label_fc(ts, roi, masks, valid, "HCP LSS template export")
 
 
 def finite_mean(values: np.ndarray, axis: int = 0) -> np.ndarray:
@@ -139,7 +139,7 @@ def write_profile_files(folder: Path, profiles: np.ndarray, names: tuple[str, ..
     savemat(folder / "template_profiles.mat", payload, do_compression=True)
 
 
-def render_overview(path: Path, profiles: np.ndarray, names: tuple[str, ...], title: str) -> None:
+def render_overview(path: Path, profiles: np.ndarray, names: tuple[str, ...], title: str, n_subjects: int) -> None:
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -160,14 +160,14 @@ def render_overview(path: Path, profiles: np.ndarray, names: tuple[str, ...], ti
                 axes[r, c].set_ylabel(f"{smoothing} {hemi}", weight="bold")
             if r == 3:
                 axes[r, c].set_xlabel("Kong2022 ROI ID")
-    fig.suptitle(f"HCP 7T (N=151) | {title}", weight="bold", fontsize=17)
+    fig.suptitle(f"HCP 7T (N={n_subjects}) | {title}", weight="bold", fontsize=17)
     fig.colorbar(img, ax=axes, location="right", shrink=0.75, label="Mean Fisher-z")
     fig.savefig(path, dpi=160)
     plt.close(fig)
 
 
 def export(out_root: Path) -> None:
-    subjects = load_formal_subjects(COHORT, "hcp151")
+    subjects = load_formal_subjects(COHORT, "hcp")
     template = read_source_manifest(FIXED / "template_manifest.json", subjects)
     combos = {(row["smoothing"], row["hemi"]): row for row in template["combinations"]}
     if len(template["combinations"]) != 4 or set(combos) != set(ROWS):
@@ -204,7 +204,7 @@ def export(out_root: Path) -> None:
         for subject in subjects:
             for path in subject_paths(subject, smoothing, hemi):
                 if not path.is_file():
-                    raise FileNotFoundError(f"Required HCP151 input for {smoothing} hemi-{hemi}: {path}")
+                    raise FileNotFoundError(f"Required HCP input for {smoothing} hemi-{hemi}: {path}")
     mapping7 = load_kong2022_merge_mapping(taxonomy="canonical7")
     for row in registry:
         if row["canonical7"] != mapping7[row["family17"]]:
@@ -217,7 +217,7 @@ def export(out_root: Path) -> None:
     gradients = []
     for smoothing, hemi in ROWS:
         key = f"{smoothing}_{hemi}"
-        print(f"[start] {key}: all 151 subjects, native threads=1", flush=True)
+        print(f"[start] {key}: all {len(subjects)} subjects, native threads=1", flush=True)
         fc, indices, support = sources[(smoothing, hemi)]
         labels = {}
         for variant, column in (("8net", "canonical8"), ("17net", "family17")):
@@ -241,7 +241,7 @@ def export(out_root: Path) -> None:
                     ts, roi, valid & support, labels[variant], len(SELECTED[variant]),
                 ))
             if number % 30 == 0:
-                print(f"[subjects] {key}: {number}/151", flush=True)
+                print(f"[subjects] {key}: {number}/{len(subjects)}", flush=True)
         mean_network_fc = finite_mean(np.stack(direct_fc))
         labels["7net"] = direct_labels(mean_network_fc[indices], indices, 512,
                                          canonical_families_7_order())
@@ -255,7 +255,7 @@ def export(out_root: Path) -> None:
         for variant in labels:
             counts[variant][key] = {name: int(np.sum(labels[variant] == i + 1))
                                     for i, name in enumerate(SELECTED[variant])}
-        prototype_path = FIXED / f"hcp151_{smoothing}_hemi-{hemi}_prototypes.npy"
+        prototype_path = FIXED / f"hcp_{smoothing}_hemi-{hemi}_prototypes.npy"
         declared = Path(combos[(smoothing, hemi)]["outputs"]["prototypes"]["path"])
         if declared.resolve() != prototype_path.resolve():
             raise ValueError(f"Exact gradient prototype declaration mismatch: {declared}")
@@ -280,8 +280,8 @@ def export(out_root: Path) -> None:
         title = "Gradient-spectral AP prototypes" if gradient else (
             f"{variant} WTA | " +
             ("direct Fisher-z" if variant == "7net" else "normalized top20"))
-        render_overview(target / "figures/overview.png", values, display, title)
-        entry = {"id": package, "status": "ok", "n_subjects": 151,
+        render_overview(target / "figures/overview.png", values, display, title, len(subjects))
+        entry = {"id": package, "status": "ok", "n_subjects": len(subjects),
                  "method": "gradient-spectral" if gradient else "wta-top",
                  "profile_shape": list(values.shape),
                  "row_order": [f"{s}_{h}" for s, h in ROWS],
@@ -309,14 +309,14 @@ def export(out_root: Path) -> None:
         entries.append(entry)
         if gradient or package == "wta_normalized/7net":
             (target / "provenance.json").write_text(json.dumps(entry, indent=2) + "\n")
-    catalog = {"dataset": "HCP 7T", "atlas": "Kong2022 400 ROIs", "n_subjects": 151,
+    catalog = {"dataset": "HCP 7T", "atlas": "Kong2022 400 ROIs", "n_subjects": len(subjects),
                "connectivity": "mean Fisher-z hippocampus-cortex connectivity",
                "smoothing": ["2mm", "4mm"], "hemisphere_rows": [f"{s}_{h}" for s, h in ROWS],
                "templates": entries}
     (out_root / "catalog.json").write_text(json.dumps(catalog, indent=2) + "\n")
     (out_root / "README.md").write_text("""# HCP 7T templates
 
-HCP151 Kong2022 400-ROI templates. Mean Fisher-z values; rows are
+HCP Kong2022 400-ROI templates. Mean Fisher-z values; rows are
 `2mm_L`, `2mm_R`, `4mm_L`, `4mm_R`; columns are ROI IDs 1..400.
 
 - `gradient_spectral`: three AP-ordered formal fixed-template prototypes
@@ -329,7 +329,7 @@ HCP151 Kong2022 400-ROI templates. Mean Fisher-z values; rows are
   SalVenAttnA, DefaultC, SomMotB.
 
 WTA profiles correlate each subject's valid pseudo-cluster mean hippocampal
-time series with each ROI, apply Fisher-z, and average over all 151 subjects.
+time series with each ROI, apply Fisher-z, and average over all roster subjects.
 Canonical7 assignment correlates vertices with equally averaged ROI network
 time series. Normalized-top20 assignment uses the retained 400-ROI group FC
 bank and the declared taxonomy. Unobserved values remain NaN.

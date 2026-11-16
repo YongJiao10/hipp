@@ -39,7 +39,7 @@
 - 原 agent 会话 ID 45192 未必能跨 agent 使用。进程结束不等于成功，应检查日志和完整产物。此前没有保存全队列重建前的数值哈希，不能事后声称已经证明全队列重建前后完全一致。
 - 先前元数据审计发现控制输入有已不存在的 `kong400_regeneration_20260911` 输出路径引用；运行中的重建尚未完成。ctxreg FC 层还需审计。不要为了路径字符串直接把两条分支全量重跑一遍。
 - 六张 overview 已存在，但 `06_01` 尚无本轮要求的 ctxdrop 原始 FC 标注。不能把文档已有解释当成图已修复。
-- 先前检查报告过 16 个 group manifest 为 ok/N151；本次最终交付必须再核验。
+- 先前检查报告过 16 个 group manifest 为 ok 且 N 与名单一致；本次最终交付必须再核验。
 
 现有 dirty files（不要覆盖或整批提交）：
 
@@ -104,7 +104,7 @@ M tests/core_workflow/test_kong400_subject_completeness.py
 
 **检查对象：** 两个控制分支 `outputs_hcp/inputs/kong2022/shared_inputs/<route>/` 内 04_00/04_01 summary、stage manifest 及被下游实际消费的路径。
 
-- [ ] 等待已有 04_00 正常结束，或记录失败及具体 subjects。根据其真实目录结构和 subject manifest 枚举 151 subjects × 2 smoothing × 2 hemi = 604 个预期 regression 单元，不使用无范围全盘扫描。
+- [ ] 等待已有 04_00 正常结束，或记录失败及具体 subjects。根据其真实目录结构和 subject manifest 枚举 subjects × 2 smoothing × 2 hemi 个预期 regression 单元，不使用无范围全盘扫描。
 - [ ] 检查每个单元 residual、summary、manifest 存在且可读；状态、shape、subject、smoothing、hemi 与数据一致。把缺失/错误精确列出。
 - [ ] 对 ctxreg 与 ctxdrop 的 FC stage 同样检查实际输入输出路径；区分“历史来源记录”和“当前必须存在的运行依赖”。尤其补查尚未完成的 ctxreg FC manifests。
 - [ ] 若仅 metadata 输出路径失效，先证明新旧路径指向的预期产品身份和契约相同，再提出显式、限定字段、带审计记录的迁移；不得无证据批量字符串替换或静默 fallback。迁移需符合仓库审批规则。
@@ -145,7 +145,7 @@ kong2022_wta-top_group_overview_<route>_normalized_top20_count.png
 ```
 
 - [ ] 检查各 overview manifest 恰好对应三项有效产品、正确路由和来源，无另一个 sparse/dated 版本被当成正式入口；发现额外旧文件只列清单，不擅自删。
-- [ ] 再验 2 routes × 2 methods × 2 smoothing × 2 hemi 的 16 个 group manifest：status、N151、有效支持域、profile 有限值；gradient 400 ROI 特征、顺序、affinity、K 与已接受配置吻合；gradient cluster profile 为 3×7。WTA 按其自身网络输出契约检查，不强行要求 3×7。
+- [ ] 再验 2 routes × 2 methods × 2 smoothing × 2 hemi 的 16 个 group manifest：status、N 与名单一致、有效支持域、profile 有限值；gradient 400 ROI 特征、顺序、affinity、K 与已接受配置吻合；gradient cluster profile 为 3×7。WTA 按其自身网络输出契约检查，不强行要求 3×7。
 - [ ] 对比 Task 1 的数值文件哈希与科学指标：纯展示改动不得改变 cluster labels、FC、ARI、网络占比。若 Task 3 经批准重算导致改变，单独列变化和原因，不掩盖。
 - [ ] 实际打开六张 PNG 检查：两张 ctxdrop gradient 说明清晰可见，count/FC 单位正确；标题/legend/colorbar 不裁切、重叠；热图负数显示与颜色一致；左右及 2mm/4mm 标签正确。
 - [ ] 运行 `git diff --check`，区分本次引入的问题与已有无关问题。

@@ -55,29 +55,28 @@ DEFAULT_WB_COMMAND = (
 if DEFAULT_WB_COMMAND.is_file():
     os.environ.setdefault("CORE_WORKFLOW_WB_COMMAND", str(DEFAULT_WB_COMMAND))
 DEFAULT_MATCHING_ROOT = (
-    PRODUCTION_ROOT / "outputs_iowa_jj_tms" / "work" / "hcp151_fixed_template_matching"
+    PRODUCTION_ROOT / "outputs_iowa_jj_tms" / "work" / "hcp_fixed_template_matching"
 )
 DEFAULT_OUTPUT_DIR = (
     PRODUCTION_ROOT
     / "outputs_iowa_jj_tms"
     / "present"
     / "overviews"
-    / "hcp151_fixed_template_matching"
+    / "hcp_fixed_template_matching"
 )
 DEFAULT_SUBJECTS_MANIFEST = (
-    REPO_ROOT / "manifests" / "jj_tms_hcp151_fixed_template_subjects.txt"
+    REPO_ROOT / "manifests" / "jj_tms_hcp_fixed_template_subjects.txt"
 )
 DEFAULT_SCENE = (
     PRODUCTION_ROOT / "config" / "wb_locked_native_view_lateral_medial.scene"
 )
-DEFAULT_RUN_ID = "jj_tms_hcp151_full_20260809"
+DEFAULT_RUN_ID = "jj_tms_hcp_full_20260809"
 DEFAULT_JOBS = 2
 MAX_JOBS = 5
 SMOOTHINGS = ("2mm", "4mm")
 HEMIS = ("L", "R")
 N_VERTICES = 512
-EXPECTED_SUBJECT_COUNT = 94
-WORKFLOW_NAME = "jj_tms_hcp151_fixed_template_matching_overviews"
+WORKFLOW_NAME = "jj_tms_hcp_fixed_template_matching_overviews"
 RENDERER = "brainspace_hippocampal_grid"
 STATUS_FIELDS = (
     "status",
@@ -122,7 +121,7 @@ compose_stacked_rows = _CROSSFIT.compose_stacked_rows
 write_network_display_label_gifti = _CROSSFIT.write_network_display_label_gifti
 
 _MATCHER_PATH = (
-    REPO_ROOT / "scripts" / "jj_tms" / "jj_tms_hcp151_fixed_template_matching.py"
+    REPO_ROOT / "scripts" / "jj_tms" / "jj_tms_hcp_fixed_template_matching.py"
 )
 _MATCHER_MODULE: Any | None = None
 
@@ -215,10 +214,8 @@ def load_subject_roster(path: Path) -> list[str]:
         if line.strip() and not line.lstrip().startswith("#")
     ]
     subjects = normalize_subjects(values)
-    if len(subjects) != EXPECTED_SUBJECT_COUNT:
-        raise ValueError(
-            f"Expected the fixed {EXPECTED_SUBJECT_COUNT}-subject roster, got {len(subjects)}"
-        )
+    if not subjects:
+        raise ValueError(f"Subject roster is empty: {path}")
     return subjects
 
 
@@ -375,7 +372,7 @@ def _combo_rows(
             / f"hemi-{hemi}"
             / (
                 f"sub-{subject}_hemi-{hemi}_space-corobl_den-512_"
-                f"label-hcp151_fixed_template_k3_{smoothing}.label.gii"
+                f"label-hcp_fixed_template_k3_{smoothing}.label.gii"
             )
         ).resolve()
         if label_path != expected_label:
@@ -528,12 +525,9 @@ def _validate_full_validation_manifest(
     payload = _load_json(path)
     if payload.get("status") != "complete":
         raise ValueError(f"Validation source is not complete: {path}")
-    if (
-        len(subjects) != EXPECTED_SUBJECT_COUNT
-        or len(set(subjects)) != EXPECTED_SUBJECT_COUNT
-    ):
+    if not subjects or len(set(subjects)) != len(subjects):
         raise ValueError(
-            f"Validation source must cover the full {EXPECTED_SUBJECT_COUNT}-subject roster: {path}"
+            f"Validation source must cover a non-empty roster of unique subjects: {path}"
         )
     expected_subjects = [f"sub-{subject}" for subject in subjects]
     recorded_subjects = payload.get("subject_manifests")
@@ -560,10 +554,10 @@ def _validate_full_validation_manifest(
     if (
         run_payload.get("status") != "complete"
         or run_payload.get("scope") != "full"
-        or run_payload.get("subject_count") != EXPECTED_SUBJECT_COUNT
-        or run_payload.get("complete_count") != EXPECTED_SUBJECT_COUNT
+        or run_payload.get("subject_count") != len(subjects)
+        or run_payload.get("complete_count") != len(subjects)
         or run_payload.get("failed_count") != 0
-        or len(run_payload.get("subjects", [])) != EXPECTED_SUBJECT_COUNT
+        or len(run_payload.get("subjects", [])) != len(subjects)
     ):
         raise ValueError(f"Validation run dependency is not complete: {run_path}")
     if [str(value) for value in run_payload.get("subjects", [])] != expected_subjects:
@@ -795,7 +789,7 @@ def _validated_png_fingerprint(path: Path) -> dict[str, object]:
 def overview_png_path(output_dir: Path, subject: str) -> Path:
     return (
         Path(output_dir).resolve()
-        / f"sub-{normalize_subject(subject)}_hcp151_fixed_template_matching_overview.png"
+        / f"sub-{normalize_subject(subject)}_hcp_fixed_template_matching_overview.png"
     )
 
 
@@ -931,7 +925,7 @@ def render_subject_overview(
             except ValueError:
                 pass
 
-    with tempfile.TemporaryDirectory(prefix="jj_tms_hcp151_overview_") as scratch:
+    with tempfile.TemporaryDirectory(prefix="jj_tms_hcp_overview_") as scratch:
         scratch_root = Path(scratch)
         rendered_rows: list[tuple[str, Path]] = []
         for row in source["source_rows"]:
@@ -952,8 +946,8 @@ def render_subject_overview(
             rendered = render_hippocampal_grid(
                 subject=subject,
                 outdir=scratch_root / smoothing,
-                name=f"hcp151_fixed_template_matching_{smoothing}",
-                title=(f"HCP151 fixed-template matching | sub-{subject} | {smoothing}"),
+                name=f"hcp_fixed_template_matching_{smoothing}",
+                title=(f"HCP fixed-template matching | sub-{subject} | {smoothing}"),
                 left_labels=left_display,
                 right_labels=right_display,
                 left_surface=Path(str(left["surface"]["path"])),
@@ -966,7 +960,7 @@ def render_subject_overview(
             subject=subject,
             rows=rendered_rows,
             output_path=output,
-            title=(f"HCP151 fixed-template Fisher-z network matching | sub-{subject}"),
+            title=(f"HCP fixed-template Fisher-z network matching | sub-{subject}"),
         )
     item = _item(
         source=source,
@@ -1283,7 +1277,7 @@ def render_fixed_template_overviews(
         status_partial_path,
     )
     existing_pngs = list(
-        destination.glob("*_hcp151_fixed_template_matching_overview.png")
+        destination.glob("*_hcp_fixed_template_matching_overview.png")
     )
     if existing_pngs and not (manifest_path.exists() or manifest_partial_path.exists()):
         raise ValueError(

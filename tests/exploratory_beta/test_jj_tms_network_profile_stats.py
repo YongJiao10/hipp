@@ -39,7 +39,7 @@ def synthetic_healthy_profile():
                     'site_network': network,
                     'hippocampal_hemi': 'L',
                     'cluster': cluster,
-                    'parcellation': 'hcp151',
+                    'parcellation': 'hcp',
                     'beta_mean': beta_mean,
                 })
     return pd.DataFrame(rows)

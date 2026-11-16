@@ -42,8 +42,8 @@ def test_stable_outputs_close_over_feature_manifest() -> None:
     effects = pd.read_csv(effects_path, sep="\t")
     assert {"method", "smoothing_mm", "hemisphere", "system", "metric"} <= set(effects)
     assert set(effects["method"].dropna()) <= {
-        "hcp151_template_matching",
-        "hcp151_fixed",
+        "hcp_template_matching",
+        "hcp_fixed",
     }
     successful = feature_table.loc[feature_table["status"].eq("success")]
     if not successful.empty:

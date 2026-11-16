@@ -1,11 +1,11 @@
-# JJ_TMS × HCP151 Fixed-Template Matching
+# JJ_TMS × HCP Fixed-Template Matching
 
 ## Scope
 
-This workflow builds one immutable HCP151 RouteA template and applies it to the
-fixed 94-subject JJ_TMS roster. It uses only XCP-D `task-rest` denoised runs.
+This workflow builds one immutable HCP RouteA template and applies it to the
+fixed JJ_TMS roster in `manifests/jj_tms_subjects.txt`. It uses only XCP-D `task-rest` denoised runs.
 Runs are ordered by numeric run ID: `sub-1016` has the expected two runs and
-the other 69 subjects have three. The HCP template is shared by reference and
+the other subjects have three. The HCP template is shared by reference and
 is not copied into JJ_TMS outputs.
 
 ## Clinical diagnosis and Iowa3T cohort provenance
@@ -19,16 +19,16 @@ processing status, and QC is the external workbook:
 
 Use worksheet `Sheet1`. Subject IDs are in column `A`; background labels are
 in columns `C:E` (`MDD`, `PTSD`, `GAD`); data-upload fields are `G:H`;
-data-processing fields are `I:J`; and `QC` is column `K`. The 94-subject
-imaging roster is the rows with `QC == "Yes"`. That rule yields 94 subjects
-and must match `manifests/jj_tms_94_subjects.txt` exactly. The fixed 26-patient
+data-processing fields are `I:J`; and `QC` is column `K`. The
+imaging roster is the rows with `QC == "Yes"`. That rule must yield the
+subjects in `manifests/jj_tms_subjects.txt` exactly. The fixed patient
 subset excludes sub-3003 and is
-`manifests/jj_tms_patient_26_subjects.txt`. There is no separate 27-person
+`manifests/jj_tms_patient_subjects.txt`. There is no separate 27-person
 patient manifest.
 
 `outputs_iowa_jj_tms/TMSfMRI_DataSharing.xlsx` is a separate target-coordinate
 and data-sharing workbook used by the stimulation-site mapping workflow. It is
-not the source for the 94-subject imaging roster or the Iowa3T diagnostic
+not the source for the imaging roster or the Iowa3T diagnostic
 grouping, and its patient list must not replace the roster above.
 
 For the Iowa3T two-group comparison, use these fixed operational names and
@@ -42,7 +42,7 @@ membership:
 
 Thus the two-group analysis is `7 + 19 = 26` subjects. `JJ_TMS_3003` is the
 past-only MDD/current-GAD case and is intentionally not assigned to either
-primary group. `JJ_TMS_3021` is not in the QC-passed 94-subject roster; its
+primary group. `JJ_TMS_3021` is not in the QC-passed roster; its
 `Sheet1` row is marked `N/A` for upload, processing, and QC with the note
 `Dropped during Visit 1 scan`.
 
@@ -63,7 +63,7 @@ All repository Python commands use:
 
 The implementation has no new dependency or runtime-stack requirement.
 
-## HCP151 Template Contract
+## HCP Template Contract
 
 Build the template from the formal HCP RouteA group labels/support and the
 matching full-cohort group mean Fisher-z FC bank. Do not substitute
@@ -71,24 +71,24 @@ matching full-cohort group mean Fisher-z FC bank. Do not substitute
 definition.
 
 ```bash
-/home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/03_01_build_hcp151_fixed_template.py \
+/home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/03_01_build_hcp_fixed_template.py \
   --mode preflight \
   --group-root /home/yojiao/hpchome/hipp/outputs_hcp/work/group_atlas/pfm \
   --gradient-root /home/yojiao/hpchome/hipp/outputs_hcp/work/hippomaps_gradients/pfm \
-  --out-root /home/yojiao/hpchome/hipp/outputs_hcp/templates/hcp151_routea_full_k3_fisherz
+  --out-root /home/yojiao/hpchome/hipp/outputs_hcp/templates/hcp_routea_full_k3_fisherz
 
-/home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/03_01_build_hcp151_fixed_template.py \
+/home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/03_01_build_hcp_fixed_template.py \
   --mode build \
   --group-root /home/yojiao/hpchome/hipp/outputs_hcp/work/group_atlas/pfm \
   --gradient-root /home/yojiao/hpchome/hipp/outputs_hcp/work/hippomaps_gradients/pfm \
-  --out-root /home/yojiao/hpchome/hipp/outputs_hcp/templates/hcp151_routea_full_k3_fisherz
+  --out-root /home/yojiao/hpchome/hipp/outputs_hcp/templates/hcp_routea_full_k3_fisherz
 
-/home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/03_01_build_hcp151_fixed_template.py \
+/home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/03_01_build_hcp_fixed_template.py \
   --mode validate \
-  --out-root /home/yojiao/hpchome/hipp/outputs_hcp/templates/hcp151_routea_full_k3_fisherz
+  --out-root /home/yojiao/hpchome/hipp/outputs_hcp/templates/hcp_routea_full_k3_fisherz
 ```
 
-The builder requires the same 151 unique normalized subject IDs across all four
+The builder requires the same unique normalized subject IDs across all four
 combinations, consumed `den-512` surface evidence whose GIFTI pointset is
 actually counted as 512 vertices, ordered AP labels `1..3`, a fixed ordered
 Kong2022 registry `1..400`, and `float32[512,400]`
@@ -96,12 +96,12 @@ Kong2022 registry `1..400`, and `float32[512,400]`
 of:
 
 ```text
-hcp151_<2mm|4mm>_hemi-<L|R>_labels.npy       int32[512]
-hcp151_<2mm|4mm>_hemi-<L|R>_support.npy      uint8[512]
-hcp151_<2mm|4mm>_hemi-<L|R>_prototypes.npy   float32[3,400]
+hcp_<2mm|4mm>_hemi-<L|R>_labels.npy       int32[512]
+hcp_<2mm|4mm>_hemi-<L|R>_support.npy      uint8[512]
+hcp_<2mm|4mm>_hemi-<L|R>_prototypes.npy   float32[3,400]
 ```
 
-`template_manifest.json` records the 151-subject, den-512, K=3, 400-ROI
+`template_manifest.json` records the subject roster, den-512, K=3, 400-ROI
 contract plus SHA-256 fingerprints for every source and output. Prototype row
 `k` is the finite feature-wise mean of
 `group_mean_fisherz_fc_full[group_support_mask & (group_labels_final == k)]`.
@@ -111,7 +111,7 @@ contract plus SHA-256 fingerprints for every source and output. Prototype row
 CtxReg matching is maintained by the separate
 `scripts/jj_tms/jj_tms_ctxreg_fixed_template_matching.py` adapter. It requires
 `template_manifest.json` to declare exactly
-`template_id=hcp151_routea_ctxreg`, complete 2mm L/R prototypes, the fixed
+`template_id=hcp_routea_ctxreg`, complete 2mm L/R prototypes, the fixed
 400-ROI registry, and source manifests whose gradient route is
 `pfm_ctxreg` and whose group resume provenance has
 `route_tag=pfm_ctxreg`. A standard RouteA template, a renamed output
@@ -129,13 +129,13 @@ outputs_iowa_jj_tms/inputs/hippunfold/dense_corobl_batch/
   sub-<id>_hemi-{L,R}_space-corobl_den-512_label-hipp_midthickness.surf.gii
 ```
 
-The default subject source is the existing HC-67 manifest followed by the
-Patient-26 manifest. The matcher performs a complete preflight for all
+The default subject source is the existing HC manifest followed by the
+Patient manifest. The matcher performs a complete preflight for all
 selected subjects before creating any `subjects/sub-<id>/` output directory.
 Its canonical output root is:
 
 ```text
-outputs_iowa_jj_tms/work/hcp151_fixed_template_matching/pfm_ctxreg/
+outputs_iowa_jj_tms/work/hcp_fixed_template_matching/pfm_ctxreg/
   subjects/sub-<id>/matching/2mm/hemi-{L,R}/
   runs/<run_id>/
 ```
@@ -150,12 +150,12 @@ The adapter has no `--overwrite` mode.
 The CtxReg builder is selected explicitly:
 
 ```bash
-/home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/03_01_build_hcp151_fixed_template.py \
+/home/yojiao/.conda/envs/py314/bin/python scripts/individual_workflow/03_01_build_hcp_fixed_template.py \
   --mode preflight \
-  --template-id hcp151_routea_ctxreg \
+  --template-id hcp_routea_ctxreg \
   --group-root outputs_hcp/work/group_atlas/pfm_ctxreg \
   --gradient-root outputs_hcp/work/hippomaps_gradients/pfm_ctxreg \
-  --out-root outputs_hcp/templates/hcp151_routea_ctxreg
+  --out-root outputs_hcp/templates/hcp_routea_ctxreg
 ```
 
 This section documents the contract only; it does not authorize rebuilding or
@@ -216,7 +216,7 @@ environment variables are pinned to one before numerical-library import, so
 Canonical outputs are:
 
 ```text
-outputs_iowa_jj_tms/work/hcp151_fixed_template_matching/
+outputs_iowa_jj_tms/work/hcp_fixed_template_matching/
   subjects/sub-<id>/
   runs/<run_id>/
 ```
@@ -225,8 +225,8 @@ Publishing is exclusive. New run and validation manifests carry
 `artifact_contract_schema_version=2`; new complete run items must contain both
 the exact subject-manifest fingerprint and all four combo-manifest fingerprints.
 Missing schema/anchors are not inferred as legacy: only the two explicitly
-published pre-schema run IDs (`jj_tms_hcp151_smoke_20260809` and
-`jj_tms_hcp151_full_20260809`) receive legacy compatibility, with the same
+published pre-schema run IDs (`jj_tms_hcp_smoke_20260809` and
+`jj_tms_hcp_full_20260809`) receive legacy compatibility, with the same
 fresh dependency closure. `--resume` reuses a completed subject only when its
 independently constructed canonical output set, four unique smoothing/hemi
 combinations, paths, fingerprints, shapes, dtypes, parameters, and per-valid-
@@ -269,38 +269,38 @@ gate always requires dependency roots/parameters and runs its full closure.
 Smoke preflight:
 
 ```bash
-/home/yojiao/.conda/envs/py314/bin/python scripts/jj_tms/jj_tms_hcp151_fixed_template_matching.py \
+/home/yojiao/.conda/envs/py314/bin/python scripts/jj_tms/jj_tms_hcp_fixed_template_matching.py \
   --mode preflight --subjects 1001 1002 1003
 ```
 
 Smoke run and validation:
 
 ```bash
-/home/yojiao/.conda/envs/py314/bin/python scripts/jj_tms/jj_tms_hcp151_fixed_template_matching.py \
+/home/yojiao/.conda/envs/py314/bin/python scripts/jj_tms/jj_tms_hcp_fixed_template_matching.py \
   --mode run --subjects 1001 1002 1003 --jobs 2 \
-  --run-id jj_tms_hcp151_smoke_20260809
+  --run-id jj_tms_hcp_smoke_20260809
 
-/home/yojiao/.conda/envs/py314/bin/python scripts/jj_tms/jj_tms_hcp151_fixed_template_matching.py \
+/home/yojiao/.conda/envs/py314/bin/python scripts/jj_tms/jj_tms_hcp_fixed_template_matching.py \
   --mode validate --subjects 1001 1002 1003 \
-  --run-id jj_tms_hcp151_smoke_20260809
+  --run-id jj_tms_hcp_smoke_20260809
 ```
 
 The full-run code enforces this hard gate before its own preflight: the fixed
-`jj_tms_hcp151_smoke_20260809` validation must be `status=complete`, contain
+`jj_tms_hcp_smoke_20260809` validation must be `status=complete`, contain
 1001/1002/1003 and exactly 12 unique combinations with all labels represented,
 and retain matching template, ROI-registry, run-manifest, and validation-table
 fingerprints. Only then launch the fixed full roster:
 
 ```bash
-/home/yojiao/.conda/envs/py314/bin/python scripts/jj_tms/jj_tms_hcp151_fixed_template_matching.py \
+/home/yojiao/.conda/envs/py314/bin/python scripts/jj_tms/jj_tms_hcp_fixed_template_matching.py \
   --mode run --jobs 2 --resume \
-  --subjects-manifest manifests/jj_tms_hcp151_fixed_template_subjects.txt \
-  --run-id jj_tms_hcp151_full_20260809
+  --subjects-manifest manifests/jj_tms_hcp_fixed_template_subjects.txt \
+  --run-id jj_tms_hcp_full_20260809
 
-/home/yojiao/.conda/envs/py314/bin/python scripts/jj_tms/jj_tms_hcp151_fixed_template_matching.py \
+/home/yojiao/.conda/envs/py314/bin/python scripts/jj_tms/jj_tms_hcp_fixed_template_matching.py \
   --mode validate \
-  --subjects-manifest manifests/jj_tms_hcp151_fixed_template_subjects.txt \
-  --run-id jj_tms_hcp151_full_20260809
+  --subjects-manifest manifests/jj_tms_hcp_fixed_template_subjects.txt \
+  --run-id jj_tms_hcp_full_20260809
 ```
 
 Validation rechecks every input/output fingerprint and array contract, requires
@@ -308,7 +308,7 @@ all valid vertices to have nonzero labels, three finite in-range prototype
 correlations and a finite in-range margin, and all three labels to occur in each
 combination. It verifies the consumed GIFTI pointset is actually 512 vertices
 and writes label counts, margin summaries, and label SHA-256 values. A full run
-is complete only when the manifest contains the exact fixed roster, 94/94 subjects, and 376/376
+is complete only when the manifest contains the exact fixed roster, every roster subject complete, and all
 validated combinations. Any failure remains `failed` rather than being
 reported as complete.
 
@@ -359,7 +359,7 @@ After a complete fixed-roster validation, render one presentation PNG per
 subject with the shared BrainSpace hippocampal layout:
 
 ```bash
-scripts/jj_tms/run_jj_tms_hcp151_fixed_template_overviews.sh \
+scripts/jj_tms/run_jj_tms_hcp_fixed_template_overviews.sh \
   --jobs 2
 ```
 
@@ -374,7 +374,7 @@ and combination manifest fingerprints before rendering. The display layer
 retains the established HCP style: canonical network colors
 `1=Anterior/VAN`, `2=Middle/SMN`, `3=Posterior/DMN`, left/right hemispheres, and
 the fixed two-row order `2mm` above `4mm`. The top banner title is
-fixed-template specific (`HCP151 fixed-template Fisher-z network matching |
+fixed-template specific (`HCP fixed-template Fisher-z network matching |
 sub-<id>`, passed explicitly to the shared stacked-row composer); earlier
 PNGs rendered before this fix still show the inherited `HCP RouteA cross-fit
 ...` banner and are refreshed on the next production re-render.
@@ -382,8 +382,8 @@ PNGs rendered before this fix still show the inherited `HCP RouteA cross-fit
 The canonical output is:
 
 ```text
-outputs_iowa_jj_tms/present/overviews/hcp151_fixed_template_matching/
-  sub-<id>_hcp151_fixed_template_matching_overview.png
+outputs_iowa_jj_tms/present/overviews/hcp_fixed_template_matching/
+  sub-<id>_hcp_fixed_template_matching_overview.png
   fixed_template_overview_status.tsv
   fixed_template_overview_manifest.json
 ```
@@ -392,8 +392,8 @@ The renderer validates the complete run/validation manifest when present (or
 the 94 completed subject manifests otherwise), records source, scene, visual
 contract, and PNG fingerprints, and caps renderer workers at five so the
 worker plus one Workbench child per worker stays within ten processes.
-Validation-backed rendering is production-only full scope: exactly 94 subjects,
-280 unique TSV/items, complete run roots/parameters, and matcher dependency
+Validation-backed rendering is production-only full scope: the complete fixed roster,
+unique TSV/items for every roster subject, complete run roots/parameters, and matcher dependency
 closure are required. Subsets require --allow-subset and cannot use a
 production validation manifest.
 It refuses to overwrite an existing PNG or provenance file. `--resume` only
@@ -419,8 +419,8 @@ The independent Iowa analysis and presentation entry point is
 [`scripts/visualize/iowa_hipp_functional_organization/README.md`](../../scripts/visualize/iowa_hipp_functional_organization/README.md).
 It uses the already validated Kong2022 canonical7, 36P, 2 mm standard and
 ctxreg products with explicit manifest selection, never directory-order
-fallback. Its fixed Patient-26, Pure-MDD-7, and Comorbid-MDD-19 versus
-Iowa-HC-67 Welch comparisons are separate from this fixed-template matching
+fallback. Its fixed Patient, Pure-MDD, and Comorbid-MDD versus
+Iowa-HC Welch comparisons are separate from this fixed-template matching
 workflow; HCP supplies only templates and gradient references.
 
 For this analysis, **de novo 指每个队列使用自身组平均 FC 所得梯度独立聚类的组

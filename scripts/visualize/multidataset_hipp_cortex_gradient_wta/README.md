@@ -1,6 +1,6 @@
 # Hippocampal parcellation, cortical FC and Iowa HC contrasts
 
-The canonical seven-network figure contains five cohort rows: HCP 7T (151),
+The canonical seven-network figure contains five cohort rows: HCP 7T,
 Iowa HC (67), Iowa Patient (26; sub-3003 excluded), Pure MDD (7), and Comorbid
 MDD (19). The latter two are subgroups of Patient; the displayed total N=270
 sums row memberships, not unique individuals. All four smoothing/preprocessing
@@ -100,7 +100,7 @@ has 659 denoised hippocampal frames, while the changed cortical reference has
 recovery and rebuilding upper WTA mean FC from the recovered individuals.
 
 In this mode only Iowa36P reads original time series and valid masks under
-`outputs_iowa_jj_tms/work/hcp151_fixed_template_matching/subjects/sub-*/`:
+`outputs_iowa_jj_tms/work/hcp_fixed_template_matching/subjects/sub-*/`:
 
 - `surface/{2mm|4mm}/hemi-{L|R}_timeseries.npy`
 - `surface/validity/hemi-{L|R}_valid_mask.npy`
@@ -174,7 +174,7 @@ significant-cluster outlines stacked to 1000x2186. Row heights therefore follow
 the existing 1408 (HCP 7T, Iowa HC) vs 2186 (clinical rows) rule unchanged.
 
 Masks are each Iowa cohort's own group dominant atlas: vertex-wise majority
-vote over the branch `hcp151_fixed_template_matching[/routea_ctxreg]/subjects`
+vote over the branch `hcp_fixed_template_matching[/routea_ctxreg]/subjects`
 2mm `labels.npy`, with deterministic mean-`template_correlations.npy`
 tie-break — the same rule as
 `scripts/visualize/template_matching_dominant_subregions`. HCP 7T has no

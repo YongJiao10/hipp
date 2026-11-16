@@ -193,17 +193,18 @@ def test_canonical7_merge_conserves_network_area_and_keeps_noise_unassigned() ->
     canonical.assert_conserved()
 
 
-def test_formal_rosters_have_fixed_counts_and_exclude_3003() -> None:
+def test_formal_rosters_are_unique_partitioned_and_exclude_3003() -> None:
     rosters = load_formal_rosters(REPO_ROOT)
 
-    assert {key: len(value.subjects) for key, value in rosters.items()} == {
-        "HCP HC": 151,
-        "Iowa HC": 67,
-        "Patient": 26,
-        "Pure MDD": 7,
-        "Comorbid MDD": 19,
-    }
+    assert set(rosters) == {"HCP HC", "Iowa HC", "Patient", "Pure MDD", "Comorbid MDD"}
+    for roster in rosters.values():
+        assert roster.subjects
+        assert len(set(roster.subjects)) == len(roster.subjects)
     assert "sub-3003" not in rosters["Patient"].subjects
+    assert set(rosters["Pure MDD"].subjects) | set(rosters["Comorbid MDD"].subjects) == set(
+        rosters["Patient"].subjects
+    )
+    assert not set(rosters["Pure MDD"].subjects) & set(rosters["Comorbid MDD"].subjects)
 
 
 def test_resolver_reuses_one_hcp_input_and_selects_exact_iowa_variant_branch(

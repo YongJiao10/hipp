@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compute and render 5 completely disjoint, non-overlapping 30-subject fold templates for HCP."""
+"""Compute and render 5 completely disjoint, non-overlapping fold templates for HCP."""
 
 from __future__ import annotations
 
@@ -338,7 +338,9 @@ def compose_disjoint_comparison_figure(
 
     # 1. Header Banner
     main_title = "HCP 7T RouteA Five Disjoint Independent Cohorts (K=3, 0% Sample Overlap)"
-    sub_title = "Direct 3D Hippocampal Surface Parcellation Comparison Across 5 Non-Overlapping Independent Subgroups (~30 Subjects Each)"
+    sizes = sorted(fold_sizes.values())
+    size_text = f"{sizes[0]}" if sizes[0] == sizes[-1] else f"{sizes[0]}-{sizes[-1]}"
+    sub_title = f"Direct 3D Hippocampal Surface Parcellation Comparison Across 5 Non-Overlapping Independent Subgroups ({size_text} Subjects Each)"
     
     bbox_t = draw.textbbox((0, 0), main_title, font=title_font)
     draw.text(
@@ -372,7 +374,7 @@ def compose_disjoint_comparison_figure(
         for col_idx, fold_name in enumerate(fold_names):
             col_x = outer_pad_x + col_idx * (cell_w + col_gap)
             fold_num = int(fold_name.split("-")[-1])
-            n_sub = fold_sizes.get(fold_name, 30)
+            n_sub = fold_sizes[fold_name]
 
             f_title = f"Cohort {fold_num}"
             f_sub = f"Independent n = {n_sub} (0% overlap)"
@@ -460,7 +462,7 @@ def compose_disjoint_comparison_figure(
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Fit and render 5 completely disjoint 30-subject templates (0% overlap)."
+        description="Fit and render 5 completely disjoint fold templates (0% overlap)."
     )
     parser.add_argument(
         "--crossfit-root",

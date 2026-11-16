@@ -52,8 +52,8 @@ GROUPS = ("healthy", "patient")
 GROUP_DISPLAY = {"healthy": "Healthy participants", "patient": "Patient participants"}
 HEMIS = ("L", "R")
 HEMI_DISPLAY = {"L": "Left hippocampus", "R": "Right hippocampus"}
-PARCELLATIONS = ("template_matching", "hcp151")
-PARCELLATION_DISPLAY = {"template_matching": "Template matching", "hcp151": "HCP151 fixed atlas"}
+PARCELLATIONS = ("template_matching", "hcp")
+PARCELLATION_DISPLAY = {"template_matching": "Template matching", "hcp": "HCP fixed atlas"}
 CLUSTERS = (1, 2, 3)
 CLUSTER_DISPLAY = {
     1: "C1\nAnterior / VAN",
@@ -69,8 +69,8 @@ EXPORT_PDF = False
 
 LUT_PATH = REPO_ROOT / "external/Schaefer2018_Kong2022/Schaefer2018_400Parcels_Kong2022_17Networks_order.lut"
 MERGE_CONFIG = REPO_ROOT / "config/cross_atlas_network_merge.json"
-MATCH_ROOT = REPO_ROOT / "outputs_stanford/work/hcp151_fixed_template_matching/subjects"
-HCP151_LABEL_ROOT = REPO_ROOT / "outputs_hcp/templates/hcp151_routea_full_k3_fisherz"
+MATCH_ROOT = REPO_ROOT / "outputs_stanford/work/hcp_fixed_template_matching/subjects"
+HCP_LABEL_ROOT = REPO_ROOT / "outputs_hcp/templates/hcp_routea_full_k3_fisherz"
 ROI_NAME_RE = re.compile(r"^17networks_(?:LH|RH)_(?P<family>[A-Za-z0-9]+)(?:_.+)?_\d+$")
 
 
@@ -563,7 +563,7 @@ def pairwise_figure(data: pd.DataFrame, tests: pd.DataFrame, output_dir: Path) -
         y=0.998,
     )
     fig.tight_layout(rect=(0, 0, 1, 0.985), h_pad=1.8, w_pad=0.8)
-    return save_pair(fig, output_dir, "surface_template_matching_hcp151_within_network_pairwise_8x4", pdf=EXPORT_PDF)
+    return save_pair(fig, output_dir, "surface_template_matching_hcp_within_network_pairwise_8x4", pdf=EXPORT_PDF)
 
 
 def load_network_columns() -> dict[str, np.ndarray]:
@@ -591,7 +591,7 @@ def load_network_columns() -> dict[str, np.ndarray]:
 def label_path(subject: str, hipp_hemi: str, parcellation: str) -> Path:
     if parcellation == "template_matching":
         return MATCH_ROOT / f"sub-{subject}/matching/2mm/hemi-{hipp_hemi}/labels.npy"
-    return HCP151_LABEL_ROOT / f"hcp151_2mm_hemi-{hipp_hemi}_labels.npy"
+    return HCP_LABEL_ROOT / f"hcp_2mm_hemi-{hipp_hemi}_labels.npy"
 
 
 def fc_path(subject: str, hipp_hemi: str) -> Path:
@@ -777,7 +777,7 @@ def heatmap_figure(fc_stats_table: pd.DataFrame, output_dir: Path) -> dict[str, 
 
 
 def scatter_figure(fc_beta: pd.DataFrame, fc_stats_table: pd.DataFrame, output_dir: Path) -> dict[str, str]:
-    parcellation = "hcp151"
+    parcellation = "hcp"
     fig, axes = plt.subplots(4, 9, figsize=(28.0, 13.5), squeeze=False)
     for row_index, (group, hipp_hemi) in enumerate((g, h) for g in GROUPS for h in HEMIS):
         for network_index, network in enumerate(NETWORKS):
@@ -846,7 +846,7 @@ def scatter_figure(fc_beta: pd.DataFrame, fc_stats_table: pd.DataFrame, output_d
             color=NETWORK_COLORS[network],
         )
     fig.suptitle(
-        f"{DATASET_LABEL} HCP151 FC–beta associations by stimulation network and hippocampal cluster\n"
+        f"{DATASET_LABEL} HCP FC–beta associations by stimulation network and hippocampal cluster\n"
         "Rows preserve healthy/patient and left/right hippocampal analyses",
         fontsize=17,
         fontweight="bold",
@@ -854,7 +854,7 @@ def scatter_figure(fc_beta: pd.DataFrame, fc_stats_table: pd.DataFrame, output_d
     )
     fig.text(0.5, 0.002, "FC = mean vertex-to-Kong2022-ROI Fisher-z FC across each stimulation network; target-side rows averaged within subject.", ha="center", fontsize=10.0, color="#444444")
     fig.tight_layout(rect=(0.045, 0.025, 0.995, 0.955), w_pad=0.8, h_pad=1.4)
-    return save_pair(fig, output_dir, "fc_beta_hcp151_network_by_cluster_scatter_4x9", pdf=EXPORT_PDF)
+    return save_pair(fig, output_dir, "fc_beta_hcp_network_by_cluster_scatter_4x9", pdf=EXPORT_PDF)
 
 
 def main() -> int:
@@ -931,7 +931,7 @@ def main() -> int:
             ("analysis", f"{DATASET_LABEL} surface-beta five-figure analysis"),
             ("groups", "healthy=NTHC+TEHC; patient=NTS+TIS"),
             ("networks", "Control/CON; Default/DMN; VentralAttention/VAN"),
-            ("parcellations", "individual template matching and HCP151 fixed atlas"),
+            ("parcellations", "individual template matching and HCP fixed atlas"),
             ("hippocampal_hemisphere", "L and R separate in every figure and statistic; no bilateral rows"),
             ("heatmap_layout", "rows=group x parcellation; left column=L hippocampus; right column=R hippocampus"),
             ("figure_observation_unit", "one subject x stimulation network x hippocampal hemisphere x cluster x parcellation after equal target-hemi averaging"),

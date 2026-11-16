@@ -2,8 +2,8 @@
 
 EMOTION and WM use the complete 144-participant task cohort at
 `/home/yojiao/LSS/jianglab/3_Data_Working/HCP_tast_3T/`.
-Every participant has LR and RL. The task cohort is a subset of the 151-person
-HCP 7T resting-state reference cohort; 151 is not the task denominator.
+Every participant has LR and RL. The task cohort is a subset of the
+HCP 7T resting-state reference cohort; the reference cohort size is not the task denominator.
 
 Resolve every run from its exact subject declaration:
 

@@ -11,7 +11,7 @@ Newly generated figures use CON for the Control Network; existing figures genera
 - 健康组：`NTHC + TEHC`；病人组：`NTS + TIS`。
 - 当前探索 cohort：966 个 `subject × site × condition` top-3 行。
 - 海马：左、右分别统计；不生成 `bilateral`。
-- HippUnfold parcellation：individual template matching 和固定 HCP151，各自保留。
+- HippUnfold parcellation：individual template matching 和固定 HCP，各自保留。
 - 测量：只执行 `volume → hippocampal surface`；不执行 `surface → volume`。
 - con：Native-space Float32 `con_0001.nii.gz`，不 GrayZ、不重采样。
 - Native 表面：Stanford HippUnfold den-512 `space-corobl` inner/midthickness/outer。
@@ -76,7 +76,7 @@ Rscript scripts/exploratory_beta/stanford_tms_surface_model.R \
   outputs_stanford/work/tms_hipp_surface_beta_native/runs/stanford_native_surface_beta_20260818_v2
 ```
 
-分别拟合 healthy/patient × template matching/HCP151 四个预设探索分支，并同时保存
+分别拟合 healthy/patient × template matching/HCP 四个预设探索分支，并同时保存
 subject-network primary 和 site-level sensitivity：
 
 ```text
@@ -111,7 +111,7 @@ comparisons have no bracket or label. Results are written to
 Template matching labels follow the fixed 194-person QC-passed roster. The
 five HippUnfold-only subjects `1055`, `2001`, `3046`, `3107`, and `4117` are
 recorded in `parcellation_exclusions.csv` and are excluded only from the
-individual template-matching branch; HCP151 remains available for them.
+individual template-matching branch; HCP remains available for them.
 
 ## 旧结果归档
 

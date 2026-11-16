@@ -26,6 +26,7 @@ for p in (CORE_DIR, VIS_LIB_DIR):
 from lib.surface_utils import render_hippocampal_grid
 from surface_panel_cache import panel_inputs, cache_matches, publish_cache
 from multidataset_cohorts import (
+    HCP_COHORT_SIZE,
     COMPARISON_VERSION,
     GridSpec,
     GRID_VARIANTS,
@@ -103,7 +104,7 @@ COHORTS_COL1 = [
         "dataset_name": "HCP 7T",
         "cohort_name": "HCP 7T",
         "cohort_desc": "Healthy Young Adults",
-        "n_subjects": 151,
+        "n_subjects": HCP_COHORT_SIZE,
         "group_root": REPO_ROOT / "outputs_hcp/work/group_atlas/pfm",
         "bg_color": "#ffffff",
         "badge_bg": "#0b3c5d",

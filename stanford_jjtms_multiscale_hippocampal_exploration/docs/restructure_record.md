@@ -32,7 +32,7 @@ The duplicated subject-level branches were consolidated before output cleanup:
 - The active Kember area operation consumes native HippUnfold `surfareacorobl` values;
   geometry reconstruction is limited to a clearly named QC/utility role.
 - The active subject-level method axis contains only
-  `hcp151_template_matching` and `hcp151_fixed`.
+  `hcp_template_matching` and `hcp_fixed`.
 
 Stable code paths and their documentation now agree on one overwrite-in-place layout:
 
@@ -160,7 +160,7 @@ The canonical-seed `primary_screen` rerun consumed the repository-root current
 inputs and completed the unified experiment:
 
 - 80/80 branches completed with strict P0=36, P1=8, P2=36 ordering;
-- active methods are `hcp151_fixed`, `hcp151_template_matching`, and
+- active methods are `hcp_fixed`, `hcp_template_matching`, and
   `group_atlas_gradient_spectral`; no individual-gradient branch was executed;
 - group-atlas outputs contain 64 inventory rows, 192 region-area rows, 56
   non-HC-versus-HC matched-comparison rows, and 64 stability rows;

@@ -141,9 +141,9 @@ def _write_template_fixture(module, root: Path, *, template_id: str):
                 encoding="utf-8",
             )
 
-            labels_out = root / f"hcp151_{smoothing}_hemi-{hemi}_labels.npy"
-            support_out = root / f"hcp151_{smoothing}_hemi-{hemi}_support.npy"
-            prototypes_out = root / f"hcp151_{smoothing}_hemi-{hemi}_prototypes.npy"
+            labels_out = root / f"hcp_{smoothing}_hemi-{hemi}_labels.npy"
+            support_out = root / f"hcp_{smoothing}_hemi-{hemi}_support.npy"
+            prototypes_out = root / f"hcp_{smoothing}_hemi-{hemi}_prototypes.npy"
             np.save(labels_out, labels)
             np.save(support_out, support)
             np.save(prototypes_out, prototypes)
@@ -177,7 +177,7 @@ def _write_template_fixture(module, root: Path, *, template_id: str):
 
     manifest = {
         "status": "complete",
-        "workflow": "build_hcp151_fixed_template",
+        "workflow": "build_hcp_fixed_template",
         "template_id": template_id,
         "signal_branch": "ctxreg",
         "signal_control_route": "pfm_ctxreg",
@@ -246,7 +246,7 @@ def test_load_template_uses_a_hermetic_ctxreg_fixture(tmp_path: Path):
 
     info = module.load_template(template_root)
 
-    assert info["manifest"]["template_id"] == "hcp151_routea_ctxreg"
+    assert info["manifest"]["template_id"] == "hcp_routea_ctxreg"
     assert info["manifest_fingerprint"]["path"] == str(
         (template_root / "template_manifest.json").resolve()
     )
@@ -256,10 +256,10 @@ def test_load_template_uses_a_hermetic_ctxreg_fixture(tmp_path: Path):
 def test_load_template_rejects_non_ctxreg_identity(tmp_path: Path):
     module = load_module()
     template_root, _ = _write_template_fixture(
-        module, tmp_path / "template", template_id="hcp151_routea_full_k3_fisherz"
+        module, tmp_path / "template", template_id="hcp_routea_full_k3_fisherz"
     )
 
-    with pytest.raises(ValueError, match="hcp151_routea_ctxreg"):
+    with pytest.raises(ValueError, match="hcp_routea_ctxreg"):
         module.load_template(template_root)
 
 

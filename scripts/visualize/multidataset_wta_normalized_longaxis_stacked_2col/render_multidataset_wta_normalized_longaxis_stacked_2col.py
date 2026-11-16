@@ -3,7 +3,7 @@
 
 Renders a 2-column comparative panel across 10 cohorts:
   Left Column (5 Cohorts - Controls & Reference):
-    - HCP 7T (Healthy Young Adults, N=151)
+    - HCP 7T (Healthy Young Adults)
     - Iowa 3T HC (Healthy Controls, N=67)
     - Iowa 3T Patient (Depression Patients, N=26; sub-3003 excluded)
     - Stanford NTHC (Non-Trauma Controls, N=51)
@@ -45,6 +45,7 @@ for p in (CORE_DIR, VIS_LIB_DIR):
 from lib.surface_utils import long_axis_order, render_hippocampal_grid
 from lib.workbench_grid import load_labels
 from multidataset_cohorts import (
+    HCP_COHORT_SIZE,
     COMPARISON_VERSION,
     GRID_VARIANTS,
     SIGNAL_BRANCHES,
@@ -104,7 +105,7 @@ COHORTS_COL1 = [
         "dataset_name": "HCP 7T",
         "cohort_name": "HCP 7T",
         "cohort_desc": "Healthy Young Adults",
-        "n_subjects": 151,
+        "n_subjects": HCP_COHORT_SIZE,
         "group_root": REPO_ROOT
         / "outputs_hcp/work/group_atlas/pfm",
         "bg_color": "#ffffff",

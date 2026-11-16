@@ -47,7 +47,7 @@ def test_nsi_manifest_keeps_all_base_subjects_and_writes_nsi_audit(tmp_path: Pat
 
     assert result.pass_subjects == ["1001", "1002", "1003", "1004"]
     assert result.excluded_subjects == []
-    assert result.pass_manifest.name == "hcp_7t_lynch2024_pass_151.txt"
+    assert result.pass_manifest.name == "hcp_7t_lynch2024_pass_latest.txt"
     assert result.pass_manifest.read_text(encoding="utf-8").splitlines() == [
         "sub-1001",
         "sub-1002",

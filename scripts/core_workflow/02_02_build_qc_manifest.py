@@ -270,13 +270,11 @@ def main() -> int:
     manifest_dir.mkdir(parents=True, exist_ok=True)
     qc_tsv = out_dir / "t1only_hippunfold_qc.tsv"
     qc_json = out_dir / "t1only_hippunfold_qc.json"
-    manifest = manifest_dir / pass_roster_name(args.dataset, args.task, len(pass_subjects))
     latest_manifest = manifest_dir / pass_roster_name(args.dataset, args.task)
     fields = ["subject", "overall_mean_power_fd_mm", "dice_L", "dice_R", "unsupported_vertices_L", "unsupported_vertices_R",
               "pass_motion", "pass_dice", "pass_coverage", "pass_all", "qc_status", "exclude_reason", "unassessable_reason"]
     write_tsv(qc_tsv, rows, fields)
     text = "\n".join(pass_subjects) + ("\n" if pass_subjects else "")
-    manifest.write_text(text, encoding="utf-8")
     latest_manifest.write_text(text, encoding="utf-8")
     motion_formats = {run.get('motion_format', 'hcp_movement_degrees')
                       for subject in subjects for run in declarations.get(subject, [])}
@@ -293,12 +291,12 @@ def main() -> int:
         "n_subjects_total": len(subjects), "n_subjects_pass": len(pass_subjects),
         "n_subjects_fail": sum(row["qc_status"] == "fail" for row in rows),
         "n_subjects_unassessable": sum(row["qc_status"] == "unassessable" for row in rows),
-        "manifest": str(manifest), "latest_manifest": str(latest_manifest), "qc_tsv": str(qc_tsv), "rows": rows, "inputs": inputs,
-        "outputs": [str(qc_tsv), str(qc_json), str(manifest), str(latest_manifest)],
+        "manifest": str(latest_manifest), "qc_tsv": str(qc_tsv), "rows": rows, "inputs": inputs,
+        "outputs": [str(qc_tsv), str(qc_json), str(latest_manifest)],
     }
     write_json(qc_json, payload)
     print(json.dumps({"n_total": len(subjects), "n_pass": len(pass_subjects), "n_fail": payload["n_subjects_fail"],
-                      "n_unassessable": payload["n_subjects_unassessable"], "manifest": str(manifest)}, indent=2))
+                      "n_unassessable": payload["n_subjects_unassessable"], "manifest": str(latest_manifest)}, indent=2))
     return 0
 
 

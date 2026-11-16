@@ -92,7 +92,7 @@ def test_routea_resume_rebuilds_when_requested_contract_changes(tmp_path: Path, 
 
 def test_jj_adapter_reads_source_policy(tmp_path: Path) -> None:
     path = tmp_path / 'subject_manifest.json'
-    source = {'subject': 'sub-01', 'workflow': 'jj_tms_hcp151_fixed_template_matching',
+    source = {'subject': 'sub-01', 'workflow': 'jj_tms_hcp_fixed_template_matching',
               'parameters': {'task': 'rest', 'cortex_validity_policy': 'finite_cortex_signal'}}
     path.write_text(json.dumps(source))
     assert jj.read_cortex_reference_policy(path, subject='01') == {

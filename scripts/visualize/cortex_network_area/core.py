@@ -568,16 +568,15 @@ def calculate_area_metrics(
 
 def _formal_manifest_paths(root: Path) -> dict[str, Path]:
     return {
-        "HCP HC": root / "outputs_hcp" / "inputs" / "kong2022" / "manifests" / "hcp_7t_hippocampus_fmri_qc_pass_t1only_151.txt",
-        "Iowa HC": root / "manifests" / "jj_tms_hc_67_subjects.txt",
-        "Patient": root / "manifests" / "jj_tms_patient_26_subjects.txt",
-        "Pure MDD": root / "manifests" / "jj_tms_pure_mdd_7_subjects.txt",
-        "Comorbid MDD": root / "manifests" / "jj_tms_comorbid_mdd_19_subjects.txt",
+        "HCP HC": root / "outputs_hcp" / "inputs" / "kong2022" / "manifests" / "hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt",
+        "Iowa HC": root / "manifests" / "jj_tms_hc_subjects.txt",
+        "Patient": root / "manifests" / "jj_tms_patient_subjects.txt",
+        "Pure MDD": root / "manifests" / "jj_tms_pure_mdd_subjects.txt",
+        "Comorbid MDD": root / "manifests" / "jj_tms_comorbid_mdd_subjects.txt",
     }
 
 
 def load_formal_rosters(repo_root: Path) -> dict[str, CohortRoster]:
-    expected = {"HCP HC": 151, "Iowa HC": 67, "Patient": 26, "Pure MDD": 7, "Comorbid MDD": 19}
     rosters: dict[str, CohortRoster] = {}
     for name, manifest in _formal_manifest_paths(Path(repo_root).resolve()).items():
         if not manifest.is_file():
@@ -587,8 +586,8 @@ def load_formal_rosters(repo_root: Path) -> dict[str, CohortRoster]:
             for line in manifest.read_text(encoding="utf-8").splitlines()
             if line.strip() and not line.lstrip().startswith("#")
         )
-        if len(subjects) != expected[name] or len(set(subjects)) != len(subjects):
-            raise ValueError(f"Formal roster {manifest} expected {expected[name]} unique subjects, got {len(subjects)}")
+        if not subjects or len(set(subjects)) != len(subjects):
+            raise ValueError(f"Formal roster {manifest} must contain unique subjects, got {len(subjects)}")
         if name == "Patient" and "sub-3003" in subjects:
             raise ValueError("Patient formal roster must exclude sub-3003")
         rosters[name] = CohortRoster(name, subjects, manifest)

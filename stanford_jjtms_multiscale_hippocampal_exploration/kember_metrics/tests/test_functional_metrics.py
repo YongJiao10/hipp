@@ -20,7 +20,7 @@ def _kember_module():
 def test_feature_builder_exposes_stable_combined_methods() -> None:
     module = _kember_module()
 
-    assert module.METHODS == ("hcp151_template_matching", "hcp151_fixed")
+    assert module.METHODS == ("hcp_template_matching", "hcp_fixed")
 
 
 def test_paper_metrics_match_hand_checked_surface_area_segregation_and_sharpness() -> None:
@@ -90,10 +90,10 @@ def test_consistent_smoothing_selects_only_2mm_for_figures() -> None:
     visualization = importlib.import_module("plot_contrasts")
     effects = np.array(
         [
-            ("hcp151_template_matching", "surface_area", "surface_area_mm2", "posterior", "TEHC−NTHC", "L", 2, -0.40, 0.031),
-            ("hcp151_template_matching", "surface_area", "surface_area_mm2", "posterior", "TEHC−NTHC", "L", 4, -0.22, 0.042),
-            ("hcp151_template_matching", "functional_segregation", "functional_segregation_d", "posterior", "TEHC−NTHC", "L", 2, 0.33, 0.210),
-            ("hcp151_template_matching", "functional_segregation", "functional_segregation_d", "posterior", "TEHC−NTHC", "L", 4, 0.19, 0.440),
+            ("hcp_template_matching", "surface_area", "surface_area_mm2", "posterior", "TEHC−NTHC", "L", 2, -0.40, 0.031),
+            ("hcp_template_matching", "surface_area", "surface_area_mm2", "posterior", "TEHC−NTHC", "L", 4, -0.22, 0.042),
+            ("hcp_template_matching", "functional_segregation", "functional_segregation_d", "posterior", "TEHC−NTHC", "L", 2, 0.33, 0.210),
+            ("hcp_template_matching", "functional_segregation", "functional_segregation_d", "posterior", "TEHC−NTHC", "L", 4, 0.19, 0.440),
         ],
         dtype=[
             ("method", "U32"),

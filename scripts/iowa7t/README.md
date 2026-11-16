@@ -10,7 +10,7 @@ cortical references, FC and figures. Run local Python commands with
 | Cortex ArealMSHBM submission | [Shared Argon interface](../ArealMSHBM_Kong2022/README.md#iowa7t-variants) |
 | Acquisition-level surface/cortex/FC stages | `run_branch_downstream.py --help` |
 | Run-level surface/cortex/FC stages | `run_runwise_downstream.py --help` |
-| Portable HCP151 template export | `export_hcp_templates.py --help`, [template guide](../../docs/hipp_parcellation_network/lss_hcp_templates.md) |
+| Portable HCP template export | `export_hcp_templates.py --help`, [template guide](../../docs/hipp_parcellation_network/lss_hcp_templates.md) |
 | Production paths and usage | [Iowa7T output layout](../../docs/iowa7t_36p_hipp_outputs_layout.md) |
 
 Argon 36P inputs use

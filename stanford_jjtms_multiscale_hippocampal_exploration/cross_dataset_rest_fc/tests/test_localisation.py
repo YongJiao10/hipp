@@ -60,7 +60,7 @@ def _subject_rows(dataset: str, group: str, index: int, resolution: int) -> list
                         "group": group,
                         "trauma": trauma,
                         "symptomatic": symptomatic,
-                        "method": "hcp151_fixed",
+                        "method": "hcp_fixed",
                         "smoothing_mm": 2,
                         "hemisphere": mode,
                         "hemisphere_mode": mode,
@@ -86,7 +86,7 @@ def _stanford_views(*, resolutions: tuple[int, ...] = (8,)) -> pd.DataFrame:
     frame = pd.DataFrame(rows)
     frame.attrs["global_p"] = 0.99
     frame.attrs["network_ordinals"] = {
-        ("hcp151_fixed", resolution, f"N{network:02d}"): network - 1
+        ("hcp_fixed", resolution, f"N{network:02d}"): network - 1
         for resolution in (8, 17)
         for network in range(1, resolution + 1)
     }
@@ -106,7 +106,7 @@ def _jjtms_views(*, resolutions: tuple[int, ...] = (8,)) -> pd.DataFrame:
     frame["trauma"] = pd.NA
     frame["symptomatic"] = pd.NA
     frame.attrs["network_ordinals"] = {
-        ("hcp151_fixed", resolution, f"N{network:02d}"): network - 1
+        ("hcp_fixed", resolution, f"N{network:02d}"): network - 1
         for resolution in (8, 17)
         for network in range(1, resolution + 1)
     }
@@ -221,7 +221,7 @@ def test_network_labels_and_ordinals_must_match_task2_frozen_metadata() -> None:
 
     tensor = _jjtms_views()
     metadata = dict(tensor.attrs["network_ordinals"])
-    metadata[("hcp151_fixed", 8, "N08")] = metadata[("hcp151_fixed", 8, "N07")]
+    metadata[("hcp_fixed", 8, "N08")] = metadata[("hcp_fixed", 8, "N07")]
     tensor.attrs["network_ordinals"] = metadata
     with pytest.raises(ValueError, match="ordinal|metadata"):
         fit_local_effects(tensor, jjtms_contrast_matrix())
@@ -302,7 +302,7 @@ def test_localisation_family_keeps_three_regions_times_all_networks(
     result = fit_local_effects(tensor, jjtms_contrast_matrix())
     family = result.query(
         "dataset == 'jjtms' and estimand == 'patient-healthy' "
-        "and hemisphere_mode == 'bilateral' and method == 'hcp151_fixed' "
+        "and hemisphere_mode == 'bilateral' and method == 'hcp_fixed' "
         "and smoothing_mm == 2"
     )
     assert len(family) == expected_m

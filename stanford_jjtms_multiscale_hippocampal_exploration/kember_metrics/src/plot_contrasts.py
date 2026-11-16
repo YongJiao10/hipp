@@ -213,7 +213,7 @@ def _render_smoothing(
     subset = table.loc[table["smoothing_mm"].eq(smoothing_mm)].copy()
     axes = _axes(subset)
     labels = [
-        f"{method.replace('hcp151_', '')}\n{contrast}\n{hemisphere}"
+        f"{method.replace('hcp_', '')}\n{contrast}\n{hemisphere}"
         for method, contrast, hemisphere in axes
     ]
     figure, panels = plt.subplots(3, 1, figsize=(28, 15), squeeze=False, constrained_layout=True)

@@ -35,14 +35,12 @@ template_profiles = importlib.import_module("scripts.core_workflow.lib.cortex_te
 extractor = importlib.import_module("scripts.core_workflow.lib.extract_cortex_kong2022_route_a_roi_timeseries")
 
 
-def test_iowa_patient_manifest_contract_is_fixed26() -> None:
-    manifest_dir = REPO_ROOT / "outputs_iowa_jj_tms/inputs/kong2022/manifests"
+def test_iowa_patient_manifest_excludes_sub_3003() -> None:
     subjects = formal_cohorts.load_formal_subjects(
-        manifest_dir / "jj_tms_patient_26_subjects.txt",
-        "jjtms_patient26",
+        REPO_ROOT / "manifests" / "jj_tms_patient_subjects.txt",
+        "jjtms_patient",
     )
 
-    assert len(subjects) == 26
     assert "sub-3003" not in subjects
 
 
@@ -476,7 +474,7 @@ def test_template_producer_canonicalizes_and_consumer_rejects_foreign_paths(
     monkeypatch,
 ) -> None:
     dataset_root = tmp_path / "outputs_iowa_estt"
-    template_root = dataset_root / "inputs" / "kong2022" / "templates" / "hipp_group_average_t1only_151"
+    template_root = dataset_root / "inputs" / "kong2022" / "templates" / "hipp_group_average"
     spec_root = dataset_root / "inputs" / "hippunfold" / "dense_corobl_batch"
     surface_name = "group-average_hemi-L_space-corobl_den-512_label-hipp_midthickness.surf.gii"
     spec_name = "sub-01_den-512_label-hipp_surfaces.spec"
@@ -567,9 +565,9 @@ def test_template_surface_validation_rejects_foreign_dataset_path(
     monkeypatch,
 ) -> None:
     dataset_root = tmp_path / "outputs_iowa_jj_tms"
-    canonical_root = dataset_root / "inputs" / "kong2022" / "templates" / "hipp_group_average_t1only_151"
+    canonical_root = dataset_root / "inputs" / "kong2022" / "templates" / "hipp_group_average"
     canonical_surface = canonical_root / "group_average_surfaces" / "group-average_hemi-L_space-corobl_den-512_label-hipp_midthickness.surf.gii"
-    foreign_surface = tmp_path / "outputs_hcp" / "inputs" / "kong2022" / "templates" / "hipp_group_average_t1only_151" / "group_average_surfaces" / canonical_surface.name
+    foreign_surface = tmp_path / "outputs_hcp" / "inputs" / "kong2022" / "templates" / "hipp_group_average" / "group_average_surfaces" / canonical_surface.name
     canonical_surface.parent.mkdir(parents=True)
     foreign_surface.parent.mkdir(parents=True)
     canonical_surface.write_bytes(b"iowa-canonical")

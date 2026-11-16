@@ -51,7 +51,7 @@ The corrected production rebuild was completed on 2026-09-13 for both
 `routea_ctxreg` and `routea_ctxdrop`: `05_01` HippoMaps gradients, `05_02`
 gradient-spectral and WTA-top group products, and the maintained overview,
 gradient-product, and local-neighbor presentations. All four smoothing /
-hemisphere combinations per method have `status: ok`, N=151, and finite main
+hemisphere combinations per method have `status: ok`, `n_subjects` equal to the roster length, and finite main
 profiles. The control branches use the standard `cluster_mean_timeseries`
 annotation statistic recorded in their manifests.
 
@@ -81,7 +81,7 @@ metadata.
 The single IDAS execution agent took over the pre-existing PID 1652039
 (`04_00_materialize_cortex_regressed_surface_timeseries.py --jobs 8`) and did
 not start a duplicate job. It exited after all 604 expected ctxreg units
-(151 subjects × 2 smoothings × 2 hemispheres) had `status: done` stage
+(roster subjects × 2 smoothings × 2 hemispheres) had `status: done` stage
 manifests, `status: ok` summaries, and controlled time-series outputs. No
 ctxdrop/ctxreg `04_01`, `05_01`, or `05_02` numerical recomputation was started
 in this closeout.
@@ -93,7 +93,7 @@ items and the README tables identify the ctxdrop gradient annotation. A
 pre-render baseline of 64 group scientific files (labels, profiles, K/ARI
 summaries, and assignment status files) was compared after rendering; all 64
 SHA-256 hashes were unchanged. The 16 group manifests remain `status: ok`,
-N=151; all active consumed paths exist; gradient profiles are finite 3×7 with
+`n_subjects` equal to the roster length; all active consumed paths exist; gradient profiles are finite 3×7 with
 400-ROI feature summaries, three components, and shifted-cosine affinity; WTA
 status payloads are non-empty and valid.
 

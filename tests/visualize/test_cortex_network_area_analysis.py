@@ -22,6 +22,7 @@ from scripts.visualize.cortex_network_area.core import (
     InputLayout,
     SubjectRecord,
     Taxonomy,
+    load_formal_rosters,
 )
 
 
@@ -263,7 +264,8 @@ def test_subject_record_builder_uses_every_formal_roster_for_both_methods(
         layout=_layout(tmp_path),
     )
 
-    assert len(records) == (151 + 67 + 26 + 7 + 19) * 2
+    rosters = load_formal_rosters(Path(__file__).resolve().parents[2])
+    assert len(records) == sum(len(roster.subjects) for roster in rosters.values()) * 2
     assert {record.atlas for record in records} == {"kong2022", "lynch2024"}
     assert {record.cohort for record in records} == {
         "HCP HC",
