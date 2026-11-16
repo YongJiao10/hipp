@@ -26,7 +26,6 @@ CONTRACTS = {
 MANIFEST_NAME_CONTRACTS = {
     "hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt": "hcp",
     "hcp_7t_lynch2024_pass_latest.txt": "lynch",
-    "hcp_7t_lynch2024_nsi043_pass_latest.txt": "lynch",
     "stanford_hc_1xxx2xxx_qc_pass_t1only_latest.txt": "stanford_hc",
     "stanford_symp_3xxx4xxx_qc_pass_t1only_latest.txt": "stanford_symp",
     "jj_tms_hc_subjects.txt": "jjtms_hc",

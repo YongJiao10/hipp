@@ -139,7 +139,7 @@ def test_task_group_average_rejects_formal_destination_before_writing(tmp_path, 
 
 
 @pytest.mark.parametrize("recorded", [False, True])
-def test_formal_average_uses_current_qc_cohort_instead_of_historical_151(tmp_path, roots, recorded):
+def test_formal_average_uses_current_qc_cohort_instead_of_historical_roster(tmp_path, roots, recorded):
     _, _, template, _ = roots
     subjects = OTHER_SUBJECTS
     make_inputs(tmp_path / "anatomy", tmp_path / "task/surface", subjects)
