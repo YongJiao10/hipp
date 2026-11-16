@@ -14,7 +14,9 @@ Root: `outputs_hcp/work/group_atlas/`.
 - Lynch2024 comparison: `lynch2024_20net/`, `lynch2024_7net/`.
 
 Family17 products reuse the corresponding PFM or
-Fixed input and gradient banks. Assignment variants such as `fisherz` and
+Fixed input and gradient banks. Family17 `wta-top/kong2022/` is a clusterless
+`normalized_top20_count` product over the `family17` registry column; it is
+present for `pfm_17net/` and is a supported destination for `fixed_17net/`. Assignment variants such as `fisherz` and
 `normalized_top20_count` remain explicit files and manifest entries inside
 these roots.
 

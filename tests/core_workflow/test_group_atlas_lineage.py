@@ -45,6 +45,23 @@ def test_family17_upstream_gradient_lineage_requires_selected_taxonomy(tmp_path)
     assert result["network_taxonomy"] == "family17"
 
 
+def test_family17_reuses_canonical7_parent_labels(tmp_path):
+    parent = make_run(tmp_path / "canonical7")
+    child = make_run(tmp_path / "family17", fields={
+        "network_taxonomy": "family17",
+        "gradient_recomputed": False,
+        "clustering_recomputed": False,
+        "k_selection_recomputed": False,
+        "fixed_cluster_reuse": {
+            "source_manifest": str(parent),
+            "source_network_taxonomy": "canonical7",
+        },
+    })
+    result = validate_group_atlas_lineage(child, expected_network_taxonomy="family17")
+    assert result["mode"] == "active_parent_declared"
+    assert result["source_manifest"] == str(parent)
+
+
 def test_gradient_lineage_validates_declared_unit_sd_transform(tmp_path):
     from scripts.core_workflow.lib.hippomaps_adapter import scale_gradient_features
     path = make_run(tmp_path / "scaled")

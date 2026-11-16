@@ -16,7 +16,8 @@ from .workflow_utils import write_json
 
 OVR_VARIANTS = ("ovr_logistic_canonical7", "ovr_logistic_family17")
 NETWORK_TS_OVR_VARIANT = "ovr_logistic_canonical7_network_ts"
-ALL_OVR_VARIANTS = (*OVR_VARIANTS, NETWORK_TS_OVR_VARIANT)
+NETWORK_TS_FAMILY17_OVR_VARIANT = "ovr_logistic_family17_network_ts"
+ALL_OVR_VARIANTS = (*OVR_VARIANTS, NETWORK_TS_OVR_VARIANT, NETWORK_TS_FAMILY17_OVR_VARIANT)
 OVR_ASSIGNMENT_METRIC = "largest_positive_raw_beta"
 INTERPRETATION = (
     "Descriptive conditional association; observations from the same subject are dependent. "
@@ -27,6 +28,14 @@ INTERPRETATION = (
     "units and does not refit a standardized L2 model. Magnitudes are not directly comparable "
     "with Kember's different features, standardization domain, and model inputs."
 )
+
+
+def network_ts_ovr_variant(taxonomy: str) -> str:
+    if taxonomy == "canonical7":
+        return NETWORK_TS_OVR_VARIANT
+    if taxonomy == "family17":
+        return NETWORK_TS_FAMILY17_OVR_VARIANT
+    raise ValueError(f"Unsupported network time-series OVR taxonomy: {taxonomy}")
 
 
 def assignment_rows(beta, cluster_ids, network_names) -> list[dict]:

@@ -10,16 +10,18 @@ Run Argon commands from the checkout root. Argon paths use `/Shared/jianglab`;
 Python-backed adapters use `/Users/yojiao/miniconda3/envs/py313/bin/python`.
 Local workflow Python paths do not apply to these launchers.
 
-On Argon glibc 2.17 hosts, explicitly select the existing compatible runtime:
-`WB_COMMAND=/old_Users/yojiao/hipp/software/workbench_2.1.0/bin_linux64/wb_command`.
-Its version and frame-count probes must succeed before submission; the shared
-Workbench 2.2.1 build requires newer system libraries. See the
+The launchers fix Workbench to the Argon-compatible
+`/old_Users/yojiao/hipp/software/workbench_2.1.0/bin_linux64/wb_command`; no
+override is accepted. The shared Workbench 2.2.1 build requires newer system
+libraries than Argon glibc 2.17 provides. The version and frame-count probes
+must succeed before submission. See the
 [Argon runtime manifest](../../docs/environment/argon_kong2022_runtime_manifest.md).
 
 ## Datasets
 
 Select `DATASET=jj_tms`, `DATASET=stanford`, `DATASET=iowa7t`, `DATASET=estt`,
-`DATASET=iowa_hcp500`, `DATASET=hcp7t`, `DATASET=pdc`, or `DATASET=banda`.
+`DATASET=iowa_hcp500`, `DATASET=hcp7t`, `DATASET=pdc`, `DATASET=banda`, or
+`DATASET=nih_rtms`.
 The CLI defaults to `jj_tms`; set the dataset explicitly in commands.
 
 | Dataset | Default input root | Default output root | Rest dtseries pattern |
@@ -32,6 +34,7 @@ The CLI defaults to `jj_tms`; set the dataset explicitly in commands.
 | `iowa_hcp500` | `/old_Users/yojiao/HCPpipeline500/work/qunex_iowa7t_hcppipeline500/sessions` | `${REPO_ROOT}/outputs_iowa_hcp500/inputs/kong2022/cortex_references/routea_areal_mshbm` | `<subject>/hcp/<subject>/MNINonLinear/Results/REST/REST_Atlas_MSMAll_hp0_clean_rclean.dtseries.nii` |
 | `hcp7t` | `${REPO_ROOT}/data/hippunfold_input` | `${REPO_ROOT}/outputs_hcp/inputs/kong2022/cortex_references/pfm_areal_mshbm` | `func/sub-<id>_task-rest_run-concat.dtseries.nii`, split using `outputs_hcp/inputs/qc/run_metadata/sub-<id>.json` |
 | `pdc` | `/Shared/jianglab/3_Data_Working/Depression/PDC/imaging` | `${REPO_ROOT}/outputs_pdc/inputs/kong2022/cortex_references/routea_areal_mshbm` | exact run filenames in `COHORT_MANIFEST`, mapped from `<base>_<visit>_MR/MNINonLinear/Results/` |
+| `nih_rtms` | `/Shared/jianglab/3_Data_Working/Depression/NIH_rTMS/xcpd_surf/restfmri` | `${REPO_ROOT}/outputs_nih_rtms/inputs/kong2022/cortex_references/pfm_areal_mshbm` | exact `sub-<ID>/ses-<N>/func/sub-<ID>_ses-<N>_task-rest_space-fsLR_den-91k_desc-denoised_bold.dtseries.nii` in `COHORT_MANIFEST` |
 | `banda` | `/Shared/jianglab/3_Data_Working/Depression/BANDA/imaging` | `${REPO_ROOT}/outputs_banda/inputs/kong2022/cortex_references/routea_areal_mshbm` | exact run filenames in `COHORT_MANIFEST`, mapped from `BANDA<ID>_MR/MNINonLinear/Results/` |
 
 `DATA_ROOT` and `OUT_ROOT` are explicit overrides. Stanford and ESTT
@@ -86,6 +89,23 @@ identities declared there. Tasks validate identity, variant, file metadata,
 frame counts and both cortical brain models. Missing/stale/conflicting inputs
 fail before MATLAB. These presets require `KEEP_TMP=1 OVERWRITE=0` and retain
 persistent subject `inputs/` plus a unique CBIG work directory.
+
+### NIH rTMS
+
+`DATASET=nih_rtms` uses the XCP-D 36P fsLR-91k denoised rest CIFTIs. Each
+subject-session is one independent subject with one rest run and one all-ones
+censor file; `sub-D01` session 1/2 becomes `sub-D01s1`/`sub-D01s2`, and the two
+sessions are never merged. The roster is `scripts/nih_rtms/sublist.txt`; a
+subject without session directories (`sub-D16`, anat-only) is recorded under
+`excluded_subjects`, and a single absent `ses-1`/`ses-2` directory is recorded
+under `missing_sessions`. A present session directory without its exact CIFTI
+stops the build. The current cohort is 66 subject-sessions. It retains the PDC/BANDA
+`KEEP_TMP=1 OVERWRITE=0` and fail-closed rules.
+
+```bash
+/Users/yojiao/miniconda3/envs/py313/bin/python scripts/ArealMSHBM_Kong2022/prepare_kong2022_areal_mshbm_subject_inputs.py --action build-cohort --dataset nih_rtms --data-root /Shared/jianglab/3_Data_Working/Depression/NIH_rTMS/xcpd_surf/restfmri --cohort-manifest outputs_nih_rtms/inputs/kong2022/manifests/nih_rtms_cortex_inputs.json
+SYSTEM_NAME=argon DATASET=nih_rtms KEEP_TMP=1 OVERWRITE=0 SMOKE_N=1 DRY_RUN=1 scripts/ArealMSHBM_Kong2022/submit_kong2022_areal_mshbm.sh
+```
 
 ### Iowa7T variants
 
@@ -143,7 +163,6 @@ only for the authorized operation. `KEEP_TMP=1` prevents automatic workdir clean
 | `DATA_ROOT`, `OUT_ROOT`, `COHORT_MANIFEST`, `HCP_RUN_METADATA_ROOT` | Explicit input/output contracts |
 | `SYSTEM_NAME`, `UI_TC`, `PINC_TC`, `HOLD_JID` | Cluster, throttle and dependencies |
 | `RUN_ID` | Manifest/log identifier |
-| `WB_COMMAND` | Workbench path; default `software/workbench/bin_linux64/wb_command` |
 | `DRY_RUN=1`, `TASK_DRY_RUN=1` | Submission preview or task input preflight |
 | `OVERWRITE=1` | Explicit recomputation where supported, after exact-path approval |
 | `KEEP_TMP=1` | Retain temporary work; required for PDC/BANDA |

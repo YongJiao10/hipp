@@ -128,19 +128,59 @@ def test_directory_manifest_keeps_other_figures_rendered_by_earlier_calls(tmp_pa
     second.write_bytes(b"b")
     manifest_path = tmp_path / "group_overview_manifest.json"
     manifest_path.write_text(json.dumps({"items": [
-        {"overview_png": str(first), "assignment_variant": "roi-fisherz", "note": "old"},
-        {"overview_png": str(gone), "assignment_variant": "stale"},
+        {"overview_png": str(first), "layout": "annotation-pair", "assignment_variant": "roi-fisherz", "note": "old"},
+        {"overview_png": str(gone), "layout": "annotation-pair", "assignment_variant": "stale"},
     ]}), encoding="utf-8")
 
     merged = overview_mod.merge_overview_manifest_items(
-        manifest_path, [{"overview_png": str(second), "assignment_variant": "top20"}],
+        manifest_path, [{"overview_png": str(second), "layout": "annotation-pair", "assignment_variant": "top20"}],
     )
     assert [item["assignment_variant"] for item in merged] == ["roi-fisherz", "top20"]
 
     replaced = overview_mod.merge_overview_manifest_items(
-        manifest_path, [{"overview_png": str(first), "assignment_variant": "roi-fisherz", "note": "new"}],
+        manifest_path, [{"overview_png": str(first), "layout": "annotation-pair", "assignment_variant": "roi-fisherz", "note": "new"}],
     )
     assert [item.get("note") for item in replaced] == ["new"]
+
+
+def test_directory_manifest_with_retired_layout_stops_merge(tmp_path):
+    import json
+
+    old_png, current_png, new_png = (tmp_path / name for name in ("old.png", "current.png", "new.png"))
+    for path in (old_png, current_png, new_png):
+        path.touch()
+    manifest_path = tmp_path / "group_overview_manifest.json"
+    manifest_path.write_text(json.dumps({"items": [
+        {"layout": "dual-smoothing", "overview_png": str(old_png)},
+        {"layout": "annotation-pair", "overview_png": str(current_png)},
+    ]}), encoding="utf-8")
+    with pytest.raises(ValueError, match="retired overview layout"):
+        overview_mod.merge_overview_manifest_items(
+            manifest_path, [{"layout": "annotation-pair", "overview_png": str(new_png)}],
+        )
+    assert old_png.is_file()
+
+
+def test_default_gradient_cli_renders_all_three_pairs_for_one_smoothing(tmp_path, monkeypatch):
+    monkeypatch.setattr(overview_mod, "validate_group_atlas_root_for_route", lambda *_args: None)
+    monkeypatch.setattr(overview_mod, "ensure_combo_ready", lambda **_kwargs: None)
+    monkeypatch.setattr(overview_mod, "_discover_gradient_comp_tags", lambda *_args: ["g1g2g3"])
+    calls = []
+
+    def render(**kwargs):
+        calls.append(kwargs)
+        return {"overview_png": str(kwargs["present_dir"] / (kwargs["annotation_pair"] + ".png")),
+                "rows": [], "layout": kwargs["layout"], "assignment_variant": kwargs["annotation_pair"]}
+
+    monkeypatch.setattr(overview_mod, "render_combo", render)
+    monkeypatch.setattr(sys, "argv", [
+        "06_01_build_group_overview.py", "--group-root", str(tmp_path / "group"),
+        "--present-dir", str(tmp_path / "present"), "--methods", "gradient-spectral", "--atlases", "kong2022",
+        "--route-tag", "pfm", "--smoothing", "4mm", "--skip-readme", "--skip-manifest",
+    ])
+    assert overview_mod.main() == 0
+    assert [call["annotation_pair"] for call in calls] == ["roi-fisherz", "network-ts-fisherz", "top20"]
+    assert all(call["smoothing"] == "4mm" and call["layout"] == "annotation-pair" for call in calls)
 
 
 def _write_profile_run(root, hemi, profile, *, k=3, declare=True):

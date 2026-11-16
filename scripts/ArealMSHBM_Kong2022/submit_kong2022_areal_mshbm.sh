@@ -97,11 +97,23 @@ case "${dataset}" in
     job_prefix="${dataset}_k22"
     manifest_prefix="${dataset}"
     ;;
+  nih_rtms)
+    dataset_label="NIH_rTMS"
+    default_data_root="/Shared/jianglab/3_Data_Working/Depression/NIH_rTMS/xcpd_surf/restfmri"
+    default_out_root="${repo_root}/outputs_nih_rtms/inputs/kong2022/cortex_references/pfm_areal_mshbm"
+    job_prefix="nih_k22"
+    manifest_prefix="nih_rtms"
+    ;;
   *)
-    echo "ERROR: unsupported DATASET=${DATASET:-}. Expected jj_tms, stanford, iowa7t, estt, iowa_hcp500, hcp7t, pdc, or banda." >&2
+    echo "ERROR: unsupported DATASET=${DATASET:-}. Expected jj_tms, stanford, iowa7t, estt, iowa_hcp500, hcp7t, pdc, banda, or nih_rtms." >&2
     exit 2
     ;;
 esac
+# PDC, BANDA and NIH rTMS consume an exact cohort manifest and fail closed.
+cohort_dataset=0
+if [[ "${dataset}" =~ ^(pdc|banda|nih_rtms)$ ]]; then
+  cohort_dataset=1
+fi
 
 if [ "${dataset}" = "iowa7t" ]; then
   case "${iowa7t_branch}" in
@@ -252,7 +264,8 @@ if [ "${dataset}" = "estt" ] && [ -z "${PYTHON_EXE:-}" ]; then
 fi
 cbig_code_dir="${CBIG_CODE_DIR:-${repo_root}/external/CBIG}"
 group_prior="${GROUP_PRIOR:-${cbig_code_dir}/stable_projects/brain_parcellation/Kong2022_ArealMSHBM/lib/group_priors/HCP_fs_LR_32k_40sub/400/gMSHBM/beta50/Params_Final.mat}"
-wb_command="${WB_COMMAND:-${repo_root}/software/workbench/bin_linux64/wb_command}"
+# Fixed: Workbench 2.2.1 cannot start on Argon (glibc 2.17); no override is accepted.
+wb_command="${repo_root}/software/workbench_2.1.0/bin_linux64/wb_command"
 
 dry_run="${DRY_RUN:-0}"
 task_dry_run="${TASK_DRY_RUN:-0}"
@@ -260,7 +273,7 @@ smoke_n="${SMOKE_N:-0}"
 subjects_csv="${SUBJECT_IDS_CSV:-}"
 subject_ids_file="${SUBJECT_IDS_FILE:-}"
 overwrite="${OVERWRITE:-0}"
-keep_tmp="${KEEP_TMP:-$([[ "${dataset}" = "iowa_hcp500" || "${dataset}" = "hcp7t" || "${dataset}" = "pdc" || "${dataset}" = "banda" ]] && printf 1 || printf 0)}"
+keep_tmp="${KEEP_TMP:-$([[ "${dataset}" = "iowa_hcp500" || "${dataset}" = "hcp7t" || "${cohort_dataset}" = 1 ]] && printf 1 || printf 0)}"
 hcp_run_metadata_root="${HCP_RUN_METADATA_ROOT:-${repo_root}/outputs_hcp/inputs/qc/run_metadata}"
 cohort_manifest="${COHORT_MANIFEST:-}"
 hold_jid="${HOLD_JID:-}"
@@ -281,7 +294,7 @@ usage() {
 Usage: $(basename "$0")
 
 Environment controls:
-  DATASET=jj_tms|stanford|iowa7t|estt|iowa_hcp500|hcp7t|pdc|banda
+  DATASET=jj_tms|stanford|iowa7t|estt|iowa_hcp500|hcp7t|pdc|banda|nih_rtms
                         Dataset preset. Default: jj_tms.
   STANFORD_VARIANT=36p
                         Stanford input version. Auto-detected from DATA_ROOT;
@@ -299,10 +312,10 @@ Environment controls:
   UI_TC=N               UI array throttle. IDAS default: 3; Argon default: 5.
   PINC_TC=N             PINC array throttle. IDAS default: 7; Argon default: 15.
   OVERWRITE=1           Recompute existing outputs.
-  KEEP_TMP=1            Retain task temporary files. Required for pdc/banda.
+  KEEP_TMP=1            Retain task temporary files. Required for pdc/banda/nih_rtms.
   HCP_RUN_METADATA_ROOT=... HCP7T physical-run metadata root; defaults to
                         outputs_hcp/inputs/qc/run_metadata.
-  COHORT_MANIFEST=...   Exact metadata-derived PDC/BANDA input manifest.
+  COHORT_MANIFEST=...   Exact PDC/BANDA/NIH_rTMS input manifest.
   HOLD_JID=...          Explicit comma-separated prerequisite SGE job IDs.
   IOWA7T_BRANCH=...     Required for DATASET=iowa7t: multiband or multi_echo.
   IOWA7T_VARIANT=...    Optional for DATASET=iowa7t: 0p, 32p, 36p, or noxcpd.
@@ -351,9 +364,9 @@ if [ "$((ui_tc + pinc_tc))" -gt "${max_concurrency}" ]; then
 fi
 
 cohort_ids=()
-if [ "${dataset}" = "pdc" ] || [ "${dataset}" = "banda" ]; then
+if [ "${cohort_dataset}" = 1 ]; then
   if [ "${keep_tmp}" != "1" ] || [ "${overwrite}" != "0" ]; then
-    echo "ERROR: PDC/BANDA requires KEEP_TMP=1 OVERWRITE=0; existing outputs must remain protected." >&2
+    echo "ERROR: PDC/BANDA/NIH_rTMS requires KEEP_TMP=1 OVERWRITE=0; existing outputs must remain protected." >&2
     exit 2
   fi
   cohort_manifest="${COHORT_MANIFEST:-${repo_root}/outputs_${dataset}/inputs/kong2022/manifests/${dataset}_cortex_inputs.json}"
@@ -366,7 +379,7 @@ fi
 mkdir -p "${manifest_dir}" "${log_root}"
 
 read_subjects() {
-  if [ "${dataset}" = "pdc" ] || [ "${dataset}" = "banda" ]; then
+  if [ "${cohort_dataset}" = 1 ]; then
     if [ -n "${subject_ids_file}" ] && [ -n "${subjects_csv}" ]; then
       echo "ERROR: select SUBJECT_IDS_FILE or SUBJECT_IDS_CSV, not both." >&2
       return 2
@@ -412,7 +425,7 @@ if [ -z "${selected_ids}" ]; then
 fi
 mapfile -t all_ids <<< "${selected_ids}"
 
-if [ "${dataset}" = "pdc" ] || [ "${dataset}" = "banda" ]; then
+if [ "${cohort_dataset}" = 1 ]; then
   for sid in "${all_ids[@]}"; do
     found=0
     for declared_id in "${cohort_ids[@]}"; do

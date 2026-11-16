@@ -34,7 +34,8 @@ host_name="$(hostname)"
 overwrite="${OVERWRITE:-0}"
 task_dry_run="${TASK_DRY_RUN:-0}"
 matlab_mode="${MATLAB_MODE:-batch}"
-wb_command="${WB_COMMAND:-${repo_root}/software/workbench/bin_linux64/wb_command}"
+# Fixed: Workbench 2.2.1 cannot start on Argon (glibc 2.17); no override is accepted.
+wb_command="${repo_root}/software/workbench_2.1.0/bin_linux64/wb_command"
 cbig_code_dir="${CBIG_CODE_DIR:-${repo_root}/external/CBIG}"
 group_prior="${GROUP_PRIOR:-${cbig_code_dir}/stable_projects/brain_parcellation/Kong2022_ArealMSHBM/lib/group_priors/HCP_fs_LR_32k_40sub/400/gMSHBM/beta50/Params_Final.mat}"
 
@@ -169,7 +170,7 @@ for path in "${required[@]}"; do
   fi
 done
 if [ ! -x "${wb_command}" ]; then
-  echo "ERROR: WB_COMMAND is not executable: ${wb_command}" >&2
+  echo "ERROR: Workbench 2.1.0 is not executable: ${wb_command}" >&2
   exit 3
 fi
 

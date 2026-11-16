@@ -75,11 +75,22 @@ case "${dataset}" in
     default_out_root="${repo_root}/outputs_${dataset}/inputs/kong2022/cortex_references/routea_areal_mshbm"
     tmp_prefix="${dataset}_kong2022"
     ;;
+  nih_rtms)
+    dataset_label="NIH_rTMS"
+    default_data_root="/Shared/jianglab/3_Data_Working/Depression/NIH_rTMS/xcpd_surf/restfmri"
+    default_out_root="${repo_root}/outputs_nih_rtms/inputs/kong2022/cortex_references/pfm_areal_mshbm"
+    tmp_prefix="nih_rtms_kong2022"
+    ;;
   *)
-    echo "ERROR: unsupported DATASET=${DATASET:-}. Expected jj_tms, stanford, iowa7t, estt, iowa_hcp500, hcp7t, pdc, or banda." >&2
+    echo "ERROR: unsupported DATASET=${DATASET:-}. Expected jj_tms, stanford, iowa7t, estt, iowa_hcp500, hcp7t, pdc, banda, or nih_rtms." >&2
     exit 2
     ;;
 esac
+# PDC, BANDA and NIH rTMS consume an exact cohort manifest and fail closed.
+cohort_dataset=0
+if [[ "${dataset}" =~ ^(pdc|banda|nih_rtms)$ ]]; then
+  cohort_dataset=1
+fi
 
 if [ "${dataset}" = "iowa7t" ]; then
   case "${iowa7t_branch}" in
@@ -227,19 +238,20 @@ if [ "${dataset}" = "estt" ] && [ -z "${PYTHON_EXE:-}" ]; then
 fi
 cbig_code_dir="${CBIG_CODE_DIR:-${repo_root}/external/CBIG}"
 group_prior="${GROUP_PRIOR:-${cbig_code_dir}/stable_projects/brain_parcellation/Kong2022_ArealMSHBM/lib/group_priors/HCP_fs_LR_32k_40sub/400/gMSHBM/beta50/Params_Final.mat}"
-wb_command="${WB_COMMAND:-${repo_root}/software/workbench/bin_linux64/wb_command}"
+# Fixed: Workbench 2.2.1 cannot start on Argon (glibc 2.17); no override is accepted.
+wb_command="${repo_root}/software/workbench_2.1.0/bin_linux64/wb_command"
 kong2022_dlabel="${KONG2022_DLABEL:-${repo_root}/external/Schaefer2018_Kong2022/Schaefer2018_400Parcels_Kong2022_17Networks_order.dlabel.nii}"
 overwrite="${OVERWRITE:-0}"
-keep_tmp="${KEEP_TMP:-$([[ "${dataset}" = "iowa_hcp500" || "${dataset}" = "hcp7t" || "${dataset}" = "pdc" || "${dataset}" = "banda" ]] && printf 1 || printf 0)}"
+keep_tmp="${KEEP_TMP:-$([[ "${dataset}" = "iowa_hcp500" || "${dataset}" = "hcp7t" || "${cohort_dataset}" = 1 ]] && printf 1 || printf 0)}"
 hcp_run_metadata_root="${HCP_RUN_METADATA_ROOT:-${repo_root}/outputs_hcp/inputs/qc/run_metadata}"
 cohort_manifest="${COHORT_MANIFEST:-}"
-if [ "${dataset}" = "pdc" ] || [ "${dataset}" = "banda" ]; then
+if [ "${cohort_dataset}" = 1 ]; then
   if [ "${keep_tmp}" != "1" ] || [ "${overwrite}" != "0" ]; then
-    echo "ERROR: PDC/BANDA requires KEEP_TMP=1 OVERWRITE=0." >&2
+    echo "ERROR: PDC/BANDA/NIH_rTMS requires KEEP_TMP=1 OVERWRITE=0." >&2
     exit 2
   fi
   if [ -z "${subject_ids_file}" ] && [ -z "${subject_ids_csv}" ]; then
-    echo "ERROR: PDC/BANDA tasks require an explicit subject list from the shared launcher." >&2
+    echo "ERROR: PDC/BANDA/NIH_rTMS tasks require an explicit subject list from the shared launcher." >&2
     exit 2
   fi
   cohort_manifest="${COHORT_MANIFEST:-${repo_root}/outputs_${dataset}/inputs/kong2022/manifests/${dataset}_cortex_inputs.json}"
@@ -297,7 +309,7 @@ else
   else
     tmp_root="/tmp/${tmp_prefix}_${job_id}_${task_id}_${subject}"
   fi
-  if [ "${dataset}" = "pdc" ] || [ "${dataset}" = "banda" ]; then
+  if [ "${cohort_dataset}" = 1 ]; then
     tmp_root="$(mktemp -d "/tmp/${tmp_prefix}_${job_id}_${task_id}_${subject}.XXXXXX")"
   fi
   project_dir="${tmp_root}/cbig_project"
@@ -308,10 +320,10 @@ input_manifest="${tmp_root}/inputs/input_manifest.json"
 lh_labels="${subject_out}/lh_labels.txt"
 rh_labels="${subject_out}/rh_labels.txt"
 provenance_path="${subject_out}/provenance.json"
-if [ "${dataset}" = "pdc" ] || [ "${dataset}" = "banda" ]; then
+if [ "${cohort_dataset}" = 1 ]; then
   for existing in "${lh_labels}" "${rh_labels}" "${provenance_path}"; do
     if [ -e "${existing}" ]; then
-      echo "ERROR: refusing to reuse an existing PDC/BANDA result: ${existing}; inspect its input provenance before resubmission." >&2
+      echo "ERROR: refusing to reuse an existing PDC/BANDA/NIH_rTMS result: ${existing}; inspect its input provenance before resubmission." >&2
       exit 2
     fi
   done
@@ -389,7 +401,7 @@ if [ "${dataset}" != "iowa_hcp500" ] && [ "${dataset}" != "iowa7t" ]; then
     "${script_dir}/prepare_kong2022_areal_mshbm_subject_inputs.py"
   )
 fi
-if [ "${dataset}" = "pdc" ] || [ "${dataset}" = "banda" ]; then
+if [ "${cohort_dataset}" = 1 ]; then
   required+=("${cohort_manifest}" "${script_dir}/prepare_kong2022_areal_mshbm_subject_inputs.py")
 fi
 if [ "${dataset}" = "estt" ]; then
@@ -425,7 +437,7 @@ left_midthickness=""
 right_midthickness=""
 sulc_dscalar=""
 
-if [ "${dataset}" = "pdc" ] || [ "${dataset}" = "banda" ]; then
+if [ "${cohort_dataset}" = 1 ]; then
   "${python_exe}" "${script_dir}/prepare_kong2022_areal_mshbm_subject_inputs.py" \
     --action prepare-cohort \
     --dataset "${dataset}" --data-root "${data_root}" \

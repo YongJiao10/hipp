@@ -461,6 +461,17 @@ def resolve_cohort_gradient_root(
     return base if cohort is None else base / str(cohort).strip()
 
 
+ANNOTATION_PAIR_BY_ASSIGNMENT_VARIANT = {
+    "fisherz": "roi-fisherz",
+    "ovr_logistic_canonical7": "roi-fisherz",
+    "ovr_logistic_family17": "roi-fisherz",
+    "network_ts_fisherz": "network-ts-fisherz",
+    "ovr_logistic_canonical7_network_ts": "network-ts-fisherz",
+    "ovr_logistic_family17_network_ts": "network-ts-fisherz",
+    "normalized_top20_count": "top20",
+}
+
+
 def annotation_pair_overview_name(annotation_pair: str) -> str:
     """Overview filename of one annotation pair; top20 has no OVR model, so no OVR rows."""
     return "top20_overview.png" if annotation_pair == "top20" else f"{annotation_pair}_ovr_overview.png"

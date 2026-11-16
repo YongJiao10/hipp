@@ -236,7 +236,7 @@ Source labels remain separate from data-derived network annotations.
 |---|---|---|
 | `kong2022_pfm` | `pfm` | Individualized Kong400 FC; canonical7 default |
 | `kong2022_fixed` | `fixed` | Public-atlas Kong400 FC; canonical7 default |
-| `kong2022_pfm_17net`, `kong2022_fixed_17net` | `pfm_17net`, `fixed_17net` | Reuse PFM/Fixed FC and gradient banks; explicit family17, gradient-only |
+| `kong2022_pfm_17net`, `kong2022_fixed_17net` | `pfm_17net`, `fixed_17net` | Reuse PFM/Fixed FC, gradients and the corresponding canonical7 spatial clusters; explicit family17; gradient methods plus clusterless `wta-top` |
 | `kong2022_pfm_ctxreg` | `pfm_ctxreg` | Cortex-regressed hippocampal signals; upstream PFM references and surface masks |
 | `kong2022_pfm_ctxdrop` | `pfm_ctxdrop` | Exclude valid cortex within 20 mm before ROI averaging; gradient-spectral/WTA |
 | `lynch2024_20net`, `lynch2024_7net` | Matching atlas slug | Hard-label Lynch references; both reuse the Lynch20 gradient bank |
@@ -245,8 +245,34 @@ For family17 group overviews, pass `--route-tag pfm_17net` or
 `--route-tag fixed_17net` to `06_01_build_group_overview.py`. The explicit
 route selects the family17 assignment taxonomy for lineage validation;
 the consumed gradient FC bank must have 400 ordered Kong2022 ROI columns.
-Family17 overviews use a wider layout with vertical network labels. Signed
+Family17 overviews use the same canvas and column proportions as canonical7,
+with vertical network labels. Signed
 Fisher-z heatmap annotations preserve negative signs.
+For the same per-smoothing layouts as canonical7, select `--smoothing 2mm` or
+`4mm` and each `--annotation-pair` (`roi-fisherz`, `network-ts-fisherz`,
+`top20`). Their OVR rows use family17 ROI or family17 network-time-series
+features, respectively.
+
+Family17 `wta-top` is a clusterless run over the `family17` registry column
+with the same `normalized_top20_count` assignment as canonical7. It does not
+use `--reuse-fixed-cluster-root`:
+
+```bash
+/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/05_02_run_group_atlas.py --shared-root outputs_hcp/inputs/kong2022/shared_inputs/pfm --surface-root outputs_hcp/inputs/kong2022/shared_inputs/surface --reference-root outputs_hcp/inputs/kong2022/shared_inputs/pfm --out-root outputs_hcp/work/group_atlas/pfm_17net --methods wta-top --atlases kong2022 --route-tag pfm_17net --network-taxonomy family17
+/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/06_01_build_group_overview.py --group-root outputs_hcp/work/group_atlas/pfm_17net --present-dir outputs_hcp/present/overviews/pfm_17net/wta-top/2mm --atlases kong2022 --methods wta-top --coverage-threshold 0.80 --route-tag pfm_17net --assignment-variant normalized_top20_count --smoothing 2mm
+```
+
+Repeat the overview with `4mm`. `06_01` rejects a Kong WTA source whose
+manifest `network_taxonomy` differs from the route (`family17` for
+`*_17net`, otherwise `canonical7`).
+
+To produce family17 annotations for an existing TopSim/Ward result, use
+`05_02_run_group_atlas.py --route-tag pfm_17net --network-taxonomy family17
+--profile topsim --methods gradient-ward --reuse-fixed-cluster-root
+outputs_hcp/work/group_atlas/pfm/topsim` with the same source inputs and cohort.
+The analogous TopFC run selects `--profile topfc --methods gradient-spectral`
+and the `pfm/topfc` source. The output records its canonical7 source and reuses
+its spatial labels and K diagnostics.
 
 For HCP cortex controls, the formal route roots are
 `outputs_hcp/inputs/kong2022/shared_inputs/<route>/`,
@@ -273,9 +299,11 @@ explicitly when a controlled signal root is separate.
 - Kong2022 gradient overviews of a three-cluster partition add a column of
   cluster-to-cortex FC tiles (C1 Anterior, C2 Middle, C3 Posterior). Each tile
   shows the left/right mean of the run's `cluster_roi_profile.npy` on the
-  inflated cortex (`RdBu_r`, +/-0.15 Fisher-z) with its ten most positive and
+  inflated cortex (`RdBu_r`, unclipped piecewise-linear scale with a 0.15
+  Fisher-z knee spanning the figure's own range) with its ten most positive and
   ten most negative ROIs. `lib/cortex_fc_tiles.py` draws the tile for the
-  overview and for the multi-dataset hippocampus/cortex figure. Family17 and
+  overview and for the multi-dataset hippocampus/cortex figure. Family17
+  gradient overviews use the same 400-ROI cortical profiles and column;
   `wta-top` overviews have no such column.
 - Renderers consume exact manifest-declared assignment and template assets.
   Select `--group-root`/`--out-root`, route and assignment variant explicitly

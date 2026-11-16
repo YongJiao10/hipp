@@ -42,6 +42,7 @@ from lib.stale_products import print_stale_figures
 from lib.gradient_clustering import GRADIENT_METHODS
 from lib.network_ovr import OVR_VARIANTS
 from lib.output_layout import (
+    ANNOTATION_PAIR_BY_ASSIGNMENT_VARIANT,
     annotation_pair_overview_name,
     DEFAULT_FIXED_17NET_GROUP_ATLAS_ROOT,
     DEFAULT_FIXED_GROUP_ATLAS_ROOT,
@@ -75,6 +76,7 @@ class RenderJob:
     route_tag: str
     mode_tag: str | None
     group_root: Path
+    smoothing: str
     assignment_variant: str | None = None
 
 
@@ -134,7 +136,14 @@ def build_render_jobs(
             ("fixed", None, route_roots["fixed"]),
             ("fixed_17net", None, route_roots["fixed_17net"]),
         ],
-        "wta-top": [("pfm", None, route_roots["pfm"]), ("pfm_ctxreg", None, route_roots["pfm_ctxreg"]), ("pfm_ctxdrop", None, route_roots["pfm_ctxdrop"]), ("fixed", None, route_roots["fixed"])],
+        "wta-top": [
+            ("pfm", None, route_roots["pfm"]),
+            ("pfm_17net", None, route_roots["pfm_17net"]),
+            ("pfm_ctxreg", None, route_roots["pfm_ctxreg"]),
+            ("pfm_ctxdrop", None, route_roots["pfm_ctxdrop"]),
+            ("fixed", None, route_roots["fixed"]),
+            ("fixed_17net", None, route_roots["fixed_17net"]),
+        ],
     }
     route_roots_by_method.update({
         method: list(route_roots_by_method["gradient-spectral"])
@@ -152,16 +161,27 @@ def build_render_jobs(
             else:
                 variants = assignment_variants
             for assignment_variant in variants:
-                jobs.append(
-                    RenderJob(
-                        method=method,
-                        route_tag=str(route_tag),
-                        mode_tag=(None if mode_tag is None else str(mode_tag)),
-                        group_root=Path(group_root).resolve(),
-                        assignment_variant=assignment_variant,
+                for smoothing in ("2mm", "4mm"):
+                    jobs.append(
+                        RenderJob(
+                            method=method,
+                            route_tag=str(route_tag),
+                            mode_tag=(None if mode_tag is None else str(mode_tag)),
+                            group_root=Path(group_root).resolve(),
+                            assignment_variant=assignment_variant,
+                            smoothing=smoothing,
+                        )
                     )
-                )
     return jobs
+
+
+def annotation_pair_for_job(method: str, assignment_variant: str | None) -> str | None:
+    """Select the exact maintained interpretation for each gradient assignment."""
+    if method not in GRADIENT_METHODS:
+        return None
+    if assignment_variant in ANNOTATION_PAIR_BY_ASSIGNMENT_VARIANT:
+        return ANNOTATION_PAIR_BY_ASSIGNMENT_VARIANT[assignment_variant]
+    raise ValueError(f"Unsupported gradient overview assignment variant: {assignment_variant!r}")
 
 
 def expected_overview_path(
@@ -171,16 +191,27 @@ def expected_overview_path(
     route_tag: str,
     mode_tag: str | None,
     assignment_variant: str | None = None,
+    smoothing: str,
 ) -> Path:
-    bits = [ATLAS, method, "group_overview"]
-    if method in GRADIENT_METHODS:
-        bits.append(DEFAULT_GRADIENT_COMPONENT_TAG)
-    bits.append(route_tag)
-    if mode_tag:
-        bits.append(mode_tag)
-    if assignment_variant:
+    if smoothing not in {"2mm", "4mm"}:
+        raise ValueError(f"Unsupported smoothing: {smoothing!r}")
+    pair = annotation_pair_for_job(method, assignment_variant)
+    if pair is not None:
+        filename = annotation_pair_overview_name(pair)
+    elif method in CLUSTERLESS_METHODS:
+        filename = "wta_overview.png"
+    elif assignment_variant is not None:
+        bits = [ATLAS, method, "group_overview"]
+        if method in GRADIENT_METHODS:
+            bits.append(DEFAULT_GRADIENT_COMPONENT_TAG)
+        bits.append(route_tag)
+        if mode_tag:
+            bits.append(mode_tag)
         bits.append(assignment_variant)
-    return present_dir / route_tag / f"{'_'.join(bits)}.png"
+        filename = f"{'_'.join(bits)}.png"
+    else:
+        raise ValueError(f"Missing assignment variant for {method}")
+    return present_dir / route_tag / method / smoothing / filename
 
 
 def discover_hcp_profile_overviews(present_dir: Path) -> list[dict[str, object]]:
@@ -316,6 +347,7 @@ def main() -> int:
                 route_tag=job.route_tag,
                 mode_tag=job.mode_tag,
                 assignment_variant=job.assignment_variant,
+                smoothing=job.smoothing,
             ).resolve()
             if overview_png.exists():
                 records.append(
@@ -323,6 +355,7 @@ def main() -> int:
                         "route_tag": job.route_tag,
                         "mode_tag": "" if job.mode_tag is None else job.mode_tag,
                         "method": job.method,
+                        "smoothing": job.smoothing,
                         "assignment_variant": "" if job.assignment_variant is None else job.assignment_variant,
                         "source_group_root": str(job.group_root),
                         "overview_png": str(overview_png),
@@ -333,7 +366,7 @@ def main() -> int:
             group_root = Path(job.group_root).resolve()
             if not group_root.exists():
                 raise FileNotFoundError(f"Missing group_root: {group_root}")
-            route_present_dir = present_dir / job.route_tag
+            route_present_dir = present_dir / job.route_tag / job.method / job.smoothing
             cmd = [
                 args.python_exe,
                 str(BUILD_PRESENT_SCRIPT),
@@ -351,10 +384,15 @@ def main() -> int:
                 job.route_tag,
                 "--skip-manifest",
                 "--skip-readme",
+                "--smoothing",
+                job.smoothing,
             ]
             if job.mode_tag:
                 cmd.extend(["--mode-tag", job.mode_tag])
-            if job.assignment_variant:
+            pair = annotation_pair_for_job(job.method, job.assignment_variant)
+            if pair is not None:
+                cmd.extend(["--annotation-pair", pair])
+            elif job.assignment_variant:
                 cmd.extend(["--assignment-variant", job.assignment_variant])
             if args.scene:
                 cmd.extend(["--scene", str(Path(args.scene).resolve())])
@@ -365,6 +403,7 @@ def main() -> int:
                 route_tag=job.route_tag,
                 mode_tag=job.mode_tag,
                 assignment_variant=job.assignment_variant,
+                smoothing=job.smoothing,
             ).resolve()
             if not overview_png.exists():
                 raise FileNotFoundError(f"Expected overview not found: {overview_png}")
@@ -373,6 +412,7 @@ def main() -> int:
                     "route_tag": job.route_tag,
                     "mode_tag": "" if job.mode_tag is None else job.mode_tag,
                     "method": job.method,
+                    "smoothing": job.smoothing,
                     "assignment_variant": "" if job.assignment_variant is None else job.assignment_variant,
                     "source_group_root": str(group_root),
                     "overview_png": str(overview_png),

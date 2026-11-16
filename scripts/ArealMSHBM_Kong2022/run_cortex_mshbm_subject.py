@@ -81,9 +81,7 @@ def main() -> int:
             "CBIG_CODE_DIR": str(args.cbig_code_dir.resolve()),
             "GROUP_PRIOR": str(args.group_prior.resolve()),
             "KONG2022_DLABEL": str(args.kong2022_dlabel.resolve()),
-            "WB_COMMAND": env.get(
-                "WB_COMMAND", str(REPO_ROOT / "software" / "workbench" / "bin_linux64" / "wb_command")
-            ),
+            "WB_COMMAND": str(REPO_ROOT / "software" / "workbench_2.1.0" / "bin_linux64" / "wb_command"),
             "KEEP_TMP": "1",
             "TASK_DRY_RUN": "1" if args.dry_run else "0",
             "OVERWRITE": env.get("OVERWRITE", "0"),

@@ -18,6 +18,7 @@ from typing import Sequence
 import pandas as pd
 
 from .core import CANONICAL7_ORDER, KONG_NATIVE17_ORDER, LYNCH_NATIVE20_ORDER
+from scripts.core_workflow.lib.network_colors import NETWORK_DISPLAY_NAMES
 
 
 EMPTY_PATIENT_PANEL_TEXT = "No uncorrected p < 0.05 results"
@@ -85,19 +86,6 @@ def _facet_key(frame: pd.DataFrame) -> list[tuple[str, str, str]]:
     )
 
 
-DISPLAY_NAMES = {
-    "DorsalAttention": "Dorsal attention", "VentralAttention": "Ventral attention",
-    "Default_Parietal": "Default · parietal",
-    "Default_Anterolateral": "Default · anterolateral",
-    "Default_Dorsolateral": "Default · dorsolateral",
-    "Default_Retrosplenial": "Default · retrosplenial",
-    "Visual_Lateral": "Visual · lateral", "Visual_Dorsal/VentralStream": "Visual · dorsal/ventral",
-    "Visual_V5": "Visual · V5", "Visual_V1": "Visual · V1",
-    "Premotor/DorsalAttentionII": "Premotor / DAN II",
-    "CinguloOpercular/Action-mode": "Cingulo-opercular / action",
-    "Somatomotor_Hand": "Somatomotor · hand", "Somatomotor_Face": "Somatomotor · face",
-    "Somatomotor_Foot": "Somatomotor · foot", "SomatoCognitiveAction": "Somato-cognitive action",
-}
 TAXONOMY_TITLES = {
     "kong_canonical7": "Kong2022  /  canonical 7",
     "lynch_canonical7": "Lynch2024  /  canonical 7",
@@ -135,7 +123,7 @@ def _draw_panel(axis, frame, networks, *, limit, series_column, series, colors, 
     axis.xaxis.set_major_locator(MaxNLocator(nbins=5, symmetric=True))
     axis.grid(axis="x", color="#e7ebef", lw=0.6, zorder=0)
     axis.set_axisbelow(True)
-    axis.set_yticks(range(len(networks)), [DISPLAY_NAMES.get(n, n) for n in networks] if labels else [])
+    axis.set_yticks(range(len(networks)), [NETWORK_DISPLAY_NAMES.get(n, n) for n in networks] if labels else [])
     axis.tick_params(axis="both", length=0, labelsize=9, colors=MUTED, pad=7)
     for spine in axis.spines.values():
         spine.set_visible(False)

@@ -241,7 +241,7 @@ def main() -> int:
         payload["run_metadata"] = manifest["run_metadata"]
         payload["run_lengths"] = manifest["run_lengths"]
         payload["concat_timepoints"] = manifest["concat_timepoints"]
-    if args.dataset in ("pdc", "banda"):
+    if args.dataset in ("pdc", "banda", "nih_rtms"):
         for key in ("source_subject", "cohort_manifest", "cohort_manifest_sha256",
                     "source_manifest", "source_manifest_sha256", "session_policy"):
             payload[key] = manifest[key]

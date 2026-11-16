@@ -98,13 +98,56 @@ keys remain as shown; display abbreviations do not replace input or output keys.
 | `Limbic` | Limbic Network | LIM |
 | `CinguloOpercular` | Cingulo-Opercular Network | CO |
 
-CON means Control in this project; use CO for Cingulo-Opercular. Preserve
-atlas-native names, subnetwork suffixes and published terminology when reporting
-those specific labels, and identify the atlas or source. A cross-atlas merge is
-an analysis mapping, not a claim that its source networks are identical; use
-`config/cross_atlas_network_merge.json` for the defined Kong2022 and Lynch2024
-canonical7 mapping. Do not rename existing artifacts or change their selection
-contracts solely to conform to display terminology.
+CON means Control in this project; use CO for Cingulo-Opercular. For native
+17- and 20-network views, use the following source-key-to-display mappings.
+Keep the atlas and taxonomy identified in figure titles or captions. Preserve
+source keys in data, metadata and artifact selection; these aliases change only
+presentation. A cross-atlas merge is an analysis mapping, not a claim that its
+source networks are identical; use `config/cross_atlas_network_merge.json` for
+the defined canonical7 mapping.
+
+Kong2022 native 17 networks:
+
+| Source key | Display abbreviation |
+|---|---|
+| `DefaultA`, `DefaultB`, `DefaultC` | DMN-A, DMN-B, DMN-C |
+| `ContA`, `ContB`, `ContC` | CON-A, CON-B, CON-C |
+| `SalVenAttnA`, `SalVenAttnB` | VAN-A, VAN-B |
+| `DorsAttnA`, `DorsAttnB` | DAN-A, DAN-B |
+| `SomMotA`, `SomMotB` | SMN-A, SMN-B |
+| `VisualA`, `VisualB`, `VisualC` | VN-A, VN-B, VN-C |
+| `Aud`, `Language` | AUD, LAN |
+
+The original `SalVenAttn` key denotes salience/ventral attention; VAN-A/B are
+project display aliases and do not erase that source terminology.
+
+Lynch2024 native 20 networks (Noise is a separate non-network label):
+
+| Source key | Display abbreviation |
+|---|---|
+| `Default_Parietal` | DMN-Par |
+| `Default_Anterolateral` | DMN-AntLat |
+| `Default_Dorsolateral` | DMN-DorsLat |
+| `Default_Retrosplenial` | DMN-Retro |
+| `Visual_Lateral` | VN-Lat |
+| `Visual_Dorsal/VentralStream` | VN-DV |
+| `Visual_V5`, `Visual_V1` | VN-V5, VN-V1 |
+| `Frontoparietal` | FPN |
+| `DorsalAttention` | DAN |
+| `Premotor/DorsalAttentionII` | PM/DAN-II |
+| `Language` | LAN |
+| `Salience` | SAL |
+| `CinguloOpercular/Action-mode` | CO/AM |
+| `MedialParietal` | MP |
+| `Somatomotor_Hand`, `Somatomotor_Face`, `Somatomotor_Foot` | SMN-Hand, SMN-Face, SMN-Foot |
+| `Auditory` | AUD |
+| `SomatoCognitiveAction` | SCAN |
+
+Preserve atlas-native names and published terminology when referring to the
+source; do not rename existing artifacts or change selection contracts solely
+to conform to display terminology. FPN and CO/AM remain distinct native Lynch
+networks even though both map to canonical7 Control; SAL and VAN are likewise
+not interchangeable native labels.
 
 ## Runtime
 

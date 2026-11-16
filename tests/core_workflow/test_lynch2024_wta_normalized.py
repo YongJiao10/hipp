@@ -77,7 +77,8 @@ def test_normalized_topn_wta_prefers_fraction_over_raw_count() -> None:
 def test_wta_method_routes_by_atlas_taxonomy() -> None:
     assert atlas_mod.method_allowed_for_atlas("wta-top", "kong2022") is True
     assert atlas_mod.method_allowed_for_atlas("wta-top", "kong2022", network_taxonomy="canonical8") is True
-    assert atlas_mod.method_allowed_for_atlas("wta-top", "kong2022", network_taxonomy="family17") is False
+    assert atlas_mod.method_allowed_for_atlas("wta-top", "kong2022", network_taxonomy="family17") is True
+    assert atlas_mod.method_allowed_for_atlas("wta-top", "kong2022", network_taxonomy="lynch20") is False
     assert atlas_mod.method_allowed_for_atlas("wta-top", "kong2022_7net") is False
     assert atlas_mod.method_allowed_for_atlas("wta-top", "lynch2024_7net", network_taxonomy="lynch7") is True
     assert atlas_mod.method_allowed_for_atlas("wta-top", "lynch2024_7net", network_taxonomy="canonical7") is False
@@ -125,10 +126,11 @@ def test_lynch_omitted_taxonomy_is_inferred_from_atlas() -> None:
         atlas_mod.default_network_taxonomy_for_atlases(("kong2022", "lynch2024_7net"))
 
 
-def test_group_atlas_rejects_wta_request_for_gradient_only_taxonomy() -> None:
-    with pytest.raises(ValueError, match="canonical7/canonical8"):
-        atlas_mod.validate_requested_methods_for_taxonomy(("gradient-spectral", "wta-top"), "family17")
+def test_group_atlas_accepts_family17_wta_and_rejects_unknown_taxonomy() -> None:
+    atlas_mod.validate_requested_methods_for_taxonomy(("gradient-spectral", "wta-top"), "family17", ("kong2022",))
     atlas_mod.validate_requested_methods_for_taxonomy(("gradient-spectral",), "family17")
+    with pytest.raises(ValueError, match="canonical7/canonical8/family17"):
+        atlas_mod.validate_requested_methods_for_taxonomy(("wta-top",), "kong17")
 
 
 def test_group_atlas_rejects_wta_request_for_non_kong_atlas() -> None:

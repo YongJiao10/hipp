@@ -161,6 +161,7 @@ from lib.network_ts_fisherz import (
     subjectwise_cluster_network_fisherz_profile,
 )
 from lib.route_tags import (
+    FAMILY17_ROUTE_TAGS,
     ROUTE_TAG_CHOICES,
     resolve_group_atlas_out_root,
     infer_route_tag_from_shared_root,
@@ -187,6 +188,7 @@ from lib.network_ovr import (
     export_network_ovr,
     fit_network_ovr,
     fit_network_ovr_from_network_profiles,
+    network_ts_ovr_variant,
 )
 from lib.cluster_roi_profile_contract import (
     GRADIENT_PROFILE_CONTRACT_TAG,
@@ -247,7 +249,7 @@ DEFAULT_GRADIENT_COMPONENTS = (1, 2, 3)
 GRADIENT_N_COMPONENTS_COMPUTED = 5
 GRADIENT_BRAINSPACE_KERNEL = "pearson"
 NETWORK_TAXONOMIES = ("canonical7", "canonical8", "family17", "lynch20", "lynch7")
-WTA_NETWORK_TAXONOMIES = frozenset({"canonical7", "canonical8", "lynch20", "lynch7"})
+WTA_NETWORK_TAXONOMIES = frozenset({"canonical7", "canonical8", "family17", "lynch20", "lynch7"})
 DEFAULT_CLUSTER_LEVEL_ASSIGNMENT_VARIANT = "fisherz"
 MAX_K_EVAL_JOBS = 10
 RESUME_SIGNATURE_VERSION = 1
@@ -920,10 +922,11 @@ def method_allowed_for_atlas(
             return str(network_taxonomy) == expected_taxonomy
         return method_key in LYNCH2024_METHODS
     if method_key == "wta-top":
-        # Direct WTA consumes the Kong2022 400-ROI profile.  A canonical7
-        # taxonomy view, where needed, is derived from that same invariant
-        # profile with the same normalized Top-20 count definition.
-        return atlas_key == "kong2022" and str(network_taxonomy) in {"canonical7", "canonical8"}
+        # Direct WTA consumes the Kong2022 400-ROI profile.  Canonical7 and
+        # family17 views are derived from that same invariant profile with the
+        # same normalized Top-20 count definition over the selected registry
+        # column.
+        return atlas_key == "kong2022" and str(network_taxonomy) in {"canonical7", "canonical8", "family17"}
     if is_gradient_method(method_key):
         return atlas_key == "kong2022"
     if method_key in KONG2022_ONLY_METHODS:
@@ -939,7 +942,7 @@ def validate_requested_methods_for_taxonomy(
     requested_methods = {str(method) for method in methods}
     if "wta-top" in requested_methods and str(network_taxonomy) not in WTA_NETWORK_TAXONOMIES:
         raise ValueError(
-            "wta-top requires canonical7/canonical8 for Kong2022 "
+            "wta-top requires canonical7/canonical8/family17 for Kong2022 "
             "normalized_top20_count or lynch20/lynch7 for direct Lynch "
             "Fisher-z assignment; "
             f"got {network_taxonomy!r}."
@@ -2456,6 +2459,19 @@ def load_fixed_cluster_reuse(
         "clustering_recomputed": False,
         "k_selection_recomputed": False,
     }
+
+
+def family17_reused_k_diagnostics(source_run: Path, k_final: int) -> tuple[list[dict], dict]:
+    """Preserve the canonical7 source's full K diagnostics for family17."""
+    path = Path(source_run) / "k_selection_summary.json"
+    summary = load_json(path)
+    if int(summary["chosen_k_final"]) != int(k_final):
+        raise ValueError(f"Reused K diagnostics disagree with source labels: {path}")
+    rows = [dict(row) for row in summary["rows"]]
+    if sum(int(row["selected_final"]) for row in rows) != 1:
+        raise ValueError(f"Reused K diagnostics must contain one selected K: {path}")
+    primary = {key: summary[key] for key in ("chosen_k_final", "automatic_k_final", "primary_k_source")}
+    return rows, primary
 
 
 def load_cluster_colors() -> list[tuple[int, int, int, int]]:
@@ -5687,10 +5703,12 @@ def main() -> int:
             # canonical8 is retired upstream (see _resolve_methods_and_taxonomy),
             # so it can never reach this reuse-fixed validation.
             allowed_taxonomies = {"canonical7"}
+        elif route_tag in FAMILY17_ROUTE_TAGS:
+            allowed_taxonomies = {"family17"}
         else:
             raise ValueError(
-                "--reuse-fixed-cluster-root is supported only for explicit Kong PFM/control "
-                "or Lynch canonical7 routes"
+                "--reuse-fixed-cluster-root is supported only for explicit Kong PFM/control, "
+                "Kong family17, or Lynch canonical7 routes"
             )
         if network_taxonomy not in allowed_taxonomies:
             raise ValueError(
@@ -5698,7 +5716,7 @@ def main() -> int:
                 f"allowed={sorted(allowed_taxonomies)}"
             )
         if not any(is_gradient_method(m) for m in args.methods):
-            raise ValueError("--reuse-fixed-cluster-root requires gradient-spectral in --methods")
+            raise ValueError("--reuse-fixed-cluster-root requires a gradient method in --methods")
 
     out_root.mkdir(parents=True, exist_ok=True)
     reference_root = (
@@ -6407,6 +6425,8 @@ def main() -> int:
                                 target_rbf_scale=args.rbf_scale,
                                 target_gradient_features_active=group_features_active,
                             )
+                            if network_taxonomy == "family17" and fixed_cluster_reuse["source_network_taxonomy"] != "canonical7":
+                                raise ValueError("Family17 cluster reuse requires a canonical7 source manifest")
                             labels_by_k[int(reused_k)] = reused_labels.astype(np.int32)
                             np.save(run_dir / f"group_labels_k{reused_k}.npy", reused_labels.astype(np.int32))
                             rows.append(reused_row)
@@ -6877,6 +6897,10 @@ def main() -> int:
                                 f"Primary K={k_final} was not evaluated for combo={combo}; "
                                 f"evaluated={sorted(labels_by_k)}"
                             )
+                        if network_taxonomy == "family17" and fixed_cluster_reuse is not None:
+                            rows, primary_k = family17_reused_k_diagnostics(
+                                Path(fixed_cluster_reuse["source_run"]), k_final,
+                            )
                         primary_row = primary_k_row(rows, k_final)
                         labels_final = reorder_labels_by_long_axis(
                             labels_by_k[k_final],
@@ -7021,7 +7045,7 @@ def main() -> int:
                                 variants=ovr_variants, out_dir=run_dir,
                             ))
                         if atlas == "kong2022" and not is_clusterless_method(method):
-                            if args.profile is not None or "network_ts_fisherz" in args.assignment_variant or NETWORK_TS_OVR_VARIANT in args.assignment_variant:
+                            if args.profile is not None or "network_ts_fisherz" in args.assignment_variant or any(v.endswith("_network_ts") for v in args.assignment_variant):
                                 net_ts_3d, net_ts_mean, net_ts_subs = subjectwise_cluster_network_fisherz_profile(
                                     group_labels_final=labels_final,
                                     support_mask=support,
@@ -7054,20 +7078,22 @@ def main() -> int:
                                     subject_ids=net_ts_subs,
                                     cluster_ids=list(range(1, k_final + 1)),
                                     network_names=list(network_names),
+                                    taxonomy=network_taxonomy,
                                 )
+                                net_ts_variant = network_ts_ovr_variant(network_taxonomy)
                                 net_ts_ovr_paths = export_network_ovr(
                                     net_ts_ovr_res,
                                     run_dir,
-                                    prefix=NETWORK_TS_OVR_VARIANT,
+                                    prefix=net_ts_variant,
                                 )
-                                assignment_variant_specs[NETWORK_TS_OVR_VARIANT] = {
+                                assignment_variant_specs[net_ts_variant] = {
                                     "status_rows": net_ts_ovr_res["assignment_rows"],
                                     "dominant": [row["top1_network"] for row in net_ts_ovr_res["assignment_rows"]],
                                     "assignment_metric": OVR_ASSIGNMENT_METRIC,
                                     "q_threshold": None,
                                     "top_n_cap": None,
                                     "network_names": net_ts_ovr_res["network_names"],
-                                    "network_taxonomy": "canonical7",
+                                    "network_taxonomy": network_taxonomy,
                                     "network_profile": str(net_ts_ovr_paths["beta"].resolve()),
                                     "profile_units": "raw_beta_per_Fisher_z_unit",
                                     "ovr_model_metadata": str(net_ts_ovr_paths["metadata"].resolve()),
@@ -7323,6 +7349,11 @@ def main() -> int:
                             "cluster_assignment_status_ovr_logistic_canonical7_network_ts": (
                                 str(functional_variant_payloads[NETWORK_TS_OVR_VARIANT]["cluster_assignment_status"])
                                 if NETWORK_TS_OVR_VARIANT in functional_variant_payloads
+                                else None
+                            ),
+                            "cluster_assignment_status_ovr_logistic_family17_network_ts": (
+                                str(functional_variant_payloads["ovr_logistic_family17_network_ts"]["cluster_assignment_status"])
+                                if "ovr_logistic_family17_network_ts" in functional_variant_payloads
                                 else None
                             ),
                             "cluster_network_ts_profile": (

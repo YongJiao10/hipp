@@ -213,6 +213,7 @@ def build_present_cmd(
     coverage_threshold: float,
     route_tag: str,
     mode_tag: str | None,
+    smoothing: str,
 ) -> list[str]:
     manifest_bits = ["group_overview_manifest", route_tag]
     if mode_tag:
@@ -225,7 +226,9 @@ def build_present_cmd(
         "--group-root",
         str(group_root),
         "--present-dir",
-        str(present_dir),
+        str(present_dir / method / smoothing),
+        "--smoothing",
+        smoothing,
         "--atlases",
         "kong2022",
         "--methods",
@@ -335,17 +338,19 @@ def run_method_combo_parallel(
         if procs:
             time.sleep(5.0)
 
-    present_cmd = build_present_cmd(
-        python_exe=python_exe,
-        group_root=group_root,
-        present_dir=present_dir,
-        method=method,
-        coverage_threshold=coverage_threshold,
-        route_tag=route_tag,
-        mode_tag=mode_tag,
-    )
-    print(f"[present] {method}", flush=True)
-    subprocess.run(present_cmd, check=True, cwd=str(REPO_ROOT), env=child_env)
+    for smoothing in SMOOTHINGS:
+        present_cmd = build_present_cmd(
+            python_exe=python_exe,
+            group_root=group_root,
+            present_dir=present_dir,
+            method=method,
+            coverage_threshold=coverage_threshold,
+            route_tag=route_tag,
+            mode_tag=mode_tag,
+            smoothing=smoothing,
+        )
+        print(f"[present] {method} {smoothing}", flush=True)
+        subprocess.run(present_cmd, check=True, cwd=str(REPO_ROOT), env=child_env)
 
 
 def main() -> int:

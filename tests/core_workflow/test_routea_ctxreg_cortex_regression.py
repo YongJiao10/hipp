@@ -365,7 +365,7 @@ def test_routea_ctx_control_route_contracts_and_paths() -> None:
         method="network-spectral",
         route_tag="pfm_ctxreg",
         mode_tag=None,
-        assignment_variant="fisherz",
+        assignment_variant="fisherz", smoothing="2mm",
     )
     assert overview_path.name == "kong2022_network-spectral_group_overview_pfm_ctxreg_fisherz.png"
 
@@ -374,9 +374,9 @@ def test_routea_ctx_control_route_contracts_and_paths() -> None:
         method="gradient-spectral",
         route_tag="pfm_ctxdrop",
         mode_tag=None,
-        assignment_variant="fisherz",
+        assignment_variant="fisherz", smoothing="2mm",
     )
-    assert ctxdrop_overview_path.name == "kong2022_gradient-spectral_group_overview_g1g2g3_pfm_ctxdrop_fisherz.png"
+    assert ctxdrop_overview_path.name == "roi-fisherz_ovr_overview.png"
 
 
 

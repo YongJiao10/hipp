@@ -55,6 +55,26 @@ HCP_METADATA = {
     "pdc": ("datastructure_manifest.txt", "associated_file"),
     "banda": ("datastructure_manifest.txt", "associated_file"),
 }
+NIH_DATASET = "nih_rtms"
+NIH_VARIANT = "xcpd36P_fsLR91k_denoised"
+NIH_RUN_ID = "task-rest"
+NIH_SESSIONS = ("ses-1", "ses-2")
+NIH_ROSTER = Path(__file__).resolve().parents[1] / "nih_rtms" / "sublist.txt"
+COHORT_DATASETS = (*HCP_METADATA, NIH_DATASET)
+
+
+def variant_for(dataset: str) -> str:
+    return NIH_VARIANT if dataset == NIH_DATASET else HCP_VARIANT
+
+
+def run_ids_for(dataset: str) -> tuple:
+    return (NIH_RUN_ID,) if dataset == NIH_DATASET else HCP_RUNS
+
+
+def policies_for(dataset: str) -> tuple:
+    if dataset == NIH_DATASET:
+        return ("each_subject_session_is_one_Kong2022_subject", "not_applicable_one_rest_run_per_session")
+    return ("each_metadata_declared_rest_run_is_one_Kong2022_session", "excluded_to_avoid_duplicate_frames")
 
 
 def normalize_dataset(value: str) -> str:
@@ -79,7 +99,7 @@ def write_ones(path: Path, count: int) -> None:
             f.write("1\n")
 
 
-def hcp_identity(dataset: str, source_subject: str) -> dict:
+def cohort_identity(dataset: str, source_subject: str) -> dict:
     if dataset == "pdc":
         match = re.fullmatch(r"([a-z]\d{4})_(\d{2})_MR", source_subject)
         if not match:
@@ -87,26 +107,89 @@ def hcp_identity(dataset: str, source_subject: str) -> dict:
         base, session = match.groups()
         return {"subject": f"sub-{base}s{session}", "source_subject": source_subject,
                 "base_subject_id": base, "session_number": session}
+    if dataset == NIH_DATASET:
+        match = re.fullmatch(r"(D\d{2}|HVS\d+)_(ses-[12])", source_subject)
+        if not match:
+            raise ValueError(f"Invalid NIH rTMS subject-session: {source_subject}")
+        base, session = match.groups()
+        return {"subject": f"sub-{base}s{session[-1]}", "source_subject": source_subject,
+                "base_subject_id": base, "session_number": session}
     if dataset == "banda" and re.fullmatch(r"BANDA\d{3}_MR", source_subject):
         return {"subject": f"sub-{source_subject.removesuffix('_MR')}",
                 "source_subject": source_subject}
     raise ValueError(f"Invalid {dataset} source identity: {source_subject}")
 
 
-def hcp_run_path(root: Path, source_subject: str, run: str) -> Path:
-    return root / source_subject / "MNINonLinear" / "Results" / run / f"{run}_Atlas_{HCP_VARIANT}.dtseries.nii"
+def source_subject_dir(root: Path, source_subject: str, dataset: str) -> Path:
+    if dataset == NIH_DATASET:
+        base, session = source_subject.split("_")
+        return root / f"sub-{base}" / session
+    return root / source_subject
 
 
-def check_hcp_file(row: dict) -> None:
+def cohort_run_path(root: Path, source_subject: str, run: str, dataset: str) -> Path:
+    subject_dir = source_subject_dir(root, source_subject, dataset)
+    if dataset == NIH_DATASET:
+        base, session = source_subject.split("_")
+        return (subject_dir / "func" /
+                f"sub-{base}_{session}_task-rest_space-fsLR_den-91k_desc-denoised_bold.dtseries.nii")
+    return subject_dir / "MNINonLinear" / "Results" / run / f"{run}_Atlas_{HCP_VARIANT}.dtseries.nii"
+
+
+def check_cohort_file(row: dict) -> None:
     path = Path(row["dtseries"])
     stat = path.stat()
     if not path.is_file() or stat.st_size <= 0:
-        raise ValueError(f"Missing/empty canonical {HCP_VARIANT} input: {path}")
+        raise ValueError(f"Missing/empty canonical input: {path}")
     if stat.st_size != row["size_bytes"] or stat.st_mtime_ns != row["mtime_ns"]:
-        raise ValueError(f"Stale {HCP_VARIANT} declaration: {path}; size or mtime changed")
+        raise ValueError(f"Stale declaration: {path}; size or mtime changed")
 
 
-def build_hcp_manifest(dataset: str, root: Path) -> dict:
+def build_nih_manifest(root: Path) -> dict:
+    source_bytes = NIH_ROSTER.read_bytes()
+    roster = [line.strip() for line in source_bytes.decode("utf-8").splitlines()
+              if line.strip() and not line.lstrip().startswith("#")]
+    if len(roster) != len(set(roster)):
+        raise ValueError(f"Duplicate subjects in {NIH_ROSTER}")
+    subjects, excluded, missing_sessions = [], [], []
+    for sid in roster:
+        base = sid.removeprefix("sub-")
+        sessions = [ses for ses in NIH_SESSIONS if (root / f"sub-{base}" / ses).is_dir()]
+        if not sessions:
+            excluded.append({"subject": f"sub-{base}", "reason": "no_session_directory_in_xcpd_surf"})
+            continue
+        missing_sessions.extend({"subject": f"sub-{base}", "session": ses,
+                                 "reason": "no_session_directory_in_xcpd_surf"}
+                                for ses in NIH_SESSIONS if ses not in sessions)
+        for ses in sessions:
+            source_subject = f"{base}_{ses}"
+            path = cohort_run_path(root, source_subject, NIH_RUN_ID, NIH_DATASET)
+            stat = path.stat()
+            if not path.is_file() or stat.st_size <= 0:
+                raise ValueError(f"Missing/empty canonical input: {path}")
+            subjects.append({**cohort_identity(NIH_DATASET, source_subject),
+                             "runs": [{"run_id": NIH_RUN_ID, "dtseries": str(path),
+                                       "size_bytes": stat.st_size, "mtime_ns": stat.st_mtime_ns}]})
+    if not subjects:
+        raise ValueError(f"No declared NIH rTMS rest CIFTIs under {root}")
+    session_policy, concat_policy = policies_for(NIH_DATASET)
+    return {
+        "schema_version": 1, "dataset": NIH_DATASET, "variant": NIH_VARIANT,
+        "generated_at_utc": datetime.now(timezone.utc).isoformat(),
+        "data_root": str(root), "source_manifest": str(NIH_ROSTER),
+        "source_manifest_sha256": hashlib.sha256(source_bytes).hexdigest(),
+        "session_policy": session_policy, "concatenated_rest_policy": concat_policy,
+        "source_concatenated_rest_subject_count": 0,
+        "subjects": subjects, "excluded_subjects": excluded,
+        "missing_sessions": missing_sessions,
+        "subject_count": len(subjects), "run_count": len(subjects),
+        "runs_per_subject": {1: len(subjects)},
+    }
+
+
+def build_cohort_manifest(dataset: str, root: Path) -> dict:
+    if dataset == NIH_DATASET:
+        return build_nih_manifest(root)
     metadata_name, column = HCP_METADATA[dataset]
     source = root.parent / "metadata" / metadata_name
     source_bytes = source.read_bytes()
@@ -125,14 +208,14 @@ def build_hcp_manifest(dataset: str, root: Path) -> dict:
         if run == "rfMRI_REST":
             concatenated.add(source_subject)
             continue
-        path = hcp_run_path(root, source_subject, run)
+        path = cohort_run_path(root, source_subject, run, dataset)
         if str(path) in seen:
             raise ValueError(f"Duplicate canonical {HCP_VARIANT} declaration in {source}: {path}")
         seen.add(str(path))
         stat = path.stat()
         if not path.is_file() or stat.st_size <= 0:
             raise ValueError(f"Missing/empty canonical {HCP_VARIANT} input: {path}")
-        entry = by_subject.setdefault(source_subject, {**hcp_identity(dataset, source_subject), "runs": []})
+        entry = by_subject.setdefault(source_subject, {**cohort_identity(dataset, source_subject), "runs": []})
         entry["runs"].append({"run_id": run, "dtseries": str(path),
                               "size_bytes": stat.st_size, "mtime_ns": stat.st_mtime_ns})
     if not by_subject:
@@ -143,7 +226,7 @@ def build_hcp_manifest(dataset: str, root: Path) -> dict:
     missing_dirs = set(by_subject) - imaging_subjects
     if missing_dirs:
         raise ValueError(f"Metadata subjects missing from {root}: {sorted(missing_dirs)}")
-    excluded = [{**hcp_identity(dataset, sid), "reason": "no_run_level_rest_in_source_metadata"}
+    excluded = [{**cohort_identity(dataset, sid), "reason": "no_run_level_rest_in_source_metadata"}
                 for sid in sorted(imaging_subjects - set(by_subject))]
     subjects = []
     for sid in sorted(by_subject):
@@ -164,14 +247,17 @@ def build_hcp_manifest(dataset: str, root: Path) -> dict:
     }
 
 
-def load_hcp_manifest(path: Path, dataset: str, root: Path) -> dict:
+def load_cohort_manifest(path: Path, dataset: str, root: Path) -> dict:
     manifest = json.loads(path.read_text())
+    session_policy, concat_policy = policies_for(dataset)
+    source_expected = (str(NIH_ROSTER) if dataset == NIH_DATASET
+                       else str(root.parent / "metadata" / HCP_METADATA[dataset][0]))
     expected_values = (
-        ("schema_version", 1), ("dataset", dataset), ("variant", HCP_VARIANT),
+        ("schema_version", 1), ("dataset", dataset), ("variant", variant_for(dataset)),
         ("data_root", str(root)),
-        ("source_manifest", str(root.parent / "metadata" / HCP_METADATA[dataset][0])),
-        ("session_policy", "each_metadata_declared_rest_run_is_one_Kong2022_session"),
-        ("concatenated_rest_policy", "excluded_to_avoid_duplicate_frames"),
+        ("source_manifest", source_expected),
+        ("session_policy", session_policy),
+        ("concatenated_rest_policy", concat_policy),
     )
     for key, expected in expected_values:
         if manifest.get(key) != expected:
@@ -181,7 +267,7 @@ def load_hcp_manifest(path: Path, dataset: str, root: Path) -> dict:
     subjects = manifest.get("subjects", [])
     seen_subjects, seen_paths = set(), set()
     for entry in subjects:
-        expected_identity = hcp_identity(dataset, entry["source_subject"])
+        expected_identity = cohort_identity(dataset, entry["source_subject"])
         if any(entry.get(key) != value for key, value in expected_identity.items()):
             raise ValueError(f"Identity mismatch in {path}: {entry}")
         subject = entry["subject"]
@@ -191,14 +277,15 @@ def load_hcp_manifest(path: Path, dataset: str, root: Path) -> dict:
         runs = entry["runs"]
         if not runs or len({item["run_id"] for item in runs}) != len(runs):
             raise ValueError(f"Empty/duplicate run declarations in {path}: {subject}")
-        if any(item["run_id"] not in HCP_RUNS for item in runs):
+        run_ids = run_ids_for(dataset)
+        if any(item["run_id"] not in run_ids for item in runs):
             raise ValueError(f"Unsupported rest run in {path}: {subject}")
-        if [item["run_id"] for item in runs] != sorted((item["run_id"] for item in runs), key=HCP_RUNS.index):
+        if [item["run_id"] for item in runs] != sorted((item["run_id"] for item in runs), key=run_ids.index):
             raise ValueError(f"Run order mismatch in {path}: {subject}")
         for item in runs:
-            expected = str(hcp_run_path(root, entry["source_subject"], item["run_id"]))
+            expected = str(cohort_run_path(root, entry["source_subject"], item["run_id"], dataset))
             if item["dtseries"] != expected or expected in seen_paths:
-                raise ValueError(f"Canonical {HCP_VARIANT} path mismatch/duplicate in {path}: {item['dtseries']}; expected {expected}")
+                raise ValueError(f"Canonical path mismatch/duplicate in {path}: {item['dtseries']}; expected {expected}")
             if item["size_bytes"] <= 0 or item["mtime_ns"] <= 0:
                 raise ValueError(f"Invalid input fingerprint in {path}: {expected}")
             seen_paths.add(expected)
@@ -207,15 +294,15 @@ def load_hcp_manifest(path: Path, dataset: str, root: Path) -> dict:
     return manifest
 
 
-def prepare_hcp_subject(manifest_path: Path, dataset: str, root: Path, subject: str, output: Path) -> None:
-    manifest = load_hcp_manifest(manifest_path, dataset, root)
+def prepare_cohort_subject(manifest_path: Path, dataset: str, root: Path, subject: str, output: Path) -> None:
+    manifest = load_cohort_manifest(manifest_path, dataset, root)
     subject = f"sub-{subject.removeprefix('sub-')}"
     matches = [entry for entry in manifest["subjects"] if entry["subject"] == subject]
     if len(matches) != 1:
         raise ValueError(f"Expected one declaration for {subject} in {manifest_path}, got {len(matches)}")
     rows = []
     for index, declared in enumerate(matches[0]["runs"], 1):
-        check_hcp_file(declared)
+        check_cohort_file(declared)
         img = nib.load(declared["dtseries"])
         if not isinstance(img, nib.Cifti2Image) or len(img.shape) != 2:
             raise ValueError(f"Not a 2D CIFTI: {declared['dtseries']}")
@@ -239,8 +326,8 @@ def prepare_hcp_subject(manifest_path: Path, dataset: str, root: Path, subject: 
     run_list.write_text("".join(row["dtseries"] + "\n" for row in rows))
     censor_list.write_text("".join(row["censor"] + "\n" for row in rows))
     entry = matches[0]
-    payload = {**entry, "dataset": dataset, "variant": HCP_VARIANT, "data_root": str(root),
-               "subject_dir": str(root / entry["source_subject"]), "runs": rows,
+    payload = {**entry, "dataset": dataset, "variant": variant_for(dataset), "data_root": str(root),
+               "subject_dir": str(source_subject_dir(root, entry["source_subject"], dataset)), "runs": rows,
                "branch": None, "run_count": len(rows), "run_list": str(run_list), "censor_list": str(censor_list),
                "cohort_manifest": str(manifest_path),
                "cohort_manifest_sha256": hashlib.sha256(manifest_path.read_bytes()).hexdigest(),
@@ -248,7 +335,7 @@ def prepare_hcp_subject(manifest_path: Path, dataset: str, root: Path, subject: 
                "source_manifest_sha256": manifest["source_manifest_sha256"],
                "session_policy": manifest["session_policy"]}
     (inputs / "input_manifest.json").write_text(json.dumps(payload, indent=2) + "\n")
-    print(f"Prepared {subject}: {len(rows)} declared {HCP_VARIANT} runs, timepoints={[row['timepoints'] for row in rows]}")
+    print(f"Prepared {subject}: {len(rows)} declared runs, timepoints={[row['timepoints'] for row in rows]}")
 
 
 def main() -> int:
@@ -264,7 +351,7 @@ def main() -> int:
     parser.add_argument(
         "--dataset",
         default="jj_tms",
-        help="Dataset preset: jj_tms, stanford, iowa7t, iowa_hcp500, pdc, or banda.",
+        help="Dataset preset: jj_tms, stanford, iowa7t, iowa_hcp500, pdc, banda, or nih_rtms.",
     )
     parser.add_argument("--subject", help="Subject ID with or without sub- prefix.")
     parser.add_argument("--data-root", type=Path, help="Dataset root (imaging/ for PDC/BANDA).")
@@ -286,8 +373,8 @@ def main() -> int:
 
     dataset = normalize_dataset(args.dataset)
     if args.action in ("build-cohort", "list-cohort", "prepare-cohort"):
-        if dataset not in HCP_METADATA:
-            parser.error(f"--action {args.action} requires --dataset pdc or banda")
+        if dataset not in COHORT_DATASETS:
+            parser.error(f"--action {args.action} requires --dataset pdc, banda or nih_rtms")
         if args.data_root is None or not args.data_root.is_absolute():
             parser.error(f"--action {args.action} requires an absolute --data-root")
         if args.cohort_manifest is None:
@@ -295,18 +382,18 @@ def main() -> int:
         if args.action == "build-cohort":
             if args.cohort_manifest.exists():
                 parser.error(f"Refusing to replace existing cohort manifest: {args.cohort_manifest}")
-            cohort = build_hcp_manifest(dataset, args.data_root)
+            cohort = build_cohort_manifest(dataset, args.data_root)
             args.cohort_manifest.parent.mkdir(parents=True, exist_ok=True)
             args.cohort_manifest.write_text(json.dumps(cohort, indent=2) + "\n")
             print(json.dumps({key: cohort[key] for key in ("dataset", "subject_count", "run_count", "runs_per_subject", "excluded_subjects")}))
             return 0
-        cohort = load_hcp_manifest(args.cohort_manifest, dataset, args.data_root)
+        cohort = load_cohort_manifest(args.cohort_manifest, dataset, args.data_root)
         if args.action == "list-cohort":
             print("\n".join(entry["subject"].removeprefix("sub-") for entry in cohort["subjects"]))
             return 0
         if not args.subject or args.subject_output_dir is None:
             parser.error("prepare-cohort requires --subject and --subject-output-dir")
-        prepare_hcp_subject(args.cohort_manifest, dataset, args.data_root, args.subject,
+        prepare_cohort_subject(args.cohort_manifest, dataset, args.data_root, args.subject,
                             args.subject_output_dir)
         return 0
 

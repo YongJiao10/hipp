@@ -27,7 +27,7 @@ CORE_WORKFLOW_DIR = REPO_ROOT / "scripts" / "core_workflow"
 if str(CORE_WORKFLOW_DIR) not in sys.path:
     sys.path.insert(0, str(CORE_WORKFLOW_DIR))
 
-from lib.network_colors import load_network_colors
+from lib.network_colors import NETWORK_DISPLAY_NAMES, load_network_colors
 from lib.workbench import resolve_wb_command, run_workbench
 
 DEFAULT_SCENE = REPO_ROOT / "config" / "manual_wb_scenes" / "cortex_manual.scene"
@@ -43,32 +43,6 @@ DEFAULT_FASTANS_RESOURCES = REPO_ROOT / "external" / "FASTANS" / "resources"
 LYNCH_LABEL_LIST = DEFAULT_FASTANS_RESOURCES / "PFM" / "priors" / "Lynch2024" / "Lynch2024_LabelList.txt"
 LYNCH_PRIORS_PICKLE = DEFAULT_FASTANS_RESOURCES / "PFM" / "priors" / "Lynch2024" / "Lynch2024_priors.pickle"
 DEFAULT_LYNCH_STD_DLABEL = DEFAULT_FASTANS_RESOURCES / "PFM" / "priors" / "Lynch2024" / "Lynch2024_Standard_Prior.dlabel.nii"
-
-# Standardized short/literature display names for Lynch 2024 networks
-LYNCH_SHORT_NAMES: dict[str, str] = {
-    "Default_Parietal": "Def_Parietal",
-    "Default_Anterolateral": "Def_AntLat",
-    "Default_Dorsolateral": "Def_DorsLat",
-    "Default_Retrosplenial": "Def_Retro",
-    "Visual_Lateral": "Vis_Lateral",
-    "Visual_Dorsal/VentralStream": "Vis_DV_Stream",
-    "Visual_V5": "Vis_V5",
-    "Visual_V1": "Vis_V1",
-    "Frontoparietal": "Frontoparietal",
-    "DorsalAttention": "DorsalAttn",
-    "Premotor/DorsalAttentionII": "PM/DorsAttnII",
-    "Language": "Language",
-    "Salience": "Salience",
-    "CinguloOpercular/Action-mode": "CinguloOpercular",
-    "MedialParietal": "MedialParietal",
-    "Somatomotor_Hand": "SomMot_Hand",
-    "Somatomotor_Face": "SomMot_Face",
-    "Somatomotor_Foot": "SomMot_Foot",
-    "Auditory": "Auditory",
-    "SomatoCognitiveAction": "SCAN",
-    "Noise": "Noise",
-}
-
 
 def load_font(size: int) -> ImageFont.ImageFont:
     for font_name in [
@@ -93,7 +67,7 @@ def load_lynch_label_colors(label_list_path: Path = LYNCH_LABEL_LIST) -> list[tu
         if i + 1 >= len(lines):
             break
         raw_name = lines[i]
-        short_name = LYNCH_SHORT_NAMES.get(raw_name, raw_name)
+        short_name = NETWORK_DISPLAY_NAMES.get(raw_name, raw_name)
         parts = [int(p) for p in lines[i + 1].split()]
         rgba = (parts[1], parts[2], parts[3], parts[4])
         items.append((short_name, rgba))
@@ -208,7 +182,7 @@ def compute_lynch_similarity(
 
     per_net_dice: dict[str, float] = {}
     for i, raw_name in enumerate(raw_names, start=1):
-        short_name = LYNCH_SHORT_NAMES.get(raw_name, raw_name)
+        short_name = NETWORK_DISPLAY_NAMES.get(raw_name, raw_name)
         s_m = (std_data == i) & valid_mask
         p_m = (pfm_data == i) & valid_mask
         inter = np.sum(s_m & p_m)

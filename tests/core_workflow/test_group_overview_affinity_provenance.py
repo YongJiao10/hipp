@@ -306,7 +306,7 @@ def test_invalid_gradient_provenance_fails_before_figure_creation(
             route_tag="routea",
             mode_tag=None,
             assignment_variant="fisherz",
-            gradient_comp_tag="g1g2g3",
+            gradient_comp_tag="g1g2g3", smoothing="2mm",
         )
 
 
@@ -321,7 +321,7 @@ def test_overview_title_with_group_name_and_n_subjects() -> None:
         group_name="NTHC",
         n_subjects=51,
     )
-    assert title == "Group Overview | kong2022 | gradient-spectral | routea | fisherz | NTHC (N=51)"
+    assert title == "gradient-spectral | kong2022 | routea | fisherz | Group overview NTHC (N=51)"
 
     title_wta = overview_mod.overview_title(
         atlas="kong2022",
@@ -332,7 +332,7 @@ def test_overview_title_with_group_name_and_n_subjects() -> None:
         group_name="TEHC",
         n_subjects=40,
     )
-    assert title_wta == "Group Overview | kong2022 | wta-top | routea | TEHC (N=40)"
+    assert title_wta == "wta-top | kong2022 | routea | Group overview TEHC (N=40)"
 
 
 def test_infer_group_name_from_path() -> None:

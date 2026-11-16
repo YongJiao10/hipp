@@ -26,7 +26,12 @@ ROUTE_TAG_CHOICES = (
 )
 NETWORK_TAXONOMY_CHOICES = ("canonical7", "family17", "lynch20", "lynch7")
 _CANONICAL7_ROUTE_TAGS = frozenset({"pfm", "pfm_ctxreg", "pfm_ctxdrop", "fixed"})
-_FAMILY17_ROUTE_TAGS = frozenset({"pfm_17net", "fixed_17net"})
+FAMILY17_ROUTE_TAGS = frozenset({"pfm_17net", "fixed_17net"})
+
+
+def kong_network_taxonomy_for_route(route_tag: str | None) -> str:
+    """Kong2022 network taxonomy of a route: family17 routes are 17-network, all others canonical7."""
+    return "family17" if str(route_tag) in FAMILY17_ROUTE_TAGS else "canonical7"
 
 
 _ROUTE_DETECTION_ORDER = (
@@ -126,9 +131,9 @@ def resolve_route_tag_for_group_atlas_run(*, shared_root: Path, explicit_route: 
     else:
         route = _normalize_route_tag(explicit)
 
-    if route in _FAMILY17_ROUTE_TAGS and taxonomy != "family17":
+    if route in FAMILY17_ROUTE_TAGS and taxonomy != "family17":
         raise ValueError(f"--route-tag {route} requires --network-taxonomy family17.")
-    if taxonomy == "family17" and route not in _FAMILY17_ROUTE_TAGS:
+    if taxonomy == "family17" and route not in FAMILY17_ROUTE_TAGS:
         raise ValueError("--network-taxonomy family17 requires --route-tag pfm_17net or fixed_17net.")
     if route in _CANONICAL7_ROUTE_TAGS and taxonomy != "canonical7":
         raise ValueError(f"--route-tag {route} requires --network-taxonomy canonical7.")

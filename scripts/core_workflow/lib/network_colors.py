@@ -13,6 +13,20 @@ NETWORK_DISPLAY_NAMES = {
     "DorsalAttention": "DAN", "VentralAttention": "VAN", "Control": "CON",
     "Language": "LAN", "Auditory": "AUD", "Limbic": "LIM",
     "CinguloOpercular": "CO",
+    "DefaultA": "DMN-A", "DefaultB": "DMN-B", "DefaultC": "DMN-C",
+    "ContA": "CON-A", "ContB": "CON-B", "ContC": "CON-C",
+    "SalVenAttnA": "VAN-A", "SalVenAttnB": "VAN-B",
+    "DorsAttnA": "DAN-A", "DorsAttnB": "DAN-B",
+    "SomMotA": "SMN-A", "SomMotB": "SMN-B",
+    "VisualA": "VN-A", "VisualB": "VN-B", "VisualC": "VN-C", "Aud": "AUD",
+    "Default_Parietal": "DMN-Par", "Default_Anterolateral": "DMN-AntLat",
+    "Default_Dorsolateral": "DMN-DorsLat", "Default_Retrosplenial": "DMN-Retro",
+    "Visual_Lateral": "VN-Lat", "Visual_Dorsal/VentralStream": "VN-DV",
+    "Visual_V5": "VN-V5", "Visual_V1": "VN-V1", "Frontoparietal": "FPN",
+    "Premotor/DorsalAttentionII": "PM/DAN-II", "Salience": "SAL",
+    "CinguloOpercular/Action-mode": "CO/AM", "MedialParietal": "MP",
+    "Somatomotor_Hand": "SMN-Hand", "Somatomotor_Face": "SMN-Face",
+    "Somatomotor_Foot": "SMN-Foot", "SomatoCognitiveAction": "SCAN",
 }
 
 

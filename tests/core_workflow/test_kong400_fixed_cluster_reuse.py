@@ -17,6 +17,38 @@ sys.modules["kong_atlas_reuse"] = atlas
 SPEC.loader.exec_module(atlas)
 
 
+def test_family17_can_reuse_canonical7_ward_clustering(monkeypatch):
+    class ReachedOutputSetup(Exception):
+        pass
+
+    def stop_before_writing(*args, **kwargs):
+        raise ReachedOutputSetup
+
+    monkeypatch.setattr(Path, "mkdir", stop_before_writing)
+    monkeypatch.setattr(sys, "argv", [
+        "05_02_run_group_atlas.py", "--route-tag", "pfm_17net",
+        "--network-taxonomy", "family17", "--profile", "topsim",
+        "--methods", "gradient-ward", "--reuse-fixed-cluster-root", "source",
+    ])
+    with pytest.raises(ReachedOutputSetup):
+        atlas.main()
+
+
+def test_family17_reuse_preserves_all_source_k_diagnostics(tmp_path):
+    source = tmp_path / "source"
+    source.mkdir()
+    # The automatically selected K can differ from the displayed default K.
+    rows = [{"k": 2, "selected_final": 1}, {"k": 3, "selected_final": 0}]
+    (source / "k_selection_summary.json").write_text(json.dumps({
+        "rows": rows, "k_final": 3, "chosen_k_final": 3,
+        "automatic_k_final": 2, "primary_k_source": "default_k",
+    }))
+    copied_rows, primary = atlas.family17_reused_k_diagnostics(source, 3)
+    assert copied_rows == rows
+    assert primary["automatic_k_final"] == 2
+    assert primary["primary_k_source"] == "default_k"
+
+
 def make_source(tmp_path: Path, feature_count: int = 400) -> Path:
     run = tmp_path / "source" / "gradient-spectral" / "kong2022" / "2mm" / "cov_0p80" / "g1g2g3" / "hemi_L"
     run.mkdir(parents=True)

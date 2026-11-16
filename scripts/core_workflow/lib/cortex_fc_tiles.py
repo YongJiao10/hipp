@@ -24,13 +24,83 @@ DEFAULT_CMAP = "RdBu_r"
 COLORBAR_VMAX = 0.15
 COLORBAR_TICKS = (-0.15, -0.08, 0.0, 0.08, 0.15)
 COLORBAR_LABEL = "Mean Fisher-z Hippo-Cortex FC"
+# Two-segment colour scale: |z| <= COLORBAR_KNEE keeps 80% of the colormap (linear, for
+# contrast in the bulk of the ROIs); the remaining 10% per side spans the knee to the
+# figure's own data extreme, so no value is clipped and the colour bar shows the true range.
+COLORBAR_KNEE = COLORBAR_VMAX
+COLORBAR_INNER_FRACTION = 0.8
 SURFACE_SIZE = (1000, 700)
 COMPOSITE_DIVIDER_PX = 8
 
 
-def strength_colors(values: np.ndarray, vmax: float = COLORBAR_VMAX) -> np.ndarray:
+class KneeNorm(Normalize):
+    """Piecewise-linear norm with breakpoints at -knee, 0 and +knee.
+
+    [-knee, +knee] maps linearly onto the central `inner_fraction` of the colormap with 0
+    at its centre; [vmin, -knee] and [+knee, vmax] map onto the outer segments. A side whose
+    data extreme does not exceed the knee ends at the knee, leaving its outer colours unused,
+    so equal magnitudes receive equal colour intensity on both sides.
+    """
+
+    def __init__(self, *, vmin: float, vmax: float, knee: float = COLORBAR_KNEE,
+                 inner_fraction: float = COLORBAR_INNER_FRACTION) -> None:
+        knee = float(knee)
+        if not knee > 0.0:
+            raise ValueError(f"KneeNorm knee must be positive, got {knee}")
+        if not 0.0 < inner_fraction < 1.0:
+            raise ValueError(f"KneeNorm inner_fraction must be in (0, 1), got {inner_fraction}")
+        lo, hi = min(float(vmin), -knee), max(float(vmax), knee)
+        if not (np.isfinite(lo) and np.isfinite(hi)):
+            raise ValueError(f"KneeNorm bounds must be finite, got vmin={vmin} vmax={vmax}")
+        super().__init__(vmin=lo, vmax=hi, clip=True)
+        self.knee = knee
+        self.inner_fraction = float(inner_fraction)
+        outer = (1.0 - self.inner_fraction) / 2.0
+        xs, ys = [-knee, 0.0, knee], [outer, 0.5, 1.0 - outer]
+        if lo < -knee:
+            xs, ys = [lo, *xs], [0.0, *ys]
+        if hi > knee:
+            xs, ys = [*xs, hi], [*ys, 1.0]
+        self._xs = np.asarray(xs, dtype=np.float64)
+        self._ys = np.asarray(ys, dtype=np.float64)
+
+    def __call__(self, value, clip=None):
+        arr = np.ma.asarray(value, dtype=np.float64)
+        out = np.interp(arr.filled(np.nan), self._xs, self._ys)
+        return np.ma.masked_array(out, mask=np.ma.getmaskarray(arr) | ~np.isfinite(out))
+
+    def inverse(self, value):
+        return np.interp(np.asarray(value, dtype=np.float64), self._ys, self._xs)
+
+
+def cortex_fc_norm(values: np.ndarray) -> KneeNorm:
+    """Build the colour scale for one figure from all of its finite cortex FC values."""
     arr = np.asarray(values, dtype=np.float64)
-    norm = Normalize(vmin=-float(vmax), vmax=float(vmax), clip=True)
+    finite = arr[np.isfinite(arr)]
+    if finite.size == 0:
+        raise ValueError("Cortex FC colour scale requires at least one finite value")
+    return KneeNorm(vmin=float(finite.min()), vmax=float(finite.max()))
+
+
+def style_cortex_fc_colorbar(cbar, norm: KneeNorm, *, fontsize: float) -> None:
+    """Draw a horizontal colour bar on a linear Fisher-z axis spanning the figure's true range.
+
+    The colours keep the knee norm, so the gradient is steep inside the knee and shallow
+    beyond it, while tick spacing is proportional to Fisher-z.
+    """
+    cbar.ax.set_xscale("linear")
+    cbar.ax.set_xlim(norm.vmin, norm.vmax)
+    span = norm.vmax - norm.vmin
+    ticks = ticker.MaxNLocator(nbins=6, steps=[1, 2, 2.5, 5, 10]).tick_values(norm.vmin, norm.vmax)
+    ticks = [float(t) for t in ticks if norm.vmin + 0.04 * span <= t <= norm.vmax - 0.04 * span]
+    cbar.set_ticks(ticks, labels=[f"{t:+.2f}" if abs(t) >= 0.005 else "0" for t in ticks])
+    cbar.ax.tick_params(labelsize=fontsize)
+
+
+def strength_colors(values: np.ndarray, vmax: float = COLORBAR_VMAX, *, norm: Normalize | None = None) -> np.ndarray:
+    arr = np.asarray(values, dtype=np.float64)
+    if norm is None:
+        norm = Normalize(vmin=-float(vmax), vmax=float(vmax), clip=True)
     cmap = plt.get_cmap(DEFAULT_CMAP)
     colors = np.asarray(cmap(norm(np.nan_to_num(arr, nan=0.0))), dtype=np.float64)
     colors[np.isfinite(arr) & (arr == 0.0), :3] = 1.0
@@ -149,7 +219,7 @@ def render_cortex_top10_bars(
         ax.text(
             val + x_lim * 0.020,
             y,
-            f"{lbl} (+{val:.3f})",
+            f"{lbl} (+{val:.2f})",
             va="center",
             ha="left",
             fontsize=8.2,
@@ -165,7 +235,7 @@ def render_cortex_top10_bars(
         ax.text(
             val - x_lim * 0.020,
             y,
-            f"({val:.3f}) {lbl}",
+            f"({val:.2f}) {lbl}",
             va="center",
             ha="right",
             fontsize=8.2,
@@ -288,16 +358,19 @@ def render_cortex_fc_tile(
     vertex_arrays: dict[str, tuple[np.ndarray, np.ndarray]],
     cortex_assets: dict[str, Path],
     panels_dir: Path,
-    vmax: float = COLORBAR_VMAX,
+    norm: Normalize,
     bars: str = "below",
+    cached_surface: Path | None = None,
 ) -> Path:
     """Render one tile under `panels_dir/<panel_tag>/` and return the joined image."""
     panel_dir = Path(panels_dir) / panel_tag
     panel_dir.mkdir(parents=True, exist_ok=True)
-    surface_png = render_cortex_surface(
-        panel_tag=panel_tag, colors=strength_colors(values, vmax=vmax), roi_registry=roi_registry,
-        vertex_arrays=vertex_arrays, cortex_assets=cortex_assets, panel_dir=panel_dir,
-        out_png=panel_dir / f"{panel_tag}_surface.png",
-    )
+    surface_png = cached_surface
+    if surface_png is None:
+        surface_png = render_cortex_surface(
+            panel_tag=panel_tag, colors=strength_colors(values, norm=norm), roi_registry=roi_registry,
+            vertex_arrays=vertex_arrays, cortex_assets=cortex_assets, panel_dir=panel_dir,
+            out_png=panel_dir / f"{panel_tag}_surface.png",
+        )
     bar_png = render_cortex_top10_bars(panel_tag=panel_tag, values=values, roi_registry=roi_registry, panels_dir=panels_dir)
     return join_surface_and_bars(surface_png, bar_png, panel_dir / f"{panel_tag}_tile.png", bars=bars)

@@ -304,15 +304,10 @@ def compute_subject_label_roi_profiles(
 compute_subject_cluster_roi_profiles = compute_subject_label_roi_profiles
 
 
-def resolve_cortex_assets(
-    subject: str,
-    data_root: Path,
-    scene: Path,
-    dlabel: Path = KONG2022_DLABEL_PATH,
-    *,
-    sulc_dir: Path,
+def cortex_asset_paths(
+    subject: str, data_root: Path, scene: Path, dlabel: Path = KONG2022_DLABEL_PATH,
 ) -> dict[str, Path]:
-    """Load exact subject assets and split their declared sulc into render assets."""
+    """Resolve the exact persistent inputs without invoking Workbench."""
     subject = str(subject).removeprefix("sub-")
     anat = Path(data_root) / f"sub-{subject}" / "anat"
     required = {
@@ -329,6 +324,20 @@ def resolve_cortex_assets(
             f"Missing cortex rendering assets for sub-{subject}: {'; '.join(missing)}"
         )
 
+    return required
+
+
+def resolve_cortex_assets(
+    subject: str,
+    data_root: Path,
+    scene: Path,
+    dlabel: Path = KONG2022_DLABEL_PATH,
+    *,
+    sulc_dir: Path,
+) -> dict[str, Path]:
+    """Load exact subject assets and split their declared sulc into render assets."""
+    subject = str(subject).removeprefix("sub-")
+    required = cortex_asset_paths(subject, data_root, scene, dlabel)
     sulc_dir = Path(sulc_dir).resolve()
     sulc_dir.mkdir(parents=True, exist_ok=True)
     derived = {

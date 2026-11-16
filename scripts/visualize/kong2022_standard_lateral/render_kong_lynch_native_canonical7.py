@@ -35,7 +35,7 @@ from lib.kong2022_label_utils import (
     load_kong2022_merge_mapping,
     split_vertex_label_arrays,
 )
-from lib.network_colors import load_network_colors
+from lib.network_colors import NETWORK_DISPLAY_NAMES, load_network_colors
 from lib.workbench import resolve_wb_command, run_workbench
 
 DEFAULT_SCENE = REPO_ROOT / "config" / "manual_wb_scenes" / "cortex_manual.scene"
@@ -84,47 +84,23 @@ CANONICAL_7_ORDER: tuple[str, ...] = (
 )
 
 KONG_CAN7_CONSTITUENTS: dict[str, str] = {
-    "Default": "DefaultA, DefaultB, DefaultC",
-    "Visual": "VisualA, VisualB, VisualC",
-    "Somatomotor": "SomMotA, SomMotB, Aud",
-    "DorsalAttention": "DorsAttnA, DorsAttnB",
-    "VentralAttention": "SalVenAttnA, SalVenAttnB",
-    "Control": "ContA, ContB, ContC",
-    "Language": "Language",
+    "Default": "DMN-A, DMN-B, DMN-C",
+    "Visual": "VN-A, VN-B, VN-C",
+    "Somatomotor": "SMN-A, SMN-B, AUD",
+    "DorsalAttention": "DAN-A, DAN-B",
+    "VentralAttention": "VAN-A, VAN-B",
+    "Control": "CON-A, CON-B, CON-C",
+    "Language": "LAN",
 }
 
 LYNCH_CAN7_CONSTITUENTS: dict[str, str] = {
-    "Default": "Def_Par, AntLat, DorsLat, Retro, MedPar",
-    "Visual": "Vis_Lat, DV_Stream, Vis_V5, Vis_V1",
-    "Somatomotor": "SomMot_Hand, Face, Foot, Aud, SCAN",
-    "DorsalAttention": "DorsalAttn, PM/DorsAttnII",
-    "VentralAttention": "Salience",
-    "Control": "Frontoparietal, CinguloOpercular",
-    "Language": "Language",
-}
-
-LYNCH_SHORT_NAMES: dict[str, str] = {
-    "Default_Parietal": "Def_Parietal",
-    "Default_Anterolateral": "Def_AntLat",
-    "Default_Dorsolateral": "Def_DorsLat",
-    "Default_Retrosplenial": "Def_Retro",
-    "Visual_Lateral": "Vis_Lateral",
-    "Visual_Dorsal/VentralStream": "Vis_DV_Stream",
-    "Visual_V5": "Vis_V5",
-    "Visual_V1": "Vis_V1",
-    "Frontoparietal": "Frontoparietal",
-    "DorsalAttention": "DorsalAttn",
-    "Premotor/DorsalAttentionII": "PM/DorsAttnII",
-    "Language": "Language",
-    "Salience": "Salience",
-    "CinguloOpercular/Action-mode": "CinguloOpercular",
-    "MedialParietal": "MedialParietal",
-    "Somatomotor_Hand": "SomMot_Hand",
-    "Somatomotor_Face": "SomMot_Face",
-    "Somatomotor_Foot": "SomMot_Foot",
-    "Auditory": "Auditory",
-    "SomatoCognitiveAction": "SCAN",
-    "Noise": "Noise",
+    "Default": "DMN-Par, DMN-AntLat, DMN-DorsLat, DMN-Retro, MP",
+    "Visual": "VN-Lat, VN-DV, VN-V5, VN-V1",
+    "Somatomotor": "SMN-Hand, SMN-Face, SMN-Foot, AUD, SCAN",
+    "DorsalAttention": "DAN, PM/DAN-II",
+    "VentralAttention": "SAL",
+    "Control": "FPN, CO/AM",
+    "Language": "LAN",
 }
 
 
@@ -151,7 +127,7 @@ def load_lynch_label_colors(
         if i + 1 >= len(lines):
             break
         raw_name = lines[i]
-        short_name = LYNCH_SHORT_NAMES.get(raw_name, raw_name)
+        short_name = NETWORK_DISPLAY_NAMES.get(raw_name, raw_name)
         parts = [int(p) for p in lines[i + 1].split()]
         rgba = (parts[1], parts[2], parts[3], parts[4])
         items.append((short_name, rgba))

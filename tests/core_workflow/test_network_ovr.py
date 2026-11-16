@@ -15,6 +15,11 @@ from lib import kong2022_fc_contract as contract
 from lib.kong2022_label_utils import FAMILIES_17_ORDER, load_kong2022_merge_mapping
 
 
+def test_network_ts_ovr_variant_follows_taxonomy():
+    assert ovr.network_ts_ovr_variant("canonical7") == "ovr_logistic_canonical7_network_ts"
+    assert ovr.network_ts_ovr_variant("family17") == "ovr_logistic_family17_network_ts"
+
+
 @pytest.fixture
 def inputs(monkeypatch):
     mapping = load_kong2022_merge_mapping()

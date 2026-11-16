@@ -93,8 +93,12 @@ case "${dataset}" in
     repo_root="${REPO_ROOT:-/old_Users/yojiao/hipp}"
     out_root="${OUT_ROOT:-${repo_root}/outputs_${dataset}/inputs/kong2022/cortex_references/routea_areal_mshbm}"
     ;;
+  nih_rtms)
+    repo_root="${REPO_ROOT:-/old_Users/yojiao/hipp}"
+    out_root="${OUT_ROOT:-${repo_root}/outputs_nih_rtms/inputs/kong2022/cortex_references/pfm_areal_mshbm}"
+    ;;
   *)
-    echo "ERROR: unsupported DATASET=${DATASET:-}. Expected jj_tms, stanford, iowa7t, estt, iowa_hcp500, hcp7t, pdc, or banda." >&2
+    echo "ERROR: unsupported DATASET=${DATASET:-}. Expected jj_tms, stanford, iowa7t, estt, iowa_hcp500, hcp7t, pdc, banda, or nih_rtms." >&2
     exit 2
     ;;
 esac

@@ -329,6 +329,8 @@ def build_command_plan(*, subjects: list[str], layout: dict[str, Path], python_e
                         "0.80",
                         "--route-tag",
                         route,
+                        "--smoothing",
+                        "2mm",
                     ),
                 ),
             ]

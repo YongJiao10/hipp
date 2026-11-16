@@ -174,19 +174,22 @@ def test_overview_matrix_custom_group_atlas_root_uses_canonical_branch_children(
     assert by_route["fixed"].group_root == (custom_root / "fixed").resolve()
 
 
-def test_overview_matrix_does_not_create_family17_wta_jobs() -> None:
+def test_overview_matrix_creates_family17_wta_jobs() -> None:
     jobs = build_render_jobs(
         REPO_ROOT / "outputs_hcp" / "work" / "group_atlas",
         routes=("pfm_17net", "fixed_17net"),
         methods=("wta-top",),
     )
-    assert jobs == []
+    assert {(job.route_tag, job.smoothing) for job in jobs} == {
+        (route, smoothing) for route in ("pfm_17net", "fixed_17net") for smoothing in ("2mm", "4mm")
+    }
+    assert {job.assignment_variant for job in jobs} == {None}
 
 
 def test_overview_matrix_defaults_to_routea_only() -> None:
     jobs = build_render_jobs(REPO_ROOT / "outputs_hcp" / "inputs" / "kong2022")
     assert {job.route_tag for job in jobs} == {"pfm"}
-    assert len(jobs) == 7
+    assert len(jobs) == 14
 
 
 def test_overview_matrix_can_filter_methods_for_gradient_and_wta_only() -> None:
@@ -196,7 +199,7 @@ def test_overview_matrix_can_filter_methods_for_gradient_and_wta_only() -> None:
     )
     assert {job.route_tag for job in jobs} == {"pfm"}
     assert {job.method for job in jobs} == {"gradient-spectral", "wta-top"}
-    assert len(jobs) == 3
+    assert len(jobs) == 6
 
 
 def test_overview_matrix_keeps_normalized_top20_and_fisherz_assignment_variants() -> None:
@@ -205,8 +208,8 @@ def test_overview_matrix_keeps_normalized_top20_and_fisherz_assignment_variants(
     for job in jobs:
         by_method.setdefault(job.method, []).append(job.assignment_variant)
     for method in ("intrinsic-spectral", "network-spectral", "gradient-spectral"):
-        assert sorted(by_method[method]) == ["fisherz", "normalized_top20_count"]
-    assert by_method["wta-top"] == [None]
+        assert sorted(by_method[method]) == ["fisherz", "fisherz", "normalized_top20_count", "normalized_top20_count"]
+    assert by_method["wta-top"] == [None, None]
     assert "count" not in set(present_mod.ASSIGNMENT_VARIANT_CHOICES)
     assert "count" not in set(matrix_mod.ASSIGNMENT_VARIANTS)
     out = expected_overview_path(
@@ -214,10 +217,10 @@ def test_overview_matrix_keeps_normalized_top20_and_fisherz_assignment_variants(
         method="network-spectral",
         route_tag="pfm",
         mode_tag=None,
-        assignment_variant="normalized_top20_count",
+        assignment_variant="normalized_top20_count", smoothing="2mm",
     )
     assert out.name == "kong2022_network-spectral_group_overview_pfm_normalized_top20_count.png"
-    assert out.parent == Path("/tmp/present/pfm")
+    assert out.parent == Path("/tmp/present/pfm/network-spectral/2mm")
 
 
     grad_out = expected_overview_path(
@@ -225,10 +228,10 @@ def test_overview_matrix_keeps_normalized_top20_and_fisherz_assignment_variants(
         method="gradient-spectral",
         route_tag="pfm_ctxreg",
         mode_tag=None,
-        assignment_variant="fisherz",
+        assignment_variant="fisherz", smoothing="4mm",
     )
-    assert grad_out.name == "kong2022_gradient-spectral_group_overview_g1g2g3_pfm_ctxreg_fisherz.png"
-    assert grad_out.parent == Path("/tmp/present/pfm_ctxreg")
+    assert grad_out.name == "roi-fisherz_ovr_overview.png"
+    assert grad_out.parent == Path("/tmp/present/pfm_ctxreg/gradient-spectral/4mm")
 
 
 def test_group_overview_direct_renderer_keeps_gradient_variants_but_wta_is_canonical() -> None:
@@ -246,13 +249,17 @@ def test_group_overview_direct_renderer_keeps_gradient_variants_but_wta_is_canon
 
 
 
-def test_group_overview_rejects_family17_wta_route() -> None:
-    with pytest.raises(ValueError, match="pfm_17net/family17"):
-        present_mod.validate_method_route_compatibility("wta-top", "pfm_17net")
-    with pytest.raises(ValueError, match="fixed_17net/family17"):
-        present_mod.validate_method_route_compatibility("wta-top", "fixed_17net")
-    present_mod.validate_method_route_compatibility("gradient-spectral", "pfm_17net")
-    present_mod.validate_method_route_compatibility("gradient-spectral", "fixed_17net")
+def test_group_overview_wta_requires_route_taxonomy() -> None:
+    paths = [Path("/tmp/hemi_L/group_atlas_manifest.json"), Path("/tmp/hemi_R/group_atlas_manifest.json")]
+    family17 = [{"network_taxonomy": "family17"}, {"network_taxonomy": "family17"}]
+    canonical7 = [{"network_taxonomy": "canonical7"}, {"network_taxonomy": "canonical7"}]
+    present_mod.validate_kong_wta_taxonomy(paths, family17, "pfm_17net")
+    present_mod.validate_kong_wta_taxonomy(paths, family17, "fixed_17net")
+    present_mod.validate_kong_wta_taxonomy(paths, canonical7, "pfm")
+    with pytest.raises(ValueError, match="expected 'family17'"):
+        present_mod.validate_kong_wta_taxonomy(paths, canonical7, "pfm_17net")
+    with pytest.raises(ValueError, match="expected 'canonical7'"):
+        present_mod.validate_kong_wta_taxonomy(paths, family17, "pfm")
 
 
 def test_group_overview_direct_renderer_accepts_network_ts_fisherz_without_changing_both() -> None:

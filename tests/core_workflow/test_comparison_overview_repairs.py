@@ -67,16 +67,17 @@ def render_inputs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 
     monkeypatch.setattr(overview, "validate_gradient_assignment", validated_assignment)
 
-    def render(*, amplitude=1.0, layout="dual-interpretation", **kwargs):
+    def render(*, amplitude=1.0, layout="annotation-pair", route_tag="pfm", extra_variants=(), **kwargs):
         for smoothing in ("2mm", "4mm"):
             for hemi in ("L", "R"):
                 run_dir = group_root / "gradient-spectral" / "kong2022" / smoothing / "cov_0p80" / f"hemi_{hemi}"
                 run_dir.mkdir(parents=True, exist_ok=True)
                 profile = np.array([[-0.2, 0.4], [0.6, -0.1]], dtype=np.float32) * amplitude
                 np.save(run_dir / "cluster_network_profile.npy", profile)
+                np.save(run_dir / "cluster_network_ts_profile.npy", profile)
                 np.save(run_dir / "group_labels_final.npy", np.array([1, 1, 2, 2], dtype=np.int32))
                 assignments = {}
-                for variant in VARIANTS:
+                for variant in [*VARIANTS, *extra_variants]:
                     status = run_dir / f"{variant}_status.json"
                     label = run_dir / f"{variant}.label.gii"
                     label.touch()
@@ -90,7 +91,7 @@ def render_inputs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
                         "cluster_assignment_status": str(status),
                         "template_functional_atlas_label": str(label),
                     }
-                    values = profile if variant == "fisherz" else np.array([[-1.5, 2.0], [0.5, -0.25]]) * amplitude
+                    values = profile if variant in {"fisherz", "network_ts_fisherz"} else np.array([[-1.5, 2.0], [0.5, -0.25]]) * amplitude
                     np.save(run_dir / f"{variant}_profile.npy", values)
                 (run_dir / "group_atlas_manifest.json").write_text(json.dumps({
                     "chosen_k_final": 2, "n_subjects": 3,
@@ -104,10 +105,13 @@ def render_inputs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
                 (run_dir / "k_selection_summary.tsv").write_text(
                     "k\tmax_profile_similarity\n2\t0.5\n", encoding="utf-8"
                 )
+        kwargs.setdefault("smoothing", "2mm")
+        if layout == "annotation-pair":
+            kwargs.setdefault("annotation_pair", "roi-fisherz")
         meta = overview.render_combo(
             group_root=group_root, present_dir=tmp_path / "present",
             method="gradient-spectral", atlas="kong2022", coverage_tag="cov_0p80",
-            route_tag="pfm", mode_tag=None,
+            route_tag=route_tag, mode_tag=None,
             assignment_variant="fisherz", skip_subject_split_ari=True, layout=layout,
             **kwargs,
         )
@@ -122,27 +126,74 @@ def _profile_images(figure: Figure):
     return [image for axis in figure.axes for image in axis.images if image.get_array().ndim == 2]
 
 
+@pytest.mark.parametrize("pair, expected", [
+    ("roi-fisherz", ["fisherz", "ovr_logistic_family17"]),
+    ("network-ts-fisherz", ["network_ts_fisherz", "ovr_logistic_family17_network_ts"]),
+    ("top20", ["normalized_top20_count"]),
+])
+def test_family17_uses_matching_annotation_rows(pair, expected):
+    rows = overview.annotation_pair_rows(pair, "2mm", "pfm_17net")
+    assert [row[0] for row in rows] == expected
+
+
+@pytest.mark.parametrize("pair, expected", [
+    ("roi-fisherz", ["fisherz", "ovr_logistic_family17"]),
+    ("network-ts-fisherz", ["network_ts_fisherz", "ovr_logistic_family17_network_ts"]),
+])
+def test_family17_annotation_pair_renders_matching_ovr_rows(render_inputs, pair, expected):
+    meta, figure, _, _ = render_inputs(
+        layout="annotation-pair", route_tag="pfm_17net", annotation_pair=pair,
+        smoothing="2mm", extra_variants=("ovr_logistic_family17", "network_ts_fisherz", "ovr_logistic_family17_network_ts"),
+    )
+    assert meta["layout"] == "annotation-pair"
+    assert [row["assignment_variant"] for row in meta["rows"]] == expected
+    assert figure.get_figheight() == pytest.approx(12.2)
+
+
+def test_family17_annotation_layout_matches_canonical_canvas_and_columns(render_inputs):
+    common = {"layout": "annotation-pair", "annotation_pair": "roi-fisherz", "smoothing": "2mm"}
+    _, canonical, _, _ = render_inputs(route_tag="pfm", **common)
+    _, family17, _, _ = render_inputs(route_tag="pfm_17net", extra_variants=("ovr_logistic_family17",), **common)
+    assert family17.get_size_inches() == pytest.approx(canonical.get_size_inches())
+    assert family17.axes[0].get_subplotspec().get_gridspec().get_width_ratios() == canonical.axes[0].get_subplotspec().get_gridspec().get_width_ratios()
+
+
+@pytest.mark.parametrize("smoothing", ["2mm", "4mm"])
+def test_family17_overview_draws_cortex_for_each_smoothing(render_inputs, monkeypatch, smoothing):
+    source_pairs, drawn = [], []
+    def bilateral(paths, _manifests):
+        source_pairs.append(paths)
+        return np.ones((3, 400), dtype=np.float32)
+    monkeypatch.setattr(overview, "bilateral_cluster_roi_profile", bilateral)
+    monkeypatch.setattr(overview, "draw_cluster_cortex_fc", lambda *args, **kwargs: drawn.append(kwargs) or [])
+    meta, _, _, _ = render_inputs(route_tag="pfm_17net", smoothing=smoothing,
+                                  extra_variants=("ovr_logistic_family17",))
+    assert meta["cluster_cortex_fc_column"] is True
+    assert len(source_pairs) == len(drawn) == 1
+    assert [path.parent.name for path in source_pairs[0]] == ["hemi_L", "hemi_R"]
+    assert all(smoothing in str(path) for path in source_pairs[0])
+
+
 def test_dual_interpretation_labels_rows_surface_and_combined_metadata(render_inputs):
     meta, figure, surface_titles, scratch_paths = render_inputs()
 
     assert [row["assignment_variant"] for row in meta["rows"]] == VARIANTS
-    assert [row["row_label"] for row in meta["rows"]] == ["2mm Fisher-z", "2mm canonical7 OVR"]
-    assert surface_titles[0].endswith("2mm fisherz")
-    assert surface_titles[1].endswith("2mm ovr logistic canonical7")
-    titles = [axis.get_title().replace("\n", " | ") for axis in figure.axes]
-    assert "2mm Fisher-z | functional atlas surface" in titles
-    assert "2mm canonical7 OVR | functional atlas surface" in titles
-    assert "Fisher-z" in figure._suptitle.get_text()
-    assert "canonical7 OVR" in figure._suptitle.get_text()
+    assert [row["row_label"] for row in meta["rows"]] == ["2mm ROI Fisher-z", "2mm canonical7 OVR"]
+    assert surface_titles == ["", ""]
+    titles = [axis.get_title() for axis in figure.axes]
+    assert "Functional atlas\nFisher-z" in titles
+    assert "OVR" in titles
+    assert all("2mm" not in title for title in titles)
+    assert figure._suptitle.get_text() == "gradient-spectral | kong2022 | pfm | roi-fisherz | 2mm | Group overview (N=3)"
     assert meta["rendered_title"] == figure._suptitle.get_text()
     assert meta["assignment_variants"] == VARIANTS
     assert len(meta["source_group_manifests"]) == 2
     sidecar = json.loads(Path(meta["overview_source_sidecar"]).read_text(encoding="utf-8"))
     assert sidecar["assignment_variants"] == VARIANTS
-    assert sidecar["assignment_variant"] == "dual-interpretation"
+    assert sidecar["assignment_variant"] == "roi-fisherz"
     item = overview.overview_manifest_item(base={"assignment_variant": "fisherz"}, meta=meta)
     assert item["assignment_variants"] == VARIANTS
-    assert item["assignment_variant"] == "dual-interpretation"
+    assert item["assignment_variant"] == "roi-fisherz"
     assert all(path.is_relative_to(REPO_ROOT / "tmp") for path in scratch_paths)
 
 
@@ -167,19 +218,10 @@ def test_dual_interpretation_panel_titles_do_not_overlap(render_inputs):
             assert not first.overlaps(second), 'Adjacent panel titles overlap'
 
 
-@pytest.mark.parametrize("layout, expected", [
-    ("dual-interpretation", [(-0.6, 0.6), (-2.0, 2.0)]),
-    ("dual-smoothing", [(-0.6, 0.6), (-0.6, 0.6)]),
-])
-def test_omitted_shared_ranges_keep_local_scaling_and_legacy_layout(render_inputs, layout, expected):
-    _, figure, surface_titles, _ = render_inputs(layout=layout)
-
-    assert np.asarray([image.get_clim() for image in _profile_images(figure)]) == pytest.approx(np.asarray(expected))
-    if layout == "dual-smoothing":
-        assert "2mm | functional atlas surface" in [axis.get_title() for axis in figure.axes]
-        assert "4mm | functional atlas surface" in [axis.get_title() for axis in figure.axes]
-        assert all(title.endswith("fisherz") for title in surface_titles)
-        assert "ovr" not in figure._suptitle.get_text().lower()
+def test_omitted_shared_ranges_keep_local_scaling(render_inputs):
+    _, figure, _, _ = render_inputs()
+    assert np.asarray([image.get_clim() for image in _profile_images(figure)]) == pytest.approx(
+        np.asarray([(-0.6, 0.6), (-2.0, 2.0)]))
 
 
 def _write_invalid_lineage_pair(root: Path) -> list[Path]:
@@ -207,7 +249,7 @@ def test_dual_interpretation_preflight_rejects_both_invalid_source_lineages(tmp_
         overview.ensure_combo_ready(
             group_root=tmp_path / "group", method="gradient-spectral", atlas="kong2022",
             coverage_tag="cov_0p80", route_tag="pfm", smoothings=["2mm"],
-            layout="dual-interpretation",
+            layout="annotation-pair",
         )
 
     assert all(str(path) in str(caught.value) for path in paths)
@@ -226,5 +268,5 @@ def test_dual_interpretation_render_rejects_invalid_lineage_before_plotting(tmp_
             group_root=tmp_path / "group", present_dir=tmp_path / "present",
             method="gradient-spectral", atlas="kong2022", coverage_tag="cov_0p80",
             route_tag="pfm", mode_tag=None,
-            assignment_variant="fisherz", layout="dual-interpretation",
+            assignment_variant="fisherz", layout="annotation-pair", annotation_pair="roi-fisherz", smoothing="2mm",
         )

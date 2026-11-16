@@ -12,7 +12,7 @@ Run the shared Kong2022 SGE launcher from `/old_Users/yojiao/hipp` with
 | CBIG | `/old_Users/yojiao/hipp/external/CBIG` |
 | Native math threads | One per process, enforced by the shared task script |
 
-Explicitly pass the Workbench path through the supported `WB_COMMAND` control.
+The Kong2022 launchers fix Workbench to this 2.1.0 path and accept no override.
 The shared Workbench 2.2.1 binary cannot start on the Argon glibc 2.17 login
 host; its Qt6 and newer glibc requirements are not satisfied. Do not change
 the local HippUnfold Workbench selection to accommodate Argon.

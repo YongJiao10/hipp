@@ -632,7 +632,7 @@ def validate_gradient_assignment(
         coefficient_path = _declared_path(row, "network_profile", run_dir, variant)
         metadata_path = _declared_path(row, "ovr_model_metadata", run_dir, variant)
         model = _read_json(metadata_path, label="OVR model", variant=variant, run_dir=run_dir)
-        taxonomy = "canonical7" if variant == NETWORK_TS_OVR_VARIANT else variant.removeprefix("ovr_logistic_")
+        taxonomy = variant.removeprefix("ovr_logistic_").removesuffix("_network_ts")
         if model.get("taxonomy") != taxonomy or model.get("variant") != variant:
             raise ValueError(f"OVR taxonomy/variant mismatch: {metadata_path}")
         if (model.get("cluster_ids") != actual_ids or model.get("network_names") != names

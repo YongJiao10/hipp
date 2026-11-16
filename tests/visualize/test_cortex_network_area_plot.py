@@ -166,7 +166,7 @@ def test_patient_figure_marks_empty_facets_and_states_interpretation_notes() -> 
     figure_text = "\n".join(text.get_text() for text in figure.texts)
 
     assert "NS" not in all_text
-    assert "Visual" in all_text
+    assert "VN" in all_text
     assert "*" in all_text
     labels = [c.get_label() for ax in figure.axes for c in ax.containers]
     assert "Visual | Patient vs Iowa HC | n=26/67 | p=0.049" in labels

@@ -188,7 +188,11 @@ def validate_group_atlas_lineage(
         parent = parents.pop()
         if not parent.is_file():
             raise FileNotFoundError(f"Declared parent group atlas manifest does not exist: {parent} (from {path})")
-        validate_group_atlas_lineage(parent, expected_network_taxonomy=expected_network_taxonomy,
+        parent_taxonomy = expected_network_taxonomy
+        if (expected_network_taxonomy == "family17" and reuse
+                and reuse.get("source_network_taxonomy") == "canonical7"):
+            parent_taxonomy = "canonical7"
+        validate_group_atlas_lineage(parent, expected_network_taxonomy=parent_taxonomy,
                                      expected_method=str(manifest["method"]),
                                      require_complete_local_artifacts=require_complete_local_artifacts,
                                      visited_paths=visited)

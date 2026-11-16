@@ -46,15 +46,24 @@ import matplotlib.pyplot as plt
 import nibabel as nib
 import numpy as np
 from matplotlib.cm import ScalarMappable
-from matplotlib.colors import Normalize
 from matplotlib.lines import Line2D
 from matplotlib.patches import Rectangle
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from nibabel.gifti import GiftiDataArray, GiftiImage, GiftiLabel, GiftiLabelTable
 
-from lib.output_layout import DEFAULT_OVERVIEWS_DIR, DEFAULT_ROUTEA_GROUP_ATLAS_ROOT, annotation_pair_overview_name
+from lib.output_layout import (
+    ANNOTATION_PAIR_BY_ASSIGNMENT_VARIANT,
+    DEFAULT_OVERVIEWS_DIR,
+    DEFAULT_ROUTEA_GROUP_ATLAS_ROOT,
+    annotation_pair_overview_name,
+)
 from lib.template_assets import validate_template_assets
-from lib.route_tags import ROUTE_TAG_CHOICES, infer_route_tag_from_group_root, validate_group_atlas_root_for_route
+from lib.route_tags import (
+    ROUTE_TAG_CHOICES,
+    infer_route_tag_from_group_root,
+    kong_network_taxonomy_for_route,
+    validate_group_atlas_root_for_route,
+)
 from lib.workflow_utils import write_json
 from lib.surface_utils import equal_vertex_long_axis_bins, long_axis_order, render_hippocampal_grid, network_color_map
 from lib.io_utils import load_json
@@ -62,11 +71,19 @@ from lib.group_atlas_lineage import validate_group_atlas_lineage
 from lib.cluster_roi_profile_contract import (
     KONG2022_CLUSTER_PROFILE_SUBREGIONS,
     atlas_produces_cluster_roi_profile,
-    validate_cluster_roi_profile_manifest,
 )
-from lib.cortex_fc_tiles import COLORBAR_LABEL, COLORBAR_TICKS, COLORBAR_VMAX, DEFAULT_CMAP, render_cortex_fc_tile
-from lib.cortex_template_profiles import resolve_cortex_assets
-from lib.kong2022_label_utils import load_kong2022_bundle
+from lib.cortex_fc_tiles import (
+    COLORBAR_LABEL,
+    DEFAULT_CMAP,
+    SURFACE_SIZE,
+    cortex_fc_norm,
+    render_cortex_fc_tile,
+    style_cortex_fc_colorbar,
+)
+from lib.cortex_template_profiles import cortex_asset_paths, resolve_cortex_assets
+from lib.cortex_overview_cache import bilateral_cluster_roi_profile, cortex_surface_cache_paths, store_cortex_surface
+from lib.kong2022_label_utils import KONG2022_MERGE_CONFIG, load_kong2022_bundle
+from lib.workbench import resolve_wb_command
 from lib.gifti_labels import (
     resolve_cluster_label_path,
     resolve_functional_atlas_array_paths,
@@ -76,6 +93,7 @@ from lib.gifti_labels import (
 from lib.network_colors import NETWORK_DISPLAY_NAMES, load_network_hex_colors
 from lib.gradient_assignment_contract import validate_gradient_assignment, sha256_file
 from lib.gradient_clustering import is_gradient_method, validate_gradient_method_provenance
+from lib.network_ovr import network_ts_ovr_variant
 try:
     from lib.network_ovr import ALL_OVR_VARIANTS, NETWORK_TS_OVR_VARIANT, OVR_VARIANTS
 except ImportError:
@@ -123,6 +141,7 @@ FS_SMALL = 8.5
 FS_LEGEND_SMALL = FS_SMALL - 2.0
 FS_CELL = 7.5
 FS_CELL_DENSE = 6
+FS_CELL_FAMILY17 = 4
 FS_MISSING = 13
 FS_BIG_TITLE = 13
 FS_SUPTITLE = 18
@@ -166,25 +185,9 @@ def ctxdrop_original_fc_annotation_provenance(
     *,
     manifest_paths: list[Path],
     manifests: list[dict[str, object]],
-    layout: str = "dual-smoothing",
+    layout: str = "source-set",
 ) -> dict[str, object]:
     """Validate and describe the accepted ctxdrop cluster annotation source."""
-    if layout in {"dual-interpretation", "annotation-pair", "single-smoothing"}:
-        if len(manifest_paths) != 2 or len(manifests) != 2:
-            raise ValueError(
-                f"ctxdrop original-FC annotation provenance requires exactly two "
-                f"manifests for {layout} layout"
-            )
-        sm = str(manifests[0].get("smoothing", "2mm"))
-        expected_grid = {(sm, "L"), (sm, "R")}
-    else:
-        if len(manifest_paths) != 4 or len(manifests) != 4:
-            raise ValueError(
-                "ctxdrop original-FC annotation provenance requires exactly four "
-                "2mm/4mm by L/R manifests"
-            )
-        expected_grid = {("2mm", "L"), ("2mm", "R"), ("4mm", "L"), ("4mm", "R")}
-
     known_routes = ("pfm_ctxdrop", "pfm_ctxreg", "pfm")
     path_route_hints: list[str | None] = []
     for path in manifest_paths:
@@ -197,6 +200,29 @@ def ctxdrop_original_fc_annotation_provenance(
             "ctxdrop original-FC annotation provenance mismatch: mixed route paths; "
             f"paths={[str(path) for path in manifest_paths]}"
         )
+    if layout in {"annotation-pair", "single-smoothing"}:
+        if len(manifest_paths) != 2 or len(manifests) != 2:
+            raise ValueError(
+                f"ctxdrop original-FC annotation provenance for {layout} layout requires "
+                "exactly two L/R manifests"
+            )
+        smoothings = {str(manifest.get("smoothing", "")).strip() for manifest in manifests}
+        if len(smoothings) != 1 or "" in smoothings:
+            raise ValueError(
+                "ctxdrop original-FC annotation provenance requires one declared smoothing "
+                f"across L/R manifests; got {sorted(smoothings)}"
+            )
+        sm = smoothings.pop()
+        expected_grid = {(sm, "L"), (sm, "R")}
+    elif layout == "source-set":
+        if len(manifest_paths) != 4 or len(manifests) != 4:
+            raise ValueError(
+                "ctxdrop original-FC annotation provenance requires exactly four "
+                "2mm/4mm by L/R manifests"
+            )
+        expected_grid = {("2mm", "L"), ("2mm", "R"), ("4mm", "L"), ("4mm", "R")}
+    else:
+        raise ValueError(f"Unsupported ctxdrop provenance layout: {layout!r}")
 
     route_tags: list[str] = []
     for path, manifest in zip(manifest_paths, manifests):
@@ -281,7 +307,7 @@ def overview_source_provenance(
     method: str,
     manifest_paths: list[Path],
     manifests: list[dict[str, object]],
-    layout: str = "dual-smoothing",
+    layout: str = "source-set",
 ) -> dict[str, object]:
     provenance: dict[str, object] = {
         "source_group_manifests": [str(path) for path in manifest_paths],
@@ -366,31 +392,30 @@ def overview_title(
     overview_scope: str = "Group",
     group_name: str | None = None,
     n_subjects: int | None = None,
+    smoothing: str | None = None,
 ) -> str:
-    group_tag_str = None
-    if group_name and n_subjects is not None:
-        if "N=" in str(group_name):
-            group_tag_str = str(group_name)
-        else:
-            group_tag_str = f"{group_name} (N={n_subjects})"
-    elif group_name:
-        group_tag_str = str(group_name)
-    elif n_subjects is not None:
-        group_tag_str = f"N={n_subjects}"
-
-    affinity_or_group = (
-        group_tag_str
-        if group_tag_str
-        else (surface_affinity if _is_gradient_method(method) else None)
-    )
-
-    return (
-        f"{str(overview_scope).strip() or 'Group'} Overview | {atlas} | {method}"
-        + (f" | {route_tag}" if route_tag else "")
-        + (f" | {mode_tag}" if mode_tag else "")
-        + (f" | {assignment_variant}" if assignment_variant else "")
-        + (f" | {affinity_or_group}" if affinity_or_group else "")
-    )
+    """Place method and data identifiers before the cohort description."""
+    if (str(overview_scope).strip() or "Group") != "Group":
+        parts = [f"{str(overview_scope).strip()} Overview", str(atlas), str(method)]
+        parts.extend(str(value) for value in (route_tag, mode_tag, assignment_variant) if value)
+        if group_name:
+            parts.append(f"{group_name} (N={n_subjects})" if n_subjects is not None and "N=" not in group_name else group_name)
+        elif n_subjects is not None:
+            parts.append(f"N={n_subjects}")
+        elif surface_affinity and _is_gradient_method(method):
+            parts.append(str(surface_affinity))
+        return " | ".join(parts)
+    parts = [str(method), str(atlas)]
+    parts.extend(str(value) for value in (route_tag, mode_tag, assignment_variant, smoothing) if value)
+    scope = f"{str(overview_scope).strip() or 'Group'} overview"
+    if group_name:
+        scope += f" {group_name}"
+    if n_subjects is not None and "N=" not in scope:
+        scope += f" (N={n_subjects})"
+    if not group_name and n_subjects is None and surface_affinity and _is_gradient_method(method):
+        parts.append(str(surface_affinity))
+    parts.append(scope)
+    return " | ".join(parts)
 
 
 def resolve_render_assignment_variants(
@@ -464,12 +489,22 @@ def resolve_overview_mode_tag(group_root: Path, explicit_mode_tag: str | None) -
     return None
 
 
-def validate_method_route_compatibility(method: str, route_tag: str | None) -> None:
-    if str(method) == "wta-top" and str(route_tag) in {"pfm_17net", "fixed_17net"}:
-        raise ValueError(
-            f"WTA is not valid for the {route_tag}/family17 gradient-only branch; "
-            "use a canonical7 Kong2022 route."
-        )
+
+
+def validate_kong_wta_taxonomy(
+    manifest_paths: list[Path],
+    manifests: list[dict],
+    route_tag: str | None,
+) -> None:
+    """Require Kong WTA source manifests to declare the route's taxonomy."""
+    expected = kong_network_taxonomy_for_route(route_tag)
+    for path, manifest in zip(manifest_paths, manifests, strict=True):
+        declared = manifest.get("network_taxonomy")
+        if declared != expected:
+            raise ValueError(
+                f"Kong2022 WTA taxonomy mismatch for route={route_tag!r}: "
+                f"{path} declares network_taxonomy={declared!r}, expected {expected!r}"
+            )
 
 
 def _is_gradient_method(method: str) -> bool:
@@ -851,7 +886,7 @@ def plot_ovr_association_panel(
             has_top2.append(True)
             display_labels.append(f"{row_lbl} {network_display_name(w_net)} | {network_display_name(r_net)}")
             diff = w_val - r_val
-            diff_texts.append((w_val + 0.005, f"Δβ={diff:.3f}", "#333333"))
+            diff_texts.append((w_val + 0.005, f"Δβ={diff:.2f}", "#333333"))
 
     t1_arr = np.array(top1_vals, dtype=float)
     t2_arr = np.array(top2_vals, dtype=float)
@@ -944,7 +979,7 @@ def annotate_profile_values(
             color = "white" if luminance < 0.179 else "#222222"
             ax.text(
                 c, r, f"{val:.2f}", ha="center", va="center",
-                fontsize=FS_CELL_DENSE if data.shape[1] > 8 else FS_CELL,
+                fontsize=FS_CELL_FAMILY17 if data.shape[1] == 17 else (FS_CELL_DENSE if data.shape[1] > 8 else FS_CELL),
                 color=color,
             )
 
@@ -1169,9 +1204,9 @@ def plot_confidence_panel(ax, rows: list[dict[str, object]], title: str) -> None
             max(float(row["top1_value"]), float(row["top2_value"])) + 0.005,
             yi,
             (
-                f"Δn={float(row['margin']):.3f}"
+                f"Δn={float(row['margin']):.2f}"
                 if is_normalized_count
-                else f"Δz={float(row['margin']):.3f}"
+                else f"Δz={float(row['margin']):.2f}"
             ),
             va="center",
             ha="left",
@@ -1372,7 +1407,7 @@ def plot_k_gate_panel(
             Line2D([0], [0], color="#b00020", lw=1.2, ls=":", label=f"Redundancy threshold ({redundancy_threshold:.2f})"),
             Line2D([0], [0], color="#555555", lw=1.2, ls="--", label=k_label),
         ],
-        loc="lower left",
+        loc="lower right",
         fontsize=FS_LEGEND_SMALL,
         framealpha=0.9,
         edgecolor="#dddddd",
@@ -1516,47 +1551,58 @@ def plot_wta_overview_profile_axis(
         ax.legend(fontsize=WTA_OVERVIEW_SIDE_PANEL_LEGEND_FS, frameon=False, loc="best", handlelength=1.4, labelspacing=0.22)
 
 
-def bilateral_cluster_roi_profile(manifest_paths: list[Path], manifests: list[dict]) -> np.ndarray | None:
-    """Left/right mean of one run's head-to-tail (3, 400) cluster FC profile.
+def draw_cluster_cortex_fc(fig, cell, profile: np.ndarray, *, stacked: bool, label: str, profile_paths: list[Path],
+                           show_header: bool = True) -> list[dict[str, object]]:
+    """Draw one run's three cluster-to-cortex FC tiles in a grid cell, with their shared colour bar.
 
-    Returns None when the run is not a three-cluster partition with a declared ROI profile.
+    Returns one record per cluster saying whether its Workbench surface was reused from the cache or rendered.
     """
-    if any(manifest.get("cluster_roi_profile") is None or manifest.get("chosen_k_final") != 3 for manifest in manifests):
-        return None
-    profiles = []
-    for manifest_path, manifest in zip(manifest_paths, manifests, strict=True):
-        profile_path = manifest_path.parent / "cluster_roi_profile.npy"
-        profile = np.load(profile_path).astype(np.float64)
-        validate_cluster_roi_profile_manifest(manifest, profile_path=profile_path, profile_shape=profile.shape)
-        profiles.append(profile)
-    return np.mean(profiles, axis=0)
-
-
-def draw_cluster_cortex_fc(fig, cell, profile: np.ndarray, *, stacked: bool, label: str) -> None:
-    """Draw one run's three cluster-to-cortex FC tiles in a grid cell, with their shared colour bar."""
     bundle = load_kong2022_bundle()
     grid = cell.subgridspec(3, 1, hspace=0.03) if stacked else cell.subgridspec(1, 3, wspace=0.02)
     axes = []
+    norm = cortex_fc_norm(profile)
+    cache_root = REPO_ROOT / "tmp" / "overview_cortex_surfaces"
+    inputs = [*profile_paths, *cortex_asset_paths(CORTEX_DISPLAY_SUBJECT, CORTEX_DATA_ROOT, CORTEX_SCENE).values(),
+              KONG2022_MERGE_CONFIG, resolve_wb_command()]
+    library = REPO_ROOT / "scripts" / "core_workflow" / "lib"
+    code = [library / name for name in ("cortex_fc_tiles.py", "cortex_template_profiles.py", "render_cortex_pfm_scene.py",
+                                        "workbench.py", "kong2022_label_utils.py", "gifti_labels.py")]
+    cached = cortex_surface_cache_paths(cache_root=cache_root, inputs=inputs, code=code, size=SURFACE_SIZE)
+    surface_records: list[dict[str, object]] = []
     with tempfile.TemporaryDirectory(prefix="present_group_cortex_tiles_", dir=REPO_ROOT / "tmp") as tmp:
-        assets = resolve_cortex_assets(CORTEX_DISPLAY_SUBJECT, CORTEX_DATA_ROOT, CORTEX_SCENE, sulc_dir=Path(tmp) / "sulc")
+        assets = (resolve_cortex_assets(CORTEX_DISPLAY_SUBJECT, CORTEX_DATA_ROOT, CORTEX_SCENE, sulc_dir=Path(tmp) / "sulc")
+                  if any(path is None for path in cached) else {})
         for index, (name, color) in enumerate(zip(KONG2022_CLUSTER_PROFILE_SUBREGIONS, CLUSTER_CORTEX_TITLE_COLORS, strict=True)):
             tile = render_cortex_fc_tile(
                 panel_tag=f"cluster{index + 1}", values=profile[index], roi_registry=bundle["roi_registry"],
                 vertex_arrays=bundle["vertex_arrays"], cortex_assets=assets, panels_dir=Path(tmp),
-                bars="right" if stacked else "below",
+                norm=norm, bars="right" if stacked else "below", cached_surface=cached[index],
             )
+            if cached[index] is None:
+                surface = store_cortex_surface(cache_root=cache_root, inputs=inputs, code=code, index=index,
+                                               source=Path(tmp) / f"cluster{index + 1}" / f"cluster{index + 1}_surface.png")
+            else:
+                surface = cached[index]
+            surface_records.append({
+                "profile_paths": [str(path) for path in profile_paths], "cluster": index + 1,
+                "surface_png": str(surface), "status": "rendered" if cached[index] is None else "reused",
+            })
             ax = fig.add_subplot(grid[index, 0] if stacked else grid[0, index])
             ax.imshow(plt.imread(tile))
             ax.axis("off")
-            ax.set_title(f"{label} C{index + 1} {name} (L/R mean)", fontsize=FS_TITLE, fontweight="bold", color=color)
+            ax.set_title(f"{label} C{index + 1} {name} (L/R mean)".strip(), fontsize=FS_TITLE, fontweight="bold", color=color)
+            if show_header and index == (0 if stacked else 1):
+                ax.annotate("Cluster-to-cortex FC", xy=(0.5, 1.0), xycoords="axes fraction",
+                            xytext=(0, 24), textcoords="offset points", ha="center", va="bottom",
+                            fontsize=FS_BIG_TITLE + 3, fontweight="bold", annotation_clip=False)
             axes.append(ax)
     cbar = fig.colorbar(
-        ScalarMappable(norm=Normalize(vmin=-COLORBAR_VMAX, vmax=COLORBAR_VMAX), cmap=DEFAULT_CMAP),
+        ScalarMappable(norm=norm, cmap=DEFAULT_CMAP),
         ax=axes, orientation="horizontal", shrink=0.45, fraction=0.04, pad=0.015, aspect=32,
     )
-    cbar.set_ticks(list(COLORBAR_TICKS))
+    style_cortex_fc_colorbar(cbar, norm, fontsize=FS_TICK)
     cbar.set_label(COLORBAR_LABEL, fontsize=FS_LABEL, fontweight="bold")
-    cbar.ax.tick_params(labelsize=FS_TICK)
+    return surface_records
 
 
 def overview_png_path(
@@ -1569,7 +1615,7 @@ def overview_png_path(
     assignment_variant: str | None,
     gradient_comp_tag: str = "",
     output_name: str | None = None,
-    layout: str = "dual-smoothing",
+    layout: str = "single-smoothing",
     annotation_pair: str | None = None,
 ) -> Path:
     if output_name is not None:
@@ -1589,28 +1635,34 @@ def overview_png_path(
         return Path(present_dir) / annotation_pair_overview_name(annotation_pair)
 
     if layout == "single-smoothing":
-        return Path(present_dir) / "wta_overview.png"
-
-    if layout == "dual-interpretation":
-        name_bits = [atlas, method, "group_overview_2mm_dual_interpretation"]
+        if method in CLUSTERLESS_METHODS:
+            return Path(present_dir) / "wta_overview.png"
+        if assignment_variant is None:
+            raise ValueError("single-smoothing cluster overview requires assignment_variant")
+        bits = [atlas, method, "group_overview"]
         if gradient_comp_tag:
-            name_bits.append(gradient_comp_tag)
+            bits.append(gradient_comp_tag)
         if route_tag:
-            name_bits.append(route_tag)
+            bits.append(route_tag)
         if mode_tag:
-            name_bits.append(mode_tag)
-        return Path(present_dir) / f"{'_'.join(name_bits)}.png"
+            bits.append(mode_tag)
+        bits.append(assignment_variant)
+        return Path(present_dir) / f"{'_'.join(bits)}.png"
 
-    name_bits = [atlas, method, "group_overview"]
-    if gradient_comp_tag:
-        name_bits.append(gradient_comp_tag)
-    if route_tag:
-        name_bits.append(route_tag)
-    if mode_tag:
-        name_bits.append(mode_tag)
-    if assignment_variant:
-        name_bits.append(assignment_variant)
-    return Path(present_dir) / f"{'_'.join(name_bits)}.png"
+    raise ValueError(f"Unsupported overview layout: {layout!r}")
+
+def annotation_pair_rows(pair: str, smoothing: str, route_tag: str | None) -> list[tuple[str, str, str]]:
+    taxonomy = kong_network_taxonomy_for_route(route_tag)
+    if pair == "roi-fisherz":
+        return [("fisherz", smoothing, f"{smoothing} ROI Fisher-z"),
+                (f"ovr_logistic_{taxonomy}", smoothing, f"{smoothing} {taxonomy} OVR")]
+    if pair == "network-ts-fisherz":
+        return [("network_ts_fisherz", smoothing, f"{smoothing} network-TS Fisher-z"),
+                (network_ts_ovr_variant(taxonomy), smoothing, f"{smoothing} network-TS {taxonomy} OVR")]
+    if pair == "top20":
+        return [("normalized_top20_count", smoothing, f"{smoothing} normalized Top20")]
+    raise ValueError(f"Unknown annotation pair: {pair!r}")
+
 
 def render_combo(
     *,
@@ -1627,15 +1679,19 @@ def render_combo(
     overview_scope: str = "Group",
     skip_subject_split_ari: bool = False,
     group_name: str | None = None,
-    layout: str = "dual-smoothing",
+    layout: str = "single-smoothing",
     profile_vmax_by_variant: dict[str, float] | None = None,
     annotation_pair: str | None = None,
     smoothing: str | None = None,
 ) -> dict[str, object]:
+    if layout not in {"annotation-pair", "single-smoothing"}:
+        raise ValueError(f"Unsupported overview layout: {layout!r}; use annotation-pair or single-smoothing")
+    if smoothing not in SMOOTHINGS:
+        raise ValueError("Overview rendering requires explicit smoothing: 2mm or 4mm")
     if annotation_pair is not None:
         layout = "annotation-pair"
-    elif method in CLUSTERLESS_METHODS and smoothing is not None:
-        layout = "single-smoothing"
+    elif layout == "annotation-pair":
+        raise ValueError("annotation-pair layout requires an explicit annotation_pair")
 
     if assignment_variant is None:
         assignment_variant = default_render_assignment_variant(method, atlas)
@@ -1653,26 +1709,12 @@ def render_combo(
     effective_assignment_variant = (
         str(assignment_variant) if method in CLUSTERLESS_METHODS else str(assignment_variant)
     )
-    family17_overview = route_tag in {"pfm_17net", "fixed_17net"} or effective_assignment_variant == "ovr_logistic_family17"
-    diagnostic_hspace = 0.06 if family17_overview else 0.035
-    manifest_paths: list[Path] = []
-    if layout in {"dual-interpretation", "annotation-pair", "single-smoothing"}:
-        target_sm = smoothing or "2mm"
-        manifest_paths = [
-            _build_run_dir(group_root, method, atlas, target_sm, coverage_tag, "L", gradient_comp_tag=gradient_comp_tag)
-            / "group_atlas_manifest.json",
-            _build_run_dir(group_root, method, atlas, target_sm, coverage_tag, "R", gradient_comp_tag=gradient_comp_tag)
-            / "group_atlas_manifest.json",
-        ]
-    else:
-        for sm in SMOOTHINGS:
-            manifest_paths.extend(
-                [
-                    _build_run_dir(group_root, method, atlas, sm, coverage_tag, hemi, gradient_comp_tag=gradient_comp_tag)
-                    / "group_atlas_manifest.json"
-                    for hemi in ("L", "R")
-                ]
-            )
+    diagnostic_hspace = 0.035
+    manifest_paths = [
+        _build_run_dir(group_root, method, atlas, smoothing, coverage_tag, hemi, gradient_comp_tag=gradient_comp_tag)
+        / "group_atlas_manifest.json"
+        for hemi in ("L", "R")
+    ]
     source_manifests = [load_json(path) for path in manifest_paths]
     source_provenance = overview_source_provenance(
         method=method,
@@ -1680,14 +1722,14 @@ def render_combo(
         manifests=source_manifests,
         layout=layout,
     )
+    if method in CLUSTERLESS_METHODS and str(atlas) == "kong2022":
+        validate_kong_wta_taxonomy(manifest_paths, source_manifests, route_tag)
     assignment_validation_results: dict[tuple[str, str, str], dict[str, object]] = {}
     if atlas == "kong2022" and _is_gradient_method(method):
         for path in manifest_paths:
             validate_group_atlas_lineage(
                 path,
-                expected_network_taxonomy=(
-                    "family17" if route_tag in {"pfm_17net", "fixed_17net"} else "canonical7"
-                ),
+                expected_network_taxonomy=kong_network_taxonomy_for_route(route_tag),
                 expected_method=method,
             )
         # Validate all declared assignment variants before constructing any
@@ -1695,7 +1737,7 @@ def render_combo(
         # gradient assignment asset.
         for index, (path, manifest) in enumerate(zip(manifest_paths, source_manifests, strict=True)):
             ensure_gradient_assignment_variants(path, manifest)
-            smoothing_name = (smoothing or "2mm") if layout in {"dual-interpretation", "annotation-pair", "single-smoothing"} else SMOOTHINGS[index // 2]
+            smoothing_name = smoothing
             hemi_name = "L" if index % 2 == 0 else "R"
             for variant_name in sorted(manifest["assignment_variants"]):
                 assignment_validation_results[(smoothing_name, hemi_name, str(variant_name))] = (
@@ -1705,45 +1747,18 @@ def render_combo(
     rows_meta: list[dict[str, object]] = []
 
     if layout == "annotation-pair":
-        target_sm = smoothing or "2mm"
-        if annotation_pair == "roi-fisherz":
-            row_specs = [
-                ("fisherz", target_sm, f"{target_sm} ROI Fisher-z"),
-                ("ovr_logistic_canonical7", target_sm, f"{target_sm} canonical7 OVR"),
-            ]
-        elif annotation_pair == "network-ts-fisherz":
-            row_specs = [
-                ("network_ts_fisherz", target_sm, f"{target_sm} network-TS Fisher-z"),
-                (NETWORK_TS_OVR_VARIANT, target_sm, f"{target_sm} network-TS canonical7 OVR"),
-            ]
-        elif annotation_pair == "top20":
-            # Top20 counts are taken from the group-average profile; no OVR model is fitted on them.
-            row_specs = [
-                ("normalized_top20_count", target_sm, f"{target_sm} normalized Top20"),
-            ]
-        else:
-            raise ValueError(f"Unknown annotation pair: {annotation_pair!r}")
+        target_sm = smoothing
+        row_specs = annotation_pair_rows(str(annotation_pair), target_sm, route_tag)
     elif layout == "single-smoothing":
-        target_sm = smoothing or "2mm"
+        target_sm = smoothing
         row_specs = [
             (effective_assignment_variant, target_sm, target_sm),
         ]
-    elif layout == "dual-interpretation":
-        row_specs = [
-            ("fisherz", "2mm", "2mm Fisher-z"),
-            ("ovr_logistic_canonical7", "2mm", "2mm canonical7 OVR"),
-        ]
-    else:
-        row_specs = [
-            (effective_assignment_variant, sm, sm)
-            for sm in SMOOTHINGS
-        ]
-
-    # One block of cluster cortical-FC tiles per distinct run: the annotation layouts show one run in every row.
-    shared_run = layout in {"dual-interpretation", "annotation-pair"}
+    # Both rows of an annotation pair use the same spatial partition.
+    shared_run = layout == "annotation-pair"
     cortex_stacked = shared_run and len(row_specs) == 2
     cortex_profiles: list[np.ndarray] = []
-    if _is_gradient_method(method) and atlas_produces_cluster_roi_profile(atlas) and not family17_overview:
+    if _is_gradient_method(method) and atlas_produces_cluster_roi_profile(atlas):
         run_slices = [slice(0, 2)] if shared_run else [slice(2 * i, 2 * i + 2) for i in range(len(row_specs))]
         profiles = [bilateral_cluster_roi_profile(manifest_paths[run], source_manifests[run]) for run in run_slices]
         if all(profile is not None for profile in profiles):
@@ -1757,8 +1772,8 @@ def render_combo(
         gs = fig.add_gridspec(nrows=2, ncols=3, width_ratios=[0.62, 1.18, 1.42], hspace=0.08, wspace=0.06)
     else:
         n_rows = len(row_specs)
-        width, height = (22.0, 14.0) if family17_overview else (14.8, 12.2)
-        width_ratios = [1.65, 1.30] if family17_overview else [1.65, 1.05]
+        width, height = 14.8, 12.2
+        width_ratios = [1.65, 1.05]
         cortex_width = 0.0
         if cortex_profiles:
             cortex_width = CLUSTER_CORTEX_COLUMN_WIDTH["stacked" if cortex_stacked else "side_by_side"]
@@ -1772,15 +1787,9 @@ def render_combo(
         sub_diag = None
 
     for ridx, (row_variant, smoothing_val, row_label) in enumerate(row_specs):
-        if layout in {"dual-interpretation", "annotation-pair", "single-smoothing"}:
-            left_manifest, right_manifest = manifest_paths[0], manifest_paths[1]
-            m_l, m_r = source_manifests[0], source_manifests[1]
-            effective_assignment_variant = row_variant
-        else:
-            left_manifest, right_manifest = manifest_paths[2 * ridx : 2 * ridx + 2]
-            m_l, m_r = source_manifests[2 * ridx : 2 * ridx + 2]
-            effective_assignment_variant = row_variant
-        surface_assignment_title = effective_assignment_variant.replace("_", " ")
+        left_manifest, right_manifest = manifest_paths
+        m_l, m_r = source_manifests
+        effective_assignment_variant = row_variant
         row_meta = {
             "smoothing": smoothing_val,
             "assignment_variant": effective_assignment_variant,
@@ -1879,7 +1888,7 @@ def render_combo(
                         subject=template_subject,
                         outdir=Path(tmp),
                         name=f"merged_group_vertex_wta_{method}_{atlas}_{smoothing}",
-                        title=f"{str(overview_scope).strip() or 'Group'} functional atlas {method} {atlas} {smoothing} {surface_assignment_title}",
+                        title="",
                         left_labels=left_label,
                         right_labels=right_label,
                         left_surface=surf_l,
@@ -1889,7 +1898,10 @@ def render_combo(
                     )
                     big = Path(str(render["biglegend_png"]))
                     ax_big.imshow(plt.imread(big))
-            ax_big.set_title(f"{row_label} | functional atlas surface", fontsize=FS_BIG_TITLE)
+            if layout == "single-smoothing":
+                ax_big.set_title("Functional atlas", fontsize=FS_BIG_TITLE + 3, fontweight="bold")
+            else:
+                ax_big.set_title(f"{row_label} | functional atlas surface", fontsize=FS_BIG_TITLE)
             ax_big.axis("off")
             rows_meta.append(
                 {
@@ -1905,7 +1917,7 @@ def render_combo(
         k_l_raw = m_l.get("chosen_k_final")
         k_r_raw = m_r.get("chosen_k_final")
         if k_l_raw is None or k_r_raw is None:
-            sub = gs[ridx, 0].subgridspec(2, 2, wspace=0.08, hspace=diagnostic_hspace)
+            sub = gs[ridx, 0].subgridspec(2, 2, width_ratios=[1.0, 1.0], wspace=0.08, hspace=diagnostic_hspace)
             ax0 = fig.add_subplot(sub[0, 0])
             rows_l_tsv = read_tsv(d_l / "k_selection_summary.tsv")
             rows_r_tsv = read_tsv(d_r / "k_selection_summary.tsv")
@@ -2218,7 +2230,7 @@ def render_combo(
                     subject=template_subject,
                     outdir=Path(tmp),
                     name=f"merged_group_cluster_wta_{method}_{atlas}_{smoothing_val}",
-                    title=f"{str(overview_scope).strip() or 'Group'} functional atlas {method} {atlas} {smoothing_val} {surface_assignment_title}",
+                    title="",
                     left_labels=left_label,
                     right_labels=right_label,
                     left_surface=surf_l,
@@ -2228,7 +2240,17 @@ def render_combo(
                 )
                 big = Path(str(render["biglegend_png"]))
                 ax_big.imshow(plt.imread(big))
-        ax_big.set_title(f"{row_label} | functional atlas surface", fontsize=FS_BIG_TITLE)
+        if shared_run:
+            if effective_assignment_variant in ALL_OVR_VARIANTS:
+                atlas_row_title = "OVR"
+            elif effective_assignment_variant == "normalized_top20_count":
+                atlas_row_title = "Top20"
+            else:
+                atlas_row_title = "Fisher-z"
+            ax_big.set_title(("Functional atlas\n" if ridx == 0 else "") + atlas_row_title,
+                             fontsize=FS_BIG_TITLE + (3 if ridx == 0 else 0), fontweight="bold")
+        else:
+            ax_big.set_title(f"{row_label} | functional atlas surface", fontsize=FS_BIG_TITLE)
         ax_big.set_anchor("E")
         ax_big.axis("off")
 
@@ -2245,18 +2267,22 @@ def render_combo(
 
 
 
+    cortex_surface_records: list[dict[str, object]] = []
     if cortex_profiles and shared_run:
-        draw_cluster_cortex_fc(fig, gs[:, 2], cortex_profiles[0], stacked=cortex_stacked, label=row_specs[0][1])
+        cortex_surface_records += draw_cluster_cortex_fc(fig, gs[:, 2], cortex_profiles[0], stacked=cortex_stacked, label="",
+                               profile_paths=[p.parent / "cluster_roi_profile.npy" for p in manifest_paths[:2]])
     else:
         for ridx, profile in enumerate(cortex_profiles):
-            draw_cluster_cortex_fc(fig, gs[ridx, 2], profile, stacked=False, label=row_specs[ridx][1])
+            cortex_surface_records += draw_cluster_cortex_fc(fig, gs[ridx, 2], profile, stacked=False, label="" if layout == "single-smoothing" else row_specs[ridx][1],
+                                   profile_paths=[p.parent / "cluster_roi_profile.npy" for p in manifest_paths[2*ridx:2*ridx+2]],
+                                   show_header=(ridx == 0))
 
-    if layout in {"dual-interpretation", "annotation-pair"}:
+    if layout in {"annotation-pair", "single-smoothing"}:
         for axis in fig.axes:
             title = axis.get_title()
             if " | " not in title:
                 continue
-            label, detail = title.split(" | ", 1)
+            _, detail = title.split(" | ", 1)
             if detail.startswith("OVR raw beta"):
                 detail = "Raw beta (zero reference)"
             elif detail.startswith("cluster_network_profile (normalized"):
@@ -2267,7 +2293,7 @@ def render_combo(
                 detail = "OVR conditional association"
             elif detail.startswith("cluster confidence / ambiguity"):
                 detail = "Cluster confidence / ambiguity"
-            axis.set_title(f"{label}\n{detail}", fontsize=axis.title.get_fontsize())
+            axis.set_title(detail, fontsize=axis.title.get_fontsize())
 
     out_png = overview_png_path(
         present_dir=present_dir,
@@ -2290,8 +2316,7 @@ def render_combo(
     assignment_metadata = {
         "layout": layout,
         "assignment_variant": (
-            annotation_pair if layout == "annotation-pair" else
-            ("dual-interpretation" if layout == "dual-interpretation" else assignment_variant)
+            annotation_pair if layout == "annotation-pair" else assignment_variant
         ),
         "assignment_variants": list(dict.fromkeys(variant for variant, _, _ in row_specs)),
     }
@@ -2301,14 +2326,13 @@ def render_combo(
         route_tag=route_tag,
         mode_tag=effective_mode_tag,
         assignment_variant=(
-            f"{smoothing or '2mm'} {annotation_pair}"
-            if layout == "annotation-pair"
-            else ("2mm Fisher-z + canonical7 OVR" if layout == "dual-interpretation" else effective_assignment_variant)
+            annotation_pair if layout == "annotation-pair" else effective_assignment_variant
         ),
         surface_affinity=source_provenance.get("surface_affinity"),
         overview_scope=overview_scope,
         group_name=inferred_group_name,
         n_subjects=n_sub,
+        smoothing=smoothing,
     )
     assignment_annotation_note = None
     annotation_note = source_provenance.get("cluster_annotation_note")
@@ -2351,6 +2375,7 @@ def render_combo(
         "assignment_annotation_note": assignment_annotation_note,
         "assignment_assets": assignment_assets,
         "cluster_cortex_fc_column": bool(cortex_profiles),
+        "cortex_surface_cache": cortex_surface_records,
         "hippocampal_renderer": "brainspace_hippocampal_grid",
         **assignment_metadata,
         **source_provenance,
@@ -2362,11 +2387,19 @@ def merge_overview_manifest_items(manifest_path: Path, rendered: list[dict[str, 
 
     A directory holds one figure per annotation pair, each rendered by its own
     call. Records are keyed by figure path: this call replaces its own figures
-    and drops records whose figure no longer exists.
+    and drops records whose figure no longer exists. A record of a retired
+    layout stops the merge; archive that figure before rerunning.
     """
     kept: list[dict[str, object]] = []
     if manifest_path.is_file():
         previous = json.loads(manifest_path.read_text(encoding="utf-8")).get("items", [])
+        retired = [str(item.get("overview_png")) for item in previous
+                   if item.get("layout") not in {"annotation-pair", "single-smoothing"}]
+        if retired:
+            raise ValueError(
+                f"{manifest_path} records figures of a retired overview layout: {retired}; "
+                "archive them under wrong/outputs_<dataset>/ and remove their records before rerunning"
+            )
         current = {str(item["overview_png"]) for item in rendered}
         kept = [
             item for item in previous
@@ -2383,7 +2416,7 @@ def write_readme(present_dir: Path, items: list[dict[str, object]]) -> None:
         "|---|---|---|---|---|---|---|---|---|",
     ]
     for item in sorted(items, key=lambda x: (str(x["atlas"]), str(x["method"]), str(x["overview_png"]))):
-        png = Path(str(item["overview_png"])).name
+        png = Path(str(item["overview_png"])).resolve().relative_to(present_dir.resolve()).as_posix()
         sm = ", ".join(str(s) for s in item.get("smoothings", []))
         metric = str(item.get("metric_summary", ""))
         route = str(item.get("route_tag", ""))
@@ -2445,7 +2478,7 @@ def ensure_combo_ready(
     route_tag: str | None = None,
     smoothings: list[str] | None = None,
     hemis: list[str] | None = None,
-    layout: str = "dual-smoothing",
+    layout: str = "single-smoothing",
 ) -> None:
     sm = smoothings or ["2mm", "4mm"]
     hs = hemis or ["L", "R"]
@@ -2464,9 +2497,7 @@ def ensure_combo_ready(
                     try:
                         validate_group_atlas_lineage(
                             manifest_path,
-                            expected_network_taxonomy=(
-                                "family17" if route_tag in {"pfm_17net", "fixed_17net"} else "canonical7"
-                            ),
+                            expected_network_taxonomy=kong_network_taxonomy_for_route(route_tag),
                         )
                     except ValueError as exc:
                         problems.append(f"invalid_group_atlas_lineage: {exc}")
@@ -2530,20 +2561,14 @@ def main() -> int:
     p.add_argument(
         "--smoothing",
         choices=["2mm", "4mm"],
-        default=None,
-        help="Optional single smoothing selection (2mm or 4mm).",
+        required=True,
+        help="Required single smoothing selection (2mm or 4mm).",
     )
     p.add_argument(
         "--annotation-pair",
         choices=ANNOTATION_PAIR_CHOICES,
         default=None,
         help="Formal paired-interpretation overview branch (roi-fisherz, network-ts-fisherz, or top20).",
-    )
-    p.add_argument(
-        "--layout",
-        choices=["dual-smoothing", "dual-interpretation"],
-        default="dual-smoothing",
-        help="Overview layout: dual-smoothing (2mm/4mm) or dual-interpretation (2mm Fisher-z / 2mm OVR).",
     )
     p.add_argument(
         "--skip-readme",
@@ -2582,96 +2607,65 @@ def main() -> int:
     methods_explicit = args.methods is not None
     items: list[dict[str, object]] = []
 
-    if args.annotation_pair is not None:
-        effective_layout = "annotation-pair"
-        req_smoothings = [args.smoothing or "2mm"]
-        render_variants = [args.annotation_pair]
-    elif args.smoothing is not None:
-        effective_layout = "single-smoothing"
-        req_smoothings = [args.smoothing]
-        render_variants = ["single-smoothing"]
-    elif args.layout == "dual-interpretation":
-        effective_layout = "dual-interpretation"
-        req_smoothings = ["2mm"]
-        render_variants = ["fisherz"]
-    else:
-        effective_layout = "dual-smoothing"
-        req_smoothings = ["2mm", "4mm"]
-        render_variants = None
-
+    req_smoothings = [args.smoothing]
     for atlas in args.atlases:
         methods = tuple(args.methods) if methods_explicit else default_methods_for_atlas(atlas)
         for method in methods:
-            validate_method_route_compatibility(method, args.route_tag)
-            ensure_combo_ready(
-                group_root=group_root,
-                method=method,
-                atlas=atlas,
-                coverage_tag=tau_tag,
-                route_tag=args.route_tag,
-                smoothings=req_smoothings,
-                layout=effective_layout,
-            )
-            comp_tags = _discover_gradient_comp_tags(
-                group_root, method, atlas, req_smoothings[0], tau_tag,
-            )
-            if render_variants is not None:
-                current_variants = render_variants
+            if args.annotation_pair is not None:
+                if method in CLUSTERLESS_METHODS:
+                    raise ValueError("--annotation-pair is not supported for WTA")
+                render_specs = [("annotation-pair", args.annotation_pair, None)]
+            elif _is_gradient_method(method) and atlas == "kong2022":
+                requested = str(args.assignment_variant)
+                taxonomy = kong_network_taxonomy_for_route(args.route_tag)
+                if requested.startswith("ovr_logistic_") and not requested.startswith(f"ovr_logistic_{taxonomy}"):
+                    raise ValueError(f"Requested {requested} conflicts with {taxonomy} route {args.route_tag}")
+                if args.assignment_variant == "both":
+                    pairs = ["roi-fisherz", "network-ts-fisherz", "top20"]
+                elif args.assignment_variant in ANNOTATION_PAIR_BY_ASSIGNMENT_VARIANT:
+                    pairs = [ANNOTATION_PAIR_BY_ASSIGNMENT_VARIANT[args.assignment_variant]]
+                else:
+                    raise ValueError(f"Unsupported gradient overview assignment: {args.assignment_variant!r}")
+                render_specs = [("annotation-pair", pair, None) for pair in pairs]
             else:
-                current_variants = resolve_render_assignment_variants(
-                    method,
-                    str(args.assignment_variant),
-                    atlas=atlas,
-                )
+                render_specs = [("single-smoothing", None, variant) for variant in
+                                resolve_render_assignment_variants(method, str(args.assignment_variant), atlas=atlas)]
+            if args.output_name and (len(render_specs) != 1 or len(methods) != 1 or len(args.atlases) != 1):
+                raise ValueError("--output-name requires exactly one output")
+            if len(args.atlases) > 1:
+                target_dir = present_dir / atlas / method / args.smoothing
+            elif len(methods) > 1 or args.present_dir is None:
+                target_dir = present_dir / method / args.smoothing
+            else:
+                target_dir = present_dir
+            ensure_combo_ready(group_root=group_root, method=method, atlas=atlas, coverage_tag=tau_tag,
+                               route_tag=args.route_tag, smoothings=req_smoothings, layout=render_specs[0][0])
+            comp_tags = _discover_gradient_comp_tags(group_root, method, atlas, args.smoothing, tau_tag)
+            if len(comp_tags) != 1:
+                raise ValueError(f"Overview output would be ambiguous for gradient components {comp_tags}; select a single component input")
             for comp_tag in comp_tags:
-                for assignment_variant in current_variants:
+                for effective_layout, pair, assignment_variant in render_specs:
                     meta = render_combo(
-                        group_root=group_root,
-                        present_dir=present_dir,
-                        method=method,
-                        atlas=atlas,
-                        coverage_tag=tau_tag,
-                        route_tag=args.route_tag,
-                        mode_tag=args.mode_tag,
-                        assignment_variant=(
-                            None if effective_layout == "annotation-pair"
-                            else (assignment_variant if assignment_variant != "single-smoothing" else None)
-                        ),
-                        gradient_comp_tag=comp_tag,
-                        output_name=args.output_name,
-                        group_name=args.group_name,
-                        layout=effective_layout,
-                        annotation_pair=args.annotation_pair,
-                        smoothing=args.smoothing or (req_smoothings[0] if len(req_smoothings) == 1 else None),
+                        group_root=group_root, present_dir=target_dir, method=method, atlas=atlas,
+                        coverage_tag=tau_tag, route_tag=args.route_tag, mode_tag=args.mode_tag,
+                        assignment_variant=assignment_variant, gradient_comp_tag=comp_tag,
+                        output_name=args.output_name, group_name=args.group_name, layout=effective_layout,
+                        annotation_pair=pair, smoothing=args.smoothing,
                     )
                     row_meta = meta["rows"]
-                    metric = (
-                        "; ".join(
-                            [
-                                f"{r['smoothing']}: K(L/R)={('-' if r['k_final_L'] is None else r['k_final_L'])}/"
-                                f"{('-' if r['k_final_R'] is None else r['k_final_R'])} N={r['n_subjects']}"
-                                for r in row_meta
-                            ]
-                        )
-                        if row_meta
-                        else "missing"
-                    )
-                    item = overview_manifest_item(
-                        base={
-                            "atlas": atlas,
-                            "method": method,
-                            "gradient_comp_tag": comp_tag or None,
-                            "overview_png": meta["overview_png"],
-                            "smoothings": [r["smoothing"] for r in row_meta],
-                            "metric_summary": metric,
-                            "route_tag": args.route_tag,
-                            "mode_tag": effective_overview_mode_tag(method, args.mode_tag, assignment_variant),
-                            "assignment_variant": assignment_variant,
-                            "source_group_root": str(group_root),
-                        },
+                    metric = "; ".join(
+                        f"{r['smoothing']}: K(L/R)={('-' if r['k_final_L'] is None else r['k_final_L'])}/"
+                        f"{('-' if r['k_final_R'] is None else r['k_final_R'])} N={r['n_subjects']}"
+                        for r in row_meta
+                    ) if row_meta else "missing"
+                    items.append(overview_manifest_item(
+                        base={"atlas": atlas, "method": method, "gradient_comp_tag": comp_tag or None,
+                              "overview_png": meta["overview_png"], "smoothings": [r["smoothing"] for r in row_meta],
+                              "metric_summary": metric, "route_tag": args.route_tag,
+                              "mode_tag": effective_overview_mode_tag(method, args.mode_tag, assignment_variant),
+                              "assignment_variant": pair or assignment_variant, "source_group_root": str(group_root)},
                         meta=meta,
-                    )
-                    items.append(item)
+                    ))
 
     rendered_count = len(items)
     if not bool(args.skip_manifest):
