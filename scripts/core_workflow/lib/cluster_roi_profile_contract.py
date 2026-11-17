@@ -145,9 +145,9 @@ def validate_wta_profile_cache_manifest(
             )
     if expected_signal_branch is not None:
         recorded_branch = manifest.get("signal_branch")
-        if expected_signal_branch == "ctxreg" and recorded_branch != "ctxreg":
+        if expected_signal_branch in ("ctxreg", "ctxreg_10mm") and recorded_branch != expected_signal_branch:
             raise ValueError(
-                f"WTA profile signal_branch must be 'ctxreg', got {recorded_branch!r}"
+                f"WTA profile signal_branch must be {expected_signal_branch!r}, got {recorded_branch!r}"
             )
         if expected_signal_branch == "standard" and recorded_branch not in (None, "standard"):
             raise ValueError(

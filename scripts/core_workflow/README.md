@@ -59,9 +59,9 @@ Other entrypoints expose their own options and stage manifests.
 | `01` | `01_01` run HippUnfold; `01_02` check outputs | Individual anatomy and den-512 surfaces |
 | `02` | `02_01` prepare inputs; `02_02` participant QC; `02_03` Lynch NSI audit | Sampled signals, masks, templates and analysis rosters |
 | `03` | `03_01` Fixed references; `03_02` PFM references; Lynch `03_04` then `03_03` | Cortical reference time series |
-| `04` | `04_00` cortex regression; `04_01` ROI FC/ctxdrop; `04_02` intrinsic FC | Branch-specific signals and FC |
+| `04` | `04_00` cortex regression; `04_01` ROI FC; `04_02` intrinsic FC | Branch-specific signals and FC |
 | `05` | `05_01` gradients; `05_02` group atlas; `05_04` confidence | Gradients, labels and assignment products |
-| `06` | Numbered renderers and `06_02` label materialization | Figures and GIFTI/CIFTI labels |
+| `06` | Numbered renderers, `06_02` label materialization and the `06_07` local cortex-control diagnostic | Figures, diagnostics and GIFTI/CIFTI labels |
 | `07` | `07_01` presentation matrix | Overview index |
 
 Task analysis uses `04_03` for first-level activation, optional exploratory
@@ -238,8 +238,20 @@ Source labels remain separate from data-derived network annotations.
 | `kong2022_fixed` | `fixed` | Public-atlas Kong400 FC; canonical7 default |
 | `kong2022_pfm_17net`, `kong2022_fixed_17net` | `pfm_17net`, `fixed_17net` | Reuse PFM/Fixed FC, gradients and the corresponding canonical7 spatial clusters; explicit family17; gradient methods plus clusterless `wta-top` |
 | `kong2022_pfm_ctxreg` | `pfm_ctxreg` | Cortex-regressed hippocampal signals; upstream PFM references and surface masks |
-| `kong2022_pfm_ctxdrop` | `pfm_ctxdrop` | Exclude valid cortex within 20 mm before ROI averaging; gradient-spectral/WTA |
 | `lynch2024_20net`, `lynch2024_7net` | Matching atlas slug | Hard-label Lynch references; both reuse the Lynch20 gradient bank |
+
+`pfm_ctxreg` is the only cortex-control signal branch; the former
+`pfm_ctxdrop` branch is retired. `06_07_render_local_cortex_control_diagnostics.py`
+reports target-side local-cortex exclusion (ctxdrop) next to ctxreg at 3, 6,
+10 and 20 mm as an FC/WTA-level diagnostic that feeds nothing downstream:
+`--stage subjects` writes `outputs_hcp/work/local_cortex_control/sub-<id>/`,
+`--stage render` requires every roster subject and writes
+`outputs_hcp/present/local_cortex_control/`. In HCP 7T, exclusion changes the
+winning network for only about 1-4% of hippocampal vertices, whereas ctxreg
+changes about a quarter to two fifths, an effect reproduced by regressing only
+cortex within 3 mm; ctxreg is therefore a conservative sensitivity analysis
+that removes boundary-shared signal, possibly including genuine hippocampal or
+subicular signal.
 
 For family17 group overviews, pass `--route-tag pfm_17net` or
 `--route-tag fixed_17net` to `06_01_build_group_overview.py`. The explicit

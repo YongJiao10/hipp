@@ -80,7 +80,7 @@ def test_ants_points_convert_ras_to_lps_and_back(tmp_path, monkeypatch):
 
 @pytest.mark.parametrize('module,function', [
     ('scripts.core_workflow.04_00_materialize_cortex_regressed_surface_timeseries', 'hipp_surface_path'),
-    ('scripts.core_workflow.04_01_materialize_kong2022_roi_fc', 'hipp_surface_path'),
+    ('scripts.core_workflow.06_07_render_local_cortex_control_diagnostics', 'hipp_surface_path'),
     ('scripts.core_workflow.06_08_render_hcp_subfield_composition', 'midthickness_surface_path'),
 ])
 def test_distance_and_area_geometry_is_native_t1w(module, function):

@@ -49,7 +49,7 @@ For run-level volume sampling, the native T1w mesh is transformed using
 `derivatives_surf/sub-<id>/anat/sub-<id>_from-MNI152NLin6Asym_to-T1w_mode-image_xfm.h5`
 and ANTs point mapping. The mapped meshes are saved in each subject's
 `surface/sampling_surfaces/`. Native T1w geometry defines smoothing; metrics
-use `space-T1w` filenames. If `04_00` or `04_01 --ctxdrop` is used with JJ_TMS
+use `space-T1w` filenames. If `04_00` is used with JJ_TMS
 native cortical meshes, explicitly pass `--cortex-coordinate-space T1w`.
 
 The default roster is the concatenation of the two existing caller-selected

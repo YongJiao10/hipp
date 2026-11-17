@@ -1,30 +1,18 @@
 #!/usr/bin/env python3
-"""HCP 7T Cortical Proximity Control Combination Visualization: Standard vs. CtxDrop vs. CtxReg.
+"""HCP 7T hippocampal organization: Standard vs. CtxReg 10 mm vs. CtxReg 20 mm, 2mm and 4mm smoothing.
 
-Directly copied and adapted from the three canonical multi-dataset reference scripts:
-  1. Subfig 1 (Gradient Positive Fisher-z):
-     - Adapted from `multidataset_cluster_confidence_stacked` (plot_multidataset_cluster_positive_stacked.py)
-     - `width_ratios = [0.40, 0.20, 0.40]`, `wspace = 0.02`
-     - Subplots: [Left Hipp Bar] | [2x2 Surface Overlay] | [Right Hipp Bar]
-     - Branch-specific adaptive dynamic range (Standard: ~0.25, CtxDrop: ~0.06, CtxReg: ~0.03)
-     - Y-axis: C1: Anterior at top, C2: Middle in middle, C3: Posterior at bottom
-     - Hipp surface and stacked bars share the EXACT same height.
+One figure with two smoothing blocks (2mm on top, 4mm below), each with three rows
+(Standard `pfm`, CtxReg 10 mm `pfm_ctxreg_10mm`, CtxReg 20 mm `pfm_ctxreg`) and three
+modality columns. Gradient panels read the formal HCP Kong2022 gradient run selected by
+`multidataset_cohorts.HCP_KONG_GRADIENT_RUN` (TopSim profile, primary Ward partition).
 
-  2. Subfig 2 (Gradient Top-20 Count):
-     - Copied and adapted from `multidataset_gradient_subregion_top20_stacked_2col` (render_multidataset_gradient_subregion_top20_stacked_2col.py)
-     - `width_ratios = [0.13, 0.19, 0.34, 0.34]`, `wspace = 0.055, hspace = 0.16`
-     - Subplots: [Cohort Card] | [2x2 Surface Overlay] | [Left Hipp Bar] | [Right Hipp Bar]
-     - Y-axis: Ant at top, Middle in middle, Post at bottom (0-100% normalized ROI count)
-     - Hipp surface and stacked bars share the EXACT same height.
-
-  3. Subfig 3 (WTA Long-Axis 20 Bins):
-     - Copied and adapted from `multidataset_wta_normalized_longaxis_stacked_2col` (render_multidataset_wta_normalized_longaxis_stacked_2col.py)
-     - `width_ratios = [0.12, 0.20, 0.34, 0.34]`, `wspace = 0.045, hspace = 0.14`
-     - Subplots: [Cohort Card] | [2x2 Surface Overlay] | [Left Hipp Bar] | [Right Hipp Bar]
-     - Y-axis: Bin 1 (Ant) at top, Bin 20 (Post) at bottom (0-100% vertex count)
-     - Hipp surface and stacked bars share the EXACT same height.
-
-Unified grid support: 2mm_36p and 4mm_36p (HCP 7T ICA-FIX Young Adults).
+  1. Gradient clusters, positive Fisher-z FC (adapted from multidataset_cluster_confidence_stacked):
+     [Left Hipp bar] | [2x2 surface] | [Right Hipp bar]; row-specific Fisher-z scale;
+     C1 anterior at top, C3 posterior at bottom.
+  2. Gradient clusters, normalized top-20 ROI count (adapted from
+     multidataset_gradient_subregion_top20_stacked_2col): [Branch card] | [2x2 surface] | [Left] | [Right].
+  3. Winner-take-all labels in 20 long-axis bins (adapted from
+     multidataset_wta_normalized_longaxis_stacked_2col): bin 1 anterior at top.
 """
 
 from __future__ import annotations
@@ -56,7 +44,7 @@ for p in (CORE_DIR, VIS_LIB_DIR):
         sys.path.insert(0, str(p))
 
 from lib.surface_utils import long_axis_order, render_hippocampal_grid
-from multidataset_cohorts import GridSpec, GRID_VARIANTS, HCP_COHORT_SIZE
+from multidataset_cohorts import HCP_COHORT_SIZE, HCP_KONG_GRADIENT_RUN
 
 # -----------------------------------------------------------------------------
 # Canonical Styling & Palette (Exact Match to References)
@@ -119,7 +107,6 @@ BRANCHES: list[dict[str, Any]] = [
     {
         "id": "standard",
         "cohort_name": "Standard",
-        "cohort_desc": "RouteA Baseline Reference",
         "dataset_name": "HCP 7T",
         "n_subjects": HCP_COHORT_SIZE,
         "badge_bg": "#0b3c5d",
@@ -128,28 +115,33 @@ BRANCHES: list[dict[str, Any]] = [
         "group_root": REPO_ROOT / "outputs_hcp" / "work" / "group_atlas" / "pfm",
     },
     {
-        "id": "ctxdrop",
-        "cohort_name": "CtxDrop",
-        "cohort_desc": "Adjacent Cortical Dropped",
+        "id": "ctxreg_10mm",
+        "cohort_name": "CtxReg 10 mm",
         "dataset_name": "HCP 7T",
         "n_subjects": HCP_COHORT_SIZE,
-        "badge_bg": "#1d5b79",
+        "badge_bg": "#b45309",
         "badge_fg": "#ffffff",
-        "bg_color": "#f7faff",
-        "group_root": REPO_ROOT / "outputs_hcp" / "work" / "group_atlas" / "pfm_ctxdrop",
+        "bg_color": "#fffbf5",
+        "group_root": REPO_ROOT / "outputs_hcp" / "work" / "group_atlas" / "pfm_ctxreg_10mm",
     },
     {
-        "id": "ctxreg",
-        "cohort_name": "CtxReg",
-        "cohort_desc": "Adjacent Cortical Regressed",
+        "id": "ctxreg_20mm",
+        "cohort_name": "CtxReg 20 mm",
         "dataset_name": "HCP 7T",
         "n_subjects": HCP_COHORT_SIZE,
-        "badge_bg": "#8c4600",
+        "badge_bg": "#7c2d12",
         "badge_fg": "#ffffff",
-        "bg_color": "#fffdf8",
+        "bg_color": "#fff7ef",
         "group_root": REPO_ROOT / "outputs_hcp" / "work" / "group_atlas" / "pfm_ctxreg",
     },
 ]
+SMOOTHINGS = ("2mm", "4mm")
+DEFAULT_DIR = REPO_ROOT / "scripts" / "visualize" / "hcp_cortex_control_gradient_wta"
+DEFAULT_OUT_PNG = DEFAULT_DIR / "hcp_cortex_control_gradient_wta.png"
+DEFAULT_STATS_TSV = DEFAULT_DIR / "stats" / "hcp_cortex_control_gradient_wta_stats.tsv"
+
+
+REFERENCE_FIG_HEIGHT_IN = 18.0
 
 
 # -----------------------------------------------------------------------------
@@ -161,7 +153,7 @@ def load_branch_fisherz(branch: dict[str, Any], smoothing: str) -> dict[str, lis
     out: dict[str, list[dict[str, Any]]] = {}
 
     for hemi in ("L", "R"):
-        hdir = group_root / f"gradient-spectral/kong2022/{smoothing}/cov_0p80/g1g2g3/hemi_{hemi}"
+        hdir = group_root / f"{HCP_KONG_GRADIENT_RUN}/kong2022/{smoothing}/cov_0p80/g1g2g3/hemi_{hemi}"
         npy_path = hdir / "cluster_network_profile.npy"
         status_path = hdir / "cluster_assignment_status_fisherz.json"
         summary_path = hdir / "group_feature_summary.json"
@@ -205,7 +197,7 @@ def load_branch_top20_count(branch: dict[str, Any], smoothing: str) -> dict[str,
     out: dict[str, list[dict[str, Any]]] = {}
 
     for hemi in ("L", "R"):
-        hdir = group_root / f"gradient-spectral/kong2022/{smoothing}/cov_0p80/g1g2g3/hemi_{hemi}"
+        hdir = group_root / f"{HCP_KONG_GRADIENT_RUN}/kong2022/{smoothing}/cov_0p80/g1g2g3/hemi_{hemi}"
         status_path = hdir / "cluster_assignment_status_normalized_top20_count.json"
 
         if not status_path.is_file():
@@ -413,15 +405,15 @@ def render_branch_surface_2x2(
         lbl_l = Path(ml["template_functional_atlas_label"])
         lbl_r = Path(mr["template_functional_atlas_label"])
     elif modality == "fisherz":
-        ml_path = group_root / f"gradient-spectral/kong2022/{smoothing}/cov_0p80/g1g2g3/hemi_L/group_atlas_manifest.json"
-        mr_path = group_root / f"gradient-spectral/kong2022/{smoothing}/cov_0p80/g1g2g3/hemi_R/group_atlas_manifest.json"
+        ml_path = group_root / f"{HCP_KONG_GRADIENT_RUN}/kong2022/{smoothing}/cov_0p80/g1g2g3/hemi_L/group_atlas_manifest.json"
+        mr_path = group_root / f"{HCP_KONG_GRADIENT_RUN}/kong2022/{smoothing}/cov_0p80/g1g2g3/hemi_R/group_atlas_manifest.json"
         ml = json.loads(ml_path.read_text(encoding="utf-8"))
         mr = json.loads(mr_path.read_text(encoding="utf-8"))
         lbl_l = Path(ml["assignment_variants"]["fisherz"]["template_functional_atlas_label_variant"])
         lbl_r = Path(mr["assignment_variants"]["fisherz"]["template_functional_atlas_label_variant"])
     elif modality == "top20_count":
-        ml_path = group_root / f"gradient-spectral/kong2022/{smoothing}/cov_0p80/g1g2g3/hemi_L/group_atlas_manifest.json"
-        mr_path = group_root / f"gradient-spectral/kong2022/{smoothing}/cov_0p80/g1g2g3/hemi_R/group_atlas_manifest.json"
+        ml_path = group_root / f"{HCP_KONG_GRADIENT_RUN}/kong2022/{smoothing}/cov_0p80/g1g2g3/hemi_L/group_atlas_manifest.json"
+        mr_path = group_root / f"{HCP_KONG_GRADIENT_RUN}/kong2022/{smoothing}/cov_0p80/g1g2g3/hemi_R/group_atlas_manifest.json"
         ml = json.loads(ml_path.read_text(encoding="utf-8"))
         mr = json.loads(mr_path.read_text(encoding="utf-8"))
         lbl_l = Path(ml["assignment_variants"]["normalized_top20_count"]["template_functional_atlas_label_variant"])
@@ -587,7 +579,7 @@ def render_subfig_fisherz_row(
     if row_idx == 0:
         ax_left.set_title("Left Hipp. (hemi-L)", fontsize=16.5, fontweight="heavy", color="#0b2447", pad=8)
         ax_right.set_title("Right Hipp. (hemi-R)", fontsize=16.5, fontweight="heavy", color="#0b2447", pad=8)
-        ax_mid.set_title(f"{smoothing} Atlas (2x2 View)", fontsize=15.5, fontweight="heavy", color="#0b2447", pad=8)
+        ax_mid.set_title("Cluster labels (2x2 view)", fontsize=15.5, fontweight="heavy", color="#0b2447", pad=8)
 
     if is_bottom:
         ax_left.set_xlabel("Positive FC (Fisher-z)", fontsize=15.0, fontweight="heavy", color="#0b2447", labelpad=8)
@@ -598,14 +590,14 @@ def render_subfig_fisherz_row(
     ax_mid.imshow(surf_img, aspect="equal")
 
     # Cohort Label Badge on the Left of Left Subplot
-    badge_txt = f"{binfo['cohort_name']}\n(N={binfo['n_subjects']})"
+    badge_txt = f"{binfo['cohort_name']}\n{smoothing}"
     ax_left.text(
-        -0.33,
+        -0.40,
         0.50,
         badge_txt,
         va="center",
         ha="center",
-        fontsize=14.0,
+        fontsize=13.0,
         fontweight="heavy",
         color=binfo["badge_fg"],
         transform=ax_left.transAxes,
@@ -668,7 +660,7 @@ def render_subfig_top20_row(
         0.50,
         0.54,
         binfo["cohort_name"],
-        fontsize=19.0,
+        fontsize=16.0,
         fontweight="heavy",
         ha="center",
         va="center",
@@ -678,7 +670,7 @@ def render_subfig_top20_row(
     ax_meta.text(
         0.50,
         0.30,
-        f"(N = {binfo['n_subjects']})",
+        f"N = {binfo['n_subjects']}",
         fontsize=16.0,
         fontweight="bold",
         ha="center",
@@ -689,9 +681,9 @@ def render_subfig_top20_row(
     ax_meta.text(
         0.50,
         0.12,
-        binfo["cohort_desc"],
-        fontsize=12.0,
-        fontweight="medium",
+        f"{smoothing} smoothing",
+        fontsize=14.0,
+        fontweight="bold",
         ha="center",
         va="center",
         color="#64748b",
@@ -739,7 +731,8 @@ def render_subfig_top20_row(
         ax.tick_params(direction="out", length=4, width=1.2, pad=6)
 
         if is_bottom:
-            ax.set_xticklabels(["0%", "25%", "50%", "75%", "100%"], fontsize=13.5, fontweight="bold", color="#111111")
+            first = "0%" if side == "left" else ""
+            ax.set_xticklabels([first, "25%", "50%", "75%", "100%"], fontsize=13.5, fontweight="bold", color="#111111")
             ax.set_xlabel("Normalized Top-20 Representation (%)", fontsize=15.0, fontweight="bold", color="#0b2447", labelpad=8)
         else:
             ax.set_xticklabels([])
@@ -748,8 +741,8 @@ def render_subfig_top20_row(
     ax_right.set_yticklabels([])
 
     if row_idx == 0:
-        ax_meta.set_title("Cohort Profile", fontsize=16.5, fontweight="heavy", color="#102a43", pad=8)
-        ax_surf.set_title(f"{smoothing} Atlas", fontsize=16.5, fontweight="heavy", color="#102a43", pad=8)
+        ax_meta.set_title("Branch", fontsize=16.5, fontweight="heavy", color="#102a43", pad=8)
+        ax_surf.set_title("Labels (2x2 view)", fontsize=16.5, fontweight="heavy", color="#102a43", pad=8)
         ax_left.set_title("Left Hipp.", fontsize=16.5, fontweight="heavy", color="#0f4c81", pad=8)
         ax_right.set_title("Right Hipp.", fontsize=16.5, fontweight="heavy", color="#0f4c81", pad=8)
 
@@ -797,9 +790,9 @@ def render_subfig_wta_row(
     )
     ax_meta.add_patch(badge_patch)
     ax_meta.text(0.50, 0.83, binfo["dataset_name"], fontsize=16.0, fontweight="bold", ha="center", va="center", color=binfo["badge_fg"], transform=ax_meta.transAxes, zorder=3)
-    ax_meta.text(0.50, 0.50, binfo["cohort_name"], fontsize=19.0, fontweight="bold", ha="center", va="center", color="#0f172a", transform=ax_meta.transAxes)
-    ax_meta.text(0.50, 0.30, f"(N={binfo['n_subjects']})", fontsize=16.0, fontweight="bold", ha="center", va="center", color="#334e68", transform=ax_meta.transAxes)
-    ax_meta.text(0.50, 0.12, binfo["cohort_desc"], fontsize=12.0, fontweight="medium", ha="center", va="center", color="#64748b", transform=ax_meta.transAxes)
+    ax_meta.text(0.50, 0.50, binfo["cohort_name"], fontsize=16.0, fontweight="bold", ha="center", va="center", color="#0f172a", transform=ax_meta.transAxes)
+    ax_meta.text(0.50, 0.30, f"N = {binfo['n_subjects']}", fontsize=16.0, fontweight="bold", ha="center", va="center", color="#334e68", transform=ax_meta.transAxes)
+    ax_meta.text(0.50, 0.12, f"{smoothing} smoothing", fontsize=14.0, fontweight="bold", ha="center", va="center", color="#64748b", transform=ax_meta.transAxes)
 
     # 2. 2x2 3D Surface expanding to fill full row height
     ax_surf.axis("off")
@@ -838,7 +831,8 @@ def render_subfig_wta_row(
 
         if is_bottom:
             ax.set_xlabel("Vertices in Bin (%)", fontsize=15.0, fontweight="bold", color="#102a43", labelpad=8)
-            ax.set_xticklabels(["0%", "25%", "50%", "75%", "100%"], fontsize=13.5, fontweight="bold", color="#243b53")
+            first = "0%" if side == "left" else ""
+            ax.set_xticklabels([first, "25%", "50%", "75%", "100%"], fontsize=13.5, fontweight="bold", color="#243b53")
         else:
             ax.set_xticklabels([])
 
@@ -847,8 +841,8 @@ def render_subfig_wta_row(
     ax_right.set_yticklabels([])
 
     if row_idx == 0:
-        ax_meta.set_title("Cohort Profile", fontsize=16.5, fontweight="heavy", color="#102a43", pad=8)
-        ax_surf.set_title(f"{smoothing} Atlas", fontsize=16.5, fontweight="heavy", color="#102a43", pad=8)
+        ax_meta.set_title("Branch", fontsize=16.5, fontweight="heavy", color="#102a43", pad=8)
+        ax_surf.set_title("Labels (2x2 view)", fontsize=16.5, fontweight="heavy", color="#102a43", pad=8)
         ax_left.set_title("Left Hipp.", fontsize=16.5, fontweight="heavy", color="#0f4c81", pad=8)
         ax_right.set_title("Right Hipp.", fontsize=16.5, fontweight="heavy", color="#0f4c81", pad=8)
 
@@ -857,56 +851,56 @@ def render_subfig_wta_row(
 # Master Figure Assembly
 # -----------------------------------------------------------------------------
 def render_hcp_cortex_control_gradient_wta(
-    spec: GridSpec,
     out_path: Path,
     tsv_path: Path | None = None,
     force: bool = False,
 ):
-    """Render the master composite comparison figure across standard, ctxdrop, and ctxreg."""
-    smoothing = spec.smoothing
-    variant = spec.variant
-    print(f"\n[RENDER] Building HCP Cortex-Control Combination Figure ({spec.tag})...")
+    """Render Standard, CtxReg 10 mm and CtxReg 20 mm rows for 2mm and 4mm hippocampal smoothing."""
+    print("\n[RENDER] Building HCP local cortex regression comparison figure...")
 
-    panels_dir = REPO_ROOT / "scripts" / "visualize" / "hcp_cortex_control_gradient_wta" / "panels"
+    panels_dir = DEFAULT_DIR / "panels"
     panels_dir.mkdir(parents=True, exist_ok=True)
 
-    # 1. Load data & render 2x2 3D surfaces for all three branches
+    # 1. Load data & render 2x2 3D surfaces: one row per (smoothing, branch)
     branch_data: list[dict[str, Any]] = []
     with tempfile.TemporaryDirectory() as temp_dir_str:
         temp_dir = Path(temp_dir_str)
-        for b in BRANCHES:
-            print(f"  -> Loading & rendering assets for branch: {b['cohort_name']}...")
-            fz_data = load_branch_fisherz(b, smoothing)
-            top20_data = load_branch_top20_count(b, smoothing)
-            wta_data = load_branch_wta(b, smoothing)
+        for smoothing in SMOOTHINGS:
+            for b in BRANCHES:
+                print(f"  -> Loading & rendering assets for {b['cohort_name']} ({smoothing})...")
+                fz_data = load_branch_fisherz(b, smoothing)
+                top20_data = load_branch_top20_count(b, smoothing)
+                wta_data = load_branch_wta(b, smoothing)
 
-            surf_fz = render_branch_surface_2x2(b, "fisherz", smoothing, temp_dir, panels_dir, force=force)
-            surf_top20 = render_branch_surface_2x2(b, "top20_count", smoothing, temp_dir, panels_dir, force=force)
-            surf_wta = render_branch_surface_2x2(b, "wta", smoothing, temp_dir, panels_dir, force=force)
+                surf_fz = render_branch_surface_2x2(b, "fisherz", smoothing, temp_dir, panels_dir, force=force)
+                surf_top20 = render_branch_surface_2x2(b, "top20_count", smoothing, temp_dir, panels_dir, force=force)
+                surf_wta = render_branch_surface_2x2(b, "wta", smoothing, temp_dir, panels_dir, force=force)
 
-            # Compute branch-specific dynamic range for Fisher-z
-            max_z, z_ticks = adaptive_positive_axis_scale(fz_data["L"], fz_data["R"])
+                # Compute row-specific dynamic range for Fisher-z
+                max_z, z_ticks = adaptive_positive_axis_scale(fz_data["L"], fz_data["R"])
 
-            branch_data.append({
-                "info": b,
-                "fisherz": fz_data,
-                "top20": top20_data,
-                "wta": wta_data,
-                "surf_fz": surf_fz,
-                "surf_top20": surf_top20,
-                "surf_wta": surf_wta,
-                "max_z": max_z,
-                "z_ticks": z_ticks,
-            })
+                branch_data.append({
+                    "info": b,
+                    "smoothing": smoothing,
+                    "fisherz": fz_data,
+                    "top20": top20_data,
+                    "wta": wta_data,
+                    "surf_fz": surf_fz,
+                    "surf_top20": surf_top20,
+                    "surf_wta": surf_wta,
+                    "max_z": max_z,
+                    "z_ticks": z_ticks,
+                })
 
     # Save TSV statistics if requested
     if tsv_path is not None:
         tsv_path.parent.mkdir(parents=True, exist_ok=True)
         lines = [
-            "branch\tsmoothing\tvariant\tmodality\themisphere\tcluster_or_bin_id\tregion_name\tnetwork_name\tvalue_or_pct\ttop1_network\tmargin"
+            "branch\tsmoothing\tmodality\themisphere\tcluster_or_bin_id\tregion_name\tnetwork_name\tvalue_or_pct\ttop1_network\tmargin"
         ]
         for bd in branch_data:
             b_id = bd["info"]["id"]
+            smoothing = bd["smoothing"]
             # Fisher-z
             for hemi in ("L", "R"):
                 for c in bd["fisherz"][hemi]:
@@ -915,7 +909,7 @@ def render_hcp_cortex_control_gradient_wta(
                     top1 = c["top1_network"]
                     m = c["margin"]
                     for net, val in c["pos_networks"]:
-                        lines.append(f"{b_id}\t{smoothing}\t{variant}\tgradient_fisherz\t{hemi}\t{cid}\t{cname}\t{net}\t{val:.6f}\t{top1}\t{m:.6f}")
+                        lines.append(f"{b_id}\t{smoothing}\tgradient_fisherz\t{hemi}\t{cid}\t{cname}\t{net}\t{val:.6f}\t{top1}\t{m:.6f}")
             # Top20
             for hemi in ("L", "R"):
                 for s in bd["top20"][hemi]:
@@ -924,38 +918,48 @@ def render_hcp_cortex_control_gradient_wta(
                     top1 = s["top1_network"]
                     m = s["margin_count"]
                     for net, pct in s["comp"].items():
-                        lines.append(f"{b_id}\t{smoothing}\t{variant}\tgradient_top20\t{hemi}\t{cid}\t{sname}\t{net}\t{pct:.4f}\t{top1}\t{m}")
+                        lines.append(f"{b_id}\t{smoothing}\tgradient_top20\t{hemi}\t{cid}\t{sname}\t{net}\t{pct:.4f}\t{top1}\t{m}")
             # WTA
             for hemi in ("L", "R"):
                 for b_idx, comp in enumerate(bd["wta"][hemi], start=1):
                     for net, pct in comp.items():
-                        lines.append(f"{b_id}\t{smoothing}\t{variant}\twta_longaxis\t{hemi}\t{b_idx}\tBin_{b_idx}\t{net}\t{pct:.4f}\t-\t-")
+                        lines.append(f"{b_id}\t{smoothing}\twta_longaxis\t{hemi}\t{b_idx}\tBin_{b_idx}\t{net}\t{pct:.4f}\t-\t-")
         tsv_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
         print(f"  [TSV] Saved statistics to: {tsv_path}")
 
-    # Set up Master Canvas: 49.0 x 18.0 inches (10,780 x 3,960 pixels at 220 DPI)
-    # Maintains the ~4.8 inches row height so the 2x2 hippocampal surface
-    # expands to the exact same vertical height as the stacked bars,
-    # while narrowing blank spaces and tightening figure margins across all three modalities.
-    fig = plt.figure(figsize=(49.0, 18.0), facecolor="#ffffff", dpi=220)
+    # Master canvas: fixed header (2.25 in) and legend (1.35 in) zones plus ~4.8 in per
+    # branch row, so the 2x2 hippocampal surface keeps the same height as the
+    # stacked bars whatever the number of branch rows. Layout fractions below are
+    # written for the three-row reference height (18 in) and rescaled here.
+    n_rows = len(branch_data)
+    fig_height = 2.25 + 4.8 * n_rows + 1.35
+    scale = REFERENCE_FIG_HEIGHT_IN / fig_height
+
+    def from_top(y: float) -> float:
+        return 1.0 - (1.0 - y) * scale
+
+    def from_bottom(y: float) -> float:
+        return y * scale
+
+    fig = plt.figure(figsize=(49.0, fig_height), facecolor="#ffffff", dpi=220)
 
     # -------------------------------------------------------------------------
     # 1. Non-Overlapping Header Zone
     # -------------------------------------------------------------------------
     fig.suptitle(
-        "HCP 7T Cortical Proximity Control: Standard vs. CtxDrop vs. CtxReg",
+        "HCP 7T Hippocampal Organization with Local Cortex Regression (CtxReg 10 mm vs. 20 mm)",
         fontsize=38.0,
         fontweight="heavy",
         x=0.50,
-        y=0.985,
+        y=from_top(0.985),
         ha="center",
         va="top",
         color="#0b2447",
     )
     fig.text(
         0.50,
-        0.940,
-        f"Hippocampal Gradient (Fisher-z FC & Normalized Top-20 Count) and Winner-Take-All Parcellation  |  {smoothing}_{variant} (N = {HCP_COHORT_SIZE} Young Adults, ICA-FIX)",
+        from_top(0.940),
+        f"Gradient clusters (TopSim profile, Ward, K = 3) and winner-take-all labels; Kong2022 PFM canonical7 networks  |  rest, ICA-FIX, N = {HCP_COHORT_SIZE} young adults  |  top: 2mm, bottom: 4mm hippocampal smoothing",
         ha="center",
         va="top",
         fontsize=20.0,
@@ -964,21 +968,21 @@ def render_hcp_cortex_control_gradient_wta(
     )
 
     # Subfigure Section Banners at y = 0.916
-    y_subfig_title = 0.916
-    fig.text(0.193, y_subfig_title, "GRADIENT POSITIVE FISHER-Z FC PROFILES (DYNAMIC RANGE)", fontsize=17.0, fontweight="heavy", color="#0b3c5d", ha="center", va="top")
-    fig.text(0.500, y_subfig_title, "GRADIENT NORMALIZED TOP-20 RECRUITMENT (%)", fontsize=17.0, fontweight="heavy", color="#1d5b79", ha="center", va="top")
-    fig.text(0.827, y_subfig_title, "WINNER-TAKE-ALL 20 LONG-AXIS BINS (%)", fontsize=17.0, fontweight="heavy", color="#8c4600", ha="center", va="top")
+    y_subfig_title = from_top(0.916)
+    fig.text(0.193, y_subfig_title, "GRADIENT CLUSTERS: POSITIVE FISHER-Z FC (ROW-SPECIFIC SCALE)", fontsize=17.0, fontweight="heavy", color="#0b3c5d", ha="center", va="top")
+    fig.text(0.500, y_subfig_title, "GRADIENT CLUSTERS: NORMALIZED TOP-20 ROI COUNT (%)", fontsize=17.0, fontweight="heavy", color="#1d5b79", ha="center", va="top")
+    fig.text(0.827, y_subfig_title, "WINNER-TAKE-ALL LABELS: 20 LONG-AXIS BINS (%)", fontsize=17.0, fontweight="heavy", color="#8c4600", ha="center", va="top")
 
     # -------------------------------------------------------------------------
     # 2. Main Master GridSpec: 3 Columns side-by-side
     # -------------------------------------------------------------------------
-    top_margin = 0.875
-    bottom_margin = 0.075
+    top_margin = from_top(0.875)
+    bottom_margin = from_bottom(0.075)
 
     gs_main = fig.add_gridspec(
         nrows=1,
         ncols=3,
-        left=0.052,
+        left=0.072,
         right=0.988,
         top=top_margin,
         bottom=bottom_margin,
@@ -986,9 +990,9 @@ def render_hcp_cortex_control_gradient_wta(
         wspace=0.020,
     )
 
-    # Subgridspec for each subfigure: 3 rows (Standard, CtxDrop, CtxReg)
+    # Subgridspec for each subfigure: one row per (smoothing, branch)
     gs_sub1 = gs_main[0, 0].subgridspec(
-        nrows=3,
+        nrows=n_rows,
         ncols=3,
         width_ratios=[0.41, 0.18, 0.41],
         wspace=0.012,
@@ -996,7 +1000,7 @@ def render_hcp_cortex_control_gradient_wta(
     )
 
     gs_sub2 = gs_main[0, 1].subgridspec(
-        nrows=3,
+        nrows=n_rows,
         ncols=4,
         width_ratios=[0.12, 0.18, 0.35, 0.35],
         wspace=0.024,
@@ -1004,7 +1008,7 @@ def render_hcp_cortex_control_gradient_wta(
     )
 
     gs_sub3 = gs_main[0, 2].subgridspec(
-        nrows=3,
+        nrows=n_rows,
         ncols=5,
         width_ratios=[0.11, 0.15, 0.085, 0.3275, 0.3275],
         wspace=0.015,
@@ -1015,17 +1019,23 @@ def render_hcp_cortex_control_gradient_wta(
     print("  [RENDER] Drawing Subfigure 1: Gradient Fisher-z...")
     for row_idx, bd in enumerate(branch_data):
         is_bottom = (row_idx == len(branch_data) - 1)
-        render_subfig_fisherz_row(fig, gs_sub1, row_idx, bd, smoothing, is_bottom)
+        render_subfig_fisherz_row(fig, gs_sub1, row_idx, bd, bd["smoothing"], is_bottom)
 
     print("  [RENDER] Drawing Subfigure 2: Gradient Top-20 Count...")
     for row_idx, bd in enumerate(branch_data):
         is_bottom = (row_idx == len(branch_data) - 1)
-        render_subfig_top20_row(fig, gs_sub2, row_idx, bd, smoothing, is_bottom)
+        render_subfig_top20_row(fig, gs_sub2, row_idx, bd, bd["smoothing"], is_bottom)
 
     print("  [RENDER] Drawing Subfigure 3: WTA Long-Axis...")
     for row_idx, bd in enumerate(branch_data):
         is_bottom = (row_idx == len(branch_data) - 1)
-        render_subfig_wta_row(fig, gs_sub3, row_idx, bd, smoothing, is_bottom)
+        render_subfig_wta_row(fig, gs_sub3, row_idx, bd, bd["smoothing"], is_bottom)
+
+    # Separator between the 2mm and 4mm smoothing blocks
+    rows_per_block = len(BRANCHES)
+    for boundary in range(rows_per_block, n_rows, rows_per_block):
+        y_sep = 0.5 * (gs_sub2[boundary - 1, 2].get_position(fig).y0 + gs_sub2[boundary, 2].get_position(fig).y1)
+        fig.add_artist(plt.Line2D([0.012, 0.988], [y_sep, y_sep], transform=fig.transFigure, color="#334e68", lw=2.0, ls="--"))
 
     # -------------------------------------------------------------------------
     # 3. Global Bottom Legend: Canonical 7 Networks
@@ -1039,16 +1049,16 @@ def render_hcp_cortex_control_gradient_wta(
         ("Language", "Language (LAN)"),
         ("Visual", "Visual (VN)"),
     ]
-    y_leg = 0.024
+    y_leg = from_bottom(0.024)
     x_leg_start = 0.125
     dx_leg = 0.110
     for idx, (net_key, net_label) in enumerate(legend_nets):
         col = NETWORK_COLORS.get(net_key, "#888888")
         x_pos = x_leg_start + idx * dx_leg
         rect = patches.Rectangle(
-            (x_pos, y_leg - 0.007),
+            (x_pos, y_leg - 0.007 * scale),
             0.015,
-            0.014,
+            0.014 * scale,
             facecolor=col,
             edgecolor="#222222",
             linewidth=1.0,
@@ -1079,32 +1089,14 @@ def render_hcp_cortex_control_gradient_wta(
 # -----------------------------------------------------------------------------
 # Entrypoint for suite and CLI
 # -----------------------------------------------------------------------------
-def _render_grid():
-    """Entrypoint compatible with suite runner and CLI invocation."""
-    parser = argparse.ArgumentParser(description="Render HCP Cortex-Control Combination Visualization.")
-    default_dir = REPO_ROOT / "scripts" / "visualize" / "hcp_cortex_control_gradient_wta"
-    parser.add_argument("--smoothing", choices=["2mm", "4mm"], default="2mm", help="Hippocampal smoothing resolution")
-    parser.add_argument("--variant", choices=["36p"], default="36p", help="Denoising variant label")
-    parser.add_argument("--grid", choices=list(GRID_VARIANTS), default=None, help="Grid tag (e.g. 2mm_36p)")
-    parser.add_argument("--all-grids", action="store_true", help="Render both 36p grid combinations (2mm/4mm)")
-    parser.add_argument("--out-png", type=Path, default=None, help="Output PNG path")
-    parser.add_argument("--stats-tsv", type=Path, default=None, help="Output stats TSV path")
-    parser.add_argument("--force", action="store_true", help="Force re-rendering of surface panels and composites")
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Render the HCP Standard vs. CtxReg 10 mm vs. CtxReg 20 mm comparison (2mm and 4mm).")
+    parser.add_argument("--out-png", type=Path, default=DEFAULT_OUT_PNG, help="Output PNG path")
+    parser.add_argument("--stats-tsv", type=Path, default=DEFAULT_STATS_TSV, help="Output statistics TSV path")
+    parser.add_argument("--force", action="store_true", help="Force re-rendering of cached surface panels")
     args = parser.parse_args()
-
-    grids = list(GRID_VARIANTS) if args.all_grids else [args.grid if args.grid else f"{args.smoothing}_{args.variant}"]
-
-    for g in grids:
-        spec = GridSpec.from_tag(g)
-        out_png = args.out_png if (args.out_png and len(grids) == 1) else default_dir / f"hcp_cortex_control_gradient_wta_{spec.tag}.png"
-        stats_tsv = args.stats_tsv if (args.stats_tsv and len(grids) == 1) else default_dir / "stats" / f"hcp_cortex_control_gradient_wta_{spec.tag}_stats.tsv"
-        render_hcp_cortex_control_gradient_wta(
-            spec=spec,
-            out_path=out_png,
-            tsv_path=stats_tsv,
-            force=args.force,
-        )
+    render_hcp_cortex_control_gradient_wta(out_path=args.out_png, tsv_path=args.stats_tsv, force=args.force)
 
 
 if __name__ == "__main__":
-    _render_grid()
+    main()

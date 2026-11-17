@@ -47,18 +47,6 @@ def test_missing_network_never_wins_over_negative_observed_fc():
     assert rows[1]["status"] == "unassigned"
 
 
-def test_ctxdrop_default_methods_only_request_materialized_inputs():
-    args = atlas.build_arg_parser().parse_args(["--route-tag", "pfm_ctxdrop"])
-    atlas._resolve_methods_and_taxonomy(args)
-    assert set(args.methods) == {"gradient-spectral", "wta-top"}
-
-
-def test_ctxdrop_rejects_explicit_unsupported_method():
-    args = atlas.build_arg_parser().parse_args(["--route-tag", "pfm_ctxdrop", "--methods", "group-roi-sim-spectral"])
-    with pytest.raises(ValueError, match="ctxdrop"):
-        atlas._resolve_methods_and_taxonomy(args)
-
-
 def test_fc_run_boundaries_do_not_invent_missing_run_ids(tmp_path):
     ref = tmp_path / "reference" / "kong2022"
     ref.mkdir(parents=True)

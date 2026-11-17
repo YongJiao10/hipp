@@ -308,11 +308,8 @@ def resolve_kong2022_pfm_ctxreg_root(dataset: str = DEFAULT_DATASET) -> Path:
 resolve_kong2022_routea_ctxreg_root = resolve_kong2022_pfm_ctxreg_root
 
 
-def resolve_kong2022_pfm_ctxdrop_root(dataset: str = DEFAULT_DATASET) -> Path:
-    return resolve_kong2022_shared_inputs_root(dataset) / "pfm_ctxdrop"
-
-
-resolve_kong2022_routea_ctxdrop_root = resolve_kong2022_pfm_ctxdrop_root
+def resolve_kong2022_pfm_ctxreg_10mm_root(dataset: str = DEFAULT_DATASET) -> Path:
+    return resolve_kong2022_shared_inputs_root(dataset) / "pfm_ctxreg_10mm"
 
 
 def resolve_kong2022_fixed_root(dataset: str = DEFAULT_DATASET) -> Path:
@@ -399,11 +396,8 @@ def resolve_pfm_ctxreg_group_atlas_root(dataset: str = DEFAULT_DATASET) -> Path:
 resolve_routea_ctxreg_group_atlas_root = resolve_pfm_ctxreg_group_atlas_root
 
 
-def resolve_pfm_ctxdrop_group_atlas_root(dataset: str = DEFAULT_DATASET) -> Path:
-    return resolve_group_atlas_root(dataset) / "pfm_ctxdrop"
-
-
-resolve_routea_ctxdrop_group_atlas_root = resolve_pfm_ctxdrop_group_atlas_root
+def resolve_pfm_ctxreg_10mm_group_atlas_root(dataset: str = DEFAULT_DATASET) -> Path:
+    return resolve_group_atlas_root(dataset) / "pfm_ctxreg_10mm"
 
 
 def resolve_fixed_group_atlas_root(dataset: str = DEFAULT_DATASET) -> Path:
@@ -545,8 +539,13 @@ def resolve_cortex_panels_dir(dataset: str = DEFAULT_DATASET) -> Path:
     return resolve_present_root(dataset) / "cortex_panels"
 
 
-def resolve_local_cortex_neighbors_dir(dataset: str = DEFAULT_DATASET) -> Path:
-    return resolve_present_root(dataset) / "local_cortex_neighbors"
+def resolve_local_cortex_control_work_root(dataset: str = DEFAULT_DATASET) -> Path:
+    """Per-subject local-cortex control diagnostics (FC/WTA-level, not a signal branch)."""
+    return resolve_work_root(dataset) / "local_cortex_control"
+
+
+def resolve_local_cortex_control_present_dir(dataset: str = DEFAULT_DATASET) -> Path:
+    return resolve_present_root(dataset) / "local_cortex_control"
 
 
 def resolve_crossfit_template_matching_overview_root(dataset: str = DEFAULT_DATASET) -> Path:
@@ -571,11 +570,9 @@ DEFAULT_KONG2022_SHARED_INPUTS_ROOT = resolve_kong2022_shared_inputs_root()
 DEFAULT_KONG2022_SURFACE_ROOT = resolve_kong2022_surface_root()
 DEFAULT_KONG2022_PFM_ROOT = resolve_kong2022_pfm_root()
 DEFAULT_KONG2022_PFM_CTXREG_ROOT = resolve_kong2022_pfm_ctxreg_root()
-DEFAULT_KONG2022_PFM_CTXDROP_ROOT = resolve_kong2022_pfm_ctxdrop_root()
 DEFAULT_KONG2022_FIXED_ROOT = resolve_kong2022_fixed_root()
 DEFAULT_KONG2022_ROUTEA_ROOT = DEFAULT_KONG2022_PFM_ROOT
 DEFAULT_KONG2022_ROUTEA_CTXREG_ROOT = DEFAULT_KONG2022_PFM_CTXREG_ROOT
-DEFAULT_KONG2022_ROUTEA_CTXDROP_ROOT = DEFAULT_KONG2022_PFM_CTXDROP_ROOT
 DEFAULT_KONG2022_ROUTEB_ROOT = DEFAULT_KONG2022_FIXED_ROOT
 DEFAULT_KONG2022_TEMPLATE_ROOT = resolve_kong2022_template_root()
 DEFAULT_KONG2022_MANIFEST_ROOT = resolve_kong2022_manifest_root()
@@ -591,13 +588,12 @@ DEFAULT_GROUP_ATLAS_ROOT = resolve_group_atlas_root()
 DEFAULT_PFM_GROUP_ATLAS_ROOT = resolve_pfm_group_atlas_root()
 DEFAULT_PFM_17NET_GROUP_ATLAS_ROOT = resolve_pfm_17net_group_atlas_root()
 DEFAULT_PFM_CTXREG_GROUP_ATLAS_ROOT = resolve_pfm_ctxreg_group_atlas_root()
-DEFAULT_PFM_CTXDROP_GROUP_ATLAS_ROOT = resolve_pfm_ctxdrop_group_atlas_root()
+DEFAULT_PFM_CTXREG_10MM_GROUP_ATLAS_ROOT = resolve_pfm_ctxreg_10mm_group_atlas_root()
 DEFAULT_FIXED_GROUP_ATLAS_ROOT = resolve_fixed_group_atlas_root()
 DEFAULT_FIXED_17NET_GROUP_ATLAS_ROOT = resolve_fixed_17net_group_atlas_root()
 DEFAULT_ROUTEA_GROUP_ATLAS_ROOT = DEFAULT_PFM_GROUP_ATLAS_ROOT
 DEFAULT_ROUTEA_17NET_GROUP_ATLAS_ROOT = DEFAULT_PFM_17NET_GROUP_ATLAS_ROOT
 DEFAULT_ROUTEA_CTXREG_GROUP_ATLAS_ROOT = DEFAULT_PFM_CTXREG_GROUP_ATLAS_ROOT
-DEFAULT_ROUTEA_CTXDROP_GROUP_ATLAS_ROOT = DEFAULT_PFM_CTXDROP_GROUP_ATLAS_ROOT
 DEFAULT_ROUTEB_GROUP_ATLAS_ROOT = DEFAULT_FIXED_GROUP_ATLAS_ROOT
 DEFAULT_LYNCH2024_20NET_GROUP_ATLAS_ROOT = resolve_lynch2024_20net_group_atlas_root()
 DEFAULT_LYNCH2024_7NET_GROUP_ATLAS_ROOT = resolve_lynch2024_7net_group_atlas_root()
@@ -608,7 +604,8 @@ DEFAULT_PRESENT_ROOT = resolve_present_root()
 DEFAULT_OVERVIEWS_DIR = resolve_overviews_dir()
 DEFAULT_GRADIENTS_DIR = resolve_gradients_dir()
 DEFAULT_CORTEX_PANELS_DIR = resolve_cortex_panels_dir()
-DEFAULT_LOCAL_CORTEX_NEIGHBORS_DIR = resolve_local_cortex_neighbors_dir()
+DEFAULT_LOCAL_CORTEX_CONTROL_WORK_ROOT = resolve_local_cortex_control_work_root()
+DEFAULT_LOCAL_CORTEX_CONTROL_PRESENT_DIR = resolve_local_cortex_control_present_dir()
 
 
 # ── run helpers ───────────────────────────────────────────────────────
@@ -643,7 +640,7 @@ def run_layout(run_id: str, dataset: str = DEFAULT_DATASET) -> dict[str, Path]:
         "cortex_panels": present / "cortex_panels",
         "gradient_products": present / "gradients",
     }
-KONG400_CONTROL_ROUTES = ("pfm_ctxreg", "pfm_ctxdrop")
+KONG400_CONTROL_ROUTES = ("pfm_ctxreg", "pfm_ctxreg_10mm")
 
 
 def resolve_hcp_kong400_control_shared_root(
@@ -665,7 +662,7 @@ def resolve_hcp_kong400_control_shared_root(
 
 
 DEFAULT_KONG400_CTXREG_SHARED_ROOT = resolve_hcp_kong400_control_shared_root("pfm_ctxreg")
-DEFAULT_KONG400_CTXDROP_SHARED_ROOT = resolve_hcp_kong400_control_shared_root("pfm_ctxdrop")
+DEFAULT_KONG400_CTXREG_10MM_SHARED_ROOT = resolve_hcp_kong400_control_shared_root("pfm_ctxreg_10mm")
 
 
 def load_legacy_wrong_path_mapping(

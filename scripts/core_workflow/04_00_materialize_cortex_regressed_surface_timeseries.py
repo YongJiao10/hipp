@@ -33,10 +33,12 @@ from lib.io_utils import (
 from lib.output_layout import (
     DEFAULT_HIPPUNFOLD_BATCH_ROOT,
     DEFAULT_KONG400_CTXREG_SHARED_ROOT,
+    resolve_hcp_kong400_control_shared_root,
     DEFAULT_KONG2022_MANIFEST_ROOT,
     DEFAULT_KONG2022_ROUTEA_ROOT,
     DEFAULT_KONG2022_SURFACE_ROOT,
 )
+from lib.branch_config import CTXREG_ROUTE_DISTANCE_MM
 from lib.path_templates import format_subject_path_template
 from lib.surface_coordinates import (
     MNI_SPACE,
@@ -268,6 +270,23 @@ def _ols_residual(y: np.ndarray, x: np.ndarray) -> np.ndarray:
     return out.astype(np.float32)
 
 
+def run_centered_corr(
+    y: np.ndarray,
+    x: np.ndarray,
+    run_segments: list[dict[str, int]],
+) -> float:
+    """Pooled Pearson r after removing each run's mean, matching FC pooling."""
+    yy = np.asarray(y, dtype=np.float64).reshape(-1).copy()
+    xx = np.asarray(x, dtype=np.float64).reshape(-1).copy()
+    for seg in run_segments:
+        window = slice(int(seg["run_start"]), int(seg["run_stop"]))
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            yy[window] -= np.nanmean(yy[window])
+            xx[window] -= np.nanmean(xx[window])
+    return _finite_corr(yy, xx)
+
+
 def regress_local_cortex_signal(
     *,
     hipp_ts: np.ndarray,
@@ -317,7 +336,7 @@ def regress_local_cortex_signal(
                 "Unusable regression data: cortical neighbors contain no finite signal "
                 f"for hippocampal vertex {vertex_idx}"
             )
-        local_corr[vertex_idx] = _finite_corr(hipp[vertex_idx, :], local_mean)
+        local_corr[vertex_idx] = run_centered_corr(hipp[vertex_idx, :], local_mean, segments)
         for seg in segments:
             start = int(seg["run_start"])
             stop = int(seg["run_stop"])
@@ -357,6 +376,7 @@ def write_regression_outputs(
     cortex_dtseries_paths: list[Path] | None = None,
     hippocampal_surface_path: Path | None = None,
     run_metadata_path: Path | None = None,
+    route_tag: str = ROUTE_TAG,
 ) -> None:
     subject = str(subject).replace("sub-", "")
     out_surface_dir = Path(out_shared_root) / f"sub-{subject}" / "surface" / smoothing
@@ -435,7 +455,7 @@ def write_regression_outputs(
     skipped_valid = result.skipped_no_neighbor & valid_vertices
     summary = {
         "status": "ok",
-        "route_tag": ROUTE_TAG,
+        "route_tag": route_tag,
         "source_route_tag": SOURCE_ROUTE_TAG,
         "subject": f"sub-{subject}",
         "smoothing": smoothing,
@@ -458,6 +478,7 @@ def write_regression_outputs(
         "mean_variance_before": float(np.nanmean(result.variance_before)),
         "mean_variance_after": float(np.nanmean(result.variance_after)),
         "mean_local_cortex_corr": float(np.nanmean(result.local_cortex_corr)),
+        "local_cortex_corr_definition": "pooled_pearson_after_runwise_mean_centering",
         "coordinate_space_gate": coord_meta,
         "source_fingerprints": source_fingerprints,
         "inputs": {
@@ -488,7 +509,7 @@ def write_regression_outputs(
     write_json(
         diag_dir / "stage_manifest.json",
         {
-            "stage": "pfm_ctxreg_local_cortex_regression",
+            "stage": f"{route_tag}_local_cortex_regression",
             "status": "done",
             "timestamp_utc": utc_now_iso(),
             "params": {
@@ -539,6 +560,7 @@ def process_subject(
     distance_mm: float,
     run_metadata_template: str | None = None,
     cortex_coordinate_space: str = MNI_SPACE,
+    route_tag: str = ROUTE_TAG,
 ) -> dict[str, object]:
     subject = str(subject).replace("sub-", "")
     source_shared = Path(source_shared_root)
@@ -659,24 +681,44 @@ def process_subject(
                 cortex_dtseries_paths=dtseries_paths,
                 hippocampal_surface_path=hipp_surface,
                 run_metadata_path=explicit_run_metadata,
+                route_tag=route_tag,
             )
             n_outputs += 1
 
     return {"subject": f"sub-{subject}", "controlled_timeseries": int(n_outputs)}
 
 
+def resolve_route_distance_mm(route_tag: str, distance_mm: float | None) -> float:
+    """A ctxreg route is defined by one radius; a conflicting explicit radius is an error."""
+    if route_tag not in CTXREG_ROUTE_DISTANCE_MM:
+        raise ValueError(f"Unsupported ctxreg route: {route_tag!r}; expected one of {sorted(CTXREG_ROUTE_DISTANCE_MM)}")
+    expected = CTXREG_ROUTE_DISTANCE_MM[route_tag]
+    if distance_mm is not None and float(distance_mm) != expected:
+        raise ValueError(
+            f"Route {route_tag!r} is defined at {expected:g} mm; got --distance-mm {float(distance_mm):g}. "
+            "A different radius needs its own route."
+        )
+    return expected
+
+
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Materialize RouteA local-cortex-regressed hippocampal time series.")
     parser.add_argument("--source-shared-root", default=str(DEFAULT_SOURCE_SHARED_ROOT))
     parser.add_argument("--source-surface-root", default=str(DEFAULT_SURFACE_ROOT))
-    parser.add_argument("--out-shared-root", default=str(DEFAULT_OUT_SHARED_ROOT))
+    parser.add_argument(
+        "--route-tag",
+        choices=sorted(CTXREG_ROUTE_DISTANCE_MM),
+        default=ROUTE_TAG,
+        help="ctxreg route; pfm_ctxreg is defined at 20 mm and pfm_ctxreg_10mm at 10 mm.",
+    )
+    parser.add_argument("--out-shared-root", default=None, help="Defaults to the route's formal HCP shared-input root.")
     parser.add_argument("--data-root", default=str(DEFAULT_DATA_ROOT))
     parser.add_argument("--hippunfold-batch-root", default=str(DEFAULT_HIPPUNFOLD_BATCH_ROOT))
     parser.add_argument("--subjects-manifest", default=str(DEFAULT_SUBJECTS))
     parser.add_argument("--subjects", nargs="*", default=None)
     parser.add_argument("--smoothings", nargs="+", choices=SMOOTHINGS, default=list(SMOOTHINGS))
     parser.add_argument("--hemis", nargs="+", choices=HEMIS, default=list(HEMIS))
-    parser.add_argument("--distance-mm", type=float, default=20.0)
+    parser.add_argument("--distance-mm", type=float, default=None, help="Must equal the route's defined radius; defaults to it.")
     parser.add_argument("--left-cortex-surface-template", default=DEFAULT_LEFT_CORTEX_SURFACE_TEMPLATE)
     parser.add_argument("--right-cortex-surface-template", default=DEFAULT_RIGHT_CORTEX_SURFACE_TEMPLATE)
     parser.add_argument('--cortex-coordinate-space', choices=['T1w', MNI_SPACE], default=MNI_SPACE,
@@ -715,10 +757,16 @@ def main() -> int:
     args = build_arg_parser().parse_args()
     subjects = [s.replace("sub-", "") for s in args.subjects] if args.subjects else load_subject_ids(Path(args.subjects_manifest).resolve())
     jobs = capped_jobs(int(args.jobs), len(subjects))
+    route_tag = str(args.route_tag)
+    distance_mm = resolve_route_distance_mm(route_tag, args.distance_mm)
+    out_shared_root = (
+        Path(args.out_shared_root) if args.out_shared_root else resolve_hcp_kong400_control_shared_root(route_tag)
+    )
     kwargs: dict[str, Any] = {
+        "route_tag": route_tag,
         "source_shared_root": str(Path(args.source_shared_root).resolve()),
         "source_surface_root": str(Path(args.source_surface_root).resolve()),
-        "out_shared_root": str(Path(args.out_shared_root).resolve()),
+        "out_shared_root": str(out_shared_root.resolve()),
         "data_root": str(Path(args.data_root).resolve()),
         "hippunfold_batch_root": str(Path(args.hippunfold_batch_root).resolve()),
         "left_cortex_surface_template": str(args.left_cortex_surface_template),
@@ -729,7 +777,7 @@ def main() -> int:
         "run_metadata_template": str(args.run_metadata_template) if args.run_metadata_template else None,
         "smoothings": [str(x) for x in args.smoothings],
         "hemis": [str(x) for x in args.hemis],
-        "distance_mm": float(args.distance_mm),
+        "distance_mm": distance_mm,
     }
     results: list[dict[str, object]] = []
     if jobs == 1:

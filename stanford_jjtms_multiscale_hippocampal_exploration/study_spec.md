@@ -192,7 +192,7 @@ symptom_scale_name, symptom_total, assessment_interval_days
   count 和 `density_evidence`。
 - 检查组间 QC 缺失率；若 T/S 预测 exclusion，用 inverse-probability weighting 作为
   sensitivity，不把其替代主分析。
-- cortex-near-hippocampus signal leakage 以 20 mm local-cortex exclusion (`ctxdrop`) 做敏感性。
+- cortex-near-hippocampus signal leakage 以 20 mm local-cortex regression (`ctxreg`) 做保守敏感性分析；原 target-side local-cortex exclusion (`ctxdrop`) 分支已退役，不再作为敏感性分支（其 HCP 影响由 `06_07` FC/WTA 诊断报告）。
 
 ### 4.4 网络 FC 定义
 

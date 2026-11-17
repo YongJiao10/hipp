@@ -125,12 +125,11 @@ def test_routeb_group_atlas_root_is_core_work_fixed_k3_fisherz() -> None:
 def test_overview_matrix_uses_formal_hcp_control_roots() -> None:
     jobs = build_render_jobs(
         REPO_ROOT / "outputs_hcp" / "work" / "group_atlas",
-        routes=("pfm_ctxreg", "pfm_ctxdrop"),
+        routes=("pfm_ctxreg",),
         methods=("gradient-spectral", "wta-top"),
     )
     expected = {
         "pfm_ctxreg": "pfm_ctxreg",
-        "pfm_ctxdrop": "pfm_ctxdrop",
     }
     assert jobs
     for job in jobs:
@@ -144,9 +143,6 @@ def test_default_control_out_root_uses_formal_kong400_roots() -> None:
     assert str(canonical_group_atlas_root_for_route("pfm_ctxreg")).endswith(
         "pfm_ctxreg"
     )
-    assert str(canonical_group_atlas_root_for_route("pfm_ctxdrop")).endswith(
-        "pfm_ctxdrop"
-    )
 
 
 def test_non_hcp_control_roots_keep_their_dataset_generic_contract() -> None:
@@ -154,9 +150,6 @@ def test_non_hcp_control_roots_keep_their_dataset_generic_contract() -> None:
 
     assert str(canonical_group_atlas_root_for_route("pfm_ctxreg", dataset="stanford")).endswith(
         "pfm_ctxreg"
-    )
-    assert str(canonical_group_atlas_root_for_route("pfm_ctxdrop", dataset="iowa_jj_tms")).endswith(
-        "pfm_ctxdrop"
     )
 
 

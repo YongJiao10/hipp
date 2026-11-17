@@ -50,9 +50,13 @@ The first-level directory count follows actual product ownership.
   downstream reference contracts.
 
 Preserve separate preprocessing variants, cohorts, methods, taxonomies,
-cortex controls, and scientific parameter branches. Formal HCP control routes remain `pfm_ctxreg`
-and `pfm_ctxdrop`. Exact group-atlas roots are documented in
+cortex controls, and scientific parameter branches. The formal HCP cortex-control
+route is `pfm_ctxreg`; the former `pfm_ctxdrop` route is retired. Exact
+group-atlas roots are documented in
 [Formal Group-Atlas Layout](active_group_atlas_inventory.md).
+The `06_07` local cortex-control diagnostic is not a route: it writes
+per-subject arrays under `work/local_cortex_control/sub-<id>/` and its figure,
+summary TSV and manifest under `present/local_cortex_control/`.
 
 Existing valid cortical references retain their scientific contents.
 Hippocampal coordinate corrections do not require cortical reference

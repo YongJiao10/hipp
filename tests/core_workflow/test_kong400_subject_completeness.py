@@ -18,7 +18,7 @@ atlas = importlib.import_module("scripts.core_workflow.05_02_run_group_atlas")
 fc_contract = importlib.import_module("scripts.core_workflow.lib.kong2022_fc_contract")
 
 
-@pytest.mark.parametrize("route_tag", ["routea", "routea_ctxreg", "routea_ctxdrop"])
+@pytest.mark.parametrize("route_tag", ["routea", "routea_ctxreg"])
 def test_production_kong_annotation_call_consumes_controlled_profile_timeseries(tmp_path, route_tag):
     # Execute the real CLI call expression with real annotation inputs, avoiding
     # unrelated bootstrap/render stages. Wrong root reverses the observed FC.

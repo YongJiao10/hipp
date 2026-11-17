@@ -188,10 +188,8 @@ def test_group_mean_fc_applies_fisher_z_before_averaging() -> None:
 def test_control_routes_use_routea_reference_root_without_fallback_search() -> None:
     shared_parent = Path("/data/inputs/shared_inputs")
     ctxreg_root = shared_parent / "pfm_ctxreg"
-    ctxdrop_root = shared_parent / "pfm_ctxdrop"
     assert compute_mod.resolve_gradient_shared_root(shared_parent, "pfm_ctxreg") == ctxreg_root.resolve()
     assert compute_mod.resolve_gradient_reference_root(shared_parent, ctxreg_root, "pfm_ctxreg") == (shared_parent / "pfm").resolve()
-    assert compute_mod.resolve_gradient_reference_root(shared_parent, ctxdrop_root, "pfm_ctxdrop") == (shared_parent / "pfm").resolve()
     explicit = Path("/data/inputs/references/pfm")
     assert compute_mod.resolve_gradient_reference_root(shared_parent, ctxreg_root, "pfm_ctxreg", explicit) == explicit.resolve()
 
@@ -1107,8 +1105,8 @@ def test_family17_auto_route_requires_explicit_routea_17net() -> None:
 
 def test_route_auto_helpers_cover_renderers_and_confidence_choices() -> None:
     assert (
-        route_tags.infer_route_tag_from_group_root(Path("outputs_hcp/work/group_atlas/pfm_ctxdrop"))
-        == "pfm_ctxdrop"
+        route_tags.infer_route_tag_from_group_root(Path("outputs_hcp/work/group_atlas/pfm_ctxreg"))
+        == "pfm_ctxreg"
     )
     assert (
         route_tags.infer_route_tag_from_group_root(Path("outputs_hcp/work/group_atlas/pfm_17net"))

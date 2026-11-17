@@ -61,8 +61,8 @@ Use the suite for these renderers; their standalone rendering CLIs are disabled.
 ## Input and output contracts
 
 Group roots use the formal `outputs_<dataset>/work/group_atlas/` layout:
-HCP `pfm/`; Iowa/Stanford `pfm/<cohort>/` for 36P. Cortex controls use `pfm_ctxreg` and
-`pfm_ctxdrop`. The registry selects exact Lynch and comparison products
+HCP `pfm/`; Iowa/Stanford `pfm/<cohort>/` for 36P. The cortex control uses `pfm_ctxreg`
+(the former `pfm_ctxdrop` branch is retired). The registry selects exact Lynch and comparison products
 separately; presentation tags do not select another scientific input bank.
 See [output layout](../../docs/hipp_parcellation_network/output_layout.md).
 
@@ -97,7 +97,7 @@ These have their own CLI and are separate from the six-family suite:
 | Module | Guide |
 |---|---|
 | Dataset-independent cortical FC heatmaps and chord diagrams | [Cortical FC](cortex_fc/README.md) |
-| HCP Standard/CtxDrop/CtxReg comparison | [Cortex proximity controls](hcp_cortex_control_gradient_wta/README.md) |
+| HCP Standard/CtxReg comparison | [Cortex proximity controls](hcp_cortex_control_gradient_wta/README.md) |
 | Iowa3T dominant subregions and template-matching comparisons | [Template matching](template_matching_dominant_subregions/README.md) |
 | Standalone cortical network surface-area analysis | [Cortical network area](cortex_network_area/README.md) |
 | Standard cortical atlas views | [Kong/Lynch cortical views](kong2022_standard_lateral/README.md) |

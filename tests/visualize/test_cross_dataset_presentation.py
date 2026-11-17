@@ -6,7 +6,7 @@ Verifies:
 3. Section slides strictly preserve image aspect ratios without title overlap or boundary overflow.
 4. Exactly 4 7net sections are registered with 8 slides each.
 5. The final cortical network area section has three method pages.
-6. Page 7 contains concise scientific explanations for CtxDrop and CtxReg.
+6. Page 7 explains CtxReg and the local-cortex diagnostics.
 """
 
 from __future__ import annotations
@@ -184,7 +184,8 @@ def test_page_7_has_cortex_control_explanations(presentation):
         tbs = [s for s in page7_slide.shapes if s.has_text_frame]
         assert tbs, f"Page 7 in {sec_name} must have a text frame"
         full_text = tbs[0].text_frame.text
-        assert "CtxDrop" in full_text, f"Page 7 in {sec_name} missing CtxDrop explanation"
         assert "CtxReg" in full_text, f"Page 7 in {sec_name} missing CtxReg explanation"
+        assert "Local cortex diagnostics" in full_text, f"Page 7 in {sec_name} missing local-cortex diagnostics note"
+        assert "CtxDrop" not in full_text, f"Page 7 in {sec_name} still describes the retired CtxDrop branch"
 
 

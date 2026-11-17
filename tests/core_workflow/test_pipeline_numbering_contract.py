@@ -34,7 +34,7 @@ EXPECTED_NUMBERED_SCRIPTS = [
     "06_04_render_hippomaps_gradient_products.py",
     "06_05_render_group_gradient_heatmaps.py",
     "06_06_render_confidence_maps.py",
-    "06_07_render_ctxdrop_neighbor_counts.py",
+    "06_07_render_local_cortex_control_diagnostics.py",
     "06_08_render_hcp_subfield_composition.py",
     "06_09_plot_cortex_kong2022_mshbm.py",
     "06_10_render_cluster_roi_strength_panels.py",

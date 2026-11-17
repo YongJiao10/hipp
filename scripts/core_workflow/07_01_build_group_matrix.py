@@ -14,13 +14,13 @@ Inputs:
   - --python-exe: Explicit python interpreter path used to execute child scripts (default: `/home/yojiao/.conda/envs/py314/bin/python`).
   - --group-atlas-root: Base directory containing branch-level group-atlas outputs (default: `outputs_hcp/work/group_atlas`).
   - --present-dir: Output directory for final matrix presentation figures and manifest (default: `outputs_hcp/present/overviews`).
-  - --routes: Routes/branches to process (choices: "pfm", "pfm_17net", "pfm_ctxreg", "pfm_ctxdrop", "fixed", "fixed_17net", default: ["pfm"]).
+  - --routes: Routes/branches to process (choices: "pfm", "pfm_17net", "pfm_ctxreg", "pfm_ctxreg_10mm", "fixed", "fixed_17net", default: ["pfm"]).
   - --methods: Methods to export (default: all supported methods).
   - --coverage-threshold: Coverage threshold used to filter outputs (default: 0.80).
   - --manifest-name: Filename for the generated overview matrix manifest JSON (default: "group_overview_matrix_manifest.json").
   - --scene: Connectome Workbench template scene file override path.
 - Physical inputs:
-  - Group atlas directories: maintained science branches keep their method/taxonomy suffixes; the HCP cortex-control routes resolve explicitly to the formal direct roots `pfm_ctxreg` and `pfm_ctxdrop`.
+  - Group atlas directories: maintained science branches keep their method/taxonomy suffixes; the HCP cortex-control routes resolve explicitly to the formal direct roots `pfm_ctxreg` (20 mm) and `pfm_ctxreg_10mm`.
   - Scripts to execute:
     - `scripts/core_workflow/06_01_build_group_overview.py`
 
@@ -50,7 +50,7 @@ from lib.output_layout import (
     DEFAULT_KONG2022_ROOT,
     DEFAULT_OVERVIEWS_DIR,
     DEFAULT_PFM_17NET_GROUP_ATLAS_ROOT,
-    DEFAULT_PFM_CTXDROP_GROUP_ATLAS_ROOT,
+    DEFAULT_PFM_CTXREG_10MM_GROUP_ATLAS_ROOT,
     DEFAULT_PFM_CTXREG_GROUP_ATLAS_ROOT,
     DEFAULT_PFM_GROUP_ATLAS_ROOT,
 )
@@ -61,7 +61,7 @@ DEFAULT_CORE_GROUP_ATLAS_ROOT = DEFAULT_GROUP_ATLAS_ROOT
 DEFAULT_PRESENT_DIR = DEFAULT_OVERVIEWS_DIR
 DEFAULT_MANIFEST_NAME = "group_overview_matrix_manifest.json"
 DEFAULT_ROUTES = ("pfm",)
-ROUTE_CHOICES = ("pfm", "pfm_17net", "pfm_ctxreg", "pfm_ctxdrop", "fixed", "fixed_17net")
+ROUTE_CHOICES = ("pfm", "pfm_17net", "pfm_ctxreg", "pfm_ctxreg_10mm", "fixed", "fixed_17net")
 METHODS = ["intrinsic-spectral", "network-spectral", "gradient-spectral", "wta-top"]
 ATLAS = "kong2022"
 CLUSTERLESS_METHODS = {"wta-top"}
@@ -95,7 +95,7 @@ def canonical_group_roots(group_atlas_root: Path) -> dict[str, Path]:
             "pfm": DEFAULT_PFM_GROUP_ATLAS_ROOT.resolve(),
             "pfm_17net": DEFAULT_PFM_17NET_GROUP_ATLAS_ROOT.resolve(),
             "pfm_ctxreg": DEFAULT_PFM_CTXREG_GROUP_ATLAS_ROOT.resolve(),
-            "pfm_ctxdrop": DEFAULT_PFM_CTXDROP_GROUP_ATLAS_ROOT.resolve(),
+            "pfm_ctxreg_10mm": DEFAULT_PFM_CTXREG_10MM_GROUP_ATLAS_ROOT.resolve(),
             "fixed": DEFAULT_FIXED_GROUP_ATLAS_ROOT.resolve(),
             "fixed_17net": DEFAULT_FIXED_17NET_GROUP_ATLAS_ROOT.resolve(),
         }
@@ -103,7 +103,7 @@ def canonical_group_roots(group_atlas_root: Path) -> dict[str, Path]:
         "pfm": (base / "pfm").resolve(),
         "pfm_17net": (base / "pfm_17net").resolve(),
         "pfm_ctxreg": (base / "pfm_ctxreg").resolve(),
-        "pfm_ctxdrop": (base / "pfm_ctxdrop").resolve(),
+        "pfm_ctxreg_10mm": (base / "pfm_ctxreg_10mm").resolve(),
         "fixed": (base / "fixed").resolve(),
         "fixed_17net": (base / "fixed_17net").resolve(),
     }
@@ -132,7 +132,7 @@ def build_render_jobs(
             ("pfm", None, route_roots["pfm"]),
             ("pfm_17net", None, route_roots["pfm_17net"]),
             ("pfm_ctxreg", None, route_roots["pfm_ctxreg"]),
-            ("pfm_ctxdrop", None, route_roots["pfm_ctxdrop"]),
+            ("pfm_ctxreg_10mm", None, route_roots["pfm_ctxreg_10mm"]),
             ("fixed", None, route_roots["fixed"]),
             ("fixed_17net", None, route_roots["fixed_17net"]),
         ],
@@ -140,7 +140,7 @@ def build_render_jobs(
             ("pfm", None, route_roots["pfm"]),
             ("pfm_17net", None, route_roots["pfm_17net"]),
             ("pfm_ctxreg", None, route_roots["pfm_ctxreg"]),
-            ("pfm_ctxdrop", None, route_roots["pfm_ctxdrop"]),
+            ("pfm_ctxreg_10mm", None, route_roots["pfm_ctxreg_10mm"]),
             ("fixed", None, route_roots["fixed"]),
             ("fixed_17net", None, route_roots["fixed_17net"]),
         ],
@@ -156,7 +156,7 @@ def build_render_jobs(
             variants: tuple[str | None, ...]
             if method in CLUSTERLESS_METHODS:
                 variants = (None,)
-            elif str(route_tag) in {"pfm", "pfm_17net", "pfm_ctxreg", "pfm_ctxdrop"}:
+            elif str(route_tag) in {"pfm", "pfm_17net", "pfm_ctxreg", "pfm_ctxreg_10mm"}:
                 variants = assignment_variants
             else:
                 variants = assignment_variants

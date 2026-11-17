@@ -120,8 +120,8 @@ FIGURE_CONFIGS_7NET = [
     },
     {
         "page": 7,
-        "title": "HCP 7T Cortical Proximity Control (Standard vs CtxDrop vs CtxReg)",
-        "template": str(REPO_ROOT / "scripts/visualize/hcp_cortex_control_gradient_wta/hcp_cortex_control_gradient_wta_{grid}.png"),
+        "title": "HCP 7T Local Cortex Regression (Standard vs CtxReg 10 mm vs 20 mm)",
+        "template": str(REPO_ROOT / "scripts/visualize/hcp_cortex_control_gradient_wta/hcp_cortex_control_gradient_wta.png"),
     },
     {
         "page": 8,
@@ -163,8 +163,8 @@ FIGURE_CONFIGS_HCP_JJTMS_7NET = [
     },
     {
         "page": 7,
-        "title": "HCP 7T Cortical Proximity Control (Standard vs CtxDrop vs CtxReg)",
-        "template": str(REPO_ROOT / "scripts/visualize/hcp_cortex_control_gradient_wta/hcp_cortex_control_gradient_wta_{grid}.png"),
+        "title": "HCP 7T Local Cortex Regression (Standard vs CtxReg 10 mm vs 20 mm)",
+        "template": str(REPO_ROOT / "scripts/visualize/hcp_cortex_control_gradient_wta/hcp_cortex_control_gradient_wta.png"),
     },
     {
         "page": 8,
@@ -410,14 +410,14 @@ def format_slide_title(slide: pptx.slide.Slide, fig_idx: int, title: str) -> Non
 
         p1 = tf.add_paragraph()
         r1_b = p1.add_run()
-        r1_b.text = "• CtxDrop (Cortical Drop / Exclusion): "
+        r1_b.text = "• CtxReg (Local Cortex Regression): "
         r1_b.font.name = "Arial"
         r1_b.font.size = Pt(13)
         r1_b.font.bold = True
         r1_b.font.color.rgb = pptx.dml.color.RGBColor(180, 50, 50)
 
         r1_t = p1.add_run()
-        r1_t.text = "Excludes local cortical vertices (<20 mm) during FC computation; parcellates purely on non-local cortex to avoid proximity bias."
+        r1_t.text = "Regresses the mean of cortex within 10 mm or 20 mm out of each hippocampal time series per run; a conservative sensitivity analysis that also removes signal shared at the hippocampal boundary. The figure shows 2mm (top) and 4mm (bottom) smoothing."
         r1_t.font.name = "Arial"
         r1_t.font.size = Pt(12)
         r1_t.font.color.rgb = pptx.dml.color.RGBColor(70, 70, 70)
@@ -425,14 +425,14 @@ def format_slide_title(slide: pptx.slide.Slide, fig_idx: int, title: str) -> Non
 
         p2 = tf.add_paragraph()
         r2_b = p2.add_run()
-        r2_b.text = "• CtxReg (Cortical Regression): "
+        r2_b.text = "• Local cortex diagnostics: "
         r2_b.font.name = "Arial"
         r2_b.font.size = Pt(13)
         r2_b.font.bold = True
         r2_b.font.color.rgb = pptx.dml.color.RGBColor(30, 100, 160)
 
         r2_t = p2.add_run()
-        r2_t.text = "Regresses out local cortical mean signal (<20 mm) from hippocampal BOLD timeseries; parcellates on residual signal to eliminate partial volume effects."
+        r2_t.text = "Excluding local cortex from the ROI targets barely changes FC or WTA labels; CtxReg changes are driven by signal shared within about 3 mm of the hippocampus (06_07 diagnostics)."
         r2_t.font.name = "Arial"
         r2_t.font.size = Pt(12)
         r2_t.font.color.rgb = pptx.dml.color.RGBColor(70, 70, 70)

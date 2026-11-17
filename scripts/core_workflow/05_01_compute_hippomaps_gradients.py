@@ -9,7 +9,7 @@ Main Flow Path:
 
 Inputs:
 - Command-line arguments:
-  - --routes: Workflow branches to process (choices include pfm, pfm_ctxreg, pfm_ctxdrop, fixed, lynch2024_20net, lynch2024_7net; default: pfm and fixed).
+  - --routes: Workflow branches to process (choices include pfm, pfm_ctxreg, pfm_ctxreg_10mm, fixed, lynch2024_20net, lynch2024_7net; default: pfm and fixed).
   - --shared-inputs-root: Directory containing route-specific shared reference inputs (default: `outputs_hcp/inputs/kong2022/shared_inputs`).
   - --surface-root: Path to BOLD surfaces root directory (default: `outputs_hcp/inputs/kong2022/shared_inputs/surface`).
   - --subjects-manifest: Path to QC-passed subject list manifest (default: `outputs_hcp/inputs/kong2022/manifests/hcp_7t_hippocampus_fmri_qc_pass_t1only_latest.txt`).
@@ -48,6 +48,7 @@ from typing import Any
 import lib.native_threads  # noqa: F401  pins native threads; must precede numpy
 import numpy as np
 from lib.branch_config import (
+    CTXREG_ROUTES,
     SIGNAL_BRANCH_CHOICES,
     resolve_signal_branch_for_route,
 )
@@ -70,8 +71,7 @@ from lib.kong2022_label_utils import canonical_families_7_order
 from lib.lynch2024_reference import lynch2024_20net_order
 from lib.output_layout import (
     DEFAULT_HIPPOMAPS_GRADIENT_ROOT,
-    DEFAULT_KONG400_CTXDROP_SHARED_ROOT,
-    DEFAULT_KONG400_CTXREG_SHARED_ROOT,
+    resolve_hcp_kong400_control_shared_root,
     DEFAULT_KONG2022_MANIFEST_ROOT,
     DEFAULT_KONG2022_SHARED_INPUTS_ROOT,
     DEFAULT_KONG2022_SURFACE_ROOT,
@@ -94,7 +94,7 @@ DEFAULT_LYNCH2024_MERGE_CONFIG = REPO_ROOT / "config" / "cross_atlas_network_mer
 ROUTE_TO_SHARED_DIR = {
     "pfm": "pfm",
     "pfm_ctxreg": "pfm_ctxreg",
-    "pfm_ctxdrop": "pfm_ctxdrop",
+    "pfm_ctxreg_10mm": "pfm_ctxreg_10mm",
     "fixed": "fixed",
     "lynch2024_20net": "pfm",
     "lynch2024_7net": "pfm",
@@ -102,7 +102,7 @@ ROUTE_TO_SHARED_DIR = {
 ROUTE_TO_ATLAS = {
     "pfm": "kong2022",
     "pfm_ctxreg": "kong2022",
-    "pfm_ctxdrop": "kong2022",
+    "pfm_ctxreg_10mm": "kong2022",
     "fixed": "kong2022",
     "lynch2024_20net": "lynch2024_20net",
     # 7net changes only the downstream reference/assignment taxonomy.  The
@@ -184,14 +184,12 @@ def resolve_gradient_shared_root(shared_inputs_root: Path, route: str) -> Path:
         raise ValueError(f"Unsupported gradient route: {route!r}")
     root = Path(shared_inputs_root).resolve()
     if root == DEFAULT_SHARED_INPUTS.resolve():
-        if route_key == "pfm_ctxreg":
-            return DEFAULT_KONG400_CTXREG_SHARED_ROOT.resolve()
-        if route_key == "pfm_ctxdrop":
-            return DEFAULT_KONG400_CTXDROP_SHARED_ROOT.resolve()
+        if route_key in CTXREG_ROUTES:
+            return resolve_hcp_kong400_control_shared_root(route_key).resolve()
     # An explicitly selected branch root is already final.  Patient and
     # subgroup roots use the same convention, while a shared-inputs parent
     # still expands to its named route below.
-    direct_names = {"pfm", "pfm_ctxreg", "pfm_ctxdrop", "fixed", "pfm_nsi043"}
+    direct_names = {"pfm", *CTXREG_ROUTES, "fixed", "pfm_nsi043"}
     if root.name in direct_names or root.name.startswith(("pfm_patient", "pfm_pure_mdd", "pfm_comorbid_mdd")):
         return root
     return root / ROUTE_TO_SHARED_DIR[route_key]
@@ -214,8 +212,8 @@ def resolve_gradient_reference_root(
         return Path(explicit_reference_root).resolve()
     root = Path(shared_inputs_root).resolve()
     route_key = str(route).strip().lower()
-    if route_key in {"pfm_ctxreg", "pfm_ctxdrop"}:
-        if root.name in {"pfm_ctxreg", "pfm_ctxdrop"} or root.name.startswith("pfm_patient"):
+    if route_key in CTXREG_ROUTES:
+        if root.name == route_key or root.name.startswith("pfm_patient"):
             return root.parent / "pfm"
         return root / "pfm"
     if route_key in {"pfm", "fixed"} and root.name.startswith(("pfm_patient", "pfm_pure_mdd", "pfm_comorbid_mdd")):
@@ -642,7 +640,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--signal-branch",
         choices=SIGNAL_BRANCH_CHOICES,
         default=None,
-        help="Explicit standard/ctxreg signal branch for pfm or pfm_ctxreg.",
+        help="Explicit signal branch for pfm (standard), pfm_ctxreg (ctxreg) or pfm_ctxreg_10mm (ctxreg_10mm).",
     )
     parser.add_argument("--shared-inputs-root", default=str(DEFAULT_SHARED_INPUTS))
     parser.add_argument(

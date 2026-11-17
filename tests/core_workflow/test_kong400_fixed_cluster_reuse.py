@@ -158,7 +158,7 @@ def test_kong_reuse_rejects_target_gradient_branch_mismatch(tmp_path: Path) -> N
     target_summary = json.loads((run / "group_gradient_feature_summary.json").read_text(encoding="utf-8"))
     target_manifest = tmp_path / "target_branch_manifest.json"
     target_manifest_payload = json.loads((run / "gradient_manifest.json").read_text(encoding="utf-8"))
-    target_manifest_payload["route"] = "routea_ctxdrop"
+    target_manifest_payload["route"] = "routea_ctxreg"
     target_manifest.write_text(json.dumps(target_manifest_payload), encoding="utf-8")
     target_summary["hippomaps_gradient_manifest"] = str(target_manifest)
     with pytest.raises(ValueError, match="gradient identity mismatch"):

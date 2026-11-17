@@ -16,7 +16,6 @@ from scripts.core_workflow.lib.output_layout import (
     resolve_cohort_overview_root,
     resolve_hcp_kong400_control_shared_root,
     resolve_kong2022_routea_root,
-    resolve_kong2022_routea_ctxdrop_root,
     resolve_kong2022_routea_ctxreg_root,
     resolve_kong2022_routeb_root,
     resolve_kong2022_surface_root,
@@ -139,7 +138,6 @@ def test_kong2022_all_shared_input_roots_are_cohort_independent():
         resolve_kong2022_surface_root(): "surface",
         resolve_kong2022_routeb_root(): "fixed",
         resolve_kong2022_routea_ctxreg_root(): "pfm_ctxreg",
-        resolve_kong2022_routea_ctxdrop_root(): "pfm_ctxdrop",
     }
 
     assert {path.name for path in expected} == set(expected.values())
@@ -147,7 +145,8 @@ def test_kong2022_all_shared_input_roots_are_cohort_independent():
 
 def test_hcp_kong400_control_roots_use_formal_route_namespace():
     assert resolve_hcp_kong400_control_shared_root("pfm_ctxreg").parts[-2:] == ("shared_inputs", "pfm_ctxreg")
-    assert resolve_hcp_kong400_control_shared_root("pfm_ctxdrop").parts[-2:] == ("shared_inputs", "pfm_ctxdrop")
+    with pytest.raises(ValueError, match="Unsupported Kong400 control route"):
+        resolve_hcp_kong400_control_shared_root("pfm_ctxdrop")
 
 
 def test_hcp_kong400_control_roots_reject_non_hcp_dataset():

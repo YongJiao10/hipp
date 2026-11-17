@@ -188,9 +188,8 @@ The dedicated Iowa functional-organization report uses two fixed source
 identities: `standard → pfm` and `ctxreg → pfm_ctxreg`. Standard is the
 explicit original RouteA branch used by its producer schema; it is not selected
 by filesystem fallback, and its original matching manifests deliberately omit
-`signal_branch`. CtxReg matching must explicitly declare its CtxReg contract.
-`pfm_ctxdrop` is the separate local-cortex-exclusion control and is not a
-substitute for the standard branch in this report.
+`signal_branch`. CtxReg matching must explicitly declare its CtxReg contract. No other
+cortex-control branch is a substitute for the standard branch in this report.
 
 ## JJ_TMS Method
 

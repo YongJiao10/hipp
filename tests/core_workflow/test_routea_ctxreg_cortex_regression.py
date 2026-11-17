@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -63,9 +64,9 @@ cortex_mod = _load_numbered_module(
     "scripts/core_workflow/06_03_build_cluster_cortex_panels.py",
     "core_06_03_build_cluster_cortex_panels_ctxreg_test",
 )
-neighbors_mod = _load_numbered_module(
-    "scripts/core_workflow/06_07_render_ctxdrop_neighbor_counts.py",
-    "core_06_07_render_ctxdrop_neighbor_counts_ctxreg_test",
+diagnostics_mod = _load_numbered_module(
+    "scripts/core_workflow/06_07_render_local_cortex_control_diagnostics.py",
+    "core_06_07_render_local_cortex_control_diagnostics_ctxreg_test",
 )
 
 
@@ -205,15 +206,15 @@ def test_coordinate_gate_rejects_implausible_coordinate_spaces() -> None:
         raise AssertionError("expected coordinate-space validation failure")
 
 
-def test_ctxdrop_default_cortex_surface_template_matches_bids_input_layout() -> None:
-    left = roi_fc_mod.format_subject_template(
-        roi_fc_mod.DEFAULT_LEFT_CORTEX_SURFACE_TEMPLATE,
+def test_diagnostic_default_cortex_surface_template_matches_bids_input_layout() -> None:
+    left = ctxreg_mod.format_subject_template(
+        diagnostics_mod.DEFAULT_LEFT_SURFACE,
         data_root=Path("/data"),
         subject="100610",
         hemi="L",
     )
-    right = roi_fc_mod.format_subject_template(
-        roi_fc_mod.DEFAULT_RIGHT_CORTEX_SURFACE_TEMPLATE,
+    right = ctxreg_mod.format_subject_template(
+        diagnostics_mod.DEFAULT_RIGHT_SURFACE,
         data_root=Path("/data"),
         subject="100610",
         hemi="R",
@@ -222,143 +223,14 @@ def test_ctxdrop_default_cortex_surface_template_matches_bids_input_layout() -> 
     assert right.as_posix() == "/data/sub-100610/anat/sub-100610_hemi-R_space-fsLR_den-32k_desc-MSMAll_midthickness.surf.gii"
 
 
-def test_local_cortex_neighbor_renderer_uses_shallow_neutral_present_path() -> None:
-    assert neighbors_mod.DEFAULT_OUT_DIR == REPO_ROOT / "outputs_hcp" / "present" / "local_cortex_neighbors"
-    assert not any(part in {"gradients", "diagnostics", "ctxdrop", "ctxreg"} for part in neighbors_mod.DEFAULT_OUT_DIR.parts)
-
-    ctxdrop_path = neighbors_mod.count_path(
-        shared_root=Path("/data/shared/pfm_ctxdrop"),
-        subject="100610",
-        hemi="L",
-        source_branch="pfm_ctxdrop",
-    )
-    ctxreg_path = neighbors_mod.count_path(
-        shared_root=Path("/data/shared/pfm_ctxreg"),
-        subject="100610",
-        hemi="L",
-        source_branch="pfm_ctxreg",
-    )
-    assert ctxdrop_path.as_posix() == "/data/shared/pfm_ctxdrop/sub-100610/surface/local_cortex_neighbors/hemi_L/neighbor_counts.npy"
-    assert ctxreg_path.as_posix() == "/data/shared/pfm_ctxreg/sub-100610/surface/local_cortex_neighbors/hemi_L/neighbor_counts.npy"
-
-
-def test_local_cortex_neighbor_manifest_omits_smoothing_semantics() -> None:
-    payload = neighbors_mod.manifest_payload(
-        summaries=[],
-        subjects=[],
-        subjects_manifest=Path("/tmp/subjects.txt"),
-        source_branch="pfm_ctxdrop",
-        distance_mm=20.0,
-        display_vmin=1.0,
-        display_vmax=2.0,
-        hippomaps_root=Path("/tmp/hippomaps"),
-        outputs={},
-    )
-    assert "smoothing" not in payload
-    assert "source_smoothing" not in payload
-    assert "cache_smoothing" not in payload
-
-    parser = neighbors_mod.parse_args_for_test([])
-    assert not hasattr(parser, "smoothing")
-
-
-def test_local_cortex_neighbor_output_names_are_smoothing_independent() -> None:
-    paths = neighbors_mod.output_paths(Path("/tmp/present/local_cortex_neighbors"), distance_mm=20.0)
-    assert paths["png"].name == "kong2022_pfm_local_cortex_neighbors_mean20mm.png"
-    assert paths["manifest"].name == "kong2022_pfm_local_cortex_neighbors_mean20mm_manifest.json"
-    assert paths["tsv"].name == "group_mean_local_cortex_neighbors.tsv"
-    assert paths["mean_array"].name == "group_mean_local_cortex_neighbors_hemi-{hemi}.npy"
-    assert "2mm" not in paths["png"].name
-    assert "4mm" not in paths["png"].name
-
-
-def test_local_cortex_neighbor_renderer_outputs_hippocampal_overlay(tmp_path: Path) -> None:
-    from PIL import Image
-
-    calls = []
-
-    def fake_plotter(cdata, **kwargs):
-        calls.append((np.asarray(cdata), kwargs))
-        Image.new("RGB", (90, 50), (255, 255, 255)).save(kwargs["filename"])
-        return None
-
-    summaries = [
-        neighbors_mod.HemiSummary(
-            hemi="L",
-            count_paths=[],
-            mean=np.asarray([1.0, 2.0, 3.0], dtype=np.float32),
-            sd=np.zeros(3, dtype=np.float32),
-            n_subjects=np.asarray([2, 2, 2], dtype=np.int32),
-        ),
-        neighbors_mod.HemiSummary(
-            hemi="R",
-            count_paths=[],
-            mean=np.asarray([4.0, 5.0, 6.0], dtype=np.float32),
-            sd=np.zeros(3, dtype=np.float32),
-            n_subjects=np.asarray([2, 2, 2], dtype=np.int32),
-        ),
-    ]
-    out = tmp_path / "overlay.png"
-
-    neighbors_mod.render_overlay_png(out, summaries, title="RouteA group mean cortex vertices within 20 mm", plotter=fake_plotter)
-
-    assert out.exists()
-    assert Image.open(out).size[0] > 180
-    assert len(calls) == 2
-    assert calls[0][1]["hemis"] == ["L"]
-    assert calls[1][1]["hemis"] == ["R"]
-    assert calls[0][1]["cmap"] == "viridis"
-    assert calls[0][1]["color_range"] == (1.0, 6.0)
-    assert calls[0][1]["cb__labelFormat"] == "%.0f"
-
-
-def test_ctxdrop_vertex_to_roi_fc_excludes_only_each_hipp_vertex_local_cortex() -> None:
-    hipp = np.asarray(
-        [
-            [0.0, 1.0, 0.0, 1.0],
-            [0.0, 0.0, 1.0, 1.0],
-            [1.0, 2.0, 1.0, 2.0],
-        ],
-        dtype=np.float32,
-    )
-    cortex = np.asarray(
-        [
-            [0.0, 0.0, 1.0, 1.0],
-            [0.0, 1.0, 0.0, 1.0],
-            [1.0, 2.0, 1.0, 2.0],
-        ],
-        dtype=np.float32,
-    )
-    result = roi_fc_mod.compute_ctxdrop_vertex_to_roi_fc(
-        hipp_ts=hipp,
-        cortex_ts=cortex,
-        cortex_roi_ids=np.asarray([1, 1, 2], dtype=np.int32),
-        roi_ids=[1, 2],
-        cortex_valid_mask=np.asarray([True, True, True], dtype=bool),
-        neighbor_indices=[
-            np.asarray([0], dtype=np.int64),
-            np.asarray([1], dtype=np.int64),
-            np.asarray([2], dtype=np.int64),
-        ],
-    )
-    assert result.excluded_neighbor_counts.tolist() == [1, 1, 1]
-    assert result.roi_cortex_counts.tolist() == [[1, 1], [1, 1], [2, 0]]
-    assert np.allclose(result.fc[0, 0], 1.0, atol=1e-6)
-    assert np.allclose(result.fc[1, 0], 1.0, atol=1e-6)
-    assert np.isnan(result.fc[2, 1])
-
-
 def test_routea_ctx_control_route_contracts_and_paths() -> None:
     assert compute_mod.ROUTE_TO_SHARED_DIR["pfm_ctxreg"] == "pfm_ctxreg"
-    assert compute_mod.ROUTE_TO_SHARED_DIR["pfm_ctxdrop"] == "pfm_ctxdrop"
     assert atlas_mod.infer_route_tag(Path("/data/kong2022/shared_inputs/pfm_ctxreg"), "auto") == "pfm_ctxreg"
-    assert atlas_mod.infer_route_tag(Path("/data/kong2022/shared_inputs/pfm_ctxdrop"), "auto") == "pfm_ctxdrop"
     assert "pfm_ctxreg" in overview_mod.ROUTE_TAG_CHOICES
-    assert "pfm_ctxdrop" in overview_mod.ROUTE_TAG_CHOICES
     assert "pfm_ctxreg" in grad_render_mod.ROUTES
-    assert "pfm_ctxdrop" in grad_render_mod.ROUTES
     assert "pfm_ctxreg" in matrix_mod.ROUTE_CHOICES
-    assert "pfm_ctxdrop" in matrix_mod.ROUTE_CHOICES
+    for retired in (compute_mod.ROUTE_TO_SHARED_DIR, overview_mod.ROUTE_TAG_CHOICES, grad_render_mod.ROUTES, matrix_mod.ROUTE_CHOICES):
+        assert "pfm_ctxdrop" not in retired
 
     overview_path = matrix_mod.expected_overview_path(
         Path("/tmp/present"),
@@ -368,16 +240,6 @@ def test_routea_ctx_control_route_contracts_and_paths() -> None:
         assignment_variant="fisherz", smoothing="2mm",
     )
     assert overview_path.name == "kong2022_network-spectral_group_overview_pfm_ctxreg_fisherz.png"
-
-    ctxdrop_overview_path = matrix_mod.expected_overview_path(
-        Path("/tmp/present"),
-        method="gradient-spectral",
-        route_tag="pfm_ctxdrop",
-        mode_tag=None,
-        assignment_variant="fisherz", smoothing="2mm",
-    )
-    assert ctxdrop_overview_path.name == "roi-fisherz_ovr_overview.png"
-
 
 
 
@@ -399,69 +261,6 @@ def test_routea_17net_reuses_routea_inputs_and_has_shallow_output_contract() -> 
     assert route_roots["fixed_17net"] == (
         REPO_ROOT / "outputs_hcp" / "work" / "group_atlas" / "fixed_17net"
     ).resolve()
-
-
-def test_ctxdrop_materializer_writes_standard_fc_and_diagnostics(tmp_path: Path) -> None:
-    subject = "101"
-    fc_dir = tmp_path / "routea_ctxdrop" / f"sub-{subject}" / "fc" / "kong2022" / "2mm" / "hemi_L"
-    diag_dir = tmp_path / "routea_ctxdrop" / f"sub-{subject}" / "surface" / "local_cortex_neighbors" / "hemi_L"
-    hipp = np.asarray(
-        [
-            [0.0, 1.0, 0.0, 1.0],
-            [9.0, 9.0, 9.0, 9.0],
-            [1.0, 2.0, 1.0, 2.0],
-        ],
-        dtype=np.float32,
-    )
-    cortex = np.asarray(
-        [
-            [0.0, 0.0, 1.0, 1.0],
-            [0.0, 1.0, 0.0, 1.0],
-            [1.0, 2.0, 1.0, 2.0],
-        ],
-        dtype=np.float32,
-    )
-    roi_rows = [
-        {"parcel_id": 1, "parcel_name": "roi1"},
-        {"parcel_id": 2, "parcel_name": "roi2"},
-    ]
-    run_segments = [
-        {"run_id": 1, "run_start": 0, "run_stop": 2, "run_length": 2},
-        {"run_id": 2, "run_start": 2, "run_stop": 4, "run_length": 2},
-    ]
-
-    roi_fc_mod.materialize_ctxdrop_fc_from_arrays(
-        fc_dir=fc_dir,
-        subject=subject,
-        smoothing="2mm",
-        hemi="L",
-        hipp_ts=hipp,
-        valid_mask=np.asarray([True, False, True], dtype=bool),
-        cortex_ts=cortex,
-        cortex_roi_ids=np.asarray([1, 1, 2], dtype=np.int32),
-        roi_rows=roi_rows,
-        neighbor_indices=[
-            np.asarray([0], dtype=np.int64),
-            np.asarray([1], dtype=np.int64),
-            np.asarray([2], dtype=np.int64),
-        ],
-        run_segments=run_segments,
-        distance_mm=20.0,
-        local_neighbor_dir=diag_dir,
-    )
-
-    full = np.load(fc_dir / "hipp_vertex_to_network_fc.npy")
-    active = np.load(fc_dir / "hipp_vertex_to_network_fc_active.npy")
-    assert full.shape == (3, 2)
-    assert active.shape == (2, 2)
-    assert np.isnan(full[1]).all()
-    assert not (fc_dir / "ctxdrop_neighbor_counts.npy").exists()
-    assert not (fc_dir / "ctxdrop_roi_cortex_counts.npy").exists()
-    assert np.load(diag_dir / "neighbor_counts.npy").tolist() == [1, 1, 1]
-    assert np.load(diag_dir / "ctxdrop_roi_cortex_counts.npy").tolist() == [[1, 1], [1, 1], [2, 0]]
-    summary = (fc_dir / "fc_summary.json").read_text(encoding="utf-8")
-    assert "pearson_vertex_to_kong2022_roi_timeseries_ctxdrop_local20mm" in summary
-    assert (fc_dir / "runs" / "run-1" / "hipp_vertex_to_network_fc_active.npy").exists()
 
 
 def test_routea_ctxreg_fc_steps_use_separate_reference_and_mask_roots(tmp_path: Path, cortex_reference_factory) -> None:
@@ -547,20 +346,67 @@ def test_group_and_cortex_helpers_accept_reference_root_for_ctxreg() -> None:
 
 def test_hcp_control_writer_defaults_use_dated_400_roi_roots() -> None:
     expected_ctxreg = ctxreg_mod.DEFAULT_KONG400_CTXREG_SHARED_ROOT.resolve()
-    expected_ctxdrop = roi_fc_mod.DEFAULT_KONG400_CTXDROP_SHARED_ROOT.resolve()
     assert ctxreg_mod.DEFAULT_OUT_SHARED_ROOT == expected_ctxreg
-    assert roi_fc_mod.resolve_shared_root_for_mode(None, ctxdrop=True) == expected_ctxdrop
-    assert roi_fc_mod.resolve_reference_root_for_mode(None, ctxdrop=True) == roi_fc_mod.DEFAULT_SHARED_ROOT.resolve()
-    assert neighbors_mod.resolve_neighbor_shared_root(None, source_branch="pfm_ctxreg") == expected_ctxreg
-    assert neighbors_mod.resolve_neighbor_shared_root(None, source_branch="pfm_ctxdrop") == expected_ctxdrop
 
 
 def test_hcp_gradient_control_routes_use_dated_400_roi_roots() -> None:
     assert compute_mod.resolve_gradient_shared_root(
         compute_mod.DEFAULT_SHARED_INPUTS,
         "pfm_ctxreg",
-    ) == compute_mod.DEFAULT_KONG400_CTXREG_SHARED_ROOT.resolve()
-    assert compute_mod.resolve_gradient_shared_root(
-        compute_mod.DEFAULT_SHARED_INPUTS,
-        "pfm_ctxdrop",
-    ) == compute_mod.DEFAULT_KONG400_CTXDROP_SHARED_ROOT.resolve()
+    ) == ctxreg_mod.DEFAULT_KONG400_CTXREG_SHARED_ROOT.resolve()
+
+
+def test_local_cortex_corr_diagnostic_removes_run_offsets() -> None:
+    rng = np.random.default_rng(7)
+    noise_a = rng.standard_normal(40)
+    noise_b = rng.standard_normal(40)
+    segments = [
+        {"run_id": 1, "run_start": 0, "run_stop": 20, "run_length": 20},
+        {"run_id": 2, "run_start": 20, "run_stop": 40, "run_length": 20},
+    ]
+    offsets = np.r_[np.zeros(20), np.full(20, 50.0)]
+    hipp = (noise_a + offsets)[None, :].astype(np.float32)
+    cortex = (noise_b + offsets)[None, :].astype(np.float32)
+    result = ctxreg_mod.regress_local_cortex_signal(
+        hipp_ts=hipp,
+        cortex_ts=cortex,
+        neighbor_indices=[np.asarray([0])],
+        run_segments=segments,
+    )
+    centered = [
+        np.r_[noise_a[:20] - noise_a[:20].mean(), noise_a[20:] - noise_a[20:].mean()],
+        np.r_[noise_b[:20] - noise_b[:20].mean(), noise_b[20:] - noise_b[20:].mean()],
+    ]
+    expected = float(np.corrcoef(centered[0], centered[1])[0, 1])
+    assert abs(float(result.local_cortex_corr[0]) - expected) < 1e-5
+    assert float(result.local_cortex_corr[0]) < 0.9
+
+
+def test_group_atlas_profile_root_must_match_signal_branch(tmp_path: Path) -> None:
+    shared = tmp_path / "shared_inputs" / "pfm_ctxreg"
+    surface = tmp_path / "shared_inputs" / "surface"
+    check = atlas_mod.validate_profile_surface_root_for_signal_branch
+    assert check(shared, signal_branch="ctxreg", shared_root=shared) == shared.resolve()
+    assert check(surface, signal_branch="standard", shared_root=tmp_path / "pfm") == surface.resolve()
+    assert check(surface, signal_branch=None, shared_root=tmp_path / "lynch") == surface.resolve()
+    with pytest.raises(ValueError, match="must read residualized"):
+        check(surface, signal_branch="ctxreg", shared_root=shared)
+    with pytest.raises(ValueError, match="Signal-branch mismatch"):
+        check(shared, signal_branch=None, shared_root=tmp_path / "lynch")
+
+
+def test_ctxreg_10mm_route_is_distinct_and_radius_bound() -> None:
+    from scripts.core_workflow.lib import branch_config, route_tags
+
+    assert route_tags.infer_route_tag_from_shared_root(Path("/x/shared_inputs/pfm_ctxreg_10mm")) == "pfm_ctxreg_10mm"
+    assert route_tags.infer_route_tag_from_shared_root(Path("/x/shared_inputs/pfm_ctxreg")) == "pfm_ctxreg"
+    assert branch_config.signal_branch_for_route("pfm_ctxreg_10mm") == "ctxreg_10mm"
+    assert branch_config.CTXREG_ROUTE_DISTANCE_MM == {"pfm_ctxreg": 20.0, "pfm_ctxreg_10mm": 10.0}
+    assert ctxreg_mod.resolve_route_distance_mm("pfm_ctxreg_10mm", None) == 10.0
+    with pytest.raises(ValueError, match="defined at 10 mm"):
+        ctxreg_mod.resolve_route_distance_mm("pfm_ctxreg_10mm", 20.0)
+    root = Path("/x/shared_inputs/pfm_ctxreg_10mm")
+    assert atlas_mod.standard_reference_root_for_signal_branch(root, "ctxreg_10mm") == Path("/x/shared_inputs/pfm")
+    with pytest.raises(ValueError, match="Signal-branch mismatch"):
+        atlas_mod.validate_profile_surface_root_for_signal_branch(root, signal_branch="standard", shared_root=Path("/x/pfm"))
+    assert compute_mod.resolve_gradient_reference_root(Path("/x/shared_inputs"), root, "pfm_ctxreg_10mm") == Path("/x/shared_inputs/pfm").resolve()

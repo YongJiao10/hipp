@@ -120,30 +120,3 @@ def test_kong400_requires_run_ids_and_lengths_from_exact_atlas_summary(tmp_path,
     with pytest.raises(ValueError, match=str(summary)):
         _materialize(surface_root, reference_root, output_root)
     assert not output_root.exists()
-
-
-def test_ctxdrop_array_materializer_removes_common_run_step_before_roi_fc(tmp_path):
-    fc_dir = tmp_path / "fc"
-    materializer.materialize_ctxdrop_fc_from_arrays(
-        fc_dir=fc_dir, subject="01", smoothing="2mm", hemi="L",
-        hipp_ts=np.repeat((HIPP_SIGNAL + STEP)[None, :], 2, axis=0),
-        valid_mask=np.array([True, False]),
-        cortex_ts=np.array([CORTEX_SIGNAL + STEP, HIPP_SIGNAL + STEP]),
-        cortex_roi_ids=np.array([1, 1]),
-        roi_rows=[{"parcel_id": 1, "parcel_name": "retained_roi"}, {"parcel_id": 2, "parcel_name": "empty_roi"}],
-        neighbor_indices=[np.array([1]), np.array([1])],
-        run_segments=[
-            {"run_id": 1, "run_start": 0, "run_stop": 4, "run_length": 4},
-            {"run_id": 2, "run_start": 4, "run_stop": 8, "run_length": 4},
-        ],
-        distance_mm=20.0, local_neighbor_dir=tmp_path / "neighbors",
-    )
-    pooled = np.load(fc_dir / "hipp_vertex_to_network_fc.npy")
-    np.testing.assert_allclose(pooled[0, 0], POOLED_FC, atol=2e-7)
-    assert np.isnan(pooled[1]).all()
-    assert np.isnan(pooled[:, 1]).all()
-    for run_id, expected in enumerate(RUN_FC, start=1):
-        run_roi = np.load(fc_dir / "runs" / f"run-{run_id}" / "hipp_vertex_to_network_fc_active.npy")
-        np.testing.assert_allclose(run_roi[0, 0], expected, atol=2e-7)
-        assert np.isnan(run_roi[0, 1])
-    np.testing.assert_array_equal(np.load(tmp_path / "neighbors/ctxdrop_roi_cortex_counts.npy"), [[1, 0], [1, 0]])

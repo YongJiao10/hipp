@@ -167,9 +167,6 @@ WTA_OVERVIEW_SIDE_PANEL_TICK_FS = FS_TICK + WTA_OVERVIEW_SIDE_PANEL_FONT_DELTA_P
 WTA_OVERVIEW_SIDE_PANEL_LEGEND_FS = FS_LEGEND_SMALL + WTA_OVERVIEW_SIDE_PANEL_FONT_DELTA_PT
 WTA_NON_NETWORK_NAME = "__non_network_or_null__"
 GRADIENT_METHOD = "gradient-spectral"
-CTXDROP_ORIGINAL_FC_ANNOTATION_SIGNAL = "original_timeseries"
-CTXDROP_ORIGINAL_FC_ANNOTATION_NOTE = "Original-FC annotation of cortex-controlled clusters"
-CTXDROP_NORMALIZED_COUNT_ANNOTATION_NOTE = "Counts derived from original-FC ranking"
 
 
 def default_methods_for_atlas(atlas: str) -> tuple[str, ...]:
@@ -185,133 +182,11 @@ def gradient_affinity_provenance(manifests: list[dict[str, object]]) -> dict[str
     return validate_gradient_spectral_affinity_provenance(manifests)
 
 
-def ctxdrop_original_fc_annotation_provenance(
-    *,
-    manifest_paths: list[Path],
-    manifests: list[dict[str, object]],
-    layout: str = "source-set",
-) -> dict[str, object]:
-    """Validate and describe the accepted ctxdrop cluster annotation source."""
-    known_routes = ("pfm_ctxdrop", "pfm_ctxreg", "pfm")
-    path_route_hints: list[str | None] = []
-    for path in manifest_paths:
-        matches = [route for route in known_routes if route in Path(path).parts]
-        path_route_hints.append(matches[0] if len(matches) == 1 else None)
-    if "pfm_ctxdrop" not in path_route_hints:
-        return {}
-    if any(route != "pfm_ctxdrop" for route in path_route_hints):
-        raise ValueError(
-            "ctxdrop original-FC annotation provenance mismatch: mixed route paths; "
-            f"paths={[str(path) for path in manifest_paths]}"
-        )
-    if layout in {"annotation-pair", "single-smoothing"}:
-        if len(manifest_paths) != 2 or len(manifests) != 2:
-            raise ValueError(
-                f"ctxdrop original-FC annotation provenance for {layout} layout requires "
-                "exactly two L/R manifests"
-            )
-        smoothings = {str(manifest.get("smoothing", "")).strip() for manifest in manifests}
-        if len(smoothings) != 1 or "" in smoothings:
-            raise ValueError(
-                "ctxdrop original-FC annotation provenance requires one declared smoothing "
-                f"across L/R manifests; got {sorted(smoothings)}"
-            )
-        sm = smoothings.pop()
-        expected_grid = {(sm, "L"), (sm, "R")}
-    elif layout == "source-set":
-        if len(manifest_paths) != 4 or len(manifests) != 4:
-            raise ValueError(
-                "ctxdrop original-FC annotation provenance requires exactly four "
-                "2mm/4mm by L/R manifests"
-            )
-        expected_grid = {("2mm", "L"), ("2mm", "R"), ("4mm", "L"), ("4mm", "R")}
-    else:
-        raise ValueError(f"Unsupported ctxdrop provenance layout: {layout!r}")
-
-    route_tags: list[str] = []
-    for path, manifest in zip(manifest_paths, manifests):
-        payload = manifest.get("resume_input_signature_payload")
-        if not isinstance(payload, dict) or not str(payload.get("route_tag", "")).strip():
-            raise ValueError(
-                "ctxdrop original-FC annotation provenance mismatch: missing "
-                f"resume route_tag in {path}"
-            )
-        route_tag = str(payload["route_tag"]).strip()
-        route_tags.append(route_tag)
-    if set(route_tags) != {"pfm_ctxdrop"}:
-        raise ValueError(
-            "ctxdrop original-FC annotation provenance mismatch: route tags="
-            f"{route_tags}"
-        )
-
-    observed_grid = {(str(m.get("smoothing", "")), str(m.get("hemi", ""))) for m in manifests}
-    if observed_grid != expected_grid:
-        raise ValueError(
-            "ctxdrop original-FC annotation provenance mismatch: expected complete "
-            f"smoothing/hemi grid={sorted(expected_grid)}, observed={sorted(observed_grid)}"
-        )
-
-    profile_fc_modes = {str(m.get("profile_fc_mode", "")) for m in manifests}
-    if profile_fc_modes != {"cluster_mean_timeseries"}:
-        raise ValueError(
-            "ctxdrop original-FC annotation provenance mismatch: profile_fc_mode="
-            f"{sorted(profile_fc_modes)}"
-        )
-
-    profile_source_modes = {str(m.get("profile_source_mode", "")) for m in manifests}
-    if profile_source_modes != {"canonical"}:
-        raise ValueError(
-            "ctxdrop original-FC annotation provenance mismatch: profile_source_mode="
-            f"{sorted(profile_source_modes)}"
-        )
-    if any(m.get("profile_source_root") is not None for m in manifests):
-        raise ValueError(
-            "ctxdrop original-FC annotation provenance mismatch: explicit profile_source_root present"
-        )
-    if any(m.get("profile_source_registry") is not None for m in manifests):
-        raise ValueError(
-            "ctxdrop original-FC annotation provenance mismatch: explicit profile_source_registry present"
-        )
-
-    profile_surface_roots = {str(m.get("profile_surface_root", "")).strip() for m in manifests}
-    if len(profile_surface_roots) != 1 or "" in profile_surface_roots:
-        raise ValueError(
-            "ctxdrop original-FC annotation provenance mismatch: profile_surface_root="
-            f"{sorted(profile_surface_roots)}"
-        )
-    profile_surface_root = Path(next(iter(profile_surface_roots))).resolve()
-    if (
-        profile_surface_root.name != "surface"
-        or profile_surface_root.parent.name != "shared_inputs"
-        or any(route in profile_surface_root.parts for route in ("pfm_ctxdrop", "pfm_ctxreg"))
-    ):
-        raise ValueError(
-            "ctxdrop original-FC annotation provenance mismatch: expected the canonical "
-            f"original surface root, got {profile_surface_root}"
-        )
-
-    reference_roots = {str(m.get("reference_root", "")).strip() for m in manifests}
-    if len(reference_roots) != 1 or "" in reference_roots:
-        raise ValueError(
-            "ctxdrop original-FC annotation provenance mismatch: reference_root="
-            f"{sorted(reference_roots)}"
-        )
-
-    return {
-        "cluster_annotation_signal": CTXDROP_ORIGINAL_FC_ANNOTATION_SIGNAL,
-        "cluster_annotation_note": CTXDROP_ORIGINAL_FC_ANNOTATION_NOTE,
-        "cluster_annotation_profile_fc_mode": "cluster_mean_timeseries",
-        "cluster_annotation_profile_surface_root": str(profile_surface_root),
-        "cluster_annotation_reference_root": next(iter(reference_roots)),
-    }
-
-
 def overview_source_provenance(
     *,
     method: str,
     manifest_paths: list[Path],
     manifests: list[dict[str, object]],
-    layout: str = "source-set",
 ) -> dict[str, object]:
     provenance: dict[str, object] = {
         "source_group_manifests": [str(path) for path in manifest_paths],
@@ -319,13 +194,6 @@ def overview_source_provenance(
     if _is_gradient_method(method):
         provenance.update(gradient_affinity_provenance(manifests) if method == "gradient-spectral"
                           else validate_gradient_method_provenance(method, manifests))
-        provenance.update(
-            ctxdrop_original_fc_annotation_provenance(
-                manifest_paths=manifest_paths,
-                manifests=manifests,
-                layout=layout,
-            )
-        )
     return provenance
 
 
@@ -346,12 +214,6 @@ def overview_manifest_item(
         "assignment_assets",
         "surface_affinity",
         "affinity_description",
-        "cluster_annotation_signal",
-        "cluster_annotation_note",
-        "cluster_annotation_profile_fc_mode",
-        "cluster_annotation_profile_surface_root",
-        "cluster_annotation_reference_root",
-        "assignment_annotation_note",
         "cluster_cortex_fc_column",
         "hippocampal_renderer",
     ):
@@ -492,7 +354,7 @@ def resolve_overview_mode_tag(group_root: Path, explicit_mode_tag: str | None) -
     # All maintained formal runs are full computations; there is no sparse
     # overview mode in production. Only honor an explicit caller override
     # (e.g. side-by-side comparisons). Never infer "sparse" from the
-    # directory name: formal roots such as work/group_atlas/pfm_ctxdrop
+    # directory name: formal roots such as work/group_atlas/pfm_ctxreg
     # omit the legacy _full_k3_fisherz suffix by contract yet remain full.
     if explicit_mode_tag is not None:
         text = str(explicit_mode_tag).strip()
@@ -1714,7 +1576,6 @@ def render_combo(
         method=method,
         manifest_paths=manifest_paths,
         manifests=source_manifests,
-        layout=layout,
     )
     if method in CLUSTERLESS_METHODS and str(atlas) == "kong2022":
         validate_kong_wta_taxonomy(manifest_paths, source_manifests, route_tag)
@@ -2333,14 +2194,6 @@ def render_combo(
             else None
         ),
     )
-    assignment_annotation_note = None
-    annotation_note = source_provenance.get("cluster_annotation_note")
-    if annotation_note is not None:
-        title_lines = [rendered_title, str(annotation_note)]
-        if effective_assignment_variant == "normalized_top20_count":
-            assignment_annotation_note = CTXDROP_NORMALIZED_COUNT_ANNOTATION_NOTE
-            title_lines.append(assignment_annotation_note)
-        rendered_title = "\n".join(title_lines)
     fig.suptitle(rendered_title, fontsize=FS_SUPTITLE)
     out_png.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_png, dpi=300)
@@ -2371,7 +2224,6 @@ def render_combo(
         "rendered_title": rendered_title,
         "overview_scope": str(overview_scope).strip() or "Group",
         "subject_split_ari": "skipped" if skip_subject_split_ari else "rendered",
-        "assignment_annotation_note": assignment_annotation_note,
         "assignment_assets": assignment_assets,
         "cluster_cortex_fc_column": bool(cortex_profiles),
         "cortex_surface_cache": cortex_surface_records,
@@ -2411,8 +2263,8 @@ def write_readme(present_dir: Path, items: list[dict[str, object]]) -> None:
     lines = [
         "# HCP 7T hippocampus group overviews",
         "",
-        "| atlas | method | route | mode | assignment | overview | smoothings | annotation | key metrics |",
-        "|---|---|---|---|---|---|---|---|---|",
+        "| atlas | method | route | mode | assignment | overview | smoothings | key metrics |",
+        "|---|---|---|---|---|---|---|---|",
     ]
     for item in sorted(items, key=lambda x: (str(x["atlas"]), str(x["method"]), str(x["overview_png"]))):
         png = Path(str(item["overview_png"])).resolve().relative_to(present_dir.resolve()).as_posix()
@@ -2421,13 +2273,7 @@ def write_readme(present_dir: Path, items: list[dict[str, object]]) -> None:
         route = str(item.get("route_tag", ""))
         mode = str(item.get("mode_tag", ""))
         assignment = str(item.get("assignment_variant", ""))
-        annotation_parts = [
-            str(item[key])
-            for key in ("cluster_annotation_note", "assignment_annotation_note")
-            if item.get(key)
-        ]
-        annotation = "<br>".join(annotation_parts)
-        lines.append(f"| {item['atlas']} | {item['method']} | {route} | {mode} | {assignment} | [{png}]({png}) | {sm} | {annotation} | {metric} |")
+        lines.append(f"| {item['atlas']} | {item['method']} | {route} | {mode} | {assignment} | [{png}]({png}) | {sm} | {metric} |")
     (present_dir / "README.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 

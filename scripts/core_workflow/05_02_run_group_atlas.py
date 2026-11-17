@@ -21,7 +21,7 @@ Inputs:
   - --out-root: Directory where group-atlas intermediate files will be saved (default: `outputs_hcp/work/group_atlas/pfm`).
   - --gradient-root: Directory containing computed continuous gradients (default: `outputs_hcp/work/hippomaps_gradients`).
   - --hippomaps-root: Root path to external HippoMaps codebase (default: `external/hippomaps`).
-  - --route-tag: Expected workflow branch tag, e.g., "pfm", "pfm_ctxreg", "pfm_ctxdrop", or "fixed".
+  - --route-tag: Expected workflow branch tag, e.g., "pfm", "pfm_ctxreg", "pfm_ctxreg_10mm", or "fixed".
   - --subjects-manifest: Path to QC-passed subject list manifest.
   - --hippunfold-batch-root: Batch output root containing sub-*/hippunfold outputs.
   - --kong2022-dlabel: Path to standard Kong2022 dlabel.nii cortical atlas file.
@@ -198,7 +198,10 @@ from lib.cluster_roi_profile_contract import (
     atlas_produces_cluster_roi_profile,
 )
 from lib.branch_config import (
+    CTXREG_ROUTES,
     SIGNAL_BRANCH_CHOICES,
+    SIGNAL_BRANCH_TO_ROUTE,
+    is_ctxreg_signal_branch,
     normalize_signal_branch,
     resolve_signal_branch_for_route,
 )
@@ -852,17 +855,47 @@ def standard_reference_root_for_signal_branch(
 ) -> Path:
     """Map a CtxReg shared-input root to its explicit PFM reference root."""
     root = Path(shared_root).resolve()
-    if signal_branch != "ctxreg":
+    if not is_ctxreg_signal_branch(signal_branch):
         return root
-    matches = [idx for idx, part in enumerate(root.parts) if part == "pfm_ctxreg"]
+    route = SIGNAL_BRANCH_TO_ROUTE[str(signal_branch)]
+    matches = [idx for idx, part in enumerate(root.parts) if part == route]
     if len(matches) != 1:
         raise ValueError(
             "CtxReg group-atlas runs require a shared root containing exactly one "
-            f"pfm_ctxreg path component or an explicit --reference-root: {root}"
+            f"{route} path component or an explicit --reference-root: {root}"
         )
     parts = list(root.parts)
     parts[matches[0]] = "pfm"
     return Path(*parts)
+
+
+def validate_profile_surface_root_for_signal_branch(
+    profile_surface_root: Path,
+    *,
+    signal_branch: str | None,
+    shared_root: Path,
+) -> Path:
+    """Cluster annotation must use the same hippocampal signal branch as the FC.
+
+    CtxReg annotation reads the residualized series under its own shared root;
+    every other route reads uncontrolled series and must not borrow CtxReg
+    residuals, otherwise clusters and their network profiles mix signal branches.
+    """
+    profile = Path(profile_surface_root).resolve()
+    if is_ctxreg_signal_branch(signal_branch):
+        expected = Path(shared_root).resolve()
+        if profile != expected:
+            raise ValueError(
+                "CtxReg cluster annotation must read residualized hippocampal time series "
+                f"from its shared root: expected profile_surface_root={expected}, got {profile}"
+            )
+        return profile
+    if any(route in profile.parts for route in CTXREG_ROUTES):
+        raise ValueError(
+            "Signal-branch mismatch: cluster annotation for a non-CtxReg route must not read "
+            f"CtxReg residualized hippocampal time series: profile_surface_root={profile}"
+        )
+    return profile
 
 
 def is_network_method(method: str) -> bool:
@@ -1542,10 +1575,10 @@ def load_hippomaps_gradient_features(
     if expected_signal_branch is not None:
         expected_branch = normalize_signal_branch(expected_signal_branch)
         recorded_branch = manifest.get("signal_branch")
-        if expected_branch == "ctxreg" and recorded_branch != "ctxreg":
+        if is_ctxreg_signal_branch(expected_branch) and recorded_branch != expected_branch:
             raise ValueError(
                 "Gradient signal branch mismatch: "
-                f"expected='ctxreg' manifest={recorded_branch!r} path={manifest_path}"
+                f"expected={expected_branch!r} manifest={recorded_branch!r} path={manifest_path}"
             )
         if expected_branch == "standard" and recorded_branch not in {None, "standard"}:
             raise ValueError(
@@ -1563,7 +1596,7 @@ def load_hippomaps_gradient_features(
                 "Gradient atlas route mismatch: "
                 f"expected={route!r} manifest={manifest_route!r} path={manifest_path}"
             )
-    if str(route) in {"pfm", "pfm_ctxreg", "pfm_ctxdrop", "fixed"}:
+    if str(route) in {"pfm", *CTXREG_ROUTES, "fixed"}:
         group_fc_shape = manifest.get("group_fc_shape")
         feature_count = manifest.get("feature_count")
         if not (isinstance(group_fc_shape, list) and len(group_fc_shape) == 2 and int(group_fc_shape[1]) == 400):
@@ -5379,9 +5412,10 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default=None,
         help=(
             "Root containing sub-*/surface/<smoothing>/sub-*_hemi-*_timeseries.npy "
-            "for cluster-network profile annotation. Defaults to --surface-root. "
-            "Use this when masks/coverage live in a branch root but hippocampal "
-            "time series live in a separate controlled shared-input root."
+            "for cluster-network profile annotation. Defaults to the CtxReg shared "
+            "root for ctxreg routes and to --surface-root otherwise. The root must "
+            "match the route's signal branch; non-CtxReg routes cannot read "
+            "CtxReg residualized time series."
         ),
     )
     parser.add_argument(
@@ -5420,7 +5454,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--signal-branch",
         choices=SIGNAL_BRANCH_CHOICES,
         default=None,
-        help="Explicit standard/ctxreg signal branch for pfm or pfm_ctxreg.",
+        help="Explicit signal branch for pfm (standard), pfm_ctxreg (ctxreg) or pfm_ctxreg_10mm (ctxreg_10mm).",
     )
     class _StoreExplicitNetworkTaxonomy(argparse.Action):
         def __call__(self, parser, namespace, values, option_string=None):
@@ -5572,15 +5606,13 @@ def _resolve_methods_and_taxonomy(args: argparse.Namespace) -> str:
     if route == "auto":
         route = infer_route_tag_from_shared_root(Path(args.shared_root))
     if args.methods is None:
-        args.methods = ["gradient-spectral", "wta-top"] if route == "pfm_ctxdrop" else list(
+        args.methods = list(
             dict.fromkeys(
                 method
                 for atlas in args.atlases
                 for method in default_methods_for_atlas(atlas)
             )
         )
-    if route == "pfm_ctxdrop" and set(args.methods) - (GRADIENT_METHODS | {"wta-top"}):
-        raise ValueError("pfm_ctxdrop supports only gradient-spectral and wta-top")
     network_taxonomy = str(args.network_taxonomy)
     if not getattr(args, "_network_taxonomy_explicit", False):
         network_taxonomy = default_network_taxonomy_for_atlases(args.atlases)
@@ -5676,7 +5708,7 @@ def main() -> int:
     if args.reuse_fixed_cluster_root is not None:
         if route_tag == "lynch2024_7net":
             allowed_taxonomies = {"lynch7"}
-        elif route_tag in {"pfm", "pfm_ctxreg", "pfm_ctxdrop"}:
+        elif route_tag in {"pfm", *CTXREG_ROUTES}:
             # canonical8 is retired upstream (see _resolve_methods_and_taxonomy),
             # so it can never reach this reuse-fixed validation.
             allowed_taxonomies = {"canonical7"}
@@ -5704,7 +5736,12 @@ def main() -> int:
     profile_surface_root = (
         Path(args.profile_surface_root).resolve()
         if args.profile_surface_root
-        else shared_root if signal_branch == "ctxreg" else surface_root
+        else shared_root if is_ctxreg_signal_branch(signal_branch) else surface_root
+    )
+    profile_surface_root = validate_profile_surface_root_for_signal_branch(
+        profile_surface_root,
+        signal_branch=signal_branch,
+        shared_root=shared_root,
     )
     signal_provenance = {
         "signal_branch": signal_branch,

@@ -9,7 +9,7 @@ from .output_layout import (
     resolve_lynch2024_20net_group_atlas_root,
     resolve_lynch2024_7net_group_atlas_root,
     resolve_pfm_17net_group_atlas_root,
-    resolve_pfm_ctxdrop_group_atlas_root,
+    resolve_pfm_ctxreg_10mm_group_atlas_root,
     resolve_pfm_ctxreg_group_atlas_root,
     resolve_pfm_group_atlas_root,
 )
@@ -18,14 +18,14 @@ ROUTE_TAG_CHOICES = (
     "pfm",
     "pfm_17net",
     "pfm_ctxreg",
-    "pfm_ctxdrop",
+    "pfm_ctxreg_10mm",
     "fixed",
     "fixed_17net",
     "lynch2024_20net",
     "lynch2024_7net",
 )
 NETWORK_TAXONOMY_CHOICES = ("canonical7", "family17", "lynch20", "lynch7")
-_CANONICAL7_ROUTE_TAGS = frozenset({"pfm", "pfm_ctxreg", "pfm_ctxdrop", "fixed"})
+_CANONICAL7_ROUTE_TAGS = frozenset({"pfm", "pfm_ctxreg", "pfm_ctxreg_10mm", "fixed"})
 FAMILY17_ROUTE_TAGS = frozenset({"pfm_17net", "fixed_17net"})
 
 
@@ -37,8 +37,8 @@ def kong_network_taxonomy_for_route(route_tag: str | None) -> str:
 _ROUTE_DETECTION_ORDER = (
     "lynch2024_20net",
     "lynch2024_7net",
+    "pfm_ctxreg_10mm",  # before pfm_ctxreg: detection matches name prefixes
     "pfm_ctxreg",
-    "pfm_ctxdrop",
     "pfm_17net",
     "fixed_17net",
     "fixed",
@@ -49,7 +49,7 @@ ROUTE_TO_GROUP_ATLAS_ROOT = {
     "pfm": resolve_pfm_group_atlas_root,
     "pfm_17net": resolve_pfm_17net_group_atlas_root,
     "pfm_ctxreg": resolve_pfm_ctxreg_group_atlas_root,
-    "pfm_ctxdrop": resolve_pfm_ctxdrop_group_atlas_root,
+    "pfm_ctxreg_10mm": resolve_pfm_ctxreg_10mm_group_atlas_root,
     "fixed": resolve_fixed_group_atlas_root,
     "fixed_17net": resolve_fixed_17net_group_atlas_root,
     "lynch2024_20net": resolve_lynch2024_20net_group_atlas_root,
@@ -138,7 +138,7 @@ def resolve_route_tag_for_group_atlas_run(*, shared_root: Path, explicit_route: 
     if route in _CANONICAL7_ROUTE_TAGS and taxonomy != "canonical7":
         raise ValueError(f"--route-tag {route} requires --network-taxonomy canonical7.")
     if taxonomy == "canonical7" and route not in _CANONICAL7_ROUTE_TAGS:
-        raise ValueError("--network-taxonomy canonical7 requires a Kong2022 canonical7 route (pfm, pfm_ctxreg, pfm_ctxdrop, or fixed).")
+        raise ValueError("--network-taxonomy canonical7 requires a Kong2022 canonical7 route (pfm, pfm_ctxreg, pfm_ctxreg_10mm, or fixed).")
     if route == "lynch2024_20net" and taxonomy != "lynch20":
         raise ValueError("--route-tag lynch2024_20net requires --network-taxonomy lynch20.")
     if route == "lynch2024_7net" and taxonomy != "lynch7":

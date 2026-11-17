@@ -6,7 +6,7 @@
     "kong2022_pfm",
     "kong2022_pfm_17net",
     "kong2022_pfm_ctxreg",
-    "kong2022_pfm_ctxdrop",
+    "kong2022_pfm_ctxreg_10mm",
     "kong2022_fixed",
     "kong2022_fixed_17net",
     "lynch2024_20net",
@@ -124,9 +124,10 @@
     {
       "step_id": "04_00_materialize_cortex_regressed_surface_timeseries",
       "stage": "04_hipp_fc",
-      "purpose": "Materialize PFM hippocampal surface time series after local cortex regression for the isolated cortex-control branch.",
+      "purpose": "Materialize PFM hippocampal surface time series after run-wise local cortex regression for the isolated ctxreg branches (--route-tag pfm_ctxreg at 20 mm, pfm_ctxreg_10mm at 10 mm).",
       "branches": [
-        "kong2022_pfm_ctxreg"
+        "kong2022_pfm_ctxreg",
+        "kong2022_pfm_ctxreg_10mm"
       ],
       "entry_script": "scripts/core_workflow/04_00_materialize_cortex_regressed_surface_timeseries.py",
       "implementation_script": "scripts/core_workflow/04_00_materialize_cortex_regressed_surface_timeseries.py",
@@ -139,7 +140,7 @@
       "branches": [
         "kong2022_pfm",
         "kong2022_pfm_ctxreg",
-        "kong2022_pfm_ctxdrop",
+        "kong2022_pfm_ctxreg_10mm",
         "kong2022_fixed",
         "lynch2024_20net",
         "lynch2024_7net"
@@ -155,6 +156,7 @@
       "branches": [
         "kong2022_pfm",
         "kong2022_pfm_ctxreg",
+        "kong2022_pfm_ctxreg_10mm",
         "kong2022_fixed"
       ],
       "entry_script": "scripts/core_workflow/04_02_materialize_intrinsic_fc.py",
@@ -190,7 +192,7 @@
       "branches": [
         "kong2022_pfm",
         "kong2022_pfm_ctxreg",
-        "kong2022_pfm_ctxdrop",
+        "kong2022_pfm_ctxreg_10mm",
         "kong2022_fixed",
         "lynch2024_20net",
         "lynch2024_7net"
@@ -207,7 +209,7 @@
         "kong2022_pfm",
         "kong2022_pfm_17net",
         "kong2022_pfm_ctxreg",
-        "kong2022_pfm_ctxdrop",
+        "kong2022_pfm_ctxreg_10mm",
         "kong2022_fixed",
         "kong2022_fixed_17net",
         "lynch2024_20net",
@@ -236,7 +238,7 @@
       "branches": [
         "kong2022_pfm",
         "kong2022_pfm_ctxreg",
-        "kong2022_pfm_ctxdrop"
+        "kong2022_pfm_ctxreg_10mm"
       ],
       "entry_script": "scripts/core_workflow/05_04_compute_confidence_maps.py",
       "implementation_script": "scripts/core_workflow/05_04_compute_confidence_maps.py",
@@ -261,7 +263,7 @@
         "kong2022_pfm",
         "kong2022_pfm_17net",
         "kong2022_pfm_ctxreg",
-        "kong2022_pfm_ctxdrop",
+        "kong2022_pfm_ctxreg_10mm",
         "kong2022_fixed",
         "kong2022_fixed_17net",
         "lynch2024_20net",
@@ -293,7 +295,7 @@
         "kong2022_pfm",
         "kong2022_pfm_17net",
         "kong2022_pfm_ctxreg",
-        "kong2022_pfm_ctxdrop",
+        "kong2022_pfm_ctxreg_10mm",
         "kong2022_fixed",
         "kong2022_fixed_17net"
       ],
@@ -308,7 +310,7 @@
       "branches": [
         "kong2022_pfm",
         "kong2022_pfm_ctxreg",
-        "kong2022_pfm_ctxdrop",
+        "kong2022_pfm_ctxreg_10mm",
         "kong2022_fixed"
       ],
       "entry_script": "scripts/core_workflow/06_04_render_hippomaps_gradient_products.py",
@@ -334,23 +336,23 @@
       "branches": [
         "kong2022_pfm",
         "kong2022_pfm_ctxreg",
-        "kong2022_pfm_ctxdrop"
+        "kong2022_pfm_ctxreg_10mm"
       ],
       "entry_script": "scripts/core_workflow/06_06_render_confidence_maps.py",
       "implementation_script": "scripts/core_workflow/06_06_render_confidence_maps.py",
       "recommended_manifest": "manifests/core_workflow/06_06_render_confidence_maps.json"
     },
     {
-      "step_id": "06_07_render_ctxdrop_neighbor_counts",
+      "step_id": "06_07_render_local_cortex_control_diagnostics",
       "stage": "06_presentation_products",
-      "purpose": "Render group-average PFM 20 mm local cortex-neighbor count summaries shared by ctxreg and ctxdrop.",
+      "purpose": "Quantify ctxreg and ctxdrop sensitivity (3/6/10/20 mm) of Kong2022 PFM hippocampal FC and normalized top-20 WTA, local-cortex network make-up, distance-ring coupling and boundary identity; render one diagnostic figure and summary TSV. FC/WTA-level diagnostic only; it is not a signal branch.",
       "branches": [
-        "kong2022_pfm_ctxreg",
-        "kong2022_pfm_ctxdrop"
+        "kong2022_pfm",
+        "kong2022_pfm_ctxreg"
       ],
-      "entry_script": "scripts/core_workflow/06_07_render_ctxdrop_neighbor_counts.py",
-      "implementation_script": "scripts/core_workflow/06_07_render_ctxdrop_neighbor_counts.py",
-      "recommended_manifest": "outputs_hcp/present/local_cortex_neighbors/kong2022_pfm_local_cortex_neighbors_mean20mm_manifest.json"
+      "entry_script": "scripts/core_workflow/06_07_render_local_cortex_control_diagnostics.py",
+      "implementation_script": "scripts/core_workflow/06_07_render_local_cortex_control_diagnostics.py",
+      "recommended_manifest": "outputs_hcp/present/local_cortex_control/local_cortex_control_manifest.json"
     },
     {
       "step_id": "06_08_render_hcp_subfield_composition",
@@ -382,7 +384,7 @@
         "kong2022_pfm",
         "kong2022_pfm_17net",
         "kong2022_pfm_ctxreg",
-        "kong2022_pfm_ctxdrop",
+        "kong2022_pfm_ctxreg_10mm",
         "kong2022_fixed",
         "kong2022_fixed_17net"
       ],
@@ -409,7 +411,7 @@
         "kong2022_pfm",
         "kong2022_pfm_17net",
         "kong2022_pfm_ctxreg",
-        "kong2022_pfm_ctxdrop",
+        "kong2022_pfm_ctxreg_10mm",
         "kong2022_fixed",
         "kong2022_fixed_17net"
       ],

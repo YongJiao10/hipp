@@ -13,7 +13,7 @@ Inputs:
   - --cohort / --variant: Select the same cohort and 36p gradient bank as 05_01 and 05_02.
   - --present-root: Root directory for saving presentation figures (default: `outputs_hcp/present/gradients`).
   - --hippomaps-root: Root directory for the HippoMaps repository package (default: `external/HippoMaps`).
-  - --routes: Routes to process (choices: "pfm", "pfm_ctxreg", "pfm_ctxdrop", "fixed"; default: all).
+  - --routes: Routes to process (choices: "pfm", "pfm_ctxreg", "pfm_ctxreg_10mm", "fixed"; default: all).
   - --smoothings: Smoothing kernel values to process (default: ["2mm", "4mm"]).
   - --den: Output density resolution (default: "512").
   - --components: Comma-separated list of gradient components to plot (default: "1,2,3").
@@ -68,7 +68,7 @@ import matplotlib.pyplot as plt  # type: ignore[import-untyped]  # noqa: E402
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_GRADIENT_ROOT = DEFAULT_HIPPOMAPS_GRADIENT_ROOT
 DEFAULT_PRESENT_ROOT = DEFAULT_GRADIENTS_DIR
-ROUTES = ("pfm", "pfm_ctxreg", "pfm_ctxdrop", "fixed")
+ROUTES = ("pfm", "pfm_ctxreg", "pfm_ctxreg_10mm", "fixed")
 SMOOTHINGS = ("2mm", "4mm")
 HEMIS = ("L", "R")
 

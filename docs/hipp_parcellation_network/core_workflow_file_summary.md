@@ -27,7 +27,7 @@ for those details:
 | `scripts/core_workflow/03_01_build_kong2022_reference.py` | Build shared Kong2022 cortex references |
 | `scripts/core_workflow/03_02_build_kong2022_routea_reference.py` | Build RouteA cortex references and compact 17-net summaries |
 | `scripts/core_workflow/04_00_materialize_cortex_regressed_surface_timeseries.py` | Build isolated RouteA cortex-regressed hippocampal time series |
-| `scripts/core_workflow/04_01_materialize_kong2022_roi_fc.py` | Materialize Kong2022 vertex-to-ROI FC, including ctxdrop mode |
+| `scripts/core_workflow/04_01_materialize_kong2022_roi_fc.py` | Materialize Kong2022 and Lynch2024 vertex-to-reference FC |
 | `scripts/core_workflow/04_02_materialize_intrinsic_fc.py` | Materialize intrinsic hippocampal FC |
 | `scripts/core_workflow/05_01_compute_hippomaps_gradients.py` | Compute aligned HippoMaps/BrainSpace gradient artifacts |
 | `scripts/core_workflow/05_02_run_group_atlas.py` | Build group atlas outputs and K diagnostics |
@@ -41,7 +41,7 @@ for those details:
 | `scripts/core_workflow/06_04_render_hippomaps_gradient_products.py` | Render continuous-gradient products |
 | `scripts/core_workflow/06_05_render_group_gradient_heatmaps.py` | Deprecated heatmap entrypoint that exits with guidance |
 | `scripts/core_workflow/06_06_render_confidence_maps.py` | Render confidence maps |
-| `scripts/core_workflow/06_07_render_ctxdrop_neighbor_counts.py` | Render ctxreg/ctxdrop local cortex-neighbor overlays |
+| `scripts/core_workflow/06_07_render_local_cortex_control_diagnostics.py` | FC/WTA-level diagnostic of ctxreg and local-cortex target exclusion at 3/6/10/20 mm; not a signal branch |
 | `scripts/core_workflow/06_08_render_hcp_subfield_composition.py` | Render HCP subfield composition plots |
 | `scripts/core_workflow/06_09_plot_cortex_kong2022_mshbm.py` | Render subject-level Kong2022 MSHBM cortical parcellation brain maps |
 | `scripts/core_workflow/07_01_build_group_matrix.py` | Build the maintained presentation matrix/index |
@@ -62,6 +62,7 @@ for those details:
 | `scripts/core_workflow/lib/hippomaps_adapter.py` | Adapter for external HippoMaps functionality |
 | `scripts/core_workflow/lib/io_utils.py` | Shared filesystem and array IO helpers |
 | `scripts/core_workflow/lib/kong2022_label_utils.py` | Kong2022 label and network mapping helpers |
+| `scripts/core_workflow/lib/local_cortex_control.py` | Local-cortex ROI bank, ctxreg/ctxdrop FC, normalized top-20 WTA winner and boundary-group helpers for `06_07` |
 | `scripts/core_workflow/lib/output_layout.py` | Standardized output path layout helpers |
 | `scripts/core_workflow/lib/render_cortex_pfm_scene.py` | Cortex/PFM scene rendering helpers |
 | `scripts/core_workflow/lib/surface_sampling.py` | Surface sampling helpers |

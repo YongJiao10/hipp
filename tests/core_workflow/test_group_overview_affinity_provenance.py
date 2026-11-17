@@ -80,7 +80,7 @@ def _shifted_manifest() -> dict[str, object]:
     }
 
 
-def _ctxdrop_manifest(smoothing: str, hemi: str) -> dict[str, object]:
+def _ctxreg_manifest(smoothing: str, hemi: str) -> dict[str, object]:
     return {
         **_shifted_manifest(),
         "smoothing": smoothing,
@@ -89,15 +89,6 @@ def _ctxdrop_manifest(smoothing: str, hemi: str) -> dict[str, object]:
         "profile_source_mode": "canonical",
         "profile_source_root": None,
         "profile_source_registry": None,
-        "profile_surface_root": "/outputs_hcp/inputs/kong2022/shared_inputs/surface",
-        "reference_root": "/outputs_hcp/inputs/kong2022/shared_inputs/pfm_ctxdrop",
-        "resume_input_signature_payload": {"route_tag": "pfm_ctxdrop"},
-    }
-
-
-def _ctxreg_manifest(smoothing: str, hemi: str) -> dict[str, object]:
-    return {
-        **_ctxdrop_manifest(smoothing, hemi),
         "profile_surface_root": "/outputs_hcp/inputs/kong2022/shared_inputs/pfm_ctxreg",
         "reference_root": "/outputs_hcp/inputs/kong2022/shared_inputs/pfm_ctxreg",
         "resume_input_signature_payload": {"route_tag": "pfm_ctxreg"},
@@ -128,31 +119,7 @@ def test_gradient_overview_item_records_four_shifted_cosine_sources() -> None:
     assert "shifted-cosine" in rendered_title
 
 
-def test_ctxdrop_gradient_provenance_records_original_fc_annotation() -> None:
-    pairs = [("2mm", "L"), ("2mm", "R"), ("4mm", "L"), ("4mm", "R")]
-    paths = [
-        Path(f"/group/pfm_ctxdrop/{smoothing}/{hemi}/group_atlas_manifest.json")
-        for smoothing, hemi in pairs
-    ]
-    manifests = [_ctxdrop_manifest(smoothing, hemi) for smoothing, hemi in pairs]
-
-    provenance = overview_mod.overview_source_provenance(
-        method="gradient-spectral",
-        manifest_paths=paths,
-        manifests=manifests,
-    )
-
-    assert provenance["cluster_annotation_signal"] == "original_timeseries"
-    assert provenance["cluster_annotation_note"] == (
-        "Original-FC annotation of cortex-controlled clusters"
-    )
-    assert provenance["cluster_annotation_profile_fc_mode"] == "cluster_mean_timeseries"
-    assert provenance["cluster_annotation_profile_surface_root"].endswith(
-        "/shared_inputs/surface"
-    )
-
-
-def test_standard_and_ctxreg_gradient_provenance_do_not_get_ctxdrop_raw_note() -> None:
+def test_standard_and_ctxreg_gradient_provenance_have_no_annotation_override() -> None:
     pairs = [("2mm", "L"), ("2mm", "R"), ("4mm", "L"), ("4mm", "R")]
     standard_paths = [Path(f"/group/pfm/{smoothing}/{hemi}/group_atlas_manifest.json") for smoothing, hemi in pairs]
     standard = [
@@ -177,28 +144,6 @@ def test_standard_and_ctxreg_gradient_provenance_do_not_get_ctxdrop_raw_note() -
         assert "cluster_annotation_note" not in provenance
 
 
-@pytest.mark.parametrize(
-    "mutator",
-    [
-        lambda manifest: manifest.update({"profile_surface_root": "/outputs_hcp/inputs/kong2022/shared_inputs/pfm_ctxreg"}),
-        lambda manifest: manifest["resume_input_signature_payload"].update({"route_tag": "pfm_ctxreg"}),
-        lambda manifest: manifest.update({"profile_fc_mode": "pearson"}),
-    ],
-)
-def test_ctxdrop_gradient_provenance_rejects_mismatched_annotation_source(mutator) -> None:
-    pairs = [("2mm", "L"), ("2mm", "R"), ("4mm", "L"), ("4mm", "R")]
-    paths = [Path(f"/group/pfm_ctxdrop/{smoothing}/{hemi}/group_atlas_manifest.json") for smoothing, hemi in pairs]
-    manifests = [_ctxdrop_manifest(smoothing, hemi) for smoothing, hemi in pairs]
-    mutator(manifests[-1])
-
-    with pytest.raises(ValueError, match="ctxdrop original-FC annotation provenance"):
-        overview_mod.overview_source_provenance(
-            method="gradient-spectral",
-            manifest_paths=paths,
-            manifests=manifests,
-        )
-
-
 def test_overview_manifest_item_preserves_rendered_title() -> None:
     title = "Group Overview | kong2022 | gradient-spectral | shifted-cosine"
     item = overview_mod.overview_manifest_item(
@@ -208,16 +153,11 @@ def test_overview_manifest_item_preserves_rendered_title() -> None:
             "source_group_manifests": ["/group/manifest.json"],
             "surface_affinity": "shifted-cosine",
             "affinity_description": overview_mod.GRADIENT_SPECTRAL_AFFINITY_DESCRIPTION,
-            "cluster_annotation_signal": "original_timeseries",
-            "cluster_annotation_note": "Original-FC annotation of cortex-controlled clusters",
-            "assignment_annotation_note": "Counts derived from original-FC ranking",
         },
     )
 
     assert item["rendered_title"] == title
     assert item["source_group_manifests"] == ["/group/manifest.json"]
-    assert item["cluster_annotation_signal"] == "original_timeseries"
-    assert item["assignment_annotation_note"] == "Counts derived from original-FC ranking"
 
 
 def test_individual_overview_title_is_not_labeled_as_group() -> None:

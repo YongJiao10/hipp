@@ -4,12 +4,12 @@ Kong2022 gradient and WTA products consume the ordered 400-parcel profile from e
 
 Canonical7 network time series and FC are summaries only. The materializer writes them to `hipp_vertex_to_canonical7_fc.npy` and `_active.npy`. They are available to network-spectral diagnostics and do not enter the Kong gradient bank. Gradient Fisher-z and normalized_top20_count annotations reuse the same spatial clusters; Fisher-z averages the 400 ROI profile by the selected taxonomy, while normalized_top20_count takes at most 20 ROI columns and divides counts by the total ROI count in each taxonomy network.
 
-The `05_01` manifest records `feature_family: kong2022_400roi_fc`, `feature_count: 400`, `group_fc_shape`, and the ordered registry evidence. `05_02` rejects missing or stale gradient output paths and rejects Kong manifests without the 400-column evidence. Control routes `routea_ctxreg` and `routea_ctxdrop` use the same contract after their route-specific time-series construction.
+The `05_01` manifest records `feature_family: kong2022_400roi_fc`, `feature_count: 400`, `group_fc_shape`, and the ordered registry evidence. `05_02` rejects missing or stale gradient output paths and rejects Kong manifests without the 400-column evidence. The cortex-control route `pfm_ctxreg` uses the same contract after its route-specific time-series construction. The former ctxdrop control branch is retired; target-side local-cortex exclusion is quantified only by the `06_07_render_local_cortex_control_diagnostics.py` FC/WTA diagnostic, which uses the same ordered 400-ROI registry and the `normalized_top20_count` rule but feeds no group atlas.
 
 ## Cortex controls: preserve the standard annotation statistic
 
 Production `05_02` annotation uses `profile_fc_mode=cluster_mean_timeseries`
-for RouteA, ctxreg, and ctxdrop alike. For each subject, average supported,
+for RouteA and ctxreg alike. For each subject, average supported,
 valid hippocampal time series within each cluster, correlate that mean with
 each of the 400 ROI reference time series, transform to Fisher-z, and then
 average across subjects. Network profiles average the resulting ROI columns.
@@ -19,18 +19,16 @@ manifest must all record the same cluster-mean statistic.
 
 Stage boundaries remain explicit: ctxreg removes the local cortical regressor
 in `04_00`; its `--profile-surface-root` must point to those residual time
-series. ctxdrop excludes local cortical vertices before ROI averaging in
-`04_01`, affecting the FC features used by `05_01` and clustering.
-Its subsequent cluster annotation uses the standard ROI reference and
-hippocampal time series; this annotation is not a second, cluster-level
-local-cortex exclusion analysis. Do not invent a union-of-spheres or another
-cluster-level exclusion policy as part of annotation.
+series, and every non-ctxreg route must not read them. Do not invent a
+union-of-spheres or another cluster-level exclusion policy as part of
+annotation.
 
 The erroneous control profiles produced by averaging vertex-wise Fisher-z FC
 are not comparable to standard annotations and must be rebuilt before
 presentation. Correcting this annotation does not require changing the
 upstream gradient algorithm or surface affinity. The 2026-09-13 approved
-deletion inventory is
+deletion inventory (a dated record; the ctxdrop control named here and below
+is now retired) is
 `pending_ctxprofile_deletion_20260913.txt`: all 120 listed files were deleted.
 The user subsequently approved removing the complete control result trees.
 Both `routea_ctxreg/` and `routea_ctxdrop/` were deleted under each of these
@@ -55,28 +53,10 @@ hemisphere combinations per method have `status: ok`, `n_subjects` equal to the 
 profiles. The control branches use the standard `cluster_mean_timeseries`
 annotation statistic recorded in their manifests.
 
-## Overview display semantics for cortex-control routes
-
-The `06_01` overview renderer keeps the control stages separate from their
-explanatory annotation. For `routea_ctxdrop`, gradient-spectral clustering and
-vertex WTA retain the per-hippocampal-vertex local-cortex exclusion used by the
-control route. The two gradient overview products do not introduce a new
-cluster-level exclusion statistic: their cluster network panels are the
-standard `cluster_mean_timeseries` annotation using the original surface
-reference recorded by the four source manifests. Their title and manifest
-therefore say `Original-FC annotation of cortex-controlled clusters`.
-
-For the `normalized_top20_count` gradient product, the displayed counts are
-counts derived from that original-FC ranking; they are not a second FC estimate
-computed after taking a cluster-wide union of local cortical neighborhoods.
-The WTA overview is not labeled as a cluster original-FC annotation. The
-renderer validates the complete 2mm/4mm × L/R source-manifest grid, route tag,
-profile mode, profile surface root, and reference-root consistency before
-writing these labels; missing or mixed provenance fails closed. No FC values,
-cluster labels, K selection, or control algorithm are changed by this display
-metadata.
-
 ## 2026-09-13 closeout execution record
+
+This dated record names the since-retired ctxdrop control and its former
+`06_01` original-FC annotation display; neither is part of the active workflow.
 
 The single IDAS execution agent took over the pre-existing PID 1652039
 (`04_00_materialize_cortex_regressed_surface_timeseries.py --jobs 8`) and did

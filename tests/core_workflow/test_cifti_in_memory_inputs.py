@@ -696,7 +696,7 @@ def test_fc_explicit_run_metadata_preserves_nonconsecutive_ids(tmp_path: Path) -
 
 def test_fc_cortex_valid_masks_are_required_by_default(tmp_path: Path) -> None:
     with pytest.raises(FileNotFoundError, match="explicit cortical validity mask"):
-        roi_fc_mod.load_optional_cortex_valid_mask(
+        io_utils.load_optional_cortex_valid_mask(
             tmp_path,
             "01",
             {"CORTEX_LEFT": 2, "CORTEX_RIGHT": 2},

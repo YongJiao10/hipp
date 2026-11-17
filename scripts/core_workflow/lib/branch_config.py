@@ -5,7 +5,7 @@ BRANCH_CHOICES = (
     "kong2022_pfm",
     "kong2022_pfm_17net",
     "kong2022_pfm_ctxreg",
-    "kong2022_pfm_ctxdrop",
+    "kong2022_pfm_ctxreg_10mm",
     "kong2022_fixed",
     "kong2022_fixed_17net",
     "lynch2024_20net",
@@ -13,12 +13,21 @@ BRANCH_CHOICES = (
 )
 
 
-# Signal branches are orthogonal to the cortical atlas/taxonomy.  The
-# visualization release maintains only these two 2mm/36P choices; core control
-# routes retain the separate ctxdrop route for its own explicit workflow.
-SIGNAL_BRANCH_CHOICES = ("standard", "ctxreg")
-SIGNAL_BRANCH_TO_ROUTE = {"standard": "pfm", "ctxreg": "pfm_ctxreg"}
-ROUTE_TO_SIGNAL_BRANCH = {"pfm": "standard", "pfm_ctxreg": "ctxreg"}
+# Signal branches are orthogonal to the cortical atlas/taxonomy.  ``ctxreg``
+# (route ``pfm_ctxreg``) regresses local cortex within 20 mm; ``ctxreg_10mm``
+# (route ``pfm_ctxreg_10mm``) within 10 mm. The multi-dataset visualization
+# release maintains only the standard and 20 mm ctxreg choices.
+SIGNAL_BRANCH_CHOICES = ("standard", "ctxreg", "ctxreg_10mm")
+SIGNAL_BRANCH_TO_ROUTE = {"standard": "pfm", "ctxreg": "pfm_ctxreg", "ctxreg_10mm": "pfm_ctxreg_10mm"}
+ROUTE_TO_SIGNAL_BRANCH = {route: branch for branch, route in SIGNAL_BRANCH_TO_ROUTE.items()}
+CTXREG_SIGNAL_BRANCHES = frozenset({"ctxreg", "ctxreg_10mm"})
+CTXREG_ROUTES = frozenset(SIGNAL_BRANCH_TO_ROUTE[b] for b in CTXREG_SIGNAL_BRANCHES)
+# Local-cortex radius (native T1w mm) that each ctxreg route is defined by.
+CTXREG_ROUTE_DISTANCE_MM = {"pfm_ctxreg": 20.0, "pfm_ctxreg_10mm": 10.0}
+
+
+def is_ctxreg_signal_branch(signal_branch: str | None) -> bool:
+    return signal_branch in CTXREG_SIGNAL_BRANCHES
 
 
 def normalize_signal_branch(signal_branch: str) -> str:
@@ -35,7 +44,7 @@ def signal_branch_for_route(route_tag: str) -> str:
     if route not in ROUTE_TO_SIGNAL_BRANCH:
         raise ValueError(
             f"Route {route_tag!r} has no maintained standard/ctxreg signal branch; "
-            "ctxdrop and other control routes require their own explicit workflow."
+            "other routes require their own explicit workflow."
         )
     return ROUTE_TO_SIGNAL_BRANCH[route]
 
@@ -61,7 +70,7 @@ def resolve_signal_branch_for_route(
 ) -> str | None:
     """Resolve standard/ctxreg only for the maintained PFM controls."""
     route_key = str(route).strip().lower()
-    if route_key in {"pfm", "pfm_ctxreg"}:
+    if route_key in ROUTE_TO_SIGNAL_BRANCH:
         if explicit_signal_branch is None:
             return signal_branch_for_route(route_key)
         return validate_signal_branch_route(

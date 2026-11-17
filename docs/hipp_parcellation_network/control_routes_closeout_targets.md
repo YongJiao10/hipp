@@ -1,10 +1,14 @@
 # HCP Cortex-Control Presentation Targets
 
-The formal cortex-control routes are `pfm_ctxreg` and `pfm_ctxdrop`.
-Their input, gradient, group-atlas, and presentation roots use those exact
-names. Historical presentation records do not establish current readiness.
+The formal cortex-control route is `pfm_ctxreg`. Its input, gradient,
+group-atlas, and presentation roots use that exact name. The former
+`pfm_ctxdrop` route is retired; target-side local-cortex exclusion is reported
+by the `06_07_render_local_cortex_control_diagnostics.py` FC/WTA diagnostic
+under `outputs_hcp/present/local_cortex_control/`, which is not a route and
+has no overview products. Historical presentation records do not establish
+current readiness.
 
-For each route, the maintained overview destination is
+The maintained overview destination is
 `outputs_hcp/present/overviews/<route>/`, containing:
 
 - `kong2022_gradient-spectral_group_overview_g1g2g3_<route>_fisherz.png`
@@ -13,8 +17,7 @@ For each route, the maintained overview destination is
 - `group_overview_manifest.json`
 - `README.md`
 
-Ctxdrop original-FC annotation must remain explicit in the gradient overview
-semantics. A group-atlas stage consuming saved gradients records consumption;
+A group-atlas stage consuming saved gradients records consumption;
 it must not claim that the group-atlas stage computed those gradients or
 rewrite genuine upstream computation history as reuse.
 

@@ -30,14 +30,16 @@ and `presentation_namespace: kong2022_7net`, while their source paths end in
 `gradient-spectral/kong2022` or `wta-top/kong2022`. Historical four-network
 Patient pseudo-cluster sidecars remain excluded from the active comparison suite.
 The accepted HCP
-ctxdrop/ctxreg controls are now independently regenerated from the dated
-400-ROI roots recorded in
-`docs/kong400_recovery_audit/2026-09-11-review-followup.md`; their group
-atlases prove a `(3,400)` profile and a 400-ROI gradient input. The older
+ctxreg control is independently regenerated from the dated 400-ROI roots
+recorded in
+`docs/kong400_recovery_audit/2026-09-11-review-followup.md`; its group
+atlases prove a `(3,400)` profile and a 400-ROI gradient input. The ctxdrop
+control named in those dated audits is retired; its target-side exclusion is
+reported by `06_07_render_local_cortex_control_diagnostics.py`. The older
 recovered trees were removed on 2026-09-12 and are not selected by active
 manifests. The visualization audit in
 `docs/kong400_recovery_audit/visualization_7net_audit.json` records comparison
-PNGs and their source/statistics contracts. The six HCP
-ctxdrop/ctxreg overview panels and their dated sources are checked in the
-`controls` section of the closeout audit. Earlier audit files are annotated
+PNGs and their source/statistics contracts. The dated closeout audit's `controls` section
+checks the six HCP ctxdrop/ctxreg overview panels and sources that existed at
+that time. Earlier audit files are annotated
 as historical/superseded rather than having their old facts silently rewritten.

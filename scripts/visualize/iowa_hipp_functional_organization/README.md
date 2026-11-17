@@ -21,8 +21,8 @@
 
 `standard` 和 `ctxreg` 分别与 HC 对比。两个原始 margin 的差异不被解释为
 回归效果，也不以显著性是否消失判断两个分支不同。路径选择是固定合同：
-`standard → routea`、`ctxreg → routea_ctxreg`。`routea_ctxdrop` 是另一项局部
-皮层排除控制，不是 standard 的替代物；本入口从不因为文件存在情况在这些分支间
+`standard → routea`、`ctxreg → routea_ctxreg`。其他皮层控制分支都不是 standard
+的替代物（原 ctxdrop 分支已退役）；本入口从不因为文件存在情况在这些分支间
 切换。
 
 ## Atlas 与指标定义
