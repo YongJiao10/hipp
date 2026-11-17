@@ -1081,8 +1081,10 @@ def run_analysis(output_root=DEFAULT_OUTPUT, *, workers=4, overwrite=False):
                 "cache_path": str(cache_root / branch / f"{subject}_hemi-{hemi}.npz"),
             }
         )
-    if len(tasks) != 372:
-        raise ValueError(f"Expected 372 explicit branch/subject/hemi tasks, got {len(tasks)}")
+    if len(tasks) != len(subjects):
+        raise ValueError(
+            f"Expected one task per validated branch/subject/hemi inventory row ({len(subjects)}), got {len(tasks)}"
+        )
 
     scalar_rows = []
     curve_rows = []

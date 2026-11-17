@@ -230,5 +230,6 @@ def validate_inventory(inv):
     expected_templates={(branch,hemi) for branch in ('standard','ctxreg') for hemi in ('L','R')}
     if not isinstance(hcp_templates,list) or {(row.get('branch'),row.get('hemi')) for row in hcp_templates}!=expected_templates:
         raise ValueError('fixed HCP template inventory coverage mismatch')
-    if len(inv['subjects'])!=372 or len({(r['branch'],r['hemi'],r['subject']) for r in inv['subjects']})!=372: raise ValueError('incomplete/duplicate subject inventory')
+    expected_rows=len(inv['rosters']['hc']+inv['rosters']['patient'])*2*2  # roster subjects x branches x hemispheres
+    if len(inv['subjects'])!=expected_rows or len({(r['branch'],r['hemi'],r['subject']) for r in inv['subjects']})!=expected_rows: raise ValueError('incomplete/duplicate subject inventory')
     return inv
