@@ -3,7 +3,8 @@
 This directory is the dataset-specific surface for JJ_TMS orchestration and
 mapping. It contains the JJ_TMS HippUnfold batch runner, shared inputs and template
 materializer (`materialize_jj_tms_shared_inputs.py`), target-to-Kong2022
-mapping, HCP direct-template matcher, and fixed-template overview renderer.
+mapping, HCP direct-template matcher, fixed-template overview renderer, and the
+cohort-roster derivation/check (`derive_jj_tms_groups.py`).
 
 JJ_TMS code does not belong in the protected multi-dataset numbered surfaces
 `scripts/core_workflow/` or `scripts/individual_workflow/`. The reusable
@@ -86,8 +87,9 @@ Its `Sheet1` columns `C:E` contain the background `MDD`, `PTSD`, and
 `GAD` labels; column `K` contains QC status. Select `QC == "Yes"` for the
 fixed imaging roster. Do not use `TMSfMRI_DataSharing.xlsx` to
 replace this roster or to infer whether a patient has usable fMRI data. The
-fixed Iowa3T two-group definitions and IDs are documented in the HCP
-matching document linked above.
+Iowa3T group rules (patient, pure MDD, comorbid MDD) are documented in the HCP
+matching document linked above and implemented by `derive_jj_tms_groups.py`,
+which compares the workbook with the frozen manifests (`--mode check`).
 
 
 ## Iowa3T diagnostic subgroup core-workflow outputs
@@ -118,7 +120,7 @@ Pass `--atlas-slug kong2022` to `03_02`, `--atlas kong2022` to `04_01`,
 The fixed Iowa Patient cohort excludes sub-3003. The
 active Patient branch uses `pfm/patient`; Lynch2024 7net uses the
 corresponding `lynch2024_7net_iowa3t_patient*` roots. There is no parallel
-27-person Patient branch.
+Patient branch that includes sub-3003.
 
 ## Signal validity
 

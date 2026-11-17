@@ -20,31 +20,52 @@ processing status, and QC is the external workbook:
 Use worksheet `Sheet1`. Subject IDs are in column `A`; background labels are
 in columns `C:E` (`MDD`, `PTSD`, `GAD`); data-upload fields are `G:H`;
 data-processing fields are `I:J`; and `QC` is column `K`. The
-imaging roster is the rows with `QC == "Yes"`. That rule must yield the
-subjects in `manifests/jj_tms_subjects.txt` exactly. The fixed patient
-subset excludes sub-3003 and is
-`manifests/jj_tms_patient_subjects.txt`. There is no separate 27-person
-patient manifest.
+imaging roster is the rows with `QC == "Yes"`. The analysis rosters in
+`manifests/jj_tms_*_subjects.txt` are frozen snapshots of that rule, so a
+workbook update never changes an analysis silently. Roster sizes are results of
+the rules below, never inputs; `derive_jj_tms_groups.py` (below) reports any
+difference between the workbook and the frozen manifests.
 
 `outputs_iowa_jj_tms/TMSfMRI_DataSharing.xlsx` is a separate target-coordinate
 and data-sharing workbook used by the stimulation-site mapping workflow. It is
 not the source for the imaging roster or the Iowa3T diagnostic
 grouping, and its patient list must not replace the roster above.
 
-For the Iowa3T two-group comparison, use these fixed operational names and
-membership:
+### Iowa3T group derivation
 
-| Group | Operational definition | N | Subjects |
-| --- | --- | ---: | --- |
-| `Current MDD without confirmed GAD/PTSD` (study label: pure MDD) | Current MDD only (3) plus current MDD with clinical anxiety but no MINI-confirmed GAD (4) | 7 | `JJ_TMS_3010`, `JJ_TMS_3011`, `JJ_TMS_3015`, `JJ_TMS_3017`, `JJ_TMS_3018`, `JJ_TMS_3020`, `JJ_TMS_3023` |
-| `comorbid MDD` | Current MDD with GAD and/or PTSD comorbidity: MDD+GAD without PTSD (11), MDD+PTSD+GAD (7), and MDD+PTSD without GAD (1) | 19 | `JJ_TMS_3001`, `JJ_TMS_3002`, `JJ_TMS_3004`, `JJ_TMS_3005`, `JJ_TMS_3006`, `JJ_TMS_3007`, `JJ_TMS_3008`, `JJ_TMS_3009`, `JJ_TMS_3012`, `JJ_TMS_3013`, `JJ_TMS_3014`, `JJ_TMS_3016`, `JJ_TMS_3019`, `JJ_TMS_3022`, `JJ_TMS_3024`, `JJ_TMS_3025`, `JJ_TMS_3026`, `JJ_TMS_3027`, `JJ_TMS_3028` |
-| Excluded from the two-group comparison | Past-only MDD with current GAD | 1 | `JJ_TMS_3003` |
+Groups are derived from workbook columns `A`, `C:E` and `K` as follows. The
+scripted form is `scripts/jj_tms/derive_jj_tms_groups.py`.
 
-Thus the two-group analysis is `7 + 19 = 26` subjects. `JJ_TMS_3003` is the
-past-only MDD/current-GAD case and is intentionally not assigned to either
-primary group. `JJ_TMS_3021` is not in the QC-passed roster; its
-`Sheet1` row is marked `N/A` for upload, processing, and QC with the note
-`Dropped during Visit 1 scan`.
+| Cell | Rule |
+| --- | --- |
+| Roster | `QC == "Yes"`; subject IDs `JJ_TMS_1xxx` are healthy controls (`hc`), `JJ_TMS_3xxx` are patients |
+| Current MDD | `MDD` cell is `No` (absent) or `Yes (...)` whose list contains `Current`; a list without `Current` is past-only MDD |
+| PTSD | `PTSD == "Yes (Current)"` |
+| GAD | MINI-confirmed only for `GAD == "Yes (Current)"`; `No (Current diagnosis, but no on MINI)` is clinical anxiety without confirmed GAD and does not count |
+
+| Group | Rule |
+| --- | --- |
+| `patient` | QC-passed patient with current MDD |
+| `pure_mdd` | `patient` with no PTSD and no confirmed GAD (current MDD only, or clinical anxiety without MINI-confirmed GAD) |
+| `comorbid_mdd` | `patient` with PTSD and/or confirmed GAD (MDD+GAD, MDD+PTSD+GAD, MDD+PTSD) |
+| excluded | QC-passed patient without current MDD (for example past-only MDD with current GAD, `JJ_TMS_3003`); assigned to no group |
+
+`pure_mdd` and `comorbid_mdd` partition `patient`. Cell values outside the
+documented set stop the script with the row and value named, so a new category
+in the workbook forces an explicit rule decision.
+
+```bash
+/home/yojiao/.conda/envs/py314/bin/python scripts/jj_tms/derive_jj_tms_groups.py \
+  --workbook /home/yojiao/LSS/jianglab/3_Data_Working/fmriprep_processed_JJ_TMS/subject_infomation.xlsx
+```
+
+`--mode check` (default) prints each group's size, lists excluded subjects and
+the per-group differences from the frozen manifests, and exits 1 on any
+difference. `--mode write --out-dir <new directory>` writes the derived rosters
+without overwriting existing files. Adopting a changed roster means replacing the
+frozen manifests deliberately and re-running the dependent products. Rows with
+an empty `QC` cell (for example `JJ_TMS_3021`, dropped during the Visit 1 scan)
+are not in any roster.
 
 The Iowa3T subgroup products use the 36P branch.
 
