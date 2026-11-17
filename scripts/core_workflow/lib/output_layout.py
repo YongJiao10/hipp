@@ -477,6 +477,34 @@ def annotation_pair_overview_name(annotation_pair: str) -> str:
     return "top20_overview.png" if annotation_pair == "top20" else f"{annotation_pair}_ovr_overview.png"
 
 
+DEFAULT_GRADIENT_COMPONENTS = (1, 2, 3)
+
+
+def parse_gradient_components(raw: str | None) -> tuple[int, ...]:
+    """Parse ``--gradient-components`` (ascending, unique, drawn from 1..3)."""
+    if raw is None:
+        return DEFAULT_GRADIENT_COMPONENTS
+    text = str(raw).strip()
+    if not text:
+        raise ValueError("--gradient-components must not be empty")
+    try:
+        comps = tuple(int(p.strip()) for p in text.split(","))
+    except ValueError as exc:
+        raise ValueError(f"--gradient-components must be comma-separated integers from 1..3, got {raw!r}") from exc
+    if any(c not in DEFAULT_GRADIENT_COMPONENTS for c in comps):
+        raise ValueError(f"--gradient-components must only contain 1, 2, and/or 3, got {raw!r}")
+    if len(set(comps)) != len(comps):
+        raise ValueError(f"--gradient-components must not contain duplicates, got {raw!r}")
+    if tuple(sorted(comps)) != comps:
+        raise ValueError(f"--gradient-components must be in ascending order, got {raw!r}")
+    return comps
+
+
+def gradient_comp_tag(gradient_components: tuple[int, ...]) -> str:
+    """Directory-safe tag for gradient component indices, e.g. (1, 2, 3) -> 'g1g2g3'."""
+    return "".join(f"g{int(c)}" for c in gradient_components)
+
+
 def resolve_cohort_overview_root(
     dataset: str = DEFAULT_DATASET,
     route: str = "pfm",

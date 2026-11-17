@@ -135,7 +135,10 @@ from lib.output_layout import (
     DEFAULT_KONG2022_ROUTEA_ROOT,
     DEFAULT_KONG2022_SURFACE_ROOT,
     DEFAULT_KONG2022_TEMPLATE_ROOT,
+    DEFAULT_GRADIENT_COMPONENTS,
     DEFAULT_ROUTEA_GROUP_ATLAS_ROOT,
+    gradient_comp_tag,
+    parse_gradient_components,
     resolve_cohort_gradient_root,
     resolve_cohort_group_atlas_root,
 )
@@ -245,7 +248,6 @@ PROFILE_REDUNDANCY_MAX_SIM = 0.80
 SUBJECT_FC_PREPROCESS_METHODS = {"group-roi-sim-spectral", "network-spectral", "intrinsic-spectral"}
 SUBJECT_FC_VALUE_RULE = "largest_raw_values"
 SUBJECT_FC_MODE_CHOICES = ["full", "top-percent"]
-DEFAULT_GRADIENT_COMPONENTS = (1, 2, 3)
 GRADIENT_N_COMPONENTS_COMPUTED = 5
 GRADIENT_BRAINSPACE_KERNEL = "pearson"
 NETWORK_TAXONOMIES = ("canonical7", "canonical8", "family17", "lynch20", "lynch7")
@@ -1187,31 +1189,6 @@ def resolve_subject_fc_mode(subject_fc_mode: str, subject_fc_top_percent: int | 
         top_fraction=float(pct) / 100.0,
         binarize=True,
     )
-
-
-def parse_gradient_components(raw: str | None) -> tuple[int, ...]:
-    if raw is None:
-        return DEFAULT_GRADIENT_COMPONENTS
-    text = str(raw).strip()
-    if not text:
-        raise ValueError("--gradient-components must not be empty")
-    parts = text.split(",")
-    try:
-        comps = tuple(int(p.strip()) for p in parts)
-    except ValueError as exc:
-        raise ValueError(f"--gradient-components must be comma-separated integers from 1..3, got {raw!r}") from exc
-    if any(c not in DEFAULT_GRADIENT_COMPONENTS for c in comps):
-        raise ValueError(f"--gradient-components must only contain 1, 2, and/or 3, got {raw!r}")
-    if len(set(comps)) != len(comps):
-        raise ValueError(f"--gradient-components must not contain duplicates, got {raw!r}")
-    if tuple(sorted(comps)) != comps:
-        raise ValueError(f"--gradient-components must be in ascending order, got {raw!r}")
-    return comps
-
-
-def gradient_comp_tag(gradient_components: tuple[int, ...]) -> str:
-    """Build a directory-safe tag from gradient component indices, e.g. (1,2,3) -> 'g1g2g3'."""
-    return "".join(f"g{int(c)}" for c in gradient_components)
 
 
 def subject_fc_preprocessing_manifest_block(method: str, subject_fc_mode: SubjectFCMode) -> dict[str, object]:

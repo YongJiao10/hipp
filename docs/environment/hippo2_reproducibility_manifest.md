@@ -4,6 +4,14 @@ The stage-01 launcher and installed hippo2 runtime select HippUnfold 2.4.1 and
 `multihist7sgi`. Output validation uses the complete contract from a successful
 run of the selected release.
 
+For this project's use, HippUnfold 2.4.0 and 2.4.1 results have been confirmed
+equivalent. Existing 2.4.0 results remain valid; rerunning them with 2.4.1 is
+not required. This is a settled project decision: the version difference alone
+must not trigger renewed warnings, requests for explanation, equivalence
+checks, stale-result classification or rerun recommendations. Historical run
+records retain the version actually used. The runtime version gates in this
+document apply to new executions, not retroactively to existing results.
+
 Runtime revision: 2026-11-05. The installed scientific workflow is the official
 HippUnfold v2.4.1 release. Local changes are limited to cache/inference runtime
 adapters and CLI version display. No local boundary, reference-plane or

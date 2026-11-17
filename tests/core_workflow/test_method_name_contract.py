@@ -354,6 +354,7 @@ def test_gradient_overview_readiness_checks_each_component_hemi(tmp_path: Path) 
             coverage_tag="cov_0p80",
             smoothings=["2mm"],
             hemis=["L", "R"],
+            gradient_comp_tag="g1",
         )
         raise AssertionError("expected missing hemi_L manifest to fail readiness")
     except RuntimeError as exc:

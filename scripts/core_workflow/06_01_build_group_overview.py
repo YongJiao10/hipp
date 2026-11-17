@@ -17,6 +17,7 @@ Inputs:
   - --methods: Parcellation methods to process: "intrinsic-spectral", "network-spectral", "gradient-spectral", "gradient-ward", "gradient-gmm", "gradient-spectral-rbf", "wta-top".
   - --atlases: Cortical atlases to process (default: Kong2022); Lynch2024 atlases support gradient-spectral and direct-network wta-top.
   - --coverage-threshold: Selected coverage threshold for overview outputs (default: 0.80).
+  - --gradient-components: Gradient component selection of the 05_02 run to render (default: "1,2,3"); it selects the exact `cov_<tau>/<g-tag>/` input. Non-default selections (e.g. "1", "1,2") render into a `<g-tag>/` subdirectory of the overview destination and name the set (e.g. "G1+G2") in the title.
   - --route-tag: Custom workflow branch tag to override automatic detection.
   - --mode-tag: Optional explicit overview label override (default: none). No automatic sparse/full inference is performed; all maintained formal runs are full.
   - --assignment-variant: Network mapping variant: "fisherz", "normalized_top20_count", "network_ts_fisherz", "ovr_logistic_canonical7", "ovr_logistic_family17", or "both" (default: "both").
@@ -54,8 +55,11 @@ from nibabel.gifti import GiftiDataArray, GiftiImage, GiftiLabel, GiftiLabelTabl
 from lib.output_layout import (
     ANNOTATION_PAIR_BY_ASSIGNMENT_VARIANT,
     DEFAULT_OVERVIEWS_DIR,
+    DEFAULT_GRADIENT_COMPONENTS,
     DEFAULT_ROUTEA_GROUP_ATLAS_ROOT,
     annotation_pair_overview_name,
+    gradient_comp_tag as format_gradient_comp_tag,
+    parse_gradient_components,
 )
 from lib.template_assets import validate_template_assets
 from lib.route_tags import (
@@ -393,8 +397,15 @@ def overview_title(
     group_name: str | None = None,
     n_subjects: int | None = None,
     smoothing: str | None = None,
+    gradient_set: str | None = None,
 ) -> str:
-    """Place method and data identifiers before the cohort description."""
+    """Place method and data identifiers before the cohort description.
+
+    ``gradient_set`` (e.g. ``"G1+G2"``) follows the method when a non-default
+    gradient component selection is rendered.
+    """
+    if gradient_set:
+        method = f"{method} {gradient_set}"
     if (str(overview_scope).strip() or "Group") != "Group":
         parts = [f"{str(overview_scope).strip()} Overview", str(atlas), str(method)]
         parts.extend(str(value) for value in (route_tag, mode_tag, assignment_variant) if value)
@@ -509,23 +520,6 @@ def validate_kong_wta_taxonomy(
 
 def _is_gradient_method(method: str) -> bool:
     return is_gradient_method(method)
-
-
-def _discover_gradient_comp_tags(
-    group_root: Path,
-    method: str,
-    atlas: str,
-    smoothing: str,
-    coverage_tag: str,
-) -> list[str]:
-    """Discover gradient component subdirectories under the coverage directory."""
-    if not _is_gradient_method(method):
-        return [""]
-    base = group_root / method / atlas / smoothing / coverage_tag
-    if not base.exists():
-        return [""]
-    tags = sorted(d.name for d in base.iterdir() if d.is_dir() and d.name.startswith("g"))
-    return tags if tags else [""]
 
 
 def _build_run_dir(
@@ -2333,6 +2327,11 @@ def render_combo(
         group_name=inferred_group_name,
         n_subjects=n_sub,
         smoothing=smoothing,
+        gradient_set=(
+            "+".join(f"G{c}" for c in gradient_comp_tag.split("g") if c)
+            if gradient_comp_tag and gradient_comp_tag != format_gradient_comp_tag(DEFAULT_GRADIENT_COMPONENTS)
+            else None
+        ),
     )
     assignment_annotation_note = None
     annotation_note = source_provenance.get("cluster_annotation_note")
@@ -2479,47 +2478,49 @@ def ensure_combo_ready(
     smoothings: list[str] | None = None,
     hemis: list[str] | None = None,
     layout: str = "single-smoothing",
+    gradient_comp_tag: str = "",
 ) -> None:
+    if _is_gradient_method(method) and not gradient_comp_tag:
+        raise ValueError(f"Gradient method {method!r} requires an explicit gradient component tag")
     sm = smoothings or ["2mm", "4mm"]
     hs = hemis or ["L", "R"]
     problems: list[str] = []
     for smoothing in sm:
-        comp_tags = _discover_gradient_comp_tags(group_root, method, atlas, smoothing, coverage_tag)
-        for comp_tag in comp_tags:
-            for hemi in hs:
-                run_dir = _build_run_dir(group_root, method, atlas, smoothing, coverage_tag, hemi, gradient_comp_tag=comp_tag)
-                manifest_path = run_dir / "group_atlas_manifest.json"
-                if not manifest_path.exists():
-                    problems.append(f"missing_manifest: {manifest_path}")
-                    continue
-                m = load_json(manifest_path)
-                if atlas == "kong2022" and _is_gradient_method(method):
-                    try:
-                        validate_group_atlas_lineage(
-                            manifest_path,
-                            expected_network_taxonomy=kong_network_taxonomy_for_route(route_tag),
-                        )
-                    except ValueError as exc:
-                        problems.append(f"invalid_group_atlas_lineage: {exc}")
-                if str(m.get("status", "")) != "ok":
-                    problems.append(f"manifest_not_ok: {manifest_path} status={m.get('status')}")
-                    continue
-                if method in CLUSTERLESS_METHODS:
-                    status_path = run_dir / "vertex_assignment_status.json"
-                    if not status_path.exists():
-                        problems.append(f"missing_vertex_assignment_status: {status_path}")
-                    else:
-                        try:
-                            validate_vertex_wta_status_payload(
-                                status_payload=load_json(status_path), manifest=m, status_path=status_path
-                            )
-                        except RuntimeError as exc:
-                            problems.append(f"invalid_vertex_assignment_status: {exc}")
+        for hemi in hs:
+            run_dir = _build_run_dir(group_root, method, atlas, smoothing, coverage_tag, hemi,
+                                     gradient_comp_tag=gradient_comp_tag if _is_gradient_method(method) else "")
+            manifest_path = run_dir / "group_atlas_manifest.json"
+            if not manifest_path.exists():
+                problems.append(f"missing_manifest: {manifest_path}")
+                continue
+            m = load_json(manifest_path)
+            if atlas == "kong2022" and _is_gradient_method(method):
+                try:
+                    validate_group_atlas_lineage(
+                        manifest_path,
+                        expected_network_taxonomy=kong_network_taxonomy_for_route(route_tag),
+                    )
+                except ValueError as exc:
+                    problems.append(f"invalid_group_atlas_lineage: {exc}")
+            if str(m.get("status", "")) != "ok":
+                problems.append(f"manifest_not_ok: {manifest_path} status={m.get('status')}")
+                continue
+            if method in CLUSTERLESS_METHODS:
+                status_path = run_dir / "vertex_assignment_status.json"
+                if not status_path.exists():
+                    problems.append(f"missing_vertex_assignment_status: {status_path}")
                 else:
-                    # For cluster-based methods, group labels must exist.
-                    labels = run_dir / "group_labels_final.npy"
-                    if not labels.exists():
-                        problems.append(f"missing_group_labels: {labels}")
+                    try:
+                        validate_vertex_wta_status_payload(
+                            status_payload=load_json(status_path), manifest=m, status_path=status_path
+                        )
+                    except RuntimeError as exc:
+                        problems.append(f"invalid_vertex_assignment_status: {exc}")
+            else:
+                # For cluster-based methods, group labels must exist.
+                labels = run_dir / "group_labels_final.npy"
+                if not labels.exists():
+                    problems.append(f"missing_group_labels: {labels}")
     if problems:
         raise RuntimeError(
             "Cluster outputs are not ready. Do not skip clustering before present rendering.\n"
@@ -2565,6 +2566,13 @@ def main() -> int:
         help="Required single smoothing selection (2mm or 4mm).",
     )
     p.add_argument(
+        "--gradient-components",
+        default=",".join(str(c) for c in DEFAULT_GRADIENT_COMPONENTS),
+        help="Gradient components of the 05_02 run to render (e.g. 1, 1,2 or 1,2,3; default 1,2,3). "
+             "Selects the exact cov_<tau>/<g-tag>/ input; non-default selections render into a "
+             "<g-tag>/ subdirectory of the overview destination.",
+    )
+    p.add_argument(
         "--annotation-pair",
         choices=ANNOTATION_PAIR_CHOICES,
         default=None,
@@ -2603,6 +2611,8 @@ def main() -> int:
         present_dir = Path(args.present_dir).resolve()
     present_dir.mkdir(parents=True, exist_ok=True)
     tau_tag = f"cov_{args.coverage_threshold:.2f}".replace(".", "p")
+    selected_comp_tag = format_gradient_comp_tag(parse_gradient_components(args.gradient_components))
+    default_comp_tag = format_gradient_comp_tag(DEFAULT_GRADIENT_COMPONENTS)
 
     methods_explicit = args.methods is not None
     items: list[dict[str, object]] = []
@@ -2638,34 +2648,34 @@ def main() -> int:
                 target_dir = present_dir / method / args.smoothing
             else:
                 target_dir = present_dir
+            comp_tag = selected_comp_tag if _is_gradient_method(method) else ""
+            if comp_tag and comp_tag != default_comp_tag:
+                target_dir = target_dir / comp_tag
             ensure_combo_ready(group_root=group_root, method=method, atlas=atlas, coverage_tag=tau_tag,
-                               route_tag=args.route_tag, smoothings=req_smoothings, layout=render_specs[0][0])
-            comp_tags = _discover_gradient_comp_tags(group_root, method, atlas, args.smoothing, tau_tag)
-            if len(comp_tags) != 1:
-                raise ValueError(f"Overview output would be ambiguous for gradient components {comp_tags}; select a single component input")
-            for comp_tag in comp_tags:
-                for effective_layout, pair, assignment_variant in render_specs:
-                    meta = render_combo(
-                        group_root=group_root, present_dir=target_dir, method=method, atlas=atlas,
-                        coverage_tag=tau_tag, route_tag=args.route_tag, mode_tag=args.mode_tag,
-                        assignment_variant=assignment_variant, gradient_comp_tag=comp_tag,
-                        output_name=args.output_name, group_name=args.group_name, layout=effective_layout,
-                        annotation_pair=pair, smoothing=args.smoothing,
-                    )
-                    row_meta = meta["rows"]
-                    metric = "; ".join(
-                        f"{r['smoothing']}: K(L/R)={('-' if r['k_final_L'] is None else r['k_final_L'])}/"
-                        f"{('-' if r['k_final_R'] is None else r['k_final_R'])} N={r['n_subjects']}"
-                        for r in row_meta
-                    ) if row_meta else "missing"
-                    items.append(overview_manifest_item(
-                        base={"atlas": atlas, "method": method, "gradient_comp_tag": comp_tag or None,
-                              "overview_png": meta["overview_png"], "smoothings": [r["smoothing"] for r in row_meta],
-                              "metric_summary": metric, "route_tag": args.route_tag,
-                              "mode_tag": effective_overview_mode_tag(method, args.mode_tag, assignment_variant),
-                              "assignment_variant": pair or assignment_variant, "source_group_root": str(group_root)},
-                        meta=meta,
-                    ))
+                               route_tag=args.route_tag, smoothings=req_smoothings, layout=render_specs[0][0],
+                               gradient_comp_tag=comp_tag)
+            for effective_layout, pair, assignment_variant in render_specs:
+                meta = render_combo(
+                    group_root=group_root, present_dir=target_dir, method=method, atlas=atlas,
+                    coverage_tag=tau_tag, route_tag=args.route_tag, mode_tag=args.mode_tag,
+                    assignment_variant=assignment_variant, gradient_comp_tag=comp_tag,
+                    output_name=args.output_name, group_name=args.group_name, layout=effective_layout,
+                    annotation_pair=pair, smoothing=args.smoothing,
+                )
+                row_meta = meta["rows"]
+                metric = "; ".join(
+                    f"{r['smoothing']}: K(L/R)={('-' if r['k_final_L'] is None else r['k_final_L'])}/"
+                    f"{('-' if r['k_final_R'] is None else r['k_final_R'])} N={r['n_subjects']}"
+                    for r in row_meta
+                ) if row_meta else "missing"
+                items.append(overview_manifest_item(
+                    base={"atlas": atlas, "method": method, "gradient_comp_tag": comp_tag or None,
+                          "overview_png": meta["overview_png"], "smoothings": [r["smoothing"] for r in row_meta],
+                          "metric_summary": metric, "route_tag": args.route_tag,
+                          "mode_tag": effective_overview_mode_tag(method, args.mode_tag, assignment_variant),
+                          "assignment_variant": pair or assignment_variant, "source_group_root": str(group_root)},
+                    meta=meta,
+                ))
 
     rendered_count = len(items)
     if not bool(args.skip_manifest):

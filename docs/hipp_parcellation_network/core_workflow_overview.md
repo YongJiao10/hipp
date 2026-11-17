@@ -263,8 +263,9 @@ Three side-by-side annotation pairs are generated for every clustering result:
 Output tree:
 ```text
 outputs_hcp/work/hippomaps_gradients/pfm/{topfc,topsim}/{2mm,4mm}/hemi_{L,R}/
-outputs_hcp/work/group_atlas/pfm/{topfc,topsim}/{method}/kong2022/{2mm,4mm}/cov_0p80/g1g2g3/hemi_{L,R}/
+outputs_hcp/work/group_atlas/pfm/{topfc,topsim}/{method}/kong2022/{2mm,4mm}/cov_0p80/{g1g2g3,g1,g1g2}/hemi_{L,R}/
 outputs_hcp/present/overviews/pfm/{topfc,topsim}/{method}/{2mm,4mm}/
+outputs_hcp/present/overviews/pfm/topsim/gradient-ward/{2mm,4mm}/{g1,g1g2}/
 outputs_hcp/present/overviews/pfm/wta-top/{2mm,4mm}/
 outputs_hcp/present/overviews/pfm_17net/wta-top/{2mm,4mm}/
 ```

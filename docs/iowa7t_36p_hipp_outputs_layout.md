@@ -121,13 +121,22 @@ selected `hipp_outputs/subjects/sub-<ID>/hippunfold/`. Use an isolated BIDS
 staging root for anatomical inputs before running HippUnfold so SnakeBIDS does
 not scan existing `hipp_outputs` as inputs.
 
-Example 06122026 downstream and FC heatmap runs:
+Example 06122026 downstream runs:
 
 ```bash
 /home/yojiao/.conda/envs/py314/bin/python scripts/iowa7t/run_branch_downstream.py --variant 0p --job 06122026:multiband --job 06122026:multi_echo --stage all --run-metadata-template '/absolute/path/to/run_metadata/{sub_subject}.json' --overwrite
 /home/yojiao/.conda/envs/py314/bin/python scripts/iowa7t/run_branch_downstream.py --variant 32p --job 06122026:multiband --job 06122026:multi_echo --stage all --run-metadata-template '/absolute/path/to/run_metadata/{sub_subject}.json' --overwrite
+```
 
-/home/yojiao/.conda/envs/py314/bin/python scripts/iowa7t/generate_all_subject_plots.py --variant 0p --variant 32p --subject 06122026 --branch multiband --branch multi_echo
+Cortical FC figures use the [dataset-independent renderer](../scripts/visualize/cortex_fc/README.md).
+Pass the exact time series and ROI table from the selected subject, variant and
+acquisition; there is no dataset-specific plotting launcher:
+
+```bash
+/home/yojiao/.conda/envs/py314/bin/python -m scripts.visualize.cortex_fc.render_fc \
+  --timeseries /absolute/path/to/cortex/kong2022/cortex_roi_parcel_timeseries.npy \
+  --parcels /absolute/path/to/cortex/kong2022/cortex_roi_parcels.tsv \
+  --net-type 7net --output /absolute/path/to/figures/cortex_fc_canonical7.png
 ```
 
 ## NoXCPD Variant

@@ -284,6 +284,17 @@ explicitly when a controlled signal root is separate.
 - `gradient-spectral` consumes aligned `05_01` gradients, defaults to G1/G2/G3,
   and uses shifted-cosine surface affinity. `05_02` evaluates K=2..8 and renders
   primary K=3 while recording automatic K selection separately.
+- `--gradient-components` (default `1,2,3`) selects the clustering gradients for
+  every gradient method in `05_02` and the rendered input in `06_01`; each
+  selection is a separate `cov_<tau>/<g-tag>/` run (`g1`, `g1g2`, `g1g2g3`).
+  `06_01` renders exactly the selected tag and puts non-default selections in a
+  `<g-tag>/` subdirectory of the overview destination. TopSim Ward also has
+  `g1` and `g1g2` runs:
+
+  ```bash
+  /home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/05_02_run_group_atlas.py --shared-root outputs_hcp/inputs/kong2022/shared_inputs/pfm --surface-root outputs_hcp/inputs/kong2022/shared_inputs/surface --reference-root outputs_hcp/inputs/kong2022/shared_inputs/pfm --out-root outputs_hcp/work/group_atlas/pfm/topsim --methods gradient-ward --profile topsim --atlases kong2022 --gradient-root outputs_hcp/work/hippomaps_gradients --route-tag pfm --network-taxonomy canonical7 --k-min 2 --k-max 8 --default-k 3 --gradient-components 1,2
+  /home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/06_01_build_group_overview.py --group-root outputs_hcp/work/group_atlas/pfm/topsim --methods gradient-ward --atlases kong2022 --route-tag pfm --smoothing 2mm --gradient-components 1,2
+  ```
 - Kong2022 cluster assignments default to `fisherz`; `normalized_top20_count`
   is an explicit comparison. Kong ROI-registry `wta-top` uses only
   `normalized_top20_count`. Lynch direct-network WTA uses `fisherz`.

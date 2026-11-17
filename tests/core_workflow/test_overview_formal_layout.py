@@ -164,7 +164,6 @@ def test_directory_manifest_with_retired_layout_stops_merge(tmp_path):
 def test_default_gradient_cli_renders_all_three_pairs_for_one_smoothing(tmp_path, monkeypatch):
     monkeypatch.setattr(overview_mod, "validate_group_atlas_root_for_route", lambda *_args: None)
     monkeypatch.setattr(overview_mod, "ensure_combo_ready", lambda **_kwargs: None)
-    monkeypatch.setattr(overview_mod, "_discover_gradient_comp_tags", lambda *_args: ["g1g2g3"])
     calls = []
 
     def render(**kwargs):
@@ -181,6 +180,32 @@ def test_default_gradient_cli_renders_all_three_pairs_for_one_smoothing(tmp_path
     assert overview_mod.main() == 0
     assert [call["annotation_pair"] for call in calls] == ["roi-fisherz", "network-ts-fisherz", "top20"]
     assert all(call["smoothing"] == "4mm" and call["layout"] == "annotation-pair" for call in calls)
+    assert all(call["gradient_comp_tag"] == "g1g2g3" for call in calls)
+    assert all(call["present_dir"] == (tmp_path / "present").resolve() for call in calls)
+
+
+def test_non_default_gradient_components_render_into_component_subdirectory(tmp_path, monkeypatch):
+    monkeypatch.setattr(overview_mod, "validate_group_atlas_root_for_route", lambda *_args: None)
+    readiness = []
+    monkeypatch.setattr(overview_mod, "ensure_combo_ready", lambda **kwargs: readiness.append(kwargs))
+    calls = []
+
+    def render(**kwargs):
+        calls.append(kwargs)
+        return {"overview_png": str(kwargs["present_dir"] / (kwargs["annotation_pair"] + ".png")),
+                "rows": [], "layout": kwargs["layout"], "assignment_variant": kwargs["annotation_pair"]}
+
+    monkeypatch.setattr(overview_mod, "render_combo", render)
+    monkeypatch.setattr(sys, "argv", [
+        "06_01_build_group_overview.py", "--group-root", str(tmp_path / "group"),
+        "--present-dir", str(tmp_path / "present"), "--methods", "gradient-ward", "--atlases", "kong2022",
+        "--route-tag", "pfm", "--smoothing", "2mm", "--gradient-components", "1,2",
+        "--skip-readme", "--skip-manifest",
+    ])
+    assert overview_mod.main() == 0
+    assert [r["gradient_comp_tag"] for r in readiness] == ["g1g2"]
+    assert all(call["gradient_comp_tag"] == "g1g2" for call in calls)
+    assert all(call["present_dir"] == (tmp_path / "present").resolve() / "g1g2" for call in calls)
 
 
 def _write_profile_run(root, hemi, profile, *, k=3, declare=True):

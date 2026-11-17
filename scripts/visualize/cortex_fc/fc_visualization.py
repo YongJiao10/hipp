@@ -9,7 +9,7 @@ from matplotlib.colors import ListedColormap, Normalize, TwoSlopeNorm, LinearSeg
 from matplotlib.patches import Arc, PathPatch
 from matplotlib.path import Path
 import seaborn as sns
-from .network_colors import load_network_hex_colors
+from scripts.core_workflow.lib.network_colors import load_network_hex_colors
 
 def FC_vec2mat(x: np.ndarray, n: int = 100, upper: bool = False, include_diag: bool = False, dtype=np.float32) -> np.ndarray:
     """
@@ -338,7 +338,7 @@ def draw_chord_on_ax(ax, cax, conn_matrix, max_line_width=12, min_line_width=0.5
         colors = []
         for name in node_names:
             full_name = abbrev_to_full.get(name, name)
-            colors.append(hex_colors.get(full_name, "#808080"))
+            colors.append(hex_colors[full_name])
             
     ax.set_aspect('equal')
     
@@ -544,7 +544,7 @@ def plot_fc_heatmap(fc_values, parcels_df=None, net_type='7net', pos_value=False
             mat = processed_mats_list[j][i]
             pos = pos_list[j][i]
             net_names = net_names_list[j][i]
-            net_colors = [hex_colors.get(color_map_names.get(name, name), "#808080") for name in net_names]
+            net_colors = [hex_colors[color_map_names.get(name, name)] for name in net_names]
 
             draw_fc_heatmap_on_ax(
                 ax=ax,
@@ -566,7 +566,7 @@ def plot_fc_heatmap(fc_values, parcels_df=None, net_type='7net', pos_value=False
 
     plt.tight_layout()
     if save_path:
-        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        os.makedirs(os.path.dirname(os.path.abspath(save_path)), exist_ok=True)
         fig.patch.set_alpha(0)
         plt.savefig(f'{save_path}.png', bbox_inches='tight', dpi=300, facecolor=fig.get_facecolor(), edgecolor='none')
         plt.close(fig)
@@ -575,11 +575,15 @@ def plot_chord(conn_matrix: np.ndarray, max_line_width: float = 12, min_line_wid
                colormap: str | list | tuple = 'coolwarm', nodewidth: float = 3,
                colorbar_pos: str = 'bottom', colorbar_width: float = 0.018, colorbar_length: float = 0.3, colorbar_pad: float = 0.45, 
                max_strength: float | None = None, shadow: bool = False, node_names: list[str] | None = None, 
-               colors: list[str] | None = None, save_path: str | None = None):
+               colors: list[str] | None = None, save_path: str | None = None,
+               title: str = '', cb_title: str = "Fisher's $z$", dark_mode: bool = False):
     """
     Plot functional connectivity chord diagram.
     """
     fig = plt.figure(figsize=(8, 7))
+    fig.patch.set_facecolor('#111111' if dark_mode else 'white')
+    if title:
+        fig.suptitle(title, color='white' if dark_mode else 'black')
     start, end = 0, 0.9
     center = (end - start) / 2
     ax = fig.add_axes([start, start, end, end])
@@ -602,11 +606,12 @@ def plot_chord(conn_matrix: np.ndarray, max_line_width: float = 12, min_line_wid
         shadow=shadow,
         node_names=node_names,
         colors=colors,
-        tick_color='black'
+        tick_color='white' if dark_mode else 'black'
     )
+    cax.set_title(cb_title, color='white' if dark_mode else 'black')
     
     if save_path:
-        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        os.makedirs(os.path.dirname(os.path.abspath(save_path)), exist_ok=True)
         fig.patch.set_alpha(0)
         plt.savefig(f'{save_path}.png', bbox_inches='tight', dpi=300, facecolor=fig.get_facecolor(), edgecolor='none')
         plt.close(fig)
@@ -616,7 +621,7 @@ def compute_network_fc(fc_matrix: np.ndarray, df: pd.DataFrame, net_type: str = 
     Compute network-level functional connectivity by averaging ROI-to-ROI connection strengths.
     
     Args:
-        fc_matrix: 2D array of shape (400, 400) representing ROI-to-ROI Fisher-z FC.
+        fc_matrix: 2D array of shape (n_rois, n_rois) representing ROI-to-ROI FC.
         df: DataFrame containing parcel definitions.
         net_type: '7net' (default), '8net', or '17net'
         
@@ -624,6 +629,7 @@ def compute_network_fc(fc_matrix: np.ndarray, df: pd.DataFrame, net_type: str = 
         net_fc: 2D array of shape (n_networks, n_networks)
         net_names: list of network names in the display order
     """
+    df = df.reset_index(drop=True)
     if net_type in {'8net', 'canonical8'}:
         net_col = 'canonical8'
         net_order = [
@@ -754,7 +760,7 @@ def plot_combined_fc(fc_matrix: np.ndarray, parcels_df: pd.DataFrame, net_type: 
         "DorsalAttention": "DorsalAttention", "VentralAttention": "VentralAttention",
         "Control": "Control", "Auditory": "Auditory"
     }
-    net_colors = [hex_colors.get(color_map_names.get(name, name), "#808080") for name in net_names_rearranged]
+    net_colors = [hex_colors[color_map_names.get(name, name)] for name in net_names_rearranged]
     
     draw_fc_heatmap_on_ax(
         ax=ax,
@@ -790,7 +796,7 @@ def plot_combined_fc(fc_matrix: np.ndarray, parcels_df: pd.DataFrame, net_type: 
     ax_chord.axis('off')
     
     if save_path:
-        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        os.makedirs(os.path.dirname(os.path.abspath(save_path)), exist_ok=True)
         fig.patch.set_alpha(0)
         plt.savefig(f'{save_path}.png', bbox_inches='tight', dpi=300, facecolor=fig.get_facecolor(), edgecolor='none')
         plt.close(fig)

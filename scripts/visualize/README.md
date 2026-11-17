@@ -96,6 +96,7 @@ These have their own CLI and are separate from the six-family suite:
 
 | Module | Guide |
 |---|---|
+| Dataset-independent cortical FC heatmaps and chord diagrams | [Cortical FC](cortex_fc/README.md) |
 | HCP Standard/CtxDrop/CtxReg comparison | [Cortex proximity controls](hcp_cortex_control_gradient_wta/README.md) |
 | Iowa3T dominant subregions and template-matching comparisons | [Template matching](template_matching_dominant_subregions/README.md) |
 | Standalone cortical network surface-area analysis | [Cortical network area](cortex_network_area/README.md) |

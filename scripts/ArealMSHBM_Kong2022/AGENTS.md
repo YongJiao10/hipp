@@ -27,10 +27,6 @@ Use [README.md](README.md) for exact dataset roots, sessions, controls and comma
 - HCP7T uses `pfm_areal_mshbm/sub-<id>/`, retains task work under repository
   `tmp/`, and protects existing label/provenance files. ESTT retains its
   subject-level CBIG work and complete label/dlabel/materialization assets.
-- Detect `idas` or `argon` before submitting; ambiguous detection requires an
-  explicit `SYSTEM_NAME`. The launcher caps IDAS at 10 total (UI 3/PINC 7)
-  and Argon at 20 total (UI 5/PINC 15). Throttle sums and combined active
-  batches must remain within the applicable cap.
 - Keep login-node work lightweight. Run MATLAB on compute nodes via qsub.
   Use the documented Argon runtime; do not add a local py314 dependency.
 - Before a real smoke or batch submission, show the exact qsub command or

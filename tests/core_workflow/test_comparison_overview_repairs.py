@@ -227,7 +227,7 @@ def test_omitted_shared_ranges_keep_local_scaling(render_inputs):
 def _write_invalid_lineage_pair(root: Path) -> list[Path]:
     paths = []
     for hemi in ("L", "R"):
-        run_dir = root / "gradient-spectral" / "kong2022" / "2mm" / "cov_0p80" / f"hemi_{hemi}"
+        run_dir = root / "gradient-spectral" / "kong2022" / "2mm" / "cov_0p80" / "g1g2g3" / f"hemi_{hemi}"
         run_dir.mkdir(parents=True)
         path = run_dir / "group_atlas_manifest.json"
         path.write_text(json.dumps({
@@ -249,7 +249,7 @@ def test_dual_interpretation_preflight_rejects_both_invalid_source_lineages(tmp_
         overview.ensure_combo_ready(
             group_root=tmp_path / "group", method="gradient-spectral", atlas="kong2022",
             coverage_tag="cov_0p80", route_tag="pfm", smoothings=["2mm"],
-            layout="annotation-pair",
+            layout="annotation-pair", gradient_comp_tag="g1g2g3",
         )
 
     assert all(str(path) in str(caught.value) for path in paths)
@@ -267,6 +267,22 @@ def test_dual_interpretation_render_rejects_invalid_lineage_before_plotting(tmp_
         overview.render_combo(
             group_root=tmp_path / "group", present_dir=tmp_path / "present",
             method="gradient-spectral", atlas="kong2022", coverage_tag="cov_0p80",
-            route_tag="pfm", mode_tag=None,
+            route_tag="pfm", mode_tag=None, gradient_comp_tag="g1g2g3",
             assignment_variant="fisherz", layout="annotation-pair", annotation_pair="roi-fisherz", smoothing="2mm",
         )
+
+
+def test_overview_preflight_requires_explicit_gradient_component_tag(tmp_path):
+    with pytest.raises(ValueError, match="explicit gradient component tag"):
+        overview.ensure_combo_ready(
+            group_root=tmp_path / "group", method="gradient-ward", atlas="kong2022",
+            coverage_tag="cov_0p80", route_tag="pfm", smoothings=["2mm"],
+        )
+
+
+def test_overview_title_names_non_default_gradient_set():
+    title = overview.overview_title(
+        atlas="kong2022", method="gradient-ward", route_tag="pfm", mode_tag=None,
+        assignment_variant="roi-fisherz", smoothing="2mm", gradient_set="G1+G2",
+    )
+    assert title.startswith("gradient-ward G1+G2 | kong2022")
