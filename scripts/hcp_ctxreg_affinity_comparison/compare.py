@@ -290,6 +290,11 @@ def main():
     parser.add_argument("--routes", nargs="+", choices=tuple(ROUTES), default=list(ROUTES))
     args = parser.parse_args()
     out = args.out.resolve()
+    if args.render_only:
+        from figure import render_comparison
+
+        render_comparison(out, {route: ROUTES[route] for route in args.routes}, CLUSTER_COLORS)
+        return
     if not out.is_relative_to(REPO_ROOT / "tmp"):
         parser.error("--out must be under the repository tmp directory")
 
@@ -299,13 +304,6 @@ def main():
         / f"group-average_hemi-{hemi}_space-corobl_den-512_label-hipp_midthickness.surf.gii"
         for hemi in ("L", "R")
     }
-    if args.render_only:
-        from figure import render_comparison
-
-        render_comparison(out, {route: ROUTES[route] for route in args.routes}, METHODS,
-                          {hemi: atlas.load_surface(path) for hemi, path in surfaces.items()},
-                          CLUSTER_COLORS)
-        return
     if "pfm_ctxreg_10mm" in args.routes and args.ctxreg_10mm_fc_root is None:
         parser.error("--ctxreg-10mm-fc-root is required when fitting pfm_ctxreg_10mm")
     ctxreg_10mm_fc_root = args.ctxreg_10mm_fc_root.resolve() if args.ctxreg_10mm_fc_root else None

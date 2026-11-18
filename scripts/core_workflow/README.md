@@ -429,13 +429,19 @@ export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_TH
 /home/yojiao/.conda/envs/py314/bin/python scripts/hcp_ctxreg_affinity_comparison/compare.py \
   --out tmp/ctxreg-mean-subject-similarity \
   --ctxreg-10mm-fc-root outputs_hcp/inputs/kong2022/shared_inputs/pfm_ctxreg_10mm
-/home/yojiao/.conda/envs/py314/bin/python scripts/hcp_ctxreg_affinity_comparison/compare.py \
+LP_NUM_THREADS=1 VTK_SMP_MAX_THREADS=1 xvfb-run -a \
+  /home/yojiao/.conda/envs/py314/bin/python scripts/hcp_ctxreg_affinity_comparison/compare.py \
   --out tmp/ctxreg-mean-subject-similarity --render-only
 ```
 
-The renderer writes `comparison.tsv` and `ctxreg_affinity_averaging.png` in the
-selected experiment directory. The 10 mm FC root must contain the complete
-roster. Generate missing FC inputs with Stage `04_01` from the 10 mm residuals,
+The renderer reads the exported label GIFTIs and the recorded template
+surfaces. It uses the standard BrainSpace hippocampal grid and the HCP CtxReg
+2×2 composite. The top row shows dorsal views and the bottom row shows ventral
+views, with the left and right hemispheres side by side. It writes
+`comparison.tsv` and `ctxreg_affinity_averaging.png` in the selected experiment
+directory. Pass the absolute experiment path to `--out` to render from a
+separate worktree. The 10 mm FC root must contain the complete roster. Generate
+missing FC inputs with Stage `04_01` from the 10 mm residuals,
 the Standard PFM cortical references and shared hippocampal validity masks.
 
 ## Implementation boundary

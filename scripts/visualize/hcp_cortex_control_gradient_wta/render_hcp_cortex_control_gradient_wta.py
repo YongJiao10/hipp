@@ -44,6 +44,7 @@ for p in (CORE_DIR, VIS_LIB_DIR):
         sys.path.insert(0, str(p))
 
 from lib.surface_utils import long_axis_order, render_hippocampal_grid
+from lib.workbench_grid import build_2x2_composite
 from multidataset_cohorts import HCP_COHORT_SIZE, HCP_KONG_GRADIENT_RUN
 
 # -----------------------------------------------------------------------------
@@ -323,65 +324,6 @@ def adaptive_positive_axis_scale(
 # -----------------------------------------------------------------------------
 # 2x2 Locked View Composite Builder (Ensures Hipp Surface Shares Bar Height)
 # -----------------------------------------------------------------------------
-def trim_bounding_box(img: Image.Image) -> Image.Image:
-    """Trim uniform background margin from render."""
-    a = np.array(img)
-    corners = np.array([a[0, 0, :3], a[0, -1, :3], a[-1, 0, :3], a[-1, -1, :3]])
-    is_white_bg = float(np.mean(corners)) > 127.0
-    if is_white_bg:
-        fg = np.any(a[..., :3] < 245, axis=2)
-    else:
-        fg = (a[..., :3].sum(axis=2) > 15)
-    if not np.any(fg):
-        return img
-    rmin, rmax = np.where(np.any(fg, axis=1))[0][[0, -1]]
-    cmin, cmax = np.where(np.any(fg, axis=0))[0][[0, -1]]
-    return img.crop((cmin, rmin, cmax + 1, rmax + 1))
-
-
-def build_2x2_composite(native_im: Image.Image) -> Image.Image:
-    """Build a tight 2x2 composite: Front (L/R) on top, Back (L/R) on bottom.
-    
-    This matches the authentic layout in reference figures 2 and 3, and ensures
-    the hippocampal 3D surface occupies the exact same vertical height as the stacked bars.
-    """
-    arr = np.array(native_im)
-    v_l_front = trim_bounding_box(Image.fromarray(arr[: arr.shape[0] // 2, : arr.shape[1] // 2]))
-    v_r_front = trim_bounding_box(Image.fromarray(arr[: arr.shape[0] // 2, arr.shape[1] // 2 :]))
-    v_l_back  = trim_bounding_box(Image.fromarray(arr[arr.shape[0] // 2 :, : arr.shape[1] // 2]))
-    v_r_back  = trim_bounding_box(Image.fromarray(arr[arr.shape[0] // 2 :, arr.shape[1] // 2 :]))
-
-    target_h = max(v_l_front.height, v_r_front.height, v_l_back.height, v_r_back.height)
-    scaled = []
-    for v in [v_l_front, v_r_front, v_l_back, v_r_back]:
-        sc = target_h / float(v.height)
-        sw = max(1, int(round(v.width * sc)))
-        scaled.append(v.resize((sw, target_h), Image.Resampling.LANCZOS))
-
-    gap_x = 6
-    gap_y = 10
-    pad = 2
-
-    row1_w = pad * 2 + scaled[0].width + gap_x + scaled[1].width
-    row2_w = pad * 2 + scaled[2].width + gap_x + scaled[3].width
-    total_w = max(row1_w, row2_w)
-    total_h = pad * 2 + target_h * 2 + gap_y
-
-    canvas = Image.new("RGBA", (total_w, total_h), (255, 255, 255, 255))
-    # Paste row 1 centered
-    r1_x = (total_w - (scaled[0].width + gap_x + scaled[1].width)) // 2
-    canvas.paste(scaled[0], (r1_x, pad), scaled[0] if scaled[0].mode == "RGBA" else None)
-    canvas.paste(scaled[1], (r1_x + scaled[0].width + gap_x, pad), scaled[1] if scaled[1].mode == "RGBA" else None)
-
-    # Paste row 2 centered
-    r2_x = (total_w - (scaled[2].width + gap_x + scaled[3].width)) // 2
-    y2 = pad + target_h + gap_y
-    canvas.paste(scaled[2], (r2_x, y2), scaled[2] if scaled[2].mode == "RGBA" else None)
-    canvas.paste(scaled[3], (r2_x + scaled[2].width + gap_x, y2), scaled[3] if scaled[3].mode == "RGBA" else None)
-
-    return canvas
-
-
 def render_branch_surface_2x2(
     branch: dict[str, Any],
     modality: str,
