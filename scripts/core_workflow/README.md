@@ -315,7 +315,8 @@ explicitly when a controlled signal root is separate.
   selection is a separate `cov_<tau>/<g-tag>/` run (`g1`, `g1g2`, `g1g2g3`).
   `06_01` renders exactly the selected tag and puts non-default selections in a
   `<g-tag>/` subdirectory of the overview destination. TopSim Ward also has
-  `g1` and `g1g2` runs:
+  `g1` and `g1g2` runs for `pfm`, `pfm_ctxreg` and `pfm_ctxreg_10mm` (ctxreg
+  routes use their own `--shared-root`, `--out-root` and `--route-tag`):
 
   ```bash
   /home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/05_02_run_group_atlas.py --shared-root outputs_hcp/inputs/kong2022/shared_inputs/pfm --surface-root outputs_hcp/inputs/kong2022/shared_inputs/surface --reference-root outputs_hcp/inputs/kong2022/shared_inputs/pfm --out-root outputs_hcp/work/group_atlas/pfm/topsim --methods gradient-ward --profile topsim --atlases kong2022 --gradient-root outputs_hcp/work/hippomaps_gradients --route-tag pfm --network-taxonomy canonical7 --k-min 2 --k-max 8 --default-k 3 --gradient-components 1,2

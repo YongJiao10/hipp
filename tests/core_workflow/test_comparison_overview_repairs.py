@@ -44,9 +44,10 @@ def render_inputs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 
     def render_surface(**kwargs):
         assert kwargs["surface_cache_root"] == overview.REPO_ROOT / "tmp" / "overview_hippocampal_surfaces"
+        assert kwargs["unfolded"] == "unfolded-assets"
         surface_titles.append(kwargs["title"])
         scratch_paths.append(kwargs["outdir"])
-        return {"biglegend_png": str(image_path)}
+        return {"biglegend_png": str(image_path), "foldunfold_png": str(image_path)}
 
     monkeypatch.setattr(Figure, "savefig", save_figure)
     monkeypatch.setattr(overview, "render_hippocampal_grid", render_surface)
@@ -54,6 +55,9 @@ def render_inputs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         tmp_path / "left.surf.gii", tmp_path / "right.surf.gii", "template", tmp_path / "template.spec"
     ))
     monkeypatch.setattr(overview, "long_axis_order", lambda _path: np.arange(4))
+    # Spec-declared unfolded asset selection has its own coverage.
+    monkeypatch.setattr(overview, "resolve_overview_unfolded_assets", lambda *_a: "unfolded-assets")
+    monkeypatch.setattr(overview, "unfolded_assets_lock", lambda assets: {"assets": assets})
     # Assignment and lineage contracts have separate coverage; these tests
     # exercise their validated data at the figure boundary.
     monkeypatch.setattr(overview, "validate_group_atlas_lineage", lambda *_a, **_k: {})

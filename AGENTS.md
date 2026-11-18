@@ -12,6 +12,12 @@
 - Start Argon sessions from the checkout with `codex-argon`, `codex-argon resume`
   or `codex-argon agents`. Personal launcher details belong in
   `/Users/yojiao/.local/share/codex-argon.md`.
+- The main checkout (`/home/yojiao/hpchome/hipp` on idas) stays on `main`, which
+  holds the mainline work. Side work by other agents uses its own branch in a
+  separate git worktree outside the main checkout (for example
+  `/home/yojiao/hpchome/hipp-<agent>`); never switch, commit on, reset or rebase
+  the main checkout from side work, and never rewrite another agent's branch.
+  Check `git branch --show-current` before any git write.
 
 ## Filesystem authorization
 

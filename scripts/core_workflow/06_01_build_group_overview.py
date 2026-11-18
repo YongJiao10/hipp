@@ -27,10 +27,12 @@ Inputs:
 - Physical inputs:
   - Group parcellation label arrays: manifest `assignment_variants[default_assignment_variant].group_functional_atlas_labels` for cluster-level methods; vertex-level methods use the manifest top-level label array.
   - Group mapping status files and dataset-scoped template assets from manifest paths; stale or foreign absolute mounts fail validation against canonical current assets.
+  - Unfolded hippocampal maps: the template spec (`template_spec_path`) must declare exactly one unfold-space hipp midthickness surface and one hipp subfield label GIFTI per hemisphere at the density of the consumed folded template surface; the unfolded grid must be regular and its y axis must track the folded anterior axis.
 
 Outputs:
 - Command-line output / file outputs:
-  - Overview panel PNG figures for each rendered method/assignment variant; gradient names include the component tag, and cluster-based names include the assignment suffix.
+  - Overview panel PNG figures for each rendered method/assignment variant; gradient names include the component tag, and cluster-based names include the assignment suffix. The functional-atlas panel shows [L unfolded | L folded | R folded | R unfolded | legend]; unfolded rows run anterior to posterior and subfield boundaries are drawn once in the color of the subfield with the larger atlas key (Sub -> CA4).
+  - `<png>.sources.json` and manifest items record `hippocampal_unfolded_assets` with SHA-256 of the unfolded surfaces and subfield labels.
   - Group overview manifest JSON file: `{present_dir}/{manifest_name}`.
   - Summary README file: `{present_dir}/README.md`.
 """
@@ -69,7 +71,14 @@ from lib.route_tags import (
     validate_group_atlas_root_for_route,
 )
 from lib.workflow_utils import write_json
-from lib.surface_utils import equal_vertex_long_axis_bins, long_axis_order, render_hippocampal_grid, network_color_map
+from lib.surface_utils import (
+    equal_vertex_long_axis_bins,
+    infer_density_from_surface,
+    long_axis_order,
+    network_color_map,
+    render_hippocampal_grid,
+    resolve_unfolded_assets,
+)
 from lib.io_utils import load_json
 from lib.group_atlas_lineage import validate_group_atlas_lineage
 from lib.cluster_roi_profile_contract import (
@@ -120,6 +129,15 @@ CORTEX_DISPLAY_SUBJECT = "100610"
 CLUSTER_CORTEX_TITLE_COLORS = ("#d95f02", "#1b9e77", "#7570b3")
 # Width in inches of the cluster cortical-FC column: three tiles stacked over two rows, or side by side in one row.
 CLUSTER_CORTEX_COLUMN_WIDTH = {"stacked": 9.4, "side_by_side": 10.8}
+# Extra figure width (inches) given to the functional-atlas column for the unfolded maps.
+FOLDUNFOLD_EXTRA_WIDTH = {"single-smoothing": 4.0, "clusterless": 3.0, "cluster": 3.2}
+
+
+def widen_column(width: float, ratios: list[float], index: int, extra: float) -> tuple[float, list[float]]:
+    """Add ``extra`` inches to column ``index`` while keeping the other columns' absolute widths."""
+    ratios = list(ratios)
+    ratios[index] += extra * sum(ratios) / width
+    return width + extra, ratios
 METHOD_CHOICES = [
     "network-spectral",
     "gradient-spectral",
@@ -216,6 +234,7 @@ def overview_manifest_item(
         "affinity_description",
         "cluster_cortex_fc_column",
         "hippocampal_renderer",
+        "hippocampal_unfolded_assets",
     ):
         if key in meta:
             item[key] = meta[key]
@@ -619,6 +638,24 @@ def resolve_template_render_spec(
         run_dir=run_dir,
     )
     return subject, spec
+
+
+def resolve_overview_unfolded_assets(surf_l: Path, surf_r: Path, spec_path: Path):
+    """Unfolded surface + subfield labels declared by the template spec at the consumed density."""
+    density = infer_density_from_surface(surf_l)
+    if infer_density_from_surface(surf_r) != density:
+        raise ValueError(f"Left/right template surface densities disagree: {surf_l.name} vs {surf_r.name}")
+    return resolve_unfolded_assets(spec_path, density=density)
+
+
+def unfolded_assets_lock(assets) -> dict[str, object]:
+    record = assets.provenance()
+    record["sha256"] = {
+        str(path): sha256_file(path)
+        for group in (assets.unfold_surface, assets.subfield_labels)
+        for path in group.values()
+    }
+    return record
 
 
 def format_panel_error(label: str, exc: Exception, *, width: int = 36, max_detail_lines: int = 2) -> str:
@@ -1246,9 +1283,16 @@ def plot_k_gate_panel(
     ax.axhline(redundancy_threshold, color="#b00020", lw=1.0, ls=":", alpha=0.9)
     ax.axvline(int(k_l), color="#1f77b4", ls="--", lw=1.0)
     ax.axvline(int(k_r), color="#d62728", ls="--", lw=1.0)
-    ax.set_ylim(0.50, 1.02)
-    ax.set_yticks([0.50, 0.60, 0.70, 0.80, 0.90, 1.00])
-    ax.set_yticklabels(["0.50", "0.60", "0.70", "0.80", "0.90", "1.00"])
+    # Profile similarity is a correlation: start at 0 and extend below 0 only when
+    # a run has anti-correlated cluster profiles, so no value is clipped.
+    finite = np.concatenate([max_sim_l[np.isfinite(max_sim_l)], max_sim_r[np.isfinite(max_sim_r)]])
+    y_min = min(0.0, float(np.floor(finite.min() * 5.0) / 5.0)) if finite.size else 0.0
+    yticks = np.round(np.arange(y_min, 1.0001, 0.2), 1)
+    ax.set_ylim(y_min - (0.02 if y_min < 0 else 0.0), 1.02)
+    ax.set_yticks(yticks)
+    ax.set_yticklabels([f"{t:.1f}" for t in yticks])
+    if y_min < 0:
+        ax.axhline(0.0, color="#999999", lw=0.6)
     ax.set_xticks(np.arange(2, 9, dtype=int))
     ax.set_xlim(1.5, 8.5)
     ax.set_xlabel("K", fontsize=FS_LABEL)
@@ -1600,6 +1644,7 @@ def render_combo(
                 )
 
     rows_meta: list[dict[str, object]] = []
+    unfolded_locks: list[dict[str, object]] = []
 
     if layout == "annotation-pair":
         target_sm = smoothing
@@ -1620,15 +1665,18 @@ def render_combo(
             cortex_profiles = profiles
 
     if layout == "single-smoothing":
-        fig = plt.figure(figsize=(19.0, 7.5), dpi=180, constrained_layout=True)
-        gs = fig.add_gridspec(nrows=1, ncols=3, width_ratios=[0.72, 1.14, 1.40], wspace=0.06)
+        atlas_col = 2 if method in CLUSTERLESS_METHODS else 1
+        width, width_ratios = widen_column(19.0, [0.72, 1.14, 1.40], atlas_col, FOLDUNFOLD_EXTRA_WIDTH["single-smoothing"])
+        fig = plt.figure(figsize=(width, 7.5), dpi=180, constrained_layout=True)
+        gs = fig.add_gridspec(nrows=1, ncols=3, width_ratios=width_ratios, wspace=0.06)
     elif method in CLUSTERLESS_METHODS:
-        fig = plt.figure(figsize=(19.0, 12.8), dpi=180, constrained_layout=True)
-        gs = fig.add_gridspec(nrows=2, ncols=3, width_ratios=[0.62, 1.18, 1.42], hspace=0.08, wspace=0.06)
+        width, width_ratios = widen_column(19.0, [0.62, 1.18, 1.42], 2, FOLDUNFOLD_EXTRA_WIDTH["clusterless"])
+        fig = plt.figure(figsize=(width, 12.8), dpi=180, constrained_layout=True)
+        gs = fig.add_gridspec(nrows=2, ncols=3, width_ratios=width_ratios, hspace=0.08, wspace=0.06)
     else:
         n_rows = len(row_specs)
-        width, height = 14.8, 12.2
-        width_ratios = [1.65, 1.05]
+        height = 12.2
+        width, width_ratios = widen_column(14.8, [1.65, 1.05], 1, FOLDUNFOLD_EXTRA_WIDTH["cluster"])
         cortex_width = 0.0
         if cortex_profiles:
             cortex_width = CLUSTER_CORTEX_COLUMN_WIDTH["stacked" if cortex_stacked else "side_by_side"]
@@ -1738,6 +1786,8 @@ def render_combo(
                     fontsize=FS_MISSING,
                 )
             else:
+                unfolded = resolve_overview_unfolded_assets(surf_l, surf_r, spec_path)
+                unfolded_locks.append(unfolded_assets_lock(unfolded))
                 with tempfile.TemporaryDirectory(prefix="present_group_surface_render_", dir=REPO_ROOT / "tmp") as tmp:
                     render = render_hippocampal_grid(
                         subject=template_subject,
@@ -1750,8 +1800,9 @@ def render_combo(
                         right_surface=surf_r,
                         legend_display_names=NETWORK_DISPLAY_NAMES,
                         surface_cache_root=REPO_ROOT / "tmp" / "overview_hippocampal_surfaces",
+                        unfolded=unfolded,
                     )
-                    big = Path(str(render["biglegend_png"]))
+                    big = Path(str(render["foldunfold_png"]))
                     ax_big.imshow(plt.imread(big))
             if layout == "single-smoothing":
                 ax_big.set_title("Functional atlas", fontsize=FS_BIG_TITLE + 3, fontweight="bold")
@@ -2080,6 +2131,8 @@ def render_combo(
                 fontsize=FS_MISSING,
             )
         else:
+            unfolded = resolve_overview_unfolded_assets(surf_l, surf_r, spec_path)
+            unfolded_locks.append(unfolded_assets_lock(unfolded))
             with tempfile.TemporaryDirectory(prefix="present_group_surface_render_", dir=REPO_ROOT / "tmp") as tmp:
                 render = render_hippocampal_grid(
                     subject=template_subject,
@@ -2092,8 +2145,9 @@ def render_combo(
                     right_surface=surf_r,
                     legend_display_names=NETWORK_DISPLAY_NAMES,
                     surface_cache_root=REPO_ROOT / "tmp" / "overview_hippocampal_surfaces",
+                    unfolded=unfolded,
                 )
-                big = Path(str(render["biglegend_png"]))
+                big = Path(str(render["foldunfold_png"]))
                 ax_big.imshow(plt.imread(big))
         if shared_run:
             if effective_assignment_variant in ALL_OVR_VARIANTS:
@@ -2202,6 +2256,9 @@ def render_combo(
         f"{smoothing}/hemi-{hemi}/{variant}": result.get("asset_fingerprints", {})
         for (smoothing, hemi, variant), result in sorted(assignment_validation_results.items())
     }
+    unfolded_lock = unfolded_locks[0] if unfolded_locks else None
+    if any(lock != unfolded_lock for lock in unfolded_locks):
+        raise RuntimeError("Overview rows resolved different unfolded hippocampal assets")
     source_sidecar = out_png.with_suffix(out_png.suffix + ".sources.json")
     write_json(
         source_sidecar,
@@ -2215,6 +2272,7 @@ def render_combo(
             **assignment_metadata,
             "source_manifests": [str(path.resolve()) for path in manifest_paths],
             "assignment_assets": assignment_assets,
+            "hippocampal_unfolded_assets": unfolded_lock,
         },
     )
     return {
@@ -2228,6 +2286,7 @@ def render_combo(
         "cluster_cortex_fc_column": bool(cortex_profiles),
         "cortex_surface_cache": cortex_surface_records,
         "hippocampal_renderer": "brainspace_hippocampal_grid",
+        "hippocampal_unfolded_assets": unfolded_lock,
         **assignment_metadata,
         **source_provenance,
     }
