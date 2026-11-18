@@ -51,7 +51,10 @@ The first-level directory count follows actual product ownership.
 
 Preserve separate preprocessing variants, cohorts, methods, taxonomies,
 cortex controls, and scientific parameter branches. The formal HCP cortex-control
-route is `pfm_ctxreg`; the former `pfm_ctxdrop` route is retired. Exact
+routes are `pfm_ctxreg` (20 mm) and `pfm_ctxreg_10mm` (10 mm), each with its own
+`inputs/kong2022/shared_inputs/<route>/`, `work/hippomaps_gradients/<route>/`,
+`work/group_atlas/<route>/` and `present/overviews/<route>/` roots; the former
+`pfm_ctxdrop` route is retired. Exact
 group-atlas roots are documented in
 [Formal Group-Atlas Layout](active_group_atlas_inventory.md).
 The `06_07` local cortex-control diagnostic is not a route: it writes

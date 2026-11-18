@@ -8,7 +8,9 @@ alone does not establish that a scientific product is present or valid.
 
 Root: `outputs_hcp/work/group_atlas/`.
 
-- Kong2022 canonical7: `pfm/`, `fixed/`, `pfm_ctxreg/`.
+- Kong2022 canonical7: `pfm/`, `fixed/`, `pfm_ctxreg/`, `pfm_ctxreg_10mm/`.
+  The two cortex-control roots (20 mm and 10 mm local-cortex regression) each
+  contain `topsim/gradient-ward/` and `wta-top/`.
 - Kong2022 family17: `pfm_17net/`, `fixed_17net/`.
 - Post-hoc weighted assignment comparison: `pfm_weighted/`.
 - Lynch2024 comparison: `lynch2024_20net/`, `lynch2024_7net/`.

@@ -237,11 +237,25 @@ Source labels remain separate from data-derived network annotations.
 | `kong2022_pfm` | `pfm` | Individualized Kong400 FC; canonical7 default |
 | `kong2022_fixed` | `fixed` | Public-atlas Kong400 FC; canonical7 default |
 | `kong2022_pfm_17net`, `kong2022_fixed_17net` | `pfm_17net`, `fixed_17net` | Reuse PFM/Fixed FC, gradients and the corresponding canonical7 spatial clusters; explicit family17; gradient methods plus clusterless `wta-top` |
-| `kong2022_pfm_ctxreg` | `pfm_ctxreg` | Cortex-regressed hippocampal signals; upstream PFM references and surface masks |
+| `kong2022_pfm_ctxreg` | `pfm_ctxreg` | Hippocampal signals with the 20 mm local cortex mean regressed out per run; upstream PFM references and surface masks |
+| `kong2022_pfm_ctxreg_10mm` | `pfm_ctxreg_10mm` | Hippocampal signals with the 10 mm local cortex mean regressed out per run; upstream PFM references and surface masks |
 | `lynch2024_20net`, `lynch2024_7net` | Matching atlas slug | Hard-label Lynch references; both reuse the Lynch20 gradient bank |
 
-`pfm_ctxreg` is the only cortex-control signal branch; the former
-`pfm_ctxdrop` branch is retired. `06_07_render_local_cortex_control_diagnostics.py`
+`pfm_ctxreg` (signal branch `ctxreg`) and `pfm_ctxreg_10mm` (signal branch
+`ctxreg_10mm`) are the cortex-control signal branches; the former
+`pfm_ctxdrop` branch is retired. Both regress, per run, the mean of valid
+cortex within a native T1w radius out of each hippocampal vertex series in
+`04_00`; the radius is fixed per route in
+`lib/branch_config.CTXREG_ROUTE_DISTANCE_MM` (20 mm and 10 mm).
+`04_00 --route-tag {pfm_ctxreg,pfm_ctxreg_10mm}` defaults to `pfm_ctxreg`;
+`--distance-mm` defaults to the route's radius and rejects any other value, and
+`--out-shared-root` defaults to the route's formal root. 10 mm is the smallest
+radius at which essentially every hippocampal vertex has cortex in range and
+matches the 6-10 mm range of earlier subcortical work; its regressor is mostly
+default-mode network (DMN), so the two routes bracket the same boundary-signal
+removal, stronger at 10 mm. Each route keeps `topsim` gradients and
+`topsim/gradient-ward` plus `wta-top` group atlases and overviews under its own
+roots. `06_07_render_local_cortex_control_diagnostics.py`
 reports target-side local-cortex exclusion (ctxdrop) next to ctxreg at 3, 6,
 10 and 20 mm as an FC/WTA-level diagnostic that feeds nothing downstream:
 `--stage subjects` writes `outputs_hcp/work/local_cortex_control/sub-<id>/`,
@@ -249,8 +263,8 @@ reports target-side local-cortex exclusion (ctxdrop) next to ctxreg at 3, 6,
 `outputs_hcp/present/local_cortex_control/`. In HCP 7T, exclusion changes the
 winning network for only about 1-4% of hippocampal vertices, whereas ctxreg
 changes about a quarter to two fifths, an effect reproduced by regressing only
-cortex within 3 mm; ctxreg is therefore a conservative sensitivity analysis
-that removes boundary-shared signal, possibly including genuine hippocampal or
+cortex within 3 mm; both ctxreg routes are therefore conservative sensitivity
+analyses that remove boundary-shared signal, possibly including genuine hippocampal or
 subicular signal.
 
 For family17 group overviews, pass `--route-tag pfm_17net` or
