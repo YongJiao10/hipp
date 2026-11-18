@@ -391,6 +391,39 @@ OVR group overviews summarize the six fitted left/right clusters; the blank
 hemisphere separator in the coefficient heatmap is excluded from bar summaries.
 
 
+### HCP affinity averaging comparison
+
+The standalone comparison fits the Standard, CtxReg 10 mm and CtxReg 20 mm
+routes at 2 mm and 4 mm for both hemispheres. Both arms use the HCP QC roster,
+Kong2022 400-ROI FC, 0.80 vertex coverage, TopSim with 0.90 affinity sparsity,
+the 2 mm left alignment anchor, and surface-connected Ward with G1–G3 at
+K=3. The mean-similarity arm computes Pearson across jointly observed ROIs
+within each subject and gives equal weight to subjects with a defined
+correlation for that vertex pair. TopSim sparsification follows aggregation
+in both arms. The mean-FC arm averages Fisher-z FC before computing Pearson.
+
+The comparison exports cluster label GIFTIs, aligned gradients, descriptive
+canonical7 Fisher-z and OVR annotations, and five paired subject half-splits.
+Each half is fitted independently, then its maps score the other half.
+Each held-out score subtracts the mean Pearson similarity of neighboring
+vertices across parcel boundaries from that of neighboring vertices within
+parcels. The summary averages each subject's paired scores across the splits
+before pooling subjects, and reports split-half adjusted Rand index separately.
+
+```bash
+export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1
+/home/yojiao/.conda/envs/py314/bin/python scripts/hcp_ctxreg_affinity_comparison/compare.py \
+  --out tmp/ctxreg-mean-subject-similarity \
+  --ctxreg-10mm-fc-root outputs_hcp/inputs/kong2022/shared_inputs/pfm_ctxreg_10mm
+/home/yojiao/.conda/envs/py314/bin/python scripts/hcp_ctxreg_affinity_comparison/compare.py \
+  --out tmp/ctxreg-mean-subject-similarity --render-only
+```
+
+The renderer writes `comparison.tsv` and `ctxreg_affinity_averaging.png` in the
+selected experiment directory. The 10 mm FC root must contain the complete
+roster. Generate missing FC inputs with Stage `04_01` from the 10 mm residuals,
+the Standard PFM cortical references and shared hippocampal validity masks.
+
 ## Implementation boundary
 
 Numbered scripts contain orchestration and stage logic; shared implementation
