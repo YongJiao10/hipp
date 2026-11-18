@@ -114,6 +114,7 @@ Kong2022 cortex-control routes keep TopSim gradients and two group-atlas product
 ```bash
 /home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/05_01_compute_hippomaps_gradients.py --routes pfm_ctxreg_10mm --profile topsim --shared-inputs-root outputs_hcp/inputs/kong2022/shared_inputs --reference-inputs-root outputs_hcp/inputs/kong2022/shared_inputs/pfm --surface-root outputs_hcp/inputs/kong2022/shared_inputs/surface --out-root outputs_hcp/work/hippomaps_gradients --smoothings 2mm 4mm --hemis L R --n-components 5 --selected-components 1,2,3
 /home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/05_02_run_group_atlas.py --dataset outputs_hcp --shared-root outputs_hcp/inputs/kong2022/shared_inputs/pfm_ctxreg_10mm --surface-root outputs_hcp/inputs/kong2022/shared_inputs/surface --reference-root outputs_hcp/inputs/kong2022/shared_inputs/pfm --out-root outputs_hcp/work/group_atlas/pfm_ctxreg_10mm/topsim --methods gradient-ward --profile topsim --atlases kong2022 --gradient-root outputs_hcp/work/hippomaps_gradients --route-tag pfm_ctxreg_10mm --network-taxonomy canonical7 --k-min 2 --k-max 8 --default-k 3
+# G1-only and G1+G2 TopSim Ward runs: repeat the gradient-ward command with --gradient-components 1 and with --gradient-components 1,2
 /home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/05_02_run_group_atlas.py --dataset outputs_hcp --shared-root outputs_hcp/inputs/kong2022/shared_inputs/pfm_ctxreg_10mm --surface-root outputs_hcp/inputs/kong2022/shared_inputs/surface --reference-root outputs_hcp/inputs/kong2022/shared_inputs/pfm --out-root outputs_hcp/work/group_atlas/pfm_ctxreg_10mm --methods wta-top --atlases kong2022 --route-tag pfm_ctxreg_10mm --network-taxonomy canonical7
 ```
 
@@ -160,10 +161,11 @@ These products are derived from group atlas and gradient work and can be refresh
 /home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/06_07_render_local_cortex_control_diagnostics.py --stage all --jobs 10
 ```
 
-Cortex-control overviews are rendered once per smoothing (`<sm>` is `2mm` or `4mm`) into `outputs_hcp/present/overviews/<route>/{topsim/gradient-ward,wta-top}/<sm>/`. Commands for the 10 mm route; the 20 mm route uses the same commands with `pfm_ctxreg` in place of `pfm_ctxreg_10mm`:
+Cortex-control overviews are rendered once per smoothing (`<sm>` is `2mm` or `4mm`) into `outputs_hcp/present/overviews/<route>/{topsim/gradient-ward,wta-top}/<sm>/`; G1-only and G1+G2 TopSim Ward overviews go to `outputs_hcp/present/overviews/<route>/topsim/gradient-ward/<sm>/{g1,g1g2}/`. Commands for the 10 mm route; the 20 mm route uses the same commands with `pfm_ctxreg` in place of `pfm_ctxreg_10mm`:
 
 ```bash
 /home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/06_01_build_group_overview.py --group-root outputs_hcp/work/group_atlas/pfm_ctxreg_10mm/topsim --present-dir outputs_hcp/present/overviews/pfm_ctxreg_10mm/topsim/gradient-ward/<sm> --methods gradient-ward --atlases kong2022 --route-tag pfm_ctxreg_10mm --smoothing <sm>
+/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/06_01_build_group_overview.py --group-root outputs_hcp/work/group_atlas/pfm_ctxreg_10mm/topsim --methods gradient-ward --atlases kong2022 --route-tag pfm_ctxreg_10mm --smoothing <sm> --gradient-components <1 or 1,2>
 /home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/06_01_build_group_overview.py --group-root outputs_hcp/work/group_atlas/pfm_ctxreg_10mm --present-dir outputs_hcp/present/overviews/pfm_ctxreg_10mm/wta-top/<sm> --atlases kong2022 --methods wta-top --coverage-threshold 0.80 --route-tag pfm_ctxreg_10mm --assignment-variant normalized_top20_count --smoothing <sm>
 ```
 

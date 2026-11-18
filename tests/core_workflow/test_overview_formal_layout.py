@@ -86,14 +86,12 @@ def test_plot_k_gate_panel_axis_and_threshold():
     )
 
     ylim = ax.get_ylim()
-    assert ylim[0] == pytest.approx(0.50)
+    assert ylim[0] == pytest.approx(0.0)
     assert ylim[1] == pytest.approx(1.02)
 
     # Check ticks
     yticks = ax.get_yticks()
-    assert 0.50 in yticks
-    assert 0.90 in yticks
-    assert 1.00 in yticks
+    assert list(yticks) == pytest.approx([0.0, 0.2, 0.4, 0.6, 0.8, 1.0])
 
     xticks = ax.get_xticks()
     assert list(xticks) == list(range(2, 9))
@@ -264,3 +262,22 @@ def test_cortex_tile_places_the_bars_below_or_beside_the_surface(tmp_path, bars,
         assert image.size == size
         assert image.getpixel((0, 0))[:3] == (255, 0, 0)
         assert image.getpixel((size[0] - 1, size[1] - 1))[:3] == (0, 0, 255)
+
+
+def test_widen_column_keeps_other_columns_absolute_width():
+    width, ratios = overview_mod.widen_column(14.8, [1.65, 1.05], 1, 3.2)
+    assert width == pytest.approx(18.0)
+    first_col_in = width * ratios[0] / sum(ratios)
+    assert first_col_in == pytest.approx(14.8 * 1.65 / 2.7)
+
+
+def test_plot_k_gate_panel_extends_axis_for_negative_similarity():
+    fig, ax = plt.subplots(figsize=(6, 4))
+    rows_l = [{"k": "2", "max_profile_similarity": "-0.42"}] + [
+        {"k": str(k), "max_profile_similarity": "0.9"} for k in range(3, 9)
+    ]
+    rows_r = [{"k": str(k), "max_profile_similarity": "0.8"} for k in range(2, 9)]
+    plot_k_gate_panel(ax, rows_l=rows_l, rows_r=rows_r, k_l=3, k_r=3, smoothing="2mm")
+    assert ax.get_ylim()[0] < -0.42
+    assert list(ax.get_yticks()) == pytest.approx([-0.6, -0.4, -0.2, 0.0, 0.2, 0.4, 0.6, 0.8, 1.0])
+    plt.close(fig)
