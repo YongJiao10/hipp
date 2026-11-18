@@ -51,6 +51,48 @@ read-only during this experiment. Tests in an isolated checkout must declare
 the original shipped Kong400 dlabel explicitly; do not install another atlas
 or substitute a different ROI registry.
 
+## Subject-aware parcellation comparison runtime
+
+The HCP experiment in `scripts/hcp_ctxreg_affinity_comparison/` uses the
+existing py314 stack. The Bayesian step has been smoke-tested on CPU with
+PyTorch 2.9.1+cu128 and the authors' HierarchBayesParcel checkout at
+`d4031910ebd16e9013d756eef4d057ba7106d64c` (tag `v.1.0.1`). Pass the checkout
+with `--bayes-source`. The runner imports the pinned source directly. Both
+the numerical libraries and PyTorch CPU pools run with one thread. Use
+`--device cuda` on IDAS to move the pinned vMF solver to the L40S with IEEE
+float32 matmul throughout. The old upstream tensor factories require the
+legacy CUDA default tensor type in this dedicated process. Keep the device
+fixed across the reported comparisons.
+
+Run from the experimental worktree. Supply the main checkout and the previous
+Avg FC/Avg Sim run explicitly. Set `--routes pfm --smoothing 2mm` for the
+development condition, and use a fresh `--out` under the worktree's `tmp/`.
+
+```bash
+git clone --branch v.1.0.1 --depth 1 https://github.com/DiedrichsenLab/HierarchBayesParcel.git \
+  tmp/subject-aware-parcellation/HierarchBayesParcel
+
+env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1 \
+  /home/yojiao/.conda/envs/py314/bin/python \
+  scripts/hcp_ctxreg_affinity_comparison/compare_subject_models.py \
+  --input-root /home/yojiao/hpchome/hipp \
+  --reference-run /home/yojiao/hpchome/hipp/tmp/ctxreg-mean-subject-similarity \
+  --bayes-source tmp/subject-aware-parcellation/HierarchBayesParcel \
+  --out tmp/subject-aware-parcellation/standard-pilot \
+  --routes pfm --smoothing 2mm
+```
+
+Pass the fitted output and the same route selection to
+`scripts/hcp_ctxreg_affinity_comparison/annotate_subject_models.py` using
+`--out` and `--routes`. The default annotates both new methods. Use
+`--render-only` under the headless figure runtime to assemble the saved
+label GIFTIs into the standard hippocampal panels. Per-condition
+`fit_failures.json` records failures to satisfy the prespecified fit for
+a fold. Paired scores use folds where both methods in that contrast produced
+a usable map. OVR requires one observed profile for each participant and parcel.
+The experiment records any ineligible maps in `network_annotation_unavailable.json`
+and still computes both Fisher-z annotations where the parcel has observations.
+
 ## Hard Rules
 
 - Never run repository Python tasks with bare `python`.

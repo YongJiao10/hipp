@@ -25,8 +25,21 @@ def partition_directory(out, route, smoothing, hemi, method):
     return out / route / smoothing / f"hemi_{hemi}" / method
 
 
-def render_panel(out, route, smoothing, method, surfaces, variant):
+def render_panel(out, route, smoothing, method, surfaces, variant, *, unavailable=()):
+    panel_root = out / "panels" / route / smoothing / method / (variant or "clusters")
+
     def label_path(hemi):
+        if hemi in unavailable:
+            import nibabel as nib
+            import numpy as np
+            from lib.gifti_labels import make_named_label_gifti
+
+            panel_root.mkdir(parents=True, exist_ok=True)
+            path = panel_root / f"unavailable-{hemi}.label.gii"
+            n = len(nib.load(surfaces[hemi]).agg_data("pointset"))
+            neutral = make_named_label_gifti(np.zeros(n), [(0, "Unavailable", (185, 185, 185, 255))])
+            nib.save(neutral, path)
+            return path
         run = partition_directory(out, route, smoothing, hemi, method)
         if variant is None:
             return run / "group_labels_final.label.gii"
@@ -34,7 +47,7 @@ def render_panel(out, route, smoothing, method, surfaces, variant):
 
     render = render_hippocampal_grid(
         subject="group-average",
-        outdir=out / "panels" / route / smoothing / method / (variant or "clusters"),
+        outdir=panel_root,
         name="partition",
         title="",
         left_labels=label_path("L"),
