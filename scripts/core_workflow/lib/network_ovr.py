@@ -57,7 +57,38 @@ def assignment_rows(beta, cluster_ids, network_names) -> list[dict]:
     return rows
 
 
-def fit_network_ovr(roi_profiles, subject_ids, cluster_ids, roi_registry, *, taxonomy: str) -> dict:
+def _fitting_observations(data, subjects, clusters, names, observed_profiles):
+    if observed_profiles is None:
+        observed = np.ones(data.shape[:2], dtype=bool)
+    else:
+        observed = np.asarray(observed_profiles)
+        if observed.dtype != np.bool_ or observed.shape != data.shape[:2]:
+            raise ValueError("OVR observation mask must be Boolean with shape subjects x clusters")
+        if not np.isnan(data[~observed]).all():
+            raise ValueError("OVR excluded profiles must be wholly missing")
+
+    missing = np.argwhere(~np.isfinite(data) & observed[:, :, None])
+    if missing.size:
+        detail = "; ".join(
+            f"subject={subjects[s]} cluster={clusters[c]} network={names[n]}"
+            for s, c, n in missing[:5]
+        )
+        raise ValueError(f"Missing required OVR network feature: {detail}")
+    if not observed.any(axis=0).all():
+        empty = np.asarray(clusters)[~observed.any(axis=0)].tolist()
+        raise ValueError(f"OVR clusters without any observed profiles: {empty}")
+
+    excluded = [
+        {"subject_id": subjects[s], "cluster_id": clusters[c]}
+        for s, c in np.argwhere(~observed)
+    ]
+    metadata = {"excluded_subject_cluster_rows": excluded} if excluded else {}
+    return data[observed], np.broadcast_to(clusters, observed.shape)[observed], metadata
+
+
+def fit_network_ovr(
+    roi_profiles, subject_ids, cluster_ids, roi_registry, *, taxonomy: str, observed_profiles=None,
+) -> dict:
     if taxonomy not in {"canonical7", "family17"}:
         raise ValueError(f"Unsupported OVR taxonomy: {taxonomy}")
     data = np.asarray(roi_profiles, dtype=np.float64)
@@ -82,13 +113,7 @@ def fit_network_ovr(roi_profiles, subject_ids, cluster_ids, roi_registry, *, tax
             columns = [i for i, row in enumerate(roi_registry) if row[taxonomy] == name]
             if columns:
                 network[:, :, index] = np.nanmean(data[:, :, columns], axis=2)
-    missing = np.argwhere(~np.isfinite(network))
-    if missing.size:
-        detail = "; ".join(f"subject={subjects[s]} cluster={clusters[c]} network={names[n]}"
-                           for s, c, n in missing[:5])
-        raise ValueError(f"Missing required OVR network feature: {detail}")
-    x = network.reshape(-1, len(names))
-    y = np.tile(clusters, len(subjects))
+    x, y, observation_metadata = _fitting_observations(network, subjects, clusters, names, observed_profiles)
     model = OneVsRestClassifier(LogisticRegression(
         solver="liblinear", C=1., tol=1e-4, max_iter=1000,
     ), n_jobs=1)
@@ -113,6 +138,7 @@ def fit_network_ovr(roi_profiles, subject_ids, cluster_ids, roi_registry, *, tax
     sd = np.std(x, axis=0, ddof=0)
     standardized = beta * sd
     result = {
+        **observation_metadata,
         "taxonomy": taxonomy, "variant": f"ovr_logistic_{taxonomy}",
         "subject_ids": subjects, "cluster_ids": clusters, "network_names": names,
         "estimator_classes": classes, "network_profiles": network,
@@ -141,6 +167,7 @@ def fit_network_ovr_from_network_profiles(
     taxonomy: str = "canonical7",
     feature_source: str = "network_ts",
     prefix: str | None = None,
+    observed_profiles=None,
 ) -> dict:
     """Fit descriptive OVR from direct subjectwise cluster-to-network Fisher-z features."""
     data = np.asarray(network_profiles, dtype=np.float64)
@@ -154,15 +181,7 @@ def fit_network_ovr_from_network_profiles(
         raise ValueError("OVR requires nonempty unique subject IDs")
     if len(clusters) < 2 or len(set(clusters)) != len(clusters) or min(clusters) < 1:
         raise ValueError("OVR requires at least two unique positive cluster IDs")
-    missing = np.argwhere(~np.isfinite(data))
-    if missing.size:
-        detail = "; ".join(
-            f"subject={subjects[s]} cluster={clusters[c]} network={names[n]}"
-            for s, c, n in missing[:5]
-        )
-        raise ValueError(f"Missing required OVR network feature: {detail}")
-    x = data.reshape(-1, len(names))
-    y = np.tile(clusters, len(subjects))
+    x, y, observation_metadata = _fitting_observations(data, subjects, clusters, names, observed_profiles)
     model = OneVsRestClassifier(
         LogisticRegression(
             solver="liblinear", C=1.0, tol=1e-4, max_iter=1000
@@ -191,6 +210,7 @@ def fit_network_ovr_from_network_profiles(
     standardized = beta * sd
     out_prefix = prefix or f"network_ovr_{taxonomy}_{feature_source}"
     result = {
+        **observation_metadata,
         "taxonomy": taxonomy,
         "variant": f"ovr_logistic_{taxonomy}_{feature_source}",
         "feature_source": feature_source,
@@ -261,9 +281,13 @@ def export_network_ovr(result: dict, out_dir: Path, *, prefix: str | None = None
         paths[key] = out_dir / f"{out_prefix}_{key}.npy"
         np.save(paths[key], result[key])
     paths["input_table"] = out_dir / f"{out_prefix}_inputs.tsv"
+    excluded = {
+        (row["subject_id"], row["cluster_id"]) for row in result.get("excluded_subject_cluster_rows", [])
+    }
     rows = [{"subject_id": sid, "cluster_id": cid,
              **dict(zip(result["network_names"], result["network_profiles"][s, c].tolist(), strict=True))}
-            for s, sid in enumerate(result["subject_ids"]) for c, cid in enumerate(result["cluster_ids"])]
+            for s, sid in enumerate(result["subject_ids"]) for c, cid in enumerate(result["cluster_ids"])
+            if (sid, cid) not in excluded]
     write_tsv(paths["input_table"], rows, ["subject_id", "cluster_id", *result["network_names"]])
     paths["coefficient_figure"] = out_dir / f"{out_prefix}_coefficients.png"
     fig = plot_network_ovr(result)

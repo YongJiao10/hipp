@@ -171,7 +171,7 @@ def write_table(path, rows):
         writer.writerows(rows)
 
 
-def annotate(out, labels, subjects, shared_root, ts_root, ref_root, masks, smoothing, hemi):
+def annotate(out, labels, subjects, shared_root, ts_root, ref_root, masks, smoothing, hemi, *, observed_profiles=None):
     profiles, mean_profile, roi_registry, used_subjects = atlas.cluster_roi_profile_subjectwise(
         group_labels_final=labels, support_mask=labels > 0, subjects=subjects,
         shared_root=shared_root, surface_root=ts_root, reference_root=ref_root,
@@ -184,6 +184,7 @@ def annotate(out, labels, subjects, shared_root, ts_root, ref_root, masks, smoot
         roi_profile_3d=profiles, subjects=used_subjects,
         cluster_ids=sorted(int(label) for label in np.unique(labels) if label > 0),
         roi_registry=roi_registry, variants=["ovr_logistic_canonical7"], out_dir=out,
+        observed_profiles=observed_profiles,
     )
     return dominant, ovr["ovr_logistic_canonical7"]["dominant"]
 

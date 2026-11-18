@@ -89,9 +89,12 @@ Pass the fitted output and the same route selection to
 label GIFTIs into the standard hippocampal panels. Per-condition
 `fit_failures.json` records failures to satisfy the prespecified fit for
 a fold. Paired scores use folds where both methods in that contrast produced
-a usable map. OVR requires one observed profile for each participant and parcel.
-The experiment records any ineligible maps in `network_annotation_unavailable.json`
-and still computes both Fisher-z annotations where the parcel has observations.
+a usable map. For this experiment, both OVR variants fit the observed
+subject–parcel rows. The individual validity mask identifies wholly
+unobserved parcels before either fit. A failed feature within an observed
+row remains an error. The model metadata names any excluded rows and the
+input TSV lists the exact fitting rows. The NPY profiles retain the original
+subject-by-parcel axes.
 
 To show the recovered Shen solutions in this experiment, pass
 `--shen-diagnostic <directory>` to the same annotation script. The selected
@@ -100,8 +103,7 @@ affected CtxReg route. The script labels those partitions using their observed
 parcel count and saves those annotations alongside the diagnostic GIFTIs.
 Repeat the command with `--render-only` to regenerate the five overviews with
 the two occupied parcels marked as diagnostic. The renderer reuses the
-existing successful panels and leaves unavailable OVR hemispheres blank
-with an explanation. Fold scores and the fixed-K failure records continue
+existing successful panels and identifies unavailable OVR hemispheres in historical runs. Fold scores and the fixed-K failure records continue
 to describe the original comparison.
 
 ## Hard Rules

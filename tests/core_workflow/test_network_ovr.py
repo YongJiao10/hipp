@@ -74,6 +74,57 @@ def test_missing_network_values_identify_subject_cluster_and_network(inputs):
         ovr.fit_network_ovr(profiles, subjects, clusters, registry, taxonomy="canonical7")
 
 
+@pytest.mark.parametrize("feature_source", ["roi", "network_ts"])
+def test_ovr_excludes_only_declared_missing_subject_cluster_rows(inputs, tmp_path, feature_source):
+    import csv
+    import json
+
+    profiles, subjects, clusters, registry = inputs
+    names = list(ovr.canonical_families_7_order())
+    observed = np.ones(profiles.shape[:2], dtype=bool)
+    observed[4, 1] = False
+    profiles[4, 1] = np.nan
+    if feature_source == "roi":
+        result = ovr.fit_network_ovr(
+            profiles, subjects, clusters, registry, taxonomy="canonical7", observed_profiles=observed,
+        )
+    else:
+        network = profiles[..., :len(names)]
+        result = ovr.fit_network_ovr_from_network_profiles(
+            network, subjects, clusters, names, observed_profiles=observed,
+        )
+
+    x = result["network_profiles"][observed]
+    y = np.broadcast_to(clusters, observed.shape)[observed]
+    expected = OneVsRestClassifier(LogisticRegression(
+        solver="liblinear", C=1., tol=1e-4, max_iter=1000,
+    )).fit(x, y)
+    np.testing.assert_allclose(
+        result["beta"], [expected.estimators_[list(expected.classes_).index(c)].coef_[0] for c in clusters],
+    )
+    np.testing.assert_allclose(result["feature_sd"], x.std(axis=0))
+    paths = ovr.export_network_ovr(result, tmp_path)
+    with paths["input_table"].open() as handle:
+        fitting_rows = list(csv.DictReader(handle, delimiter="\t"))
+    assert [(row["subject_id"], int(row["cluster_id"])) for row in fitting_rows] == [
+        (subjects[i], clusters[j]) for i, j in np.argwhere(observed)
+    ]
+    metadata = json.loads(paths["metadata"].read_text())
+    assert metadata["n_observations"] == 35
+    assert metadata["excluded_subject_cluster_rows"] == [{"subject_id": subjects[4], "cluster_id": clusters[1]}]
+    assert np.isnan(np.load(paths["network_profiles"])[4, 1]).all()
+
+
+def test_ovr_observation_mask_cannot_omit_measured_profiles():
+    data = np.ones((3, 2, 2))
+    observed = np.ones(data.shape[:2], dtype=bool)
+    observed[0, 0] = False
+    with pytest.raises(ValueError, match="excluded profiles must be wholly missing"):
+        ovr.fit_network_ovr_from_network_profiles(
+            data, ["s1", "s2", "s3"], [1, 2], ["a", "b"], observed_profiles=observed,
+        )
+
+
 def test_partial_roi_missingness_preserves_existing_nanmean_semantics(inputs):
     profiles, subjects, clusters, registry = inputs
     profiles[:, :, 0] = np.nan

@@ -11,16 +11,32 @@ import numpy as np
 
 from lib import kong2022_label_utils
 from lib.network_colors import require_network_colors
-from network_annotation import OVR_NET_TS, OVR_ROI, annotate_partition
+from network_annotation import annotate_partition
 from compare_subject_models import METHODS, SENSITIVITY
 
 PRIMARY_METHODS = {"shen_joint": "Shen joint spectral", "hierarch_bayes": "HierarchBayesParcel"}
 SHEN_DIAGNOSTIC_ROUTES = ("pfm_ctxreg_10mm", "pfm_ctxreg")
 
 
+def annotate_fit(run, labels, subjects, fc_root, ts_root, ref_root, masks, smoothing, hemi,
+                 names, registry, colors):
+    cluster_ids = np.unique(labels[labels > 0])
+    observed = np.asarray([
+        [np.any(masks[sub] & (labels == cid)) for cid in cluster_ids] for sub in subjects
+    ], dtype=bool)
+    baseline.annotate(
+        run, labels, subjects, fc_root, ts_root, ref_root, masks, smoothing, hemi,
+        observed_profiles=observed,
+    )
+    return annotate_partition(
+        run, subjects, ts_root, ref_root, masks, smoothing, hemi, names, registry, colors,
+        observed_profiles=observed,
+    )
+
+
 def annotate(out, routes, methods):
     atlas = baseline.atlas
-    table, unavailable = [], []
+    table = []
     for route in routes:
         route_root = out / route
         settings = json.loads((route_root / "run_settings.json").read_text())
@@ -49,29 +65,9 @@ def annotate(out, routes, methods):
                     print(f"[{route} {smoothing} {hemi}] annotating {method}", flush=True)
                     run = condition / method
                     labels = np.load(run / "group_labels_final.npy")
-                    missing = [
-                        (sub, cid) for sub, mask in masks.items() for cid in range(1, baseline.K + 1)
-                        if not np.any(mask & (labels == cid))
-                    ]
-                    if missing:
-                        _, mean_profile, _, _ = atlas.cluster_roi_profile_subjectwise(
-                            group_labels_final=labels, support_mask=labels > 0, subjects=subjects,
-                            shared_root=Path(settings["fc_root"]), surface_root=ts_root,
-                            reference_root=reference_root, smoothing=smoothing, hemi=hemi,
-                            valid_masks_by_subject=masks,
-                        )
-                        np.save(run / "cluster_roi_profile.npy", mean_profile)
-                        unavailable.append({
-                            "route": route, "smoothing": smoothing, "hemisphere": hemi, "method": method,
-                            "variants": [OVR_NET_TS, OVR_ROI], "missing_subject_parcels": missing,
-                        })
-                        print(f"  OVR requires the full roster, missing {len(missing)} subject-parcel rows", flush=True)
-                    else:
-                        baseline.annotate(run, labels, subjects, Path(settings["fc_root"]), ts_root,
-                                          reference_root, masks, smoothing, hemi)
-                    variants = annotate_partition(
-                        run, subjects, ts_root, reference_root, masks, smoothing, hemi, names, registry, colors,
-                        include_ovr=not missing,
+                    variants = annotate_fit(
+                        run, labels, subjects, Path(settings["fc_root"]), ts_root,
+                        reference_root, masks, smoothing, hemi, names, registry, colors,
                     )
                     for variant, rows in variants.items():
                         for row in rows:
@@ -82,7 +78,7 @@ def annotate(out, routes, methods):
                                 "score": row.get("top1_beta" if variant.startswith("ovr_") else "top1_fisher_z"),
                             })
     baseline.write_table(out / "network_labels.tsv", table)
-    (out / "network_annotation_unavailable.json").write_text(json.dumps(unavailable, indent=2) + "\n")
+    (out / "network_annotation_unavailable.json").write_text("[]\n")
 
 
 def annotate_shen_diagnostics(out, routes, diagnostic):
@@ -111,12 +107,11 @@ def annotate_shen_diagnostics(out, routes, diagnostic):
         }
         print(f"[{route} 2mm L] annotating the converged Shen diagnostic", flush=True)
         np.save(run / "group_labels_final.npy", labels)
-        baseline.annotate(run, labels, subjects, Path(settings["fc_root"]), ts_root,
-                          ref_root, masks, "2mm", "L")
-        annotate_partition(run, subjects, ts_root, ref_root, masks, "2mm", "L", names, registry, colors)
+        annotate_fit(run, labels, subjects, Path(settings["fc_root"]), ts_root,
+                     ref_root, masks, "2mm", "L", names, registry, colors)
 
 
-def render(out, routes, *, shen_diagnostic=None):
+def render(out, routes, *, shen_diagnostic=None, variants=None):
     from figure import render_panel
     from PIL import Image
     import matplotlib.pyplot as plt
@@ -141,8 +136,9 @@ def render(out, routes, *, shen_diagnostic=None):
         settings = json.loads((out / route / "run_settings.json").read_text())
         for smoothing in settings["smoothing"]:
             columns.append((route, smoothing, settings["surfaces"]))
-    variants = {None: "Parcels ordered along the hippocampal long axis", **VARIANTS}
-    for variant, title in variants.items():
+    titles = {None: "Parcels ordered along the hippocampal long axis", **VARIANTS}
+    for variant in titles if variants is None else variants:
+        title = titles[variant]
         fig, axes = plt.subplots(len(PRIMARY_METHODS), len(columns), squeeze=False,
                                  figsize=(2.7 * len(columns) + 1, 6.7), layout="constrained")
         for col, (route, smoothing, surfaces) in enumerate(columns):

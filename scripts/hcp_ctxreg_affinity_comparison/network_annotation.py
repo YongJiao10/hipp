@@ -33,17 +33,16 @@ def network_label_path(run: Path, variant: str) -> Path:
     return run / f"group_functional_atlas_labels_{variant}.label.gii"
 
 
-def annotate_partition(run, subjects, ts_root, reference_root, masks, smoothing, hemi, network_names, registry, colors, *, include_ovr=True):
+def annotate_partition(run, subjects, ts_root, reference_root, masks, smoothing, hemi, network_names, registry, colors, *, observed_profiles=None):
     partitions = np.load(run / "group_labels_final.npy")
     cluster_ids = sorted(int(key) for key in np.unique(partitions) if key > 0)
     roi_mean = np.load(run / "cluster_roi_profile.npy")
-    if include_ovr:
-        roi_model = json.loads((run / "network_ovr_canonical7.json").read_text())
-        if (
-            roi_model["subject_ids"] != subjects or roi_model["cluster_ids"] != cluster_ids
-            or roi_model["network_names"] != network_names or roi_model["taxonomy"] != TAXONOMY
-        ):
-            raise ValueError(f"ROI OVR input order differs from the fitted partition: {run}")
+    roi_model = json.loads((run / "network_ovr_canonical7.json").read_text())
+    if (
+        roi_model["subject_ids"] != subjects or roi_model["cluster_ids"] != cluster_ids
+        or roi_model["network_names"] != network_names or roi_model["taxonomy"] != TAXONOMY
+    ):
+        raise ValueError(f"ROI OVR input order differs from the fitted partition: {run}")
 
     _, roi_status, _ = atlas.assignment_status_from_kong2022_roi_profile(
         roi_mean, registry, network_names, network_column=TAXONOMY,
@@ -59,13 +58,15 @@ def annotate_partition(run, subjects, ts_root, reference_root, masks, smoothing,
     np.save(run / "cluster_network_ts_profile.npy", mean_profile)
     network_status, _ = assignment_status_from_weighted_network_profile(mean_profile, network_names)
     statuses = {"network_ts_fisherz": network_status, "fisherz": roi_status}
-    if include_ovr:
-        network_model = fit_network_ovr_from_network_profiles(
-            profiles, used_subjects, cluster_ids, network_names, taxonomy=TAXONOMY,
-        )
-        export_network_ovr(network_model, run, prefix=OVR_NET_TS)
-        statuses[OVR_NET_TS] = network_model["assignment_rows"]
-        statuses[OVR_ROI] = roi_model["assignment_rows"]
+    network_model = fit_network_ovr_from_network_profiles(
+        profiles, used_subjects, cluster_ids, network_names, taxonomy=TAXONOMY,
+        observed_profiles=observed_profiles,
+    )
+    if roi_model.get("excluded_subject_cluster_rows", []) != network_model.get("excluded_subject_cluster_rows", []):
+        raise ValueError(f"ROI and weighted time-series OVR used different subject–parcel rows: {run}")
+    export_network_ovr(network_model, run, prefix=OVR_NET_TS)
+    statuses[OVR_NET_TS] = network_model["assignment_rows"]
+    statuses[OVR_ROI] = roi_model["assignment_rows"]
     for variant, rows in statuses.items():
         if [int(row["cluster_id"]) for row in rows] != cluster_ids:
             raise ValueError(f"Cluster order differs for {variant}: {run}")

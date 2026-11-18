@@ -4962,13 +4962,16 @@ def requested_ovr_variants(variants: list[str], *, atlas: str, method: str) -> l
 
 def build_ovr_assignment_specs(*, roi_profile_3d: np.ndarray, subjects: list[str],
                               cluster_ids: list[int], roi_registry: list[dict],
-                              variants: list[str], out_dir: Path) -> dict[str, dict]:
+                              variants: list[str], out_dir: Path, observed_profiles=None) -> dict[str, dict]:
     specs = {}
     for variant in variants:
         if variant not in OVR_VARIANTS:
             continue
         taxonomy = variant.removeprefix("ovr_logistic_")
-        model = fit_network_ovr(roi_profile_3d, subjects, cluster_ids, roi_registry, taxonomy=taxonomy)
+        model = fit_network_ovr(
+            roi_profile_3d, subjects, cluster_ids, roi_registry, taxonomy=taxonomy,
+            observed_profiles=observed_profiles,
+        )
         paths = export_network_ovr(model, out_dir)
         specs[variant] = {
             "status_rows": model["assignment_rows"],
