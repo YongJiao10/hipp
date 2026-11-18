@@ -128,6 +128,7 @@ def render_hippocampal_grid(
     right_surface: Path,
     legend_display_names: dict[str, str] | None = None,
     surface_cache_root: Path | None = None,
+    unavailable: tuple[str, ...] = (),
 ) -> dict[str, str]:
     """Render the selected subject surfaces and label GIFTIs with BrainSpace."""
     os.environ.setdefault("LP_NUM_THREADS", "1")
@@ -177,6 +178,7 @@ def render_hippocampal_grid(
         out=final_png,
         scale=2,
         adaptive_legend=True,
+        unavailable=unavailable,
     )
     return {"surface_png": str(native_png), "biglegend_png": str(final_png)}
 

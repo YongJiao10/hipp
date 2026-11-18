@@ -25,10 +25,14 @@ def partition_directory(out, route, smoothing, hemi, method):
     return out / route / smoothing / f"hemi_{hemi}" / method
 
 
-def render_panel(out, route, smoothing, method, surfaces, variant, *, unavailable=()):
+def render_panel(
+    out, route, smoothing, method, surfaces, variant, *, unavailable=(), label_paths=None,
+):
     panel_root = out / "panels" / route / smoothing / method / (variant or "clusters")
 
     def label_path(hemi):
+        if label_paths is not None and hemi in label_paths:
+            return label_paths[hemi]
         if hemi in unavailable:
             import nibabel as nib
             import numpy as np
@@ -54,9 +58,21 @@ def render_panel(out, route, smoothing, method, surfaces, variant, *, unavailabl
         right_labels=label_path("R"),
         left_surface=surfaces["L"],
         right_surface=surfaces["R"],
+        unavailable=unavailable,
     )
-    with Image.open(render["surface_png"]) as image:
-        return build_2x2_composite(image.convert("RGBA"))
+    native = Path(render["surface_png"])
+    with Image.open(native) as image:
+        rgba = image.convert("RGBA")
+    panel = build_2x2_composite(rgba, unavailable=unavailable)
+    if unavailable:
+        # The native render establishes the standard crop dimensions.
+        # Clear the missing side in the exported native image as well.
+        mid = rgba.width // 2
+        for hemi in unavailable:
+            box = (0, 0, mid, rgba.height) if hemi == "L" else (mid, 0, rgba.width, rgba.height)
+            rgba.paste((255, 255, 255, 255), box)
+        rgba.save(native)
+    return panel
 
 
 def render_comparison(out: Path, route_names, cluster_colors):

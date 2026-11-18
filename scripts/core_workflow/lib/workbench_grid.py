@@ -131,7 +131,7 @@ def trim_bounding_box(img: Image.Image) -> Image.Image:
     return img.crop((cmin, rmin, cmax + 1, rmax + 1))
 
 
-def build_2x2_composite(native_im: Image.Image) -> Image.Image:
+def build_2x2_composite(native_im: Image.Image, *, unavailable: tuple[str, ...] = ()) -> Image.Image:
     """Crop and assemble the dorsal and ventral views of both hemispheres."""
     arr = np.array(native_im)
     v_l_front = trim_bounding_box(Image.fromarray(arr[: arr.shape[0] // 2, : arr.shape[1] // 2]))
@@ -141,7 +141,9 @@ def build_2x2_composite(native_im: Image.Image) -> Image.Image:
 
     target_h = max(v_l_front.height, v_r_front.height, v_l_back.height, v_r_back.height)
     scaled = []
-    for v in [v_l_front, v_r_front, v_l_back, v_r_back]:
+    for hemi, v in zip(("L", "R", "L", "R"), (v_l_front, v_r_front, v_l_back, v_r_back), strict=True):
+        if hemi in unavailable:
+            v = Image.new("RGBA", v.size, (255, 255, 255, 255))
         sc = target_h / float(v.height)
         sw = max(1, int(round(v.width * sc)))
         scaled.append(v.resize((sw, target_h), Image.Resampling.LANCZOS))
@@ -224,9 +226,14 @@ def build_grid_canvas(
     layout: str,
     bg_color: tuple[int, int, int, int] = (255, 255, 255, 255),
     scale: int = 1,
+    unavailable: tuple[str, ...] = (),
 ) -> Image.Image:
     ventral_panels = split_native_hemi_panels(ventral.convert("RGBA"))
     dorsal_panels = split_native_hemi_panels(dorsal.convert("RGBA")) if dorsal is not None else None
+    for hemi in unavailable:
+        ventral_panels[hemi] = Image.new("RGBA", ventral_panels[hemi].size, bg_color)
+        if dorsal_panels is not None:
+            dorsal_panels[hemi] = Image.new("RGBA", dorsal_panels[hemi].size, bg_color)
 
     row_gap = 48 * scale
     col_gap = 64 * scale
@@ -303,10 +310,11 @@ def compose_wb_grid_with_legend(
     legend_display_names: dict[str, str] | None = None,
     scale: int = 1,
     adaptive_legend: bool = False,
+    unavailable: tuple[str, ...] = (),
 ) -> Path:
     ventral = Image.open(ventral_image).convert("RGBA")
     dorsal = Image.open(dorsal_image).convert("RGBA") if dorsal_image else None
-    grid = build_grid_canvas(ventral, dorsal, layout, bg_color=bg_color, scale=scale)
+    grid = build_grid_canvas(ventral, dorsal, layout, bg_color=bg_color, scale=scale, unavailable=unavailable)
     img_w, img_h = grid.size
 
     left_vals, left_table = load_labels(left_labels)
@@ -326,8 +334,8 @@ def compose_wb_grid_with_legend(
             group_props[group_name] = group_props.get(group_name, 0.0) + prop
         return group_props
 
-    left_group_props = get_group_props(left_vals)
-    right_group_props = get_group_props(right_vals)
+    left_group_props = {} if "L" in unavailable else get_group_props(left_vals)
+    right_group_props = {} if "R" in unavailable else get_group_props(right_vals)
 
     group_colors: dict[str, tuple[int, int, int, int]] = {}
     for _key, (label_name, rgba) in style.items():
@@ -363,6 +371,10 @@ def compose_wb_grid_with_legend(
     left_title = f"{title_text} (Left)" if title_text else "Left"
     left_title_lines = wrap_text(measure_draw, left_title, title_font, max(panel_w - 2 * side_pad, 1))
     right_title = f"{title_text} (Right)" if title_text else "Right"
+    if "L" in unavailable:
+        left_title += " · unavailable"
+    if "R" in unavailable:
+        right_title += " · unavailable"
     right_title_lines = wrap_text(measure_draw, right_title, title_font, max(panel_w - 2 * side_pad, 1))
 
     top_pad = 20 * scale

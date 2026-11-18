@@ -181,7 +181,8 @@ def annotate(out, labels, subjects, shared_root, ts_root, ref_root, masks, smoot
     network_names = atlas.canonical_families_7_order()
     _, _, dominant = atlas.assignment_status_from_kong2022_roi_profile(mean_profile, roi_registry, network_names)
     ovr = atlas.build_ovr_assignment_specs(
-        roi_profile_3d=profiles, subjects=used_subjects, cluster_ids=list(range(1, K + 1)),
+        roi_profile_3d=profiles, subjects=used_subjects,
+        cluster_ids=sorted(int(label) for label in np.unique(labels) if label > 0),
         roi_registry=roi_registry, variants=["ovr_logistic_canonical7"], out_dir=out,
     )
     return dominant, ovr["ovr_logistic_canonical7"]["dominant"]

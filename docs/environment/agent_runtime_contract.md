@@ -93,6 +93,17 @@ a usable map. OVR requires one observed profile for each participant and parcel.
 The experiment records any ineligible maps in `network_annotation_unavailable.json`
 and still computes both Fisher-z annotations where the parcel has observations.
 
+To show the recovered Shen solutions in this experiment, pass
+`--shen-diagnostic <directory>` to the same annotation script. The selected
+directory contains the exact `shen_converged_hemi-L.label.gii` for each
+affected CtxReg route. The script labels those partitions using their observed
+parcel count and saves those annotations alongside the diagnostic GIFTIs.
+Repeat the command with `--render-only` to regenerate the five overviews with
+the two occupied parcels marked as diagnostic. The renderer reuses the
+existing successful panels and leaves unavailable OVR hemispheres blank
+with an explanation. Fold scores and the fixed-K failure records continue
+to describe the original comparison.
+
 ## Hard Rules
 
 - Never run repository Python tasks with bare `python`.
