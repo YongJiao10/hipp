@@ -417,7 +417,13 @@ correlation for that vertex pair. TopSim sparsification follows aggregation
 in both arms. The mean-FC arm averages Fisher-z FC before computing Pearson.
 
 The comparison exports cluster label GIFTIs, aligned gradients, descriptive
-canonical7 Fisher-z and OVR annotations, and five paired subject half-splits.
+Kong2022 canonical7 network labels, and five paired subject half-splits.
+The four annotation variants are ROI Fisher-z, grayordinate-weighted network
+time-series Fisher-z, and OVR from each of these two feature sets. The weighted
+variant combines cortical ROI time series using their valid grayordinate
+counts before correlating with hippocampal cluster time series. The ROI variant
+correlates each ROI separately and then averages Fisher-z within networks.
+Each OVR model uses the largest strictly positive raw coefficient for labeling.
 Each half is fitted independently, then its maps score the other half.
 Each held-out score subtracts the mean Pearson similarity of neighboring
 vertices across parcel boundaries from that of neighboring vertices within
@@ -439,8 +445,12 @@ surfaces. It uses the standard BrainSpace hippocampal grid and the HCP CtxReg
 2×2 composite. The top row shows dorsal views and the bottom row shows ventral
 views, with the left and right hemispheres side by side. It writes
 `comparison.tsv` and `ctxreg_affinity_averaging.png` in the selected experiment
-directory. Pass the absolute experiment path to `--out` to render from a
-separate worktree. The 10 mm FC root must contain the complete roster. Generate
+directory, alongside four variant-suffixed PNGs and `network_labels.tsv`.
+Each network panel names the assigned networks in C1 to C3 order for each
+hemisphere. To annotate an existing experiment, run `compare.py --out <dir>
+--annotate-only --mask-root <shared surface root>` before rendering. Pass
+`--kong2022-dlabel <path>` when running from a worktree without the atlas asset.
+Pass the absolute experiment path to `--out` to render from a separate worktree. The 10 mm FC root must contain the complete roster. Generate
 missing FC inputs with Stage `04_01` from the 10 mm residuals,
 the Standard PFM cortical references and shared hippocampal validity masks.
 

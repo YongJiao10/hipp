@@ -286,14 +286,27 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", required=True, type=Path)
     parser.add_argument("--ctxreg-10mm-fc-root", type=Path)
-    parser.add_argument("--render-only", action="store_true", help="Combine fitted route results and render the side-by-side figure.")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--render-only", action="store_true", help="Render existing partitions and network labels.")
+    mode.add_argument("--annotate-only", action="store_true", help="Add network labels to existing partitions.")
+    parser.add_argument("--mask-root", type=Path, help="Shared valid-vertex masks used by the existing partitions.")
+    parser.add_argument("--kong2022-dlabel", type=Path, help="Explicit Kong2022 400-ROI atlas asset.")
     parser.add_argument("--routes", nargs="+", choices=tuple(ROUTES), default=list(ROUTES))
     args = parser.parse_args()
     out = args.out.resolve()
+    if args.kong2022_dlabel is not None:
+        atlas.KONG2022_DLABEL_OVERRIDE = args.kong2022_dlabel.resolve(strict=True)
     if args.render_only:
         from figure import render_comparison
 
         render_comparison(out, {route: ROUTES[route] for route in args.routes}, CLUSTER_COLORS)
+        return
+    if args.annotate_only:
+        from network_annotation import annotate_comparison
+
+        if args.mask_root is None:
+            parser.error("--annotate-only requires the experiment's --mask-root")
+        annotate_comparison(out, args.routes, COMBOS, METHODS, args.mask_root.resolve())
         return
     if not out.is_relative_to(REPO_ROOT / "tmp"):
         parser.error("--out must be under the repository tmp directory")
@@ -321,6 +334,10 @@ def main():
     for route in args.routes:
         run_route(route, out / route, subjects, ctxreg_10mm_fc_root,
                   masks, surfaces, adjacency, axis_order, edges)
+
+    from network_annotation import annotate_comparison
+
+    annotate_comparison(out, args.routes, COMBOS, METHODS, gradients.DEFAULT_SURFACE_ROOT)
 
 
 if __name__ == "__main__":
