@@ -22,13 +22,14 @@ The former CtxDrop branch (excluding local cortex from the ROI targets) is retir
 
 ## 2. Layout and modalities
 
-The top block shows 2mm and the bottom block 4mm hippocampal smoothing; each block has one row per branch (Standard, CtxReg 10 mm, CtxReg 20 mm) and one column per modality.
+The top block shows 2mm and the bottom block 4mm hippocampal smoothing; each block has one row per branch (Standard, CtxReg 10 mm, CtxReg 20 mm) and one column per modality (Fisher-z, OvR, normalized top-20, WTA).
 
-Gradient panels read the formal HCP gradient run shared with the multi-dataset renderers (`HCP_KONG_GRADIENT_RUN` in `scripts/visualize/lib/multidataset_cohorts.py`: the TopSim profile and its primary Ward partition, `group_atlas/<branch>/topsim/gradient-ward/kong2022/<smoothing>/cov_0p80/g1g2g3/`). WTA panels read `group_atlas/<branch>/wta-top/kong2022/<smoothing>/cov_0p80/`.
+Gradient panels read the formal HCP gradient run shared with the multi-dataset renderers (`HCP_KONG_GRADIENT_RUN` in `scripts/visualize/lib/multidataset_cohorts.py`: the TopSim profile and its primary Ward partition, `group_atlas/<branch>/topsim/gradient-ward/kong2022/<smoothing>/cov_0p80/g1g2g3/`). All three gradient columns use the same Ward K = 3 clusters and differ only in the network annotation. WTA panels read the clusterless `group_atlas/<branch>/wta-top/kong2022/<smoothing>/cov_0p80/`.
 
 1. **Gradient clustering — positive Fisher-z FC profiles**: 4-view Workbench composite of the k=3 clusters labelled by dominant positive Fisher-z network, with left/right stacked bars of positive Fisher-z per canonical7 network for C1 (anterior), C2 (middle) and C3 (posterior). The Fisher-z axis is scaled per branch.
-2. **Gradient clustering — normalized top-20 network recruitment (%)**: clusters labelled by normalized top-20 count, with stacked bars of the normalized top-20 composition per subregion (counts divided by each network's available ROIs).
-3. **WTA parcellation — 20 long-axis bins (%)**: canonical7 vertex assignments and the network composition of 20 anterior-to-posterior bins.
+2. **Gradient clustering — OvR logistic model (network time-series features)**: the same clusters labelled by the descriptive one-vs-rest logistic model `ovr_logistic_canonical7_network_ts`, whose features are subject-by-cluster Fisher-z FC with each canonical7 network time series. Stacked bars show the positive raw coefficients per network; the label is the largest strictly positive raw coefficient (`cluster_assignment_status_ovr_logistic_canonical7_network_ts.json`). The coefficient axis is scaled per branch. The ROI-feature OvR (`ovr_logistic_canonical7`) agrees closely (coefficient profiles median r = 0.99 across branches, smoothings, hemispheres and clusters; 35 of 36 labels identical, the exception being CtxReg 10 mm, 2mm, right C1: DMN vs SMN with near-tied coefficients) and is reported in the group overviews.
+3. **Gradient clustering — normalized top-20 network recruitment (%)**: clusters labelled by normalized top-20 count, with stacked bars of the normalized top-20 composition per subregion (counts divided by each network's available ROIs).
+4. **WTA parcellation — 20 long-axis bins (%)**: canonical7 vertex assignments and the network composition of 20 anterior-to-posterior bins.
 
 Network abbreviations: DMN default mode, SMN somatomotor, VAN ventral attention, DAN dorsal attention, CON control, LAN language, VN visual (Kong2022 canonical7).
 
@@ -36,8 +37,8 @@ Network abbreviations: DMN default mode, SMN somatomotor, VAN ventral attention,
 
 ## 3. Outputs
 
-- `hcp_cortex_control_gradient_wta.png`: the combined 2mm/4mm figure (49 in wide; 2.25 in header, 4.8 in per row for six rows, 1.35 in legend zone).
-- `stats/hcp_cortex_control_gradient_wta_stats.tsv`: plotted values with `branch` and `smoothing` columns.
+- `hcp_cortex_control_gradient_wta.png`: the combined 2mm/4mm figure (about 64 in wide for four columns; 2.25 in header, 4.8 in per row for six rows, 1.35 in legend zone).
+- `stats/hcp_cortex_control_gradient_wta_stats.tsv`: plotted values with `branch` and `smoothing` columns; modalities `gradient_fisherz`, `gradient_ovr_network_ts` (positive raw coefficients; `margin` holds the winning coefficient), `gradient_top20` and `wta_longaxis`.
 
 ---
 
