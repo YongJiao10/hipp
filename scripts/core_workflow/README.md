@@ -337,8 +337,8 @@ explicitly when a controlled signal root is separate.
 - Kong2022 gradient overviews of a three-cluster partition add a column of
   cluster-to-cortex FC tiles (C1 Anterior, C2 Middle, C3 Posterior). Each tile
   shows the left/right mean of the run's `cluster_roi_profile.npy` on the
-  inflated cortex (`RdBu_r`, unclipped piecewise-linear scale with a 0.15
-  Fisher-z knee spanning the figure's own range) with its ten most positive and
+  inflated cortex (`RdBu_r`, linear and zero-centred, saturating beyond the
+  90th percentile of |Fisher-z| across the figure's three tiles) with its ten most positive and
   ten most negative ROIs. `lib/cortex_fc_tiles.py` draws the tile for the
   overview and for the multi-dataset hippocampus/cortex figure. Family17
   gradient overviews use the same 400-ROI cortical profiles and column;

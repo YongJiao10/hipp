@@ -86,9 +86,10 @@ from lib.cluster_roi_profile_contract import (
     atlas_produces_cluster_roi_profile,
 )
 from lib.cortex_fc_tiles import (
-    COLORBAR_LABEL,
     DEFAULT_CMAP,
     SURFACE_SIZE,
+    cortex_fc_colorbar_kwargs,
+    cortex_fc_colorbar_label,
     cortex_fc_norm,
     render_cortex_fc_tile,
     style_cortex_fc_colorbar,
@@ -1499,9 +1500,10 @@ def draw_cluster_cortex_fc(fig, cell, profile: np.ndarray, *, stacked: bool, lab
     cbar = fig.colorbar(
         ScalarMappable(norm=norm, cmap=DEFAULT_CMAP),
         ax=axes, orientation="horizontal", shrink=0.45, fraction=0.04, pad=0.015, aspect=32,
+        **cortex_fc_colorbar_kwargs(norm),
     )
     style_cortex_fc_colorbar(cbar, norm, fontsize=FS_TICK)
-    cbar.set_label(COLORBAR_LABEL, fontsize=FS_LABEL, fontweight="bold")
+    cbar.set_label(cortex_fc_colorbar_label(norm), fontsize=FS_LABEL, fontweight="bold")
     return surface_records
 
 
