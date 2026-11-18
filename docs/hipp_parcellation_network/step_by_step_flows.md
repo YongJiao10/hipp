@@ -5,7 +5,7 @@ This is the execution-ordered flow for active workflows. The first numeric field
 ## Canonical HCP Shared-Input Paths
 
 The maintained Kong2022 branch names are cohort-independent: `pfm`,
-`surface`, `fixed`, and `pfm_ctxreg`. Current commands use
+`surface`, `fixed`, `pfm_ctxreg`, and `pfm_ctxreg_10mm`. Current commands use
 canonical roots directly; no migration utility is part of the active workflow.
 
 ## 1. HippUnfold Runtime and Validation
@@ -56,12 +56,19 @@ not itself specify the physical coordinate frame.
 
 ## 4. Hippocampal Time-Series Control and FC Materialization
 
-1. `04_00_materialize_cortex_regressed_surface_timeseries.py` for the isolated `kong2022_pfm_ctxreg` branch
+1. `04_00_materialize_cortex_regressed_surface_timeseries.py` for the isolated `kong2022_pfm_ctxreg` (20 mm) and `kong2022_pfm_ctxreg_10mm` (10 mm) branches
 2. `04_01_materialize_kong2022_roi_fc.py --dataset hcp`
 3. `04_01_materialize_kong2022_roi_fc.py --dataset hcp --atlas lynch2024_20net` and `--atlas lynch2024_7net` for Lynch2024 ROI/component FC caches
 4. `04_02_materialize_intrinsic_fc.py`
 
-`04_00` regresses local valid cortex signal from hippocampal time series within each run segment and writes only controlled time series plus diagnostics under the formal root `outputs_hcp/inputs/kong2022/shared_inputs/pfm_ctxreg`. PFM references and `surface` masks are not copied; downstream `04_01` and `04_02` write FC into the controlled root while reading those static inputs via `--reference-root` and `--mask-root`, so FC filenames remain unchanged but isolated from PFM.
+`04_00` regresses, within each run segment, the mean of valid cortex within a native T1w radius out of each hippocampal vertex series and writes only controlled time series plus diagnostics under the route's formal root `outputs_hcp/inputs/kong2022/shared_inputs/<route>`. `--route-tag {pfm_ctxreg,pfm_ctxreg_10mm}` (default `pfm_ctxreg`) selects the route; `--distance-mm` defaults to the route's radius (20 mm for `pfm_ctxreg`, 10 mm for `pfm_ctxreg_10mm`; `lib/branch_config.CTXREG_ROUTE_DISTANCE_MM`) and a different value is rejected, and `--out-shared-root` defaults to the route's formal root. 10 mm is the smallest radius at which essentially every hippocampal vertex has cortex in range and matches the 6-10 mm range of earlier subcortical work; its regressor is mostly default-mode network (DMN), so the two routes bracket the same boundary-signal removal, stronger at 10 mm. Both are conservative sensitivity analyses. PFM references and `surface` masks are not copied; downstream `04_01` and `04_02` write FC into the controlled root while reading those static inputs via `--reference-root` and `--mask-root`, so FC filenames remain unchanged but isolated from PFM.
+
+Cortex-control time series and Kong2022 FC for the 10 mm route; the 20 mm route uses the same commands with `pfm_ctxreg` in place of `pfm_ctxreg_10mm`:
+
+```bash
+/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/04_00_materialize_cortex_regressed_surface_timeseries.py --route-tag pfm_ctxreg_10mm --jobs 10
+/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/04_01_materialize_kong2022_roi_fc.py --dataset hcp --shared-root outputs_hcp/inputs/kong2022/shared_inputs/pfm_ctxreg_10mm --surface-root outputs_hcp/inputs/kong2022/shared_inputs/pfm_ctxreg_10mm --reference-root outputs_hcp/inputs/kong2022/shared_inputs/pfm --mask-root outputs_hcp/inputs/kong2022/shared_inputs/surface --jobs 10
+```
 
 All pooled FC removes each declared run mean at computation time, while stored baselines and run variances are preserved. Empty Kong2022 parcels retain all 400 ordered rows as NaN. Kong2022 FC consumers require matching dataset/task/QC policy and cutoff in the selected reference and both cortex gate summaries. Run IDs and lengths come from the exact reference summary or a caller-selected metadata file; historical untyped references must be rebuilt.
 
@@ -91,17 +98,23 @@ Kong2022 HippoMaps gradient artifact example. The exact diffusion-map solver tak
 
 ```bash
 /home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/05_01_compute_hippomaps_gradients.py --routes pfm fixed --smoothings 2mm 4mm --hemis L R --n-components 5 --selected-components 1,2,3
-/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/05_01_compute_hippomaps_gradients.py --routes pfm_ctxreg --shared-inputs-root outputs_hcp/inputs/kong2022/shared_inputs --reference-inputs-root outputs_hcp/inputs/kong2022/shared_inputs/pfm --surface-root outputs_hcp/inputs/kong2022/shared_inputs/surface --out-root outputs_hcp/work/hippomaps_gradients --smoothings 2mm 4mm --hemis L R --n-components 5 --selected-components 1,2,3
 ```
 
 Kong2022 PFM and Fixed group clustering example:
 
 ```bash
-/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/05_02_run_group_atlas.py --shared-root outputs_hcp/inputs/kong2022/shared_inputs/pfm_ctxreg --surface-root outputs_hcp/inputs/kong2022/shared_inputs/surface --profile-surface-root outputs_hcp/inputs/kong2022/shared_inputs/pfm_ctxreg --reference-root outputs_hcp/inputs/kong2022/shared_inputs/pfm --out-root outputs_hcp/work/group_atlas/pfm_ctxreg --methods gradient-spectral wta-top --atlases kong2022 --gradient-root outputs_hcp/work/hippomaps_gradients --route-tag pfm_ctxreg --network-taxonomy canonical7 --k-min 2 --k-max 8 --default-k 3
 /home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/05_02_run_group_atlas.py --shared-root outputs_hcp/inputs/kong2022/shared_inputs/fixed --surface-root outputs_hcp/inputs/kong2022/shared_inputs/surface --out-root outputs_hcp/work/group_atlas/fixed --methods intrinsic-spectral network-spectral gradient-spectral wta-top --atlases kong2022 --gradient-root outputs_hcp/work/hippomaps_gradients --route-tag fixed --k-min 2 --k-max 8 --default-k 3
 /home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/05_02_run_group_atlas.py --shared-root outputs_hcp/inputs/kong2022/shared_inputs/pfm --surface-root outputs_hcp/inputs/kong2022/shared_inputs/surface --reference-root outputs_hcp/inputs/kong2022/shared_inputs/pfm --out-root outputs_hcp/work/group_atlas/pfm_17net/topsim --methods gradient-ward --profile topsim --atlases kong2022 --gradient-root outputs_hcp/work/hippomaps_gradients --route-tag pfm_17net --network-taxonomy family17 --reuse-fixed-cluster-root outputs_hcp/work/group_atlas/pfm/topsim --k-min 2 --k-max 8 --default-k 3
 /home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/05_02_run_group_atlas.py --shared-root outputs_hcp/inputs/kong2022/shared_inputs/pfm --surface-root outputs_hcp/inputs/kong2022/shared_inputs/surface --reference-root outputs_hcp/inputs/kong2022/shared_inputs/pfm --out-root outputs_hcp/work/group_atlas/pfm_17net --methods wta-top --atlases kong2022 --route-tag pfm_17net --network-taxonomy family17
 /home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/05_02_run_group_atlas.py --shared-root outputs_hcp/inputs/kong2022/shared_inputs/fixed --surface-root outputs_hcp/inputs/kong2022/shared_inputs/surface --reference-root outputs_hcp/inputs/kong2022/shared_inputs/fixed --out-root outputs_hcp/work/group_atlas/fixed_17net --methods gradient-spectral --atlases kong2022 --gradient-root outputs_hcp/work/hippomaps_gradients --route-tag fixed_17net --network-taxonomy family17 --reuse-fixed-cluster-root outputs_hcp/work/group_atlas/fixed --k-min 2 --k-max 8 --default-k 3
+```
+
+Kong2022 cortex-control routes keep TopSim gradients and two group-atlas products: `topsim/gradient-ward` and `wta-top`. For a ctxreg route, `05_02` annotates cluster-network profiles from the residual time series under its shared root by default and rejects any other `--profile-surface-root`. Commands for the 10 mm route; the 20 mm route uses the same commands with `pfm_ctxreg` in place of `pfm_ctxreg_10mm`:
+
+```bash
+/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/05_01_compute_hippomaps_gradients.py --routes pfm_ctxreg_10mm --profile topsim --shared-inputs-root outputs_hcp/inputs/kong2022/shared_inputs --reference-inputs-root outputs_hcp/inputs/kong2022/shared_inputs/pfm --surface-root outputs_hcp/inputs/kong2022/shared_inputs/surface --out-root outputs_hcp/work/hippomaps_gradients --smoothings 2mm 4mm --hemis L R --n-components 5 --selected-components 1,2,3
+/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/05_02_run_group_atlas.py --dataset outputs_hcp --shared-root outputs_hcp/inputs/kong2022/shared_inputs/pfm_ctxreg_10mm --surface-root outputs_hcp/inputs/kong2022/shared_inputs/surface --reference-root outputs_hcp/inputs/kong2022/shared_inputs/pfm --out-root outputs_hcp/work/group_atlas/pfm_ctxreg_10mm/topsim --methods gradient-ward --profile topsim --atlases kong2022 --gradient-root outputs_hcp/work/hippomaps_gradients --route-tag pfm_ctxreg_10mm --network-taxonomy canonical7 --k-min 2 --k-max 8 --default-k 3
+/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/05_02_run_group_atlas.py --dataset outputs_hcp --shared-root outputs_hcp/inputs/kong2022/shared_inputs/pfm_ctxreg_10mm --surface-root outputs_hcp/inputs/kong2022/shared_inputs/surface --reference-root outputs_hcp/inputs/kong2022/shared_inputs/pfm --out-root outputs_hcp/work/group_atlas/pfm_ctxreg_10mm --methods wta-top --atlases kong2022 --route-tag pfm_ctxreg_10mm --network-taxonomy canonical7
 ```
 
 Kong2022 WTA runs use the single `normalized_top20_count` assignment. For the
@@ -147,11 +160,18 @@ These products are derived from group atlas and gradient work and can be refresh
 /home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/06_07_render_local_cortex_control_diagnostics.py --stage all --jobs 10
 ```
 
+Cortex-control overviews are rendered once per smoothing (`<sm>` is `2mm` or `4mm`) into `outputs_hcp/present/overviews/<route>/{topsim/gradient-ward,wta-top}/<sm>/`. Commands for the 10 mm route; the 20 mm route uses the same commands with `pfm_ctxreg` in place of `pfm_ctxreg_10mm`:
+
+```bash
+/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/06_01_build_group_overview.py --group-root outputs_hcp/work/group_atlas/pfm_ctxreg_10mm/topsim --present-dir outputs_hcp/present/overviews/pfm_ctxreg_10mm/topsim/gradient-ward/<sm> --methods gradient-ward --atlases kong2022 --route-tag pfm_ctxreg_10mm --smoothing <sm>
+/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/06_01_build_group_overview.py --group-root outputs_hcp/work/group_atlas/pfm_ctxreg_10mm --present-dir outputs_hcp/present/overviews/pfm_ctxreg_10mm/wta-top/<sm> --atlases kong2022 --methods wta-top --coverage-threshold 0.80 --route-tag pfm_ctxreg_10mm --assignment-variant normalized_top20_count --smoothing <sm>
+```
+
 ## 7. Presentation Index
 
 1. `07_01_build_group_matrix.py`
 
-`07_01` reads refreshed `06_01` method overviews from canonical group-atlas roots, including `pfm_17net`, `pfm_ctxreg`, `fixed`, and `fixed_17net` when requested, writes each PNG under `outputs_hcp/present/overviews/<route>/`, and writes `outputs_hcp/present/overviews/group_overview_matrix_manifest.json` plus the overview README at the stage root. WTA matrix jobs include `pfm_17net` and `fixed_17net`; request only routes whose `wta-top` products exist. The WTA-top overview itself contains the fixed 20-bin transposed long-axis network profile. Use `--methods` to restrict exports to completed methods (for example `gradient-spectral wta-top`).
+`07_01` reads refreshed `06_01` method overviews from canonical group-atlas roots, including `pfm_17net`, `pfm_ctxreg`, `pfm_ctxreg_10mm`, `fixed`, and `fixed_17net` when requested, writes each PNG under `outputs_hcp/present/overviews/<route>/`, and writes `outputs_hcp/present/overviews/group_overview_matrix_manifest.json` plus the overview README at the stage root. WTA matrix jobs include `pfm_17net` and `fixed_17net`; request only routes whose `wta-top` products exist. The WTA-top overview itself contains the fixed 20-bin transposed long-axis network profile. Use `--methods` to restrict exports to completed methods (for example `gradient-spectral wta-top`).
 
 ## Utilities
 

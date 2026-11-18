@@ -4,7 +4,7 @@ Kong2022 gradient and WTA products consume the ordered 400-parcel profile from e
 
 Canonical7 network time series and FC are summaries only. The materializer writes them to `hipp_vertex_to_canonical7_fc.npy` and `_active.npy`. They are available to network-spectral diagnostics and do not enter the Kong gradient bank. Gradient Fisher-z and normalized_top20_count annotations reuse the same spatial clusters; Fisher-z averages the 400 ROI profile by the selected taxonomy, while normalized_top20_count takes at most 20 ROI columns and divides counts by the total ROI count in each taxonomy network.
 
-The `05_01` manifest records `feature_family: kong2022_400roi_fc`, `feature_count: 400`, `group_fc_shape`, and the ordered registry evidence. `05_02` rejects missing or stale gradient output paths and rejects Kong manifests without the 400-column evidence. The cortex-control route `pfm_ctxreg` uses the same contract after its route-specific time-series construction. The former ctxdrop control branch is retired; target-side local-cortex exclusion is quantified only by the `06_07_render_local_cortex_control_diagnostics.py` FC/WTA diagnostic, which uses the same ordered 400-ROI registry and the `normalized_top20_count` rule but feeds no group atlas.
+The `05_01` manifest records `feature_family: kong2022_400roi_fc`, `feature_count: 400`, `group_fc_shape`, and the ordered registry evidence. `05_02` rejects missing or stale gradient output paths and rejects Kong manifests without the 400-column evidence. The cortex-control routes `pfm_ctxreg` (20 mm) and `pfm_ctxreg_10mm` (10 mm) use the same contract after their route-specific time-series construction. The former ctxdrop control branch is retired; target-side local-cortex exclusion is quantified only by the `06_07_render_local_cortex_control_diagnostics.py` FC/WTA diagnostic, which uses the same ordered 400-ROI registry and the `normalized_top20_count` rule but feeds no group atlas.
 
 ## Cortex controls: preserve the standard annotation statistic
 
@@ -19,7 +19,9 @@ manifest must all record the same cluster-mean statistic.
 
 Stage boundaries remain explicit: ctxreg removes the local cortical regressor
 in `04_00`; its `--profile-surface-root` must point to those residual time
-series, and every non-ctxreg route must not read them. Do not invent a
+series under the route's shared root (the `05_02` default for both ctxreg
+routes; any other value is rejected), and every non-ctxreg route must not read
+them. Do not invent a
 union-of-spheres or another cluster-level exclusion policy as part of
 annotation.
 
