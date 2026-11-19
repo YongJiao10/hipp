@@ -6,8 +6,10 @@ import subprocess
 from pathlib import Path
 
 
+from .output_layout import DATA_ROOT
+
 REPO_ROOT = Path(__file__).resolve().parents[3]
-DEFAULT_WB_COMMAND = REPO_ROOT / "software" / "workbench" / "bin_linux64" / "wb_command"
+DEFAULT_WB_COMMAND = DATA_ROOT / "software" / "workbench" / "bin_linux64" / "wb_command"
 ENV_WB_COMMAND = "CORE_WORKFLOW_WB_COMMAND"
 ENV_WB_THREADS = "CORE_WORKFLOW_WB_THREADS"
 WORKBENCH_THREAD_ENV_KEYS = (

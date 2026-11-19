@@ -25,6 +25,18 @@ Iowa derived cortex surfaces and their explicitly selected manifest belong in
 Lynch PFM concatenates explicit run inputs in memory. Worktree asset links and
 parent-directory output fallbacks are not part of the formal runtime contract.
 
+## Side-worktree data access
+
+The untracked `outputs_*`, `data/`, `external/` and `software/` trees exist only
+in the main checkout. A side worktree reads them by exporting
+`HIPP_DATA_CHECKOUT=/home/yojiao/hpchome/hipp` (`lib/output_layout.py`
+`DATA_ROOT`); the default dataset roots, Kong2022 atlas, HippoMaps source,
+Workbench binary and cortical display data then resolve there. Tracked `config/`
+and code stay with the worktree. With this setting `05_02` accepts only
+`--comparison-output` runs under the worktree's own `tmp/`, and `06_01` needs an
+explicit `--present-dir` there. Recorded input paths are the main checkout's
+real paths. Leave the variable unset in the main checkout.
+
 ## Hippocampal figure runtime
 
 Hippocampal label panels use the existing py314 BrainSpace 0.2.1 and VTK 9.6.1
@@ -105,6 +117,19 @@ Repeat the command with `--render-only` to regenerate the five overviews with
 the two occupied parcels marked as diagnostic. The renderer reuses the
 existing successful panels and identifies unavailable OVR hemispheres in historical runs. Fold scores and the fixed-K failure records continue
 to describe the original comparison.
+
+### K-estimated participant-graph runs
+
+`multigraph-spectral` and `mean-graph-spectral` run through `05_02` and `06_01`
+on the py314 stack with single-threaded numerical pools; `--jobs` sets the
+number of K values evaluated together. From the experimental worktree export
+`HIPP_DATA_CHECKOUT`, pass each route's `--shared-root` under the main
+checkout's `outputs_hcp/inputs/kong2022/shared_inputs/`, and write to
+`tmp/<comparison>/group_atlas/<route>` so the route is read from the output
+root. The commands and K rule are in the
+[workflow guide](../../scripts/core_workflow/README.md#participant-graph-spectral-methods).
+Render each method and smoothing with `xvfb-run -a` and an explicit
+`--present-dir`.
 
 ## Hard Rules
 

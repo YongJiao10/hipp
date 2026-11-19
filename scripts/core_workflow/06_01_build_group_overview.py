@@ -55,6 +55,7 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 from nibabel.gifti import GiftiDataArray, GiftiImage, GiftiLabel, GiftiLabelTable
 
 from lib.output_layout import (
+    DATA_ROOT,
     ANNOTATION_PAIR_BY_ASSIGNMENT_VARIANT,
     DEFAULT_OVERVIEWS_DIR,
     DEFAULT_GRADIENT_COMPONENTS,
@@ -94,7 +95,10 @@ from lib.cortex_fc_tiles import (
     style_cortex_fc_colorbar,
 )
 from lib.cortex_template_profiles import cortex_asset_paths, resolve_cortex_assets
-from lib.cortex_overview_cache import bilateral_cluster_roi_profile, cortex_surface_cache_paths, store_cortex_surface
+from lib.cortex_overview_cache import (
+    bilateral_cluster_roi_profile, cortex_surface_cache_paths, hemisphere_cluster_roi_profiles, store_cortex_surface,
+)
+from lib.multigraph_spectral import MEAN_GRAPH_METHOD, MULTIGRAPH_METHOD, MULTIGRAPH_METHODS
 from lib.kong2022_label_utils import KONG2022_MERGE_CONFIG, load_kong2022_bundle
 from lib.workbench import resolve_wb_command
 from lib.gifti_labels import (
@@ -124,7 +128,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_GROUP_ROOT = DEFAULT_ROUTEA_GROUP_ATLAS_ROOT
 DEFAULT_PRESENT_DIR = DEFAULT_OVERVIEWS_DIR
 CORTEX_SCENE = REPO_ROOT / "config" / "manual_wb_scenes" / "cortex_manual.scene"
-CORTEX_DATA_ROOT = REPO_ROOT / "data" / "hippunfold_input"
+CORTEX_DATA_ROOT = DATA_ROOT / "data" / "hippunfold_input"
 CORTEX_DISPLAY_SUBJECT = "100610"
 CLUSTER_CORTEX_TITLE_COLORS = ("#d95f02", "#1b9e77", "#7570b3")
 # Width in inches of the cluster cortical-FC column: three tiles stacked over two rows, or side by side in one row.
@@ -145,6 +149,8 @@ METHOD_CHOICES = [
     "gradient-gmm",
     "gradient-spectral-rbf",
     "intrinsic-spectral",
+    MULTIGRAPH_METHOD,
+    MEAN_GRAPH_METHOD,
     "wta-top",
 ]
 METHODS_DEFAULT = [
@@ -401,6 +407,11 @@ def validate_kong_wta_taxonomy(
 
 def _is_gradient_method(method: str) -> bool:
     return is_gradient_method(method)
+
+
+def _uses_cluster_annotation_contract(method: str) -> bool:
+    """Methods whose Kong2022 runs publish the validated cluster-assignment variants and ROI profile."""
+    return is_gradient_method(method) or method in MULTIGRAPH_METHODS
 
 
 def _build_run_dir(
@@ -1452,13 +1463,23 @@ def plot_wta_overview_profile_axis(
 
 
 def draw_cluster_cortex_fc(fig, cell, profile: np.ndarray, *, stacked: bool, label: str, profile_paths: list[Path],
-                           show_header: bool = True) -> list[dict[str, object]]:
-    """Draw one run's three cluster-to-cortex FC tiles in a grid cell, with their shared colour bar.
+                           show_header: bool = True, tile_titles: list[str] | None = None) -> list[dict[str, object]]:
+    """Draw one run's cluster-to-cortex FC tiles in a grid cell, with their shared colour bar.
 
+    The default is the three Anterior/Middle/Posterior tiles. ``tile_titles`` names one tile per
+    profile row for runs that export another number of parcels.
     Returns one record per cluster saying whether its Workbench surface was reused from the cache or rendered.
     """
     bundle = load_kong2022_bundle()
-    grid = cell.subgridspec(3, 1, hspace=0.03) if stacked else cell.subgridspec(1, 3, wspace=0.02)
+    if tile_titles is None:
+        tile_titles = [f"C{index + 1} {name} (L/R mean)" for index, name in enumerate(KONG2022_CLUSTER_PROFILE_SUBREGIONS)]
+    n_tiles = len(tile_titles)
+    if len(profile) != n_tiles:
+        raise ValueError(f"Cluster-to-cortex FC column has {len(profile)} profile rows for {n_tiles} tiles")
+    tile_columns = 1 if n_tiles <= 4 else 2
+    tile_rows = -(-n_tiles // tile_columns)
+    grid = (cell.subgridspec(tile_rows, tile_columns, hspace=0.03, wspace=0.02) if stacked
+            else cell.subgridspec(1, n_tiles, wspace=0.02))
     axes = []
     norm = cortex_fc_norm(profile)
     cache_root = REPO_ROOT / "tmp" / "overview_cortex_surfaces"
@@ -1467,12 +1488,13 @@ def draw_cluster_cortex_fc(fig, cell, profile: np.ndarray, *, stacked: bool, lab
     library = REPO_ROOT / "scripts" / "core_workflow" / "lib"
     code = [library / name for name in ("cortex_fc_tiles.py", "cortex_template_profiles.py", "render_cortex_pfm_scene.py",
                                         "workbench.py", "kong2022_label_utils.py", "gifti_labels.py")]
-    cached = cortex_surface_cache_paths(cache_root=cache_root, inputs=inputs, code=code, size=SURFACE_SIZE)
+    cached = cortex_surface_cache_paths(cache_root=cache_root, inputs=inputs, code=code, size=SURFACE_SIZE, count=n_tiles)
     surface_records: list[dict[str, object]] = []
     with tempfile.TemporaryDirectory(prefix="present_group_cortex_tiles_", dir=REPO_ROOT / "tmp") as tmp:
         assets = (resolve_cortex_assets(CORTEX_DISPLAY_SUBJECT, CORTEX_DATA_ROOT, CORTEX_SCENE, sulc_dir=Path(tmp) / "sulc")
                   if any(path is None for path in cached) else {})
-        for index, (name, color) in enumerate(zip(KONG2022_CLUSTER_PROFILE_SUBREGIONS, CLUSTER_CORTEX_TITLE_COLORS, strict=True)):
+        for index, tile_title in enumerate(tile_titles):
+            color = CLUSTER_CORTEX_TITLE_COLORS[index % len(CLUSTER_CORTEX_TITLE_COLORS)]
             tile = render_cortex_fc_tile(
                 panel_tag=f"cluster{index + 1}", values=profile[index], roi_registry=bundle["roi_registry"],
                 vertex_arrays=bundle["vertex_arrays"], cortex_assets=assets, panels_dir=Path(tmp),
@@ -1487,10 +1509,10 @@ def draw_cluster_cortex_fc(fig, cell, profile: np.ndarray, *, stacked: bool, lab
                 "profile_paths": [str(path) for path in profile_paths], "cluster": index + 1,
                 "surface_png": str(surface), "status": "rendered" if cached[index] is None else "reused",
             })
-            ax = fig.add_subplot(grid[index, 0] if stacked else grid[0, index])
+            ax = fig.add_subplot(grid[index // tile_columns, index % tile_columns] if stacked else grid[0, index])
             ax.imshow(plt.imread(tile))
             ax.axis("off")
-            ax.set_title(f"{label} C{index + 1} {name} (L/R mean)".strip(), fontsize=FS_TITLE, fontweight="bold", color=color)
+            ax.set_title(f"{label} {tile_title}".strip(), fontsize=FS_TITLE, fontweight="bold", color=color)
             if show_header and index == (0 if stacked else 1):
                 ax.annotate("Cluster-to-cortex FC", xy=(0.5, 1.0), xycoords="axes fraction",
                             xytext=(0, 24), textcoords="offset points", ha="center", va="bottom",
@@ -1624,13 +1646,14 @@ def render_combo(
     if method in CLUSTERLESS_METHODS and str(atlas) == "kong2022":
         validate_kong_wta_taxonomy(manifest_paths, source_manifests, route_tag)
     assignment_validation_results: dict[tuple[str, str, str], dict[str, object]] = {}
-    if atlas == "kong2022" and _is_gradient_method(method):
-        for path in manifest_paths:
-            validate_group_atlas_lineage(
-                path,
-                expected_network_taxonomy=kong_network_taxonomy_for_route(route_tag),
-                expected_method=method,
-            )
+    if atlas == "kong2022" and _uses_cluster_annotation_contract(method):
+        if _is_gradient_method(method):
+            for path in manifest_paths:
+                validate_group_atlas_lineage(
+                    path,
+                    expected_network_taxonomy=kong_network_taxonomy_for_route(route_tag),
+                    expected_method=method,
+                )
         # Validate all declared assignment variants before constructing any
         # surface/profile panel. The renderer never repairs or substitutes a
         # gradient assignment asset.
@@ -1658,7 +1681,20 @@ def render_combo(
     shared_run = layout == "annotation-pair"
     cortex_stacked = shared_run and len(row_specs) == 2
     cortex_profiles: list[np.ndarray] = []
-    if _is_gradient_method(method) and atlas_produces_cluster_roi_profile(atlas):
+    cortex_tile_titles: list[str] | None = None
+    if method in MULTIGRAPH_METHODS and atlas_produces_cluster_roi_profile(atlas) and shared_run:
+        # K is estimated per hemisphere for these methods, so the column shows every exported parcel.
+        hemisphere_profiles = hemisphere_cluster_roi_profiles(manifest_paths[:2], source_manifests[:2])
+        if hemisphere_profiles is not None:
+            left_profile, right_profile = hemisphere_profiles
+            if left_profile.shape == right_profile.shape:
+                cortex_profiles = [np.mean(hemisphere_profiles, axis=0)]
+                cortex_tile_titles = [f"C{i + 1} (L/R mean)" for i in range(len(left_profile))]
+            else:
+                cortex_profiles = [np.vstack(hemisphere_profiles)]
+                cortex_tile_titles = [f"{side} C{i + 1}" for side, profile in (("Left", left_profile), ("Right", right_profile))
+                                      for i in range(len(profile))]
+    elif _is_gradient_method(method) and atlas_produces_cluster_roi_profile(atlas):
         run_slices = [slice(0, 2)] if shared_run else [slice(2 * i, 2 * i + 2) for i in range(len(row_specs))]
         profiles = [bilateral_cluster_roi_profile(manifest_paths[run], source_manifests[run]) for run in run_slices]
         if all(profile is not None for profile in profiles):
@@ -1701,7 +1737,7 @@ def render_combo(
         d_l = left_manifest.parent
         d_r = right_manifest.parent
         if method not in CLUSTERLESS_METHODS and effective_assignment_variant == "fisherz":
-            if not (atlas == "kong2022" and _is_gradient_method(method)):
+            if not (atlas == "kong2022" and _uses_cluster_annotation_contract(method)):
                 m_l = ensure_functional_label_consistency(left_manifest, m_l)
                 m_r = ensure_functional_label_consistency(right_manifest, m_r)
         if method in CLUSTERLESS_METHODS:
@@ -1909,7 +1945,7 @@ def render_combo(
                 f"Missing assignment variant functional labels for {method} {atlas} {smoothing_val} variant={effective_assignment_variant}: "
                 f"left={left_label_variant} right={right_label_variant}"
             )
-        if _is_gradient_method(method) and atlas == "kong2022":
+        if _uses_cluster_annotation_contract(method) and atlas == "kong2022":
             validated_l = assignment_validation_results[(str(smoothing_val), "L", effective_assignment_variant)]
             validated_r = assignment_validation_results[(str(smoothing_val), "R", effective_assignment_variant)]
         elif _is_gradient_method(method):
@@ -2179,7 +2215,8 @@ def render_combo(
     cortex_surface_records: list[dict[str, object]] = []
     if cortex_profiles and shared_run:
         cortex_surface_records += draw_cluster_cortex_fc(fig, gs[:, 2], cortex_profiles[0], stacked=cortex_stacked, label="",
-                               profile_paths=[p.parent / "cluster_roi_profile.npy" for p in manifest_paths[:2]])
+                               profile_paths=[p.parent / "cluster_roi_profile.npy" for p in manifest_paths[:2]],
+                               tile_titles=cortex_tile_titles)
     else:
         for ridx, profile in enumerate(cortex_profiles):
             cortex_surface_records += draw_cluster_cortex_fc(fig, gs[ridx, 2], profile, stacked=False, label="" if layout == "single-smoothing" else row_specs[ridx][1],
@@ -2530,7 +2567,7 @@ def main() -> int:
                 if method in CLUSTERLESS_METHODS:
                     raise ValueError("--annotation-pair is not supported for WTA")
                 render_specs = [("annotation-pair", args.annotation_pair, None)]
-            elif _is_gradient_method(method) and atlas == "kong2022":
+            elif _uses_cluster_annotation_contract(method) and atlas == "kong2022":
                 requested = str(args.assignment_variant)
                 taxonomy = kong_network_taxonomy_for_route(args.route_tag)
                 if requested.startswith("ovr_logistic_") and not requested.startswith(f"ovr_logistic_{taxonomy}"):

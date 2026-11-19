@@ -11,8 +11,10 @@ from typing import Any, Callable
 import numpy as np
 
 
+from .output_layout import DATA_ROOT
+
 REPO_ROOT = Path(__file__).resolve().parents[3]
-DEFAULT_HIPPOMAPS_ROOT = REPO_ROOT / "external" / "hippomaps"
+DEFAULT_HIPPOMAPS_ROOT = DATA_ROOT / "external" / "hippomaps"
 GRADIENT_EIGENSOLVER = "symmetric_eigh"
 DIFFUSION_ALPHA = 0.5
 

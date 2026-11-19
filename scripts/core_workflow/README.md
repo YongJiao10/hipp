@@ -377,9 +377,57 @@ candidate. Small clusters are reported, never rebalanced.
 Stage `05_02` supports `--k-selection-mode fixed-comparison --k-min 3 --k-max 3`.
 This exports only the requested K and its diagnostics, leaves automatic K unset,
 and treats data and fitting errors as fatal. To write a dataset comparison to
-repository `tmp/`, also pass `--comparison-output --dataset outputs_hcp` and an
-explicit output root; consumed source roots must belong to that dataset. Formal
-output routing is unchanged and the revision comparison does not replace it.
+repository `tmp/`, pass `--comparison-output --dataset outputs_hcp` and an
+explicit output root with either K-selection mode; consumed source roots must
+belong to that dataset. Formal output routing is unchanged and a comparison does
+not replace it.
+
+`--automatic-primary-k` exports the automatically chosen K as the primary
+partition, in place of the `--default-k 3` display default. A combination in
+which no K passes the gates is recorded as `skipped_no_k_survived_constraints`
+and has no overview. `--k-final-rule` sets how the automatic K is taken from the
+candidates that pass the minimum-size, connectedness, coherence and redundancy
+gates. `smallest-stable` (default) takes the smallest split-half ARI local
+maximum within one standard error of the best. `largest-admissible` takes the
+largest passing K; split-half ARI is then reported as a diagnostic and does not
+decide K. The manifest records the rule as `k_final_rule`.
+
+`--undersized-default-k-fallback <K>` applies to a `--default-k` primary
+partition. When the default-K partition has a parcel below the minimum parcel
+size, the declared fallback K is exported in its place, provided that partition
+meets the size gate; otherwise the run stops. The manifest records
+`primary_k_source: default_k_undersized_fallback` and the replaced K as
+`undersized_default_k`. The participant-graph comparison uses `--default-k 3
+--undersized-default-k-fallback 2` with `--redundancy-threshold 0.80`.
+
+### Participant-graph spectral methods
+
+`multigraph-spectral` and `mean-graph-spectral` (`lib/multigraph_spectral.py`)
+are Kong2022-only methods outside the production defaults. Each participant's
+subject feature is the Pearson similarity between the Fisher-z 400-ROI
+fingerprints of that participant's valid vertices. The affinity keeps positive
+weights among each vertex's top 10% neighbours and uses no mesh constraint.
+`multigraph-spectral` (Shen et al., 2013) embeds every participant's graph
+separately and fits one shared partition with one rotation per participant.
+`mean-graph-spectral` averages the participant affinities edgewise and applies
+the same discretization once. A disconnected participant or mean graph stops
+the run with the participant and component sizes.
+
+Both methods use the standard K scan (K = 2..8, at most eight spectral
+coordinates). The lowest-loss solution of ten seeded starts is exported for
+each K as fitted, so an unsupported K appears as an empty or undersized parcel
+and fails the minimum-size gate. Split-half and null repetitions in which a
+half assigns all shared vertices to one parcel are counted as skipped. The
+coherence gate uses the cosine of each vertex's K spectral coordinates to its
+parcel centroid within each fitted graph. Annotation, OVR and manifests follow
+the gradient cluster contract; `06_01` renders the same annotation-pair
+overviews, and its cluster-to-cortex column shows every exported parcel (L/R
+mean when both hemispheres export the same K, otherwise per hemisphere).
+
+```bash
+/home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/05_02_run_group_atlas.py --comparison-output --dataset outputs_hcp --shared-root outputs_hcp/inputs/kong2022/shared_inputs/pfm --surface-root outputs_hcp/inputs/kong2022/shared_inputs/surface --reference-root outputs_hcp/inputs/kong2022/shared_inputs/pfm --out-root tmp/<comparison>/group_atlas/pfm --methods multigraph-spectral mean-graph-spectral --atlases kong2022 --route-tag pfm --network-taxonomy canonical7 --k-min 2 --k-max 8 --instability-resamples 20 --null-resamples 20 --default-k 3 --undersized-default-k-fallback 2 --k-final-rule largest-admissible --redundancy-threshold 0.80 --assignment-variant both network_ts_fisherz ovr_logistic_canonical7 ovr_logistic_canonical7_network_ts
+xvfb-run -a /home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/06_01_build_group_overview.py --group-root tmp/<comparison>/group_atlas/pfm --present-dir tmp/<comparison>/overviews/pfm/multigraph-spectral/2mm --methods multigraph-spectral --atlases kong2022 --route-tag pfm --smoothing 2mm --annotation-pair network-ts-fisherz
+```
 
 Explicit `--assignment-variant ovr_logistic_canonical7 ovr_logistic_family17`
 adds separate descriptive OVR models to the existing Fisher-z and normalized

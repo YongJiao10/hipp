@@ -54,8 +54,15 @@ def validate_cluster_roi_profile_manifest(
     *,
     profile_path: Path,
     profile_shape: tuple[int, ...],
+    n_clusters: int = len(KONG2022_CLUSTER_ORDER_HEAD_TO_TAIL),
 ) -> None:
-    """Fail closed unless a profile is registered with the canonical ordering."""
+    """Fail closed unless a profile is registered with the canonical ordering.
+
+    ``n_clusters`` is three for the Anterior/Middle/Posterior gradient contract.
+    A run whose K was estimated passes its own exported K.
+    """
+    expected_order = list(range(1, int(n_clusters) + 1))
+    expected_shape = (int(n_clusters), KONG2022_CLUSTER_ROI_PROFILE_SHAPE[1])
     if manifest.get("status") != "ok":
         raise ValueError(
             f"gradient ROI profile manifest status must be 'ok', got {manifest.get('status')!r}"
@@ -87,16 +94,16 @@ def validate_cluster_roi_profile_manifest(
             f"{KONG2022_CLUSTER_LABEL_ORDERING!r} for gradient ROI profiles"
         )
 
-    if manifest.get("cluster_order_head_to_tail") != list(KONG2022_CLUSTER_ORDER_HEAD_TO_TAIL):
+    if manifest.get("cluster_order_head_to_tail") != expected_order:
         raise ValueError(
             "cluster_order_head_to_tail must be "
-            f"{list(KONG2022_CLUSTER_ORDER_HEAD_TO_TAIL)!r}"
+            f"{expected_order!r}"
         )
 
-    if tuple(profile_shape) != KONG2022_CLUSTER_ROI_PROFILE_SHAPE:
+    if tuple(profile_shape) != expected_shape:
         raise ValueError(
             "canonical cluster_roi_profile shape must be "
-            f"{KONG2022_CLUSTER_ROI_PROFILE_SHAPE}, got {tuple(profile_shape)}"
+            f"{expected_shape}, got {tuple(profile_shape)}"
         )
 
 

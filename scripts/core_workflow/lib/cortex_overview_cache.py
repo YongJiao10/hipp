@@ -26,6 +26,22 @@ def bilateral_cluster_roi_profile(manifest_paths: list[Path], manifests: list[di
     return np.mean(profiles, axis=0)
 
 
+def hemisphere_cluster_roi_profiles(manifest_paths: list[Path], manifests: list[dict]) -> list[np.ndarray] | None:
+    """Read and validate each hemisphere's cluster ROI profile at that run's own exported K."""
+    if any(manifest.get("cluster_roi_profile") is None for manifest in manifests):
+        return None
+    profiles = []
+    for manifest_path, manifest in zip(manifest_paths, manifests, strict=True):
+        profile_path = manifest_path.parent / "cluster_roi_profile.npy"
+        profile = np.load(profile_path).astype(np.float64)
+        validate_cluster_roi_profile_manifest(
+            manifest, profile_path=profile_path, profile_shape=profile.shape,
+            n_clusters=int(manifest["chosen_k_final"]),
+        )
+        profiles.append(profile)
+    return profiles
+
+
 _RUNTIME_PACKAGES = ("numpy", "nibabel", "matplotlib", "Pillow")
 
 
@@ -55,7 +71,8 @@ def _write_atomically(directory: Path, destination: Path, suffix: str, data: byt
     os.replace(temporary, destination)
 
 
-def cortex_surface_cache_paths(*, cache_root: Path, inputs: list[Path], code: list[Path], size: tuple[int, int]) -> list[Path | None]:
+def cortex_surface_cache_paths(*, cache_root: Path, inputs: list[Path], code: list[Path], size: tuple[int, int],
+                               count: int = 3) -> list[Path | None]:
     """Return each valid cached surface, or None.
 
     A surface is valid only when its recorded dependency digest equals the current content digest of
@@ -64,7 +81,7 @@ def cortex_surface_cache_paths(*, cache_root: Path, inputs: list[Path], code: li
     directory = _cache_directory(cache_root, inputs)
     expected = _dependency_digest(inputs, code)
     result = []
-    for index in range(3):
+    for index in range(int(count)):
         candidate = directory / f"cluster{index + 1}.png"
         record = candidate.with_suffix(".png.sha256")
         valid = candidate.is_file() and record.is_file() and record.read_text(encoding="utf-8").strip() == expected

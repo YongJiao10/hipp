@@ -10,9 +10,11 @@ import nibabel as nib
 import numpy as np
 
 
+from .output_layout import DATA_ROOT
+
 REPO_ROOT = Path(__file__).resolve().parents[3]
 KONG2022_DLABEL_PATH = (
-    REPO_ROOT
+    DATA_ROOT
     / "external"
     / "Schaefer2018_Kong2022"
     / "Schaefer2018_400Parcels_Kong2022_17Networks_order.dlabel.nii"

@@ -5,8 +5,8 @@ from typing import Any
 
 from .output_layout import (
     DATASET_KEYS,
+    DATA_ROOT,
     DEFAULT_DATASET,
-    REPO_ROOT,
     resolve_hippunfold_batch_root,
     resolve_kong2022_template_root,
 )
@@ -68,7 +68,7 @@ def _resolve_manifest_path(raw: object | None) -> Path | None:
     if text == "" or text.lower() in {"none", "null"}:
         return None
     path = Path(text).expanduser()
-    return (path if path.is_absolute() else REPO_ROOT / path).resolve()
+    return (path if path.is_absolute() else DATA_ROOT / path).resolve()
 
 
 def _normal_subject(value: object | None) -> str | None:

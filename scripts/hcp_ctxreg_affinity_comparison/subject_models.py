@@ -1,146 +1,21 @@
 """Subject-level spectral and directional parcellation for the HCP comparison."""
-from dataclasses import dataclass
+import sys
+from pathlib import Path
 
 import numpy as np
-from scipy.linalg import eigh, helmert
-from scipy.sparse.csgraph import connected_components
+from scipy.linalg import helmert
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "core_workflow"))
+
+from lib.multigraph_spectral import (  # noqa: E402,F401  Shared with the group-atlas methods.
+    MAX_ITER, N_STARTS, SEED, Fit, FitError, hippocampal_affinity, mean_graph_coordinates,
+    shen_discretize, spectral_coordinates, subject_graphs,
+)
 
 
-SEED = 20260420
-N_STARTS = 10
-MAX_ITER = 200
 SCREEN_ITER = 30
 EM_TOLERANCE = 0.01
 HBP_REVISION = "d4031910ebd16e9013d756eef4d057ba7106d64c"
-
-
-class FitError(ValueError):
-    """A model cannot produce the prespecified fit on this condition and split."""
-
-
-@dataclass
-class Fit:
-    """Labels use 1-based parcels and 0 outside the observed mesh."""
-
-    labels: np.ndarray
-    diagnostics: dict
-    individual: np.ndarray | None = None
-    probability: np.ndarray | None = None
-    posterior: np.ndarray | None = None
-    directions: np.ndarray | None = None
-
-
-def hippocampal_affinity(similarity):
-    """Keep positive weights among the closest 10% of other vertices."""
-    n = len(similarity)
-    if n < 2 or not np.isfinite(similarity).all():
-        raise FitError("Undefined Pearson edge or fewer than two observed vertices")
-    weights = similarity.copy()
-    np.fill_diagonal(weights, -np.inf)
-    count = int(np.ceil(0.10 * (n - 1)))
-    neighbors = np.argsort(-weights, axis=1, kind="stable")[:, :count]
-    rows = np.arange(n)[:, None]
-    directed = np.zeros_like(weights)
-    directed[rows, neighbors] = np.maximum(weights[rows, neighbors], 0)
-    return (directed + directed.T) * 0.5
-
-
-def spectral_coordinates(affinity, vertices, k):
-    if len(vertices) < k:
-        raise FitError(f"Only {len(vertices)} graph vertices for K={k}")
-    degree = affinity.sum(axis=1, dtype=np.float64)
-    isolates = vertices[degree <= 0]
-    n_components, labels = connected_components(affinity, directed=False)
-    if n_components != 1 or isolates.size:
-        raise FitError(
-            f"Disconnected affinity on {len(vertices)} vertices, "
-            f"component sizes={np.bincount(labels).tolist()}, zero-degree vertices={isolates.tolist()}"
-        )
-    scale = degree**-0.5
-    normalized = affinity * scale[:, None] * scale[None, :]
-    n = len(vertices)
-    _, rows = eigh(normalized, subset_by_index=(n - k, n - 1), check_finite=False)
-    rows = rows[:, ::-1]
-    return rows / np.linalg.norm(rows, axis=1, keepdims=True)
-
-
-def subject_graphs(similarity, observed, support, subjects, k):
-    """Build each subject's graph on the common training support."""
-    affinities, coordinates = [], []
-    for matrix, mask, subject in zip(similarity, observed, subjects, strict=True):
-        vertices = np.flatnonzero(mask & support)
-        try:
-            weights = hippocampal_affinity(matrix[np.ix_(vertices, vertices)])
-            coords = spectral_coordinates(weights, vertices, k)
-        except FitError as exc:
-            raise FitError(f"Subject {subject}: {exc}") from exc
-        affinities.append((vertices, weights))
-        coordinates.append((vertices, coords))
-    return affinities, coordinates
-
-
-def mean_graph_coordinates(graphs, support, k):
-    total = np.zeros((support.size, support.size), dtype=np.float64)
-    count = np.zeros_like(total, dtype=np.int32)
-    for vertices, affinity in graphs:
-        ids = np.ix_(vertices, vertices)
-        total[ids] += affinity
-        count[ids] += 1
-    active = np.flatnonzero(support)
-    ids = np.ix_(active, active)
-    if not np.all(count[ids]):
-        raise FitError("A supported vertex pair has no observed contributors")
-    return active, spectral_coordinates(total[ids] / count[ids], active, k)
-
-
-def shen_discretize(embeddings, support, *, k, seed=SEED, n_starts=N_STARTS, max_iter=MAX_ITER):
-    """Choose a shared discrete partition and a rotation for each embedding."""
-    # Pad missing rows with zero so they add neither to the Procrustes cross
-    # product nor to the sum of aligned scores. The loss masks them separately.
-    n_subjects = len(embeddings)
-    coordinates = np.zeros((n_subjects, support.size, k), dtype=np.float64)
-    observed = np.zeros((n_subjects, support.size), dtype=bool)
-    for i, (vertices, rows) in enumerate(embeddings):
-        coordinates[i, vertices] = rows
-        observed[i, vertices] = True
-    if not np.array_equal(observed.any(axis=0), support):
-        raise FitError("The training support differs from the union of embedded vertices")
-    identity = np.eye(k)
-    rng = np.random.default_rng(seed)
-    failed = 0
-    best = None
-    for _ in range(n_starts):
-        # A single subject's spectral rotation seeds the shared labels.
-        pick = rng.integers(n_subjects)
-        rotation, _ = np.linalg.qr(rng.standard_normal((k, k)))
-        labels = (coordinates[pick] @ rotation).argmax(axis=1)
-        missing = support & ~observed[pick]
-        labels[missing] = rng.integers(k, size=missing.sum())
-        for iteration in range(1, max_iter + 1):
-            target = identity[labels]
-            left, _, right = np.linalg.svd(coordinates.transpose(0, 2, 1) @ target)
-            aligned = coordinates @ (left @ right)
-            update = aligned.sum(axis=0).argmax(axis=1)
-            if np.array_equal(labels[support], update[support]):
-                break
-            labels = update
-        else:
-            failed += 1
-            continue
-        if np.unique(labels[support]).size != k:
-            failed += 1
-            continue
-        loss = float(np.square(aligned[observed] - np.broadcast_to(target, aligned.shape)[observed]).sum())
-        if best is None or loss < best.diagnostics["loss"]:
-            best = Fit(
-                np.where(support, labels + 1, 0),
-                {"loss": loss, "iterations": iteration},
-                np.where(observed, aligned.argmax(axis=2) + 1, 0),
-            )
-    if best is None:
-        raise FitError(f"All {n_starts} spectral starts failed to reach a nonempty stable partition")
-    best.diagnostics["unusable_starts"] = failed
-    return best
 
 
 def unit_directions(fisher_z, observed, *, centered):

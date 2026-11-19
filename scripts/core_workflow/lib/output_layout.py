@@ -1,12 +1,33 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
 from .workflow_utils import utc_timestamp_for_filename
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
+DATA_CHECKOUT_ENV = "HIPP_DATA_CHECKOUT"
+
+
+def resolve_data_root(environ: dict[str, str] | None = None) -> Path:
+    """Return the checkout that holds the untracked dataset, data, external and software trees.
+
+    It is this checkout unless ``HIPP_DATA_CHECKOUT`` names another one. A side
+    worktree sets it to read the main checkout's assets; such a process may
+    only write comparison outputs under its own ``tmp/``.
+    """
+    raw = (os.environ if environ is None else environ).get(DATA_CHECKOUT_ENV, "").strip()
+    if not raw:
+        return REPO_ROOT
+    root = Path(raw).expanduser()
+    if not root.is_absolute() or not root.is_dir():
+        raise ValueError(f"${DATA_CHECKOUT_ENV} must be an existing absolute checkout directory: {raw!r}")
+    return root.resolve()
+
+
+DATA_ROOT = resolve_data_root()
 LEGACY_WRONG_PATH_MAPPING_JSON = REPO_ROOT / "config" / "legacy_wrong_path_mapping.json"
 
 DATASET_KEYS = (
@@ -220,7 +241,7 @@ def _validate_dataset(dataset: str) -> str:
 
 def resolve_outputs_root(dataset: str = DEFAULT_DATASET) -> Path:
     """Return the dataset-scoped outputs root directory (e.g. outputs_hcp)."""
-    return REPO_ROOT / f"outputs_{_validate_dataset(dataset)}"
+    return DATA_ROOT / f"outputs_{_validate_dataset(dataset)}"
 
 
 def resolve_inputs_root(dataset: str = DEFAULT_DATASET) -> Path:

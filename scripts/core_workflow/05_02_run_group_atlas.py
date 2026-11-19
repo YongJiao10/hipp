@@ -127,6 +127,7 @@ from lib.kong2022_label_utils import (
 )
 from lib.lynch2024_reference import lynch2024_7net_reference_contract, lynch2024_20net_order
 from lib.output_layout import (
+    DATA_ROOT,
     DEFAULT_GROUP_ATLAS_ROOT,
     DEFAULT_HIPPOMAPS_GRADIENT_ROOT,
     DEFAULT_HIPPUNFOLD_BATCH_ROOT as CORE_HIPPUNFOLD_BATCH_ROOT,
@@ -179,6 +180,18 @@ from lib.gradient_clustering import (
     is_gradient_method as registered_gradient_method,
 )
 from lib.gifti_labels import make_cluster_label_gifti, make_named_label_gifti
+from lib.multigraph_spectral import (
+    AFFINITY_DESCRIPTION as MULTIGRAPH_AFFINITY_DESCRIPTION,
+    MAX_COORDINATES as MULTIGRAPH_MAX_COORDINATES,
+    MEAN_GRAPH_METHOD,
+    MULTIGRAPH_METHOD,
+    MULTIGRAPH_METHODS,
+    coordinate_stack,
+    discretize_stack,
+    observed_vertices,
+    stack_coherence,
+    vertex_similarity,
+)
 from lib.io_utils import load_subject_ids, load_json, write_tsv, load_run_segment_metadata
 from lib.group_atlas_lineage import validate_group_atlas_lineage, gradient_computation_provenance
 from lib.network_colors import load_cluster_palette, load_network_colors
@@ -230,6 +243,8 @@ METHOD_CHOICES = [
     "gradient-gmm",
     "gradient-spectral-rbf",
     "intrinsic-spectral",
+    MULTIGRAPH_METHOD,
+    MEAN_GRAPH_METHOD,
     "wta-top",
 ]
 METHODS_DEFAULT = [
@@ -244,7 +259,7 @@ DEFAULT_ATLASES = ["kong2022"]
 SMOOTHINGS = ["2mm", "4mm"]
 HEMIS = ["L", "R"]
 K_RANGE = list(range(2, 9))
-KONG2022_ONLY_METHODS = {"group-roi-sim-spectral"}
+KONG2022_ONLY_METHODS = {"group-roi-sim-spectral"} | MULTIGRAPH_METHODS
 LYNCH2024_METHODS = set(GRADIENT_METHODS) | {"wta-top"}
 CLUSTERLESS_METHODS = {"wta-top"}
 PROFILE_REDUNDANCY_MAX_SIM = 0.80
@@ -910,8 +925,13 @@ def is_roi_similarity_method(method: str) -> bool:
     return method == "group-roi-sim-spectral"
 
 
+def is_multigraph_method(method: str) -> bool:
+    """Participant-graph spectral methods; their subject feature is a vertex x vertex similarity."""
+    return method in MULTIGRAPH_METHODS
+
+
 def method_uses_network_fc_input(method: str) -> bool:
-    return is_gradient_method(method) or is_network_method(method) or method in ({"group-roi-sim-spectral", "gradient-spectral", "wta-top"} | GRADIENT_METHODS)
+    return is_gradient_method(method) or is_network_method(method) or method in ({"group-roi-sim-spectral", "gradient-spectral", "wta-top"} | GRADIENT_METHODS | MULTIGRAPH_METHODS)
 
 
 def is_lynch2024_atlas(atlas: str) -> bool:
@@ -1059,7 +1079,13 @@ def effective_k_values(k_values: list[int], *, n_support: int, v_min: int, mode:
 def validate_dataset_output_contract(out_root: Path, dataset: str, *, source_roots: list[Path],
                                      comparison: bool = False, repo_root: Path = REPO_ROOT) -> tuple[str, Path]:
     out, repo = Path(out_root).resolve(), Path(repo_root).resolve()
-    roots = {name: repo / name for name in ("outputs_hcp", "outputs_stanford", "outputs_iowa_jj_tms")}
+    data_root = DATA_ROOT if repo == REPO_ROOT.resolve() else repo
+    roots = {name: data_root / name for name in ("outputs_hcp", "outputs_stanford", "outputs_iowa_jj_tms")}
+    if data_root != repo and not comparison:
+        raise ValueError(
+            f"This checkout reads dataset trees from {data_root}; it may only write "
+            "--comparison-output runs under its own tmp directory"
+        )
     if comparison:
         if dataset == "auto":
             raise ValueError("A comparison requires an explicit --dataset")
@@ -1129,6 +1155,61 @@ def resolve_selected_primary_k(
     return primary_k
 
 
+def resolve_primary_k_options(
+    args: argparse.Namespace, k_values: list[int], argv: list[str] | None = None,
+) -> None:
+    """Validate the primary-K options; an automatic primary K clears the display default."""
+    fixed = args.k_selection_mode == "fixed-comparison"
+    if args.k_final_rule != K_FINAL_RULES[0] and fixed:
+        raise ValueError("--k-final-rule applies to --k-selection-mode redundancy-aware")
+    if args.automatic_primary_k:
+        if option_was_given("--default-k", argv) or args.force_final_k is not None:
+            raise ValueError("--automatic-primary-k cannot be combined with --default-k or --force-final-k")
+        if fixed:
+            raise ValueError("--automatic-primary-k requires --k-selection-mode redundancy-aware")
+        args.default_k = None
+    if args.undersized_default_k_fallback is not None:
+        if args.default_k is None or args.force_final_k is not None or fixed:
+            raise ValueError(
+                "--undersized-default-k-fallback requires --default-k in redundancy-aware mode without --force-final-k"
+            )
+        if int(args.undersized_default_k_fallback) not in k_values:
+            raise ValueError(
+                "--undersized-default-k-fallback must be within the requested K range, "
+                f"got {args.undersized_default_k_fallback}"
+            )
+
+
+def apply_undersized_default_k_fallback(
+    primary_k: dict[str, int | str | None], rows: list[dict], fallback_k: int,
+) -> dict[str, int | str | None]:
+    """Export ``fallback_k`` when the default-K partition has a parcel below the minimum size.
+
+    Only a ``default_k`` primary is replaced. The fallback partition must meet
+    the size gate itself; the replaced K is recorded as ``undersized_default_k``.
+    """
+    if primary_k["primary_k_source"] != "default_k":
+        return primary_k
+    by_k = {int(row["k"]): row for row in rows}
+    default_k = int(primary_k["chosen_k_final"])
+    if default_k not in by_k:
+        raise RuntimeError(f"Default K={default_k} was not evaluated; evaluated={sorted(by_k)}")
+    if int(by_k[default_k]["nontrivial_min_size_ok"]) == 1:
+        return primary_k
+    if int(fallback_k) not in by_k:
+        raise RuntimeError(f"Fallback K={fallback_k} was not evaluated; evaluated={sorted(by_k)}")
+    if int(by_k[int(fallback_k)]["nontrivial_min_size_ok"]) != 1:
+        raise RuntimeError(
+            f"Default K={default_k} and fallback K={fallback_k} both have a parcel below the minimum size "
+            f"({by_k[default_k]['min_cluster_size']} and {by_k[int(fallback_k)]['min_cluster_size']} vertices, "
+            f"minimum {by_k[default_k]['V_min_effective']})"
+        )
+    return {
+        **primary_k, "chosen_k_final": int(fallback_k),
+        "primary_k_source": "default_k_undersized_fallback", "undersized_default_k": default_k,
+    }
+
+
 def is_clusterless_method(method: str) -> bool:
     return method in CLUSTERLESS_METHODS
 
@@ -1140,6 +1221,10 @@ def method_uses_subject_fc_preprocessing(method: str) -> bool:
 def feature_family_for_method(method: str, atlas: str, gradient_components: tuple[int, ...]) -> str:
     if method == "group-roi-sim-spectral":
         return "vertex_to_kong2022_400roi_fc_to_vertex_similarity_centered_cosine"
+    if method == MULTIGRAPH_METHOD:
+        return "subject_vertex_similarity_graphs_of_kong2022_400roi_fc_spectral_coordinates"
+    if method == MEAN_GRAPH_METHOD:
+        return "mean_subject_vertex_similarity_graph_of_kong2022_400roi_fc_spectral_coordinates"
     if is_gradient_method(method):
         comp_tag = "".join(f"g{int(c)}" for c in gradient_components)
         if is_lynch2024_atlas(atlas) or str(atlas) == "kong2022":
@@ -1174,6 +1259,8 @@ def feature_family_for_method(method: str, atlas: str, gradient_components: tupl
 def fc_mode_for_method(method: str, atlas: str | None = None) -> str:
     if method == "group-roi-sim-spectral":
         return "pearson_vertex_to_roi_then_centered_cosine_vertex_to_vertex"
+    if is_multigraph_method(method):
+        return "pearson_vertex_to_roi_fisherz_then_pearson_vertex_to_vertex_per_subject"
     if is_gradient_method(method):
         if atlas is not None and (is_lynch2024_atlas(atlas) or str(atlas) == "kong2022"):
             if str(atlas) == "kong2022":
@@ -1348,6 +1435,14 @@ def roi_similarity_from_network_fc(fc: np.ndarray) -> np.ndarray:
     sim[~np.isfinite(sim)] = 0.0
     np.fill_diagonal(sim, 0.0)
     return sim.astype(np.float32)
+
+
+def subject_similarity_feature(fc_fisherz: np.ndarray, valid_mask: np.ndarray, *, source: Path) -> np.ndarray:
+    """Participant vertex-by-vertex Pearson similarity; unobserved vertices stay NaN."""
+    similarity = vertex_similarity(fc_fisherz)
+    if not np.array_equal(observed_vertices(similarity), np.asarray(valid_mask, dtype=bool)):
+        raise ValueError(f"Observed FC fingerprints differ from the participant validity mask: {source}")
+    return similarity
 
 
 def brainspace_version() -> str:
@@ -1728,7 +1823,7 @@ def network_feature_filename(method: str, atlas: str | None = None) -> str:
     if str(atlas) == "kong2022":
         if method == "network-spectral":
             return "hipp_vertex_to_canonical7_fc.npy"
-        if method in ({"group-roi-sim-spectral", "gradient-spectral", "wta-top"} | GRADIENT_METHODS):
+        if method in ({"group-roi-sim-spectral", "gradient-spectral", "wta-top"} | GRADIENT_METHODS | MULTIGRAPH_METHODS):
             # Historical network_fc is now the strict 400-ROI feature bank.
             return "hipp_vertex_to_network_fc.npy"
     if method in ({"group-roi-sim-spectral", "network-spectral", "gradient-spectral", "wta-top"} | GRADIENT_METHODS):
@@ -1741,7 +1836,7 @@ def runwise_network_feature_filename(method: str, atlas: str | None = None) -> s
         return "hipp_vertex_to_roi_fc_active.npy"
     if method == "network-spectral" and str(atlas) == "kong2022":
         return "hipp_vertex_to_canonical7_fc_active.npy"
-    if method in ({"network-spectral", "gradient-spectral"} | GRADIENT_METHODS):
+    if method in ({"network-spectral", "gradient-spectral"} | GRADIENT_METHODS | MULTIGRAPH_METHODS):
         return "hipp_vertex_to_network_fc_active.npy"
     raise ValueError(f"Not a network feature method: {method}")
 
@@ -2028,6 +2123,24 @@ def local_maxima_flags(values: list[float]) -> list[bool]:
         is_local = all_equal or (v >= left and v >= right and (v > left or v > right or len(values) == 1))
         flags.append(bool(is_local))
     return flags
+
+
+K_FINAL_RULES = ("smallest-stable", "largest-admissible")
+
+
+def select_k_final(candidate_pool: list[dict], rule: str) -> tuple[int, str, set[int], int]:
+    """Automatic K from the gate-passing candidates under the requested rule.
+
+    Both rules return the split-half audit values of the default rule, so the
+    summary table reports stability whether or not it decided K.
+    """
+    if rule not in K_FINAL_RULES:
+        raise ValueError(f"Unsupported K rule {rule!r}; expected one of {K_FINAL_RULES}")
+    k_final, decision_path, within_1se_k_set, argmax_k = select_k_final_after_redundancy_filter(candidate_pool)
+    if rule == "largest-admissible":
+        k_final = int(max(int(row["k"]) for row in candidate_pool))
+        decision_path = "largest_k_passing_gates"
+    return k_final, decision_path, within_1se_k_set, argmax_k
 
 
 def select_k_final_after_redundancy_filter(candidate_pool: list[dict]) -> tuple[int, str, set[int], int]:
@@ -2529,7 +2642,7 @@ def subject_network_feature(
     arr = np.load(p).astype(np.float32)
     if arr.ndim != 2:
         raise ValueError(f"Expected 2D network feature matrix: {p} shape={arr.shape}")
-    if str(atlas) == "kong2022" and method in ({"group-roi-sim-spectral", "gradient-spectral", "wta-top"} | GRADIENT_METHODS):
+    if str(atlas) == "kong2022" and method in ({"group-roi-sim-spectral", "gradient-spectral", "wta-top"} | GRADIENT_METHODS | MULTIGRAPH_METHODS):
         reference_dir = None
         if reference_root is not None:
             reference_dir = Path(reference_root) / f"sub-{subject}" / "reference" / "kong2022"
@@ -2640,6 +2753,12 @@ def group_feature_matrix(
         group = np.nanmean(stack, axis=0)
         group[~np.isfinite(group)] = 0.0
         return zscore_cols(group)
+
+    if is_multigraph_method(method):
+        return coordinate_stack(
+            [feature_bank[s] for s in subjects_subset], subjects_subset, support_mask,
+            method=method, n_components=MULTIGRAPH_MAX_COORDINATES,
+        )
 
     if is_gradient_method(method):
         features, _meta = build_group_gradient_features(
@@ -3212,7 +3331,9 @@ def subject_split_ari(
             continue
         ref = full_a[overlap]
         tgt = full_b[overlap]
-        if ref.size == 0:
+        if ref.size == 0 or np.unique(ref).size < 2 or np.unique(tgt).size < 2:
+            # A partition that puts every shared vertex in one parcel has no
+            # boundary to reproduce; scikit-learn would score two of them as 1.
             n_skipped_empty += 1
             continue
         mapping = build_hungarian_mapping(ref, tgt, int(k))
@@ -3276,7 +3397,7 @@ def strong_null_ari(
             arr = feature_bank[s]
             perm = rng.permutation(arr.shape[0])
             permutations_by_subject[s] = perm.tolist()
-            if method_uses_network_fc_input(method):
+            if method_uses_network_fc_input(method) and not is_multigraph_method(method):
                 null_bank[s] = arr[perm, :].astype(np.float32)
             else:
                 null_bank[s] = arr[np.ix_(perm, perm)].astype(np.float32)
@@ -3337,6 +3458,8 @@ def method_surface_affinity_metadata(method: str) -> tuple[str, str]:
         return "none", "ward_euclidean_binary_mesh_connectivity"
     if method == "gradient-gmm":
         return "none", "full_covariance_gaussian_mixture_no_spatial_constraint"
+    if is_multigraph_method(method):
+        return "none", MULTIGRAPH_AFFINITY_DESCRIPTION
     return POSITIVE_COSINE_AFFINITY, POSITIVE_COSINE_AFFINITY_DESCRIPTION
 
 
@@ -3351,8 +3474,8 @@ def build_method_surface_affinity(
         return build_gradient_spectral_affinity(features, adjacency)
     if method == "gradient-spectral-rbf":
         return build_rbf_mesh_affinity(features, adjacency, rbf_scale=rbf_scale)[0]
-    if method in {"gradient-ward", "gradient-gmm"}:
-        raise ValueError(f"{method} does not construct a spectral affinity")
+    if method in {"gradient-ward", "gradient-gmm"} or is_multigraph_method(method):
+        raise ValueError(f"{method} does not construct a surface affinity")
     return build_positive_cosine_surface_affinity(features, adjacency)
 
 
@@ -3371,7 +3494,13 @@ def cluster_from_precomputed_group_features(
     if idx.size == 0:
         raise RuntimeError("Support mask has zero vertices")
     adj = adjacency_full[idx][:, idx]
-    if is_gradient_method(method):
+    if is_multigraph_method(method):
+        if int(k) > MULTIGRAPH_MAX_COORDINATES:
+            raise ValueError(f"{method} supports K <= {MULTIGRAPH_MAX_COORDINATES}, got {k}")
+        labels, metadata = discretize_stack(group_features, int(k), seed=int(seed))
+        if clustering_metadata is not None:
+            clustering_metadata.update(metadata)
+    elif is_gradient_method(method):
         labels, metadata = cluster_gradients(
             method, group_features, adj, k=int(k), seed=int(seed), rbf_scale=rbf_scale,
         )
@@ -3432,7 +3561,7 @@ def evaluate_k_candidate(
     supported_mesh = adjacency_full[support_indices][:, support_indices]
     affinity_graph = (
         binary_mesh_adjacency(supported_mesh, len(support_indices))
-        if method in {"gradient-ward", "gradient-gmm"} else
+        if method in {"gradient-ward", "gradient-gmm"} or is_multigraph_method(method) else
         build_method_surface_affinity(
             method, group_features_active, supported_mesh,
             rbf_scale=float((gradient_options or {}).get("rbf_scale", 1.0)),
@@ -3448,7 +3577,10 @@ def evaluate_k_candidate(
     min_size = int(min(sizes)) if sizes else 0
     comp = connected_components_per_label(labels_active, adjacency_support)
     max_components = int(max(comp.values())) if comp else 0
-    min_coh, mean_coh = cluster_profile_coherence(group_features_active, labels_active, int(k))
+    if is_multigraph_method(method):
+        min_coh, mean_coh = stack_coherence(group_features_active, labels_active, int(k))
+    else:
+        min_coh, mean_coh = cluster_profile_coherence(group_features_active, labels_active, int(k))
 
     if precomputed_split_halves is not None:
         split_records = [
@@ -3680,7 +3812,7 @@ def runwise_feature_bank(
                 )
                 if not p.exists():
                     raise FileNotFoundError(f"Missing runwise network feature: {p}")
-                if str(atlas) == "kong2022" and method in ({"group-roi-sim-spectral", "gradient-spectral", "wta-top"} | GRADIENT_METHODS):
+                if str(atlas) == "kong2022" and method in ({"group-roi-sim-spectral", "gradient-spectral", "wta-top"} | GRADIENT_METHODS | MULTIGRAPH_METHODS):
                     reference_dir = None
                     if reference_root is not None:
                         reference_dir = Path(reference_root) / f"sub-{s}" / "reference" / "kong2022"
@@ -3699,11 +3831,14 @@ def runwise_feature_bank(
                     fc=full,
                     subject_fc_mode=subject_fc_mode,
                 )
-                out[rid][s] = (
-                    roi_similarity_from_network_fc(run_feature)
-                    if is_roi_similarity_method(method)
-                    else run_feature
-                )
+                if is_multigraph_method(method):
+                    out[rid][s] = subject_similarity_feature(run_feature, valid_masks[s], source=p)
+                else:
+                    out[rid][s] = (
+                        roi_similarity_from_network_fc(run_feature)
+                        if is_roi_similarity_method(method)
+                        else run_feature
+                    )
             else:
                 p = resolve_intrinsic_feature_path(shared_root, s, smoothing, hemi, rid)
                 arr = np.load(p).astype(np.float32)
@@ -4774,7 +4909,7 @@ def method_uses_kong2022_topn_cluster_annotation(method: str, atlas: str) -> boo
         "group-roi-sim-spectral",
         "gradient-spectral",
         "intrinsic-spectral",
-    } | GRADIENT_METHODS)
+    } | GRADIENT_METHODS | MULTIGRAPH_METHODS)
 
 
 def assignment_status_from_profile(profile: np.ndarray, network_names: list[str]) -> tuple[list[dict[str, object]], list[str | None]]:
@@ -5277,7 +5412,10 @@ def prepare_combo_inputs(
                 fc=raw_feature,
                 subject_fc_mode=subject_fc_mode,
             )
-            feature_bank[s] = roi_similarity_from_network_fc(pre_feature) if is_roi_similarity_method(method) else pre_feature
+            if is_multigraph_method(method):
+                feature_bank[s] = subject_similarity_feature(pre_feature, valid_masks[s], source=p)
+            else:
+                feature_bank[s] = roi_similarity_from_network_fc(pre_feature) if is_roi_similarity_method(method) else pre_feature
         else:
             p = resolve_intrinsic_feature_path(shared_root, s, smoothing, hemi)
             actual_input_paths[s] = str(p)
@@ -5442,7 +5580,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Verified ordered 400-ROI TSV for --profile-source-mode original-denoised.",
     )
     parser.add_argument("--out-root", default=str(DEFAULT_OUT_ROOT))
-    parser.add_argument("--comparison-output", action="store_true", help="Explicit dataset comparison under repository tmp; requires fixed-comparison K mode.")
+    parser.add_argument("--comparison-output", action="store_true", help="Explicit dataset comparison written under this checkout's tmp directory.")
     parser.add_argument(
         "--dataset", choices=["auto", "outputs_hcp", "outputs_stanford", "outputs_iowa_jj_tms"], default="auto",
         help="Dataset provenance recorded in generated manifests; auto infers it from --out-root.",
@@ -5513,6 +5651,20 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default=3,
         help="Primary K for rendered and exported labels; automatic K selection remains diagnostic evidence.",
     )
+    parser.add_argument(
+        "--undersized-default-k-fallback",
+        type=int,
+        default=None,
+        help="Export this K when the --default-k partition has a parcel below the minimum parcel size. "
+             "The fallback partition must meet the size gate; the manifest records the replaced K.",
+    )
+    parser.add_argument(
+        "--automatic-primary-k",
+        action="store_true",
+        help="Export the automatically selected K as the primary partition. A combo in which no K "
+             "passes the selection gates is recorded as skipped. Cannot be combined with --default-k "
+             "or --force-final-k.",
+    )
     parser.add_argument("--instability-resamples", type=int, default=100)
     parser.add_argument("--null-resamples", type=int, default=100)
     parser.add_argument("--seed", type=int, default=20260420)
@@ -5566,6 +5718,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--clustering-feature-scaling", choices=("none", "unit_sd"), default="none")
     parser.add_argument("--resume", action="store_true", help="Skip combos that already have group_atlas_manifest.json.")
     parser.add_argument("--k-selection-mode", default="redundancy-aware", choices=["redundancy-aware", "fixed-comparison"])
+    parser.add_argument(
+        "--k-final-rule", default=K_FINAL_RULES[0], choices=K_FINAL_RULES,
+        help="Automatic K among the candidates that pass the size, connectedness, coherence and redundancy gates: "
+             "the smallest split-half ARI local maximum within one standard error of the best (default), or the "
+             "largest passing K with split-half ARI kept as a diagnostic only.",
+    )
     parser.add_argument(
         "--redundancy-early-stop",
         action="store_true",
@@ -5701,8 +5859,6 @@ def main() -> int:
     if out_root_adjusted:
         print(f"[info] Automatically adjusted --out-root to matching route directory: {out_root}", flush=True)
     validate_group_atlas_root_for_route(out_root, route_tag)
-    if args.comparison_output and args.k_selection_mode != "fixed-comparison":
-        raise ValueError("--comparison-output requires --k-selection-mode fixed-comparison")
     dataset, expected_source_root = validate_dataset_output_contract(
         out_root, str(args.dataset), comparison=args.comparison_output,
         source_roots=[shared_root, surface_root, Path(args.reference_root).resolve() if args.reference_root else shared_root],
@@ -5774,6 +5930,7 @@ def main() -> int:
             f"--force-final-k must be within requested K range [{min(k_values)}, {max(k_values)}], "
             f"got {args.force_final_k}"
         )
+    resolve_primary_k_options(args, k_values)
     if args.default_k is not None and int(args.default_k) not in k_values:
         raise ValueError(
             f"--default-k must be within requested K range [{min(k_values)}, {max(k_values)}], "
@@ -5976,6 +6133,7 @@ def main() -> int:
                             "dataset": dataset,
                             "expected_source_root": str(expected_source_root),
                             "k_selection_mode": str(args.k_selection_mode),
+                            "k_final_rule": str(args.k_final_rule),
                             "force_final_k": int(args.force_final_k) if args.force_final_k is not None else None,
                             "default_k": int(args.default_k) if args.default_k is not None else None,
                             "candidate_k_values": [int(k) for k in k_values],
@@ -6331,6 +6489,7 @@ def main() -> int:
                                 "smoothing": smoothing,
                                 "hemi": hemi,
                                 "k_selection_mode": str(args.k_selection_mode),
+                                "k_final_rule": str(args.k_final_rule),
                                 "force_final_k": int(args.force_final_k) if args.force_final_k is not None else None,
                             "default_k": int(args.default_k) if args.default_k is not None else None,
                                 "coverage_threshold": float(tau),
@@ -6781,7 +6940,7 @@ def main() -> int:
                                 survivors = []
                             else:
                                 k_final, decision_path, within_1se_pool, survivor_argmax_k = (
-                                    select_k_final_after_redundancy_filter(candidate_pool)
+                                    select_k_final(candidate_pool, str(args.k_final_rule))
                                 )
                                 for row in rows:
                                     row["survivor_pool_argmax_k"] = int(survivor_argmax_k)
@@ -6832,6 +6991,7 @@ def main() -> int:
                                     "smoothing": smoothing,
                                     "hemi": hemi,
                                     "k_selection_mode": str(args.k_selection_mode),
+                                    "k_final_rule": str(args.k_final_rule),
                                     "force_final_k": int(args.force_final_k) if args.force_final_k is not None else None,
                                 "default_k": int(args.default_k) if args.default_k is not None else None,
                                     "coverage_threshold": float(tau),
@@ -6906,6 +7066,10 @@ def main() -> int:
                             force_final_k=args.force_final_k,
                             default_k=args.default_k,
                         )
+                        if args.undersized_default_k_fallback is not None:
+                            primary_k = apply_undersized_default_k_fallback(
+                                primary_k, rows, int(args.undersized_default_k_fallback),
+                            )
                         if primary_k["chosen_k_final"] is None:
                             raise RuntimeError(f"No primary K available for combo={combo}")
                         k_final = int(primary_k["chosen_k_final"])
@@ -7260,6 +7424,7 @@ def main() -> int:
                                 else None
                             ),
                             "k_selection_mode": str(args.k_selection_mode),
+                            "k_final_rule": str(args.k_final_rule),
                             "force_final_k": int(args.force_final_k) if args.force_final_k is not None else None,
                             "default_k": int(args.default_k) if args.default_k is not None else None,
                             "coverage_threshold": float(tau),
@@ -7294,6 +7459,8 @@ def main() -> int:
                             "group_feature_summary": str((run_dir / "group_feature_summary.json").resolve()),
                             "clustering_algorithm": (
                                 method if method in {"gradient-ward", "gradient-gmm"} else
+                                "shared_partition_with_orthogonal_rotation_per_graph_lowest_loss_of_10_starts"
+                                if is_multigraph_method(method) else
                                 "spectral_clustering_precomputed_affinity_"
                                 f"{method_surface_affinity_metadata(method)[0].replace('-', '_')}_diag0_"
                                 "kmeans_n_init_50"
@@ -7311,6 +7478,7 @@ def main() -> int:
                             "chosen_k_final": int(k_final),
                             "automatic_k_final": primary_k["automatic_k_final"],
                             "primary_k_source": str(primary_k["primary_k_source"]),
+                            "undersized_default_k": primary_k.get("undersized_default_k"),
                             **gradient_computation_provenance(
                                 group_gradient_meta, fixed_cluster_reuse=fixed_cluster_reuse),
                             "fixed_cluster_reuse": fixed_cluster_reuse,
