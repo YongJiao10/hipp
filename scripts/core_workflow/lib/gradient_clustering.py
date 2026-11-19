@@ -16,8 +16,13 @@ from .surface_affinity import (
     build_gradient_spectral_affinity,
 )
 
+MEAN_SIMILARITY_WARD_METHOD = "mean-similarity-ward"
+# Ward on diffusion gradients; the mean-similarity variant differs only in how
+# the group affinity that yields the gradients is formed.
+WARD_GRADIENT_METHODS = frozenset({"gradient-ward", MEAN_SIMILARITY_WARD_METHOD})
 GRADIENT_METHODS = frozenset({
     "gradient-spectral", "gradient-ward", "gradient-gmm", "gradient-spectral-rbf",
+    MEAN_SIMILARITY_WARD_METHOD,
 })
 SPECTRAL_GRADIENT_METHODS = frozenset({"gradient-spectral", "gradient-spectral-rbf"})
 RBF_AFFINITY_DESCRIPTION = "binary_mesh_edges_exp(-squared_gradient_distance/(2*sigma^2))"
@@ -38,7 +43,7 @@ def gradient_method_provenance(method: str, *, rbf_scale: float = 1.) -> dict:
         return {"method": method, "surface_affinity": "mesh-rbf",
                 "affinity_description": RBF_AFFINITY_DESCRIPTION, "rbf_scale": float(rbf_scale),
                 "bandwidth_rule": "rbf_scale * median(positive unique-undirected-mesh-edge distance)"}
-    elif method == "gradient-ward":
+    elif method in WARD_GRADIENT_METHODS:
         affinity, description = "none", "ward_euclidean_binary_mesh_connectivity"
     elif method == "gradient-gmm":
         affinity, description = "none", "full_covariance_gaussian_mixture_no_spatial_constraint"
@@ -171,7 +176,7 @@ def cluster_gradients(method: str, features, adjacency, *, k: int, seed: int, rb
         raise ValueError(f"Require 2 <= k < supported vertices, got {k} / {len(x)}")
     graph = binary_mesh_adjacency(adjacency, len(x))
     meta = {"method": method, "k": int(k)}
-    if method == "gradient-ward":
+    if method in WARD_GRADIENT_METHODS:
         _require_connected(graph, "Supported mesh")
         model = AgglomerativeClustering(n_clusters=k, linkage="ward", metric="euclidean", connectivity=graph)
         labels = model.fit_predict(x) + 1
@@ -207,6 +212,6 @@ def cluster_gradients(method: str, features, adjacency, *, k: int, seed: int, rb
         meta.update(assign_labels="kmeans", n_init=50, eigen_solver="arpack")
     labels = np.asarray(labels, dtype=np.int32)
     meta.update(cluster_mesh_diagnostics(labels, graph, k=k))
-    if method == "gradient-ward" and any(n != 1 for n in meta["cluster_connected_components"].values()):
+    if method in WARD_GRADIENT_METHODS and any(n != 1 for n in meta["cluster_connected_components"].values()):
         raise GradientClusteringError("Ward returned a disconnected cluster", meta)
     return labels, meta

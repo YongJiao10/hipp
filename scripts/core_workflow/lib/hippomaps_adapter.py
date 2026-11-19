@@ -336,6 +336,59 @@ def diffusion_map_embedding(affinity: np.ndarray, *, n_components: int) -> tuple
     return embedding, lambdas
 
 
+MEAN_SIMILARITY_EMBEDDING_CALL = (
+    "nanmean over subjects of within-subject Pearson vertex similarity of Fisher-z 400-ROI fingerprints; "
+    "diagonal=1; compute_affinity(kernel=None, sparsity=declared, non_negative=True); mean_symmetrize; "
+    "diffusion_map_embedding(affinity, alpha=0.5, diffusion_time=0)"
+)
+
+
+def build_mean_similarity_affinity(subject_similarities: np.ndarray, *, sparsity: float) -> np.ndarray:
+    """Average participant vertex similarities, then row-sparsify like TopSim.
+
+    Each vertex pair is averaged over the participants who observe both vertices,
+    so every participant with a defined similarity counts equally. A supported
+    pair that no participant observes stops the fit.
+    """
+    from brainspace.gradient.kernels import compute_affinity
+    from scipy.sparse.csgraph import connected_components
+
+    stack = np.asarray(subject_similarities)
+    if stack.ndim != 3 or stack.shape[1] != stack.shape[2] or stack.shape[1] < 2:
+        raise ValueError(f"Expected subjects x vertices x vertices similarities, got {stack.shape}")
+    defined = np.isfinite(stack)
+    counts = defined.sum(axis=0)
+    if not np.all(counts > 0):
+        a, b = np.argwhere(counts == 0)[0]
+        raise ValueError(f"No participant observes supported vertex pair ({int(a)}, {int(b)})")
+    similarity = np.where(defined, stack, 0.0).sum(axis=0, dtype=np.float64) / counts
+    np.fill_diagonal(similarity, 1.0)
+    affinity = compute_affinity(similarity, kernel=None, sparsity=float(sparsity), non_negative=True)
+    if not np.isfinite(affinity).all():
+        raise ValueError("Mean-similarity affinity contains non-finite values")
+    affinity = (affinity + affinity.T) / 2
+    n_components = connected_components(affinity, directed=False, return_labels=False)
+    if n_components != 1:
+        raise ValueError(f"Mean-similarity affinity is disconnected: {n_components} components")
+    return affinity
+
+
+def fit_mean_similarity_gradients(
+    subject_similarities: np.ndarray, *, n_components: int, sparsity: float,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    n_comp = int(n_components)
+    if int(np.asarray(subject_similarities).shape[1]) <= n_comp:
+        raise RuntimeError(
+            f"Not enough supported vertices for gradients: shape={np.shape(subject_similarities)} n_components={n_comp}"
+        )
+    affinity = build_mean_similarity_affinity(subject_similarities, sparsity=sparsity)
+    gradients, lambdas = diffusion_map_embedding(affinity, n_components=n_comp)
+    if not np.all(np.isfinite(gradients)) or not np.all(np.isfinite(lambdas)):
+        raise RuntimeError("Diffusion-map embedding returned non-finite values")
+    ev = ev_fractions_from_lambdas(lambdas)
+    return gradients.astype(np.float32), lambdas.astype(np.float64), ev.astype(np.float64)
+
+
 def fit_diffusion_gradients(
     group_fc: np.ndarray,
     *,

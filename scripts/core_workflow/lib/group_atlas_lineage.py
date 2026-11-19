@@ -21,7 +21,9 @@ def gradient_computation_provenance(summary, *, fixed_cluster_reuse):
     fields = {"gradient_recomputed": False,
               "clustering_recomputed": fixed_cluster_reuse is None,
               "k_selection_recomputed": fixed_cluster_reuse is None}
-    if summary is not None and fixed_cluster_reuse is None:
+    if summary is not None and fixed_cluster_reuse is None and summary.get("gradient_source", "").startswith("computed_in_group_atlas"):
+        fields.update(gradient_recomputed=True, gradient_computation=str(summary["gradient_source"]))
+    elif summary is not None and fixed_cluster_reuse is None:
         source = summary.get("hippomaps_gradient_manifest")
         if not source:
             raise ValueError("Consumed upstream gradients require a source manifest")

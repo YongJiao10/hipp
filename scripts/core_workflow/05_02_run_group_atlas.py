@@ -96,7 +96,9 @@ from lib.hippomaps_adapter import (
     DEFAULT_HIPPOMAPS_ROOT,
     brainspace_sparsity_for_feature_count,
     ensure_hippomaps_on_path,
+    MEAN_SIMILARITY_EMBEDDING_CALL,
     fit_diffusion_gradients,
+    fit_mean_similarity_gradients,
     gradient_preprocessing_settings,
     validate_gradient_preprocessing,
     scale_gradient_features,
@@ -174,7 +176,8 @@ from lib.route_tags import (
 )
 from lib.fc_math import corrcoef_rows, fisher_z_transform_fc, bh_fdr, center_run_timeseries
 from lib.gradient_clustering import (
-    GRADIENT_METHODS, RBF_AFFINITY_DESCRIPTION, cluster_gradients,
+    GRADIENT_METHODS, MEAN_SIMILARITY_WARD_METHOD, RBF_AFFINITY_DESCRIPTION, WARD_GRADIENT_METHODS,
+    cluster_gradients,
     binary_mesh_adjacency, build_rbf_mesh_affinity,
     spatial_cluster_diagnostics,
     is_gradient_method as registered_gradient_method,
@@ -243,6 +246,7 @@ METHOD_CHOICES = [
     "gradient-gmm",
     "gradient-spectral-rbf",
     "intrinsic-spectral",
+    MEAN_SIMILARITY_WARD_METHOD,
     MULTIGRAPH_METHOD,
     MEAN_GRAPH_METHOD,
     "wta-top",
@@ -259,8 +263,9 @@ DEFAULT_ATLASES = ["kong2022"]
 SMOOTHINGS = ["2mm", "4mm"]
 HEMIS = ["L", "R"]
 K_RANGE = list(range(2, 9))
-KONG2022_ONLY_METHODS = {"group-roi-sim-spectral"} | MULTIGRAPH_METHODS
-LYNCH2024_METHODS = set(GRADIENT_METHODS) | {"wta-top"}
+KONG2022_ONLY_METHODS = {"group-roi-sim-spectral", MEAN_SIMILARITY_WARD_METHOD} | MULTIGRAPH_METHODS
+LYNCH2024_METHODS = (set(GRADIENT_METHODS) - {MEAN_SIMILARITY_WARD_METHOD}) | {"wta-top"}
+MEAN_SIMILARITY_GRADIENT_SOURCE = "computed_in_group_atlas_from_mean_subject_vertex_similarity"
 CLUSTERLESS_METHODS = {"wta-top"}
 PROFILE_REDUNDANCY_MAX_SIM = 0.80
 SUBJECT_FC_PREPROCESS_METHODS = {"group-roi-sim-spectral", "network-spectral", "intrinsic-spectral"}
@@ -930,6 +935,11 @@ def is_multigraph_method(method: str) -> bool:
     return method in MULTIGRAPH_METHODS
 
 
+def uses_subject_similarity_bank(method: str) -> bool:
+    """Methods whose per-subject feature is the vertex x vertex Pearson similarity of FC fingerprints."""
+    return is_multigraph_method(method) or method == MEAN_SIMILARITY_WARD_METHOD
+
+
 def method_uses_network_fc_input(method: str) -> bool:
     return is_gradient_method(method) or is_network_method(method) or method in ({"group-roi-sim-spectral", "gradient-spectral", "wta-top"} | GRADIENT_METHODS | MULTIGRAPH_METHODS)
 
@@ -1225,6 +1235,9 @@ def feature_family_for_method(method: str, atlas: str, gradient_components: tupl
         return "subject_vertex_similarity_graphs_of_kong2022_400roi_fc_spectral_coordinates"
     if method == MEAN_GRAPH_METHOD:
         return "mean_subject_vertex_similarity_graph_of_kong2022_400roi_fc_spectral_coordinates"
+    if method == MEAN_SIMILARITY_WARD_METHOD:
+        comp_tag = "".join(f"g{int(c)}" for c in gradient_components)
+        return f"mean_subject_vertex_similarity_of_kong2022_400roi_fc_diffusion_gradients_{comp_tag}"
     if is_gradient_method(method):
         comp_tag = "".join(f"g{int(c)}" for c in gradient_components)
         if is_lynch2024_atlas(atlas) or str(atlas) == "kong2022":
@@ -1261,6 +1274,8 @@ def fc_mode_for_method(method: str, atlas: str | None = None) -> str:
         return "pearson_vertex_to_roi_then_centered_cosine_vertex_to_vertex"
     if is_multigraph_method(method):
         return "pearson_vertex_to_roi_fisherz_then_pearson_vertex_to_vertex_per_subject"
+    if method == MEAN_SIMILARITY_WARD_METHOD:
+        return "pearson_vertex_to_roi_fisherz_then_pearson_vertex_to_vertex_per_subject_then_subject_mean_then_diffusion_gradients"
     if is_gradient_method(method):
         if atlas is not None and (is_lynch2024_atlas(atlas) or str(atlas) == "kong2022"):
             if str(atlas) == "kong2022":
@@ -1503,8 +1518,20 @@ def brainspace_diffusion_gradients(
     return gradients.astype(np.float32), lambdas.astype(np.float64), ev_fractions.astype(np.float64)
 
 
+def mean_similarity_options(options: dict[str, object]) -> float:
+    """The mean-similarity affinity is TopSim-style: unscaled and row-sparsified after aggregation."""
+    if options.get("sparsify_stage") != "affinity" or options.get("feature_scaling") != "none" or options.get("sparsity") is None:
+        raise ValueError(
+            f"{MEAN_SIMILARITY_WARD_METHOD} requires --profile topsim (unscaled fingerprints, affinity-stage "
+            f"sparsification with an explicit sparsity); got feature_scaling={options.get('feature_scaling')!r} "
+            f"sparsify_stage={options.get('sparsify_stage')!r} sparsity={options.get('sparsity')!r}"
+        )
+    return float(options["sparsity"])
+
+
 def build_group_gradient_features(
     *,
+    method: str = "gradient-ward",
     feature_bank: dict[str, np.ndarray],
     subjects_subset: list[str],
     support_mask: np.ndarray,
@@ -1517,21 +1544,34 @@ def build_group_gradient_features(
     if idx.size == 0:
         raise RuntimeError("Support mask has zero vertices")
     comps = parse_gradient_components(",".join(str(c) for c in gradient_components))
-    mats = []
-    for s in subjects_subset:
-        m = np.asarray(feature_bank[s], dtype=np.float32)[idx, :]
-        mats.append(m)
-    stack = np.stack(mats, axis=0).astype(np.float32)
-    group_fc = np.nanmean(stack, axis=0)
-    group_fc[~np.isfinite(group_fc)] = 0.0
-    gradients, lambdas, ev_fractions = brainspace_diffusion_gradients(
-        group_fc,
-        n_components=GRADIENT_N_COMPONENTS_COMPUTED,
-        hippomaps_root=hippomaps_root,
-        gradient_fit_fn=gradient_fit_fn,
-        gradient_options=gradient_options,
-    )
+    mean_similarity = method == MEAN_SIMILARITY_WARD_METHOD
     options = dict(gradient_options or {})
+    if mean_similarity:
+        similarity_sparsity = mean_similarity_options(options)
+        stack = np.stack(
+            [np.asarray(feature_bank[s], dtype=np.float32)[np.ix_(idx, idx)] for s in subjects_subset], axis=0,
+        )
+        group_shape = [int(v) for v in stack.shape[1:]]
+        gradients, lambdas, ev_fractions = fit_mean_similarity_gradients(
+            stack, n_components=GRADIENT_N_COMPONENTS_COMPUTED, sparsity=similarity_sparsity,
+        )
+        del stack
+    else:
+        mats = []
+        for s in subjects_subset:
+            m = np.asarray(feature_bank[s], dtype=np.float32)[idx, :]
+            mats.append(m)
+        stack = np.stack(mats, axis=0).astype(np.float32)
+        group_fc = np.nanmean(stack, axis=0)
+        group_fc[~np.isfinite(group_fc)] = 0.0
+        group_shape = [int(v) for v in group_fc.shape]
+        gradients, lambdas, ev_fractions = brainspace_diffusion_gradients(
+            group_fc,
+            n_components=GRADIENT_N_COMPONENTS_COMPUTED,
+            hippomaps_root=hippomaps_root,
+            gradient_fit_fn=gradient_fit_fn,
+            gradient_options=gradient_options,
+        )
     alignment_meta = {"enabled": False, "role": "native_reference_fit"}
     if "alignment_fc_paths" in options:
         anchor_smoothing = str(options.get("alignment_anchor_smoothing", "4mm"))
@@ -1548,11 +1588,12 @@ def build_group_gradient_features(
                 fc_path = run_fc_path
             mask = np.asarray(np.load(options["alignment_mask_paths"][subject]), dtype=bool)
             raw_fc = np.asarray(np.load(fc_path), dtype=np.float32)
-            if raw_fc.shape[0] == int(np.sum(mask)) and raw_fc.shape[1] == group_fc.shape[1]:
-                full_raw = np.full((mask.size, group_fc.shape[1]), np.nan, dtype=np.float32)
+            n_rois = int(raw_fc.shape[1]) if mean_similarity else int(group_fc.shape[1])
+            if raw_fc.shape[0] == int(np.sum(mask)) and raw_fc.shape[1] == n_rois:
+                full_raw = np.full((mask.size, n_rois), np.nan, dtype=np.float32)
                 full_raw[mask, :] = raw_fc
                 raw_fc = full_raw
-            if raw_fc.shape != (mask.size, group_fc.shape[1]):
+            if raw_fc.shape != (mask.size, n_rois):
                 raise ValueError(f"{anchor_smoothing}-left anchor FC/mask mismatch: {fc_path}: {raw_fc.shape} vs {mask.shape}")
             permutation = options.get("alignment_vertex_permutations", {}).get(subject)
             if permutation is not None:
@@ -1564,15 +1605,25 @@ def build_group_gradient_features(
         anchor_support = np.mean(np.stack(anchor_masks), axis=0) >= float(options["alignment_coverage_threshold"])
         if anchor_support.size != support_mask.size:
             raise ValueError(f"{anchor_smoothing}-left anchor and target vertex counts differ")
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", RuntimeWarning)
-            anchor_mean = np.nanmean(np.stack(anchor_fc)[:, anchor_support], axis=0)
-        anchor_mean[~np.isfinite(anchor_mean)] = 0.
-        anchor_gradients, _, _ = brainspace_diffusion_gradients(
-            anchor_mean, n_components=GRADIENT_N_COMPONENTS_COMPUTED,
-            hippomaps_root=hippomaps_root, gradient_fit_fn=gradient_fit_fn,
-            gradient_options=gradient_options,
-        )
+        if mean_similarity:
+            # The anchor is this method's own 2 mm-left fit on the same subjects.
+            anchor_stack = np.stack(
+                [vertex_similarity(fc)[np.ix_(anchor_support, anchor_support)] for fc in anchor_fc], axis=0,
+            )
+            anchor_gradients, _, _ = fit_mean_similarity_gradients(
+                anchor_stack, n_components=GRADIENT_N_COMPONENTS_COMPUTED, sparsity=similarity_sparsity,
+            )
+            del anchor_stack
+        else:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", RuntimeWarning)
+                anchor_mean = np.nanmean(np.stack(anchor_fc)[:, anchor_support], axis=0)
+            anchor_mean[~np.isfinite(anchor_mean)] = 0.
+            anchor_gradients, _, _ = brainspace_diffusion_gradients(
+                anchor_mean, n_components=GRADIENT_N_COMPONENTS_COMPUTED,
+                hippomaps_root=hippomaps_root, gradient_fit_fn=gradient_fit_fn,
+                gradient_options=gradient_options,
+            )
         target_full = np.full((support_mask.size, gradients.shape[1]), np.nan, dtype=np.float32)
         reference_full = target_full.copy()
         target_full[support_mask] = gradients
@@ -1590,9 +1641,11 @@ def build_group_gradient_features(
         selected, scaling=options.get("clustering_feature_scaling", "none"),
     )
     preprocessing = gradient_preprocessing_settings(
-        group_fc.shape[1], feature_scaling=options.get("feature_scaling", "col_zscore"),
+        400 if mean_similarity else group_shape[1], feature_scaling=options.get("feature_scaling", "col_zscore"),
         sparsify_stage=options.get("sparsify_stage", "features"), sparsity=options.get("sparsity"),
     )
+    if mean_similarity:
+        preprocessing["kernel"] = "none_precomputed_subject_mean_pearson_vertex_similarity"
     selected_labels = [f"G{int(c)}" for c in comps]
     hippomaps_root_resolved = ensure_hippomaps_on_path(hippomaps_root)
     meta = {
@@ -1601,16 +1654,19 @@ def build_group_gradient_features(
         "selected_components": selected_labels,
         "gradient_embedding_engine": "exact_diffusion_map_via_hippomaps_adapter",
         "brainspace_version": brainspace_version(),
-        "gradient_embedding_call": "compute_affinity(explicitly_scaled_group_mean_fisherz_fc, kernel='pearson', pre_sparsify=declared_stage); mean_symmetrize; diffusion_map_embedding(affinity, alpha=0.5, diffusion_time=0)",
+        "gradient_embedding_call": (
+            MEAN_SIMILARITY_EMBEDDING_CALL if mean_similarity else
+            "compute_affinity(explicitly_scaled_group_mean_fisherz_fc, kernel='pearson', pre_sparsify=declared_stage); mean_symmetrize; diffusion_map_embedding(affinity, alpha=0.5, diffusion_time=0)"
+        ),
         "feature_zscore_pre_gradientmaps": preprocessing["feature_scaling"],
         "gradient_preprocessing": preprocessing,
         "clustering_feature_transform": clustering_transform,
-        "kernel": GRADIENT_BRAINSPACE_KERNEL,
+        "kernel": preprocessing["kernel"] if mean_similarity else GRADIENT_BRAINSPACE_KERNEL,
         "brainspace_sparsity": preprocessing["effective_sparsity"],
         "brainspace_sparsity_policy": "explicit setting; unspecified sparsity retains 0.0 for <=50 features and 0.9 otherwise",
         "n_components_computed": int(GRADIENT_N_COMPONENTS_COMPUTED),
         "components_displayed": [int(c) for c in DEFAULT_GRADIENT_COMPONENTS],
-        "group_vertex_to_roi_fc_shape": [int(v) for v in group_fc.shape],
+        ("group_mean_vertex_similarity_shape" if mean_similarity else "group_vertex_to_roi_fc_shape"): group_shape,
         "gradient_eigenvalues": [float(v) for v in lambdas],
         "gradient_alignment": alignment_meta,
         "ev_fractions": [float(v) for v in ev_fractions],
@@ -1619,6 +1675,30 @@ def build_group_gradient_features(
         "hippomaps_commit": hippomaps_commit(hippomaps_root_resolved),
     }
     return selected.astype(np.float32), meta
+
+
+def compute_mean_similarity_gradient_features(
+    *,
+    feature_bank: dict[str, np.ndarray],
+    subjects: list[str],
+    support_mask: np.ndarray,
+    gradient_components: tuple[int, ...],
+    gradient_options: dict[str, object],
+) -> tuple[np.ndarray, dict[str, object]]:
+    """Full-cohort mean-similarity gradients; this method has no 05_01 producer."""
+    features, meta = build_group_gradient_features(
+        method=MEAN_SIMILARITY_WARD_METHOD,
+        feature_bank=feature_bank,
+        subjects_subset=subjects,
+        support_mask=support_mask,
+        gradient_components=gradient_components,
+        hippomaps_root=HIPPOMAPS_ROOT_OVERRIDE,
+        gradient_options=gradient_options,
+    )
+    if not meta["gradient_alignment"].get("enabled"):
+        raise ValueError(f"{MEAN_SIMILARITY_WARD_METHOD} requires the 2 mm-left alignment anchor")
+    meta.update(gradient_source=MEAN_SIMILARITY_GRADIENT_SOURCE, n_subjects=len(subjects))
+    return features, meta
 
 
 def load_hippomaps_gradient_features(
@@ -2762,6 +2842,7 @@ def group_feature_matrix(
 
     if is_gradient_method(method):
         features, _meta = build_group_gradient_features(
+            method=method,
             feature_bank=feature_bank,
             subjects_subset=subjects_subset,
             support_mask=support_mask,
@@ -3397,7 +3478,7 @@ def strong_null_ari(
             arr = feature_bank[s]
             perm = rng.permutation(arr.shape[0])
             permutations_by_subject[s] = perm.tolist()
-            if method_uses_network_fc_input(method) and not is_multigraph_method(method):
+            if method_uses_network_fc_input(method) and not uses_subject_similarity_bank(method):
                 null_bank[s] = arr[perm, :].astype(np.float32)
             else:
                 null_bank[s] = arr[np.ix_(perm, perm)].astype(np.float32)
@@ -3454,7 +3535,7 @@ def method_surface_affinity_metadata(method: str) -> tuple[str, str]:
         return GRADIENT_SPECTRAL_AFFINITY, GRADIENT_SPECTRAL_AFFINITY_DESCRIPTION
     if method == "gradient-spectral-rbf":
         return "mesh-rbf", RBF_AFFINITY_DESCRIPTION
-    if method == "gradient-ward":
+    if method in WARD_GRADIENT_METHODS:
         return "none", "ward_euclidean_binary_mesh_connectivity"
     if method == "gradient-gmm":
         return "none", "full_covariance_gaussian_mixture_no_spatial_constraint"
@@ -3474,7 +3555,7 @@ def build_method_surface_affinity(
         return build_gradient_spectral_affinity(features, adjacency)
     if method == "gradient-spectral-rbf":
         return build_rbf_mesh_affinity(features, adjacency, rbf_scale=rbf_scale)[0]
-    if method in {"gradient-ward", "gradient-gmm"} or is_multigraph_method(method):
+    if method in (WARD_GRADIENT_METHODS | {"gradient-gmm"}) or is_multigraph_method(method):
         raise ValueError(f"{method} does not construct a surface affinity")
     return build_positive_cosine_surface_affinity(features, adjacency)
 
@@ -3561,7 +3642,7 @@ def evaluate_k_candidate(
     supported_mesh = adjacency_full[support_indices][:, support_indices]
     affinity_graph = (
         binary_mesh_adjacency(supported_mesh, len(support_indices))
-        if method in {"gradient-ward", "gradient-gmm"} or is_multigraph_method(method) else
+        if method in (WARD_GRADIENT_METHODS | {"gradient-gmm"}) or is_multigraph_method(method) else
         build_method_surface_affinity(
             method, group_features_active, supported_mesh,
             rbf_scale=float((gradient_options or {}).get("rbf_scale", 1.0)),
@@ -3831,7 +3912,7 @@ def runwise_feature_bank(
                     fc=full,
                     subject_fc_mode=subject_fc_mode,
                 )
-                if is_multigraph_method(method):
+                if uses_subject_similarity_bank(method):
                     out[rid][s] = subject_similarity_feature(run_feature, valid_masks[s], source=p)
                 else:
                     out[rid][s] = (
@@ -5412,7 +5493,7 @@ def prepare_combo_inputs(
                 fc=raw_feature,
                 subject_fc_mode=subject_fc_mode,
             )
-            if is_multigraph_method(method):
+            if uses_subject_similarity_bank(method):
                 feature_bank[s] = subject_similarity_feature(pre_feature, valid_masks[s], source=p)
             else:
                 feature_bank[s] = roi_similarity_from_network_fc(pre_feature) if is_roi_similarity_method(method) else pre_feature
@@ -5445,7 +5526,7 @@ def prepare_combo_inputs(
     if not is_clusterless_method(method):
         roi_fc_bank_for_redundancy = {}
         for s in subjects:
-            if atlas == "kong2022" and method in ({"network-spectral", "gradient-spectral"} | GRADIENT_METHODS):
+            if atlas == "kong2022" and method in ({"network-spectral", "gradient-spectral"} | GRADIENT_METHODS) and not uses_subject_similarity_bank(method):
                 roi_fc_bank_for_redundancy[s] = feature_bank[s]
             else:
                 redundancy_atlas = (
@@ -6101,7 +6182,12 @@ def main() -> int:
                         )
                         group_gradient_meta: dict[str, object] | None = None
                         group_features_active: np.ndarray | None = None
-                        if is_gradient_method(method) and k_eff:
+                        if method == MEAN_SIMILARITY_WARD_METHOD and k_eff:
+                            group_features_active, group_gradient_meta = compute_mean_similarity_gradient_features(
+                                feature_bank=feature_bank, subjects=subjects, support_mask=support,
+                                gradient_components=gradient_components, gradient_options=gradient_options,
+                            )
+                        elif is_gradient_method(method) and k_eff:
                             group_features_active, group_gradient_meta = load_hippomaps_gradient_features(
                                 gradient_root=gradient_root,
                                 route=gradient_route_tag,
@@ -6545,7 +6631,12 @@ def main() -> int:
                         support_idx = np.flatnonzero(support)
                         adjacency_support = adjacency_by_hemi[hemi][support_idx][:, support_idx]
                         if is_gradient_method(method):
-                            if group_features_active is None or group_gradient_meta is None:
+                            if (group_features_active is None or group_gradient_meta is None) and method == MEAN_SIMILARITY_WARD_METHOD:
+                                group_features_active, group_gradient_meta = compute_mean_similarity_gradient_features(
+                                    feature_bank=feature_bank, subjects=subjects, support_mask=support,
+                                    gradient_components=gradient_components, gradient_options=gradient_options,
+                                )
+                            elif group_features_active is None or group_gradient_meta is None:
                                 group_features_active, group_gradient_meta = load_hippomaps_gradient_features(
                                     gradient_root=gradient_root,
                                     route=gradient_route_tag,
@@ -7458,7 +7549,8 @@ def main() -> int:
                             ),
                             "group_feature_summary": str((run_dir / "group_feature_summary.json").resolve()),
                             "clustering_algorithm": (
-                                method if method in {"gradient-ward", "gradient-gmm"} else
+                                "gradient-ward" if method in WARD_GRADIENT_METHODS else
+                                method if method == "gradient-gmm" else
                                 "shared_partition_with_orthogonal_rotation_per_graph_lowest_loss_of_10_starts"
                                 if is_multigraph_method(method) else
                                 "spectral_clustering_precomputed_affinity_"
