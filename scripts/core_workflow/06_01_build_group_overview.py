@@ -184,6 +184,10 @@ WTA_OVERVIEW_SIDE_PANEL_TITLE_FS = FS_TITLE + WTA_OVERVIEW_SIDE_PANEL_FONT_DELTA
 WTA_OVERVIEW_SIDE_PANEL_LABEL_FS = FS_LABEL + WTA_OVERVIEW_SIDE_PANEL_FONT_DELTA_PT
 WTA_OVERVIEW_SIDE_PANEL_TICK_FS = FS_TICK + WTA_OVERVIEW_SIDE_PANEL_FONT_DELTA_PT
 WTA_OVERVIEW_SIDE_PANEL_LEGEND_FS = FS_LEGEND_SMALL + WTA_OVERVIEW_SIDE_PANEL_FONT_DELTA_PT
+# Single-smoothing WTA overview: [assignment counts | L profile, shared legend, R profile | functional atlas].
+WTA_SINGLE_SMOOTHING_FIGSIZE = (19.0, 7.8)
+WTA_SINGLE_SMOOTHING_WIDTH_RATIOS = (0.62, 1.55, 2.45)
+WTA_PROFILE_LEGEND_WIDTH_RATIOS = (1.0, 0.42, 1.0)
 WTA_NON_NETWORK_NAME = "__non_network_or_null__"
 GRADIENT_METHOD = "gradient-spectral"
 
@@ -1450,8 +1454,46 @@ def plot_wta_overview_profile_axis(
         ax.set_yticks(ticks)
     else:
         ax.set_yticklabels([])
-    if not show_ylabel:
-        ax.legend(fontsize=WTA_OVERVIEW_SIDE_PANEL_LEGEND_FS, frameon=False, loc="best", handlelength=1.4, labelspacing=0.22)
+
+
+def draw_wta_overview_profile_legend(ax_legend, profile_axes) -> None:
+    """Draw one shared network legend in the gap between the hemi-L and hemi-R profiles."""
+    ax_legend.axis("off")
+    handles_by_label: dict[str, object] = {}
+    for ax_prof in profile_axes:
+        for handle, label in zip(*ax_prof.get_legend_handles_labels()):
+            handles_by_label.setdefault(label, handle)
+    if handles_by_label:
+        ax_legend.legend(
+            handles=list(handles_by_label.values()),
+            labels=list(handles_by_label),
+            loc="center",
+            frameon=False,
+            fontsize=WTA_OVERVIEW_SIDE_PANEL_TICK_FS,
+            handlelength=1.2,
+            handletextpad=0.4,
+            labelspacing=0.35,
+            borderaxespad=0.0,
+        )
+
+
+def crop_white_margins(image: np.ndarray, *, pad: int = 8, threshold: float = 0.98) -> np.ndarray:
+    """Trim uniform white borders from a rendered RGB(A) image, keeping ``pad`` pixels around the content."""
+    rgb = np.asarray(image)[..., :3]
+    if rgb.dtype.kind in "ui":
+        rgb = rgb.astype(np.float64) / float(np.iinfo(rgb.dtype).max)
+    content = rgb.min(axis=-1) < threshold
+    if image.shape[-1] == 4:
+        alpha = np.asarray(image)[..., 3]
+        alpha = alpha.astype(np.float64) / float(np.iinfo(alpha.dtype).max) if alpha.dtype.kind in "ui" else alpha
+        content &= alpha > 0.02
+    rows = np.flatnonzero(content.any(axis=1))
+    cols = np.flatnonzero(content.any(axis=0))
+    if rows.size == 0 or cols.size == 0:
+        return image
+    r0, r1 = max(int(rows[0]) - pad, 0), min(int(rows[-1]) + pad + 1, image.shape[0])
+    c0, c1 = max(int(cols[0]) - pad, 0), min(int(cols[-1]) + pad + 1, image.shape[1])
+    return image[r0:r1, c0:c1]
 
 
 def draw_cluster_cortex_fc(fig, cell, profile: np.ndarray, *, stacked: bool, label: str, profile_paths: list[Path],
@@ -1668,9 +1710,13 @@ def render_combo(
         if all(profile is not None for profile in profiles):
             cortex_profiles = profiles
 
-    if layout == "single-smoothing":
-        atlas_col = 2 if method in CLUSTERLESS_METHODS else 1
-        width, width_ratios = widen_column(19.0, [0.72, 1.14, 1.40], atlas_col, FOLDUNFOLD_EXTRA_WIDTH["single-smoothing"])
+    if layout == "single-smoothing" and method in CLUSTERLESS_METHODS:
+        width, height = WTA_SINGLE_SMOOTHING_FIGSIZE
+        fig = plt.figure(figsize=(width, height), dpi=180, layout="constrained")
+        fig.get_layout_engine().set(w_pad=0.03, h_pad=0.03, wspace=0.01, hspace=0.0)
+        gs = fig.add_gridspec(nrows=1, ncols=3, width_ratios=list(WTA_SINGLE_SMOOTHING_WIDTH_RATIOS))
+    elif layout == "single-smoothing":
+        width, width_ratios = widen_column(19.0, [0.72, 1.14, 1.40], 1, FOLDUNFOLD_EXTRA_WIDTH["single-smoothing"])
         fig = plt.figure(figsize=(width, 7.5), dpi=180, constrained_layout=True)
         gs = fig.add_gridspec(nrows=1, ncols=3, width_ratios=width_ratios, wspace=0.06)
     elif method in CLUSTERLESS_METHODS:
@@ -1737,8 +1783,10 @@ def render_combo(
                 left_run_dir=d_l,
                 right_run_dir=d_r,
             )
-            profile_sub = gs[ridx, 1].subgridspec(1, 2, wspace=0.28)
-            profile_axes = [fig.add_subplot(profile_sub[0, 0]), fig.add_subplot(profile_sub[0, 1])]
+            profile_sub = gs[ridx, 1].subgridspec(1, 3, width_ratios=list(WTA_PROFILE_LEGEND_WIDTH_RATIOS), wspace=0.0)
+            profile_axes = [fig.add_subplot(profile_sub[0, 0]), fig.add_subplot(profile_sub[0, 2])]
+            profile_legend_ax = fig.add_subplot(profile_sub[0, 1])
+            profile_legend_ax.axis("off")
             try:
                 label_map = load_default_functional_label_map(d_l, m_l)
                 network_names = [str(x) for x in label_map["network_names"]]
@@ -1763,6 +1811,7 @@ def render_combo(
                         title=f"hemi-{hemi} long-axis profile",
                         show_ylabel=(hemi == "L"),
                     )
+                draw_wta_overview_profile_legend(profile_legend_ax, profile_axes)
             except Exception as exc:
                 for ax_prof in profile_axes:
                     ax_prof.axis("off")
@@ -1807,7 +1856,7 @@ def render_combo(
                         unfolded=unfolded,
                     )
                     big = Path(str(render["foldunfold_png"]))
-                    ax_big.imshow(plt.imread(big))
+                    ax_big.imshow(crop_white_margins(plt.imread(big)))
             if layout == "single-smoothing":
                 ax_big.set_title("Functional atlas", fontsize=FS_BIG_TITLE + 3, fontweight="bold")
             else:
