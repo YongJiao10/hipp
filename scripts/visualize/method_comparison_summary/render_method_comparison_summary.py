@@ -370,7 +370,8 @@ def cluster_networks(cond: Condition, variant: str, hemi: str) -> list[str | Non
 
 
 def symmetric_nonredundant(cond: Condition, variant: str) -> bool:
-    """Both hemispheres export K=3, pass the redundancy gate there, and match network by cluster."""
+    """Both hemispheres export K=3, pass the redundancy gate there, map C1-C3 to three different
+    networks, and match network by cluster across hemispheres."""
     for h in "LR":
         if cond.k[h] != HIGHLIGHT_K:
             return False
@@ -378,7 +379,7 @@ def symmetric_nonredundant(cond: Condition, variant: str) -> bool:
         if row is None or str(row.get("nonredundant_ok")) != "1":
             return False
     left, right = cluster_networks(cond, variant, "L"), cluster_networks(cond, variant, "R")
-    return None not in left and left == right
+    return None not in left and left == right and len(set(left)) == HIGHLIGHT_K
 
 
 def draw_highlight(fig, surface_axes: list) -> None:
@@ -490,7 +491,7 @@ def compose(conditions: dict[tuple, Condition], panels: dict[str, Path], rows: l
         Rectangle((0, 0), 1, 1, facecolor="#777777", label="Bar: winning network"),
         Rectangle((0, 0), 1, 1, facecolor="none", edgecolor="#111111", label="Outline: runner-up"),
         Rectangle((0, 0), 1, 1, facecolor="none", edgecolor=HIGHLIGHT_COLOR, lw=2.4,
-                  label=f"✓ L=R: both K={HIGHLIGHT_K}, same network per cluster, nonredundant at K={HIGHLIGHT_K} "
+                  label=f"✓ L=R: both K={HIGHLIGHT_K}, {HIGHLIGHT_K} different networks, same on L and R, nonredundant at K={HIGHLIGHT_K} "
                         "(tall frame: Fz and OVR both)"),
     ]
     fig.legend(handles=net_handles, loc="lower left", bbox_to_anchor=(0.01, 0.004), ncol=len(net_handles),

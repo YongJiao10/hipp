@@ -423,7 +423,8 @@ side by side within each smoothing. Each card shows split-half ARI, the
 redundancy gate, and the network-TS Fisher-z and network-TS OVR dominant bars
 and unfolded/folded hippocampus maps of the exported partition. A green frame around the
 hippocampus marks an annotation row in which both hemispheres export K=3, pass the redundancy gate
-at K=3 and assign the same network to each anterior-to-posterior cluster. One tall
+at K=3, assign three different networks to the three clusters and assign the
+same network to each anterior-to-posterior cluster in both hemispheres. One tall
 frame spans both rows when the Fisher-z and OVR annotations both qualify. The renderer
 stops unless every run shares the route, smoothing, coverage, canonical7
 taxonomy, 0.80 redundancy threshold, roster, K scan and resampling settings:
