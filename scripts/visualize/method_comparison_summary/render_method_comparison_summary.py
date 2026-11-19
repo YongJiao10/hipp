@@ -341,7 +341,7 @@ def compact_bar_labels(ax) -> None:
             text.set_text(f"{text.get_text()} vs {name}")
 
 
-def draw_surface(ax, png: Path, cond: Condition, variant: str) -> None:
+def draw_surface(ax, png: Path, cond: Condition, variant: str, highlighted: bool = False) -> None:
     ax.imshow(plt.imread(png))
     ax.axis("off")
     k_text = "K " + "/".join(
@@ -349,8 +349,48 @@ def draw_surface(ax, png: Path, cond: Condition, variant: str) -> None:
         for h in "LR"
     )
     tag = "Fz" if variant == VARIANTS[0][0] else "OVR"
-    ax.text(0.0, 1.0, f"{tag} · {k_text}" if variant == VARIANTS[0][0] else tag, transform=ax.transAxes,
-            ha="left", va="bottom", fontsize=FS + 0.5, fontweight="bold")
+    label = f"{tag} · {k_text}" if variant == VARIANTS[0][0] else tag
+    ax.text(0.0, 1.0, label + ("  ✓ L=R" if highlighted else ""), transform=ax.transAxes,
+            ha="left", va="bottom", fontsize=FS + 0.5, fontweight="bold",
+            color=HIGHLIGHT_COLOR if highlighted else "black")
+
+
+HIGHLIGHT_COLOR = "#1a9850"
+HIGHLIGHT_K = 3
+
+
+def cluster_networks(cond: Condition, variant: str, hemi: str) -> list[str | None]:
+    """Dominant network of each anterior-to-posterior cluster under one annotation."""
+    ann = cond.annotation[variant]
+    if variant == "network_ts_fisherz":
+        return [None if str(r["top1_network"]) in {"", "none", "unassigned"} else str(r["top1_network"])
+                for r in ann["bars"][hemi]]
+    names = ann["net_names"]
+    return [names[int(np.argmax(row))] if np.max(row) > 0 else None for row in ann["bars"][hemi]]
+
+
+def symmetric_nonredundant(cond: Condition, variant: str) -> bool:
+    """Both hemispheres export K=3, pass the redundancy gate there, and match network by cluster."""
+    for h in "LR":
+        if cond.k[h] != HIGHLIGHT_K:
+            return False
+        row = next((r for r in cond.rows[h] if int(r["k"]) == HIGHLIGHT_K), None)
+        if row is None or str(row.get("nonredundant_ok")) != "1":
+            return False
+    left, right = cluster_networks(cond, variant, "L"), cluster_networks(cond, variant, "R")
+    return None not in left and left == right
+
+
+def draw_highlight(fig, surface_ax, bar_ax, card_right: float) -> None:
+    """Frame the surface/bar row, including its tag above and the bar axis labels below (inches)."""
+    w, h = fig.get_size_inches()
+    sb, bb = surface_ax.get_position(), bar_ax.get_position()
+    x0 = sb.x0 - 0.04 / w
+    x1 = card_right - 0.05 / w
+    y0 = min(sb.y0, bb.y0) - 0.27 / h
+    y1 = max(sb.y1, bb.y1) + 0.13 / h
+    fig.add_artist(Rectangle((x0, y0), x1 - x0, y1 - y0, transform=fig.transFigure, fill=False,
+                             edgecolor=HIGHLIGHT_COLOR, lw=2.0, zorder=10))
 
 
 def bar_xmax(conditions: list[Condition], variant: str) -> float:
@@ -417,10 +457,14 @@ def compose(conditions: dict[tuple, Condition], panels: dict[str, Path], rows: l
             draw_redundancy(fig.add_subplot(gs[1, 0]), cond, show_labels=col == 0, ylim=red_ylim)
             for vi, (variant, _) in enumerate(VARIANTS):
                 key = condition_key(cond, variant)
-                draw_surface(fig.add_subplot(gs[vi, 1]), panels[key], cond, variant)
+                highlighted = symmetric_nonredundant(cond, variant)
+                surface_ax = fig.add_subplot(gs[vi, 1])
+                draw_surface(surface_ax, panels[key], cond, variant, highlighted)
                 bar_ax = fig.add_subplot(gs[vi, 2])
                 draw_bars(bar_ax, cond, variant, xmax[variant])
                 bar_ax.tick_params(axis="y", pad=1)
+                if highlighted:
+                    draw_highlight(fig, surface_ax, bar_ax, left + (card_w - 0.03) / fig_w)
             fig.add_artist(Rectangle((left + 0.03 / fig_w, y_bottom + 0.04 / fig_h),
                                      (card_w - 0.06) / fig_w, (card_h - 0.06) / fig_h,
                                      transform=fig.transFigure, fill=False, edgecolor="#d8d8d8", lw=0.6))
@@ -439,10 +483,12 @@ def compose(conditions: dict[tuple, Condition], panels: dict[str, Path], rows: l
         Line2D([0], [0], color="#555555", ls="-.", lw=1, label="Automatic K (if different)"),
         Rectangle((0, 0), 1, 1, facecolor="#777777", label="Bar: winning network"),
         Rectangle((0, 0), 1, 1, facecolor="none", edgecolor="#111111", label="Outline: runner-up"),
+        Rectangle((0, 0), 1, 1, facecolor="none", edgecolor=HIGHLIGHT_COLOR, lw=2.4,
+                  label=f"✓ L=R: both K={HIGHLIGHT_K}, same network per cluster, nonredundant at K={HIGHLIGHT_K}"),
     ]
     fig.legend(handles=net_handles, loc="lower left", bbox_to_anchor=(0.01, 0.004), ncol=len(net_handles),
                fontsize=7, frameon=False, title=f"Kong2022 {TAXONOMY} networks", title_fontsize=7.5)
-    fig.legend(handles=line_handles, loc="lower right", bbox_to_anchor=(0.99, 0.004), ncol=4, fontsize=7,
+    fig.legend(handles=line_handles, loc="lower right", bbox_to_anchor=(0.99, 0.004), ncol=3, fontsize=7,
                frameon=False)
     fig.text(
         0.5, 0.004 + 0.80 / fig_h,
@@ -502,11 +548,18 @@ def main() -> int:
                 "manifests": {h: str(c.run_dirs[h] / "group_atlas_manifest.json") for h in "LR"},
                 "label_sha256": {v: {h: sha256(Path(c.annotation[v]["label_paths"][h])) for h in "LR"}
                                  for v, _ in VARIANTS},
+                "cluster_networks": {v: {h: cluster_networks(c, v, h) for h in "LR"} for v, _ in VARIANTS},
+                "symmetric_nonredundant_k3": {v: symmetric_nonredundant(c, v) for v, _ in VARIANTS},
             }
             for c in conditions.values()
         ],
     }
     (out / "method_comparison_summary_manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+    for c in conditions.values():
+        passed = [name for v, name in VARIANTS if symmetric_nonredundant(c, v)]
+        if passed:
+            print(f"L=R K={HIGHLIGHT_K}: {c.row.key:14s} {c.route:16s} {c.smoothing}  {', '.join(passed)}  "
+                  f"{cluster_networks(c, VARIANTS[0][0] if passed[0] == VARIANTS[0][1] else VARIANTS[1][0], 'L')}")
     print(json.dumps(outputs, indent=2))
     return 0
 
