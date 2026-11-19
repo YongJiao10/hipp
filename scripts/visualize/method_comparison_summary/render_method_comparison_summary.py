@@ -96,6 +96,15 @@ FIGURES = {
 }
 
 FS = 6.0
+DPI = 300
+
+
+def compress_png(path: Path) -> None:
+    """Rewrite as an adaptive 256-colour palette PNG: the figure is flat colours plus shaded surfaces."""
+    with Image.open(path) as image:
+        rgb = image.convert("RGB")
+    rgb.quantize(colors=256, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE).save(
+        path, optimize=True)
 HEMI_COLORS = {"L": "#1f77b4", "R": "#d62728"}
 
 
@@ -409,7 +418,7 @@ def bar_xmax(conditions: list[Condition], variant: str) -> float:
 
 
 def compose(conditions: dict[tuple, Condition], panels: dict[str, Path], rows: list[MethodRow],
-            out_png: Path, shared: dict, title: str) -> None:
+            out_png: Path, shared: dict, title: str, *, dpi: int = DPI) -> None:
     columns = [(s, route, name) for s in SMOOTHINGS for route, name in ROUTES]
     card_w, card_h, label_w = 4.6, 2.9, 1.0
     gap = 0.35
@@ -507,7 +516,8 @@ def compose(conditions: dict[tuple, Condition], panels: dict[str, Path], rows: l
         ha="center", va="bottom", fontsize=6.5, color="#333333",
     )
     out_png.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out_png, dpi=200, facecolor="white")
+    fig.savefig(out_png, dpi=dpi, facecolor="white")
+    compress_png(out_png)
     plt.close(fig)
 
 
@@ -519,6 +529,7 @@ def main() -> int:
                         help="Group-atlas comparison root holding <route>/multigraph-spectral and mean-graph-spectral runs")
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--jobs", type=int, default=16)
+    parser.add_argument("--dpi", type=int, default=DPI)
     args = parser.parse_args()
     roots = {"gradient": args.gradient_root.resolve(strict=True), "graph": args.graph_root.resolve(strict=True)}
     out = args.out.resolve()
@@ -536,7 +547,8 @@ def main() -> int:
         subset = {key: c for key, c in conditions.items() if c.row in rows}
         png = out / f"{stem}.png"
         compose(subset, panels, rows, png, shared,
-                "Hippocampal parcellation methods — Standard vs CtxReg 10 mm vs CtxReg 20 mm (HCP, Kong2022 canonical7)")
+                "Hippocampal parcellation methods — Standard vs CtxReg 10 mm vs CtxReg 20 mm (HCP, Kong2022 canonical7)",
+                dpi=args.dpi)
         outputs[name] = str(png)
 
     manifest = {

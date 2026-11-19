@@ -438,7 +438,8 @@ HIPP_DATA_CHECKOUT=/home/yojiao/hpchome/hipp LP_NUM_THREADS=1 VTK_SMP_MAX_THREAD
   --out <output directory>
 ```
 
-It writes the combined figure, gradient-only and graph-only versions, and
+It writes the combined figure, gradient-only and graph-only versions as
+300 dpi 256-colour palette PNGs (`--dpi` changes the resolution), and
 `method_comparison_summary_manifest.json` with every consumed manifest and
 label checksum.
 
