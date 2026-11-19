@@ -106,6 +106,19 @@ def _local_artifacts(path: Path, manifest: dict[str, Any]) -> None:
         raise ValueError(f"K selection summary disagrees with manifest: {path}")
     features = _array(run / "group_gradient_features_active.npy")
     source = load_json(run / "group_gradient_feature_summary.json")
+    if str(source.get("gradient_source", "")).startswith("computed_in_group_atlas"):
+        # Gradients computed in 05_02 itself: no upstream array exists, so check
+        # the recorded in-stage evidence against the run's own support.
+        components = source.get("gradient_components")
+        n_support = int(mask.sum())
+        if (manifest.get("gradient_recomputed") is not True
+                or manifest.get("gradient_computation") != source["gradient_source"]
+                or not isinstance(components, list) or not components
+                or features.shape != (n_support, len(components))
+                or source.get("group_mean_vertex_similarity_shape") != [n_support, n_support]
+                or source.get("n_subjects") != manifest.get("n_subjects")):
+            raise ValueError(f"In-stage gradient evidence disagrees with the run: {path}")
+        return
     gradient = load_json(source["hippomaps_gradient_manifest"])
     outputs = gradient["outputs"]
     full = _array(Path(outputs["hippomaps_gradients_full"]))

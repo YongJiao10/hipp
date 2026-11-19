@@ -350,7 +350,7 @@ def draw_surface(ax, png: Path, cond: Condition, variant: str) -> None:
     )
     tag = "Fz" if variant == VARIANTS[0][0] else "OVR"
     ax.text(0.0, 1.0, f"{tag} · {k_text}" if variant == VARIANTS[0][0] else tag, transform=ax.transAxes,
-            ha="left", va="top", fontsize=FS + 0.5, fontweight="bold")
+            ha="left", va="bottom", fontsize=FS + 0.5, fontweight="bold")
 
 
 def bar_xmax(conditions: list[Condition], variant: str) -> float:

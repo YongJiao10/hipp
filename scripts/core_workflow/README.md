@@ -400,6 +400,44 @@ meets the size gate; otherwise the run stops. The manifest records
 `undersized_default_k`. The participant-graph comparison uses `--default-k 3
 --undersized-default-k-fallback 2` with `--redundancy-threshold 0.80`.
 
+### Mean-similarity Ward
+
+`mean-similarity-ward` is a Kong2022-only gradient method outside the
+production defaults and requires `--profile topsim`. Each participant's
+feature is the Pearson similarity between the Fisher-z 400-ROI fingerprints of
+that participant's valid vertices. The group affinity averages each vertex
+pair over the participants who observe both vertices, sets the diagonal to 1,
+keeps the top 10% of each row, clips negatives and mean-symmetrizes before the
+exact diffusion map. Gradients are aligned to the method's own 2 mm-left
+anchor and clustered with the mesh-constrained Ward of `gradient-ward`, so
+`--gradient-components`, the K scan, split-half ARI, nulls, redundancy gate and
+annotation follow the gradient cluster contract. Full-cohort gradients are
+computed in `05_02`; manifests record `gradient_recomputed: true` and no
+`05_01` source. `--resume` is not supported for this method.
+
+The method comparison figure
+(`scripts/visualize/method_comparison_summary/render_method_comparison_summary.py`)
+places gradient Ward and mean-similarity Ward (G1, G1+G2, G1–G3) and the two
+participant-graph methods in rows, and Standard, CtxReg 10 mm and CtxReg 20 mm
+side by side within each smoothing. Each card shows split-half ARI, the
+redundancy gate, and the network-TS Fisher-z and network-TS OVR dominant bars
+and unfolded/folded hippocampus maps of the exported partition. The renderer
+stops unless every run shares the route, smoothing, coverage, canonical7
+taxonomy, 0.80 redundancy threshold, roster, K scan and resampling settings:
+
+```bash
+HIPP_DATA_CHECKOUT=/home/yojiao/hpchome/hipp LP_NUM_THREADS=1 VTK_SMP_MAX_THREADS=1 xvfb-run -a \
+  /home/yojiao/.conda/envs/py314/bin/python \
+  scripts/visualize/method_comparison_summary/render_method_comparison_summary.py \
+  --gradient-root <group-atlas root with gradient-ward and mean-similarity-ward runs> \
+  --graph-root <group-atlas root with multigraph-spectral and mean-graph-spectral runs> \
+  --out <output directory>
+```
+
+It writes the combined figure, gradient-only and graph-only versions, and
+`method_comparison_summary_manifest.json` with every consumed manifest and
+label checksum.
+
 ### Participant-graph spectral methods
 
 `multigraph-spectral` and `mean-graph-spectral` (`lib/multigraph_spectral.py`)
