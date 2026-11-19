@@ -20,7 +20,7 @@ Inputs:
   - --gradient-components: Gradient component selection of the 05_02 run to render (default: "1,2,3"); it selects the exact `cov_<tau>/<g-tag>/` input. Non-default selections (e.g. "1", "1,2") render into a `<g-tag>/` subdirectory of the overview destination and name the set (e.g. "G1+G2") in the title.
   - --route-tag: Custom workflow branch tag to override automatic detection.
   - --mode-tag: Optional explicit overview label override (default: none). No automatic sparse/full inference is performed; all maintained formal runs are full.
-  - --assignment-variant: Network mapping variant: "fisherz", "normalized_top20_count", "network_ts_fisherz", "ovr_logistic_canonical7", "ovr_logistic_family17", or "both" (default: "both").
+  - --assignment-variant: Network mapping variant: "fisherz", "normalized_top20_count", "network_ts_fisherz", "ovr_logistic_canonical7", "ovr_logistic_family17", or "both" (default: "both"). For Kong2022 gradient methods "both" renders the network-TS, ROI and Top-20 annotation pairs; for other Kong2022 cluster methods it renders the default network-TS Fisher-z and normalized Top-20.
   - --manifest-name: Name of generated presentation manifest JSON (default: "group_overview_manifest.json").
   - --skip-readme: Skip writing the README.md summary in presentation directory.
   - --skip-manifest: Skip writing the overview manifest JSON file.
@@ -176,7 +176,7 @@ ASSIGNMENT_VARIANTS = (
     *ALL_OVR_VARIANTS,
 )
 ANNOTATION_PAIR_CHOICES = ("roi-fisherz", "network-ts-fisherz", "top20")
-DEFAULT_RENDER_ASSIGNMENT_VARIANTS = ("fisherz", "normalized_top20_count")
+DEFAULT_RENDER_ASSIGNMENT_VARIANTS = ("network_ts_fisherz", "normalized_top20_count")
 ASSIGNMENT_VARIANT_CHOICES = ASSIGNMENT_VARIANTS + ("both",)
 WTA_OVERVIEW_PROFILE_BINS = 20
 WTA_OVERVIEW_SIDE_PANEL_FONT_DELTA_PT = 4
@@ -361,7 +361,9 @@ def default_render_assignment_variant(method: str, atlas: str) -> str:
         if str(atlas).startswith("lynch2024_"):
             return "fisherz"
         raise ValueError(f"WTA is not supported for atlas={atlas!r}")
-    return "fisherz"
+    if str(atlas).startswith("lynch2024_"):
+        return "fisherz"
+    return "network_ts_fisherz"
 
 
 def effective_overview_mode_tag(method: str, mode_tag: str | None, assignment_variant: str | None) -> str | None:
@@ -2538,7 +2540,7 @@ def main() -> int:
                 if requested.startswith("ovr_logistic_") and not requested.startswith(f"ovr_logistic_{taxonomy}"):
                     raise ValueError(f"Requested {requested} conflicts with {taxonomy} route {args.route_tag}")
                 if args.assignment_variant == "both":
-                    pairs = ["roi-fisherz", "network-ts-fisherz", "top20"]
+                    pairs = ["network-ts-fisherz", "roi-fisherz", "top20"]
                 elif args.assignment_variant in ANNOTATION_PAIR_BY_ASSIGNMENT_VARIANT:
                     pairs = [ANNOTATION_PAIR_BY_ASSIGNMENT_VARIANT[args.assignment_variant]]
                 else:

@@ -31,7 +31,7 @@ def test_producer_and_consumers_recognize_new_gradient_methods_without_default_c
         assert overview._is_gradient_method(method)
         assert panels._is_gradient_method(method)
     assert atlas.METHODS_DEFAULT == ["intrinsic-spectral", "network-spectral", "wta-top"]
-    assert overview.resolve_render_assignment_variants("gradient-ward", "both", atlas="kong2022") == ("fisherz", "normalized_top20_count")
+    assert overview.resolve_render_assignment_variants("gradient-ward", "both", atlas="kong2022") == ("network_ts_fisherz", "normalized_top20_count")
     for variant in OVR_VARIANTS:
         assert overview.resolve_render_assignment_variants("gradient-gmm", variant, atlas="kong2022") == (variant,)
 

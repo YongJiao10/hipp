@@ -176,7 +176,7 @@ def test_default_gradient_cli_renders_all_three_pairs_for_one_smoothing(tmp_path
         "--route-tag", "pfm", "--smoothing", "4mm", "--skip-readme", "--skip-manifest",
     ])
     assert overview_mod.main() == 0
-    assert [call["annotation_pair"] for call in calls] == ["roi-fisherz", "network-ts-fisherz", "top20"]
+    assert [call["annotation_pair"] for call in calls] == ["network-ts-fisherz", "roi-fisherz", "top20"]
     assert all(call["smoothing"] == "4mm" and call["layout"] == "annotation-pair" for call in calls)
     assert all(call["gradient_comp_tag"] == "g1g2g3" for call in calls)
     assert all(call["present_dir"] == (tmp_path / "present").resolve() for call in calls)

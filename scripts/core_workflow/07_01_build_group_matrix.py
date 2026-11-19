@@ -67,7 +67,9 @@ ATLAS = "kong2022"
 CLUSTERLESS_METHODS = {"wta-top"}
 METHOD_CHOICES = METHODS + sorted(GRADIENT_METHODS - set(METHODS))
 DEFAULT_GRADIENT_COMPONENT_TAG = "g1g2g3"
-ASSIGNMENT_VARIANTS = ("fisherz", "normalized_top20_count")
+ASSIGNMENT_VARIANTS = ("network_ts_fisherz", "fisherz", "normalized_top20_count")
+# "both": the Kong2022 cluster-level default (network-TS Fisher-z) plus normalized Top-20.
+DEFAULT_ASSIGNMENT_VARIANTS = ("network_ts_fisherz", "normalized_top20_count")
 
 
 @dataclass(frozen=True)
@@ -113,7 +115,7 @@ def build_render_jobs(
     group_atlas_root: Path = DEFAULT_GROUP_ATLAS_BASE_ROOT,
     routes: tuple[str, ...] = DEFAULT_ROUTES,
     methods: tuple[str, ...] = tuple(METHODS),
-    assignment_variants: tuple[str, ...] = ASSIGNMENT_VARIANTS,
+    assignment_variants: tuple[str, ...] = DEFAULT_ASSIGNMENT_VARIANTS,
 ) -> list[RenderJob]:
     requested_routes = tuple(str(route) for route in routes)
     unknown_routes = sorted(set(requested_routes).difference(set(ROUTE_CHOICES)))
@@ -230,7 +232,7 @@ def discover_hcp_profile_overviews(present_dir: Path) -> list[dict[str, object]]
             dir_path = pfm_root / profile / method / smoothing
             if not dir_path.is_dir():
                 continue
-            for pair in ("roi-fisherz", "network-ts-fisherz", "top20"):
+            for pair in ("network-ts-fisherz", "roi-fisherz", "top20"):
                 png_path = dir_path / annotation_pair_overview_name(pair)
                 if png_path.is_file():
                     items.append({
@@ -240,7 +242,7 @@ def discover_hcp_profile_overviews(present_dir: Path) -> list[dict[str, object]]
                         "smoothing": smoothing,
                         "annotation_pair": pair,
                         "k": 3,
-                        "selected_default": (profile == "topsim" and method == "gradient-ward" and smoothing == "2mm" and pair == "roi-fisherz"),
+                        "selected_default": (profile == "topsim" and method == "gradient-ward" and smoothing == "2mm" and pair == "network-ts-fisherz"),
                         "overview_png": str(png_path.resolve()),
                     })
 
@@ -338,7 +340,7 @@ def main() -> int:
 
     records: list[dict[str, str]] = []
     jobs = build_render_jobs(group_atlas_root, routes=tuple(args.routes), methods=tuple(args.methods),
-                             assignment_variants=ASSIGNMENT_VARIANTS if args.assignment_variant == "both" else (args.assignment_variant,))
+                             assignment_variants=DEFAULT_ASSIGNMENT_VARIANTS if args.assignment_variant == "both" else (args.assignment_variant,))
     if args.index_only:
         for job in jobs:
             overview_png = expected_overview_path(
