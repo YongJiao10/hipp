@@ -229,3 +229,11 @@ def test_subject_gradient_hbp_stack(monkeypatch, tmp_path):
     assert meta["clustering_feature_transform"]["common_scale_divisor"] > 0
     assert abs(np.corrcoef(np.nanmean(stack, axis=0)[:, 0], np.arange(100))[0, 1]) > 0.9
     assert atlas.SUBJECT_GRADIENT_HBP_METHOD in atlas.SIMILARITY_GRADIENT_METHODS
+
+
+def test_hbp_provenance_matches_the_atlas_manifest_description():
+    from lib.gradient_clustering import SUBJECT_GRADIENT_HBP_METHOD, gradient_method_provenance
+    atlas = stage("05_02_run_group_atlas.py")
+    affinity, description = atlas.method_surface_affinity_metadata(SUBJECT_GRADIENT_HBP_METHOD)
+    expected = gradient_method_provenance(SUBJECT_GRADIENT_HBP_METHOD)
+    assert (expected["surface_affinity"], expected["affinity_description"]) == (affinity, description)

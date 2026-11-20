@@ -19,6 +19,11 @@ from .surface_affinity import (
 MEAN_SIMILARITY_WARD_METHOD = "mean-similarity-ward"
 SUBJECT_GRADIENT_WARD_METHOD = "subject-gradient-ward"
 SUBJECT_GRADIENT_HBP_METHOD = "subject-gradient-hbp"
+# Single provenance string for subject-gradient-hbp (lib/gradient_hbp.py records the same value).
+HBP_ALGORITHM_DESCRIPTION = (
+    "hierarchbayesparcel_independent_vertex_prior_isotropic_gaussian_mixture_unnormalized_centres_"
+    "10_inits_then_mesh_constrained_ward_on_group_prior"
+)
 # Ward on diffusion gradients; the variants differ only in how the gradients
 # are formed (group-mean FC, mean participant similarity, or the Procrustes
 # mean of each participant's own gradients).
@@ -51,7 +56,7 @@ def gradient_method_provenance(method: str, *, rbf_scale: float = 1.) -> dict:
     elif method == "gradient-gmm":
         affinity, description = "none", "full_covariance_gaussian_mixture_no_spatial_constraint"
     elif method == SUBJECT_GRADIENT_HBP_METHOD:
-        affinity, description = "none", "hbp_gaussian_mixture_on_aligned_subject_gradients_then_mesh_constrained_ward_on_group_prior"
+        affinity, description = "none", HBP_ALGORITHM_DESCRIPTION
     else:
         raise ValueError(f"Unknown gradient method: {method}")
     return {"method": method, "surface_affinity": affinity, "affinity_description": description}

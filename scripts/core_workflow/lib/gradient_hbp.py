@@ -20,16 +20,13 @@ from pathlib import Path
 import numpy as np
 from scipy.sparse.csgraph import connected_components
 
-from .gradient_clustering import cluster_gradients
+from .gradient_clustering import HBP_ALGORITHM_DESCRIPTION, cluster_gradients
 
 N_INITS = 10
 FIRST_ITER = 30
 MAX_ITER = 200
 TOLERANCE = 0.01
-ALGORITHM_DESCRIPTION = (
-    "hierarchbayesparcel_independent_vertex_prior_isotropic_gaussian_mixture_unnormalized_centres_"
-    "10_inits_then_mesh_constrained_ward_on_group_prior"
-)
+ALGORITHM_DESCRIPTION = HBP_ALGORITHM_DESCRIPTION
 # HierarchBayesParcel draws from the global torch generator; fits are serialized so a seed
 # fully determines each fit when K candidates run as threads.
 _FIT_LOCK = threading.Lock()
