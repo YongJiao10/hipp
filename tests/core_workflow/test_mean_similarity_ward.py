@@ -193,3 +193,39 @@ def test_similarity_gradient_halves_use_their_own_feature_builder(monkeypatch, t
         np.testing.assert_array_equal(first, again)
         np.testing.assert_allclose(first, direct)
     assert calls.count(atlas.MEAN_SIMILARITY_WARD_METHOD) >= 1 and calls.count(atlas.SUBJECT_GRADIENT_WARD_METHOD) == 1
+
+
+HBP_ROOT = Path("/home/yojiao/hpchome/hipp-gpt/tmp/subject-aware-parcellation/HierarchBayesParcel")
+
+
+@pytest.mark.skipif(not (HBP_ROOT / "HierarchBayesParcel").is_dir(), reason="HierarchBayesParcel checkout unavailable")
+def test_hbp_connected_group_map_recovers_chain_parcels():
+    from lib.gradient_hbp import fit_hbp_connected
+    rng = np.random.default_rng(3)
+    truth = np.repeat([1, 2, 3], 30)
+    centres = np.array([[-2.0, 0.0], [0.0, 1.5], [2.0, 0.0]])
+    stack = np.stack([centres[truth - 1] + 0.6 * rng.normal(size=(90, 2)) for _ in range(12)]).astype(np.float32)
+    stack[0, :5] = np.nan  # one participant misses five vertices
+    labels, meta = fit_hbp_connected(stack, chain_adjacency(90), k=3, seed=1, hbp_root=HBP_ROOT)
+    from sklearn.metrics import adjusted_rand_score
+    assert adjusted_rand_score(labels, truth) > 0.9
+    assert meta["hbp_prior_normalized_entropy_mean"] < 0.5
+    again, _ = fit_hbp_connected(stack, chain_adjacency(90), k=3, seed=1, hbp_root=HBP_ROOT)
+    np.testing.assert_array_equal(labels, again)
+
+
+def test_subject_gradient_hbp_stack(monkeypatch, tmp_path):
+    atlas = stage("05_02_run_group_atlas.py")
+    monkeypatch.setattr(atlas, "ensure_hippomaps_on_path", lambda root=None: tmp_path)
+    monkeypatch.setattr(atlas, "hippomaps_commit", lambda root=None: "stub")
+    monkeypatch.setattr(atlas, "hippomaps_import_path", lambda root=None: str(tmp_path))
+    bank = {str(i): vertex_similarity(fc) for i, fc in enumerate(subject_fingerprints(n_subjects=4))}
+    options = {"feature_scaling": "none", "sparsify_stage": "affinity", "sparsity": 0.9,
+               "clustering_feature_scaling": "none"}
+    stack, meta = atlas.build_group_gradient_features(
+        method=atlas.SUBJECT_GRADIENT_HBP_METHOD, feature_bank=bank, subjects_subset=list(bank),
+        support_mask=np.ones(100, dtype=bool), gradient_components=(1, 2), gradient_options=options)
+    assert stack.shape == (4, 100, 2)
+    assert meta["clustering_feature_transform"]["common_scale_divisor"] > 0
+    assert abs(np.corrcoef(np.nanmean(stack, axis=0)[:, 0], np.arange(100))[0, 1]) > 0.9
+    assert atlas.SUBJECT_GRADIENT_HBP_METHOD in atlas.SIMILARITY_GRADIENT_METHODS

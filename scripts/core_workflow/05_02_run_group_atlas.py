@@ -103,6 +103,7 @@ from lib.hippomaps_adapter import (
     fit_diffusion_gradients,
     fit_mean_similarity_gradients,
     generalized_procrustes_mean,
+    procrustes_rotation,
     gradient_preprocessing_settings,
     validate_gradient_preprocessing,
     scale_gradient_features,
@@ -180,7 +181,8 @@ from lib.route_tags import (
 )
 from lib.fc_math import corrcoef_rows, fisher_z_transform_fc, bh_fdr, center_run_timeseries
 from lib.gradient_clustering import (
-    GRADIENT_METHODS, MEAN_SIMILARITY_WARD_METHOD, RBF_AFFINITY_DESCRIPTION, SUBJECT_GRADIENT_WARD_METHOD,
+    GRADIENT_METHODS, MEAN_SIMILARITY_WARD_METHOD, RBF_AFFINITY_DESCRIPTION, SUBJECT_GRADIENT_HBP_METHOD,
+    SUBJECT_GRADIENT_WARD_METHOD,
     WARD_GRADIENT_METHODS,
     cluster_gradients,
     binary_mesh_adjacency, build_rbf_mesh_affinity,
@@ -188,6 +190,7 @@ from lib.gradient_clustering import (
     is_gradient_method as registered_gradient_method,
 )
 from lib.gifti_labels import make_cluster_label_gifti, make_named_label_gifti
+from lib import gradient_hbp
 from lib.multigraph_spectral import (
     AFFINITY_DESCRIPTION as MULTIGRAPH_AFFINITY_DESCRIPTION,
     MAX_COORDINATES as MULTIGRAPH_MAX_COORDINATES,
@@ -243,6 +246,7 @@ DEFAULT_NETWORK_STYLE = REPO_ROOT / "config" / "hipp_network_style.json"
 DEFAULT_GROUP_AVG_SURFACES_DIR = DEFAULT_KONG2022_TEMPLATE_ROOT / "group_average_surfaces"
 KONG2022_DLABEL_OVERRIDE: Path | None = None
 HIPPOMAPS_ROOT_OVERRIDE: Path = DEFAULT_HIPPOMAPS_ROOT
+HBP_ROOT_OVERRIDE: Path | None = None
 
 METHOD_CHOICES = [
     "group-roi-sim-spectral",
@@ -254,6 +258,7 @@ METHOD_CHOICES = [
     "intrinsic-spectral",
     MEAN_SIMILARITY_WARD_METHOD,
     SUBJECT_GRADIENT_WARD_METHOD,
+    SUBJECT_GRADIENT_HBP_METHOD,
     MULTIGRAPH_METHOD,
     MULTIGRAPH_GRADIENT_METHOD,
     MEAN_GRAPH_METHOD,
@@ -271,7 +276,9 @@ DEFAULT_ATLASES = ["kong2022"]
 SMOOTHINGS = ["2mm", "4mm"]
 HEMIS = ["L", "R"]
 K_RANGE = list(range(2, 9))
-SIMILARITY_GRADIENT_METHODS = frozenset({MEAN_SIMILARITY_WARD_METHOD, SUBJECT_GRADIENT_WARD_METHOD})
+SIMILARITY_GRADIENT_METHODS = frozenset({MEAN_SIMILARITY_WARD_METHOD, SUBJECT_GRADIENT_WARD_METHOD,
+                                         SUBJECT_GRADIENT_HBP_METHOD})
+SUBJECT_GRADIENT_HBP_SOURCE = "computed_in_group_atlas_aligned_subject_gradients_for_hbp"
 KONG2022_ONLY_METHODS = {"group-roi-sim-spectral"} | SIMILARITY_GRADIENT_METHODS | MULTIGRAPH_METHODS
 LYNCH2024_METHODS = (set(GRADIENT_METHODS) - SIMILARITY_GRADIENT_METHODS) | {"wta-top"}
 SUBJECT_GRADIENT_SOURCE = "computed_in_group_atlas_from_procrustes_mean_of_subject_gradients"
@@ -1253,6 +1260,9 @@ def feature_family_for_method(method: str, atlas: str, gradient_components: tupl
     if method == SUBJECT_GRADIENT_WARD_METHOD:
         comp_tag = "".join(f"g{int(c)}" for c in gradient_components)
         return f"procrustes_mean_of_subject_similarity_diffusion_gradients_kong2022_400roi_fc_{comp_tag}"
+    if method == SUBJECT_GRADIENT_HBP_METHOD:
+        comp_tag = "".join(f"g{int(c)}" for c in gradient_components)
+        return f"procrustes_aligned_subject_similarity_diffusion_gradients_kong2022_400roi_fc_{comp_tag}"
     if is_gradient_method(method):
         comp_tag = "".join(f"g{int(c)}" for c in gradient_components)
         if is_lynch2024_atlas(atlas) or str(atlas) == "kong2022":
@@ -1293,6 +1303,8 @@ def fc_mode_for_method(method: str, atlas: str | None = None) -> str:
         return "pearson_vertex_to_roi_fisherz_then_pearson_vertex_to_vertex_per_subject_then_subject_mean_then_diffusion_gradients"
     if method == SUBJECT_GRADIENT_WARD_METHOD:
         return "pearson_vertex_to_roi_fisherz_then_pearson_vertex_to_vertex_per_subject_then_subject_diffusion_gradients_procrustes_mean"
+    if method == SUBJECT_GRADIENT_HBP_METHOD:
+        return "pearson_vertex_to_roi_fisherz_then_pearson_vertex_to_vertex_per_subject_then_subject_diffusion_gradients_procrustes_aligned"
     if is_gradient_method(method):
         if atlas is not None and (is_lynch2024_atlas(atlas) or str(atlas) == "kong2022"):
             if str(atlas) == "kong2022":
@@ -1554,8 +1566,14 @@ def subject_gradient_features(
     gradient_components: tuple[int, ...],
     hippomaps_root: Path,
     gradient_options: dict[str, object],
+    as_stack: bool = False,
 ) -> tuple[np.ndarray, dict[str, object]]:
-    """Procrustes mean of each participant's own diffusion gradients, aligned to the mean-similarity template."""
+    """Procrustes mean of each participant's own diffusion gradients, aligned to the mean-similarity template.
+
+    ``as_stack`` returns every participant's aligned selected components instead (participants x
+    vertices x components, NaN where unobserved), divided by one common scale, the RMS of the
+    selected components of the Procrustes mean.
+    """
     options = dict(gradient_options or {})
     sparsity = mean_similarity_options(options)
     idx = np.flatnonzero(support_mask)
@@ -1577,7 +1595,25 @@ def subject_gradient_features(
         subject_gradients.append((rows, gradients))
     mean, procrustes_meta = generalized_procrustes_mean(subject_gradients, template)
     comps = parse_gradient_components(",".join(str(c) for c in gradient_components))
-    selected = mean[:, [int(c) - 1 for c in comps]]
+    columns = [int(c) - 1 for c in comps]
+    selected = mean[:, columns]
+    if as_stack:
+        scale = float(np.sqrt(np.mean(selected.astype(np.float64) ** 2)))
+        stack = np.full((len(subject_gradients), idx.size, len(columns)), np.nan, dtype=np.float32)
+        for i, (rows, gradients) in enumerate(subject_gradients):
+            stack[i, rows] = (gradients @ procrustes_rotation(gradients, mean[rows]))[:, columns] / scale
+        meta = dict(template_meta)
+        meta.update(
+            gradient_components=[int(c) for c in comps], gradient_component_labels=[f"G{int(c)}" for c in comps],
+            selected_components=[f"G{int(c)}" for c in comps],
+            gradient_embedding_call=SUBJECT_GRADIENT_EMBEDDING_CALL + "; participant-level aligned components kept",
+            clustering_feature_transform={"scaling": "none", "common_scale_divisor": scale},
+            template_method=MEAN_SIMILARITY_WARD_METHOD, subject_gradient_alignment=procrustes_meta,
+            n_subject_gradient_fits=len(subject_gradients),
+        )
+        meta.pop("gradient_eigenvalues", None)
+        meta.pop("ev_fractions", None)
+        return stack, meta
     selected, clustering_transform = scale_gradient_features(
         selected, scaling=options.get("clustering_feature_scaling", "none"),
     )
@@ -1613,11 +1649,11 @@ def build_group_gradient_features(
     idx = np.flatnonzero(support_mask)
     if idx.size == 0:
         raise RuntimeError("Support mask has zero vertices")
-    if method == SUBJECT_GRADIENT_WARD_METHOD:
+    if method in (SUBJECT_GRADIENT_WARD_METHOD, SUBJECT_GRADIENT_HBP_METHOD):
         return subject_gradient_features(
             feature_bank=feature_bank, subjects_subset=subjects_subset, support_mask=support_mask,
             gradient_components=gradient_components, hippomaps_root=hippomaps_root,
-            gradient_options=dict(gradient_options or {}),
+            gradient_options=dict(gradient_options or {}), as_stack=method == SUBJECT_GRADIENT_HBP_METHOD,
         )
     comps = (tuple(range(1, GRADIENT_N_COMPONENTS_COMPUTED + 1)) if all_components
              else parse_gradient_components(",".join(str(c) for c in gradient_components)))
@@ -1775,7 +1811,8 @@ def compute_similarity_gradient_features(
     )
     if not meta["gradient_alignment"].get("enabled"):
         raise ValueError(f"{method} requires the 2 mm-left alignment anchor")
-    source = SUBJECT_GRADIENT_SOURCE if method == SUBJECT_GRADIENT_WARD_METHOD else MEAN_SIMILARITY_GRADIENT_SOURCE
+    source = {SUBJECT_GRADIENT_WARD_METHOD: SUBJECT_GRADIENT_SOURCE,
+              SUBJECT_GRADIENT_HBP_METHOD: SUBJECT_GRADIENT_HBP_SOURCE}.get(method, MEAN_SIMILARITY_GRADIENT_SOURCE)
     meta.update(gradient_source=source, n_subjects=len(subjects))
     return features, meta
 
@@ -3675,6 +3712,8 @@ def method_surface_affinity_metadata(method: str) -> tuple[str, str]:
         return "mesh-rbf", RBF_AFFINITY_DESCRIPTION
     if method in WARD_GRADIENT_METHODS:
         return "none", "ward_euclidean_binary_mesh_connectivity"
+    if method == SUBJECT_GRADIENT_HBP_METHOD:
+        return "none", gradient_hbp.ALGORITHM_DESCRIPTION
     if method == "gradient-gmm":
         return "none", "full_covariance_gaussian_mixture_no_spatial_constraint"
     if is_multigraph_method(method):
@@ -3717,6 +3756,13 @@ def cluster_from_precomputed_group_features(
         if int(k) > MULTIGRAPH_MAX_COORDINATES:
             raise ValueError(f"{method} supports K <= {MULTIGRAPH_MAX_COORDINATES}, got {k}")
         labels, metadata = discretize_stack(group_features, int(k), seed=int(seed))
+        if clustering_metadata is not None:
+            clustering_metadata.update(metadata)
+    elif method == SUBJECT_GRADIENT_HBP_METHOD:
+        if HBP_ROOT_OVERRIDE is None:
+            raise ValueError(f"{method} requires --hbp-root (a HierarchBayesParcel checkout)")
+        labels, metadata = gradient_hbp.fit_hbp_connected(
+            group_features, adj, k=int(k), seed=int(seed), hbp_root=HBP_ROOT_OVERRIDE)
         if clustering_metadata is not None:
             clustering_metadata.update(metadata)
     elif is_gradient_method(method):
@@ -3780,7 +3826,7 @@ def evaluate_k_candidate(
     supported_mesh = adjacency_full[support_indices][:, support_indices]
     affinity_graph = (
         binary_mesh_adjacency(supported_mesh, len(support_indices))
-        if method in (WARD_GRADIENT_METHODS | {"gradient-gmm"}) or is_multigraph_method(method) else
+        if method in (WARD_GRADIENT_METHODS | {"gradient-gmm", SUBJECT_GRADIENT_HBP_METHOD}) or is_multigraph_method(method) else
         build_method_surface_affinity(
             method, group_features_active, supported_mesh,
             rbf_scale=float((gradient_options or {}).get("rbf_scale", 1.0)),
@@ -3798,6 +3844,10 @@ def evaluate_k_candidate(
     max_components = int(max(comp.values())) if comp else 0
     if is_multigraph_method(method):
         min_coh, mean_coh = stack_coherence(group_features_active, labels_active, int(k))
+    elif np.ndim(group_features_active) == 3:
+        # Participant-level features: coherence of the vertexwise mean over observing participants.
+        min_coh, mean_coh = cluster_profile_coherence(
+            np.nanmean(group_features_active, axis=0), labels_active, int(k))
     else:
         min_coh, mean_coh = cluster_profile_coherence(group_features_active, labels_active, int(k))
 
@@ -5809,6 +5859,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--cohort", default=None, help="Cohort directory below the selected gradient route; omit for HCP.")
     parser.add_argument("--variant", choices=("36p",), default="36p")
     parser.add_argument("--hippomaps-root", default=str(DEFAULT_HIPPOMAPS_ROOT))
+    parser.add_argument("--hbp-root", default=None,
+                        help="HierarchBayesParcel checkout used by subject-gradient-hbp; its git revision is recorded.")
     parser.add_argument("--route-tag", choices=["auto", *ROUTE_TAG_CHOICES], default="auto")
     parser.add_argument(
         "--signal-branch",
@@ -6035,9 +6087,12 @@ def main() -> int:
         flush=True,
     )
 
-    global KONG2022_DLABEL_OVERRIDE, HIPPOMAPS_ROOT_OVERRIDE
+    global KONG2022_DLABEL_OVERRIDE, HIPPOMAPS_ROOT_OVERRIDE, HBP_ROOT_OVERRIDE
     KONG2022_DLABEL_OVERRIDE = Path(args.kong2022_dlabel).resolve() if args.kong2022_dlabel else None
     HIPPOMAPS_ROOT_OVERRIDE = Path(args.hippomaps_root).resolve()
+    HBP_ROOT_OVERRIDE = Path(args.hbp_root).resolve(strict=True) if args.hbp_root else None
+    if SUBJECT_GRADIENT_HBP_METHOD in args.methods and HBP_ROOT_OVERRIDE is None:
+        raise ValueError(f"{SUBJECT_GRADIENT_HBP_METHOD} requires --hbp-root")
 
     shared_root = Path(args.shared_root).resolve()
     surface_root = Path(args.surface_root).resolve()
@@ -6841,7 +6896,11 @@ def main() -> int:
                                 flush=True,
                             )
                         if is_gradient_method(method):
-                            np.save(run_dir / "group_gradient_features_active.npy", group_features_active.astype(np.float32))
+                            np.save(
+                                run_dir / "group_gradient_features_active.npy",
+                                (np.nanmean(group_features_active, axis=0) if group_features_active.ndim == 3
+                                 else group_features_active).astype(np.float32),
+                            )
                             write_json(run_dir / "group_gradient_feature_summary.json", group_gradient_meta)
 
                         precomputed_split_halves = None
@@ -7692,6 +7751,7 @@ def main() -> int:
                             "group_feature_summary": str((run_dir / "group_feature_summary.json").resolve()),
                             "clustering_algorithm": (
                                 "gradient-ward" if method in WARD_GRADIENT_METHODS else
+                                gradient_hbp.ALGORITHM_DESCRIPTION if method == SUBJECT_GRADIENT_HBP_METHOD else
                                 method if method == "gradient-gmm" else
                                 "shared_partition_with_orthogonal_rotation_per_graph_lowest_loss_of_10_starts"
                                 if is_multigraph_method(method) else

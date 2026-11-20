@@ -18,13 +18,14 @@ from .surface_affinity import (
 
 MEAN_SIMILARITY_WARD_METHOD = "mean-similarity-ward"
 SUBJECT_GRADIENT_WARD_METHOD = "subject-gradient-ward"
+SUBJECT_GRADIENT_HBP_METHOD = "subject-gradient-hbp"
 # Ward on diffusion gradients; the variants differ only in how the gradients
 # are formed (group-mean FC, mean participant similarity, or the Procrustes
 # mean of each participant's own gradients).
 WARD_GRADIENT_METHODS = frozenset({"gradient-ward", MEAN_SIMILARITY_WARD_METHOD, SUBJECT_GRADIENT_WARD_METHOD})
 GRADIENT_METHODS = frozenset({
     "gradient-spectral", "gradient-ward", "gradient-gmm", "gradient-spectral-rbf",
-    MEAN_SIMILARITY_WARD_METHOD, SUBJECT_GRADIENT_WARD_METHOD,
+    MEAN_SIMILARITY_WARD_METHOD, SUBJECT_GRADIENT_WARD_METHOD, SUBJECT_GRADIENT_HBP_METHOD,
 })
 SPECTRAL_GRADIENT_METHODS = frozenset({"gradient-spectral", "gradient-spectral-rbf"})
 RBF_AFFINITY_DESCRIPTION = "binary_mesh_edges_exp(-squared_gradient_distance/(2*sigma^2))"
@@ -49,6 +50,8 @@ def gradient_method_provenance(method: str, *, rbf_scale: float = 1.) -> dict:
         affinity, description = "none", "ward_euclidean_binary_mesh_connectivity"
     elif method == "gradient-gmm":
         affinity, description = "none", "full_covariance_gaussian_mixture_no_spatial_constraint"
+    elif method == SUBJECT_GRADIENT_HBP_METHOD:
+        affinity, description = "none", "hbp_gaussian_mixture_on_aligned_subject_gradients_then_mesh_constrained_ward_on_group_prior"
     else:
         raise ValueError(f"Unknown gradient method: {method}")
     return {"method": method, "surface_affinity": affinity, "affinity_description": description}

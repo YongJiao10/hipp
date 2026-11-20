@@ -151,6 +151,7 @@ METHOD_CHOICES = [
     "intrinsic-spectral",
     "mean-similarity-ward",
     "subject-gradient-ward",
+    "subject-gradient-hbp",
     MULTIGRAPH_METHOD,
     MULTIGRAPH_GRADIENT_METHOD,
     MEAN_GRAPH_METHOD,

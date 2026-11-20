@@ -79,6 +79,7 @@ GRADIENT_COMBINATIONS: dict[tuple[str, str], ProfileRole] = {
     ("topsim", "gradient-gmm"): "comparison_display",
     ("topsim", "mean-similarity-ward"): "comparison_display",
     ("topsim", "subject-gradient-ward"): "comparison_display",
+    ("topsim", "subject-gradient-hbp"): "comparison_display",
 }
 
 

@@ -426,6 +426,19 @@ mesh-constrained Ward. A participant whose affinity is disconnected stops the
 fit. Manifests record the Procrustes iterations, convergence and the
 per-component correlation with the template.
 
+`subject-gradient-hbp` keeps every participant's Procrustes-aligned selected
+components instead of averaging them, divided by one common scale (the RMS of
+the Procrustes mean). HierarchBayesParcel (`--hbp-root`, revision recorded)
+fits a vertex-specific independent arrangement with an isotropic Gaussian
+mixture emission (unnormalized centres, 10 initializations). The group parcels
+are mesh-constrained Ward on the per-vertex group prior probabilities, so each
+is connected; the posterior argmax gives the individual maps. Fits are
+serialized so the seed determines each fit. A mean-field Potts arrangement was
+tested and not adopted: with a learned group prior it produced confident,
+geometry-driven partitions on vertex-permuted data. Manifests record the prior
+entropy, the fragmentation of the prior argmax, its agreement with the connected
+map, and individual-map fragmentation and agreement.
+
 `multigraph-gradient-spectral` keeps the `multigraph-spectral` participant
 graphs and shared-partition discretization, but replaces each participant's
 leading eigenvectors with a constant column followed by the eigenvalue-scaled
@@ -433,8 +446,9 @@ G1..G(K−1) of the exact diffusion map. It has no mesh constraint.
 
 The method comparison figure
 (`scripts/visualize/method_comparison_summary/render_method_comparison_summary.py`)
-places gradient Ward, mean-similarity Ward and subject-gradient Ward (G1,
-G1+G2, G1–G3) and the three participant-graph methods in rows, and Standard, CtxReg 10 mm and CtxReg 20 mm
+places gradient Ward, mean-similarity Ward, subject-gradient Ward and
+subject-gradient HBP (G1, G1+G2, G1–G3) and the three participant-graph methods
+in rows, and Standard, CtxReg 10 mm and CtxReg 20 mm
 side by side within each smoothing. Each card shows split-half ARI, the
 redundancy gate, and the network-TS Fisher-z and network-TS OVR dominant bars
 and unfolded/folded hippocampus maps of the exported partition. A green frame around the
