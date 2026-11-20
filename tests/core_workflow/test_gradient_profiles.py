@@ -79,7 +79,8 @@ def test_primary_and_baseline_selection():
     assert b_method == "gradient-spectral"
 
     disp = comparison_display_combinations()
-    assert disp == [("topsim", "gradient-gmm")]
+    assert disp == [("topsim", "gradient-gmm"), ("topsim", "mean-similarity-ward"),
+                    ("topsim", "subject-gradient-ward"), ("topsim", "subject-gradient-hbp")]
 
 
 def test_validate_gradient_combination():

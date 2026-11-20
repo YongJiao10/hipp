@@ -16,7 +16,8 @@ def resolve_data_root(environ: dict[str, str] | None = None) -> Path:
 
     It is this checkout unless ``HIPP_DATA_CHECKOUT`` names another one. A side
     worktree sets it to read the main checkout's assets; such a process may
-    only write comparison outputs under its own ``tmp/``.
+    only write comparison outputs under its own ``tmp/`` or formal-layout runs
+    under its own untracked ``outputs_<dataset>/`` tree.
     """
     raw = (os.environ if environ is None else environ).get(DATA_CHECKOUT_ENV, "").strip()
     if not raw:

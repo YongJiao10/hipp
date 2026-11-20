@@ -250,9 +250,21 @@ def test_side_checkout_reads_another_data_root_and_writes_only_comparisons(monke
     assert atlas.validate_dataset_output_contract(
         comparison, "outputs_hcp", source_roots=sources, comparison=True,
     ) == ("outputs_hcp", data.resolve() / "outputs_hcp")
-    with pytest.raises(ValueError, match="may only write --comparison-output runs under its own tmp"):
+    # Formal-layout runs go to the worktree's own outputs tree, never to the data checkout's.
+    own = atlas.REPO_ROOT / "outputs_hcp/work/group_atlas/pfm"
+    assert atlas.validate_dataset_output_contract(own, "auto", source_roots=sources) == (
+        "outputs_hcp", data.resolve() / "outputs_hcp")
+    with pytest.raises(ValueError, match="outside this checkout's"):
         atlas.validate_dataset_output_contract(
             data / "outputs_hcp/work/group_atlas/pfm", "outputs_hcp", source_roots=sources,
+        )
+    with pytest.raises(ValueError, match="may only write --comparison-output runs under its own tmp"):
+        atlas.validate_dataset_output_contract(
+            data / "outputs_hcp/work/group_atlas/pfm", "auto", source_roots=sources,
+        )
+    with pytest.raises(ValueError, match="disagrees with declared dataset"):
+        atlas.validate_dataset_output_contract(
+            own, "outputs_hcp", source_roots=[atlas.REPO_ROOT / "outputs_hcp/inputs"],
         )
     with pytest.raises(ValueError, match="outside repository tmp"):
         atlas.validate_dataset_output_contract(

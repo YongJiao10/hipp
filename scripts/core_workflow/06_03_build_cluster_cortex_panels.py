@@ -54,7 +54,7 @@ from typing import Any
 import matplotlib  # type: ignore[import-untyped]
 import nibabel as nib
 import numpy as np
-from lib.gradient_clustering import is_gradient_method
+from lib.gradient_clustering import GRADIENT_METHODS, is_gradient_method
 from lib.cortex_template_profiles import (
     compute_subject_cluster_roi_profiles,
     parse_roi_registry,
@@ -101,6 +101,7 @@ METHOD_CHOICES = [
     "gradient-spectral-rbf",
     "intrinsic-spectral",
 ]
+METHOD_CHOICES += sorted(GRADIENT_METHODS - set(METHOD_CHOICES))
 METHODS_DEFAULT = ["intrinsic-spectral", "network-spectral", "gradient-spectral"]
 SMOOTHINGS = ["2mm", "4mm"]
 HEMIS = ["L", "R"]

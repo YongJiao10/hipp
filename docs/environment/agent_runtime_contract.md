@@ -32,10 +32,13 @@ in the main checkout. A side worktree reads them by exporting
 `HIPP_DATA_CHECKOUT=/home/yojiao/hpchome/hipp` (`lib/output_layout.py`
 `DATA_ROOT`); the default dataset roots, Kong2022 atlas, HippoMaps source,
 Workbench binary and cortical display data then resolve there. Tracked `config/`
-and code stay with the worktree. With this setting `05_02` accepts only
-`--comparison-output` runs under the worktree's own `tmp/`, and `06_01` needs an
-explicit `--present-dir` there. Recorded input paths are the main checkout's
-real paths. Leave the variable unset in the main checkout.
+and code stay with the worktree. With this setting `05_02` writes either
+`--comparison-output` runs under the worktree's own `tmp/` or formal-layout runs
+under the worktree's own untracked `outputs_<dataset>/` tree (pass `--out-root`
+there explicitly); it never writes the main checkout's dataset trees. `06_01`
+derives its overview destination from such a group root, or takes an explicit
+`--present-dir`. Recorded input paths are the main checkout's real paths. Leave
+the variable unset in the main checkout.
 
 ## Hippocampal figure runtime
 
@@ -125,7 +128,8 @@ on the py314 stack with single-threaded numerical pools; `--jobs` sets the
 number of K values evaluated together. From the experimental worktree export
 `HIPP_DATA_CHECKOUT`, pass each route's `--shared-root` under the main
 checkout's `outputs_hcp/inputs/kong2022/shared_inputs/`, and write to
-`tmp/<comparison>/group_atlas/<route>` so the route is read from the output
+`tmp/<comparison>/group_atlas/<route>` or the worktree's own
+`outputs_hcp/work/group_atlas/<route>` so the route is read from the output
 root. The commands and K rule are in the
 [workflow guide](../../scripts/core_workflow/README.md#participant-graph-spectral-methods).
 Render each method and smoothing with `xvfb-run -a` and an explicit

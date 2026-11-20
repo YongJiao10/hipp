@@ -1133,12 +1133,29 @@ def validate_dataset_output_contract(out_root: Path, dataset: str, *, source_roo
                                      comparison: bool = False, repo_root: Path = REPO_ROOT) -> tuple[str, Path]:
     out, repo = Path(out_root).resolve(), Path(repo_root).resolve()
     data_root = DATA_ROOT if repo == REPO_ROOT.resolve() else repo
-    roots = {name: data_root / name for name in ("outputs_hcp", "outputs_stanford", "outputs_iowa_jj_tms")}
+    names = ("outputs_hcp", "outputs_stanford", "outputs_iowa_jj_tms")
+    roots = {name: data_root / name for name in names}
     if data_root != repo and not comparison:
-        raise ValueError(
-            f"This checkout reads dataset trees from {data_root}; it may only write "
-            "--comparison-output runs under its own tmp directory"
-        )
+        # A side worktree reads the data checkout's inputs and writes formal-layout outputs only into
+        # its own untracked outputs_<dataset> tree, never into the data checkout's.
+        own = {name: repo / name for name in names}
+        if dataset == "auto":
+            matches = [key for key, root in own.items() if out.is_relative_to(root)]
+            if len(matches) != 1:
+                raise ValueError(
+                    f"This checkout reads dataset trees from {data_root}; it may only write "
+                    f"--comparison-output runs under its own tmp directory or runs under its own "
+                    f"outputs_<dataset> tree ({repo}/outputs_*): {out}"
+                )
+            dataset = matches[0]
+        if dataset not in own:
+            raise ValueError(f"Unsupported dataset: {dataset}")
+        if not out.is_relative_to(own[dataset]):
+            raise ValueError(f"Side-worktree --out-root {out} is outside this checkout's {own[dataset]}")
+        for source in source_roots:
+            if not Path(source).resolve().is_relative_to(roots[dataset]):
+                raise ValueError(f"Source {source} disagrees with declared dataset {dataset}: {roots[dataset]}")
+        return dataset, roots[dataset]
     if comparison:
         if dataset == "auto":
             raise ValueError("A comparison requires an explicit --dataset")
@@ -6117,7 +6134,7 @@ def main() -> int:
     KONG2022_DLABEL_OVERRIDE = Path(args.kong2022_dlabel).resolve() if args.kong2022_dlabel else None
     HIPPOMAPS_ROOT_OVERRIDE = Path(args.hippomaps_root).resolve()
     HBP_ROOT_OVERRIDE = Path(args.hbp_root).resolve(strict=True) if args.hbp_root else None
-    if SUBJECT_GRADIENT_HBP_METHOD in args.methods and HBP_ROOT_OVERRIDE is None:
+    if SUBJECT_GRADIENT_HBP_METHOD in (args.methods or ()) and HBP_ROOT_OVERRIDE is None:
         raise ValueError(f"{SUBJECT_GRADIENT_HBP_METHOD} requires --hbp-root")
 
     shared_root = Path(args.shared_root).resolve()
