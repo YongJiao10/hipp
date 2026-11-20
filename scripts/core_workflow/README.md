@@ -322,8 +322,11 @@ explicitly when a controlled signal root is separate.
   /home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/05_02_run_group_atlas.py --shared-root outputs_hcp/inputs/kong2022/shared_inputs/pfm --surface-root outputs_hcp/inputs/kong2022/shared_inputs/surface --reference-root outputs_hcp/inputs/kong2022/shared_inputs/pfm --out-root outputs_hcp/work/group_atlas/pfm/topsim --methods gradient-ward --profile topsim --atlases kong2022 --gradient-root outputs_hcp/work/hippomaps_gradients --route-tag pfm --network-taxonomy canonical7 --k-min 2 --k-max 8 --default-k 3 --gradient-components 1,2
   /home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/06_01_build_group_overview.py --group-root outputs_hcp/work/group_atlas/pfm/topsim --methods gradient-ward --atlases kong2022 --route-tag pfm --smoothing 2mm --gradient-components 1,2
   ```
-- Kong2022 cluster assignments default to `fisherz`; `normalized_top20_count`
-  is an explicit comparison. Kong ROI-registry `wta-top` uses only
+- Kong2022 cluster assignments default to `network_ts_fisherz`; ROI `fisherz`
+  and `normalized_top20_count` are explicit comparisons. `05_02` computes
+  `network_ts_fisherz` for every Kong2022 cluster run, and `--resume`
+  recomputes a run whose manifest records another default. Lynch cluster
+  runs default to their direct-network `fisherz`. Kong ROI-registry `wta-top` uses only
   `normalized_top20_count`. Lynch direct-network WTA uses `fisherz`.
 - Kong2022 retains all 400 ordered ROI rows, including NaN rows for empty
   parcels. Pooled FC removes each declared run mean at computation time and
@@ -333,12 +336,14 @@ explicitly when a controlled signal root is separate.
   (average ROI time series into a grayordinate-weighted network series, then
   correlate) and `normalized_top20_count`. `wta-top` is the clusterless
   fourth branch. OVR models exist for `fisherz` and `network_ts_fisherz`
-  inputs only; the Top20 overview has no OVR rows.
+  inputs only; the Top20 overview has no OVR rows. `06_01 --assignment-variant
+  both` renders all three gradient annotation pairs; `07_01` marks the TopSim
+  Ward 2 mm `network-ts-fisherz` overview as the primary figure.
 - Kong2022 gradient overviews of a three-cluster partition add a column of
   cluster-to-cortex FC tiles (C1 Anterior, C2 Middle, C3 Posterior). Each tile
   shows the left/right mean of the run's `cluster_roi_profile.npy` on the
-  inflated cortex (`RdBu_r`, unclipped piecewise-linear scale with a 0.15
-  Fisher-z knee spanning the figure's own range) with its ten most positive and
+  inflated cortex (`RdBu_r`, linear and zero-centred, saturating beyond the
+  90th percentile of |Fisher-z| across the figure's three tiles) with its ten most positive and
   ten most negative ROIs. `lib/cortex_fc_tiles.py` draws the tile for the
   overview and for the multi-dataset hippocampus/cortex figure. Family17
   gradient overviews use the same 400-ROI cortical profiles and column;

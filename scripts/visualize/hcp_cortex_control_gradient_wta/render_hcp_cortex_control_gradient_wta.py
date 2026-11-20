@@ -2,16 +2,20 @@
 """HCP 7T hippocampal organization: Standard vs. CtxReg 10 mm vs. CtxReg 20 mm, 2mm and 4mm smoothing.
 
 One figure with two smoothing blocks (2mm on top, 4mm below), each with three rows
-(Standard `pfm`, CtxReg 10 mm `pfm_ctxreg_10mm`, CtxReg 20 mm `pfm_ctxreg`) and three
+(Standard `pfm`, CtxReg 10 mm `pfm_ctxreg_10mm`, CtxReg 20 mm `pfm_ctxreg`) and four
 modality columns. Gradient panels read the formal HCP Kong2022 gradient run selected by
 `multidataset_cohorts.HCP_KONG_GRADIENT_RUN` (TopSim profile, primary Ward partition).
 
   1. Gradient clusters, positive Fisher-z FC (adapted from multidataset_cluster_confidence_stacked):
      [Left Hipp bar] | [2x2 surface] | [Right Hipp bar]; row-specific Fisher-z scale;
      C1 anterior at top, C3 posterior at bottom.
-  2. Gradient clusters, normalized top-20 ROI count (adapted from
+  2. Gradient clusters, OvR logistic model on network time-series Fisher-z features
+     (`ovr_logistic_canonical7_network_ts`):
+     same layout as column 1 with positive raw coefficients; the cluster label is the largest
+     positive raw coefficient.
+  3. Gradient clusters, normalized top-20 ROI count (adapted from
      multidataset_gradient_subregion_top20_stacked_2col): [Branch card] | [2x2 surface] | [Left] | [Right].
-  3. Winner-take-all labels in 20 long-axis bins (adapted from
+  4. Winner-take-all labels in 20 long-axis bins (adapted from
      multidataset_wta_normalized_longaxis_stacked_2col): bin 1 anterior at top.
 """
 
@@ -143,6 +147,10 @@ DEFAULT_STATS_TSV = DEFAULT_DIR / "stats" / "hcp_cortex_control_gradient_wta_sta
 
 
 REFERENCE_FIG_HEIGHT_IN = 18.0
+# Column widths (relative): Fisher-z | OvR | Top-20 | WTA. FIG_WIDTH_IN keeps each
+# column at the physical width of the earlier three-column 49 in layout.
+COLUMN_WIDTH_RATIOS = (0.92, 0.92, 1.05, 1.05)
+FIG_WIDTH_IN = 49.0 * sum(COLUMN_WIDTH_RATIOS) / (0.92 + 1.05 + 1.05)
 
 
 # -----------------------------------------------------------------------------
@@ -187,6 +195,42 @@ def load_branch_fisherz(branch: dict[str, Any], smoothing: str) -> dict[str, lis
                 "top1_network": it.get("top1_network", "unassigned"),
                 "top2_network": it.get("top2_network", "none"),
                 "margin": float(it.get("margin", 0.0)),
+            })
+        out[hemi] = clusters
+    return out
+
+
+OVR_VARIANT = "ovr_logistic_canonical7_network_ts"
+
+
+def load_branch_ovr(branch: dict[str, Any], smoothing: str) -> dict[str, list[dict[str, Any]]]:
+    """Load the network-time-series OvR logistic model (canonical7) coefficients for each gradient cluster."""
+    group_root = Path(branch["group_root"])
+    out: dict[str, list[dict[str, Any]]] = {}
+
+    for hemi in ("L", "R"):
+        hdir = group_root / f"{HCP_KONG_GRADIENT_RUN}/kong2022/{smoothing}/cov_0p80/g1g2g3/hemi_{hemi}"
+        status_path = hdir / f"cluster_assignment_status_{OVR_VARIANT}.json"
+        if not status_path.is_file():
+            raise FileNotFoundError(f"Missing {OVR_VARIANT} assignment status in {hdir}")
+        status = json.loads(status_path.read_text(encoding="utf-8"))
+        if status.get("assignment_metric") != "largest_positive_raw_beta" or status.get("network_taxonomy") != "canonical7":
+            raise ValueError(f"Unexpected OvR assignment contract in {status_path}")
+        items = {int(it["cluster_id"]): it for it in status["items"]}
+        if sorted(items) != [1, 2, 3]:
+            raise ValueError(f"Expected OvR clusters 1-3 in {status_path}, found {sorted(items)}")
+
+        clusters = []
+        for cid in range(1, 4):
+            it = items[cid]
+            pos_nets = [(str(k), float(v)) for k, v in it["beta_by_network"].items() if float(v) > 0.0]
+            pos_nets.sort(key=lambda x: (x[1], -STACK_ORDER.index(x[0]) if x[0] in STACK_ORDER else -99), reverse=True)
+            clusters.append({
+                "cluster_id": cid,
+                "cluster_name": CLUSTER_NAMES.get(cid, f"C{cid}"),
+                "pos_networks": pos_nets,
+                "top1_network": str(it["top1_network"]),
+                "top1_beta": float(it["top1_beta"]),
             })
         out[hemi] = clusters
     return out
@@ -353,6 +397,13 @@ def render_branch_surface_2x2(
         mr = json.loads(mr_path.read_text(encoding="utf-8"))
         lbl_l = Path(ml["assignment_variants"]["fisherz"]["template_functional_atlas_label_variant"])
         lbl_r = Path(mr["assignment_variants"]["fisherz"]["template_functional_atlas_label_variant"])
+    elif modality == "ovr_network_ts":
+        ml_path = group_root / f"{HCP_KONG_GRADIENT_RUN}/kong2022/{smoothing}/cov_0p80/g1g2g3/hemi_L/group_atlas_manifest.json"
+        mr_path = group_root / f"{HCP_KONG_GRADIENT_RUN}/kong2022/{smoothing}/cov_0p80/g1g2g3/hemi_R/group_atlas_manifest.json"
+        ml = json.loads(ml_path.read_text(encoding="utf-8"))
+        mr = json.loads(mr_path.read_text(encoding="utf-8"))
+        lbl_l = Path(ml["assignment_variants"][OVR_VARIANT]["template_functional_atlas_label_variant"])
+        lbl_r = Path(mr["assignment_variants"][OVR_VARIANT]["template_functional_atlas_label_variant"])
     elif modality == "top20_count":
         ml_path = group_root / f"{HCP_KONG_GRADIENT_RUN}/kong2022/{smoothing}/cov_0p80/g1g2g3/hemi_L/group_atlas_manifest.json"
         mr_path = group_root / f"{HCP_KONG_GRADIENT_RUN}/kong2022/{smoothing}/cov_0p80/g1g2g3/hemi_R/group_atlas_manifest.json"
@@ -438,13 +489,19 @@ def render_subfig_fisherz_row(
     bd: dict[str, Any],
     smoothing: str,
     is_bottom: bool,
+    *,
+    data_key: str = "fisherz",
+    surf_key: str = "surf_fz",
+    scale_key: str = "z",
+    x_label: str = "Positive FC (Fisher-z)",
+    show_badge: bool = True,
 ):
-    """Render a single branch row for Subfig 1 with exact height matching."""
+    """Render one branch row of positive stacked cluster profiles (Fisher-z FC or OvR coefficients)."""
     binfo = bd["info"]
-    fz_l = bd["fisherz"]["L"]
-    fz_r = bd["fisherz"]["R"]
-    surf_img = bd["surf_fz"]
-    max_xlim, x_ticks = bd["max_z"], bd["z_ticks"]
+    fz_l = bd[data_key]["L"]
+    fz_r = bd[data_key]["R"]
+    surf_img = bd[surf_key]
+    max_xlim, x_ticks = bd[f"max_{scale_key}"], bd[f"{scale_key}_ticks"]
 
     ax_left = fig.add_subplot(gs_sub[row_idx, 0])
     ax_mid = fig.add_subplot(gs_sub[row_idx, 1])
@@ -499,7 +556,8 @@ def render_subfig_fisherz_row(
     # Left Subplot Settings (Inverted x-axis from max_xlim to 0.0)
     ax_left.set_xlim(max_xlim, 0.0)
     ax_left.set_xticks(x_ticks)
-    ax_left.set_yticklabels(["C1 (Ant)", "C2 (Mid)", "C3 (Post)"], fontsize=14.0, fontweight="bold", color="#1e293b")
+    # Row labels (C1/C2/C3) appear once, in the first column with the branch badge.
+    ax_left.set_yticklabels(["C1 (Ant)", "C2 (Mid)", "C3 (Post)"] if show_badge else [], fontsize=14.0, fontweight="bold", color="#1e293b")
     ax_left.tick_params(axis="y", left=False, pad=8)
     ax_left.tick_params(axis="x", labelsize=13.0, colors="#334155")
     ax_left.grid(True, axis="x", color="#e2e2e2", lw=0.7, ls=":", zorder=1)
@@ -524,12 +582,15 @@ def render_subfig_fisherz_row(
         ax_mid.set_title("Cluster labels (2x2 view)", fontsize=15.5, fontweight="heavy", color="#0b2447", pad=8)
 
     if is_bottom:
-        ax_left.set_xlabel("Positive FC (Fisher-z)", fontsize=15.0, fontweight="heavy", color="#0b2447", labelpad=8)
-        ax_right.set_xlabel("Positive FC (Fisher-z)", fontsize=15.0, fontweight="heavy", color="#0b2447", labelpad=8)
+        ax_left.set_xlabel(x_label, fontsize=15.0, fontweight="heavy", color="#0b2447", labelpad=8)
+        ax_right.set_xlabel(x_label, fontsize=15.0, fontweight="heavy", color="#0b2447", labelpad=8)
 
     # Center Subplot Settings: 2x2 3D surface overlay expanding to fill full row height
     ax_mid.axis("off")
     ax_mid.imshow(surf_img, aspect="equal")
+
+    if not show_badge:
+        return
 
     # Cohort Label Badge on the Left of Left Subplot
     badge_txt = f"{binfo['cohort_name']}\n{smoothing}"
@@ -811,27 +872,34 @@ def render_hcp_cortex_control_gradient_wta(
             for b in BRANCHES:
                 print(f"  -> Loading & rendering assets for {b['cohort_name']} ({smoothing})...")
                 fz_data = load_branch_fisherz(b, smoothing)
+                ovr_data = load_branch_ovr(b, smoothing)
                 top20_data = load_branch_top20_count(b, smoothing)
                 wta_data = load_branch_wta(b, smoothing)
 
                 surf_fz = render_branch_surface_2x2(b, "fisherz", smoothing, temp_dir, panels_dir, force=force)
+                surf_ovr = render_branch_surface_2x2(b, "ovr_network_ts", smoothing, temp_dir, panels_dir, force=force)
                 surf_top20 = render_branch_surface_2x2(b, "top20_count", smoothing, temp_dir, panels_dir, force=force)
                 surf_wta = render_branch_surface_2x2(b, "wta", smoothing, temp_dir, panels_dir, force=force)
 
                 # Compute row-specific dynamic range for Fisher-z
                 max_z, z_ticks = adaptive_positive_axis_scale(fz_data["L"], fz_data["R"])
+                max_beta, beta_ticks = adaptive_positive_axis_scale(ovr_data["L"], ovr_data["R"])
 
                 branch_data.append({
                     "info": b,
                     "smoothing": smoothing,
                     "fisherz": fz_data,
+                    "ovr": ovr_data,
                     "top20": top20_data,
                     "wta": wta_data,
                     "surf_fz": surf_fz,
+                    "surf_ovr": surf_ovr,
                     "surf_top20": surf_top20,
                     "surf_wta": surf_wta,
                     "max_z": max_z,
                     "z_ticks": z_ticks,
+                    "max_beta": max_beta,
+                    "beta_ticks": beta_ticks,
                 })
 
     # Save TSV statistics if requested
@@ -852,6 +920,11 @@ def render_hcp_cortex_control_gradient_wta(
                     m = c["margin"]
                     for net, val in c["pos_networks"]:
                         lines.append(f"{b_id}\t{smoothing}\tgradient_fisherz\t{hemi}\t{cid}\t{cname}\t{net}\t{val:.6f}\t{top1}\t{m:.6f}")
+            # OvR (positive raw coefficients; margin column holds the winning coefficient)
+            for hemi in ("L", "R"):
+                for c in bd["ovr"][hemi]:
+                    for net, val in c["pos_networks"]:
+                        lines.append(f"{b_id}\t{smoothing}\tgradient_ovr_network_ts\t{hemi}\t{c['cluster_id']}\t{c['cluster_name']}\t{net}\t{val:.6f}\t{c['top1_network']}\t{c['top1_beta']:.6f}")
             # Top20
             for hemi in ("L", "R"):
                 for s in bd["top20"][hemi]:
@@ -883,7 +956,8 @@ def render_hcp_cortex_control_gradient_wta(
     def from_bottom(y: float) -> float:
         return y * scale
 
-    fig = plt.figure(figsize=(49.0, fig_height), facecolor="#ffffff", dpi=220)
+    fig = plt.figure(figsize=(FIG_WIDTH_IN, fig_height), facecolor="#ffffff", dpi=220)
+    xw = 49.0 / FIG_WIDTH_IN  # converts the three-column (49 in) horizontal fractions
 
     # -------------------------------------------------------------------------
     # 1. Non-Overlapping Header Zone
@@ -901,19 +975,13 @@ def render_hcp_cortex_control_gradient_wta(
     fig.text(
         0.50,
         from_top(0.940),
-        f"Gradient clusters (TopSim profile, Ward, K = 3) and winner-take-all labels; Kong2022 PFM canonical7 networks  |  rest, ICA-FIX, N = {HCP_COHORT_SIZE} young adults  |  top: 2mm, bottom: 4mm hippocampal smoothing",
+        f"Gradient clusters (TopSim profile, Ward, K = 3) labelled by Fisher-z FC, OvR logistic model and normalized top-20 count; winner-take-all labels; Kong2022 PFM canonical7 networks  |  rest, ICA-FIX, N = {HCP_COHORT_SIZE} young adults  |  top: 2mm, bottom: 4mm hippocampal smoothing",
         ha="center",
         va="top",
         fontsize=20.0,
         fontweight="medium",
         color="#334e68",
     )
-
-    # Subfigure Section Banners at y = 0.916
-    y_subfig_title = from_top(0.916)
-    fig.text(0.193, y_subfig_title, "GRADIENT CLUSTERS: POSITIVE FISHER-Z FC (ROW-SPECIFIC SCALE)", fontsize=17.0, fontweight="heavy", color="#0b3c5d", ha="center", va="top")
-    fig.text(0.500, y_subfig_title, "GRADIENT CLUSTERS: NORMALIZED TOP-20 ROI COUNT (%)", fontsize=17.0, fontweight="heavy", color="#1d5b79", ha="center", va="top")
-    fig.text(0.827, y_subfig_title, "WINNER-TAKE-ALL LABELS: 20 LONG-AXIS BINS (%)", fontsize=17.0, fontweight="heavy", color="#8c4600", ha="center", va="top")
 
     # -------------------------------------------------------------------------
     # 2. Main Master GridSpec: 3 Columns side-by-side
@@ -923,14 +991,26 @@ def render_hcp_cortex_control_gradient_wta(
 
     gs_main = fig.add_gridspec(
         nrows=1,
-        ncols=3,
-        left=0.072,
-        right=0.988,
+        ncols=len(COLUMN_WIDTH_RATIOS),
+        left=0.072 * xw,
+        right=1.0 - 0.012 * xw,
         top=top_margin,
         bottom=bottom_margin,
-        width_ratios=[0.92, 1.05, 1.05],
-        wspace=0.020,
+        width_ratios=list(COLUMN_WIDTH_RATIOS),
+        wspace=0.035,
     )
+
+    # Subfigure section banners centred over each column
+    y_subfig_title = from_top(0.916)
+    banners = (
+        ("GRADIENT CLUSTERS: POSITIVE FISHER-Z FC (ROW-SPECIFIC SCALE)", "#0b3c5d"),
+        ("GRADIENT CLUSTERS: OvR LOGISTIC, NETWORK TIME-SERIES FC (ROW-SPECIFIC SCALE)", "#3b3b98"),
+        ("GRADIENT CLUSTERS: NORMALIZED TOP-20 ROI COUNT (%)", "#1d5b79"),
+        ("WINNER-TAKE-ALL LABELS: 20 LONG-AXIS BINS (%)", "#8c4600"),
+    )
+    for col, (text, color) in enumerate(banners):
+        pos = gs_main[0, col].get_position(fig)
+        fig.text(0.5 * (pos.x0 + pos.x1), y_subfig_title, text, fontsize=17.0, fontweight="heavy", color=color, ha="center", va="top")
 
     # Subgridspec for each subfigure: one row per (smoothing, branch)
     gs_sub1 = gs_main[0, 0].subgridspec(
@@ -941,7 +1021,15 @@ def render_hcp_cortex_control_gradient_wta(
         hspace=0.14,
     )
 
-    gs_sub2 = gs_main[0, 1].subgridspec(
+    gs_sub_ovr = gs_main[0, 1].subgridspec(
+        nrows=n_rows,
+        ncols=3,
+        width_ratios=[0.41, 0.18, 0.41],
+        wspace=0.012,
+        hspace=0.14,
+    )
+
+    gs_sub2 = gs_main[0, 2].subgridspec(
         nrows=n_rows,
         ncols=4,
         width_ratios=[0.12, 0.18, 0.35, 0.35],
@@ -949,7 +1037,7 @@ def render_hcp_cortex_control_gradient_wta(
         hspace=0.14,
     )
 
-    gs_sub3 = gs_main[0, 2].subgridspec(
+    gs_sub3 = gs_main[0, 3].subgridspec(
         nrows=n_rows,
         ncols=5,
         width_ratios=[0.11, 0.15, 0.085, 0.3275, 0.3275],
@@ -963,12 +1051,21 @@ def render_hcp_cortex_control_gradient_wta(
         is_bottom = (row_idx == len(branch_data) - 1)
         render_subfig_fisherz_row(fig, gs_sub1, row_idx, bd, bd["smoothing"], is_bottom)
 
-    print("  [RENDER] Drawing Subfigure 2: Gradient Top-20 Count...")
+    print("  [RENDER] Drawing Subfigure 2: Gradient OvR...")
+    for row_idx, bd in enumerate(branch_data):
+        is_bottom = (row_idx == len(branch_data) - 1)
+        render_subfig_fisherz_row(
+            fig, gs_sub_ovr, row_idx, bd, bd["smoothing"], is_bottom,
+            data_key="ovr", surf_key="surf_ovr", scale_key="beta",
+            x_label="Positive OvR coefficient (raw β)", show_badge=False,
+        )
+
+    print("  [RENDER] Drawing Subfigure 3: Gradient Top-20 Count...")
     for row_idx, bd in enumerate(branch_data):
         is_bottom = (row_idx == len(branch_data) - 1)
         render_subfig_top20_row(fig, gs_sub2, row_idx, bd, bd["smoothing"], is_bottom)
 
-    print("  [RENDER] Drawing Subfigure 3: WTA Long-Axis...")
+    print("  [RENDER] Drawing Subfigure 4: WTA Long-Axis...")
     for row_idx, bd in enumerate(branch_data):
         is_bottom = (row_idx == len(branch_data) - 1)
         render_subfig_wta_row(fig, gs_sub3, row_idx, bd, bd["smoothing"], is_bottom)
@@ -977,7 +1074,7 @@ def render_hcp_cortex_control_gradient_wta(
     rows_per_block = len(BRANCHES)
     for boundary in range(rows_per_block, n_rows, rows_per_block):
         y_sep = 0.5 * (gs_sub2[boundary - 1, 2].get_position(fig).y0 + gs_sub2[boundary, 2].get_position(fig).y1)
-        fig.add_artist(plt.Line2D([0.012, 0.988], [y_sep, y_sep], transform=fig.transFigure, color="#334e68", lw=2.0, ls="--"))
+        fig.add_artist(plt.Line2D([0.012 * xw, 1.0 - 0.012 * xw], [y_sep, y_sep], transform=fig.transFigure, color="#334e68", lw=2.0, ls="--"))
 
     # -------------------------------------------------------------------------
     # 3. Global Bottom Legend: Canonical 7 Networks
@@ -992,14 +1089,14 @@ def render_hcp_cortex_control_gradient_wta(
         ("Visual", "Visual (VN)"),
     ]
     y_leg = from_bottom(0.024)
-    x_leg_start = 0.125
-    dx_leg = 0.110
+    dx_leg = 0.110 * xw
+    x_leg_start = 0.5 - 0.5 * (dx_leg * (len(legend_nets) - 1) + 0.019 * xw + 0.075 * xw)
     for idx, (net_key, net_label) in enumerate(legend_nets):
         col = NETWORK_COLORS.get(net_key, "#888888")
         x_pos = x_leg_start + idx * dx_leg
         rect = patches.Rectangle(
             (x_pos, y_leg - 0.007 * scale),
-            0.015,
+            0.015 * xw,
             0.014 * scale,
             facecolor=col,
             edgecolor="#222222",
@@ -1010,7 +1107,7 @@ def render_hcp_cortex_control_gradient_wta(
         )
         fig.patches.append(rect)
         fig.text(
-            x_pos + 0.019,
+            x_pos + 0.019 * xw,
             y_leg,
             net_label,
             ha="left",

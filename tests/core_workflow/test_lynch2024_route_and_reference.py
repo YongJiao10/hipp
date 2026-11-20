@@ -291,7 +291,7 @@ def test_lynch_gradient_metadata_describes_network_fc_not_roi_fc() -> None:
     assert overview_mod.resolve_render_assignment_variants(
         "wta-top", "both", atlas="lynch2024_7net"
     ) == ("fisherz",)
-    assert overview_mod.resolve_render_assignment_variants("gradient-spectral", "both") == ("fisherz", "normalized_top20_count")
+    assert overview_mod.resolve_render_assignment_variants("gradient-spectral", "both") == ("network_ts_fisherz", "normalized_top20_count")
     assert overview_mod.resolve_render_assignment_variants(
         "gradient-spectral", "both", atlas="lynch2024_7net"
     ) == ("fisherz",)

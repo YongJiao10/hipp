@@ -39,7 +39,7 @@ real paths. Leave the variable unset in the main checkout.
 
 ## Hippocampal figure runtime
 
-Hippocampal label panels use the existing py314 BrainSpace 0.2.1 and VTK 9.6.1
+Hippocampal label panels use the existing py314 BrainSpace 0.3.0 and VTK 9.6.1
 stack. Run headless figure commands with `xvfb-run -a` when no display is
 available; `LP_NUM_THREADS=1` and `VTK_SMP_MAX_THREADS=1` limit rendering
 threads. Workbench remains required for cortical scene rendering and
@@ -48,7 +48,7 @@ the documented image-processing and registration stages.
 ## Gradient comparison runtime
 
 Gradient parcellation uses the local py314 numerical stack: NumPy 2.5.4,
-SciPy 1.16.3, scikit-learn 1.9.1, BrainSpace 0.2.1 and numba 0.68.1 (required
+SciPy 1.16.3, scikit-learn 1.9.1, BrainSpace 0.3.0 and numba 0.68.1 (required
 by NumPy 2.5). BrainSpace supplies the Pearson affinity; the diffusion-map
 eigendecomposition is the repository's exact solver in `lib/hippomaps_adapter.py`. Keep SciPy at 1.16.x: `06_04` imports HippoMaps plotting through
 `netneurotools`, whose releases up to 0.3.0 import a private SciPy function
@@ -195,7 +195,7 @@ python -c "import sys; print(sys.executable)"
 
 Interpretation:
 
-- First line must print `/home/yojiao/.conda/envs/py314/bin/python`, a valid `nibabel` version, and a valid `brainspace` version (`0.2.1` expected for current `gradient-spectral` workflow).
+- First line must print `/home/yojiao/.conda/envs/py314/bin/python`, a valid `nibabel` version, and a valid `brainspace` version (`0.3.0` expected for current `gradient-spectral` workflow).
 - Second line is informational only. If it points elsewhere (for example `yazi-deps`), do not use it for repo tasks.
 
 HippoMaps-style continuous gradients additionally require official package code

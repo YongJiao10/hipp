@@ -22,8 +22,14 @@
 ## Filesystem authorization
 
 - Obtain explicit permission before accessing or browsing archive contents.
-- Production result-tree migration, rebuild, replacement or cleanup requires
-  an exact user-approved path list. Keep those trees read-only until approval.
+- Production result-tree migration, restructuring, deletion, cleanup or
+  out-of-workflow edits (hand-written or one-off scripts that rewrite formal
+  products) require an exact user-approved path list. Keep those trees
+  read-only until approval.
+- Routine regeneration needs no path list: rerunning a maintained workflow
+  step with its documented arguments to rewrite its own formal products at
+  their existing paths, such as `--resume` reruns or re-rendering overviews
+  and indexes after upstream changes. Report what was regenerated.
 - `wrong/` contains legacy erroneous HippUnfold results from a completed
   one-time migration. Do not access, reuse, add to, modify, move or delete it.
 - In planning mode, obtain confirmation before creating a directory; state its

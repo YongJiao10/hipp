@@ -195,13 +195,16 @@ def test_overview_matrix_can_filter_methods_for_gradient_and_wta_only() -> None:
     assert len(jobs) == 6
 
 
-def test_overview_matrix_keeps_normalized_top20_and_fisherz_assignment_variants() -> None:
+def test_overview_matrix_defaults_to_network_ts_fisherz_and_normalized_top20() -> None:
     jobs = build_render_jobs(REPO_ROOT / "outputs_hcp" / "inputs" / "kong2022")
     by_method = {}
     for job in jobs:
         by_method.setdefault(job.method, []).append(job.assignment_variant)
     for method in ("intrinsic-spectral", "network-spectral", "gradient-spectral"):
-        assert sorted(by_method[method]) == ["fisherz", "fisherz", "normalized_top20_count", "normalized_top20_count"]
+        assert sorted(by_method[method]) == [
+            "network_ts_fisherz", "network_ts_fisherz", "normalized_top20_count", "normalized_top20_count"
+        ]
+    assert "fisherz" in set(matrix_mod.ASSIGNMENT_VARIANTS)
     assert by_method["wta-top"] == [None, None]
     assert "count" not in set(present_mod.ASSIGNMENT_VARIANT_CHOICES)
     assert "count" not in set(matrix_mod.ASSIGNMENT_VARIANTS)
@@ -228,9 +231,10 @@ def test_overview_matrix_keeps_normalized_top20_and_fisherz_assignment_variants(
 
 
 def test_group_overview_direct_renderer_keeps_gradient_variants_but_wta_is_canonical() -> None:
-    assert present_mod.resolve_render_assignment_variants("gradient-spectral", "both") == ("fisherz", "normalized_top20_count")
+    assert present_mod.resolve_render_assignment_variants("gradient-spectral", "both") == ("network_ts_fisherz", "normalized_top20_count")
     assert inspect.signature(present_mod.render_combo).parameters["assignment_variant"].default is None
-    assert present_mod.default_render_assignment_variant("gradient-spectral", "kong2022") == "fisherz"
+    assert present_mod.default_render_assignment_variant("gradient-spectral", "kong2022") == "network_ts_fisherz"
+    assert present_mod.default_render_assignment_variant("gradient-spectral", "lynch2024_7net") == "fisherz"
     assert present_mod.default_render_assignment_variant("wta-top", "kong2022") == "normalized_top20_count"
     assert present_mod.default_render_assignment_variant("wta-top", "lynch2024_7net") == "fisherz"
     assert present_mod.resolve_render_assignment_variants("network-spectral", "normalized_top20_count") == ("normalized_top20_count",)
@@ -255,11 +259,11 @@ def test_group_overview_wta_requires_route_taxonomy() -> None:
         present_mod.validate_kong_wta_taxonomy(paths, family17, "pfm")
 
 
-def test_group_overview_direct_renderer_accepts_network_ts_fisherz_without_changing_both() -> None:
+def test_group_overview_direct_renderer_defaults_both_to_network_ts_fisherz() -> None:
     assert present_mod.resolve_render_assignment_variants("gradient-spectral", "network_ts_fisherz") == ("network_ts_fisherz",)
     assert present_mod.resolve_render_assignment_variants("network-spectral", "network_ts_fisherz") == ("network_ts_fisherz",)
     assert "weighted_fisherz" not in present_mod.ASSIGNMENT_VARIANTS
-    assert present_mod.resolve_render_assignment_variants("gradient-spectral", "both") == ("fisherz", "normalized_top20_count")
+    assert present_mod.resolve_render_assignment_variants("gradient-spectral", "both") == ("network_ts_fisherz", "normalized_top20_count")
 
 
 def test_group_overview_keeps_explicit_mode_tag_for_full_root(tmp_path: Path) -> None:

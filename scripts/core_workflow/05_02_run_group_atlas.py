@@ -46,7 +46,7 @@ Inputs:
   - --feature-scaling and --sparsify-stage: Explicit upstream FC scaling and Pearson-affinity sparsification settings.
   - --clustering-feature-scaling: Independent clustering feature scaling ("none" or "unit_sd").
   - --rbf-scale: Multiplier for the median positive mesh-edge gradient distance.
-  - --assignment-variant: Select Fisher-z, normalized Top-20, or explicit canonical7/family17 OVR annotations; "both" means Fisher-z plus normalized Top-20.
+  - --assignment-variant: Select ROI Fisher-z, network-time-series Fisher-z, normalized Top-20, or explicit canonical7/family17 OVR annotations; "both" means ROI Fisher-z plus normalized Top-20. Kong2022 cluster runs always add network-time-series Fisher-z, their default.
   - --resume: Resume from existing runs.
   - --k-selection-mode: "redundancy-aware" or fixed-K "fixed-comparison".
   - --redundancy-early-stop: Stop evaluation of larger K values once first redundant K is found (default: False).
@@ -64,7 +64,7 @@ Outputs:
     - `group_atlas_manifest.json`: Step-level execution trace and results.
     - Suffixed default/variant files such as `group_functional_atlas_labels_fisherz.npy`.
     - Suffixed network mapping diagnostics such as `cluster_assignment_status_fisherz.json`.
-    - `group_atlas_manifest.json` records `default_assignment_variant` and points top-level default fields to the selected suffixed variant. Cluster-level defaults are `fisherz`; Kong2022 ROI-registry `wta-top` remains the separate `normalized_top20_count` assignment.
+    - `group_atlas_manifest.json` records `default_assignment_variant` and points top-level default fields to the selected suffixed variant. Kong2022 cluster-level defaults are `network_ts_fisherz`; Lynch cluster-level defaults are the direct-network `fisherz`; Kong2022 ROI-registry `wta-top` remains the separate `normalized_top20_count` assignment.
 """
 import argparse
 import csv
@@ -292,27 +292,46 @@ GRADIENT_N_COMPONENTS_COMPUTED = 5
 GRADIENT_BRAINSPACE_KERNEL = "pearson"
 NETWORK_TAXONOMIES = ("canonical7", "canonical8", "family17", "lynch20", "lynch7")
 WTA_NETWORK_TAXONOMIES = frozenset({"canonical7", "canonical8", "family17", "lynch20", "lynch7"})
-DEFAULT_CLUSTER_LEVEL_ASSIGNMENT_VARIANT = "fisherz"
+KONG2022_CLUSTER_LEVEL_DEFAULT_ASSIGNMENT_VARIANT = "network_ts_fisherz"
+LYNCH2024_CLUSTER_LEVEL_DEFAULT_ASSIGNMENT_VARIANT = "fisherz"
 MAX_K_EVAL_JOBS = 10
 RESUME_SIGNATURE_VERSION = 1
 MAX_DIAGNOSTIC_FAILURE_EXAMPLES = 5
 
+def cluster_level_default_assignment_variant(atlas: str) -> str:
+    """Return the atlas-specific default for cluster-level network assignments.
+
+    Kong2022 clusters default to ``network_ts_fisherz``: ROI series are
+    averaged into grayordinate-weighted network series before correlation.
+    ROI ``fisherz`` and ``normalized_top20_count`` remain explicit Kong2022
+    comparisons. Lynch references are already network series, so their
+    direct-network ``fisherz`` is the default.
+    """
+    if str(atlas) == "kong2022":
+        return KONG2022_CLUSTER_LEVEL_DEFAULT_ASSIGNMENT_VARIANT
+    if is_lynch2024_atlas(str(atlas)):
+        return LYNCH2024_CLUSTER_LEVEL_DEFAULT_ASSIGNMENT_VARIANT
+    raise ValueError(f"No cluster-level default assignment variant for atlas={atlas!r}")
+
+
 def select_cluster_level_default_assignment_variant(
     assignment_variant_specs: dict[str, dict[str, object]],
+    *,
+    atlas: str,
 ) -> str:
     """Select the explicit default for cluster-level network assignments.
 
-    ``normalized_top20_count`` remains a supported Kong2022 comparison
-    variant and the dedicated Kong ROI-registry WTA path, but it must not
-    silently become the default for cluster-based atlases.
+    The atlas default must have been computed; no other variant is
+    substituted when it is missing.
     """
-    if DEFAULT_CLUSTER_LEVEL_ASSIGNMENT_VARIANT not in assignment_variant_specs:
+    expected = cluster_level_default_assignment_variant(atlas)
+    if expected not in assignment_variant_specs:
         raise ValueError(
-            "Cluster-level assignment variants must include the required "
-            f"default {DEFAULT_CLUSTER_LEVEL_ASSIGNMENT_VARIANT!r}; "
+            f"Cluster-level assignment variants for atlas={atlas!r} must include "
+            f"the required default {expected!r}; "
             f"available={sorted(assignment_variant_specs)}"
         )
-    return DEFAULT_CLUSTER_LEVEL_ASSIGNMENT_VARIANT
+    return expected
 
 
 @dataclass(frozen=True)
@@ -610,6 +629,7 @@ def resume_manifest_matches(
     *,
     gradient_options: dict[str, object] | None = None,
     expected_gradient_meta: dict[str, object] | None = None,
+    expected_default_assignment_variant: str | None = None,
 ) -> tuple[bool, str]:
     if not manifest_path.exists():
         return False, "missing_manifest"
@@ -631,6 +651,12 @@ def resume_manifest_matches(
         return False, "missing_signature"
     if got != expected_signature:
         return False, "upstream_signature_changed"
+    if (
+        expected_default_assignment_variant is not None
+        and payload.get("status") == "ok"
+        and payload.get("default_assignment_variant") != expected_default_assignment_variant
+    ):
+        return False, "default_assignment_variant_changed"
     return True, "signature_match"
 
 
@@ -6469,6 +6495,10 @@ def main() -> int:
                                 resume_input_signature,
                                 gradient_options=gradient_options if is_gradient_method(method) else None,
                                 expected_gradient_meta=group_gradient_meta,
+                                expected_default_assignment_variant=(
+                                    None if is_clusterless_method(method)
+                                    else cluster_level_default_assignment_variant(atlas)
+                                ),
                             )
                             if skip_ok:
                                 print(
@@ -7518,34 +7548,35 @@ def main() -> int:
                                 variants=ovr_variants, out_dir=run_dir,
                             ))
                         if atlas == "kong2022" and not is_clusterless_method(method):
-                            if args.profile is not None or "network_ts_fisherz" in args.assignment_variant or any(v.endswith("_network_ts") for v in args.assignment_variant):
-                                net_ts_3d, net_ts_mean, net_ts_subs = subjectwise_cluster_network_fisherz_profile(
-                                    group_labels_final=labels_final,
-                                    support_mask=support,
-                                    subjects=subjects,
-                                    surface_root=config.profile_surface_root,
-                                    reference_root=reference_root,
-                                    smoothing=smoothing,
-                                    hemi=hemi,
-                                    valid_masks_by_subject=valid_masks,
-                                    network_names=network_names,
-                                    network_column=resolve_kong2022_network_registry_column(network_taxonomy),
-                                )
-                                np.save(run_dir / "cluster_network_ts_profile.npy", net_ts_mean.astype(np.float32))
-                                net_ts_status_rows, net_ts_dominant = assignment_status_from_weighted_network_profile(
-                                    net_ts_mean,
-                                    network_names,
-                                )
-                                assignment_variant_specs["network_ts_fisherz"] = {
-                                    "status_rows": net_ts_status_rows,
-                                    "dominant": net_ts_dominant,
-                                    "assignment_metric": "top1_network_ts_fisher_z",
-                                    "network_names": network_names,
-                                    "network_taxonomy": network_taxonomy,
-                                    "profile_units": "Fisher_z",
-                                    "q_threshold": None,
-                                    "top_n_cap": None,
-                                }
+                            # network_ts_fisherz is the Kong2022 cluster-level default and is always computed.
+                            net_ts_3d, net_ts_mean, net_ts_subs = subjectwise_cluster_network_fisherz_profile(
+                                group_labels_final=labels_final,
+                                support_mask=support,
+                                subjects=subjects,
+                                surface_root=config.profile_surface_root,
+                                reference_root=reference_root,
+                                smoothing=smoothing,
+                                hemi=hemi,
+                                valid_masks_by_subject=valid_masks,
+                                network_names=network_names,
+                                network_column=resolve_kong2022_network_registry_column(network_taxonomy),
+                            )
+                            np.save(run_dir / "cluster_network_ts_profile.npy", net_ts_mean.astype(np.float32))
+                            net_ts_status_rows, net_ts_dominant = assignment_status_from_weighted_network_profile(
+                                net_ts_mean,
+                                network_names,
+                            )
+                            assignment_variant_specs["network_ts_fisherz"] = {
+                                "status_rows": net_ts_status_rows,
+                                "dominant": net_ts_dominant,
+                                "assignment_metric": "top1_network_ts_fisher_z",
+                                "network_names": network_names,
+                                "network_taxonomy": network_taxonomy,
+                                "profile_units": "Fisher_z",
+                                "q_threshold": None,
+                                "top_n_cap": None,
+                            }
+                            if args.profile is not None or any(v.endswith("_network_ts") for v in args.assignment_variant):
                                 net_ts_ovr_res = fit_network_ovr_from_network_profiles(
                                     network_profiles=net_ts_3d,
                                     subject_ids=net_ts_subs,
@@ -7572,7 +7603,7 @@ def main() -> int:
                                     "ovr_model_metadata": str(net_ts_ovr_paths["metadata"].resolve()),
                                 }
                         default_assignment_variant = select_cluster_level_default_assignment_variant(
-                            assignment_variant_specs
+                            assignment_variant_specs, atlas=atlas
                         )
                         default_variant_spec = assignment_variant_specs[default_assignment_variant]
 

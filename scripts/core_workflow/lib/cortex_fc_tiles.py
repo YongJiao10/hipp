@@ -24,76 +24,89 @@ DEFAULT_CMAP = "RdBu_r"
 COLORBAR_VMAX = 0.15
 COLORBAR_TICKS = (-0.15, -0.08, 0.0, 0.08, 0.15)
 COLORBAR_LABEL = "Mean Fisher-z Hippo-Cortex FC"
-# Two-segment colour scale: |z| <= COLORBAR_KNEE keeps 80% of the colormap (linear, for
-# contrast in the bulk of the ROIs); the remaining 10% per side spans the knee to the
-# figure's own data extreme, so no value is clipped and the colour bar shows the true range.
-COLORBAR_KNEE = COLORBAR_VMAX
-COLORBAR_INNER_FRACTION = 0.8
+# Overview colour scale: one linear, zero-centred mapping per figure. L is the
+# COLOR_CAP_PERCENTILE-th percentile of |Fisher-z| over the figure's cortex maps; z maps to
+# 0.5 + z / (2L), so |z| = L reaches the colormap ends and |z| > L saturates there. The colour
+# bar spans the unsaturated range, marks saturated ends with triangles, and its label states the
+# true data range and the saturation point. The percentile is fixed across all overviews.
+COLOR_CAP_PERCENTILE = 90.0
 SURFACE_SIZE = (1000, 700)
 COMPOSITE_DIVIDER_PX = 8
 
 
-class KneeNorm(Normalize):
-    """Piecewise-linear norm with breakpoints at -knee, 0 and +knee.
+class PercentileCapNorm(Normalize):
+    """Linear, zero-centred norm saturating beyond +/-cap: z -> clip(0.5 + z / (2 * cap), 0, 1).
 
-    [-knee, +knee] maps linearly onto the central `inner_fraction` of the colormap with 0
-    at its centre; [vmin, -knee] and [+knee, vmax] map onto the outer segments. A side whose
-    data extreme does not exceed the knee ends at the knee, leaving its outer colours unused,
-    so equal magnitudes receive equal colour intensity on both sides.
+    vmin/vmax are the unsaturated part of the data range (the colour bar span); data_min/data_max
+    keep the true extremes and `extend` names the saturated ends for the colour bar.
     """
 
-    def __init__(self, *, vmin: float, vmax: float, knee: float = COLORBAR_KNEE,
-                 inner_fraction: float = COLORBAR_INNER_FRACTION) -> None:
-        knee = float(knee)
-        if not knee > 0.0:
-            raise ValueError(f"KneeNorm knee must be positive, got {knee}")
-        if not 0.0 < inner_fraction < 1.0:
-            raise ValueError(f"KneeNorm inner_fraction must be in (0, 1), got {inner_fraction}")
-        lo, hi = min(float(vmin), -knee), max(float(vmax), knee)
-        if not (np.isfinite(lo) and np.isfinite(hi)):
-            raise ValueError(f"KneeNorm bounds must be finite, got vmin={vmin} vmax={vmax}")
-        super().__init__(vmin=lo, vmax=hi, clip=True)
-        self.knee = knee
-        self.inner_fraction = float(inner_fraction)
-        outer = (1.0 - self.inner_fraction) / 2.0
-        xs, ys = [-knee, 0.0, knee], [outer, 0.5, 1.0 - outer]
-        if lo < -knee:
-            xs, ys = [lo, *xs], [0.0, *ys]
-        if hi > knee:
-            xs, ys = [*xs, hi], [*ys, 1.0]
-        self._xs = np.asarray(xs, dtype=np.float64)
-        self._ys = np.asarray(ys, dtype=np.float64)
+    def __init__(self, *, data_min: float, data_max: float, cap: float) -> None:
+        data_min, data_max, cap = float(data_min), float(data_max), float(cap)
+        if not (np.isfinite(data_min) and np.isfinite(data_max)) or data_min > data_max:
+            raise ValueError(f"PercentileCapNorm data range must be finite and ordered, got {data_min}..{data_max}")
+        if not (np.isfinite(cap) and cap > 0.0):
+            raise ValueError(f"PercentileCapNorm cap must be positive and finite, got {cap}")
+        super().__init__(vmin=max(data_min, -cap), vmax=min(data_max, cap), clip=False)
+        self.cap = cap
+        self.data_min = data_min
+        self.data_max = data_max
+        below, above = data_min < -cap, data_max > cap
+        self.extend = "both" if below and above else "min" if below else "max" if above else "neither"
 
     def __call__(self, value, clip=None):
         arr = np.ma.asarray(value, dtype=np.float64)
-        out = np.interp(arr.filled(np.nan), self._xs, self._ys)
+        out = np.clip(0.5 + 0.5 * arr.filled(np.nan) / self.cap, 0.0, 1.0)
         return np.ma.masked_array(out, mask=np.ma.getmaskarray(arr) | ~np.isfinite(out))
 
     def inverse(self, value):
-        return np.interp(np.asarray(value, dtype=np.float64), self._ys, self._xs)
+        """Inverse inside the unsaturated range only (saturated colours have no unique value)."""
+        return (np.asarray(value, dtype=np.float64) - 0.5) * 2.0 * self.cap
 
 
-def cortex_fc_norm(values: np.ndarray) -> KneeNorm:
+def cortex_fc_norm(values: np.ndarray, *, cap_percentile: float = COLOR_CAP_PERCENTILE) -> PercentileCapNorm:
     """Build the colour scale for one figure from all of its finite cortex FC values."""
     arr = np.asarray(values, dtype=np.float64)
     finite = arr[np.isfinite(arr)]
     if finite.size == 0:
         raise ValueError("Cortex FC colour scale requires at least one finite value")
-    return KneeNorm(vmin=float(finite.min()), vmax=float(finite.max()))
+    if not 0.0 < float(cap_percentile) <= 100.0:
+        raise ValueError(f"Cortex FC cap percentile must be in (0, 100], got {cap_percentile}")
+    cap = float(np.percentile(np.abs(finite), float(cap_percentile)))
+    if not cap > 0.0:
+        raise ValueError("Cortex FC colour scale requires non-zero values below the cap percentile")
+    return PercentileCapNorm(data_min=float(finite.min()), data_max=float(finite.max()), cap=cap)
 
 
-def style_cortex_fc_colorbar(cbar, norm: KneeNorm, *, fontsize: float) -> None:
-    """Draw a horizontal colour bar on a linear Fisher-z axis spanning the figure's true range.
+def cortex_fc_colorbar_boundaries(norm: PercentileCapNorm, n: int = 256) -> np.ndarray:
+    """Colour bar cells spanning exactly the unsaturated range; each cell is coloured by `norm` like the maps."""
+    return np.linspace(norm.vmin, norm.vmax, int(n) + 1)
 
-    The colours keep the knee norm, so the gradient is steep inside the knee and shallow
-    beyond it, while tick spacing is proportional to Fisher-z.
+
+def cortex_fc_colorbar_kwargs(norm: PercentileCapNorm) -> dict[str, Any]:
+    """Keyword arguments for `Figure.colorbar` so the bar matches the maps and marks saturated ends."""
+    return {"boundaries": cortex_fc_colorbar_boundaries(norm), "extend": norm.extend, "extendfrac": 0.04}
+
+
+def cortex_fc_colorbar_label(norm: PercentileCapNorm) -> str:
+    """Colour bar label stating the true data range and, when values saturate, the saturation point."""
+    text = f"{COLORBAR_LABEL}\nrange {norm.data_min:.2f} to {norm.data_max:.2f}"
+    if norm.extend != "neither":
+        text += f"; colour saturated beyond \u00b1{norm.cap:.2f} (|z| percentile {COLOR_CAP_PERCENTILE:g})"
+    return text
+
+
+def style_cortex_fc_colorbar(cbar, norm: PercentileCapNorm, *, fontsize: float) -> None:
+    """Draw a horizontal colour bar on a linear Fisher-z axis spanning the unsaturated range.
+
+    The norm is linear there, so the bar shows exactly the colours used on the cortex maps.
     """
     cbar.ax.set_xscale("linear")
     cbar.ax.set_xlim(norm.vmin, norm.vmax)
     span = norm.vmax - norm.vmin
     ticks = ticker.MaxNLocator(nbins=6, steps=[1, 2, 2.5, 5, 10]).tick_values(norm.vmin, norm.vmax)
     ticks = [float(t) for t in ticks if norm.vmin + 0.04 * span <= t <= norm.vmax - 0.04 * span]
-    cbar.set_ticks(ticks, labels=[f"{t:+.2f}" if abs(t) >= 0.005 else "0" for t in ticks])
+    cbar.set_ticks(ticks, labels=[f"{t:.2f}" if abs(t) >= 0.005 else "0" for t in ticks])
     cbar.ax.tick_params(labelsize=fontsize)
 
 
