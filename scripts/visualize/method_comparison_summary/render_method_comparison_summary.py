@@ -102,6 +102,23 @@ FIGURES = {
     "gradient": ("method_comparison_summary_gradient", ("gradient",)),
     "graph": ("method_comparison_summary_graph", ("graph",)),
 }
+SELECTED_STEM = "method_comparison_selected"
+# How much each method averages across participants before the partition is formed. Only drawn on a
+# --rows selection. Individual: a joint model of every participant's own data, with no cohort-averaged
+# data entering the clustering (HBP still aligns individual gradients to a cohort template).
+# Subject estimates averaged: per-participant similarity, graph or gradients, averaged, then clustered.
+# Averaged FC: the cohort-mean connectivity, then gradients and clustering.
+TIERS = {
+    "hbp": "Individual model\n(cohort-template alignment)",
+    "shen": "Individual model", "shen_gradient": "Individual model",
+    "subjgrad": "Subject estimates averaged", "avgsim": "Subject estimates averaged",
+    "mean_graph": "Subject estimates averaged",
+    "ward": "Averaged FC",
+}
+
+
+def tier_of(row: MethodRow) -> str:
+    return TIERS[row.key] if row.key in TIERS else TIERS[row.key.rsplit("_", 1)[0]]
 
 FS = 6.0
 DPI = 300
@@ -427,11 +444,12 @@ def bar_xmax(conditions: list[Condition], variant: str) -> float:
 
 
 def compose(conditions: dict[tuple, Condition], panels: dict[str, Path], rows: list[MethodRow],
-            out_png: Path, shared: dict, title: str, *, dpi: int = DPI) -> None:
+            out_png: Path, shared: dict, title: str, *, dpi: int = DPI, show_tiers: bool = False) -> None:
     columns = [(s, route, name) for s in SMOOTHINGS for route, name in ROUTES]
     card_w, card_h, label_w = 4.6, 2.9, 1.0
     gap = 0.35
-    n_groups = sum(1 for i, r in enumerate(rows) if i == 0 or rows[i - 1].family != r.family) - 1
+    group = tier_of if show_tiers else (lambda r: r.family)
+    n_groups = sum(1 for i, r in enumerate(rows) if i == 0 or group(rows[i - 1]) != group(r)) - 1
     header_h, legend_h = 0.95, 1.05
     fig_w = label_w + len(columns) * card_w + gap
     fig_h = header_h + len(rows) * card_h + n_groups * 0.25 + legend_h
@@ -461,12 +479,15 @@ def compose(conditions: dict[tuple, Condition], panels: dict[str, Path], rows: l
 
     y_top = 1 - header_h / fig_h
     for ri, row in enumerate(rows):
-        if ri and rows[ri - 1].family != row.family:
+        if ri and group(rows[ri - 1]) != group(row):
             y_top -= 0.25 / fig_h
             fig.add_artist(Line2D([0.01, 0.99], [y_top + 0.12 / fig_h] * 2, color="#999999", lw=0.8, ls="--"))
         y_bottom = y_top - card_h / fig_h
         fig.text(0.008, (y_top + y_bottom) / 2, row.label, ha="left", va="center", fontsize=8,
                  fontweight="bold", linespacing=1.15)
+        if show_tiers:
+            fig.text(0.008, y_top - 0.12 / fig_h, tier_of(row), ha="left", va="top", fontsize=6.5,
+                     style="italic", color="#555555", linespacing=1.1)
         for col, (smoothing, route, _) in enumerate(columns):
             cond = conditions[(row.key, route, smoothing)]
             left = x0(col)
@@ -541,26 +562,39 @@ def main() -> int:
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--jobs", type=int, default=16)
     parser.add_argument("--dpi", type=int, default=DPI)
+    parser.add_argument("--rows", default=None,
+                        help="Comma-separated row keys, drawn in this order as one figure "
+                             f"({SELECTED_STEM}.png) with averaging-tier captions; default: all rows, three figures")
     args = parser.parse_args()
+    by_key = {row.key: row for row in METHOD_ROWS}
+    if args.rows is not None:
+        keys = [k.strip() for k in args.rows.split(",") if k.strip()]
+        unknown = [k for k in keys if k not in by_key]
+        if unknown or not keys or len(set(keys)) != len(keys):
+            parser.error(f"--rows must list distinct keys from {sorted(by_key)}; got {keys}")
+        selected_rows = [by_key[k] for k in keys]
+    else:
+        selected_rows = list(METHOD_ROWS)
     roots = {"comparison": args.comparison_root.resolve(strict=True), "graph": args.graph_root.resolve(strict=True)}
     out = args.out.resolve()
 
     conditions = {
         (row.key, route, smoothing): load_condition(roots, row, route, smoothing)
-        for row in METHOD_ROWS for route, _ in ROUTES for smoothing in SMOOTHINGS
+        for row in selected_rows for route, _ in ROUTES for smoothing in SMOOTHINGS
     }
     shared = validate_shared_settings(list(conditions.values()))
     panels = render_surfaces(list(conditions.values()), out / "panels", args.jobs)
 
     outputs = {}
-    for name, (stem, families) in FIGURES.items():
-        rows = [row for row in METHOD_ROWS if row.family in families]
+    title = "Hippocampal parcellation methods — Standard vs CtxReg 10 mm vs CtxReg 20 mm (HCP, Kong2022 canonical7)"
+    figures = ({"selected": (SELECTED_STEM, None)} if args.rows is not None else FIGURES)
+    for name, (stem, families) in figures.items():
+        rows = selected_rows if families is None else [row for row in METHOD_ROWS if row.family in families]
         subset = {key: c for key, c in conditions.items() if c.row in rows}
         png = out / f"{stem}.png"
-        compose(subset, panels, rows, png, shared,
-                "Hippocampal parcellation methods — Standard vs CtxReg 10 mm vs CtxReg 20 mm (HCP, Kong2022 canonical7)",
-                dpi=args.dpi)
+        compose(subset, panels, rows, png, shared, title, dpi=args.dpi, show_tiers=families is None)
         outputs[name] = str(png)
+    manifest_stem = SELECTED_STEM if args.rows is not None else "method_comparison_summary"
 
     manifest = {
         "figures": outputs,
@@ -569,6 +603,8 @@ def main() -> int:
         "redundancy_threshold": REDUNDANCY_THRESHOLD,
         "annotation_variants": [v for v, _ in VARIANTS],
         "roots": {k: str(v) for k, v in roots.items()},
+        "rows": [row.key for row in selected_rows],
+        "averaging_tiers": {row.key: tier_of(row) for row in selected_rows},
         "conditions": [
             {
                 "row": c.row.key, "method": c.row.method, "gradient_components": c.row.comp_tag or None,
@@ -585,7 +621,7 @@ def main() -> int:
             for c in conditions.values()
         ],
     }
-    (out / "method_comparison_summary_manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+    (out / f"{manifest_stem}_manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     for c in conditions.values():
         passed = [name for v, name in VARIANTS if symmetric_nonredundant(c, v)]
         if passed:

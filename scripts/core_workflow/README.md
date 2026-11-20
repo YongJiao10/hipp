@@ -473,6 +473,14 @@ It writes the combined figure, gradient-only and graph-only versions as
 `method_comparison_summary_manifest.json` with every consumed manifest and
 label checksum.
 
+`--rows <key>,<key>,...` (for example `hbp_g1g2g3,mean_graph,ward_g1g2g3`)
+instead draws only those rows, in that order, as `method_comparison_selected.png`
+with `method_comparison_selected_manifest.json`. Rows are grouped by how much
+they average across participants before the partition is formed: individual
+model (a joint model of every participant's own data; HBP aligns the individual
+gradients to a cohort template), subject estimates averaged (per-participant
+similarity, graph or gradients averaged, then clustered), and averaged FC.
+
 ### Participant-graph spectral methods
 
 `multigraph-spectral` and `mean-graph-spectral` (`lib/multigraph_spectral.py`)
