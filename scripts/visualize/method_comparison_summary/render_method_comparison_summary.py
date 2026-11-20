@@ -102,18 +102,17 @@ FIGURES = {
     "gradient": ("method_comparison_summary_gradient", ("gradient",)),
     "graph": ("method_comparison_summary_graph", ("graph",)),
 }
-SELECTED_STEM = "method_comparison_selected"
+SELECTED_STEM = "method_comparison_summary_by_tier"
 # How much each method averages across participants before the partition is formed. Only drawn on a
-# --rows selection. Individual: a joint model of every participant's own data, with no cohort-averaged
-# data entering the clustering (HBP still aligns individual gradients to a cohort template).
+# --rows selection. Individual: the partition is estimated from every participant's own data; a cohort
+# average may serve only as an intermediate alignment reference (HBP), never as clustered data.
 # Subject estimates averaged: per-participant similarity, graph or gradients, averaged, then clustered.
 # Averaged FC: the cohort-mean connectivity, then gradients and clustering.
 TIERS = {
-    "hbp": "Individual model\n(cohort-template alignment)",
-    "shen": "Individual model", "shen_gradient": "Individual model",
-    "subjgrad": "Subject estimates averaged", "avgsim": "Subject estimates averaged",
-    "mean_graph": "Subject estimates averaged",
-    "ward": "Averaged FC",
+    "hbp": "Individual\nmodel", "shen": "Individual\nmodel", "shen_gradient": "Individual\nmodel",
+    "subjgrad": "Subject estimates\naveraged", "avgsim": "Subject estimates\naveraged",
+    "mean_graph": "Subject estimates\naveraged",
+    "ward": "Averaged\nFC",
 }
 
 
@@ -483,10 +482,12 @@ def compose(conditions: dict[tuple, Condition], panels: dict[str, Path], rows: l
             y_top -= 0.25 / fig_h
             fig.add_artist(Line2D([0.01, 0.99], [y_top + 0.12 / fig_h] * 2, color="#999999", lw=0.8, ls="--"))
         y_bottom = y_top - card_h / fig_h
-        fig.text(0.008, (y_top + y_bottom) / 2, row.label, ha="left", va="center", fontsize=8,
+        # G1–G3 is the default component set; the tier figure names only other sets.
+        label = row.label.replace(" G1–G3", "").replace("\nG1–G3", "") if show_tiers else row.label
+        fig.text(0.008, (y_top + y_bottom) / 2, label, ha="left", va="center", fontsize=8,
                  fontweight="bold", linespacing=1.15)
-        if show_tiers:
-            fig.text(0.008, y_top - 0.12 / fig_h, tier_of(row), ha="left", va="top", fontsize=6.5,
+        if show_tiers and (ri == 0 or group(rows[ri - 1]) != group(row)):
+            fig.text(0.008, y_top - 0.12 / fig_h, tier_of(row), ha="left", va="top", fontsize=7,
                      style="italic", color="#555555", linespacing=1.1)
         for col, (smoothing, route, _) in enumerate(columns):
             cond = conditions[(row.key, route, smoothing)]
