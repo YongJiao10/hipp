@@ -166,3 +166,30 @@ def test_multigraph_gradient_coordinates():
     assert not np.allclose(np.abs(diff[:, :, 1]), np.abs(shen[:, :, 1]))
     labels, meta = ms.discretize_stack(diff, 3)
     assert set(np.unique(labels)) <= {1, 2, 3} and meta["n_graphs"] == 4
+
+
+def test_similarity_gradient_halves_use_their_own_feature_builder(monkeypatch, tmp_path):
+    """Regression: resampled halves must embed the similarity bank, not average it as FC rows."""
+    atlas = stage("05_02_run_group_atlas.py")
+    monkeypatch.setattr(atlas, "ensure_hippomaps_on_path", lambda root=None: tmp_path)
+    monkeypatch.setattr(atlas, "hippomaps_commit", lambda root=None: "stub")
+    monkeypatch.setattr(atlas, "hippomaps_import_path", lambda root=None: str(tmp_path))
+    bank = {str(i): vertex_similarity(fc) for i, fc in enumerate(subject_fingerprints(n_subjects=6))}
+    options = {"feature_scaling": "none", "sparsify_stage": "affinity", "sparsity": 0.9,
+               "clustering_feature_scaling": "none"}
+    support = np.ones(100, dtype=bool)
+    calls = []
+    original = atlas.build_group_gradient_features
+    monkeypatch.setattr(atlas, "build_group_gradient_features",
+                        lambda **kw: calls.append(kw["method"]) or original(**kw))
+    for method in (atlas.MEAN_SIMILARITY_WARD_METHOD, atlas.SUBJECT_GRADIENT_WARD_METHOD):
+        half = list(bank)[:3]
+        first = atlas.group_feature_matrix(method=method, feature_bank=bank, subjects_subset=half,
+                                           support_mask=support, gradient_components=(1, 2), gradient_options=options)
+        again = atlas.group_feature_matrix(method=method, feature_bank=bank, subjects_subset=half,
+                                           support_mask=support, gradient_components=(1, 2), gradient_options=options)
+        direct, _ = original(method=method, feature_bank=bank, subjects_subset=half, support_mask=support,
+                             gradient_components=(1, 2), gradient_options=options)
+        np.testing.assert_array_equal(first, again)
+        np.testing.assert_allclose(first, direct)
+    assert calls.count(atlas.MEAN_SIMILARITY_WARD_METHOD) >= 1 and calls.count(atlas.SUBJECT_GRADIENT_WARD_METHOD) == 1

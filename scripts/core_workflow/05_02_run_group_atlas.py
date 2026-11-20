@@ -72,6 +72,8 @@ import sys
 import hashlib
 import importlib.metadata
 import json
+import threading
+from collections import OrderedDict
 import math
 import os
 import warnings
@@ -2888,6 +2890,59 @@ def verify_intrinsic_atlas_invariance(shared_root: Path, subjects: list[str], sm
                 )
 
 
+_SIMILARITY_FEATURE_CACHE: "OrderedDict[tuple, np.ndarray]" = OrderedDict()
+_SIMILARITY_FEATURE_LOCKS: dict[tuple, threading.Lock] = {}
+_SIMILARITY_CACHE_LOCK = threading.Lock()
+_SIMILARITY_CACHE_LIMIT = 256
+
+
+def _array_digest(array: np.ndarray) -> bytes:
+    return hashlib.blake2b(np.ascontiguousarray(array).view(np.uint8), digest_size=16).digest()
+
+
+def similarity_gradient_features_cached(
+    *, method: str, feature_bank: dict[str, np.ndarray], subjects_subset: list[str], support_mask: np.ndarray,
+    gradient_components: tuple[int, ...], gradient_options: dict[str, object] | None,
+) -> np.ndarray:
+    """Half-sample features of the similarity-gradient methods, shared across the K candidates.
+
+    The features of a subject subset do not depend on K, and the K candidates run as
+    threads, so one fit per (inputs, permutation) serves all of them.
+    """
+    options = dict(gradient_options or {})
+    permutations = options.get("alignment_vertex_permutations") or {}
+    key = (
+        method, tuple(int(c) for c in gradient_components), np.asarray(support_mask, dtype=bool).tobytes(),
+        tuple(subjects_subset),
+        _array_digest(np.concatenate([[_array_digest(np.asarray(feature_bank[s])) for s in subjects_subset]]).astype("S16")),
+        tuple(sorted((s, _array_digest(np.asarray(v, dtype=np.int64))) for s, v in permutations.items())),
+        json.dumps({k: v for k, v in options.items() if k not in {
+            "alignment_vertex_permutations", "alignment_fc_paths", "alignment_mask_paths"}}, sort_keys=True, default=str),
+    )
+    with _SIMILARITY_CACHE_LOCK:
+        hit = _SIMILARITY_FEATURE_CACHE.get(key)
+        if hit is not None:
+            _SIMILARITY_FEATURE_CACHE.move_to_end(key)
+            return hit
+        key_lock = _SIMILARITY_FEATURE_LOCKS.setdefault(key, threading.Lock())
+    with key_lock:
+        with _SIMILARITY_CACHE_LOCK:
+            hit = _SIMILARITY_FEATURE_CACHE.get(key)
+        if hit is not None:
+            return hit
+        features, _meta = build_group_gradient_features(
+            method=method, feature_bank=feature_bank, subjects_subset=subjects_subset,
+            support_mask=support_mask, gradient_components=gradient_components,
+            hippomaps_root=HIPPOMAPS_ROOT_OVERRIDE, gradient_options=options,
+        )
+        with _SIMILARITY_CACHE_LOCK:
+            _SIMILARITY_FEATURE_CACHE[key] = features
+            _SIMILARITY_FEATURE_LOCKS.pop(key, None)
+            while len(_SIMILARITY_FEATURE_CACHE) > _SIMILARITY_CACHE_LIMIT:
+                _SIMILARITY_FEATURE_CACHE.popitem(last=False)
+        return features
+
+
 def group_feature_matrix(
     *,
     method: str,
@@ -2915,6 +2970,12 @@ def group_feature_matrix(
         return coordinate_stack(
             [feature_bank[s] for s in subjects_subset], subjects_subset, support_mask,
             method=method, n_components=MULTIGRAPH_MAX_COORDINATES,
+        )
+
+    if method in SIMILARITY_GRADIENT_METHODS:
+        return similarity_gradient_features_cached(
+            method=method, feature_bank=feature_bank, subjects_subset=subjects_subset, support_mask=support_mask,
+            gradient_components=gradient_components, gradient_options=gradient_options,
         )
 
     if is_gradient_method(method):
@@ -6785,7 +6846,11 @@ def main() -> int:
 
                         precomputed_split_halves = None
                         precomputed_null_halves = None
-                        if is_gradient_method(method) and fixed_cluster_reuse is None and (args.profile is not None or len(split_seeds) <= 20):
+                        # The precomputed halves average a vertex-by-ROI FC bank; the similarity-gradient
+                        # methods hold vertex-by-vertex similarity banks and resample through
+                        # group_feature_matrix instead.
+                        if (is_gradient_method(method) and method not in SIMILARITY_GRADIENT_METHODS
+                                and fixed_cluster_reuse is None and (args.profile is not None or len(split_seeds) <= 20)):
                             half_fit_seed_offsets = (
                                 RESAMPLE_HALF_SEED_OFFSETS
                                 if args.profile is not None

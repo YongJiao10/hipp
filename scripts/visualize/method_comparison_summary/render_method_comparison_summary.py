@@ -76,7 +76,8 @@ class MethodRow:
     label: str
     method: str
     comp_tag: str  # gradient component directory; empty for non-gradient methods
-    family: str  # "gradient" or "graph"
+    family: str  # "gradient" or "graph": figure grouping
+    root: str = "comparison"  # which experiment root holds the runs: "comparison" or "graph"
 
 
 METHOD_ROWS = (
@@ -86,8 +87,12 @@ METHOD_ROWS = (
     MethodRow("avgsim_g1", "Ward · avg sim\nG1", "mean-similarity-ward", "g1", "gradient"),
     MethodRow("avgsim_g1g2", "Ward · avg sim\nG1+G2", "mean-similarity-ward", "g1g2", "gradient"),
     MethodRow("avgsim_g1g2g3", "Ward · avg sim\nG1–G3", "mean-similarity-ward", "g1g2g3", "gradient"),
-    MethodRow("shen", "Shen\nmultigraph", "multigraph-spectral", "", "graph"),
-    MethodRow("mean_graph", "Mean-graph\nspectral", "mean-graph-spectral", "", "graph"),
+    MethodRow("subjgrad_g1", "Ward · subject\ngradients G1", "subject-gradient-ward", "g1", "gradient"),
+    MethodRow("subjgrad_g1g2", "Ward · subject\ngradients G1+G2", "subject-gradient-ward", "g1g2", "gradient"),
+    MethodRow("subjgrad_g1g2g3", "Ward · subject\ngradients G1–G3", "subject-gradient-ward", "g1g2g3", "gradient"),
+    MethodRow("shen", "Shen\nmultigraph", "multigraph-spectral", "", "graph", "graph"),
+    MethodRow("shen_gradient", "Shen · gradient\ncoordinates", "multigraph-gradient-spectral", "", "graph"),
+    MethodRow("mean_graph", "Mean-graph\nspectral", "mean-graph-spectral", "", "graph", "graph"),
 )
 FIGURES = {
     "all": ("method_comparison_summary", ("gradient", "graph")),
@@ -97,6 +102,7 @@ FIGURES = {
 
 FS = 6.0
 DPI = 300
+MAX_PIXELS = 80e6
 
 
 def compress_png(path: Path) -> None:
@@ -146,7 +152,7 @@ def validate_manifest(m: dict, path: Path, *, method: str, route: str, smoothing
 
 
 def load_condition(roots: dict[str, Path], row: MethodRow, route: str, smoothing: str) -> Condition:
-    root = roots[row.family] / route
+    root = roots[row.root] / route
     run_dirs = {h: ov._build_run_dir(root, row.method, ATLAS, smoothing, COVERAGE_TAG, h, gradient_comp_tag=row.comp_tag)
                 for h in "LR"}
     manifests = {}
@@ -156,7 +162,7 @@ def load_condition(roots: dict[str, Path], row: MethodRow, route: str, smoothing
             raise FileNotFoundError(f"Missing group atlas manifest for {row.key} {route} {smoothing} hemi-{h}: {path}")
         m = json.loads(path.read_text(encoding="utf-8"))
         validate_manifest(m, path, method=row.method, route=route, smoothing=smoothing, hemi=h)
-        if row.family == "gradient":
+        if row.comp_tag:
             validate_group_atlas_lineage(path, expected_network_taxonomy=TAXONOMY, expected_method=row.method)
         ov.ensure_gradient_assignment_variants(path, m)
         manifests[h] = m
@@ -516,6 +522,8 @@ def compose(conditions: dict[tuple, Condition], panels: dict[str, Path], rows: l
         ha="center", va="bottom", fontsize=6.5, color="#333333",
     )
     out_png.parent.mkdir(parents=True, exist_ok=True)
+    # Keep every figure openable by ordinary viewers: cap the pixel count, not the layout.
+    dpi = min(int(dpi), int(np.sqrt(MAX_PIXELS / (fig_w * fig_h))))
     fig.savefig(out_png, dpi=dpi, facecolor="white")
     compress_png(out_png)
     plt.close(fig)
@@ -523,15 +531,15 @@ def compose(conditions: dict[tuple, Condition], panels: dict[str, Path], rows: l
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--gradient-root", type=Path, required=True,
-                        help="Group-atlas comparison root holding <route>/gradient-ward and mean-similarity-ward runs")
+    parser.add_argument("--comparison-root", type=Path, required=True,
+                        help="Group-atlas comparison root holding <route>/<method> runs for every row except Shen and mean-graph")
     parser.add_argument("--graph-root", type=Path, required=True,
                         help="Group-atlas comparison root holding <route>/multigraph-spectral and mean-graph-spectral runs")
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--jobs", type=int, default=16)
     parser.add_argument("--dpi", type=int, default=DPI)
     args = parser.parse_args()
-    roots = {"gradient": args.gradient_root.resolve(strict=True), "graph": args.graph_root.resolve(strict=True)}
+    roots = {"comparison": args.comparison_root.resolve(strict=True), "graph": args.graph_root.resolve(strict=True)}
     out = args.out.resolve()
 
     conditions = {

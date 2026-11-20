@@ -415,10 +415,26 @@ annotation follow the gradient cluster contract. Full-cohort gradients are
 computed in `05_02`; manifests record `gradient_recomputed: true` and no
 `05_01` source. `--resume` is not supported for this method.
 
+`subject-gradient-ward` uses the same participant similarity and TopSim
+affinity, but embeds each participant separately (exact diffusion map, G1–G5).
+Each participant's gradients are rotated onto the `mean-similarity-ward`
+template of the same training subjects with orthogonal Procrustes (reflections
+allowed); generalized Procrustes then iterates with the vertexwise mean over
+observing participants, re-rotated onto the template so G1, G2 and G3 keep the
+template's identity. The selected components of that mean are clustered with
+mesh-constrained Ward. A participant whose affinity is disconnected stops the
+fit. Manifests record the Procrustes iterations, convergence and the
+per-component correlation with the template.
+
+`multigraph-gradient-spectral` keeps the `multigraph-spectral` participant
+graphs and shared-partition discretization, but replaces each participant's
+leading eigenvectors with a constant column followed by the eigenvalue-scaled
+G1..G(K−1) of the exact diffusion map. It has no mesh constraint.
+
 The method comparison figure
 (`scripts/visualize/method_comparison_summary/render_method_comparison_summary.py`)
-places gradient Ward and mean-similarity Ward (G1, G1+G2, G1–G3) and the two
-participant-graph methods in rows, and Standard, CtxReg 10 mm and CtxReg 20 mm
+places gradient Ward, mean-similarity Ward and subject-gradient Ward (G1,
+G1+G2, G1–G3) and the three participant-graph methods in rows, and Standard, CtxReg 10 mm and CtxReg 20 mm
 side by side within each smoothing. Each card shows split-half ARI, the
 redundancy gate, and the network-TS Fisher-z and network-TS OVR dominant bars
 and unfolded/folded hippocampus maps of the exported partition. A green frame around the
@@ -433,7 +449,7 @@ taxonomy, 0.80 redundancy threshold, roster, K scan and resampling settings:
 HIPP_DATA_CHECKOUT=/home/yojiao/hpchome/hipp LP_NUM_THREADS=1 VTK_SMP_MAX_THREADS=1 xvfb-run -a \
   /home/yojiao/.conda/envs/py314/bin/python \
   scripts/visualize/method_comparison_summary/render_method_comparison_summary.py \
-  --gradient-root <group-atlas root with gradient-ward and mean-similarity-ward runs> \
+  --comparison-root <group-atlas root with the Ward variants and multigraph-gradient-spectral> \
   --graph-root <group-atlas root with multigraph-spectral and mean-graph-spectral runs> \
   --out <output directory>
 ```
