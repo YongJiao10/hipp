@@ -468,8 +468,7 @@ taxonomy, 0.80 redundancy threshold, roster, K scan and resampling settings:
 HIPP_DATA_CHECKOUT=/home/yojiao/hpchome/hipp LP_NUM_THREADS=1 VTK_SMP_MAX_THREADS=1 xvfb-run -a \
   /home/yojiao/.conda/envs/py314/bin/python \
   scripts/visualize/method_comparison_summary/render_method_comparison_summary.py \
-  --comparison-root <group-atlas root with the Ward variants and multigraph-gradient-spectral> \
-  --graph-root <group-atlas root with multigraph-spectral and mean-graph-spectral runs> \
+  --group-atlas-root <outputs_hcp/work/group_atlas: gradient rows at <route>/topsim/<method>, graph rows at <route>/<method>> \
   --out <output directory>
 ```
 

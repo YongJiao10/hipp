@@ -55,6 +55,7 @@ ov = _load_overview_module()
 
 ATLAS = "kong2022"
 COVERAGE_TAG = "cov_0p80"
+GRADIENT_PROFILE = "topsim"
 TAXONOMY = "canonical7"
 REDUNDANCY_THRESHOLD = 0.80
 VARIANTS = (
@@ -77,7 +78,11 @@ class MethodRow:
     method: str
     comp_tag: str  # gradient component directory; empty for non-gradient methods
     family: str  # "gradient" or "graph": figure grouping
-    root: str = "comparison"  # which experiment root holds the runs: "comparison" or "graph"
+
+    @property
+    def profile_dir(self) -> str:
+        """Gradient rows run under the topsim profile (<route>/topsim/<method>); graph rows have no profile."""
+        return GRADIENT_PROFILE if self.comp_tag else ""
 
 
 METHOD_ROWS = (
@@ -93,9 +98,9 @@ METHOD_ROWS = (
     MethodRow("hbp_g1", "HBP · subject\ngradients G1", "subject-gradient-hbp", "g1", "gradient"),
     MethodRow("hbp_g1g2", "HBP · subject\ngradients G1+G2", "subject-gradient-hbp", "g1g2", "gradient"),
     MethodRow("hbp_g1g2g3", "HBP · subject\ngradients G1–G3", "subject-gradient-hbp", "g1g2g3", "gradient"),
-    MethodRow("shen", "Shen\nmultigraph", "multigraph-spectral", "", "graph", "graph"),
+    MethodRow("shen", "Shen\nmultigraph", "multigraph-spectral", "", "graph"),
     MethodRow("shen_gradient", "Shen · gradient\ncoordinates", "multigraph-gradient-spectral", "", "graph"),
-    MethodRow("mean_graph", "Mean-graph\nspectral", "mean-graph-spectral", "", "graph", "graph"),
+    MethodRow("mean_graph", "Mean-graph\nspectral", "mean-graph-spectral", "", "graph"),
 )
 FIGURES = {
     "all": ("method_comparison_summary", ("gradient", "graph")),
@@ -170,8 +175,8 @@ def validate_manifest(m: dict, path: Path, *, method: str, route: str, smoothing
         raise ValueError(f"Comparison contract mismatch in {path}: " + "; ".join(bad))
 
 
-def load_condition(roots: dict[str, Path], row: MethodRow, route: str, smoothing: str) -> Condition:
-    root = roots[row.root] / route
+def load_condition(group_atlas_root: Path, row: MethodRow, route: str, smoothing: str) -> Condition:
+    root = group_atlas_root / route / row.profile_dir if row.profile_dir else group_atlas_root / route
     run_dirs = {h: ov._build_run_dir(root, row.method, ATLAS, smoothing, COVERAGE_TAG, h, gradient_comp_tag=row.comp_tag)
                 for h in "LR"}
     manifests = {}
@@ -556,10 +561,9 @@ def compose(conditions: dict[tuple, Condition], panels: dict[str, Path], rows: l
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--comparison-root", type=Path, required=True,
-                        help="Group-atlas comparison root holding <route>/<method> runs for every row except Shen and mean-graph")
-    parser.add_argument("--graph-root", type=Path, required=True,
-                        help="Group-atlas comparison root holding <route>/multigraph-spectral and mean-graph-spectral runs")
+    parser.add_argument("--group-atlas-root", type=Path, required=True,
+                        help="outputs_<dataset>/work/group_atlas root: gradient rows at <route>/topsim/<method>, "
+                             "participant-graph rows at <route>/<method>")
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--jobs", type=int, default=16)
     parser.add_argument("--dpi", type=int, default=DPI)
@@ -576,11 +580,11 @@ def main() -> int:
         selected_rows = [by_key[k] for k in keys]
     else:
         selected_rows = list(METHOD_ROWS)
-    roots = {"comparison": args.comparison_root.resolve(strict=True), "graph": args.graph_root.resolve(strict=True)}
+    group_atlas_root = args.group_atlas_root.resolve(strict=True)
     out = args.out.resolve()
 
     conditions = {
-        (row.key, route, smoothing): load_condition(roots, row, route, smoothing)
+        (row.key, route, smoothing): load_condition(group_atlas_root, row, route, smoothing)
         for row in selected_rows for route, _ in ROUTES for smoothing in SMOOTHINGS
     }
     shared = validate_shared_settings(list(conditions.values()))
@@ -603,7 +607,7 @@ def main() -> int:
         "shared_settings": shared,
         "redundancy_threshold": REDUNDANCY_THRESHOLD,
         "annotation_variants": [v for v, _ in VARIANTS],
-        "roots": {k: str(v) for k, v in roots.items()},
+        "group_atlas_root": str(group_atlas_root),
         "rows": [row.key for row in selected_rows],
         "averaging_tiers": {row.key: tier_of(row) for row in selected_rows},
         "conditions": [
