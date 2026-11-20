@@ -389,6 +389,58 @@ def fit_mean_similarity_gradients(
     return gradients.astype(np.float32), lambdas.astype(np.float64), ev.astype(np.float64)
 
 
+SUBJECT_GRADIENT_EMBEDDING_CALL = (
+    "per participant: TopSim affinity of the within-participant Pearson vertex similarity "
+    "(diagonal=1, row sparsity=declared, non_negative, mean_symmetrize) -> diffusion_map_embedding(alpha=0.5, "
+    "diffusion_time=0); orthogonal Procrustes of each participant's gradients to the mean-similarity group "
+    "template, iterated as generalized Procrustes with the mean re-rotated onto the template; vertexwise mean "
+    "over observing participants"
+)
+
+
+def procrustes_rotation(source: np.ndarray, target: np.ndarray) -> np.ndarray:
+    """Orthogonal matrix R (reflections allowed) minimising ||source @ R - target||."""
+    u, _, vt = np.linalg.svd(np.asarray(source, dtype=np.float64).T @ np.asarray(target, dtype=np.float64))
+    return u @ vt
+
+
+def generalized_procrustes_mean(
+    subject_gradients: list[tuple[np.ndarray, np.ndarray]], template: np.ndarray, *,
+    max_iter: int = 20, tol: float = 1e-6,
+) -> tuple[np.ndarray, dict]:
+    """Align each participant's gradients (rows at the given support indices) and average them.
+
+    Each iteration rotates every participant onto the reference, averages over the
+    participants observing each vertex, then re-rotates that mean onto the fixed
+    template so component identity (G1, G2, ...) stays the template's.
+    """
+    template = np.asarray(template, dtype=np.float64)
+    reference = template
+    change = np.inf
+    for iteration in range(1, max_iter + 1):
+        total = np.zeros_like(template)
+        count = np.zeros(template.shape[0], dtype=np.int64)
+        for rows, gradients in subject_gradients:
+            aligned = gradients @ procrustes_rotation(gradients, reference[rows])
+            total[rows] += aligned
+            count[rows] += 1
+        if np.any(count == 0):
+            raise ValueError("A supported vertex has no participant gradients")
+        mean = total / count[:, None]
+        mean = mean @ procrustes_rotation(mean, template)
+        change = float(np.linalg.norm(mean - reference) / max(np.linalg.norm(reference), 1e-12))
+        reference = mean
+        if change < tol:
+            break
+    return reference.astype(np.float32), {
+        "procrustes_iterations": iteration, "procrustes_relative_change": change,
+        "procrustes_converged": bool(change < tol),
+        "template_correlation_by_component": [
+            float(np.corrcoef(reference[:, c], template[:, c])[0, 1]) for c in range(template.shape[1])
+        ],
+    }
+
+
 def fit_diffusion_gradients(
     group_fc: np.ndarray,
     *,

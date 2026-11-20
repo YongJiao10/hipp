@@ -118,3 +118,51 @@ def test_group_atlas_features_and_provenance(monkeypatch, tmp_path):
     assert fields["gradient_recomputed"] is True
     assert fields["gradient_computation"] == atlas.MEAN_SIMILARITY_GRADIENT_SOURCE
     assert "gradient_source_manifest" not in fields
+
+
+def test_generalized_procrustes_recovers_rotated_reflected_copies():
+    from lib.hippomaps_adapter import generalized_procrustes_mean
+    rng = np.random.default_rng(1)
+    template = rng.normal(size=(60, 3))
+    subjects = []
+    for i in range(5):
+        rotation, _ = np.linalg.qr(rng.normal(size=(3, 3)))  # includes reflections
+        rows = np.sort(rng.choice(60, size=50, replace=False)) if i else np.arange(60)
+        subjects.append((rows, template[rows] @ rotation.T + 0.01 * rng.normal(size=(len(rows), 3))))
+    mean, meta = generalized_procrustes_mean(subjects, template)
+    assert meta["procrustes_converged"]
+    assert min(meta["template_correlation_by_component"]) > 0.99
+    np.testing.assert_allclose(mean, template, atol=0.05)
+
+
+def test_subject_gradient_ward_features(monkeypatch, tmp_path):
+    atlas = stage("05_02_run_group_atlas.py")
+    monkeypatch.setattr(atlas, "ensure_hippomaps_on_path", lambda root=None: tmp_path)
+    monkeypatch.setattr(atlas, "hippomaps_commit", lambda root=None: "stub")
+    monkeypatch.setattr(atlas, "hippomaps_import_path", lambda root=None: str(tmp_path))
+    bank = {str(i): vertex_similarity(fc) for i, fc in enumerate(subject_fingerprints(n_subjects=5))}
+    options = {"feature_scaling": "none", "sparsify_stage": "affinity", "sparsity": 0.9,
+               "clustering_feature_scaling": "none"}
+    features, meta = atlas.build_group_gradient_features(
+        method=atlas.SUBJECT_GRADIENT_WARD_METHOD, feature_bank=bank, subjects_subset=list(bank),
+        support_mask=np.ones(100, dtype=bool), gradient_components=(1, 2), gradient_options=options,
+    )
+    assert features.shape == (100, 2)
+    assert meta["n_subject_gradient_fits"] == 5 and meta["template_method"] == atlas.MEAN_SIMILARITY_WARD_METHOD
+    assert meta["subject_gradient_alignment"]["template_correlation_by_component"][0] > 0.9
+    assert abs(np.corrcoef(features[:, 0], np.arange(100))[0, 1]) > 0.9
+    assert atlas.SUBJECT_GRADIENT_WARD_METHOD in atlas.KONG2022_ONLY_METHODS
+    assert atlas.uses_subject_similarity_bank(atlas.SUBJECT_GRADIENT_WARD_METHOD)
+
+
+def test_multigraph_gradient_coordinates():
+    from lib import multigraph_spectral as ms
+    sims = [vertex_similarity(fc) for fc in subject_fingerprints(n_subjects=4)]
+    support = np.ones(100, dtype=bool)
+    shen = ms.coordinate_stack(sims, list("abcd"), support, method=ms.MULTIGRAPH_METHOD, n_components=4)
+    diff = ms.coordinate_stack(sims, list("abcd"), support, method=ms.MULTIGRAPH_GRADIENT_METHOD, n_components=4)
+    assert diff.shape == shen.shape == (4, 100, 4)
+    np.testing.assert_allclose(diff[:, :, 0], 1.0)
+    assert not np.allclose(np.abs(diff[:, :, 1]), np.abs(shen[:, :, 1]))
+    labels, meta = ms.discretize_stack(diff, 3)
+    assert set(np.unique(labels)) <= {1, 2, 3} and meta["n_graphs"] == 4

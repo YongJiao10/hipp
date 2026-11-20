@@ -98,7 +98,7 @@ from lib.cortex_template_profiles import cortex_asset_paths, resolve_cortex_asse
 from lib.cortex_overview_cache import (
     bilateral_cluster_roi_profile, cortex_surface_cache_paths, hemisphere_cluster_roi_profiles, store_cortex_surface,
 )
-from lib.multigraph_spectral import MEAN_GRAPH_METHOD, MULTIGRAPH_METHOD, MULTIGRAPH_METHODS
+from lib.multigraph_spectral import MEAN_GRAPH_METHOD, MULTIGRAPH_GRADIENT_METHOD, MULTIGRAPH_METHOD, MULTIGRAPH_METHODS
 from lib.kong2022_label_utils import KONG2022_MERGE_CONFIG, load_kong2022_bundle
 from lib.workbench import resolve_wb_command
 from lib.gifti_labels import (
@@ -149,7 +149,10 @@ METHOD_CHOICES = [
     "gradient-gmm",
     "gradient-spectral-rbf",
     "intrinsic-spectral",
+    "mean-similarity-ward",
+    "subject-gradient-ward",
     MULTIGRAPH_METHOD,
+    MULTIGRAPH_GRADIENT_METHOD,
     MEAN_GRAPH_METHOD,
     "wta-top",
 ]

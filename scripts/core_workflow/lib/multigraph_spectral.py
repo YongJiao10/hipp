@@ -23,7 +23,9 @@ from scipy.sparse.csgraph import connected_components
 
 MULTIGRAPH_METHOD = "multigraph-spectral"
 MEAN_GRAPH_METHOD = "mean-graph-spectral"
-MULTIGRAPH_METHODS = frozenset({MULTIGRAPH_METHOD, MEAN_GRAPH_METHOD})
+# Shen discretization on each participant's diffusion-map coordinates instead of raw eigenvectors.
+MULTIGRAPH_GRADIENT_METHOD = "multigraph-gradient-spectral"
+MULTIGRAPH_METHODS = frozenset({MULTIGRAPH_METHOD, MEAN_GRAPH_METHOD, MULTIGRAPH_GRADIENT_METHOD})
 NEIGHBOUR_FRACTION = 0.10
 MAX_COORDINATES = 8
 SEED = 20260420
@@ -118,6 +120,23 @@ def leading_eigenvectors(affinity: np.ndarray, vertices: np.ndarray, n_component
     n = len(vertices)
     _, vectors = eigh(normalized, subset_by_index=(n - n_components, n - 1), check_finite=False)
     return vectors[:, ::-1]
+
+
+def diffusion_coordinates(affinity: np.ndarray, vertices: np.ndarray, n_components: int) -> np.ndarray:
+    """A constant column followed by G1..G(n-1) of the exact diffusion map (alpha=0.5, eigenvalue-scaled).
+
+    The constant column replaces the trivial eigenvector, so the first K columns
+    give K coordinates for a K-way discretization, as the leading eigenvectors do.
+    """
+    from .hippomaps_adapter import diffusion_map_embedding
+
+    if len(vertices) <= n_components:
+        raise FitError(f"Only {len(vertices)} graph vertices for {n_components} diffusion coordinates")
+    try:
+        gradients, _ = diffusion_map_embedding(affinity, n_components=n_components - 1)
+    except ValueError as exc:
+        raise FitError(f"Diffusion map failed: {exc}") from exc
+    return np.column_stack([np.ones(len(vertices)), gradients])
 
 
 def spectral_coordinates(affinity: np.ndarray, vertices: np.ndarray, k: int) -> np.ndarray:
@@ -232,9 +251,10 @@ def _digest(array: np.ndarray) -> bytes:
     return hashlib.blake2b(np.ascontiguousarray(array).view(np.uint8), digest_size=16).digest()
 
 
-def _subject_eigenvectors(similarity: np.ndarray, support: np.ndarray, n_components: int):
-    """One participant's observed vertices on the support and their leading eigenvectors."""
-    key = (_digest(similarity), support.tobytes(), int(n_components))
+def _subject_eigenvectors(similarity: np.ndarray, support: np.ndarray, n_components: int,
+                          method: str = MULTIGRAPH_METHOD):
+    """One participant's observed vertices on the support and their spectral or diffusion coordinates."""
+    key = (method, _digest(similarity), support.tobytes(), int(n_components))
     with _CACHE_LOCK:
         hit = _SUBJECT_CACHE.get(key)
         if hit is not None:
@@ -242,7 +262,8 @@ def _subject_eigenvectors(similarity: np.ndarray, support: np.ndarray, n_compone
             return hit
     vertices = np.flatnonzero(observed_vertices(similarity) & support)
     affinity = hippocampal_affinity(similarity[np.ix_(vertices, vertices)])
-    value = (vertices, leading_eigenvectors(affinity, vertices, n_components))
+    coordinates = diffusion_coordinates if method == MULTIGRAPH_GRADIENT_METHOD else leading_eigenvectors
+    value = (vertices, coordinates(affinity, vertices, n_components))
     with _CACHE_LOCK:
         _SUBJECT_CACHE[key] = value
         while len(_SUBJECT_CACHE) > _SUBJECT_CACHE_LIMIT:
@@ -289,7 +310,7 @@ def coordinate_stack(similarities, subjects, support: np.ndarray, *, method: str
     stack = np.full((len(subjects), active.size, n_components), np.nan, dtype=np.float32)
     for index, (similarity, subject) in enumerate(zip(similarities, subjects, strict=True)):
         try:
-            vertices, vectors = _subject_eigenvectors(np.asarray(similarity), support, n_components)
+            vertices, vectors = _subject_eigenvectors(np.asarray(similarity), support, n_components, method)
         except FitError as exc:
             raise FitError(f"Subject {subject}: {exc}") from exc
         stack[index, position[vertices]] = vectors

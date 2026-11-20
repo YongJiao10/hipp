@@ -63,7 +63,12 @@ def test_vertex_similarity_is_pearson_and_keeps_missing_vertices():
         ms.vertex_similarity(constant)
 
 
-@pytest.mark.parametrize("method", sorted(ms.MULTIGRAPH_METHODS))
+# Exact recovery is the contract of the two eigenvector methods; the diffusion-coordinate
+# variant has its own test in test_mean_similarity_ward.py.
+EIGENVECTOR_METHODS = sorted({ms.MULTIGRAPH_METHOD, ms.MEAN_GRAPH_METHOD})
+
+
+@pytest.mark.parametrize("method", EIGENVECTOR_METHODS)
 def test_both_methods_recover_shared_parcels_from_a_k_independent_stack(method):
     truth, matrices = parcel_similarities()
     support = np.ones(truth.size, dtype=bool)
@@ -108,7 +113,7 @@ def test_group_atlas_registers_the_methods_and_clusters_their_stacks():
     bank = dict(zip(subjects, matrices, strict=True))
     support = np.ones(truth.size, dtype=bool)
     adjacency = atlas.sparse.csr_matrix(np.eye(truth.size, k=1) + np.eye(truth.size, k=-1))
-    for method in sorted(ms.MULTIGRAPH_METHODS):
+    for method in EIGENVECTOR_METHODS:
         assert method in atlas.METHOD_CHOICES and method in overview.METHOD_CHOICES
         assert atlas.method_allowed_for_atlas(method, "kong2022")
         assert not atlas.method_allowed_for_atlas(method, "lynch2024_20net")
