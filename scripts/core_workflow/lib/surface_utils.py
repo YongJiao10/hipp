@@ -58,6 +58,46 @@ def long_axis_order(surface_path: Path) -> np.ndarray:
     return np.argsort(-score, kind="stable").astype(np.int32)
 
 
+def unfolded_anterior_coordinate(unfold_surface: Path, folded_surface: Path) -> np.ndarray:
+    """Per-vertex anterior-posterior coordinate of the HippUnfold unfolded sheet (larger = nearer the head).
+
+    The folded surface's first principal axis compresses the curled head: patches that are clearly
+    anterior on the unfolded sheet can share a folded position. Cluster numbering therefore reads
+    the unfolded y axis, which must be planar, match the folded mesh vertex for vertex and point
+    anterior on the folded surface.
+    """
+    unfolded = np.asarray(nib.load(str(unfold_surface)).agg_data("pointset"), dtype=np.float64)
+    folded = np.asarray(nib.load(str(folded_surface)).agg_data("pointset"), dtype=np.float64)
+    if unfolded.shape != folded.shape:
+        raise ValueError(
+            f"Unfolded/folded vertex mismatch: {unfold_surface} {unfolded.shape} vs {folded_surface} {folded.shape}"
+        )
+    if np.ptp(unfolded[:, 2]) > 1e-3:
+        raise ValueError(f"Unfolded surface is not planar: {unfold_surface}")
+    corr = float(np.corrcoef(unfolded[:, 1], folded[:, 1])[0, 1])
+    if not corr > 0.5:
+        raise ValueError(
+            f"Unfolded y axis does not track the folded anterior axis (r={corr:.2f}): {unfold_surface} vs {folded_surface}"
+        )
+    return unfolded[:, 1].copy()
+
+
+def template_anterior_coordinate(spec_path: Path, folded_surface: Path, hemi: str) -> np.ndarray:
+    """Unfolded anterior coordinate of a template mesh, from the unfold surface its spec declares."""
+    assets = resolve_unfolded_assets(Path(spec_path), density=infer_density_from_surface(Path(folded_surface)))
+    return unfolded_anterior_coordinate(assets.unfold_surface[str(hemi).upper()], Path(folded_surface))
+
+
+def cluster_ids_head_to_tail(labels: np.ndarray, anterior_coordinate: np.ndarray) -> list[int]:
+    """Positive cluster ids ordered head to tail by the mean unfolded anterior coordinate of their vertices."""
+    labels = np.asarray(labels, dtype=np.int64)
+    coordinate = np.asarray(anterior_coordinate, dtype=np.float64)
+    if labels.ndim != 1 or coordinate.shape != labels.shape:
+        raise ValueError(f"Labels/coordinate shape mismatch: labels={labels.shape}, coordinate={coordinate.shape}")
+    ids = sorted(int(v) for v in np.unique(labels) if int(v) > 0)
+    return sorted(ids, key=lambda cid: (-float(np.mean(coordinate[labels == cid])), cid))
+
+
 def equal_vertex_long_axis_bins(order: np.ndarray, n_bins: int) -> list[np.ndarray]:
     """Split head-to-tail vertex order into consecutive, nearly equal bins.
 

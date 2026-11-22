@@ -112,7 +112,7 @@ def test_no_valid_k_skips_without_loading_gradient_cache(tmp_path, monkeypatch, 
     monkeypatch.setattr(atlas, "infer_surface_path", lambda *a, **k: surface)
     monkeypatch.setattr(atlas, "infer_spec_path", lambda *a, **k: tmp_path / "template.spec")
     monkeypatch.setattr(atlas, "verify_subject_topology_against_template", lambda *a, **k: {"L": {}})
-    monkeypatch.setattr(atlas, "long_axis_order", lambda p: np.arange(8))
+    monkeypatch.setattr(atlas, "template_anterior_coordinate", lambda *a: np.arange(8, 0, -1, dtype=float))
     monkeypatch.setattr(atlas, "load_surface", lambda p: (np.zeros((8, 3)), np.empty((0, 3), dtype=int)))
     monkeypatch.setattr(atlas, "build_surface_adjacency", lambda faces, n: np.eye(n))
     monkeypatch.setattr(atlas, "load_cluster_colors", lambda: {})

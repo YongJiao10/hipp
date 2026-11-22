@@ -17,7 +17,9 @@ if str(CORE_DIR) not in sys.path:
 
 from lib.surface_utils import (  # noqa: E402
     _draw_unfolded_map,
+    cluster_ids_head_to_tail,
     resolve_unfolded_assets,
+    unfolded_anterior_coordinate,
     unfolded_grid,
 )
 
@@ -143,3 +145,29 @@ def test_draw_unfolded_map_rejects_label_vertex_mismatch(tmp_path):
         assert len(ax.collections) == 2  # halo + coloured subfield boundaries
     finally:
         plt.close(fig)
+
+
+def test_unfolded_anterior_coordinate_is_the_unfolded_y_axis(tmp_path):
+    unfold = _save_surface(tmp_path / "unfold.surf.gii", _grid_coords("L"))
+    folded_coords = _grid_coords("L") * np.array([1.0, 2.0, 1.0], dtype=np.float32)
+    folded = _save_surface(tmp_path / "folded.surf.gii", folded_coords)
+    np.testing.assert_allclose(unfolded_anterior_coordinate(unfold, folded), _grid_coords("L")[:, 1])
+
+
+def test_unfolded_anterior_coordinate_rejects_a_sheet_pointing_posterior(tmp_path):
+    unfold = _save_surface(tmp_path / "unfold.surf.gii", _grid_coords("L"))
+    folded = _save_surface(tmp_path / "folded.surf.gii", _grid_coords("L") * np.array([1.0, -1.0, 1.0], dtype=np.float32))
+    with pytest.raises(ValueError, match="anterior axis"):
+        unfolded_anterior_coordinate(unfold, folded)
+
+
+def test_head_cluster_is_c1_even_when_a_thin_strip_reaches_further_on_average():
+    # Rows run head (y=0) to tail (y=-6.25). Cluster 2 fills the head rows; cluster 1 is a thin
+    # strip along one column from head to tail; cluster 3 fills the tail.
+    coordinate = _grid_coords("L")[:, 1]
+    rows = np.repeat(np.arange(N_ROWS), N_COLS)
+    cols = np.tile(np.arange(N_COLS), N_ROWS)
+    labels = np.where(rows >= 4, 3, 2)
+    labels[cols == 0] = 1
+    assert cluster_ids_head_to_tail(labels, coordinate) == [2, 1, 3]
+    assert cluster_ids_head_to_tail(np.where(labels == 0, 0, labels), coordinate)[0] == 2

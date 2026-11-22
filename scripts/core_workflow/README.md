@@ -322,6 +322,16 @@ explicitly when a controlled signal root is separate.
   /home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/05_02_run_group_atlas.py --shared-root outputs_hcp/inputs/kong2022/shared_inputs/pfm --surface-root outputs_hcp/inputs/kong2022/shared_inputs/surface --reference-root outputs_hcp/inputs/kong2022/shared_inputs/pfm --out-root outputs_hcp/work/group_atlas/pfm/topsim --methods gradient-ward --profile topsim --atlases kong2022 --gradient-root outputs_hcp/work/hippomaps_gradients --route-tag pfm --network-taxonomy canonical7 --k-min 2 --k-max 8 --default-k 3 --gradient-components 1,2
   /home/yojiao/.conda/envs/py314/bin/python scripts/core_workflow/06_01_build_group_overview.py --group-root outputs_hcp/work/group_atlas/pfm/topsim --methods gradient-ward --atlases kong2022 --route-tag pfm --smoothing 2mm --gradient-components 1,2
   ```
+- `05_02` numbers final clusters head to tail (C1 nearest the head) by the mean
+  anterior-posterior coordinate of their vertices on the HippUnfold unfolded
+  sheet: the unfold-space midthickness surface that the template spec
+  (`template_spec_path`) declares at the template density. The folded
+  surface's principal axis is not used: it compresses the curled head, so a
+  thin strip running head to tail can tie with the cluster that fills the
+  head. Manifests record `cluster_order_axis:
+  hippunfold_unfolded_anterior_coordinate`, and `06_10` and `05_06` reject a
+  `cluster_order_head_to_tail` that differs from the order recomputed on that
+  axis.
 - Kong2022 cluster assignments default to `network_ts_fisherz`; ROI `fisherz`
   and `normalized_top20_count` are explicit comparisons. `05_02` computes
   `network_ts_fisherz` for every Kong2022 cluster run, and `--resume`

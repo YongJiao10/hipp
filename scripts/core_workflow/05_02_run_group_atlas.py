@@ -110,7 +110,7 @@ from lib.hippomaps_adapter import (
     hippomaps_commit,
     hippomaps_import_path,
 )
-from lib.surface_utils import infer_spec_path, long_axis_order
+from lib.surface_utils import cluster_ids_head_to_tail, infer_spec_path, long_axis_order, template_anterior_coordinate
 from lib.surface_affinity import (
     GRADIENT_SPECTRAL_AFFINITY,
     GRADIENT_SPECTRAL_AFFINITY_DESCRIPTION,
@@ -732,6 +732,18 @@ def reorder_labels_by_long_axis(labels_full: np.ndarray, axis_order: np.ndarray)
         rows.append((pos, int(cid)))
     rows.sort(key=lambda t: (t[0], t[1]))
     mapping = {old: new_idx + 1 for new_idx, (_pos, old) in enumerate(rows)}
+    out = np.zeros_like(labels, dtype=np.int32)
+    for old, new in mapping.items():
+        out[labels == int(old)] = int(new)
+    return out
+
+
+def reorder_labels_head_to_tail(labels_full: np.ndarray, anterior_coordinate: np.ndarray) -> np.ndarray:
+    """Renumber clusters 1..K head to tail by mean unfolded anterior coordinate (C1 = nearest the head)."""
+    labels = np.asarray(labels_full, dtype=np.int32)
+    if labels.ndim != 1:
+        raise ValueError(f"Expected 1D labels, got shape={labels.shape}")
+    mapping = {old: new for new, old in enumerate(cluster_ids_head_to_tail(labels, anterior_coordinate), start=1)}
     out = np.zeros_like(labels, dtype=np.int32)
     for old, new in mapping.items():
         out[labels == int(old)] = int(new)
@@ -6313,8 +6325,9 @@ def main() -> int:
         surfaces,
         hippunfold_batch_root,
     )
-    long_axis_order_by_hemi: dict[str, np.ndarray] = {
-        hemi: long_axis_order(surfaces[hemi]) for hemi in args.hemis
+    # Clusters are numbered head to tail on the HippUnfold unfolded sheet of the template mesh.
+    anterior_coordinate_by_hemi: dict[str, np.ndarray] = {
+        hemi: template_anterior_coordinate(template_spec_path, surfaces[hemi], hemi) for hemi in args.hemis
     }
     surface_meta: dict[str, dict[str, object]] = {}
     adjacency_by_hemi: dict[str, sparse.csr_matrix] = {}
@@ -7422,9 +7435,9 @@ def main() -> int:
                                 Path(fixed_cluster_reuse["source_run"]), k_final,
                             )
                         primary_row = primary_k_row(rows, k_final)
-                        labels_final = reorder_labels_by_long_axis(
+                        labels_final = reorder_labels_head_to_tail(
                             labels_by_k[k_final],
-                            long_axis_order_by_hemi[hemi],
+                            anterior_coordinate_by_hemi[hemi],
                         )
                         if is_gradient_method(method) and fixed_cluster_reuse is None:
                             for row in rows:
@@ -7434,9 +7447,9 @@ def main() -> int:
                                         labels_final[support], adjacency_support, k=k_final,
                                     )
                                     row["affinity_graph_diagnostics"]["cluster_vertex_counts"] = row["gradient_clustering"]["cluster_vertex_counts"]
-                        fixed_cluster_order = cluster_ids_by_long_axis(
+                        fixed_cluster_order = cluster_ids_head_to_tail(
                             labels_final,
-                            long_axis_order_by_hemi[hemi],
+                            anterior_coordinate_by_hemi[hemi],
                         )
 
                         profile: np.ndarray
@@ -7917,6 +7930,7 @@ def main() -> int:
                             "template_source_mode": template_source_mode,
                             "template_source_note": template_source_note,
                             "cluster_label_ordering": "long_axis_head_to_tail",
+                            "cluster_order_axis": "hippunfold_unfolded_anterior_coordinate",
                             "cluster_order_head_to_tail": fixed_cluster_order,
                             "template_left_or_right_surface": str(surfaces[hemi]),
                             "template_spec_path": str(template_spec_path),

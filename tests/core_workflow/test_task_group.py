@@ -135,18 +135,19 @@ def test_group_stats_recover_known_effect() -> None:
 def test_subject_cluster_rows_and_anatomical_names(tmp_path: Path) -> None:
     labels = np.array([0, 1, 1, 2, 2, 3, 3, 1])
     mask = np.array([False, True, True, True, True, True, True, True])
-    manifest = {"cluster_order_head_to_tail": [1, 2, 3]}
+    manifest = {"cluster_order_head_to_tail": [1, 2, 3], "template_spec_path": str(tmp_path / "t.spec"), "hemi": "L"}
     surf = tmp_path / "surf.surf.gii"
     surf.write_bytes(b"placeholder")
     import scripts.core_workflow.lib.task_group as task_group
 
-    calls: dict[str, Path] = {}
+    calls: dict[str, object] = {}
 
-    def fake_axis(path: Path) -> np.ndarray:
+    def fake_axis(spec: Path, path: Path, hemi: str) -> np.ndarray:
         calls["path"] = path
-        return np.arange(8, dtype=np.int32)
+        calls["spec"] = spec
+        return np.arange(8, 0, -1, dtype=np.float64)
 
-    task_group.long_axis_order = fake_axis  # type: ignore[assignment]
+    task_group.template_anterior_coordinate = fake_axis  # type: ignore[assignment]
     try:
         names = anatomical_cluster_names(
             manifest=manifest, group_labels=labels, surface_path=surf
@@ -157,6 +158,7 @@ def test_subject_cluster_rows_and_anatomical_names(tmp_path: Path) -> None:
         importlib.reload(task_group)
     assert names == {1: "Anterior", 2: "Middle", 3: "Posterior"}
     assert calls["path"] == surf
+    assert calls["spec"] == tmp_path / "t.spec"
     stack = np.arange(16, dtype=np.float64).reshape(2, 8)
     areas = {
         "a": np.array([1.0, 2.0, 1.0, 1.0, 1.0, 1.0, 1.0, 10.0]),
@@ -245,17 +247,17 @@ def test_resolve_zone_subjects_excludes_missing_only(tmp_path: Path) -> None:
 
 def test_anatomical_names_reject_inconsistent_order(tmp_path: Path) -> None:
     labels = np.array([1, 1, 2, 2])
-    manifest = {"cluster_order_head_to_tail": [2, 1]}
+    manifest = {"cluster_order_head_to_tail": [2, 1], "template_spec_path": str(tmp_path / "t.spec"), "hemi": "L"}
     surf = tmp_path / "surf.surf.gii"
     surf.write_bytes(b"x")
     import scripts.core_workflow.lib.task_group as task_group
 
-    def fake_axis(path: Path) -> np.ndarray:
-        return np.arange(4, dtype=np.int32)
+    def fake_axis(spec: Path, path: Path, hemi: str) -> np.ndarray:
+        return np.arange(4, 0, -1, dtype=np.float64)
 
-    task_group.long_axis_order = fake_axis  # type: ignore[assignment]
+    task_group.template_anterior_coordinate = fake_axis  # type: ignore[assignment]
     try:
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="Head-to-tail order violated"):
             anatomical_cluster_names(
                 manifest=manifest, group_labels=labels, surface_path=surf
             )

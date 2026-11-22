@@ -35,7 +35,7 @@ from lib.route_tags import (
     infer_route_tag_from_group_root,
     validate_group_atlas_root_for_route,
 )
-from lib.surface_utils import long_axis_order
+from lib.surface_utils import cluster_ids_head_to_tail, template_anterior_coordinate
 from lib.template_assets import validate_template_surface_path
 from lib.workflow_utils import write_json
 from matplotlib.colors import Normalize  # type: ignore[import-untyped]
@@ -164,7 +164,7 @@ def resolve_cluster_names(
     *,
     manifest: dict[str, Any],
     group_labels: np.ndarray,
-    long_axis_order: np.ndarray,
+    anterior_coordinate: np.ndarray,
 ) -> dict[int, str]:
     labels = np.asarray(group_labels, dtype=np.int32)
     order = [int(value) for value in manifest.get("cluster_order_head_to_tail", [])]
@@ -176,20 +176,11 @@ def resolve_cluster_names(
             "cluster_order_head_to_tail does not match group labels: "
             f"order={order} active_ids={active_ids}"
         )
-    axis = np.asarray(long_axis_order, dtype=np.int32)
-    if axis.ndim != 1 or axis.size != labels.size or set(axis.tolist()) != set(range(labels.size)):
-        raise ValueError("Invalid long-axis vertex order for head-to-tail cluster validation")
-    rank_by_vertex = np.empty(axis.size, dtype=np.float64)
-    rank_by_vertex[axis] = np.arange(axis.size, dtype=np.float64)
-    centroids = {
-        cluster_id: float(np.mean(rank_by_vertex[labels == cluster_id]))
-        for cluster_id in active_ids
-    }
-    positions = [centroids[cluster_id] for cluster_id in order]
-    if any(right <= left for left, right in zip(positions, positions[1:])):
+    verified = cluster_ids_head_to_tail(labels, anterior_coordinate)
+    if order != verified:
         raise ValueError(
-            "cluster_order_head_to_tail disagrees with the verified hippocampal head-to-tail "
-            f"order: cluster_positions={positions}"
+            "cluster_order_head_to_tail disagrees with the head-to-tail order on the unfolded "
+            f"hippocampal sheet: declared={order} verified={verified}"
         )
     if len(order) == 3:
         names = DEFAULT_CLUSTER_NAMES
@@ -270,11 +261,13 @@ def load_run(
         run_dir=run_dir,
         hemi=str(manifest.get("hemi", "")),
     )
-    axis = long_axis_order(surface_path)
+    spec_raw = manifest.get("template_spec_path")
+    if not spec_raw:
+        raise ValueError(f"Missing template_spec_path in {manifest_path}")
     names_by_id = resolve_cluster_names(
         manifest=manifest,
         group_labels=labels,
-        long_axis_order=axis,
+        anterior_coordinate=template_anterior_coordinate(Path(str(spec_raw)), surface_path, str(manifest.get("hemi", ""))),
     )
     registry = parse_roi_registry(registry_path)
     return {
