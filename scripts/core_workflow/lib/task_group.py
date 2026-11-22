@@ -15,7 +15,7 @@ from pathlib import Path
 import numpy as np
 from scipy.stats import t as t_dist
 
-from .surface_utils import long_axis_order, vertex_area_weights
+from .surface_utils import cluster_ids_head_to_tail, template_anterior_coordinate, vertex_area_weights
 from .fc_math import bh_fdr
 from .task_design import normalize_task_branch
 
@@ -271,7 +271,8 @@ def anatomical_cluster_names(
     """Map cluster IDs to Anterior/Middle/Posterior via the verified head-to-tail order.
 
     Mirrors the 06_10 contract: ``cluster_order_head_to_tail`` from the group
-    manifest, validated against ``long_axis_order`` centroids, named
+    manifest must equal the head-to-tail order on the unfolded hippocampal sheet
+    declared by the manifest's ``template_spec_path``; named
     Anterior/Middle/Posterior for K=3.
     """
     labels = np.asarray(group_labels, dtype=np.int32)
@@ -283,19 +284,13 @@ def anatomical_cluster_names(
         raise ValueError(
             f"cluster_order_head_to_tail disagrees with labels: order={order} ids={active_ids}"
         )
-    axis = np.asarray(long_axis_order(surface_path), dtype=np.int32)
-    if axis.ndim != 1 or axis.size != labels.size or set(axis.tolist()) != set(
-        range(labels.size)
-    ):
-        raise ValueError("Invalid long-axis vertex order for head-to-tail validation")
-    rank = np.empty(axis.size, dtype=np.float64)
-    rank[axis] = np.arange(axis.size, dtype=np.float64)
-    centroids = {
-        cluster_id: float(np.mean(rank[labels == cluster_id])) for cluster_id in active_ids
-    }
-    positions = [centroids[c] for c in order]
-    if any(right <= left for left, right in zip(positions, positions[1:])):
-        raise ValueError(f"Head-to-tail order violated: positions={positions}")
+    spec_raw = manifest.get("template_spec_path")
+    if not spec_raw:
+        raise ValueError("Missing template_spec_path for head-to-tail validation")
+    coordinate = template_anterior_coordinate(Path(str(spec_raw)), Path(surface_path), str(manifest.get("hemi", "")))
+    verified = cluster_ids_head_to_tail(labels, coordinate)
+    if order != verified:
+        raise ValueError(f"Head-to-tail order violated: declared={order} verified={verified}")
     if len(order) == 3:
         names = ANATOMICAL_CLUSTER_NAMES
     else:

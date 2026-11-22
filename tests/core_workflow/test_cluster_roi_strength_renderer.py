@@ -41,13 +41,13 @@ def test_strength_colors_are_blue_white_red_and_nan_gray() -> None:
 
 def test_cluster_names_follow_verified_head_to_tail_order() -> None:
     labels = np.asarray([1, 1, 2, 2, 3, 3], dtype=np.int32)
-    long_axis_order = np.arange(labels.size, dtype=np.int32)
+    anterior = np.asarray([6.0, 5.0, 4.0, 3.0, 2.0, 1.0])
     manifest = {"cluster_order_head_to_tail": [1, 2, 3]}
 
     names = renderer.resolve_cluster_names(
         manifest=manifest,
         group_labels=labels,
-        long_axis_order=long_axis_order,
+        anterior_coordinate=anterior,
     )
 
     assert names == {1: "Anterior", 2: "Middle", 3: "Posterior"}
@@ -55,14 +55,14 @@ def test_cluster_names_follow_verified_head_to_tail_order() -> None:
 
 def test_cluster_names_reject_manifest_order_that_disagrees_with_long_axis() -> None:
     labels = np.asarray([1, 1, 2, 2, 3, 3], dtype=np.int32)
-    long_axis_order = np.arange(labels.size, dtype=np.int32)
+    anterior = np.asarray([6.0, 5.0, 4.0, 3.0, 2.0, 1.0])
     manifest = {"cluster_order_head_to_tail": [3, 2, 1]}
 
     with pytest.raises(ValueError, match="head-to-tail"):
         renderer.resolve_cluster_names(
             manifest=manifest,
             group_labels=labels,
-            long_axis_order=long_axis_order,
+            anterior_coordinate=anterior,
         )
 
 
