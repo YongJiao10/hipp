@@ -24,7 +24,7 @@ from lib.output_layout import (  # noqa: E402
     resolve_crossfit_template_matching_overview_root,
     resolve_crossfit_template_matching_root,
 )
-from lib.surface_utils import long_axis_order  # noqa: E402
+from lib.surface_utils import group_template_spec, template_head_to_tail_order  # noqa: E402
 
 
 DEFAULT_N_FOLDS = 5
@@ -419,7 +419,8 @@ def _load_combination(
         raise ValueError(
             f"Fold input shapes disagree for {smoothing}/hemi_{hemi}"
         ) from exc
-    order = np.asarray(long_axis_order(canonical_surface), dtype=np.int32).reshape(-1)
+    # Head to tail along the unfolded anterior-posterior axis of the group template.
+    order = np.asarray(template_head_to_tail_order(canonical_surface, hemi), dtype=np.int32).reshape(-1)
     if order.size != labels_by_fold.shape[1] or not np.array_equal(
         np.sort(order), np.arange(order.size)
     ):
@@ -435,6 +436,7 @@ def _load_combination(
         "support_by_fold": support_by_fold,
         "profiles_by_fold": profiles_by_fold,
         "long_axis_order": order,
+        "template_spec": str(group_template_spec(canonical_surface)),
         "source_folds": source_folds,
     }
 
@@ -687,7 +689,11 @@ def render_robustness_overview(
                 "smoothing": analysis["smoothing"],
                 "hemi": analysis["hemi"],
                 "canonical_surface": analysis["canonical_surface"],
-                "long_axis_order_source": analysis["canonical_surface"],
+                "long_axis_order_source": {
+                    "axis": "hippunfold_unfolded_anterior_coordinate",
+                    "folded_surface": analysis["canonical_surface"],
+                    "template_spec": analysis["template_spec"],
+                },
                 "source_folds": analysis["source_folds"],
                 "summary": analysis["summary"],
                 "pairwise_macro_dice": _json_matrix(

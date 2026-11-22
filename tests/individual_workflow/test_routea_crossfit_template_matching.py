@@ -416,10 +416,10 @@ def test_fit_fold_template_uses_only_training_subjects_and_records_density(
             np.asarray([1, 1, 2, 2, 3, 3], dtype=np.int32),
             np.asarray([1, 1, 2, 2, 3, 3], dtype=np.int32),
         ),
-        reorder_labels_by_long_axis=lambda labels, order: labels,
+        reorder_labels_head_to_tail=lambda labels, coordinate: labels,
     )
     monkeypatch.setattr(workflow, "load_group_atlas_module", lambda: fake_core)
-    monkeypatch.setattr(workflow, "long_axis_order", lambda path: np.arange(6))
+    monkeypatch.setattr(workflow, "template_anterior_coordinate", lambda *a: np.arange(6, 0, -1, dtype=float))
     config = workflow.CrossfitConfig(
         shared_root=shared_root,
         surface_root=surface_root,

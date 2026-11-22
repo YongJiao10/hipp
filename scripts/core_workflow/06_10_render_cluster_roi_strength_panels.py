@@ -261,13 +261,10 @@ def load_run(
         run_dir=run_dir,
         hemi=str(manifest.get("hemi", "")),
     )
-    spec_raw = manifest.get("template_spec_path")
-    if not spec_raw:
-        raise ValueError(f"Missing template_spec_path in {manifest_path}")
     names_by_id = resolve_cluster_names(
         manifest=manifest,
         group_labels=labels,
-        anterior_coordinate=template_anterior_coordinate(Path(str(spec_raw)), surface_path, str(manifest.get("hemi", ""))),
+        anterior_coordinate=template_anterior_coordinate(surface_path, str(manifest.get("hemi", ""))),
     )
     registry = parse_roi_registry(registry_path)
     return {

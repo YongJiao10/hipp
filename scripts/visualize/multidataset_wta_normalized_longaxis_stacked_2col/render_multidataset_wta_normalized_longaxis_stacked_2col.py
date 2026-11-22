@@ -42,7 +42,7 @@ for p in (CORE_DIR, VIS_LIB_DIR):
     if str(p) not in sys.path:
         sys.path.insert(0, str(p))
 
-from lib.surface_utils import long_axis_order, render_hippocampal_grid
+from lib.surface_utils import render_hippocampal_grid, template_head_to_tail_order
 from lib.workbench_grid import load_labels
 from multidataset_cohorts import (
     HCP_COHORT_SIZE,
@@ -341,7 +341,7 @@ def load_cohort_long_axis_bins(
         surf_path = _resolve_wta_manifest_file(
             mf, "template_left_or_right_surface", manifest_path=manifest_path
         )
-        order = long_axis_order(surf_path)
+        order = template_head_to_tail_order(surf_path, hemi)
 
         lbl_file = _resolve_wta_manifest_file(
             mf,

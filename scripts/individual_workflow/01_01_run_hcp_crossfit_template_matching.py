@@ -43,7 +43,7 @@ from lib.output_layout import (
     DEFAULT_KONG2022_TEMPLATE_ROOT,
     resolve_crossfit_template_matching_root,
 )
-from lib.surface_utils import long_axis_order
+from lib.surface_utils import template_anterior_coordinate
 from lib.gradient_clustering import GRADIENT_METHODS, gradient_method_provenance, cluster_mesh_diagnostics
 from lib.surface_affinity import (
     GRADIENT_SPECTRAL_AFFINITY,
@@ -937,9 +937,10 @@ def fit_fold_template(
         rbf_scale=config.rbf_scale,
         clustering_metadata=clustering_metadata,
     )
-    labels_full = core.reorder_labels_by_long_axis(
+    # Clusters are numbered head to tail on the unfolded sheet stored in the group template.
+    labels_full = core.reorder_labels_head_to_tail(
         labels_full.astype(np.int32),
-        long_axis_order(surface_path),
+        template_anterior_coordinate(surface_path, hemi),
     ).astype(np.int32)
     support_indices = np.flatnonzero(support_mask)
     graph_diagnostics = cluster_mesh_diagnostics(

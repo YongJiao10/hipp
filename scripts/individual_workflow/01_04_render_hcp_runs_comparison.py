@@ -40,7 +40,7 @@ from lib.output_layout import (
     resolve_crossfit_template_matching_root,
 )
 from lib.io_utils import load_subject_ids
-from lib.surface_utils import long_axis_order, render_hippocampal_grid
+from lib.surface_utils import render_hippocampal_grid, template_anterior_coordinate
 from lib.workbench_grid import build_grid_canvas, load_font
 
 DEFAULT_SMOOTHINGS = ("2mm", "4mm")
@@ -247,9 +247,9 @@ def fit_split_half_template(
         seed=int(options.get("cluster_seed", 0)),
         rbf_scale=float(options.get("rbf_scale", 1.0)),
     )
-    labels_full = core_atlas_module.reorder_labels_by_long_axis(
+    labels_full = core_atlas_module.reorder_labels_head_to_tail(
         labels_full.astype(np.int32),
-        long_axis_order(surface_path),
+        template_anterior_coordinate(surface_path, hemi),
     ).astype(np.int32)
 
     group_fc_full = cf_module.reconstruct_full_surface(group_fc_act, support, vertex_count)

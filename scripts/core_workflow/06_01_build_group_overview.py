@@ -27,7 +27,7 @@ Inputs:
 - Physical inputs:
   - Group parcellation label arrays: manifest `assignment_variants[default_assignment_variant].group_functional_atlas_labels` for cluster-level methods; vertex-level methods use the manifest top-level label array.
   - Group mapping status files and dataset-scoped template assets from manifest paths; stale or foreign absolute mounts fail validation against canonical current assets.
-  - Unfolded hippocampal maps: the template spec (`template_spec_path`) must declare exactly one unfold-space hipp midthickness surface and one hipp subfield label GIFTI per hemisphere at the density of the consumed folded template surface; the unfolded grid must be regular and its y axis must track the folded anterior axis.
+  - Unfolded hippocampal maps and the head-to-tail axis: the group template spec beside the consumed folded template surfaces (`group-average_den-<density>_label-hipp_surfaces.spec`, written by 02_01) must declare exactly one unfold-space hipp midthickness surface and one hipp subfield label GIFTI per hemisphere; the unfolded grid must be regular and its y axis must track the folded anterior axis.
 
 Outputs:
 - Command-line output / file outputs:
@@ -72,9 +72,12 @@ from lib.route_tags import (
 )
 from lib.workflow_utils import write_json
 from lib.surface_utils import (
+    cluster_ids_head_to_tail,
     equal_vertex_long_axis_bins,
+    group_template_spec,
     infer_density_from_surface,
-    long_axis_order,
+    template_anterior_coordinate,
+    template_head_to_tail_order,
     network_color_map,
     render_hippocampal_grid,
     resolve_unfolded_assets,
@@ -647,12 +650,15 @@ def resolve_template_render_spec(
     return subject, spec
 
 
-def resolve_overview_unfolded_assets(surf_l: Path, surf_r: Path, spec_path: Path):
-    """Unfolded surface + subfield labels declared by the template spec at the consumed density."""
+def resolve_overview_unfolded_assets(surf_l: Path, surf_r: Path):
+    """Unfolded surface + subfield labels of the group template that holds the folded surfaces."""
     density = infer_density_from_surface(surf_l)
     if infer_density_from_surface(surf_r) != density:
         raise ValueError(f"Left/right template surface densities disagree: {surf_l.name} vs {surf_r.name}")
-    return resolve_unfolded_assets(spec_path, density=density)
+    spec = group_template_spec(surf_l)
+    if group_template_spec(surf_r) != spec:
+        raise ValueError(f"Left/right folded surfaces belong to different group templates: {surf_l} vs {surf_r}")
+    return resolve_unfolded_assets(spec, density=density)
 
 
 def unfolded_assets_lock(assets) -> dict[str, object]:
@@ -823,25 +829,19 @@ def plot_ovr_association_panel(
               bbox_to_anchor=(1.035, 0.5), borderaxespad=0)
 
 
-def ordered_cluster_ids_by_position(labels: np.ndarray, order: np.ndarray, k: int) -> list[int]:
-    x = labels[order]
-    rows: list[tuple[float, int]] = []
-    for cid in range(1, int(k) + 1):
-        idx = np.flatnonzero(x == cid)
-        pos = float(np.mean(idx)) if idx.size else float("inf")
-        rows.append((pos, int(cid)))
-    rows.sort(key=lambda t: (t[0], t[1]))
-    return [cid for _, cid in rows]
-
-
-def resolve_cluster_order_from_manifest(manifest: dict, labels: np.ndarray, order: np.ndarray, k: int) -> list[int]:
+def resolve_cluster_order_from_manifest(manifest: dict, labels: np.ndarray, anterior_coordinate: np.ndarray, k: int) -> list[int]:
+    """The manifest's head-to-tail cluster order, verified on the unfolded anterior-posterior axis."""
     fixed = manifest.get("cluster_order_head_to_tail")
-    if isinstance(fixed, list):
-        vals = [int(x) for x in fixed]
-        expect = set(range(1, int(k) + 1))
-        if set(vals) == expect and len(vals) == int(k):
-            return vals
-    return ordered_cluster_ids_by_position(labels, order, k)
+    if not isinstance(fixed, list) or sorted(int(x) for x in fixed) != list(range(1, int(k) + 1)):
+        raise ValueError(f"cluster_order_head_to_tail must list clusters 1..{k}, got {fixed!r}")
+    declared = [int(x) for x in fixed]
+    verified = cluster_ids_head_to_tail(labels, anterior_coordinate)
+    if declared != verified:
+        raise ValueError(
+            "cluster_order_head_to_tail disagrees with the head-to-tail order on the unfolded "
+            f"hippocampal sheet: declared={declared} verified={verified}"
+        )
+    return declared
 
 
 def labels_to_indicator_by_ids(labels: np.ndarray, order: np.ndarray, cluster_ids: list[int]) -> np.ndarray:
@@ -1795,7 +1795,8 @@ def render_combo(
                     "L": load_default_functional_labels(d_l, m_l),
                     "R": load_default_functional_labels(d_r, m_r),
                 }
-                order_by_hemi = {"L": long_axis_order(surf_l), "R": long_axis_order(surf_r)}
+                order_by_hemi = {"L": template_head_to_tail_order(surf_l, "L"),
+                                 "R": template_head_to_tail_order(surf_r, "R")}
                 profile_rows = compute_wta_overview_profile_rows(
                     labels_by_hemi=labels_by_hemi,
                     order_by_hemi=order_by_hemi,
@@ -1839,7 +1840,7 @@ def render_combo(
                     fontsize=FS_MISSING,
                 )
             else:
-                unfolded = resolve_overview_unfolded_assets(surf_l, surf_r, spec_path)
+                unfolded = resolve_overview_unfolded_assets(surf_l, surf_r)
                 unfolded_locks.append(unfolded_assets_lock(unfolded))
                 with tempfile.TemporaryDirectory(prefix="present_group_surface_render_", dir=REPO_ROOT / "tmp") as tmp:
                     render = render_hippocampal_grid(
@@ -1988,10 +1989,8 @@ def render_combo(
             left_run_dir=d_l,
             right_run_dir=d_r,
         )
-        order_l = long_axis_order(surf_l)
-        order_r = long_axis_order(surf_r)
-        cids_l = resolve_cluster_order_from_manifest(m_l, lbl_l, order_l, k_l)
-        cids_r = resolve_cluster_order_from_manifest(m_r, lbl_r, order_r, k_r)
+        cids_l = resolve_cluster_order_from_manifest(m_l, lbl_l, template_anterior_coordinate(surf_l, "L"), k_l)
+        cids_r = resolve_cluster_order_from_manifest(m_r, lbl_r, template_anterior_coordinate(surf_r, "R"), k_r)
         prof_l_o = reorder_profile(prof_l, cids_l)
         prof_r_o = reorder_profile(prof_r, cids_r)
         row_lbl_l = [f"L-C{i}" for i in range(1, len(cids_l) + 1)]
@@ -2184,7 +2183,7 @@ def render_combo(
                 fontsize=FS_MISSING,
             )
         else:
-            unfolded = resolve_overview_unfolded_assets(surf_l, surf_r, spec_path)
+            unfolded = resolve_overview_unfolded_assets(surf_l, surf_r)
             unfolded_locks.append(unfolded_assets_lock(unfolded))
             with tempfile.TemporaryDirectory(prefix="present_group_surface_render_", dir=REPO_ROOT / "tmp") as tmp:
                 render = render_hippocampal_grid(

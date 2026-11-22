@@ -417,9 +417,9 @@ def test_independent_comparison_fits_honor_the_same_options(tmp_path, monkeypatc
         load_surface=lambda path:(np.zeros((8,3)),np.array([[0,1,2]])),
         build_surface_adjacency=lambda *args:sparse.eye(8,format="csr"),
         cluster_from_precomputed_group_features=cluster,
-        reorder_labels_by_long_axis=lambda labels, order:labels,
+        reorder_labels_head_to_tail=lambda labels, coordinate:labels,
     )
-    monkeypatch.setattr(driver,"long_axis_order",lambda path:np.arange(8))
+    monkeypatch.setattr(driver,"template_anterior_coordinate",lambda *a:np.arange(8,0,-1,dtype=float))
     group = SimpleNamespace(group_mean_fisherz_fc=lambda **kwargs:source)
     options = {"feature_scaling":"none","sparsify_stage":"none","sparsity":None,
                "clustering_feature_scaling":"unit_sd"}

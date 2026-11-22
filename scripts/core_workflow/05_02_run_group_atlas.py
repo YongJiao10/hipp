@@ -103,7 +103,13 @@ from lib.hippomaps_adapter import (
     hippomaps_commit,
     hippomaps_import_path,
 )
-from lib.surface_utils import cluster_ids_head_to_tail, infer_spec_path, long_axis_order, template_anterior_coordinate
+from lib.surface_utils import (
+    cluster_ids_head_to_tail,
+    group_template_spec,
+    infer_spec_path,
+    long_axis_order,
+    template_anterior_coordinate,
+)
 from lib.surface_affinity import (
     GRADIENT_SPECTRAL_AFFINITY,
     GRADIENT_SPECTRAL_AFFINITY_DESCRIPTION,
@@ -679,28 +685,6 @@ def reorder_labels_by_size(labels_zero: np.ndarray) -> np.ndarray:
     return np.asarray([mapping[int(k)] for k in labels_zero], dtype=np.int32)
 
 
-def reorder_labels_by_long_axis(labels_full: np.ndarray, axis_order: np.ndarray) -> np.ndarray:
-    labels = np.asarray(labels_full, dtype=np.int32)
-    order = np.asarray(axis_order, dtype=np.int64)
-    if labels.ndim != 1:
-        raise ValueError(f"Expected 1D labels, got shape={labels.shape}")
-    if order.ndim != 1 or int(order.size) != int(labels.size):
-        raise ValueError(f"Long-axis order size mismatch: order={order.shape}, labels={labels.shape}")
-
-    x = labels[order]
-    rows: list[tuple[float, int]] = []
-    for cid in sorted(int(v) for v in np.unique(labels) if int(v) > 0):
-        idx = np.flatnonzero(x == int(cid))
-        pos = float(np.mean(idx)) if idx.size else float("inf")
-        rows.append((pos, int(cid)))
-    rows.sort(key=lambda t: (t[0], t[1]))
-    mapping = {old: new_idx + 1 for new_idx, (_pos, old) in enumerate(rows)}
-    out = np.zeros_like(labels, dtype=np.int32)
-    for old, new in mapping.items():
-        out[labels == int(old)] = int(new)
-    return out
-
-
 def reorder_labels_head_to_tail(labels_full: np.ndarray, anterior_coordinate: np.ndarray) -> np.ndarray:
     """Renumber clusters 1..K head to tail by mean unfolded anterior coordinate (C1 = nearest the head)."""
     labels = np.asarray(labels_full, dtype=np.int32)
@@ -711,19 +695,6 @@ def reorder_labels_head_to_tail(labels_full: np.ndarray, anterior_coordinate: np
     for old, new in mapping.items():
         out[labels == int(old)] = int(new)
     return out
-
-
-def cluster_ids_by_long_axis(labels_full: np.ndarray, axis_order: np.ndarray) -> list[int]:
-    labels = np.asarray(labels_full, dtype=np.int32)
-    order = np.asarray(axis_order, dtype=np.int64)
-    x = labels[order]
-    rows: list[tuple[float, int]] = []
-    for cid in sorted(int(v) for v in np.unique(labels) if int(v) > 0):
-        idx = np.flatnonzero(x == int(cid))
-        pos = float(np.mean(idx)) if idx.size else float("inf")
-        rows.append((pos, int(cid)))
-    rows.sort(key=lambda t: (t[0], t[1]))
-    return [int(cid) for _pos, cid in rows]
 
 
 def spectral_cluster_from_affinity(aff: np.ndarray, k: int, seed: int) -> np.ndarray:
@@ -5874,9 +5845,9 @@ def main() -> int:
         surfaces,
         hippunfold_batch_root,
     )
-    # Clusters are numbered head to tail on the HippUnfold unfolded sheet of the template mesh.
+    # Clusters are numbered head to tail on the unfolded sheet stored in the group template.
     anterior_coordinate_by_hemi: dict[str, np.ndarray] = {
-        hemi: template_anterior_coordinate(template_spec_path, surfaces[hemi], hemi) for hemi in args.hemis
+        hemi: template_anterior_coordinate(surfaces[hemi], hemi) for hemi in args.hemis
     }
     surface_meta: dict[str, dict[str, object]] = {}
     adjacency_by_hemi: dict[str, sparse.csr_matrix] = {}
@@ -7449,6 +7420,7 @@ def main() -> int:
                             "template_source_note": template_source_note,
                             "cluster_label_ordering": "long_axis_head_to_tail",
                             "cluster_order_axis": "hippunfold_unfolded_anterior_coordinate",
+                            "cluster_order_template_spec": str(group_template_spec(surfaces[hemi])),
                             "cluster_order_head_to_tail": fixed_cluster_order,
                             "template_left_or_right_surface": str(surfaces[hemi]),
                             "template_spec_path": str(template_spec_path),
