@@ -40,7 +40,7 @@ CORE = REPO_ROOT / "scripts" / "core_workflow"
 sys.path.insert(0, str(CORE))
 
 from lib.group_atlas_lineage import validate_group_atlas_lineage  # noqa: E402
-from lib.surface_utils import long_axis_order, render_hippocampal_grid  # noqa: E402
+from lib.surface_utils import render_hippocampal_grid, template_anterior_coordinate  # noqa: E402
 
 
 def _load_overview_module():
@@ -205,7 +205,7 @@ def load_condition(group_atlas_root: Path, row: MethodRow, route: str, smoothing
             labels = np.load(d / "group_labels_final.npy").astype(np.int32)
             k = int(m["chosen_k_final"])
             surface = surfaces[0] if h == "L" else surfaces[1]
-            cids = ov.resolve_cluster_order_from_manifest(m, labels, long_axis_order(surface), k)
+            cids = ov.resolve_cluster_order_from_manifest(m, labels, template_anterior_coordinate(surface, h), k)
             names = [str(x) for x in validated["network_names"]]
             if net_names is not None and names != net_names:
                 raise ValueError(f"Left/right network orders differ for {row.key} {route} {smoothing} {variant}")

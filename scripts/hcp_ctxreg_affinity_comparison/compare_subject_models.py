@@ -101,10 +101,10 @@ def expand_fit(fit, support):
     return fit
 
 
-def export_fit(fit, run, order, adjacency):
+def export_fit(fit, run, anterior, adjacency):
     run.mkdir(parents=True, exist_ok=True)
-    labels = atlas.reorder_labels_by_long_axis(fit.labels, order)
-    parcel_order = np.asarray(atlas.cluster_ids_by_long_axis(fit.labels, order))
+    labels = atlas.reorder_labels_head_to_tail(fit.labels, anterior)
+    parcel_order = np.asarray(atlas.cluster_ids_head_to_tail(fit.labels, anterior))
     lut = np.zeros(K + 1, dtype=np.int32)
     lut[parcel_order] = np.arange(1, K + 1)
     np.save(run / "group_labels_final.npy", labels)
@@ -150,7 +150,7 @@ def record_failure(rows, condition, fold, method, exc):
 
 
 def run_condition(out, condition, profiles, similarity, mask, subjects, surface, anchors, training, sensitivity):
-    adjacency, order, edge_pairs = surface
+    adjacency, anterior, edge_pairs = surface
     smoothing, hemi = condition["smoothing"], condition["hemisphere"]
     condition_root = out / condition["route"] / smoothing / f"hemi_{hemi}"
     condition_root.mkdir(parents=True, exist_ok=True)
@@ -208,7 +208,7 @@ def run_condition(out, condition, profiles, similarity, mask, subjects, surface,
         } for method, fit in fits.items() if fit.diagnostics)
         if fold == "all":
             for method, fit in fits.items():
-                full_maps[method], components = export_fit(fit, condition_root / method, order, adjacency)
+                full_maps[method], components = export_fit(fit, condition_root / method, anterior, adjacency)
                 for cid, sizes in enumerate(components, start=1):
                     parcel_rows.append({
                         **condition, "method": method, "cluster_id": cid,
@@ -342,7 +342,7 @@ def main():
                 raise ValueError(f"Density mismatch between FC, surface and validity masks: {path}")
             adjacency = atlas.build_surface_adjacency(faces, len(coords))
             edges = triu(adjacency, k=1).tocoo()
-            surfaces[h] = adjacency, atlas.long_axis_order(path), (edges.row, edges.col)
+            surfaces[h] = adjacency, atlas.template_anterior_coordinate(path, h), (edges.row, edges.col)
         if (surfaces["L"][0] != surfaces["R"][0]).nnz:
             raise ValueError("The left and right surfaces do not share the homologous template topology")
 

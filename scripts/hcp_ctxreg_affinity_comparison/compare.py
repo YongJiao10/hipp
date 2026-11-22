@@ -97,7 +97,7 @@ def fit_gradients(data: np.ndarray, support: np.ndarray, method: str):
     return active, reconstruct_full_surface(active, support, support.size), values, ev
 
 
-def fit_partitions(bank, mask_bank, adjacency, axis_order, train, method):
+def fit_partitions(bank, mask_bank, adjacency, anterior, train, method):
     fitted = {}
     for combo in COMBOS:
         support = mask_bank[combo[1]][train].mean(axis=0) >= COVERAGE
@@ -116,19 +116,19 @@ def fit_partitions(bank, mask_bank, adjacency, axis_order, train, method):
             adjacency_full=adjacency[hemi], k=K, seed=20260420,
         )
         partitions[(smoothing, hemi)] = (
-            atlas.reorder_labels_by_long_axis(full_labels, axis_order[hemi]), aligned_full
+            atlas.reorder_labels_head_to_tail(full_labels, anterior[hemi]), aligned_full
         )
     return partitions
 
 
-def evaluate_split_halves(banks, masks, adjacency, axis_order, edges, subjects):
+def evaluate_split_halves(banks, masks, adjacency, anterior, edges, subjects):
     individual_rows, split_rows = [], []
     for split in range(N_SPLITS):
         seed = atlas.split_seed_for_index(split)
         order = np.random.RandomState(seed).permutation(len(subjects))
         halves = np.array_split(order, 2)
         fitted = {
-            method: [fit_partitions(banks[method], masks, adjacency, axis_order, half, method) for half in halves]
+            method: [fit_partitions(banks[method], masks, adjacency, anterior, half, method) for half in halves]
             for method in METHODS
         }
         for combo in COMBOS:
@@ -189,7 +189,7 @@ def annotate(out, labels, subjects, shared_root, ts_root, ref_root, masks, smoot
     return dominant, ovr["ovr_logistic_canonical7"]["dominant"]
 
 
-def run_route(route, out, subjects, ctxreg_10mm_fc_root, masks, surfaces, adjacency, axis_order, edges):
+def run_route(route, out, subjects, ctxreg_10mm_fc_root, masks, surfaces, adjacency, anterior, edges):
     ref_root = gradients.resolve_gradient_shared_root(gradients.DEFAULT_SHARED_INPUTS, "pfm")
     ts_root = gradients.DEFAULT_SURFACE_ROOT if route == "pfm" else resolve_hcp_kong400_control_shared_root(route)
     shared_root = {
@@ -210,10 +210,10 @@ def run_route(route, out, subjects, ctxreg_10mm_fc_root, masks, surfaces, adjace
 
     banks = dict(zip(METHODS, (fc_bank, sim_bank), strict=True))
     full = {
-        method: fit_partitions(banks[method], masks, adjacency, axis_order, slice(None), method)
+        method: fit_partitions(banks[method], masks, adjacency, anterior, slice(None), method)
         for method in METHODS
     }
-    individual, splits = evaluate_split_halves(banks, masks, adjacency, axis_order, edges, subjects)
+    individual, splits = evaluate_split_halves(banks, masks, adjacency, anterior, edges, subjects)
     out.mkdir(parents=True, exist_ok=True)
     write_table(out / "held_out_subject_scores.tsv", individual)
     write_table(out / "split_half_ari.tsv", splits)
@@ -322,11 +322,11 @@ def main():
     if "pfm_ctxreg_10mm" in args.routes and args.ctxreg_10mm_fc_root is None:
         parser.error("--ctxreg-10mm-fc-root is required when fitting pfm_ctxreg_10mm")
     ctxreg_10mm_fc_root = args.ctxreg_10mm_fc_root.resolve() if args.ctxreg_10mm_fc_root else None
-    masks, adjacency, axis_order, edges = {}, {}, {}, {}
+    masks, adjacency, anterior, edges = {}, {}, {}, {}
     for hemi, path in surfaces.items():
         coords, faces = atlas.load_surface(path)
         adjacency[hemi] = atlas.build_surface_adjacency(faces, len(coords))
-        axis_order[hemi] = atlas.long_axis_order(path)
+        anterior[hemi] = atlas.template_anterior_coordinate(path, hemi)
         edge_matrix = triu(adjacency[hemi], k=1).tocoo()
         edges[hemi] = (edge_matrix.row, edge_matrix.col)
         masks[hemi] = np.stack([
@@ -335,7 +335,7 @@ def main():
         ])
     for route in args.routes:
         run_route(route, out / route, subjects, ctxreg_10mm_fc_root,
-                  masks, surfaces, adjacency, axis_order, edges)
+                  masks, surfaces, adjacency, anterior, edges)
 
     from network_annotation import annotate_comparison
 
