@@ -50,7 +50,7 @@ from lib.output_layout import (
     DEFAULT_KONG2022_TEMPLATE_ROOT,
 )
 from lib.task_design import TASK_CONTRASTS, normalize_task_branch
-from lib.surface_utils import equal_vertex_long_axis_bins, long_axis_order
+from lib.surface_utils import equal_vertex_long_axis_bins, template_head_to_tail_order
 from lib.task_group import (
     N_LONG_AXIS_BINS,
     PARCELLATION_CHOICES,
@@ -175,8 +175,10 @@ def main() -> int:
         if smoothing != "2mm":
             return
         if hemi not in bins_by_hemi:
+            # Equal-vertex bins head to tail along the unfolded anterior-posterior axis.
             bins_by_hemi[hemi] = equal_vertex_long_axis_bins(
-                long_axis_order(group_average_surface(surfaces_dir, hemi)), N_LONG_AXIS_BINS
+                template_head_to_tail_order(group_average_surface(surfaces_dir, hemi), hemi),
+                N_LONG_AXIS_BINS,
             )
         stats = group_bin_stats(stack, bins_by_hemi[hemi])
         for i in range(N_LONG_AXIS_BINS):

@@ -47,7 +47,7 @@ for p in (CORE_DIR, VIS_LIB_DIR):
     if str(p) not in sys.path:
         sys.path.insert(0, str(p))
 
-from lib.surface_utils import long_axis_order, render_hippocampal_grid
+from lib.surface_utils import render_hippocampal_grid, template_head_to_tail_order
 from lib.workbench_grid import build_2x2_composite
 from multidataset_cohorts import HCP_COHORT_SIZE, HCP_KONG_GRADIENT_RUN
 
@@ -290,7 +290,7 @@ def load_branch_wta(branch: dict[str, Any], smoothing: str, n_bins: int = 20) ->
 
         mf = json.loads(mf_path.read_text(encoding="utf-8"))
         surf_path = Path(mf["template_left_or_right_surface"])
-        order = long_axis_order(surf_path)
+        order = template_head_to_tail_order(surf_path, hemi)
 
         labels = np.load(lbl_path).flatten()
         lmap = json.loads(lmap_path.read_text(encoding="utf-8"))

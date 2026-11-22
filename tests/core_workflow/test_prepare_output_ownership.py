@@ -82,6 +82,22 @@ def make_inputs(anatomy: Path, shared: Path, subjects: list[str]) -> None:
                 np.full((3, 3), index + 1, dtype=np.float32),
                 np.array([[0, 1, 2]], dtype=np.int32),
             )
+            # HippUnfold's unfolded sheet and subfield labels are the same for every subject.
+            PREP.save_surface(
+                PREP.surface_path(anatomy, subject, hemi, space='unfold'),
+                np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0]], dtype=np.float32),
+                np.array([[0, 1, 2]], dtype=np.int32),
+            )
+            nib.save(nib.gifti.GiftiImage(darrays=[nib.gifti.GiftiDataArray(
+                np.array([1, 1, 2], dtype=np.int32), intent="NIFTI_INTENT_LABEL", datatype="NIFTI_TYPE_INT32")]),
+                str(PREP.surface_path(anatomy, subject, hemi).parent
+                    / f"sub-{subject}_hemi-{hemi}_den-512_label-hipp_atlas-multihist7sgi_subfields.label.gii"))
+        PREP.write_hipp_spec(
+            PREP.surface_path(anatomy, subject, "L").parent / f"sub-{subject}_den-512_label-hipp_surfaces.spec",
+            [(h, kind, name) for h in ("L", "R") for kind, name in (
+                ("SURFACE", f"sub-{subject}_hemi-{h}_space-unfold_den-512_label-hipp_midthickness.surf.gii"),
+                ("LABEL", f"sub-{subject}_hemi-{h}_den-512_label-hipp_atlas-multihist7sgi_subfields.label.gii"))],
+        )
     with (anatomy.parent / "motion.tsv").open("w", newline="") as stream:
         writer = csv.DictWriter(stream, fieldnames=("subject", "run_label", "filename", "lss_path"), delimiter="\t")
         writer.writeheader()

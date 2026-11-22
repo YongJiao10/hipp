@@ -82,10 +82,71 @@ def unfolded_anterior_coordinate(unfold_surface: Path, folded_surface: Path) -> 
     return unfolded[:, 1].copy()
 
 
-def template_anterior_coordinate(spec_path: Path, folded_surface: Path, hemi: str) -> np.ndarray:
-    """Unfolded anterior coordinate of a template mesh, from the unfold surface its spec declares."""
-    assets = resolve_unfolded_assets(Path(spec_path), density=infer_density_from_surface(Path(folded_surface)))
-    return unfolded_anterior_coordinate(assets.unfold_surface[str(hemi).upper()], Path(folded_surface))
+GROUP_TEMPLATE_SPEC_NAME = "group-average_den-{density}_label-hipp_surfaces.spec"
+_SPEC_STRUCTURES = {"L": "HippocampusLeft", "R": "HippocampusRight"}
+
+
+def write_hipp_spec(spec_path: Path, entries: list[tuple[str, str, str]]) -> Path:
+    """Write a Workbench spec listing (hemi, DataFileType, file name relative to the spec) entries."""
+    lines = ['<?xml version="1.0" encoding="UTF-8"?>', '<CaretSpecFile Version="1.0">', "   <MetaData>", "   </MetaData>"]
+    for hemi, kind, name in entries:
+        if "/" in name or not name:
+            raise ValueError(f"Spec entries name files beside the spec: {name!r}")
+        lines += [
+            f'   <DataFile Structure="{_SPEC_STRUCTURES[str(hemi).upper()]}"',
+            f'             DataFileType="{kind}"',
+            '             Selected="true">',
+            f"      {name}",
+            "   </DataFile>",
+        ]
+    lines.append("</CaretSpecFile>")
+    spec_path = Path(spec_path)
+    spec_path.parent.mkdir(parents=True, exist_ok=True)
+    spec_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return spec_path
+
+
+def group_template_spec(folded_surface: Path) -> Path:
+    """The template-level spec beside a group-average folded surface; it must declare that surface.
+
+    The group-average step writes the folded surfaces, the unfolded sheet and the subfield labels
+    into one template directory with this spec, so folded and unfolded geometry always come from
+    the same template.
+    """
+    import xml.etree.ElementTree as ET
+
+    folded_surface = Path(folded_surface).resolve()
+    spec = folded_surface.parent / GROUP_TEMPLATE_SPEC_NAME.format(density=infer_density_from_surface(folded_surface))
+    if not spec.is_file():
+        raise FileNotFoundError(
+            f"Missing group template spec {spec}; rebuild the template with 02_01 --stage group-average"
+        )
+    declared = {(node.text or "").strip() for node in ET.parse(spec).getroot().iter("DataFile")}
+    if folded_surface.name not in declared:
+        raise ValueError(f"Group template spec {spec} does not declare the folded surface {folded_surface.name}")
+    return spec
+
+
+def template_anterior_coordinate(folded_surface: Path, hemi: str) -> np.ndarray:
+    """Unfolded anterior coordinate of a group-template mesh, from its template spec's unfolded sheet."""
+    folded_surface = Path(folded_surface)
+    assets = resolve_unfolded_assets(group_template_spec(folded_surface), density=infer_density_from_surface(folded_surface))
+    return unfolded_anterior_coordinate(assets.unfold_surface[str(hemi).upper()], folded_surface)
+
+
+def template_head_to_tail_order(folded_surface: Path, hemi: str) -> np.ndarray:
+    """Vertex indices of a group-template mesh head to tail along the unfolded anterior-posterior axis.
+
+    Vertices that share an unfolded row (equal anterior coordinate) keep the folded principal-axis
+    order among themselves, so equal-vertex bins that cut through a row are deterministic.
+    """
+    coordinate = template_anterior_coordinate(folded_surface, hemi)
+    folded_rank = np.empty(coordinate.size, dtype=np.int64)
+    folded_order = long_axis_order(Path(folded_surface))
+    if folded_order.size != coordinate.size:
+        raise ValueError(f"Folded/unfolded vertex mismatch for {folded_surface}")
+    folded_rank[folded_order] = np.arange(folded_order.size)
+    return np.lexsort((folded_rank, -coordinate)).astype(np.int32)
 
 
 def cluster_ids_head_to_tail(labels: np.ndarray, anterior_coordinate: np.ndarray) -> list[int]:

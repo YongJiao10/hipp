@@ -33,7 +33,11 @@ Outputs:
   - Resampled hippocampal BOLD surface timeseries: `{shared_root}/sub-<subject>/surface/{smoothing}/sub-<subject>_hemi-{hemi}_timeseries.npy`.
   - Vertex-mask summaries: `{shared_root}/sub-<subject>/surface/validity/sub-<subject>_hemi-{hemi}_validity_summary.json` and `valid_mask.npy`; all datasets use NIfTI support and runwise signal validity in each physical run.
   - BOLD NIfTI coverage: `{shared_root}/sub-<subject>/surface/raw/sub-<subject>_coverage_summary.json` and per-hemisphere `*_nifti_support.npy`.
-  - Group average template surfaces under `{template_root}/`.
+  - Group template under `{template_root}/group_average_surfaces/`: the group-average folded (corobl)
+    midthickness per hemisphere; the HippUnfold unfolded midthickness and subfield labels, which must be
+    identical for every subject (the step stops and names the subjects that differ); and the template spec
+    `group-average_den-512_label-hipp_surfaces.spec` that declares all six files. Downstream steps read
+    folded and unfolded geometry only from this template.
   - Run preparation manifest: `{route_root}/prepare_t1only_group_inputs_manifest.json`.
 """
 import argparse
@@ -76,6 +80,7 @@ from lib.task_manifests import task_run_manifest_path
 from lib.task_quality import signal_validity_policy, QC_DATASETS
 from lib.workbench import run_workbench
 from lib.workflow_utils import file_meta, git_commit, utc_now_iso, write_json
+from lib.surface_utils import GROUP_TEMPLATE_SPEC_NAME, infer_spec_path, resolve_unfolded_assets, write_hipp_spec
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -668,10 +673,53 @@ def save_surface(path: Path, coords: np.ndarray, faces: np.ndarray) -> None:
     nib.save(img, str(path))
 
 
+def _identical_unfolded_assets(batch_root: Path, subjects: list[str], density: str) -> dict[str, object]:
+    """Load every subject's spec-declared unfolded sheet and subfield labels; all must be identical."""
+    reference: dict[str, tuple] = {}
+    atlases: set[str] = set()
+    differing: dict[str, list[str]] = {"unfold_surface": [], "subfield_labels": []}
+    inputs: list[dict[str, object]] = []
+    for subject in subjects:
+        spec = infer_spec_path(subject, surface_path(batch_root, subject, HEMIS[0], space="corobl"))
+        assets = resolve_unfolded_assets(spec, density=density)
+        atlases.add(assets.subfield_atlas)
+        for hemi in HEMIS:
+            unfold = nib.load(str(assets.unfold_surface[hemi]))
+            labels = nib.load(str(assets.subfield_labels[hemi]))
+            current = (
+                np.asarray(unfold.agg_data("pointset")), np.asarray(unfold.agg_data("triangle")),
+                np.asarray(labels.darrays[0].data),
+                tuple((int(lab.key), str(lab.label), tuple(float(c) for c in lab.rgba)) for lab in labels.labeltable.labels),
+            )
+            inputs += [file_meta(assets.unfold_surface[hemi]), file_meta(assets.subfield_labels[hemi])]
+            if hemi not in reference:
+                reference[hemi] = (subject, current, labels)
+                continue
+            ref = reference[hemi][1]
+            if not (np.array_equal(current[0], ref[0]) and np.array_equal(current[1], ref[1])):
+                differing["unfold_surface"].append(f"sub-{subject} hemi-{hemi}")
+            if not (np.array_equal(current[2], ref[2]) and current[3] == ref[3]):
+                differing["subfield_labels"].append(f"sub-{subject} hemi-{hemi}")
+    if len(atlases) != 1:
+        raise RuntimeError(f"Subjects declare different HippUnfold subfield atlases: {sorted(atlases)}")
+    if differing["unfold_surface"] or differing["subfield_labels"]:
+        raise RuntimeError(
+            "Unfolded HippUnfold assets differ between subjects, so no single group template exists "
+            f"(reference sub-{reference[HEMIS[0]][0]}): unfold surface {differing['unfold_surface']}; "
+            f"subfield labels {differing['subfield_labels']}"
+        )
+    return {"reference": reference, "atlas": atlases.pop(), "inputs": inputs}
+
+
 def build_group_average_surfaces(batch_root: Path, template_root: Path, subjects: list[str]) -> None:
     out_dir = template_root / "group_average_surfaces"
     outputs: list[dict[str, object]] = []
     inputs: list[dict[str, object]] = []
+    density = "512"
+    if not subjects:
+        raise RuntimeError("The group template needs at least one subject")
+    unfolded = _identical_unfolded_assets(batch_root, subjects, density)
+    spec_entries: list[tuple[str, str, str]] = []
     for hemi in HEMIS:
         coords_all: list[np.ndarray] = []
         ref_faces: np.ndarray | None = None
@@ -690,6 +738,23 @@ def build_group_average_surfaces(batch_root: Path, template_root: Path, subjects
         out = out_dir / f"group-average_hemi-{hemi}_space-corobl_den-512_label-hipp_midthickness.surf.gii"
         save_surface(out, avg, ref_faces)
         outputs.append(file_meta(out))
+        _ref_subject, (unfold_coords, unfold_faces, label_values, _table), label_img = unfolded["reference"][hemi]
+        if unfold_coords.shape != avg.shape or not np.array_equal(unfold_faces, ref_faces):
+            raise RuntimeError(f"Unfolded and folded hemi-{hemi} meshes disagree in vertices or faces")
+        unfold_out = out_dir / f"group-average_hemi-{hemi}_space-unfold_den-{density}_label-hipp_midthickness.surf.gii"
+        save_surface(unfold_out, unfold_coords, unfold_faces)
+        label_out = out_dir / f"group-average_hemi-{hemi}_den-{density}_label-hipp_atlas-{unfolded['atlas']}_subfields.label.gii"
+        nib.save(
+            GiftiImage(darrays=[GiftiDataArray(np.asarray(label_values, dtype=np.int32), intent="NIFTI_INTENT_LABEL",
+                                               datatype="NIFTI_TYPE_INT32")],
+                       labeltable=label_img.labeltable),
+            str(label_out),
+        )
+        outputs += [file_meta(unfold_out), file_meta(label_out)]
+        spec_entries += [(hemi, "SURFACE", out.name), (hemi, "SURFACE", unfold_out.name), (hemi, "LABEL", label_out.name)]
+    spec_out = write_hipp_spec(out_dir / GROUP_TEMPLATE_SPEC_NAME.format(density=density), spec_entries)
+    outputs.append(file_meta(spec_out))
+    inputs += unfolded["inputs"]
     write_json(
         out_dir / "stage_manifest.json",
         {
@@ -701,6 +766,12 @@ def build_group_average_surfaces(batch_root: Path, template_root: Path, subjects
             "subjects": [f"sub-{s}" for s in subjects],
             "inputs": inputs,
             "outputs": outputs,
+            "template_spec": str(spec_out),
+            "unfolded_assets": {
+                "subfield_atlas": unfolded["atlas"],
+                "identical_across_subjects": True,
+                "checked_subjects": int(len(subjects)),
+            },
         },
     )
 

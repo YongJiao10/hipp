@@ -54,7 +54,9 @@ def render_inputs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(overview, "resolve_template_pair_assets", lambda *_a, **_k: (
         tmp_path / "left.surf.gii", tmp_path / "right.surf.gii", "template", tmp_path / "template.spec"
     ))
-    monkeypatch.setattr(overview, "long_axis_order", lambda _path: np.arange(4))
+    # Vertex index is the head-to-tail rank on the unfolded sheet.
+    monkeypatch.setattr(overview, "template_anterior_coordinate", lambda *_a: np.array([4.0, 3.0, 2.0, 1.0]))
+    monkeypatch.setattr(overview, "template_head_to_tail_order", lambda *_a: np.arange(4))
     # Spec-declared unfolded asset selection has its own coverage.
     monkeypatch.setattr(overview, "resolve_overview_unfolded_assets", lambda *_a: "unfolded-assets")
     monkeypatch.setattr(overview, "unfolded_assets_lock", lambda assets: {"assets": assets})
@@ -98,7 +100,7 @@ def render_inputs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
                     values = profile if variant in {"fisherz", "network_ts_fisherz"} else np.array([[-1.5, 2.0], [0.5, -0.25]]) * amplitude
                     np.save(run_dir / f"{variant}_profile.npy", values)
                 (run_dir / "group_atlas_manifest.json").write_text(json.dumps({
-                    "chosen_k_final": 2, "n_subjects": 3,
+                    "chosen_k_final": 2, "cluster_order_head_to_tail": [1, 2], "n_subjects": 3,
                     "surface_affinity": overview.GRADIENT_SPECTRAL_AFFINITY,
                     "affinity_description": overview.GRADIENT_SPECTRAL_AFFINITY_DESCRIPTION,
                     "assignment_variants": assignments,

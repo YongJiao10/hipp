@@ -272,7 +272,7 @@ def anatomical_cluster_names(
 
     Mirrors the 06_10 contract: ``cluster_order_head_to_tail`` from the group
     manifest must equal the head-to-tail order on the unfolded hippocampal sheet
-    declared by the manifest's ``template_spec_path``; named
+    of the group template that holds ``surface_path``; named
     Anterior/Middle/Posterior for K=3.
     """
     labels = np.asarray(group_labels, dtype=np.int32)
@@ -284,10 +284,7 @@ def anatomical_cluster_names(
         raise ValueError(
             f"cluster_order_head_to_tail disagrees with labels: order={order} ids={active_ids}"
         )
-    spec_raw = manifest.get("template_spec_path")
-    if not spec_raw:
-        raise ValueError("Missing template_spec_path for head-to-tail validation")
-    coordinate = template_anterior_coordinate(Path(str(spec_raw)), Path(surface_path), str(manifest.get("hemi", "")))
+    coordinate = template_anterior_coordinate(Path(surface_path), str(manifest.get("hemi", "")))
     verified = cluster_ids_head_to_tail(labels, coordinate)
     if order != verified:
         raise ValueError(f"Head-to-tail order violated: declared={order} verified={verified}")

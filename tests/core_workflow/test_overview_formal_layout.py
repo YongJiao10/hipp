@@ -281,3 +281,14 @@ def test_plot_k_gate_panel_extends_axis_for_negative_similarity():
     assert ax.get_ylim()[0] < -0.42
     assert list(ax.get_yticks()) == pytest.approx([-0.6, -0.4, -0.2, 0.0, 0.2, 0.4, 0.6, 0.8, 1.0])
     plt.close(fig)
+
+
+def test_cluster_order_must_match_the_unfolded_head_to_tail_order():
+    labels = np.array([2, 2, 1, 1, 3, 3])
+    anterior = np.array([6.0, 5.0, 4.0, 3.0, 2.0, 1.0])  # vertex 0 nearest the head
+    with pytest.raises(ValueError, match="declared=\\[1, 2, 3\\] verified=\\[2, 1, 3\\]"):
+        overview_mod.resolve_cluster_order_from_manifest({"cluster_order_head_to_tail": [1, 2, 3]}, labels, anterior, 3)
+    assert overview_mod.resolve_cluster_order_from_manifest(
+        {"cluster_order_head_to_tail": [1, 2, 3]}, np.array([1, 1, 2, 2, 3, 3]), anterior, 3) == [1, 2, 3]
+    with pytest.raises(ValueError, match="must list clusters"):
+        overview_mod.resolve_cluster_order_from_manifest({}, labels, anterior, 3)

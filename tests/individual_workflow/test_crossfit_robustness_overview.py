@@ -235,7 +235,8 @@ def test_renderer_writes_quantitative_outputs_for_five_synthetic_folds(
             encoding="utf-8",
         )
 
-    monkeypatch.setattr(overview, "long_axis_order", lambda path: np.arange(12))
+    monkeypatch.setattr(overview, "template_head_to_tail_order", lambda *a: np.arange(12))
+    monkeypatch.setattr(overview, "group_template_spec", lambda surface: surface.parent / "template.spec")
     output_dir = tmp_path / "overview"
     outputs = overview.render_robustness_overview(
         crossfit_root=crossfit_root,

@@ -395,7 +395,7 @@ def test_wta_loader_rejects_count_only_label_cache(tmp_path, monkeypatch):
         )
         np.save(hemi_dir / "group_functional_atlas_labels_count.npy", np.asarray([1], dtype=np.int32))
 
-    monkeypatch.setattr(renderer, "long_axis_order", lambda _path: np.asarray([0]))
+    monkeypatch.setattr(renderer, "template_head_to_tail_order", lambda *_a: np.asarray([0]))
     monkeypatch.setattr(renderer, "load_labels", lambda _path: (np.asarray([1]), {}))
     cohort_entry = {
         "dataset_name": "HCP 7T",

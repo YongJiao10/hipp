@@ -18,7 +18,11 @@ if str(CORE_DIR) not in sys.path:
 from lib.surface_utils import (  # noqa: E402
     _draw_unfolded_map,
     cluster_ids_head_to_tail,
+    group_template_spec,
     resolve_unfolded_assets,
+    template_anterior_coordinate,
+    template_head_to_tail_order,
+    write_hipp_spec,
     unfolded_anterior_coordinate,
     unfolded_grid,
 )
@@ -171,3 +175,96 @@ def test_head_cluster_is_c1_even_when_a_thin_strip_reaches_further_on_average():
     labels[cols == 0] = 1
     assert cluster_ids_head_to_tail(labels, coordinate) == [2, 1, 3]
     assert cluster_ids_head_to_tail(np.where(labels == 0, 0, labels), coordinate)[0] == 2
+
+
+def _group_template(tmp_path: Path, *, declare_folded: bool = True) -> Path:
+    """A group template directory as 02_01 writes it: folded, unfolded, subfields and the template spec."""
+    out = tmp_path / "group_average_surfaces"
+    out.mkdir()
+    entries = []
+    for hemi in ("L", "R"):
+        folded = f"group-average_hemi-{hemi}_space-corobl_den-512_label-hipp_midthickness.surf.gii"
+        unfold = f"group-average_hemi-{hemi}_space-unfold_den-512_label-hipp_midthickness.surf.gii"
+        label = f"group-average_hemi-{hemi}_den-512_label-hipp_atlas-multihist7sgi_subfields.label.gii"
+        _save_surface(out / folded, _grid_coords(hemi) * np.array([1.0, 2.0, 1.0], dtype=np.float32))
+        _save_surface(out / unfold, _grid_coords(hemi))
+        _save_labels(out / label, np.ones(N_ROWS * N_COLS), {1: ("Subiculum", (0, 0, 1, 1))})
+        if declare_folded:
+            entries.append((hemi, "SURFACE", folded))
+        entries += [(hemi, "SURFACE", unfold), (hemi, "LABEL", label)]
+    write_hipp_spec(out / "group-average_den-512_label-hipp_surfaces.spec", entries)
+    return out
+
+
+def test_group_template_spec_supplies_the_unfolded_axis_of_its_folded_surface(tmp_path):
+    out = _group_template(tmp_path)
+    folded = out / "group-average_hemi-L_space-corobl_den-512_label-hipp_midthickness.surf.gii"
+    assert group_template_spec(folded) == out / "group-average_den-512_label-hipp_surfaces.spec"
+    assets = resolve_unfolded_assets(group_template_spec(folded), density="512")
+    assert assets.unfold_surface["R"].parent == out and assets.subfield_atlas == "multihist7sgi"
+    np.testing.assert_allclose(template_anterior_coordinate(folded, "L"), _grid_coords("L")[:, 1])
+    order = template_head_to_tail_order(folded, "L")
+    assert sorted(order.tolist()) == list(range(N_ROWS * N_COLS))
+    assert np.all(np.diff(_grid_coords("L")[order, 1]) <= 0)  # head (largest y) first
+
+
+def test_group_template_spec_must_declare_the_folded_surface(tmp_path):
+    out = _group_template(tmp_path, declare_folded=False)
+    folded = out / "group-average_hemi-L_space-corobl_den-512_label-hipp_midthickness.surf.gii"
+    with pytest.raises(ValueError, match="does not declare the folded surface"):
+        group_template_spec(folded)
+    (out / "group-average_den-512_label-hipp_surfaces.spec").unlink()
+    with pytest.raises(FileNotFoundError, match="02_01 --stage group-average"):
+        group_template_spec(folded)
+
+
+def _subject_tree(batch_root: Path, subject: str, *, shift: float = 0.0, label_value: int = 1) -> None:
+    surf_dir = batch_root / f"sub-{subject}" / "hippunfold" / f"sub-{subject}" / "surf"
+    surf_dir.mkdir(parents=True)
+    entries = []
+    for hemi in ("L", "R"):
+        folded = f"sub-{subject}_hemi-{hemi}_space-corobl_den-512_label-hipp_midthickness.surf.gii"
+        unfold = f"sub-{subject}_hemi-{hemi}_space-unfold_den-512_label-hipp_midthickness.surf.gii"
+        label = f"sub-{subject}_hemi-{hemi}_den-512_label-hipp_atlas-multihist7sgi_subfields.label.gii"
+        _save_surface(surf_dir / folded, _grid_coords(hemi) * np.array([1.0, 2.0, 1.0], dtype=np.float32))
+        coords = _grid_coords(hemi)
+        coords[0, 0] += shift
+        _save_surface(surf_dir / unfold, coords)
+        _save_labels(surf_dir / label, np.full(N_ROWS * N_COLS, label_value), {1: ("Sub", (0, 0, 1, 1)), 2: ("CA1", (1, 0, 0, 1))})
+        entries += [(hemi, "SURFACE", folded), (hemi, "SURFACE", unfold), (hemi, "LABEL", label)]
+    write_hipp_spec(surf_dir / f"sub-{subject}_den-512_label-hipp_surfaces.spec", entries)
+
+
+def _load_prepare_module():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("prepare_group_inputs_template", CORE_DIR / "02_01_prepare_group_inputs.py")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_group_average_writes_a_self_contained_template(tmp_path):
+    prepare = _load_prepare_module()
+    batch = tmp_path / "batch"
+    for subject in ("01", "02"):
+        _subject_tree(batch, subject)
+    prepare.build_group_average_surfaces(batch, tmp_path / "template", ["01", "02"])
+    out = tmp_path / "template" / "group_average_surfaces"
+    folded = out / "group-average_hemi-R_space-corobl_den-512_label-hipp_midthickness.surf.gii"
+    assets = resolve_unfolded_assets(group_template_spec(folded), density="512")
+    assert assets.unfold_surface["R"] == out / "group-average_hemi-R_space-unfold_den-512_label-hipp_midthickness.surf.gii"
+    np.testing.assert_array_equal(nib.load(str(assets.unfold_surface["R"])).agg_data("pointset"), _grid_coords("R"))
+    stage = __import__("json").loads((out / "stage_manifest.json").read_text())
+    assert stage["unfolded_assets"] == {"subfield_atlas": "multihist7sgi", "identical_across_subjects": True, "checked_subjects": 2}
+
+
+@pytest.mark.parametrize("difference", [{"shift": 0.5}, {"label_value": 2}])
+def test_group_average_stops_when_a_subject_unfolded_asset_differs(tmp_path, difference):
+    prepare = _load_prepare_module()
+    batch = tmp_path / "batch"
+    _subject_tree(batch, "01")
+    _subject_tree(batch, "02", **difference)
+    with pytest.raises(RuntimeError, match="sub-02 hemi-L"):
+        prepare.build_group_average_surfaces(batch, tmp_path / "template", ["01", "02"])
+    assert not (tmp_path / "template" / "group_average_surfaces" / "group-average_den-512_label-hipp_surfaces.spec").exists()
