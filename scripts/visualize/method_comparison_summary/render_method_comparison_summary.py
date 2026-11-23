@@ -265,7 +265,7 @@ def crop_surface_legend(image: np.ndarray) -> np.ndarray:
 
 def render_surface_job(job: tuple) -> tuple[str, str]:
     key, subject, left_labels, right_labels, left_surface, right_surface, spec_path, outdir, cache = job
-    unfolded = ov.resolve_overview_unfolded_assets(Path(left_surface), Path(right_surface), Path(spec_path))
+    unfolded = ov.resolve_overview_unfolded_assets(Path(left_surface), Path(right_surface))
     render = render_hippocampal_grid(
         subject=subject, outdir=Path(outdir), name=key, title="",
         left_labels=Path(left_labels), right_labels=Path(right_labels),
